@@ -1,4 +1,4 @@
-# LogicTest: default
+# LogicTest: default parallel-stmts distsql
 
 subtest AllCascadingActions
 ### A test of all cascading actions in their most basic form.
@@ -21,12 +21,12 @@ CREATE TABLE b (
  ,update_cascade INT NOT NULL REFERENCES a ON UPDATE CASCADE
  ,delete_null INT REFERENCES a ON DELETE SET NULL
  ,update_null INT REFERENCES a ON UPDATE SET NULL
- ,delete_default INT DEFAULT 100 REFERENCES a
- ,update_default INT DEFAULT 100 REFERENCES a
+ ,delete_default INT DEFAULT 109 REFERENCES a ON DELETE SET DEFAULT
+ ,update_default INT DEFAULT 110 REFERENCES a ON UPDATE SET DEFAULT
 );
 
 statement ok
-INSERT INTO a (id) VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (100);
+INSERT INTO a (id) VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (109), (110);
 INSERT INTO b VALUES (1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
 
 query IIIIIIIIII
@@ -89,6 +89,24 @@ query IIIIIIIIII
 SELECT * FROM b;
 ----
 1  2  3  4  5  1006  NULL  NULL  9  10
+
+# 9. ON DELETE SET DEFAULT
+statement ok
+DELETE FROM a WHERE id = 9
+
+query IIIIIIIIII
+SELECT * FROM b;
+----
+1  2  3  4  5  1006  NULL  NULL  109  10
+
+# 10. ON UPDATE SET DEFAULT
+statement ok
+UPDATE a SET id = 1010 WHERE id = 10;
+
+query IIIIIIIIII
+SELECT * FROM b;
+----
+1  2  3  4  5  1006  NULL  NULL  109  110
 
 # Post Test Clean up
 statement ok
@@ -786,7 +804,7 @@ statement ok
 DROP TABLE self_x2;
 
 subtest DeleteCascade_Race
-## Delete cascade race
+### Delete cascade race
 #         a
 #        / \
 #       b   c
@@ -1582,7 +1600,7 @@ statement ok
 DROP TABLE self_x2;
 
 subtest UpdateCascade_TwoUpdates
-## Update cascade two updates to the same table, then both of those cascade to
+### Update cascade two updates to the same table, then both of those cascade to
 # yet another table
 #         a
 #        / \
@@ -1661,7 +1679,7 @@ statement ok
 DROP TABLE f, e, d, c, b, a;
 
 subtest UpdateCascade_TwoUpdatesReverse
-## Update cascade two updates to the same table, then both of those cascade to
+### Update cascade two updates to the same table, then both of those cascade to
 # yet another table.
 # This is a similar test to UpdateCascade_TwoUpdates, but table d is now between
 # b and e instead of c and e.
@@ -1773,7 +1791,7 @@ SELECT id, a_id FROM b;
 statement ok
 DROP TABLE b, a;
 
-subtest DeleteNull_Basic1
+subtest DeleteSetNull_Basic1
 ### Basic Delete Set Null
 #        a
 #      // \\
@@ -1874,7 +1892,7 @@ b4-pk2 NULL
 statement ok
 DROP TABLE b4, b3, b2, b1, a;
 
-subtest DeleteNull_Basic2
+subtest DeleteSetNull_Basic2
 ### Basic Delete Set Null
 #     a
 #    / \
@@ -2027,8 +2045,8 @@ c3-pk4-b2-pk2  NULL
 statement ok
 DROP TABLE c3, c2, c1, b2, b1, a;
 
-subtest DeleteNull_ToUpdateCascade
-# Cascade a delete in table a, to set null in table b, to an on update cascade
+subtest DeleteSetNull_ToUpdateCascade
+### Cascade a delete in table a, to set null in table b, to an on update cascade
 # of that null into table c
 # a
 # |
@@ -2084,8 +2102,8 @@ c4-b2  untouched
 statement ok
 DROP TABLE c, b, a;
 
-subtest DeleteNull_ToUpdateCascadeNotNull
-# Cascade a delete in table a, to set null in table b, to an on update cascade
+subtest DeleteSetNull_ToUpdateCascadeNotNull
+### Cascade a delete in table a, to set null in table b, to an on update cascade
 # of that null into table c, but table c's column is NOT NULL
 # a
 # |
@@ -2123,7 +2141,7 @@ DELETE FROM a WHERE id = 'delete-me';
 statement ok
 DROP TABLE c, b, a;
 
-subtest UpdateNull_Basic1
+subtest UpdateSetNull_Basic1
 ### Basic Update Set Null
 #        a
 #      // \\
@@ -2224,7 +2242,7 @@ b4-pk2 NULL
 statement ok
 DROP TABLE b4, b3, b2, b1, a;
 
-subtest UpdateNull_Basic2
+subtest UpdateSetNull_Basic2
 ### Basic Update Set Null
 #     a
 #    / \
@@ -2254,7 +2272,7 @@ CREATE TABLE c2 (
 );
 CREATE TABLE c3 (
   id STRING PRIMARY KEY
- ,update_set_null STRING REFERENCES b1(update_cascade) ON UPDATE SET NULL
+ ,update_set_null STRING REFERENCES b2(update_cascade) ON UPDATE SET NULL
 );
 
 statement ok
@@ -2382,9 +2400,9 @@ c3-pk4-b2-pk2  untouched
 statement ok
 DROP TABLE c3, c2, c1, b2, b1, a;
 
-subtest UpdateNull_ToUpdateCascade
-# Cascade an update in table a, to set null in table b, to an on update cascade
-# of that null into table c
+subtest UpdateSetNull_ToUpdateCascade
+### Cascade an update in table a, to set null in table b, to an on update
+# cascade of that null into table c.
 # a
 # |
 # b
@@ -2433,9 +2451,9 @@ c4-b2  untouched
 statement ok
 DROP TABLE c, b, a;
 
-subtest UpdateNull_ToUpdateCascadeNotNull
-# Cascade a delete in table a, to set null in table b, to an on update cascade
-# of that null into table c, but table c's column is NOT NULL
+subtest UpdateSetNull_ToUpdateCascadeNotNull
+### Cascade a delete in table a, to set null in table b, to an on update cascade
+# of that null into table c, but table c's column is NOT NULL.
 # a
 # |
 # b
@@ -2471,3 +2489,1043 @@ UPDATE a SET id = 'updated' WHERE id = 'original';
 # Clean up after the test.
 statement ok
 DROP TABLE c, b, a;
+
+##############
+
+subtest DeleteSetDefault_Basic1
+### Basic Delete Set Default
+#        a
+#      // \\
+#    / |  |  \
+#   b1 b2 b3 b4
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b1-default' REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b2-default' REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE b3 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b3-default' REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE b4 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b4-default' REFERENCES a ON DELETE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('delete_me'), ('untouched'), ('b1-default'), ('b2-default'), ('b3-default'), ('b4-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
+INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'delete_me');
+INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
+INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
+
+# ON DELETE CASCADE
+statement ok
+DELETE FROM a WHERE id = 'delete_me';
+
+query TT rowsort
+  SELECT id, delete_set_default FROM b1
+UNION ALL
+  SELECT id, delete_set_default FROM b2
+UNION ALL
+  SELECT id, delete_set_default FROM b3
+UNION ALL
+  SELECT id, delete_set_default FROM b4
+;
+----
+b1-pk1  untouched
+b1-pk2  untouched
+b2-pk1  untouched
+b2-pk2  b2-default
+b3-pk1  b3-default
+b3-pk2  untouched
+b4-pk1  b4-default
+b4-pk2  b4-default
+
+# Perform the same operation but with show trace.
+statement ok
+TRUNCATE a, b1, b2, b3, b4;
+
+statement ok
+INSERT INTO a VALUES ('delete_me'), ('untouched');
+INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
+INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'delete_me');
+INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
+INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
+
+# Ensure that show trace adds a cascade message for each of the tables that is
+# cascaded into.
+query I
+SELECT COUNT(*) FROM [
+  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'delete_me'
+] WHERE message LIKE 'cascading %';
+----
+4
+
+query TT rowsort
+  SELECT id, delete_set_default FROM b1
+UNION ALL
+  SELECT id, delete_set_default FROM b2
+UNION ALL
+  SELECT id, delete_set_default FROM b3
+UNION ALL
+  SELECT id, delete_set_default FROM b4
+;
+----
+b1-pk1  untouched
+b1-pk2  untouched
+b2-pk1  untouched
+b2-pk2  b2-default
+b3-pk1  b3-default
+b3-pk2  untouched
+b4-pk1  b4-default
+b4-pk2  b4-default
+
+# Clean up after the test.
+statement ok
+DROP TABLE b4, b3, b2, b1, a;
+
+subtest DeleteSetDefault_Basic1_WrongDefault
+### The same test as DeleteSetDefault_Basic1 but a default is set to a value
+# that does not exist in the table above it.
+#        a
+#      // \\
+#    / |  |  \
+#   b1 b2 b3 b4
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b1-def' REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b2-def' REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE b3 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'missing' REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE b4 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b4-def' REFERENCES a ON DELETE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('delete_me'), ('untouched'), ('b1-def'), ('b2-def'), ('b3-def'), ('b4-def');
+INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
+INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'delete_me');
+INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');
+INSERT INTO b4 VALUES ('b4-pk1', 'delete_me'), ('b4-pk2', 'delete_me');
+
+# ON DELETE CASCADE, which should fail since the value 'missing' is not in a.
+statement error pq: foreign key violation: value \['missing'\] not found in a@primary \[id\]
+DELETE FROM a WHERE id = 'delete_me';
+
+# Clean up after the test.
+statement ok
+DROP TABLE b4, b3, b2, b1, a;
+
+subtest DeleteSetDefault_Basic2
+### Basic Delete Set Null via an ON DELETE CASCADE
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b1-default' REFERENCES b1 ON DELETE SET DEFAULT
+);
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b1-default' REFERENCES b1 ON DELETE SET DEFAULT
+);
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b2-default' REFERENCES b2 ON DELETE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1'), ('a-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1'), ('b1-default', 'a-default');
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1'), ('b2-default', 'a-default');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1')
+ ,('c1-pk2-b1-pk1', 'b1-pk1')
+ ,('c1-pk3-b1-pk2', 'b1-pk2')
+ ,('c1-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1')
+ ,('c2-pk2-b1-pk1', 'b1-pk1')
+ ,('c2-pk3-b1-pk2', 'b1-pk2')
+ ,('c2-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c3 VALUES
+  ('c3-pk1-b2-pk1', 'b2-pk1')
+ ,('c3-pk2-b2-pk1', 'b2-pk1')
+ ,('c3-pk3-b2-pk2', 'b2-pk2')
+ ,('c3-pk4-b2-pk2', 'b2-pk2')
+;
+
+# This query expects to cascade the deletion in a into b1 and b2, but not into
+# the c tables which have ON DELETE SET DEFAULT instead.
+statement ok
+DELETE FROM a WHERE id = 'a-pk1';
+
+query TT rowsort
+  SELECT id, 'empty' FROM a
+UNION ALL
+  SELECT id, delete_cascade FROM b1
+UNION ALL
+  SELECT id, delete_cascade FROM b2
+UNION ALL
+  SELECT id, delete_set_default FROM c1
+UNION ALL
+  SELECT id, delete_set_default FROM c2
+UNION ALL
+  SELECT id, delete_set_default FROM c3
+;
+----
+a-default      empty
+b1-default     a-default
+b2-default     a-default
+c1-pk1-b1-pk1  b1-default
+c1-pk2-b1-pk1  b1-default
+c1-pk3-b1-pk2  b1-default
+c1-pk4-b1-pk2  b1-default
+c2-pk1-b1-pk1  b1-default
+c2-pk2-b1-pk1  b1-default
+c2-pk3-b1-pk2  b1-default
+c2-pk4-b1-pk2  b1-default
+c3-pk1-b2-pk1  b2-default
+c3-pk2-b2-pk1  b2-default
+c3-pk3-b2-pk2  b2-default
+c3-pk4-b2-pk2  b2-default
+
+statement ok
+TRUNCATE c3, c2, c1, b2, b1, a;
+
+# Perform the same operation but with show trace.
+statement ok
+INSERT INTO a VALUES ('a-pk1'), ('a-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1'), ('b1-default', 'a-default');
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1'), ('b2-default', 'a-default');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1')
+ ,('c1-pk2-b1-pk1', 'b1-pk1')
+ ,('c1-pk3-b1-pk2', 'b1-pk2')
+ ,('c1-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1')
+ ,('c2-pk2-b1-pk1', 'b1-pk1')
+ ,('c2-pk3-b1-pk2', 'b1-pk2')
+ ,('c2-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c3 VALUES
+  ('c3-pk1-b2-pk1', 'b2-pk1')
+ ,('c3-pk2-b2-pk1', 'b2-pk1')
+ ,('c3-pk3-b2-pk2', 'b2-pk2')
+ ,('c3-pk4-b2-pk2', 'b2-pk2')
+;
+
+query I
+SELECT COUNT(*) FROM [
+  SHOW KV TRACE FOR DELETE FROM a WHERE id = 'a-pk1'
+] WHERE message LIKE 'cascading %';
+----
+5
+
+query TT rowsort
+  SELECT id, 'empty' FROM a
+UNION ALL
+  SELECT id, delete_cascade FROM b1
+UNION ALL
+  SELECT id, delete_cascade FROM b2
+UNION ALL
+  SELECT id, delete_set_default FROM c1
+UNION ALL
+  SELECT id, delete_set_default FROM c2
+UNION ALL
+  SELECT id, delete_set_default FROM c3
+;
+----
+a-default      empty
+b1-default     a-default
+b2-default     a-default
+c1-pk1-b1-pk1  b1-default
+c1-pk2-b1-pk1  b1-default
+c1-pk3-b1-pk2  b1-default
+c1-pk4-b1-pk2  b1-default
+c2-pk1-b1-pk1  b1-default
+c2-pk2-b1-pk1  b1-default
+c2-pk3-b1-pk2  b1-default
+c2-pk4-b1-pk2  b1-default
+c3-pk1-b2-pk1  b2-default
+c3-pk2-b2-pk1  b2-default
+c3-pk3-b2-pk2  b2-default
+c3-pk4-b2-pk2  b2-default
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest DeleteSetDefault_Basic2_WrongDefault
+### The same test as DeleteSetDefault_Basic2 but a default is set to a value
+# that does not exist in the table above it.
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,delete_cascade STRING NOT NULL REFERENCES a ON DELETE CASCADE
+);
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b1-default' REFERENCES b1 ON DELETE SET DEFAULT
+);
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'missing' REFERENCES b1 ON DELETE SET DEFAULT
+);
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY
+ ,delete_set_default STRING DEFAULT 'b2-default' REFERENCES b2 ON DELETE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('a-pk1'), ('a-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'a-pk1'), ('b1-pk2', 'a-pk1'), ('b1-default', 'a-default');
+INSERT INTO b2 VALUES ('b2-pk1', 'a-pk1'), ('b2-pk2', 'a-pk1'), ('b2-default', 'a-default');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'b1-pk1')
+ ,('c1-pk2-b1-pk1', 'b1-pk1')
+ ,('c1-pk3-b1-pk2', 'b1-pk2')
+ ,('c1-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'b1-pk1')
+ ,('c2-pk2-b1-pk1', 'b1-pk1')
+ ,('c2-pk3-b1-pk2', 'b1-pk2')
+ ,('c2-pk4-b1-pk2', 'b1-pk2')
+;
+INSERT INTO c3 VALUES
+  ('c3-pk1-b2-pk1', 'b2-pk1')
+ ,('c3-pk2-b2-pk1', 'b2-pk1')
+ ,('c3-pk3-b2-pk2', 'b2-pk2')
+ ,('c3-pk4-b2-pk2', 'b2-pk2')
+;
+
+# This query expects to cascade the deletion in a into b1 and b2, but not into
+# the c tables which have ON DELETE SET DEFAULT instead. And ultimately fail
+# since the default value 'missing' is not present in b1.
+statement error pq: foreign key violation: value \['missing'\] not found in b1@primary \[id\]
+DELETE FROM a WHERE id = 'a-pk1';
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest DeleteSetDefault_ToUpdateCascade
+### Cascade a delete in table a, to a SET DEFAULT in table b, to an ON UPDATE
+# CASCADE of that default value into table c.
+# a
+# |
+# b
+# |
+# c
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING DEFAULT 'default' UNIQUE REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE c (
+  id STRING PRIMARY KEY
+ ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
+);
+
+statement oK
+INSERT INTO a VALUES ('delete-me'), ('untouched'), ('default');
+INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
+INSERT INTO c VALUES
+  ('c1-b1', 'delete-me')
+ ,('c2-b1', 'delete-me')
+ ,('c3-b2', 'untouched')
+ ,('c4-b2', 'untouched')
+;
+
+statement ok
+DELETE FROM a WHERE id = 'delete-me';
+
+query T rowsort
+SELECT id FROM a;
+----
+default
+untouched
+
+query TT rowsort
+  SELECT id, a_id FROM b
+UNION ALL
+  SELECT id, b_a_id FROM c
+;
+----
+b1     default
+b2     untouched
+c1-b1  default
+c2-b1  default
+c3-b2  untouched
+c4-b2  untouched
+
+# Clean up after the test.
+statement ok
+DROP TABLE c, b, a;
+
+subtest DeleteSetDefault_ToUpdateCascade
+### Cascade a delete in table a, to a SET DEFAULT in table b (of a NULL), to an
+# ON UPDATE CASCADE of that null into table c.
+# a
+# |
+# b
+# |
+# c
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING DEFAULT NULL UNIQUE REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE c (
+  id STRING PRIMARY KEY
+ ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
+);
+
+statement oK
+INSERT INTO a VALUES ('delete-me'), ('untouched');
+INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
+INSERT INTO c VALUES
+  ('c1-b1', 'delete-me')
+ ,('c2-b1', 'delete-me')
+ ,('c3-b2', 'untouched')
+ ,('c4-b2', 'untouched')
+;
+
+# Cascade the delete in a to the SET DEFAULT in b to the CASCADE in c
+statement ok
+DELETE FROM a WHERE id = 'delete-me';
+
+query TT rowsort
+  SELECT id, a_id FROM b
+UNION ALL
+  SELECT id, b_a_id FROM c
+;
+----
+b1     NULL
+b2     untouched
+c1-b1  NULL
+c2-b1  NULL
+c3-b2  untouched
+c4-b2  untouched
+
+# Clean up after the test.
+statement ok
+DROP TABLE c, b, a;
+
+subtest DeleteSetDefault_ToUpdateCascadeNotNull
+### Cascade a delete in table a, to a SET DEFAULT in table b (of a NULL), to an
+# on update cascade of that null into table c, but table c's column is NOT NULL.
+# a
+# |
+# b
+# |
+# c
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING DEFAULT NULL UNIQUE REFERENCES a ON DELETE SET DEFAULT
+);
+CREATE TABLE c (
+  id STRING PRIMARY KEY
+ ,b_a_id STRING NOT NULL REFERENCES b(a_id) ON UPDATE CASCADE
+);
+
+statement oK
+INSERT INTO a VALUES ('delete-me'), ('untouched');
+INSERT INTO b VALUES ('b1', 'delete-me'), ('b2', 'untouched');
+INSERT INTO c VALUES
+  ('c1-b1', 'delete-me')
+ ,('c2-b1', 'delete-me')
+ ,('c3-b2', 'untouched')
+ ,('c4-b2', 'untouched')
+;
+
+# Cascade the delete in a to the SET DEFAULT in b to the CASCADE in c which
+# should violate the NOT NULL in c.b_a_id.
+statement error pq: cannot cascade a null value into "test.c.b_a_id" as it violates a NOT NULL constraint
+DELETE FROM a WHERE id = 'delete-me';
+
+# Clean up after the test.
+statement ok
+DROP TABLE c, b, a;
+
+subtest DefaultSetDefault_Unique
+### Have a SET DEFAULT break a uniqueness constraint.
+# a
+# |
+# b
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING DEFAULT 'default' UNIQUE REFERENCES a ON DELETE SET DEFAULT
+);
+
+statement oK
+INSERT INTO a VALUES ('original'), ('default');
+INSERT INTO b VALUES ('b1', 'original'), ('b2', 'default');
+
+statement error pq: duplicate key value \(a_id\)=\('default'\) violates unique constraint "b_a_id_key"
+DELETE FROM a WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE b, a;
+
+subtest UpdateSetDefault_Basic1
+### Basic Update Set Default
+#        a
+#      // \\
+#    / |  |  \
+#   b1 b2 b3 b4
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b1-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b2-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE b3 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b3-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE b4 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b4-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default'), ('b3-default'), ('b4-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
+INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'original');
+INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
+INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
+
+# ON UPDATE CASCADE
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query TT rowsort
+  SELECT id, update_set_null FROM b1
+UNION ALL
+  SELECT id, update_set_null FROM b2
+UNION ALL
+  SELECT id, update_set_null FROM b3
+UNION ALL
+  SELECT id, update_set_null FROM b4
+;
+----
+b1-pk1  untouched
+b1-pk2  untouched
+b2-pk1  untouched
+b2-pk2  b2-default
+b3-pk1  b3-default
+b3-pk2  untouched
+b4-pk1  b3-default
+b4-pk2  b3-default
+
+# Perform the same operation but with show trace.
+statement ok
+TRUNCATE a, b1, b2, b3, b4;
+
+statement ok
+INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default'), ('b3-default'), ('b4-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
+INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'original');
+INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
+INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
+
+# Ensure that show trace adds a cascade message for each of the tables that is
+# cascaded into.
+query I
+SELECT COUNT(*) FROM [
+  SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
+] WHERE message LIKE 'cascading %';
+----
+4
+
+query TT rowsort
+  SELECT id, update_set_null FROM b1
+UNION ALL
+  SELECT id, update_set_null FROM b2
+UNION ALL
+  SELECT id, update_set_null FROM b3
+UNION ALL
+  SELECT id, update_set_null FROM b4
+;
+----
+b1-pk1  untouched
+b1-pk2  untouched
+b2-pk1  untouched
+b2-pk2  b2-default
+b3-pk1  b3-default
+b3-pk2  untouched
+b4-pk1  b3-default
+b4-pk2  b3-default
+
+# Clean up after the test.
+statement ok
+DROP TABLE b4, b3, b2, b1, a;
+
+subtest UpdateSetDefault_Basic1_WrongDefault
+### Basic Update Set Default
+#        a
+#      // \\
+#    / |  |  \
+#   b1 b2 b3 b4
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b1-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b2-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE b3 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'missing' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE b4 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b4-default' REFERENCES a ON UPDATE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default'), ('b3-default'), ('b4-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
+INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'original');
+INSERT INTO b3 VALUES ('b3-pk1', 'original'), ('b3-pk2', 'untouched');
+INSERT INTO b3 VALUES ('b4-pk1', 'original'), ('b4-pk2', 'original');
+
+# ON UPDATE CASCADE, which should fail since the value 'missing' is not in a.
+statement error pq: foreign key violation: value \['missing'\] not found in a@primary \[id\]
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE b4, b3, b2, b1, a;
+
+subtest UpdateSetDefault_Basic2
+### Basic UPDATE SET DEFAULT via an UPDATE CASCADE
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+);
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT
+);
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT
+);
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b2-default' REFERENCES b2(update_cascade) ON UPDATE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'original'), ('b1-pk2', 'untouched'), ('b1-default', 'b1-default');
+INSERT INTO b2 VALUES ('b2-pk1', 'original'), ('b2-pk2', 'untouched'), ('b2-default', 'b2-default');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'original')
+ ,('c1-pk2-b1-pk1', 'original')
+ ,('c1-pk3-b1-pk2', 'untouched')
+ ,('c1-pk4-b1-pk2', 'untouched')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'original')
+ ,('c2-pk2-b1-pk1', 'original')
+ ,('c2-pk3-b1-pk2', 'untouched')
+ ,('c2-pk4-b1-pk2', 'untouched')
+;
+INSERT INTO c3 VALUES
+  ('c3-pk1-b2-pk1', 'original')
+ ,('c3-pk2-b2-pk1', 'original')
+ ,('c3-pk3-b2-pk2', 'untouched')
+ ,('c3-pk4-b2-pk2', 'untouched')
+;
+
+# ON UPDATE CASCADE all b1 originals should now be updated, and all c1
+# originals should now be set to defaults.
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query TT rowsort
+  SELECT id, update_cascade FROM b1
+UNION ALL
+  SELECT id, update_cascade FROM b2
+UNION ALL
+  SELECT id, update_set_null FROM c1
+UNION ALL
+  SELECT id, update_set_null FROM c2
+UNION ALL
+  SELECT id, update_set_null FROM c3
+;
+----
+b1-default     b1-default
+b1-pk1         updated
+b1-pk2         untouched
+b2-default     b2-default
+b2-pk1         updated
+b2-pk2         untouched
+c1-pk1-b1-pk1  b1-default
+c1-pk2-b1-pk1  b1-default
+c1-pk3-b1-pk2  untouched
+c1-pk4-b1-pk2  untouched
+c2-pk1-b1-pk1  b1-default
+c2-pk2-b1-pk1  b1-default
+c2-pk3-b1-pk2  untouched
+c2-pk4-b1-pk2  untouched
+c3-pk1-b2-pk1  b2-default
+c3-pk2-b2-pk1  b2-default
+c3-pk3-b2-pk2  untouched
+c3-pk4-b2-pk2  untouched
+
+# Perform the same operation but with show trace.
+statement ok
+TRUNCATE c3, c2, c1, b2, b1, a;
+
+statement ok
+INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'original'), ('b1-pk2', 'untouched'), ('b1-default', 'b1-default');
+INSERT INTO b2 VALUES ('b2-pk1', 'original'), ('b2-pk2', 'untouched'), ('b2-default', 'b2-default');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'original')
+ ,('c1-pk2-b1-pk1', 'original')
+ ,('c1-pk3-b1-pk2', 'untouched')
+ ,('c1-pk4-b1-pk2', 'untouched')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'original')
+ ,('c2-pk2-b1-pk1', 'original')
+ ,('c2-pk3-b1-pk2', 'untouched')
+ ,('c2-pk4-b1-pk2', 'untouched')
+;
+INSERT INTO c3 VALUES
+  ('c3-pk1-b2-pk1', 'original')
+ ,('c3-pk2-b2-pk1', 'original')
+ ,('c3-pk3-b2-pk2', 'untouched')
+ ,('c3-pk4-b2-pk2', 'untouched')
+;
+
+# Ensure that show trace adds a cascade message for each of the tables that is
+# cascaded into.
+query I
+SELECT COUNT(*) FROM [
+  SHOW KV TRACE FOR UPDATE a SET id = 'updated' WHERE id = 'original'
+] WHERE message LIKE 'cascading %';
+----
+5
+
+query TT rowsort
+  SELECT id, update_cascade FROM b1
+UNION ALL
+  SELECT id, update_cascade FROM b2
+UNION ALL
+  SELECT id, update_set_null FROM c1
+UNION ALL
+  SELECT id, update_set_null FROM c2
+UNION ALL
+  SELECT id, update_set_null FROM c3
+;
+----
+b1-default     b1-default
+b1-pk1         updated
+b1-pk2         untouched
+b2-default     b2-default
+b2-pk1         updated
+b2-pk2         untouched
+c1-pk1-b1-pk1  b1-default
+c1-pk2-b1-pk1  b1-default
+c1-pk3-b1-pk2  untouched
+c1-pk4-b1-pk2  untouched
+c2-pk1-b1-pk1  b1-default
+c2-pk2-b1-pk1  b1-default
+c2-pk3-b1-pk2  untouched
+c2-pk4-b1-pk2  untouched
+c3-pk1-b2-pk1  b2-default
+c3-pk2-b2-pk1  b2-default
+c3-pk3-b2-pk2  untouched
+c3-pk4-b2-pk2  untouched
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest UpdateSetDefault_Basic2_WrongDefault
+### Basic UPDATE SET DEFAULT via an UPDATE CASCADE
+#     a
+#    / \
+#   b1 b2
+#  / \   \
+# c1  c2  c3
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b1 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+);
+CREATE TABLE b2 (
+  id STRING PRIMARY KEY
+ ,update_cascade STRING UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+);
+CREATE TABLE c1 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b1-default' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT
+);
+CREATE TABLE c2 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'missing' REFERENCES b1(update_cascade) ON UPDATE SET DEFAULT
+);
+CREATE TABLE c3 (
+  id STRING PRIMARY KEY
+ ,update_set_null STRING DEFAULT 'b2-default' REFERENCES b2(update_cascade) ON UPDATE SET DEFAULT
+);
+
+statement ok
+INSERT INTO a VALUES ('original'), ('untouched'), ('b1-default'), ('b2-default');
+INSERT INTO b1 VALUES ('b1-pk1', 'original'), ('b1-pk2', 'untouched'), ('b1-default', 'b1-default');
+INSERT INTO b2 VALUES ('b2-pk1', 'original'), ('b2-pk2', 'untouched'), ('b2-default', 'b2-default');
+INSERT INTO c1 VALUES
+  ('c1-pk1-b1-pk1', 'original')
+ ,('c1-pk2-b1-pk1', 'original')
+ ,('c1-pk3-b1-pk2', 'untouched')
+ ,('c1-pk4-b1-pk2', 'untouched')
+;
+INSERT INTO c2 VALUES
+  ('c2-pk1-b1-pk1', 'original')
+ ,('c2-pk2-b1-pk1', 'original')
+ ,('c2-pk3-b1-pk2', 'untouched')
+ ,('c2-pk4-b1-pk2', 'untouched')
+;
+INSERT INTO c3 VALUES
+  ('c3-pk1-b2-pk1', 'original')
+ ,('c3-pk2-b2-pk1', 'original')
+ ,('c3-pk3-b2-pk2', 'untouched')
+ ,('c3-pk4-b2-pk2', 'untouched')
+;
+
+# ON UPDATE CASCADE all b tables into the c tables, but fail due to a default
+# value that does not exist.
+statement error pq: foreign key violation: value \['missing'\] not found in b1@b1_update_cascade_key \[update_cascade\]
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE c3, c2, c1, b2, b1, a;
+
+subtest UpdateSetDefault_ToUpdateCascade
+### Cascade an update in table a, to SET DEFAULT in table b, to an UPDATE
+# CASCADE of that default into table c.
+# a
+# |
+# b
+# |
+# c
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING UNIQUE DEFAULT 'default' REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE c (
+  id STRING PRIMARY KEY
+ ,b_a_id STRING REFERENCES b(a_id) ON UPDATE CASCADE
+);
+
+statement oK
+INSERT INTO a VALUES ('original'), ('untouched'), ('default');
+INSERT INTO b VALUES ('b1', 'original'), ('b2', 'untouched');
+INSERT INTO c VALUES
+  ('c1-b1', 'original')
+ ,('c2-b1', 'original')
+ ,('c3-b2', 'untouched')
+ ,('c4-b2', 'untouched')
+;
+
+statement ok
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+query TT rowsort
+  SELECT id, a_id FROM b
+UNION ALL
+  SELECT id, b_a_id FROM c
+----
+b1     default
+b2     untouched
+c1-b1  default
+c2-b1  default
+c3-b2  untouched
+c4-b2  untouched
+
+# Clean up after the test.
+statement ok
+DROP TABLE c, b, a;
+
+subtest UpdateSetDefault_ToUpdateCascadeNotNull
+### Cascade a update in table a, to SET DEFAULT in table b, but that default is
+# a null. Then to an ON UPDATE CASCADE of that null into table c, but table c's
+# column is NOT NULL.
+# a
+# |
+# b
+# |
+# c
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING DEFAULT NULL UNIQUE REFERENCES a ON UPDATE SET DEFAULT
+);
+CREATE TABLE c (
+  id STRING PRIMARY KEY
+ ,b_a_id STRING NOT NULL REFERENCES b(a_id) ON UPDATE CASCADE
+);
+
+statement oK
+INSERT INTO a VALUES ('original'), ('untouched'), ('default');
+INSERT INTO b VALUES ('b1', 'original'), ('b2', 'untouched');
+INSERT INTO c VALUES
+  ('c1-b1', 'original')
+ ,('c2-b1', 'original')
+ ,('c3-b2', 'untouched')
+ ,('c4-b2', 'untouched')
+;
+
+statement error pq: cannot cascade a null value into "test.c.b_a_id" as it violates a NOT NULL constraint
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE c, b, a;
+
+subtest UpdateSetDefault_Unique
+### Have a SET DEFAULT break a uniqueness constraint.
+# a
+# |
+# b
+
+statement ok
+CREATE TABLE a (
+  id STRING PRIMARY KEY
+);
+CREATE TABLE b (
+  id STRING PRIMARY KEY
+ ,a_id STRING DEFAULT 'default' UNIQUE REFERENCES a ON UPDATE SET DEFAULT
+);
+
+statement oK
+INSERT INTO a VALUES ('original'), ('default');
+INSERT INTO b VALUES ('b1', 'original'), ('b2', 'default');
+
+statement error pq: duplicate key value \(a_id\)=\('default'\) violates unique constraint "b_a_id_key"
+UPDATE a SET id = 'updated' WHERE id = 'original';
+
+# Clean up after the test.
+statement ok
+DROP TABLE b, a;
