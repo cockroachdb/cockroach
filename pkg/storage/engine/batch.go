@@ -366,6 +366,23 @@ func rocksDBBatchDecodeHeader(repr []byte) (count int, orepr []byte, err error) 
 	return count, repr[headerSize:], nil
 }
 
+const scanHeaderSize = 4
+
+// Decode the header of an MVCCScan-returned batch, returning both the count of
+// the entries in the batch and the suffix of data remaining in the batch.
+// Our scan batch is the same as the RocksDB batch repr, without the
+// unused sequence number and without the per-value tags.
+//
+// So, our scan batch has a 4-byte fixed-size header, the count of entries,
+// followed immediately by `count' rocksDBBatchVarString entries.
+func mvccScanBatchDecodeHeader(repr []byte) (count int, orepr []byte, err error) {
+	if len(repr) < scanHeaderSize {
+		return 0, nil, errors.Errorf("batch repr too small: %d < %d", len(repr), scanHeaderSize)
+	}
+	count = int(binary.LittleEndian.Uint32(repr[:scanHeaderSize]))
+	return count, repr[scanHeaderSize:], nil
+}
+
 // Decode a RocksDB batch repr variable length string, returning both the
 // string and the suffix of data remaining in the batch.
 func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
@@ -384,16 +401,12 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 	return repr[:v], repr[v:], nil
 }
 
-// Decode a RocksDB batch repr key/value pair, returning both the key/value and
-// the suffix of data remaining in the batch.
-func rocksDBBatchDecodeValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+// Decode an MVCC scan batch repr key/value pair, returning both the key/value
+// and the suffix of data remaining in the batch.
+func mvccScanBatchDecodeValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
 	if len(repr) == 0 {
 		return key, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
-	if BatchType(repr[0]) != BatchTypeValue {
-		return key, nil, repr, errors.Errorf("unexpected batch entry type: %d", BatchType(repr[0]))
-	}
-	repr = repr[1:]
 	rawKey, repr, err := rocksDBBatchVarString(repr)
 	if err != nil {
 		return key, nil, repr, err

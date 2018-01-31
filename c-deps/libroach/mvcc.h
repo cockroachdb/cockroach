@@ -61,7 +61,7 @@ template <bool reverse> class mvccScanner {
         txn_max_timestamp_(txn.max_timestamp),
         consistent_(consistent),
         check_uncertainty_(timestamp < txn.max_timestamp),
-        kvs_(new rocksdb::WriteBatch),
+        kvs_(new buffer),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
         is_get_(false),
@@ -148,7 +148,10 @@ template <bool reverse> class mvccScanner {
   const DBScanResults& fillResults() {
     if (results_.status.len == 0) {
       if (kvs_->Count() > 0) {
-        results_.data = ToDBSlice(kvs_->Data());
+        DBSlice &lastBuf = kvs_->bufs_.back();
+        lastBuf.len = kvs_->bufPtr_ - lastBuf.data;
+        results_.data.bufs = &kvs_->bufs_.front();
+        results_.data.len = kvs_->bufs_.size();
       }
       if (intents_->Count() > 0) {
         results_.intents = ToDBSlice(intents_->Data());
@@ -161,7 +164,7 @@ template <bool reverse> class mvccScanner {
 
   bool uncertaintyError(DBTimestamp ts) {
     results_.uncertainty_timestamp = ts;
-    kvs_->Clear();
+    //kvs_->Clear();
     intents_->Clear();
     return false;
   }
@@ -605,7 +608,7 @@ template <bool reverse> class mvccScanner {
   const bool consistent_;
   const bool check_uncertainty_;
   DBScanResults results_;
-  std::unique_ptr<rocksdb::WriteBatch> kvs_;
+  std::unique_ptr<buffer> kvs_;
   std::unique_ptr<rocksdb::WriteBatch> intents_;
   std::string key_buf_;
   std::string saved_buf_;

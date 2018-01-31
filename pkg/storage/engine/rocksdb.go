@@ -2013,8 +2013,7 @@ func (r *rocksDBIterator) MVCCGet(
 
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(txn), C.bool(consistent),
-	)
+		goToCTxn(txn), C.bool(consistent))
 
 	if err := statusToError(state.status); err != nil {
 		return nil, nil, err
@@ -2034,11 +2033,9 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, intents, nil
 	}
 
-	// Extract the value from the batch data. This code would be slightly more
-	// compact using RocksDBBatchReader, but avoiding the allocation has a
-	// measurable impact on benchmarks.
-	repr := cSliceToUnsafeGoBytes(state.data)
-	count, repr, err := rocksDBBatchDecodeHeader(repr)
+	// Extract the value from the batch data.
+	repr := copyFromSliceVector(state.data)
+	count, repr, err := mvccScanBatchDecodeHeader(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2048,15 +2045,14 @@ func (r *rocksDBIterator) MVCCGet(
 	if count == 0 {
 		return nil, intents, nil
 	}
-	mvccKey, rawValue, _, err := rocksDBBatchDecodeValue(repr)
+	mvccKey, rawValue, _, err := mvccScanBatchDecodeValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
 	value := &roachpb.Value{
-		RawBytes:  make([]byte, len(rawValue)),
+		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
 	}
-	copy(value.RawBytes, rawValue)
 	return value, intents, nil
 }
 
@@ -2086,7 +2082,26 @@ func (r *rocksDBIterator) MVCCScan(
 	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
 		return nil, nil, err
 	}
-	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+
+	return copyFromSliceVector(state.data), cSliceToGoBytes(state.intents), nil
+}
+
+func copyFromSliceVector(s C.DBSliceVector) []byte {
+	neededBytes := 0
+	if s.bufs == nil {
+		return nil
+	}
+
+	// Interpret the C pointer as a pointer to a Go array, then slice.
+	slices := (*[1 << 20]C.DBSlice)(unsafe.Pointer(s.bufs))[:s.len:s.len]
+	for i := range slices {
+		neededBytes += int(slices[i].len)
+	}
+	data := make([]byte, 0, neededBytes)
+	for i := range slices {
+		data = append(data, cSliceToUnsafeGoBytes(slices[i])...)
+	}
+	return data
 }
 
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {

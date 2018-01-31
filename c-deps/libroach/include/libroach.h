@@ -250,11 +250,16 @@ typedef struct {
   DBTimestamp max_timestamp;
 } DBTxn;
 
+typedef struct {
+  DBSlice *bufs;
+  int len;
+} DBSliceVector;
+
 // DBScanResults contains the key/value pairs and intents encoded
 // using the RocksDB batch repr format.
 typedef struct {
   DBStatus status;
-  DBSlice data;
+  DBSliceVector data;
   DBSlice intents;
   DBTimestamp uncertainty_timestamp;
 } DBScanResults;
