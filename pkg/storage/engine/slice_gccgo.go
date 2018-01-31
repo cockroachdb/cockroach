@@ -12,16 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build gc,go1.9
+// +build gccgo
 
 package engine
 
-import "unsafe"
+import (
+	"unsafe"
+)
 
-// The go:linkname directives provides backdoor access to private functions in
-// the runtime. Below we're accessing the mallocgc function. Note that this
-// access is necessarily tied to a specific Go release which is why this file
-// is protected by a build tag.
-
-//go:linkname mallocgc runtime.mallocgc
+//extern runtime.mallocgc
 func mallocgc(size uintptr, typ unsafe.Pointer, needzero bool) unsafe.Pointer

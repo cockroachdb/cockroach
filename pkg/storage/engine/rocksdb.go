@@ -2091,7 +2091,7 @@ func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
 	for i := range slices {
 		neededBytes += int(slices[i].len)
 	}
-	data := rawbyteslice(neededBytes)[:0]
+	data := nonZeroingMakeByteSlice(neededBytes)[:0]
 	for i := range slices {
 		data = append(data, cSliceToUnsafeGoBytes(slices[i])...)
 	}
