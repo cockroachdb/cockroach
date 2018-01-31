@@ -827,6 +827,23 @@ func TestDropAndCreateTable(t *testing.T) {
 	}
 }
 
+func TestDropAndCreateDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Skip(`#22256`)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	for i := 0; i < 20; i++ {
+		sqlDB.Exec(t, `DROP DATABASE IF EXISTS test`)
+		sqlDB.Exec(t, `CREATE DATABASE test`)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
+	}
+}
+
 // Test commands while a table is being dropped.
 func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
