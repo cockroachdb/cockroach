@@ -1740,6 +1740,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// Joiners may guarantee an ordering to outputs, so we ensure that
 	// ordering is propagated through the input synchronizer of the next stage.
 	// We can propagate the ordering from either side, we use the left side here.
+	// Note that n.props only has a non-empty ordering for inner joins, where it
+	// uses the mergeJoinOrdering.
 	p.SetMergeOrdering(dsp.convertOrdering(n.props, p.planToStreamColMap))
 	return p, nil
 }
