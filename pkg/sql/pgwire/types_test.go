@@ -15,6 +15,8 @@
 package pgwire
 
 import (
+	"bytes"
+	"reflect"
 	"testing"
 	"time"
 
@@ -79,6 +81,30 @@ func TestTimestampRoundtrip(t *testing.T) {
 		if actual := parse(formatTs(ts, tz, nil)); !ts.Equal(actual) {
 			t.Fatalf("[%s]: timestamp did not roundtrip got [%s] expected [%s]", tz, actual, ts)
 		}
+	}
+}
+
+func TestWriteBinaryArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Regression test for #20372. Ensure that writing twice to the same
+	// writeBuffer is equivalent to writing to two different writeBuffers and
+	// then concatenating the result.
+	ary, _ := parser.ParseDArrayFromString(parser.NewTestingEvalContext(), "{1}", &parser.IntColType{})
+
+	writeBuf1 := &writeBuffer{}
+	writeBuf1.writeTextDatum(context.Background(), ary, time.UTC)
+	writeBuf1.writeBinaryDatum(context.Background(), ary, time.UTC)
+
+	writeBuf2 := &writeBuffer{}
+	writeBuf2.writeTextDatum(context.Background(), ary, time.UTC)
+
+	writeBuf3 := &writeBuffer{}
+	writeBuf3.writeBinaryDatum(context.Background(), ary, time.UTC)
+
+	concatted := bytes.Join([][]byte{writeBuf2.wrapped.Bytes(), writeBuf3.wrapped.Bytes()}, nil)
+
+	if !reflect.DeepEqual(writeBuf1.wrapped.Bytes(), concatted) {
+		t.Fatalf("expected %v, got %v", concatted, writeBuf1.wrapped.Bytes())
 	}
 }
 
