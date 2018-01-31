@@ -14,13 +14,14 @@
 
 #pragma once
 
-#include <libroach.h>
 #include <memory>
+#include "chunked_buffer.h"
+#include "encoding.h"
 #include <rocksdb/iterator.h>
 #include <rocksdb/write_batch.h>
 
 struct DBIterator {
   std::unique_ptr<rocksdb::Iterator> rep;
-  std::unique_ptr<rocksdb::WriteBatch> kvs;
+  std::unique_ptr<cockroach::chunkedBuffer> kvs;
   std::unique_ptr<rocksdb::WriteBatch> intents;
 };

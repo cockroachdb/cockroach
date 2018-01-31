@@ -384,16 +384,12 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 	return repr[:v], repr[v:], nil
 }
 
-// Decode a RocksDB batch repr key/value pair, returning both the key/value and
-// the suffix of data remaining in the batch.
-func rocksDBBatchDecodeValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+// Decode an MVCC scan batch repr key/value pair, returning both the key/value
+// and the suffix of data remaining in the batch.
+func mvccScanBatchDecodeValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
 	if len(repr) == 0 {
 		return key, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
-	if BatchType(repr[0]) != BatchTypeValue {
-		return key, nil, repr, errors.Errorf("unexpected batch entry type: %d", BatchType(repr[0]))
-	}
-	repr = repr[1:]
 	rawKey, repr, err := rocksDBBatchVarString(repr)
 	if err != nil {
 		return key, nil, repr, err

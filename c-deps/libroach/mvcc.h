@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "chunked_buffer.h"
 #include "db.h"
 #include "encoding.h"
 #include "iterator.h"
@@ -61,7 +62,7 @@ template <bool reverse> class mvccScanner {
         txn_max_timestamp_(txn.max_timestamp),
         consistent_(consistent),
         check_uncertainty_(timestamp < txn.max_timestamp),
-        kvs_(new rocksdb::WriteBatch),
+        kvs_(new chunkedBuffer),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
         is_get_(false),
@@ -148,7 +149,8 @@ template <bool reverse> class mvccScanner {
   const DBScanResults& fillResults() {
     if (results_.status.len == 0) {
       if (kvs_->Count() > 0) {
-        results_.data = ToDBSlice(kvs_->Data());
+        kvs_->GetChunks(&results_.data.bufs, &results_.data.len);
+        results_.data.count = kvs_->Count();
       }
       if (intents_->Count() > 0) {
         results_.intents = ToDBSlice(intents_->Data());
@@ -605,7 +607,7 @@ template <bool reverse> class mvccScanner {
   const bool consistent_;
   const bool check_uncertainty_;
   DBScanResults results_;
-  std::unique_ptr<rocksdb::WriteBatch> kvs_;
+  std::unique_ptr<chunkedBuffer> kvs_;
   std::unique_ptr<rocksdb::WriteBatch> intents_;
   std::string key_buf_;
   std::string saved_buf_;

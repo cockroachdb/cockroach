@@ -1652,7 +1652,7 @@ func mvccScanInternal(
 	}
 
 	iter := engine.NewIterator(false)
-	kvData, intentData, err := iter.MVCCScan(
+	kvData, numKvs, intentData, err := iter.MVCCScan(
 		key, endKey, max, timestamp, txn, consistent, reverse)
 	iter.Close()
 
@@ -1660,7 +1660,7 @@ func mvccScanInternal(
 		return nil, nil, nil, err
 	}
 
-	kvs, resumeKey, intents, err := buildScanResults(kvData, intentData, max, consistent)
+	kvs, resumeKey, intents, err := buildScanResults(kvData, numKvs, intentData, max, consistent)
 	var resumeSpan *roachpb.Span
 	if resumeKey != nil {
 		if reverse {
@@ -1705,24 +1705,21 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-func buildScanResumeKey(kvData []byte, max int) ([]byte, error) {
+func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, error) {
 	if len(kvData) == 0 {
 		return nil, nil
 	}
-	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
-	if err != nil {
-		return nil, err
-	}
-	if count <= max {
+	if numKvs <= max {
 		return nil, nil
 	}
-	for i := 0; i < max; i++ {
-		_, _, kvData, err = rocksDBBatchDecodeValue(kvData)
+	var err error
+	for i := int64(0); i < max; i++ {
+		_, _, kvData, err = mvccScanBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, err
 		}
 	}
-	key, _, _, err := rocksDBBatchDecodeValue(kvData)
+	key, _, _, err := mvccScanBatchDecodeValue(kvData)
 	if err != nil {
 		return nil, err
 	}
@@ -1730,7 +1727,7 @@ func buildScanResumeKey(kvData []byte, max int) ([]byte, error) {
 }
 
 func buildScanResults(
-	kvData, intentData []byte, max int64, consistent bool,
+	kvData []byte, numKvs int64, intentData []byte, max int64, consistent bool,
 ) ([]roachpb.KeyValue, roachpb.Key, []roachpb.Intent, error) {
 	intents, err := buildScanIntents(intentData)
 	if err != nil {
@@ -1739,7 +1736,7 @@ func buildScanResults(
 	if consistent && len(intents) > 0 {
 		// When encountering intents during a consistent scan we still need to
 		// return the resume key.
-		resumeKey, err := buildScanResumeKey(kvData, int(max))
+		resumeKey, err := buildScanResumeKey(kvData, numKvs, max)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1749,15 +1746,7 @@ func buildScanResults(
 		return nil, nil, intents, nil
 	}
 
-	// Loop over the kvData (which is in RocksDB batch repr format), creating a
-	// slice of roachpb.KeyValue. This code would be slightly more compact using
-	// RocksDBBatchReader, but there is a measurable performance benefit to
-	// avoiding the associated allocation for small (1 row) scans.
-	count, kvData, err := rocksDBBatchDecodeHeader(kvData)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if count == 0 {
+	if numKvs == 0 {
 		return nil, nil, intents, nil
 	}
 
@@ -1767,16 +1756,16 @@ func buildScanResults(
 	//
 	// TODO(peter): We should change the resumeKey to be Key.Next() of the last
 	// key returned.
-	n := count
-	if n > int(max) {
-		n = int(max)
+	n := numKvs
+	if n > max {
+		n = max
 	}
 	kvs := make([]roachpb.KeyValue, n)
 
 	var key MVCCKey
 	var rawBytes []byte
 	for i := range kvs {
-		key, rawBytes, kvData, err = rocksDBBatchDecodeValue(kvData)
+		key, rawBytes, kvData, err = mvccScanBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1786,8 +1775,8 @@ func buildScanResults(
 	}
 
 	var resumeKey roachpb.Key
-	if count > int(max) {
-		key, _, _, err = rocksDBBatchDecodeValue(kvData)
+	if numKvs > max {
+		key, _, _, err = mvccScanBatchDecodeValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
