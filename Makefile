@@ -336,6 +336,11 @@ BOOTSTRAP_TARGET := bin/.bootstrap
 
 SUBMODULES_TARGET := bin/.submodules-initialized
 
+GO_PROTOS_TARGET := bin/.go_protobuf_sources
+GW_PROTOS_TARGET := bin/.gw_protobuf_sources
+CPP_PROTOS_TARGET := bin/.cpp_protobuf_sources
+CPP_PROTOS_CCL_TARGET := bin/.cpp_ccl_protobuf_sources
+
 # Update the git hooks and install commands from dependencies whenever they
 # change.
 $(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/returncheck | $(SUBMODULES_TARGET)
@@ -683,11 +688,6 @@ SQLPARSER_TARGETS = \
 	$(PKG_ROOT)/sql/lex/reserved_keywords.go
 
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
-
-GO_PROTOS_TARGET := bin/.go_protobuf_sources
-GW_PROTOS_TARGET := bin/.gw_protobuf_sources
-CPP_PROTOS_TARGET := bin/.cpp_protobuf_sources
-CPP_PROTOS_CCL_TARGET := bin/.cpp_ccl_protobuf_sources
 
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
