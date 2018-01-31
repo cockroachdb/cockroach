@@ -37,6 +37,7 @@ var informationSchema = virtualSchema{
 	name: informationSchemaName,
 	tables: []virtualSchemaTable{
 		informationSchemaAdministrableRoleAuthorizations,
+		informationSchemaApplicableRoles,
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
@@ -143,6 +144,48 @@ CREATE TABLE information_schema.administrable_role_authorizations (
 				grantee,                   // grantee: always the current user
 				tree.NewDString(roleName), // role_name
 				yesString,                 // is_grantable: always YES
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-applicable-roles.html
+// MySQL:    missing
+var informationSchemaApplicableRoles = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.applicable_roles (
+	GRANTEE STRING NOT NULL,
+	ROLE_NAME STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		grantee := tree.NewDString(currentUser)
+
+		// The current user is always listed.
+		if err := addRow(
+			grantee,  // grantee: the current user
+			grantee,  // role_name: the current user
+			noString, // is_grantable: users do not have an ADMIN OPTION
+		); err != nil {
+			return err
+		}
+
+		for roleName, isAdmin := range memberMap {
+			if err := addRow(
+				grantee,                   // grantee: always the current user
+				tree.NewDString(roleName), // role_name
+				yesOrNoDatum(isAdmin),     // is_grantable
 			); err != nil {
 				return err
 			}

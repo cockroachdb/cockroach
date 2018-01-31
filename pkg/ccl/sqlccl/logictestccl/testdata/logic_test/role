@@ -125,6 +125,13 @@ SELECT * FROM information_schema.administrable_role_authorizations
 grantee  role_name  is_grantable
 root     admin      YES
 
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+root     root       NO
+root     admin      YES
+
 # Test that only roles are grantable.
 statement error pq: role testuser does not exist
 GRANT testuser TO testrole
@@ -186,6 +193,13 @@ query TTT colnames
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee   role_name  is_grantable
+testuser  testrole   YES
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  testuser   NO
 testuser  testrole   YES
 
 user root
@@ -334,6 +348,16 @@ SELECT * FROM information_schema.administrable_role_authorizations
 grantee   role_name  is_grantable
 testuser  rolea      YES
 
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  testuser   NO
+testuser  roled      NO
+testuser  rolec      NO
+testuser  roleb      NO
+testuser  rolea      YES
+
 statement error pq: testuser is not a superuser or role admin for role roled
 GRANT roled TO rolee
 
@@ -351,6 +375,16 @@ SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee   role_name  is_grantable
 testuser  rolea      YES
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  testuser   NO
+testuser  roleb      NO
+testuser  rolea      YES
+testuser  roled      NO
+testuser  rolec      NO
 
 user root
 
@@ -445,6 +479,15 @@ query TTT colnames
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee  role_name  is_grantable
+root     rolea      YES
+root     roleb      YES
+root     admin      YES
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+root     root       NO
 root     admin      YES
 root     rolea      YES
 root     roleb      YES
@@ -457,6 +500,14 @@ SELECT * FROM information_schema.administrable_role_authorizations
 grantee   role_name  is_grantable
 testuser  rolea      YES
 testuser  roleb      YES
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  testuser   NO
+testuser  roleb      YES
+testuser  rolea      YES
 
 statement ok
 REVOKE ADMIN OPTION FOR rolea FROM testuser

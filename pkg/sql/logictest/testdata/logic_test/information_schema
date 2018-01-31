@@ -108,6 +108,7 @@ query T
 SHOW TABLES FROM information_schema
 ----
 administrable_role_authorizations
+applicable_roles
 column_privileges
 columns
 key_column_usage
@@ -237,6 +238,7 @@ crdb_internal       table_indexes
 crdb_internal       tables
 crdb_internal       zones
 information_schema  administrable_role_authorizations
+information_schema  applicable_roles
 information_schema  column_privileges
 information_schema  columns
 information_schema  key_column_usage
@@ -415,6 +417,7 @@ def            crdb_internal       table_indexes                      SYSTEM VIE
 def            crdb_internal       tables                             SYSTEM VIEW  1
 def            crdb_internal       zones                              SYSTEM VIEW  1
 def            information_schema  administrable_role_authorizations  SYSTEM VIEW  1
+def            information_schema  applicable_roles                   SYSTEM VIEW  1
 def            information_schema  column_privileges                  SYSTEM VIEW  1
 def            information_schema  columns                            SYSTEM VIEW  1
 def            information_schema  key_column_usage                   SYSTEM VIEW  1
@@ -1196,5 +1199,24 @@ query TTT colnames
 SELECT * FROM information_schema.administrable_role_authorizations
 ----
 grantee  role_name  is_grantable
+
+user root
+
+# information_schema.applicable_roles
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+root     root       NO
+root     admin      YES
+
+user testuser
+
+query TTT colnames
+SELECT * FROM information_schema.applicable_roles
+----
+grantee   role_name  is_grantable
+testuser  testuser   NO
 
 user root
