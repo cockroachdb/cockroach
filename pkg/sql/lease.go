@@ -797,7 +797,7 @@ func (t *tableState) upsertLocked(ctx context.Context, table *tableVersionState,
 	s := t.mu.active.find(table.Version)
 	if s == nil {
 		t.mu.active.insert(table)
-		log.Eventf(ctx, "new lease: %s with %s", s, table)
+		log.Infof(ctx, "new lease: %s", table)
 		return
 	}
 
