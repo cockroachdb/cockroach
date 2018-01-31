@@ -2400,7 +2400,7 @@ func (fr *RocksDBSstFileReader) IngestExternalFile(data []byte) error {
 	if err := fr.rocksDB.WriteFile(filename, data); err != nil {
 		return err
 	}
-	return statusToError(C.DBIngestExternalFile(fr.rocksDB.rdb, goToCSlice([]byte(filename)), false))
+	return statusToError(C.DBIngestExternalFile(fr.rocksDB.rdb, goToCSlice([]byte(filename)), false, true))
 }
 
 // Iterate iterates over the keys between start inclusive and end
@@ -2509,8 +2509,8 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 }
 
 // IngestExternalFile links a file into the RocksDB log-structured merge-tree.
-func (r *RocksDB) IngestExternalFile(ctx context.Context, path string, move bool) error {
-	return statusToError(C.DBIngestExternalFile(r.rdb, goToCSlice([]byte(path)), C._Bool(move)))
+func (r *RocksDB) IngestExternalFile(ctx context.Context, path string, move, modify bool) error {
+	return statusToError(C.DBIngestExternalFile(r.rdb, goToCSlice([]byte(path)), C._Bool(move), C._Bool(modify)))
 }
 
 // WriteFile writes data to a file in this RocksDB's env.

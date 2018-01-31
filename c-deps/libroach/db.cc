@@ -495,7 +495,7 @@ DBSSTable* DBGetSSTables(DBEngine* db, int* n) { return db->GetSSTables(n); }
 
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }
 
-DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file, bool modify_file) {
   const std::vector<std::string> paths = {ToString(path)};
   rocksdb::IngestExternalFileOptions ingest_options;
   // If move_files is true and the env supports it, RocksDB will hard link.
@@ -510,7 +510,7 @@ DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file) {
   // ingest runs, then after moving/copying the file, RocksDB will edit it
   // (overwrite some of the bytes) to have a global sequence number. If this is
   // false, it will error in these cases instead.
-  ingest_options.allow_global_seqno = true;
+  ingest_options.allow_global_seqno = modify_file;
   // If there are mutations in the memtable for the keyrange covered by the file
   // being ingested, this option is checked. If true, the memtable is flushed
   // and the ingest run. If false, an error is returned.
