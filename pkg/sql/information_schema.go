@@ -36,6 +36,7 @@ const (
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
 	tables: []virtualSchemaTable{
+		informationSchemaAdministrableRoleAuthorizations,
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
 		informationSchemaKeyColumnUsageTable,
@@ -112,6 +113,43 @@ func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 		}
 	}
 	return nil
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-administrable-role-authorizations.html
+// MySQL:    missing
+var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.administrable_role_authorizations (
+	GRANTEE STRING NOT NULL,
+	ROLE_NAME STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		grantee := tree.NewDString(currentUser)
+		for roleName, isAdmin := range memberMap {
+			if !isAdmin {
+				// We only show memberships with the admin option.
+				continue
+			}
+
+			if err := addRow(
+				grantee,                   // grantee: always the current user
+				tree.NewDString(roleName), // role_name
+				yesString,                 // is_grantable: always YES
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-column-privileges.html

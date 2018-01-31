@@ -107,6 +107,7 @@ test
 query T
 SHOW TABLES FROM information_schema
 ----
+administrable_role_authorizations
 column_privileges
 columns
 key_column_usage
@@ -235,6 +236,7 @@ crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       tables
 crdb_internal       zones
+information_schema  administrable_role_authorizations
 information_schema  column_privileges
 information_schema  columns
 information_schema  key_column_usage
@@ -383,97 +385,98 @@ table_columns
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-table_catalog  table_schema        table_name                 table_type   version
-def            crdb_internal       backward_dependencies      SYSTEM VIEW  1
-def            crdb_internal       builtin_functions          SYSTEM VIEW  1
-def            crdb_internal       cluster_queries            SYSTEM VIEW  1
-def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
-def            crdb_internal       cluster_settings           SYSTEM VIEW  1
-def            crdb_internal       create_statements          SYSTEM VIEW  1
-def            crdb_internal       forward_dependencies       SYSTEM VIEW  1
-def            crdb_internal       gossip_liveness            SYSTEM VIEW  1
-def            crdb_internal       gossip_nodes               SYSTEM VIEW  1
-def            crdb_internal       index_columns              SYSTEM VIEW  1
-def            crdb_internal       jobs                       SYSTEM VIEW  1
-def            crdb_internal       kv_node_status             SYSTEM VIEW  1
-def            crdb_internal       kv_store_status            SYSTEM VIEW  1
-def            crdb_internal       leases                     SYSTEM VIEW  1
-def            crdb_internal       node_build_info            SYSTEM VIEW  1
-def            crdb_internal       node_queries               SYSTEM VIEW  1
-def            crdb_internal       node_runtime_info          SYSTEM VIEW  1
-def            crdb_internal       node_sessions              SYSTEM VIEW  1
-def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
-def            crdb_internal       partitions                 SYSTEM VIEW  1
-def            crdb_internal       ranges                     SYSTEM VIEW  1
-def            crdb_internal       schema_changes             SYSTEM VIEW  1
-def            crdb_internal       session_trace              SYSTEM VIEW  1
-def            crdb_internal       session_variables          SYSTEM VIEW  1
-def            crdb_internal       table_columns              SYSTEM VIEW  1
-def            crdb_internal       table_indexes              SYSTEM VIEW  1
-def            crdb_internal       tables                     SYSTEM VIEW  1
-def            crdb_internal       zones                      SYSTEM VIEW  1
-def            information_schema  column_privileges          SYSTEM VIEW  1
-def            information_schema  columns                    SYSTEM VIEW  1
-def            information_schema  key_column_usage           SYSTEM VIEW  1
-def            information_schema  referential_constraints    SYSTEM VIEW  1
-def            information_schema  schema_privileges          SYSTEM VIEW  1
-def            information_schema  schemata                   SYSTEM VIEW  1
-def            information_schema  sequences                  SYSTEM VIEW  1
-def            information_schema  statistics                 SYSTEM VIEW  1
-def            information_schema  table_constraints          SYSTEM VIEW  1
-def            information_schema  table_privileges           SYSTEM VIEW  1
-def            information_schema  tables                     SYSTEM VIEW  1
-def            information_schema  user_privileges            SYSTEM VIEW  1
-def            information_schema  views                      SYSTEM VIEW  1
-def            other_db            abc                        VIEW         1
-def            other_db            xyz                        BASE TABLE   3
-def            pg_catalog          pg_am                      SYSTEM VIEW  1
-def            pg_catalog          pg_attrdef                 SYSTEM VIEW  1
-def            pg_catalog          pg_attribute               SYSTEM VIEW  1
-def            pg_catalog          pg_auth_members            SYSTEM VIEW  1
-def            pg_catalog          pg_class                   SYSTEM VIEW  1
-def            pg_catalog          pg_collation               SYSTEM VIEW  1
-def            pg_catalog          pg_constraint              SYSTEM VIEW  1
-def            pg_catalog          pg_database                SYSTEM VIEW  1
-def            pg_catalog          pg_depend                  SYSTEM VIEW  1
-def            pg_catalog          pg_description             SYSTEM VIEW  1
-def            pg_catalog          pg_enum                    SYSTEM VIEW  1
-def            pg_catalog          pg_extension               SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_data_wrapper    SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_server          SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_table           SYSTEM VIEW  1
-def            pg_catalog          pg_index                   SYSTEM VIEW  1
-def            pg_catalog          pg_indexes                 SYSTEM VIEW  1
-def            pg_catalog          pg_inherits                SYSTEM VIEW  1
-def            pg_catalog          pg_namespace               SYSTEM VIEW  1
-def            pg_catalog          pg_operator                SYSTEM VIEW  1
-def            pg_catalog          pg_proc                    SYSTEM VIEW  1
-def            pg_catalog          pg_range                   SYSTEM VIEW  1
-def            pg_catalog          pg_rewrite                 SYSTEM VIEW  1
-def            pg_catalog          pg_roles                   SYSTEM VIEW  1
-def            pg_catalog          pg_sequence                SYSTEM VIEW  1
-def            pg_catalog          pg_settings                SYSTEM VIEW  1
-def            pg_catalog          pg_tables                  SYSTEM VIEW  1
-def            pg_catalog          pg_tablespace              SYSTEM VIEW  1
-def            pg_catalog          pg_trigger                 SYSTEM VIEW  1
-def            pg_catalog          pg_type                    SYSTEM VIEW  1
-def            pg_catalog          pg_user                    SYSTEM VIEW  1
-def            pg_catalog          pg_user_mapping            SYSTEM VIEW  1
-def            pg_catalog          pg_views                   SYSTEM VIEW  1
-def            system              descriptor                 BASE TABLE   1
-def            system              eventlog                   BASE TABLE   2
-def            system              jobs                       BASE TABLE   1
-def            system              lease                      BASE TABLE   1
-def            system              locations                  BASE TABLE   1
-def            system              namespace                  BASE TABLE   1
-def            system              rangelog                   BASE TABLE   1
-def            system              role_members               BASE TABLE   1
-def            system              settings                   BASE TABLE   1
-def            system              table_statistics           BASE TABLE   1
-def            system              ui                         BASE TABLE   1
-def            system              users                      BASE TABLE   4
-def            system              web_sessions               BASE TABLE   1
-def            system              zones                      BASE TABLE   1
+table_catalog  table_schema        table_name                         table_type   version
+def            crdb_internal       backward_dependencies              SYSTEM VIEW  1
+def            crdb_internal       builtin_functions                  SYSTEM VIEW  1
+def            crdb_internal       cluster_queries                    SYSTEM VIEW  1
+def            crdb_internal       cluster_sessions                   SYSTEM VIEW  1
+def            crdb_internal       cluster_settings                   SYSTEM VIEW  1
+def            crdb_internal       create_statements                  SYSTEM VIEW  1
+def            crdb_internal       forward_dependencies               SYSTEM VIEW  1
+def            crdb_internal       gossip_liveness                    SYSTEM VIEW  1
+def            crdb_internal       gossip_nodes                       SYSTEM VIEW  1
+def            crdb_internal       index_columns                      SYSTEM VIEW  1
+def            crdb_internal       jobs                               SYSTEM VIEW  1
+def            crdb_internal       kv_node_status                     SYSTEM VIEW  1
+def            crdb_internal       kv_store_status                    SYSTEM VIEW  1
+def            crdb_internal       leases                             SYSTEM VIEW  1
+def            crdb_internal       node_build_info                    SYSTEM VIEW  1
+def            crdb_internal       node_queries                       SYSTEM VIEW  1
+def            crdb_internal       node_runtime_info                  SYSTEM VIEW  1
+def            crdb_internal       node_sessions                      SYSTEM VIEW  1
+def            crdb_internal       node_statement_statistics          SYSTEM VIEW  1
+def            crdb_internal       partitions                         SYSTEM VIEW  1
+def            crdb_internal       ranges                             SYSTEM VIEW  1
+def            crdb_internal       schema_changes                     SYSTEM VIEW  1
+def            crdb_internal       session_trace                      SYSTEM VIEW  1
+def            crdb_internal       session_variables                  SYSTEM VIEW  1
+def            crdb_internal       table_columns                      SYSTEM VIEW  1
+def            crdb_internal       table_indexes                      SYSTEM VIEW  1
+def            crdb_internal       tables                             SYSTEM VIEW  1
+def            crdb_internal       zones                              SYSTEM VIEW  1
+def            information_schema  administrable_role_authorizations  SYSTEM VIEW  1
+def            information_schema  column_privileges                  SYSTEM VIEW  1
+def            information_schema  columns                            SYSTEM VIEW  1
+def            information_schema  key_column_usage                   SYSTEM VIEW  1
+def            information_schema  referential_constraints            SYSTEM VIEW  1
+def            information_schema  schema_privileges                  SYSTEM VIEW  1
+def            information_schema  schemata                           SYSTEM VIEW  1
+def            information_schema  sequences                          SYSTEM VIEW  1
+def            information_schema  statistics                         SYSTEM VIEW  1
+def            information_schema  table_constraints                  SYSTEM VIEW  1
+def            information_schema  table_privileges                   SYSTEM VIEW  1
+def            information_schema  tables                             SYSTEM VIEW  1
+def            information_schema  user_privileges                    SYSTEM VIEW  1
+def            information_schema  views                              SYSTEM VIEW  1
+def            other_db            abc                                VIEW         1
+def            other_db            xyz                                BASE TABLE   3
+def            pg_catalog          pg_am                              SYSTEM VIEW  1
+def            pg_catalog          pg_attrdef                         SYSTEM VIEW  1
+def            pg_catalog          pg_attribute                       SYSTEM VIEW  1
+def            pg_catalog          pg_auth_members                    SYSTEM VIEW  1
+def            pg_catalog          pg_class                           SYSTEM VIEW  1
+def            pg_catalog          pg_collation                       SYSTEM VIEW  1
+def            pg_catalog          pg_constraint                      SYSTEM VIEW  1
+def            pg_catalog          pg_database                        SYSTEM VIEW  1
+def            pg_catalog          pg_depend                          SYSTEM VIEW  1
+def            pg_catalog          pg_description                     SYSTEM VIEW  1
+def            pg_catalog          pg_enum                            SYSTEM VIEW  1
+def            pg_catalog          pg_extension                       SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_data_wrapper            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server                  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table                   SYSTEM VIEW  1
+def            pg_catalog          pg_index                           SYSTEM VIEW  1
+def            pg_catalog          pg_indexes                         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits                        SYSTEM VIEW  1
+def            pg_catalog          pg_namespace                       SYSTEM VIEW  1
+def            pg_catalog          pg_operator                        SYSTEM VIEW  1
+def            pg_catalog          pg_proc                            SYSTEM VIEW  1
+def            pg_catalog          pg_range                           SYSTEM VIEW  1
+def            pg_catalog          pg_rewrite                         SYSTEM VIEW  1
+def            pg_catalog          pg_roles                           SYSTEM VIEW  1
+def            pg_catalog          pg_sequence                        SYSTEM VIEW  1
+def            pg_catalog          pg_settings                        SYSTEM VIEW  1
+def            pg_catalog          pg_tables                          SYSTEM VIEW  1
+def            pg_catalog          pg_tablespace                      SYSTEM VIEW  1
+def            pg_catalog          pg_trigger                         SYSTEM VIEW  1
+def            pg_catalog          pg_type                            SYSTEM VIEW  1
+def            pg_catalog          pg_user                            SYSTEM VIEW  1
+def            pg_catalog          pg_user_mapping                    SYSTEM VIEW  1
+def            pg_catalog          pg_views                           SYSTEM VIEW  1
+def            system              descriptor                         BASE TABLE   1
+def            system              eventlog                           BASE TABLE   2
+def            system              jobs                               BASE TABLE   1
+def            system              lease                              BASE TABLE   1
+def            system              locations                          BASE TABLE   1
+def            system              namespace                          BASE TABLE   1
+def            system              rangelog                           BASE TABLE   1
+def            system              role_members                       BASE TABLE   1
+def            system              settings                           BASE TABLE   1
+def            system              table_statistics                   BASE TABLE   1
+def            system              ui                                 BASE TABLE   1
+def            system              users                              BASE TABLE   4
+def            system              web_sessions                       BASE TABLE   1
+def            system              zones                              BASE TABLE   1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -1123,7 +1126,7 @@ SELECT * FROM information_schema.sequences
 statement ok
 DROP DATABASE other_db CASCADE
 
-# test infomration_schema.colunm_privileges
+# test information_schema.column_privileges
 query TTBTT colnames
 SHOW COLUMNS FROM information_schema.column_privileges
 ----
@@ -1178,3 +1181,20 @@ NULL     root     def            system        eventlog    targetID     UPDATE  
 NULL     root     def            system        eventlog    reportingID  UPDATE          NULL
 NULL     root     def            system        eventlog    info         UPDATE          NULL
 NULL     root     def            system        eventlog    uniqueID     UPDATE          NULL
+
+# information_schema.administrable_role_authorizations
+
+query TTT colnames
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+root     admin      YES
+
+user testuser
+
+query TTT colnames
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+
+user root
