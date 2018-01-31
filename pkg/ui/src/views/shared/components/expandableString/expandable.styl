@@ -1,0 +1,17 @@
+@require "~styl/base/palette.styl"
+
+.expandable
+  cursor pointer
+  width 100%
+  height 100%
+  display flex
+  justify-content space-between
+  align-items center
+
+  .expandable__icon
+    flex 0 0 auto
+    padding-left 10px
+    line-height 0
+
+  &:hover .expandable__icon rect
+    fill $link-color
