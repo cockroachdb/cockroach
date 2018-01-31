@@ -135,8 +135,18 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	newTableDesc.Version = 1
 
 	// Remove old name -> id map.
+	// This is a violation of consistency because once the TRUNCATE commits
+	// some nodes in the cluster can have cached the old name to id map
+	// for the table and applying operations using the old table id.
+	// This violation is needed because it is not uncommon for TRUNCATE
+	// to be used along with other CRUD commands that follow it in the
+	// same transaction. Commands that follow the TRUNCATE in the same
+	// transaction will use the correct descriptor (through uncommittedTables)
+	// See the comment about problem 3 related to draining names in
+	// structured.proto
+	//
+	// TODO(vivek): Fix properly along with #12123.
 	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
-
 	b := &client.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
 	if traceKV {
@@ -148,7 +158,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 
 	// Drop table.
-	if err := p.initiateDropTable(ctx, tableDesc); err != nil {
+	if err := p.initiateDropTable(ctx, tableDesc, false /* drainName */); err != nil {
 		return err
 	}
 

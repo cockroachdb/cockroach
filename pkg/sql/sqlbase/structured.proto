@@ -562,20 +562,87 @@ message TableDescriptor {
 
   repeated CheckConstraint checks = 20;
 
-  message RenameInfo{
+  // A table descriptor is named through a name map stored in the
+  // system.namespace table: a map from {parent_id, table_name} -> id.
+  // This name map can be cached for performance on a node in the cluster
+  // making reassigning a name complicated. In particular, since a
+  // name cannot be withdrawn across a cluster in a transaction at
+  // timestamp T, we have to worry about the following:
+  //
+  // 1. A table is dropped at T, and the name and descriptor are still
+  // cached and used by transactions at timestamps >= T.
+  // 2. A table is renamed from foo to bar at T, and both names foo and bar
+  // can be used by transactions at timestamps >= T.
+  // 3. A name foo is reassigned from one table to another at T, and the name
+  // foo can reference two different tables at timestamps >= T.
+  //
+  // The system ensures that a name can be resolved only to a single
+  // descriptor at a timestamp thereby permitting 1 and 2, but not 3
+  // (the name references two tables).
+  //
+  // The transaction at T is followed by a time period when names no longer
+  // a part of the namespace are drained from the system. Once the old name
+  // is drained from the system another transaction at timestamp S is
+  // executed to release the name for future use. The interval from T to S
+  // is called the name drain interval: If the T transaction is removing
+  // the name foo then, at timestamps above S, foo can no longer be resolved.
+  //
+  // Consider a transaction at T in which name B is dropped, a new name C is
+  // created. Name C is viable as soon as the transaction commits.
+  // When the transaction at S commits, the name B is released for reuse.
+  //
+  // The transaction at S runs through the schema changer, with the system
+  // returning a response to the client initiating transaction T only after
+  // transaction at S is committed. So effectively the SQL transaction once
+  // it returns can be followed by SQL transactions that do not observe
+  // old name mappings.
+  //
+  // Note: an exception to this is #19925 which needs to be fixed.
+  //
+  // In order for transaction at S to act properly the system.namespace
+  // table entry for an old name references the descriptor who was the
+  // prior owner of the name requiring draining.
+  //
+  // Before T:   B -> Desc B
+  //
+  // After T and before S: B -> Desc B, C -> Desc C
+  //
+  // After S: C -> Desc C
+  //
+  // Between T and S the name B is drained and the system is unable
+  // to assign it to another descriptor.
+  //
+  // BEGIN;
+  // RENAME foo TO bar;
+  // CREATE foo;
+  //
+  // will fail because CREATE foo is executed at T.
+  //
+  // RENAME foo TO bar;
+  // CREATE foo;
+  //
+  // will succeed because the RENAME returns after S and CREATE foo is
+  // executed after S.
+  //
+  // The above scheme suffers from the problem that a transaction can observe
+  // the partial effect of a committed transaction during the drain interval.
+  // For instance during the drain interval a transaction can see the correct
+  // assignment for C, and the old assignments for B.
+  //
+  message NameInfo {
     // The database that the table belonged to before the rename (tables can be
     // renamed from one db to another).
-    optional uint32 old_parent_id = 1 [(gogoproto.nullable) = false,
-      (gogoproto.customname) = "OldParentID", (gogoproto.casttype) = "ID"];
-    optional string old_name = 2 [(gogoproto.nullable) = false];
+    optional uint32 parent_id = 1 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
+    optional string name = 2 [(gogoproto.nullable) = false];
   }
 
-  // This array is populated if the descriptor was renamed. If the descriptor is
-  // renamed multiple times before the schema change is processed, there will be
-  // one element for each rename.
-  // When this is detected in a schema change, the records for the old names are
-  // deleted and this field is cleared.
-  repeated RenameInfo renames = 21 [(gogoproto.nullable) = false];
+  // A list of draining names. The draining name entries are drained from
+  // the cluster wide name caches by incrementing the version for this
+  // descriptor and ensuring that there are no leases on prior
+  // versions of the descriptor. This field is then cleared and the version
+  // of the descriptor incremented.
+  repeated NameInfo draining_names = 21 [(gogoproto.nullable) = false];
 
   // The TableDescriptor is used for views in addition to tables. Views
   // use mostly the same fields as tables, but need to track the actual

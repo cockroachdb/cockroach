@@ -108,7 +108,7 @@ func (*dropSequenceNode) Close(context.Context)        {}
 func (p *planner) dropSequenceImpl(
 	ctx context.Context, seqDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
 ) error {
-	err := p.initiateDropTable(ctx, seqDesc)
+	err := p.initiateDropTable(ctx, seqDesc, true /* drainName */)
 	if err != nil {
 		return err
 	}
