@@ -886,7 +886,7 @@ INSERT INTO b VALUES (1, 1), (2, NULL), (3, 2), (4, 1), (5, NULL);
 statement ok
 DELETE FROM a;
 
-query II
+query II rowsort
 SELECT id, a_id FROM b;
 ----
 2  NULL
@@ -1778,7 +1778,7 @@ INSERT INTO b VALUES (1, 1), (2, NULL), (3, 2), (4, 1), (5, NULL);
 statement ok
 UPDATE a SET id = id + 10;
 
-query II
+query II rowsort
 SELECT id, a_id FROM b;
 ----
 1  11
