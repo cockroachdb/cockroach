@@ -1425,4 +1425,3 @@ CREATE TABLE no_default_table (
 # Clean up after the test.
 statement ok
 DROP TABLE a;
-

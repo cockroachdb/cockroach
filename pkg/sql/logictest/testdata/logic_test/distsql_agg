@@ -479,7 +479,7 @@ NULL       /0       {5}       5
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM one AS a, one AS b, two AS c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUk89LwzAUx-_-FfJOCjms2Q81J8WL87DKnHiQIrF51MKWV5IUlbH_XZoeZuuWUSYFj03yeZ9vX17WoEnhTK7QgniBCBhwYDCGhEFhKEVryVRb9cGp-gQxYJDronTVcsIgJYMg1uByt0QQsJBvS5yjVGiAgUIn86UvXph8Jc3XNWkEBnHpxCkkGwZUum0162SGIKIN69nI9xq3olKTUWhQNTRJRR46siP2nbTv95TrdupwztE_yTnucoM3WWYwk45aitv4abZ4ncfPj2fne02Thik6clbcBx2clWHDyHt_D30Y-Z8au3f1wMTM0RakLbYnfGflQTXWqDKsn4ml0qT4YCj1mvoz9pxfUGhdvTusP6bab_lL-AlHQZiHYd7BzNvwMAiPGvCgDY-C8FUYHnf451-xJ8d0--KYbl92ip1sTr4DAAD__7dOXWU=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUk11L8zAUx--fT_FwrhRysWYvaq4UEZwXrdSJF1IkNoda2HJKkqIy9t2l6cVs3VrKZOBlXn75_XNysgZNCkO5QgviGQJgwIHBFBIGhaEUrSVTLdUb5-oDxIhBrovSVdMJg5QMgliDy90SQcBCvi4xRqnQAAOFTuZLf3hh8pU0n5ekERhEpRP_IdkwoNJtT7NOZggi2LAjG_le41ZUajIKDaqGJqnIvi07Yt9K-3ZHuW6nnofhTdybd_LH8k6HvOhVlhnMpKOW6jp6DBcvcfT0cHK61zRrmIIDe8e9U-_dxg0jP_r_OIaR_6pxeFV7OiZGW5C22O70nSePqvZGlWH9XSyVJsV7Q6nX1MPIc35CoXX16rgezLVf8o_wHQ46Yd4N8wFm3obHnfCkAY_a8KQTvuiGpwPu_CP27JBqnx1S7fNBsZPNv68AAAD__-nuYT0=
 
 query I
 SELECT COUNT(*) FROM one AS a, one AS b, two AS c
@@ -599,7 +599,7 @@ SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJykkDFrwzAQhff-CnNTAjfYTuggKJhOTYemdOhSNBjrapu6OqOToBD834ulIXVoWkI26e6-e-_eASwbeqo_SUC9QQEaYXTckAi7uZQGduYLVI7Q2zH4uawRGnYE6gC-9wOBgtd6CCSAYMjX_ZD2bbP7bFVmTRfsh6xBTwgc_HGJ-LolUPmEVwrdXit03B8sO0OOzEJCz-R_I7-4faile-Tekls6Hujdr6pifef6tosvQNgHr7KqwKrEaoPV9uwdxSWBvZCMbIVO7zmTkEYg01IKRTi4hp4dN1EmffeRiwVD4lO3TJ-dja1o8CdcXACXp3D5J7xZwPmkp5vvAAAA__-HZe5E
+https://cockroachdb.github.io/distsqlplan/decode.html?eJykkDFrwzAQhff-CnNTAjfYTuggKJhCoe7glAxdigZjXW1TVzI6CQrB_71YGlKHpiFkk-7uu_fuHUAbRVX9RQziHTKQCKM1DTEbO5fiQKm-QaQIvR69m8sSoTGWQBzA9W4gEPBWD54YEBS5uh_ivm3ymKzypOm8_uQ1yAnBeHdcwq5uCUQ64Y1C97cKHfd7bawiS2ohIWfy0sgfbp9r7l5Mr8kuHZdV9bQHhIE-3KrI1g-2b7vwAoSddyIpMixyLDZYbM_ek10T3J54NJrp9K4zSUkEUi3FcNh429CrNU2Qid9d4EJBEbvYzeOn1KEVDP6Gsyvg_BTO_4U3Czid5HT3EwAA__8NtfAw
 
 statement ok
 CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
