@@ -180,6 +180,15 @@ func TestLivenessAPI(t *testing.T) {
 					sl.Expiration,
 				)
 			}
+			status, ok := resp.Statuses[s.NodeID()]
+			if !ok {
+				return errors.Errorf("found no liveness status for node %d", s.NodeID())
+			}
+			if a, e := status, storage.NodeLivenessStatus_LIVE; a != e {
+				return errors.Errorf(
+					"liveness status for node %s was %s, wanted %s", s.NodeID(), a, e,
+				)
+			}
 		}
 		return nil
 	})
