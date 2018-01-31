@@ -453,23 +453,6 @@ func (r *Replica) handleReplicatedEvalResult(
 	// of the ContainsEstimates hack.
 
 	if rResult.Split != nil {
-		// TODO(tschottdorf): We want to let the usual MVCCStats-delta
-		// machinery update our stats for the left-hand side. But there is no
-		// way to pass up an MVCCStats object that will clear out the
-		// ContainsEstimates flag. We should introduce one, but the migration
-		// makes this worth a separate effort (ContainsEstimates would need to
-		// have three possible values, 'UNCHANGED', 'NO', and 'YES').
-		// Until then, we're left with this rather crude hack.
-		{
-			r.mu.Lock()
-			r.mu.state.Stats.ContainsEstimates = false
-			stats := *r.mu.state.Stats
-			r.mu.Unlock()
-			if err := r.raftMu.stateLoader.SetMVCCStats(ctx, r.store.Engine(), &stats); err != nil {
-				log.Fatal(ctx, errors.Wrap(err, "unable to write MVCC stats"))
-			}
-		}
-
 		splitPostApply(
 			r.AnnotateCtx(ctx),
 			rResult.Split.RHSDelta,
