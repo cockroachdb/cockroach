@@ -25,6 +25,12 @@ import (
 // setNeededColumns informs the node about which columns are
 // effectively needed by the consumer of its result rows.
 func setNeededColumns(plan planNode, needed []bool) {
+	if len(planColumns(plan)) != len(needed) {
+		panic(fmt.Sprintf(
+			"mismatch between length of plan columns %d and length of needed %d",
+			len(planColumns(plan)),
+			len(needed)))
+	}
 	switch n := plan.(type) {
 	case *createTableNode:
 		if n.n.As() {
@@ -69,11 +75,17 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.right, needed)
 
 	case *joinNode:
+		leftSourceNeeded := make([]bool, len(planColumns(n.left.plan)))
+		rightSourceNeeded := make([]bool, len(planColumns(n.right.plan)))
+
 		// Note: getNeededColumns takes into account both the columns
 		// tested for equality and the join predicate expression.
 		leftNeeded, rightNeeded := n.pred.getNeededColumns(needed)
-		setNeededColumns(n.left.plan, leftNeeded)
-		setNeededColumns(n.right.plan, rightNeeded)
+		copy(leftSourceNeeded, leftNeeded)
+		copy(rightSourceNeeded, rightNeeded)
+
+		setNeededColumns(n.left.plan, leftSourceNeeded)
+		setNeededColumns(n.right.plan, rightSourceNeeded)
 		markOmitted(n.columns, needed)
 
 	case *ordinalityNode:
@@ -109,9 +121,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *filterNode:
 		// Detect which columns from the source are needed in addition to
 		// those needed by the context.
-		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))
+		sourceNeeded := make([]bool, len(planColumns(n.source.plan)))
 		copy(sourceNeeded, needed)
-		for i := range sourceNeeded {
+		for i := 0; i < len(n.source.info.sourceColumns) && i < len(sourceNeeded); i++ {
 			sourceNeeded[i] = sourceNeeded[i] || n.ivarHelper.IndexedVarUsed(i)
 		}
 		setNeededColumns(n.source.plan, sourceNeeded)
@@ -133,8 +145,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 
 		// Now detect which columns from the source are still needed.
-		sourceNeeded := make([]bool, len(n.source.info.sourceColumns))
-		for i := range sourceNeeded {
+		sourceNeeded := make([]bool, len(planColumns(n.source.plan)))
+		for i := 0; i < len(n.source.info.sourceColumns) && i < len(sourceNeeded); i++ {
 			sourceNeeded[i] = n.ivarHelper.IndexedVarUsed(i)
 		}
 		setNeededColumns(n.source.plan, sourceNeeded)
@@ -142,7 +154,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 
 	case *sortNode:
 		sourceNeeded := make([]bool, len(planColumns(n.plan)))
-		copy(sourceNeeded[:len(needed)], needed)
+		copy(sourceNeeded, needed)
 
 		// All the ordering columns are also needed.
 		for _, o := range n.ordering {
@@ -150,7 +162,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 
 		setNeededColumns(n.plan, sourceNeeded)
-		markOmitted(n.columns, sourceNeeded[:len(n.columns)])
+		markOmitted(n.columns, needed)
 
 	case *groupNode:
 		// TODO(knz): This can be optimized by removing the aggregation

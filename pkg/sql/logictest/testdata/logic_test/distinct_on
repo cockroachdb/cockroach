@@ -120,11 +120,11 @@ SELECT DISTINCT ON (b, c, a) a, c, b FROM abc
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (b, c, a) a FROM abc
 ----
-render     0  render  ·         ·            (a)        a!=NULL
- │         0  ·       render 0  a            ·          ·
- └── scan  1  scan    ·         ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
-·          1  ·       table     abc@primary  ·          ·
-·          1  ·       spans     ALL          ·          ·
+render     0  render  ·         ·            (a)                          a!=NULL
+ │         0  ·       render 0  a            ·                            ·
+ └── scan  1  scan    ·         ·            (a, b[omitted], c[omitted])  a!=NULL; b!=NULL; c!=NULL; key(a,b,c)
+·          1  ·       table     abc@primary  ·                            ·
+·          1  ·       spans     ALL          ·                            ·
 
 
 query T rowsort
