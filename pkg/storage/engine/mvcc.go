@@ -597,23 +597,6 @@ func updateStatsOnGC(
 	return ms
 }
 
-// MVCCGetRangeStats reads stat counters for the specified range and
-// sets the values in the enginepb.MVCCStats struct.
-func MVCCGetRangeStats(
-	ctx context.Context, engine Reader, rangeID roachpb.RangeID,
-) (enginepb.MVCCStats, error) {
-	var ms enginepb.MVCCStats
-	_, err := MVCCGetProto(ctx, engine, keys.RangeStatsKey(rangeID), hlc.Timestamp{}, true, nil, &ms)
-	return ms, err
-}
-
-// MVCCSetRangeStats sets stat counters for specified range.
-func MVCCSetRangeStats(
-	ctx context.Context, engine ReadWriter, rangeID roachpb.RangeID, ms *enginepb.MVCCStats,
-) error {
-	return MVCCPutProto(ctx, engine, nil, keys.RangeStatsKey(rangeID), hlc.Timestamp{}, nil, ms)
-}
-
 // MVCCGetProto fetches the value at the specified key and unmarshals it into
 // msg if msg is non-nil. Returns true on success or false if the key was not
 // found. The semantics of consistent are the same as in MVCCGet.
