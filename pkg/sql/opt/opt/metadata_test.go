@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestMetadataColumns(t *testing.T) {
@@ -28,7 +29,7 @@ func TestMetadataColumns(t *testing.T) {
 	}
 
 	// Add standalone column.
-	colIndex := md.AddColumn("alias")
+	colIndex := md.AddColumn("alias", types.Int)
 	if colIndex != 1 {
 		t.Fatalf("unexpected column index: %d", colIndex)
 	}
@@ -38,8 +39,13 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column label: %s", label)
 	}
 
+	typ := md.ColumnType(colIndex)
+	if typ != types.Int {
+		t.Fatalf("unexpected column type: %s", typ)
+	}
+
 	// Add another column.
-	colIndex = md.AddColumn("alias2")
+	colIndex = md.AddColumn("alias2", types.String)
 	if colIndex != 2 {
 		t.Fatalf("unexpected column index: %d", colIndex)
 	}
@@ -47,6 +53,11 @@ func TestMetadataColumns(t *testing.T) {
 	label = md.ColumnLabel(colIndex)
 	if label != "alias2" {
 		t.Fatalf("unexpected column label: %s", label)
+	}
+
+	typ = md.ColumnType(colIndex)
+	if typ != types.String {
+		t.Fatalf("unexpected column type: %s", typ)
 	}
 }
 
