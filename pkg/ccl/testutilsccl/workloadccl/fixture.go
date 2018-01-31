@@ -139,7 +139,11 @@ func writeCSVs(
 			row := table.InitialRowFn(rowIdx)
 			rowStrings := make([]string, len(row))
 			for i, datum := range row {
-				rowStrings[i] = fmt.Sprintf(`%v`, datum)
+				if datum == nil {
+					rowStrings[i] = `NULL`
+				} else {
+					rowStrings[i] = fmt.Sprintf(`%v`, datum)
+				}
 			}
 			if err := csvW.Write(rowStrings); err != nil {
 				return err
@@ -192,7 +196,7 @@ func MakeFixture(
 			return Fixture{}, err
 		}
 		importStmt := fmt.Sprintf(
-			`IMPORT TABLE %s %s CSV DATA ($1) WITH transform=$2`,
+			`IMPORT TABLE "%s" %s CSV DATA ($1) WITH transform=$2, nullif='NULL'`,
 			table.Name, table.Schema,
 		)
 		if _, err := sqlDB.ExecContext(ctx, importStmt, csvURI, backupURI); err != nil {

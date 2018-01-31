@@ -13,11 +13,12 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package tpcc
 
 import (
 	"math/rand"
-	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -39,16 +40,16 @@ var cCustomerID int
 var cItemID int
 
 func init() {
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(timeutil.Now().UnixNano())
 	cLoad = rand.Intn(256)
 	cItemID = rand.Intn(1024)
 	cCustomerID = rand.Intn(8192)
 }
 
-func randStringFromAlphabet(minLen, maxLen int, alphabet string) string {
+func randStringFromAlphabet(rng *rand.Rand, minLen, maxLen int, alphabet string) string {
 	size := maxLen
 	if maxLen-minLen != 0 {
-		size = randInt(minLen, maxLen)
+		size = randInt(rng, minLen, maxLen)
 	}
 	if size == 0 {
 		return ""
@@ -56,56 +57,56 @@ func randStringFromAlphabet(minLen, maxLen int, alphabet string) string {
 
 	b := make([]byte, size)
 	for i := range b {
-		b[i] = alphabet[rand.Intn(len(alphabet))]
+		b[i] = alphabet[rng.Intn(len(alphabet))]
 	}
 	return string(b)
 }
 
 // randAString generates a random alphanumeric string of length between min and
 // max inclusive. See 4.3.2.2.
-func randAString(min, max int) string {
-	return randStringFromAlphabet(min, max, aChars)
+func randAString(rng *rand.Rand, min, max int) string {
+	return randStringFromAlphabet(rng, min, max, aChars)
 }
 
 // randOriginalString generates a random a-string[26..50] with 10% chance of
 // containing the string "ORIGINAL" somewhere in the middle of the string.
 // See 4.3.3.1.
-func randOriginalString() string {
-	if rand.Intn(9) == 0 {
-		l := randInt(26, 50)
-		off := randInt(0, l-8)
-		return randAString(off, off) + originalString + randAString(l-off-8, l-off-8)
+func randOriginalString(rng *rand.Rand) string {
+	if rng.Intn(9) == 0 {
+		l := randInt(rng, 26, 50)
+		off := randInt(rng, 0, l-8)
+		return randAString(rng, off, off) + originalString + randAString(rng, l-off-8, l-off-8)
 	}
-	return randAString(26, 50)
+	return randAString(rng, 26, 50)
 }
 
 // randNString generates a random numeric string of length between min anx max
 // inclusive. See 4.3.2.2.
-func randNString(min, max int) string {
-	return randStringFromAlphabet(min, max, numbers)
+func randNString(rng *rand.Rand, min, max int) string {
+	return randStringFromAlphabet(rng, min, max, numbers)
 }
 
 // randState produces a random US state. (spec just says 2 letters)
-func randState() string {
-	return randStringFromAlphabet(2, 2, letters)
+func randState(rng *rand.Rand) string {
+	return randStringFromAlphabet(rng, 2, 2, letters)
 }
 
 // randZip produces a random "zip code" - a 4-digit number plus the constant
 // "11111". See 4.3.2.7.
-func randZip() string {
-	return randNString(4, 4) + "11111"
+func randZip(rng *rand.Rand) string {
+	return randNString(rng, 4, 4) + "11111"
 }
 
 // randTax produces a random tax between [0.0000..0.2000]
 // See 2.1.5.
-func randTax() float64 {
-	return float64(randInt(0, 2000)) / float64(10000.0)
+func randTax(rng *rand.Rand) float64 {
+	return float64(randInt(rng, 0, 2000)) / float64(10000.0)
 }
 
 // randInt returns a number within [min, max] inclusive.
 // See 2.1.4.
-func randInt(min, max int) int {
-	return rand.Intn(max-min) + min
+func randInt(rng *rand.Rand, min, max int) int {
+	return rng.Intn(max-min) + min
 }
 
 // See 4.3.2.3.
@@ -119,16 +120,6 @@ func randCLastSyllables(n int) string {
 }
 
 // See 4.3.2.3.
-func randCLast() string {
-	return randCLastSyllables(((rand.Intn(256) | rand.Intn(1000)) + cLoad) % 1000)
-}
-
-// Return a non-uniform random customer ID. See 2.1.6.
-func randCustomerID() int {
-	return ((rand.Intn(1024) | (rand.Intn(3000) + 1) + cCustomerID) % 3000) + 1
-}
-
-// Return a non-uniform random item ID. See 2.1.6.
-func randItemID() int {
-	return ((rand.Intn(8190) | (rand.Intn(100000) + 1) + cItemID) % 100000) + 1
+func randCLast(rng *rand.Rand) string {
+	return randCLastSyllables(((rng.Intn(256) | rng.Intn(1000)) + cLoad) % 1000)
 }
