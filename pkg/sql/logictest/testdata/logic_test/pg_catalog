@@ -207,6 +207,7 @@ query TB colnames
 SELECT tablename, hasindexes FROM pg_catalog.pg_tables WHERE schemaname = 'information_schema' AND tablename LIKE '%table%'
 ----
 tablename          hasindexes
+role_table_grants  false
 table_constraints  false
 table_privileges   false
 tables             false
