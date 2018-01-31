@@ -154,7 +154,6 @@ type txnKVFetcher struct {
 	fetchEnd  bool
 	batchIdx  int
 	responses []roachpb.ResponseUnion
-	kvs       []roachpb.KeyValue
 
 	// As the kvFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
@@ -341,33 +340,24 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-// nextKV returns the next key/value (initiating fetches as necessary). When
-// there are no more keys, returns false and an empty key/value.
-func (f *txnKVFetcher) nextKV(ctx context.Context) (bool, roachpb.KeyValue, error) {
-	var kv roachpb.KeyValue
-	for {
-		for len(f.kvs) == 0 && len(f.responses) > 0 {
-			reply := f.responses[0].GetInner()
-			f.responses = f.responses[1:]
-
-			switch t := reply.(type) {
-			case *roachpb.ScanResponse:
-				f.kvs = t.Rows
-			case *roachpb.ReverseScanResponse:
-				f.kvs = t.Rows
-			}
-		}
-
-		if len(f.kvs) > 0 {
-			kv = f.kvs[0]
-			f.kvs = f.kvs[1:]
-			return true, kv, nil
-		}
-		if f.fetchEnd {
-			return false, kv, nil
-		}
-		if err := f.fetch(ctx); err != nil {
-			return false, kv, err
+// nextBatch returns the next batch of key/value pairs. If there are none
+// available, a fetch is initiated. When there are no more keys, returns false.
+func (f *txnKVFetcher) nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error) {
+	if len(f.responses) > 0 {
+		reply := f.responses[0].GetInner()
+		f.responses = f.responses[1:]
+		switch t := reply.(type) {
+		case *roachpb.ScanResponse:
+			return true, t.Rows, nil
+		case *roachpb.ReverseScanResponse:
+			return true, t.Rows, nil
 		}
 	}
+	if f.fetchEnd {
+		return false, nil, nil
+	}
+	if err := f.fetch(ctx); err != nil {
+		return false, nil, err
+	}
+	return f.nextBatch(ctx)
 }
