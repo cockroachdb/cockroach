@@ -36,10 +36,14 @@ const (
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
 	tables: []virtualSchemaTable{
+		informationSchemaAdministrableRoleAuthorizations,
+		informationSchemaApplicableRoles,
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
+		informationSchemaEnabledRoles,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaReferentialConstraintsTable,
+		informationSchemaRoleTableGrants,
 		informationSchemaSchemataTable,
 		informationSchemaSchemataTablePrivileges,
 		informationSchemaSequences,
@@ -112,6 +116,85 @@ func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 		}
 	}
 	return nil
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-administrable-role-authorizations.html
+// MySQL:    missing
+var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.administrable_role_authorizations (
+	GRANTEE STRING NOT NULL,
+	ROLE_NAME STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		grantee := tree.NewDString(currentUser)
+		for roleName, isAdmin := range memberMap {
+			if !isAdmin {
+				// We only show memberships with the admin option.
+				continue
+			}
+
+			if err := addRow(
+				grantee,                   // grantee: always the current user
+				tree.NewDString(roleName), // role_name
+				yesString,                 // is_grantable: always YES
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-applicable-roles.html
+// MySQL:    missing
+var informationSchemaApplicableRoles = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.applicable_roles (
+	GRANTEE STRING NOT NULL,
+	ROLE_NAME STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		grantee := tree.NewDString(currentUser)
+
+		// The current user is always listed.
+		if err := addRow(
+			grantee,  // grantee: the current user
+			grantee,  // role_name: the current user
+			noString, // is_grantable: users do not have an ADMIN OPTION
+		); err != nil {
+			return err
+		}
+
+		for roleName, isAdmin := range memberMap {
+			if err := addRow(
+				grantee,                   // grantee: always the current user
+				tree.NewDString(roleName), // role_name
+				yesOrNoDatum(isAdmin),     // is_grantable
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-column-privileges.html
@@ -292,6 +375,40 @@ CREATE TABLE information_schema.key_column_usage (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-enabled-roles.html
+// MySQL:    missing
+var informationSchemaEnabledRoles = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.enabled_roles (
+	ROLE_NAME STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		// The current user is always listed.
+		if err := addRow(
+			tree.NewDString(currentUser), // role_name: the current user
+		); err != nil {
+			return err
+		}
+
+		for roleName := range memberMap {
+			if err := addRow(
+				tree.NewDString(roleName), // role_name
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
+}
+
 var (
 	matchOptionFull    = tree.NewDString("FULL")
 	matchOptionPartial = tree.NewDString("PARTIAL")
@@ -376,6 +493,46 @@ CREATE TABLE information_schema.referential_constraints (
 					tree.NewDString(refTable.Name),  // referenced_table_name
 				)
 			})
+		})
+	},
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-role-table-grants.html
+// MySQL:    missing
+// This is the same as information_schema.role_table_grants but is duplicated here in case
+// they diverge.
+var informationSchemaRoleTableGrants = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.role_table_grants (
+	GRANTOR STRING NOT NULL,
+	GRANTEE STRING NOT NULL,
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	PRIVILEGE_TYPE STRING NOT NULL,
+	IS_GRANTABLE STRING NOT NULL,
+	WITH_HIERARCHY STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+			for _, u := range table.Privileges.Show() {
+				for _, priv := range u.Privileges {
+					if err := addRow(
+						tree.DNull,                  // grantor
+						tree.NewDString(u.User),     // grantee
+						defString,                   // table_catalog
+						tree.NewDString(db.Name),    // table_schema
+						tree.NewDString(table.Name), // table_name
+						tree.NewDString(priv),       // privilege_type
+						tree.DNull,                  // is_grantable
+						tree.DNull,                  // with_hierarchy
+					); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
 		})
 	},
 }
