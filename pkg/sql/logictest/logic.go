@@ -30,6 +30,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime/debug"
+	"runtime/trace"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,9 +38,6 @@ import (
 	"text/tabwriter"
 	"time"
 	"unicode/utf8"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 
 	"github.com/pkg/errors"
 
@@ -50,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -715,6 +715,28 @@ type logicTest struct {
 	varMap map[string]string
 
 	rewriteResTestBuf bytes.Buffer
+}
+
+func (t *logicTest) traceStart(filename string) {
+	if t.traceFile != nil {
+		t.Fatalf("tracing already active")
+	}
+	var err error
+	t.traceFile, err = os.Create(filename)
+	if err != nil {
+		t.Fatalf("unable to open trace output file: %s", err)
+	}
+	if err := trace.Start(t.traceFile); err != nil {
+		t.Fatalf("unable to start tracing: %s", err)
+	}
+}
+
+func (t *logicTest) traceStop() {
+	if t.traceFile != nil {
+		trace.Stop()
+		t.traceFile.Close()
+		t.traceFile = nil
+	}
 }
 
 // substituteVars replaces all occurrences of "$abc", where "abc" is a variable
