@@ -107,11 +107,11 @@ type Iterator interface {
 	) (*roachpb.Value, []roachpb.Intent, error)
 	// MVCCScan scans the underlying engine from start to end keys and returns
 	// key/value pairs which have a timestamp less than or equal to the supplied
-	// timestamp, up to a max rows. The key/value pairs are returned in the batch
-	// repr format and can be iterated over using RocksDBBatchReader.
+	// timestamp, up to a max rows. The key/value pairs are returned as a buffer
+	// of varint-prefixed slices, alternating from key to value, numKvs pairs.
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, reverse bool,
-	) (kvs []byte, intents []byte, err error)
+	) (kvs []byte, numKvs int64, intents []byte, err error)
 }
 
 // Reader is the read interface to an engine's data.
