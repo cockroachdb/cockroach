@@ -134,6 +134,8 @@ func (m *roachmart) Hooks() workload.Hooks {
 	}
 }
 
+const emailTemplate = `'user-%d@roachmart.example'`
+
 // Tables implements the Generator interface.
 func (m *roachmart) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(m.seed))
@@ -142,7 +144,6 @@ func (m *roachmart) Tables() []workload.Table {
 		Schema:          usersSchema,
 		InitialRowCount: m.users,
 		InitialRowFn: func(rowIdx int) []string {
-			const emailTemplate = `'user-%d@roachmart.example'`
 			return []string{
 				`'` + zones[rowIdx%3] + `'`,                     // zone
 				fmt.Sprintf(emailTemplate, rowIdx),              // email
@@ -174,7 +175,6 @@ func (m *roachmart) Ops() []workload.Operation {
 		Fn: func(sqlDB *gosql.DB) (func(context.Context) error, error) {
 			const query = `SELECT * FROM orders WHERE user_zone = $1 AND user_email = $2`
 			rng := rand.New(rand.NewSource(m.seed))
-			usersTable := m.Tables()[0]
 
 			return func(ctx context.Context) error {
 				wantLocal := rng.Intn(100) < m.localPercent
@@ -183,14 +183,14 @@ func (m *roachmart) Ops() []workload.Operation {
 				// our locality requirements.
 				var zone, email string
 				for i := rng.Int(); ; i++ {
-					user := usersTable.InitialRowFn(i % m.users)
-					zone, email = user[0], user[1]
-					userLocal := zone == `'`+m.localZone+`'`
+					zone = zones[i%3]
+					email = fmt.Sprintf(emailTemplate, i)
+					userLocal := zone == m.localZone
 					if userLocal == wantLocal {
 						break
 					}
 				}
-				_, err := sqlDB.ExecContext(ctx, query, zone, email)
+				_, err := sqlDB.Exec(query, zone, email)
 				return err
 			}, nil
 		},
