@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,8 +49,8 @@ func TestImportOutOfOrder(t *testing.T) {
 	defer cleanupFn()
 
 	bankData := bank.FromRows(2).Tables()[0]
-	row1 := bankData.InitialRowFn(0)
-	row2 := bankData.InitialRowFn(1)
+	row1 := workload.StringTuple(bankData.InitialRowFn(0))
+	row2 := workload.StringTuple(bankData.InitialRowFn(1))
 
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)

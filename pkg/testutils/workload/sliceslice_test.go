@@ -23,24 +23,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
-func TestStringStringSort(t *testing.T) {
+func TestSliceSliceInterfaceSort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	sorted := [][]string{
+	sorted := [][]interface{}{
 		{},
 		{``},
 		{`a`},
-		{`a`, `b`},
-		{`a`, `c`},
+		{`a`, -9223372036854775808},
+		{`a`, 2},
+		{`a`, 12},
+		{`b`},
 	}
 
 	// Create a shuffled version of sorted.
-	actual := make([][]string, len(sorted))
+	actual := make([][]interface{}, len(sorted))
 	for i, v := range rand.Perm(len(actual)) {
 		actual[v] = sorted[i]
 	}
 
-	sort.Sort(stringStringSlice(actual))
+	sort.Sort(sliceSliceInterface(actual))
 	if !reflect.DeepEqual(actual, sorted) {
 		t.Fatalf(`got %v expected %v`, actual, sorted)
 	}

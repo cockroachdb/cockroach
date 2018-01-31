@@ -21,7 +21,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
-	"strconv"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -111,21 +110,21 @@ func (b *bank) Tables() []workload.Table {
 		Name:            `bank`,
 		Schema:          bankSchema,
 		InitialRowCount: b.rows,
-		InitialRowFn: func(rowIdx int) []string {
+		InitialRowFn: func(rowIdx int) []interface{} {
 			const initialPrefix = `initial-`
 			bytes := hex.EncodeToString(randutil.RandBytes(rng, b.payloadBytes/2))
 			// Minus 2 for the single quotes
 			bytes = bytes[:b.payloadBytes-len(initialPrefix)-2]
-			return []string{
-				strconv.Itoa(rowIdx), // id
-				`0`,                  // balance
-				`'` + initialPrefix + bytes + `'`, // payload
+			return []interface{}{
+				rowIdx, // id
+				0,      // balance
+				initialPrefix + bytes, // payload
 			}
 		},
 		SplitCount: b.ranges - 1,
-		SplitFn: func(splitIdx int) []string {
-			return []string{
-				strconv.Itoa((splitIdx + 1) * (b.rows / b.ranges)),
+		SplitFn: func(splitIdx int) []interface{} {
+			return []interface{}{
+				(splitIdx + 1) * (b.rows / b.ranges),
 			}
 		},
 	}
