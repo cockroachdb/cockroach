@@ -453,7 +453,7 @@ func TestCompactorThresholds(t *testing.T) {
 				if a, e := compactor.Metrics.BytesCompacted.Count(), test.expBytesCompacted; a != e {
 					return fmt.Errorf("expected bytes compacted %d; got %d", e, a)
 				}
-				if a, e := compactor.Metrics.Compactions.Count(), int64(len(test.expCompactions)); a != e {
+				if a, e := compactor.Metrics.CompactionSuccesses.Count(), int64(len(test.expCompactions)); a != e {
 					return fmt.Errorf("expected compactions %d; got %d", e, a)
 				}
 				if len(test.expCompactions) == 0 {
