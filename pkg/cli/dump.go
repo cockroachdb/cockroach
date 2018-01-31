@@ -233,9 +233,7 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 	return tableNames, nil
 }
 
-func getBasicMetadata(
-	conn *sqlConn, dbName, tableName string, ts string,
-) (basicMetadata, error) {
+func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basicMetadata, error) {
 	name := &tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)}
 
 	// Fetch table ID.
