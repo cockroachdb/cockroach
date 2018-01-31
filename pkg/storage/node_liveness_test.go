@@ -20,6 +20,7 @@ import (
 	"sort"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -28,9 +29,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func verifyLiveness(t *testing.T, mtc *multiTestContext) {
@@ -792,4 +795,114 @@ func TestNodeLivenessSetDecommissioning(t *testing.T) {
 	testNodeLivenessSetDecommissioning(t, 0)
 	// Set another node to decommissioning.
 	testNodeLivenessSetDecommissioning(t, 1)
+}
+
+func TestNodeLivenessLivenessStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	now := timeutil.Now()
+	maxOffset := 250 * time.Millisecond
+	threshold := 5 * time.Minute
+
+	for _, tc := range []struct {
+		liveness storage.Liveness
+		expected storage.NodeLivenessStatus
+	}{
+		// Valid status.
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(5 * time.Minute).UnixNano(),
+				},
+				Decommissioning: false,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_LIVE,
+		},
+		// Minimum bound of liveness is now + max offset.
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(maxOffset).UnixNano() + 1,
+				},
+				Decommissioning: false,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_LIVE,
+		},
+		// Expired status.
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(maxOffset).UnixNano(),
+				},
+				Decommissioning: false,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Expired status.
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.UnixNano(),
+				},
+				Decommissioning: false,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+		},
+		// Dead status.
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-threshold).Add(-maxOffset).UnixNano(),
+				},
+				Decommissioning: false,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_DEAD,
+		},
+		// Decommissioning.
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-time.Second).UnixNano(),
+				},
+				Decommissioning: true,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_DECOMMISSIONING,
+		},
+		// Draining (reports as unavailable).
+		{
+			liveness: storage.Liveness{
+				NodeID: 1,
+				Epoch:  1,
+				Expiration: hlc.LegacyTimestamp{
+					WallTime: now.Add(-time.Second).UnixNano(),
+				},
+				Decommissioning: false,
+				Draining:        false,
+			},
+			expected: storage.NodeLivenessStatus_UNAVAILABLE,
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			if a, e := tc.liveness.LivenessStatus(now, threshold, maxOffset), tc.expected; a != e {
+				t.Errorf("liveness status was %s, wanted %s", a.String(), e.String())
+			}
+		})
+	}
 }

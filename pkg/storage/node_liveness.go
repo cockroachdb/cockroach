@@ -90,6 +90,27 @@ func (l *Liveness) IsLive(now hlc.Timestamp, maxOffset time.Duration) bool {
 	return now.Less(expiration)
 }
 
+// LivenessStatus returns a NodeLivenessStatus enumeration value for this liveness
+// based on the provided timestamp, threshold, and clock max offset.
+func (l *Liveness) LivenessStatus(
+	now time.Time, threshold, maxOffset time.Duration,
+) NodeLivenessStatus {
+	deadAsOf := hlc.Timestamp(l.Expiration).GoTime().Add(threshold)
+	if !now.Before(deadAsOf) {
+		return NodeLivenessStatus_DEAD
+	}
+	if l.Decommissioning {
+		return NodeLivenessStatus_DECOMMISSIONING
+	}
+	if l.Draining {
+		return NodeLivenessStatus_UNAVAILABLE
+	}
+	if l.IsLive(hlc.Timestamp{WallTime: now.UnixNano()}, maxOffset) {
+		return NodeLivenessStatus_LIVE
+	}
+	return NodeLivenessStatus_UNAVAILABLE
+}
+
 // LivenessMetrics holds metrics for use with node liveness activity.
 type LivenessMetrics struct {
 	LiveNodes          *metric.Gauge

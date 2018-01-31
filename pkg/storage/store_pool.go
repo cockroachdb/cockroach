@@ -77,20 +77,7 @@ func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc 
 		if err != nil {
 			return NodeLivenessStatus_UNAVAILABLE
 		}
-		deadAsOf := hlc.Timestamp(liveness.Expiration).GoTime().Add(threshold)
-		if !now.Before(deadAsOf) {
-			return NodeLivenessStatus_DEAD
-		}
-		if liveness.Decommissioning {
-			return NodeLivenessStatus_DECOMMISSIONING
-		}
-		if liveness.Draining {
-			return NodeLivenessStatus_UNAVAILABLE
-		}
-		if liveness.IsLive(hlc.Timestamp{WallTime: now.UnixNano()}, nodeLiveness.clock.MaxOffset()) {
-			return NodeLivenessStatus_LIVE
-		}
-		return NodeLivenessStatus_UNAVAILABLE
+		return liveness.LivenessStatus(now, threshold, nodeLiveness.clock.MaxOffset())
 	}
 }
 
