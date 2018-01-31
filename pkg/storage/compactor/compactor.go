@@ -131,7 +131,7 @@ func (c *Compactor) Start(ctx context.Context, tracer opentracing.Tracer, stoppe
 				if bytesQueued, err := c.examineQueue(ctx); err != nil {
 					log.Warningf(ctx, "failed check whether compaction suggestions exist: %s", err)
 				} else if bytesQueued > 0 {
-					log.Eventf(ctx, "compactor starting in %s as there are suggested compactions pending", c.opts.CompactionMinInterval)
+					log.VEventf(ctx, 3, "compactor starting in %s as there are suggested compactions pending", c.opts.CompactionMinInterval)
 				} else {
 					// Queue is empty, don't set the timer. This can happen only at startup.
 					break
@@ -305,7 +305,7 @@ func (c *Compactor) processCompaction(
 
 	if shouldProcess {
 		startTime := timeutil.Now()
-		log.Eventf(ctx, "processing compaction %s", aggr)
+		log.Infof(ctx, "processing compaction %s", aggr)
 		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey, false /* forceBottommost */); err != nil {
 			return 0, errors.Wrapf(err, "unable to compact range %+v", aggr)
 		}
@@ -313,7 +313,7 @@ func (c *Compactor) processCompaction(
 		c.Metrics.Compactions.Inc(1)
 		duration := timeutil.Since(startTime)
 		c.Metrics.CompactingNanos.Inc(int64(duration))
-		log.Eventf(ctx, "processed compaction %s in %s", aggr, duration)
+		log.Infof(ctx, "processed compaction %s in %s", aggr, duration)
 	} else {
 		log.VEventf(ctx, 2, "skipping compaction(s) %s", aggr)
 	}
