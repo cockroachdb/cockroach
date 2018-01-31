@@ -51,19 +51,19 @@ define Tuple {
     Elems ExprList
 }
 
-[Scalar]
-define Filters {
-    Conditions ExprList
-}
-
 # Projections is a set of typed scalar expressions that will become output
 # columns for a containing relational expression, such as Project or GroupBy.
 # The private Cols field contains the set of column indexes returned by the
 # expression, as a *ColSet.
 [Scalar]
 define Projections {
-    Items ExprList
+    Elems ExprList
     Cols  ColSet
+}
+
+[Scalar]
+define Filters {
+    Conditions ExprList
 }
 
 [Scalar]
@@ -197,18 +197,6 @@ define NotRegIMatch {
 }
 
 [Scalar]
-define IsDistinctFrom {
-   Left  Expr
-   Right Expr
-}
-
-[Scalar]
-define IsNotDistinctFrom {
-   Left  Expr
-   Right Expr
-}
-
-[Scalar]
 define Is {
    Left  Expr
    Right Expr
@@ -216,6 +204,18 @@ define Is {
 
 [Scalar]
 define IsNot {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define Contains {
+   Left  Expr
+   Right Expr
+}
+
+[Scalar]
+define ContainedBy {
    Left  Expr
    Right Expr
 }
@@ -314,6 +314,30 @@ define LShift {
 define RShift {
    Left  Expr
    Right Expr
+}
+
+[Scalar]
+define FetchVal {
+   Json  Expr
+   Index Expr
+}
+
+[Scalar]
+define FetchText {
+   Json  Expr
+   Index Expr
+}
+
+[Scalar]
+define FetchValPath {
+   Json Expr
+   Path Expr
+}
+
+[Scalar]
+define FetchTextPath {
+   Json Expr
+   Path Expr
 }
 
 [Scalar]

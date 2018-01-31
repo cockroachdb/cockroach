@@ -16,6 +16,7 @@ package opt
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 //go:generate optgen -out operator.og.go ops ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
@@ -32,4 +33,34 @@ func (i Operator) String() string {
 	}
 
 	return opNames[opIndexes[i]:opIndexes[i+1]]
+}
+
+// BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
+// binary operator type.
+var BinaryOpReverseMap = [...]tree.BinaryOperator{
+	BitandOp:        tree.Bitand,
+	BitorOp:         tree.Bitor,
+	BitxorOp:        tree.Bitxor,
+	PlusOp:          tree.Plus,
+	MinusOp:         tree.Minus,
+	MultOp:          tree.Mult,
+	DivOp:           tree.Div,
+	FloorDivOp:      tree.FloorDiv,
+	ModOp:           tree.Mod,
+	PowOp:           tree.Pow,
+	ConcatOp:        tree.Concat,
+	LShiftOp:        tree.LShift,
+	RShiftOp:        tree.RShift,
+	FetchValOp:      tree.FetchVal,
+	FetchTextOp:     tree.FetchText,
+	FetchValPathOp:  tree.FetchValPath,
+	FetchTextPathOp: tree.FetchTextPath,
+}
+
+// UnaryOpReverseMap maps from an optimizer operator type to a semantic tree
+// unary operator type.
+var UnaryOpReverseMap = [...]tree.UnaryOperator{
+	UnaryPlusOp:       tree.UnaryPlus,
+	UnaryMinusOp:      tree.UnaryMinus,
+	UnaryComplementOp: tree.UnaryComplement,
 }

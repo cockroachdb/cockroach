@@ -75,8 +75,8 @@ func (f *logicalPropsFactory) constructRelationalProps(ev *ExprView) LogicalProp
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f *logicalPropsFactory) constructScanProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructScanProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	tblIndex := ev.Private().(opt.TableIndex)
 	tbl := f.mem.metadata.Table(tblIndex)
@@ -91,11 +91,11 @@ func (f *logicalPropsFactory) constructScanProps(ev *ExprView) (props LogicalPro
 		}
 	}
 
-	return
+	return props
 }
 
-func (f *logicalPropsFactory) constructSelectProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructSelectProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 
@@ -105,11 +105,11 @@ func (f *logicalPropsFactory) constructSelectProps(ev *ExprView) (props LogicalP
 	// Inherit not null columns from input.
 	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
 
-	return
+	return props
 }
 
-func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 
@@ -121,11 +121,11 @@ func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) (props Logical
 	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
 	filterNullCols(props.Relational)
 
-	return
+	return props
 }
 
-func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
@@ -159,11 +159,11 @@ func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) (props LogicalPro
 		props.Relational.NotNullCols.UnionWith(leftProps.Relational.NotNullCols)
 	}
 
-	return
+	return props
 }
 
-func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Output columns are union of columns from grouping and aggregate
 	// projection lists.
@@ -172,11 +172,11 @@ func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) (props Logical
 	agg := ev.Child(2)
 	props.Relational.OutputCols.UnionWith(*agg.Private().(*opt.ColSet))
 
-	return
+	return props
 }
 
-func (f *logicalPropsFactory) constructSetProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructSetProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
@@ -199,19 +199,19 @@ func (f *logicalPropsFactory) constructSetProps(ev *ExprView) (props LogicalProp
 		props.Relational.NotNullCols.Add(key)
 	})
 
-	return
+	return props
 }
 
-func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) (props LogicalProps) {
-	props.Relational = &RelationalProps{}
+func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) LogicalProps {
+	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = *ev.Private().(*opt.ColSet)
-	return
+	return props
 }
 
 func (f *logicalPropsFactory) constructScalarProps(ev *ExprView) LogicalProps {
-	return LogicalProps{}
+	return LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
 }
 
 // filterNullCols will ensure that the set of null columns is a subset of the

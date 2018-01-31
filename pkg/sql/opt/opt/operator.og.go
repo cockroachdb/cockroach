@@ -13,8 +13,8 @@ const (
 	FalseOp
 	PlaceholderOp
 	TupleOp
-	FiltersOp
 	ProjectionsOp
+	FiltersOp
 	ExistsOp
 	AndOp
 	OrOp
@@ -37,10 +37,10 @@ const (
 	NotRegMatchOp
 	RegIMatchOp
 	NotRegIMatchOp
-	IsDistinctFromOp
-	IsNotDistinctFromOp
 	IsOp
 	IsNotOp
+	ContainsOp
+	ContainedByOp
 	AnyOp
 	SomeOp
 	AllOp
@@ -57,6 +57,10 @@ const (
 	ConcatOp
 	LShiftOp
 	RShiftOp
+	FetchValOp
+	FetchTextOp
+	FetchValPathOp
+	FetchTextPathOp
 	UnaryPlusOp
 	UnaryMinusOp
 	UnaryComplementOp
@@ -92,6 +96,6 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertuplefiltersprojectionsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchis-distinct-fromis-not-distinct-fromisis-notanysomeallbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsfiltersexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainscontained-byanysomeallbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 60, 71, 77, 80, 82, 85, 87, 89, 91, 93, 95, 97, 99, 105, 109, 117, 123, 133, 143, 157, 166, 179, 190, 205, 221, 241, 243, 249, 252, 256, 259, 265, 270, 276, 280, 285, 289, 292, 301, 304, 307, 313, 320, 327, 337, 348, 364, 372, 376, 382, 388, 395, 405, 414, 424, 433, 442, 451, 467, 482, 498, 513, 528, 543, 551, 556, 565, 571, 575, 582}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 71, 77, 80, 82, 85, 87, 89, 91, 93, 95, 97, 99, 105, 109, 117, 123, 133, 143, 157, 166, 179, 190, 205, 207, 213, 221, 233, 236, 240, 243, 249, 254, 260, 264, 269, 273, 276, 285, 288, 291, 297, 304, 311, 320, 330, 344, 359, 369, 380, 396, 404, 408, 414, 420, 427, 437, 446, 456, 465, 474, 483, 499, 514, 530, 545, 560, 575, 583, 588, 597, 603, 607, 614}

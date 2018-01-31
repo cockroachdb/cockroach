@@ -14,44 +14,44 @@ build
 SELECT 5
 ----
 project
- ├── columns: column1:null:1
+ ├── columns: column1:int:null:1
  ├── values
- │    └── tuple
- └── projections
-      └── const: 5
+ │    └── tuple [type=tuple{}]
+ └── projections [type=tuple{int}]
+      └── const: 5 [type=int]
 
 build
 SELECT a.x FROM t.a
 ----
 project
- ├── columns: a.x:1
+ ├── columns: a.x:int:1
  ├── scan
- │    └── columns: a.x:1 a.y:null:2
- └── projections
-      └── variable: a.x
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections [type=tuple{int}]
+      └── variable: a.x [type=int]
 
 build
 SELECT a.x, a.y FROM t.a
 ----
 scan
- └── columns: a.x:1 a.y:null:2
+ └── columns: a.x:int:1 a.y:float:null:2
 
 build
 SELECT a.y, a.x FROM t.a
 ----
 project
- ├── columns: a.x:1 a.y:null:2
+ ├── columns: a.x:int:1 a.y:float:null:2
  ├── scan
- │    └── columns: a.x:1 a.y:null:2
- └── projections
-      ├── variable: a.y
-      └── variable: a.x
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections [type=tuple{float, int}]
+      ├── variable: a.y [type=float]
+      └── variable: a.x [type=int]
 
 build
 SELECT * FROM t.a
 ----
 scan
- └── columns: a.x:1 a.y:null:2
+ └── columns: a.x:int:1 a.y:float:null:2
 
 # Note that an explicit projection operator is added for table b (unlike for
 # table a) to avoid projecting the hidden rowid column.
@@ -59,52 +59,52 @@ build
 SELECT * FROM t.b
 ----
 project
- ├── columns: b.x:null:1 b.y:null:2
+ ├── columns: b.x:int:null:1 b.y:float:null:2
  ├── scan
- │    └── columns: b.x:null:1 b.y:null:2 b.rowid:3
- └── projections
-      ├── variable: b.x
-      └── variable: b.y
+ │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
+ └── projections [type=tuple{int, float}]
+      ├── variable: b.x [type=int]
+      └── variable: b.y [type=float]
 
 build
 SELECT (a.x + 3) AS "X", false AS "Y" FROM t.a
 ----
 project
- ├── columns: X:null:3 Y:null:4
+ ├── columns: X:int:null:3 Y:bool:null:4
  ├── scan
- │    └── columns: a.x:1 a.y:null:2
- └── projections
-      ├── plus
-      │    ├── variable: a.x
-      │    └── const: 3
-      └── const: false
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections [type=tuple{int, bool}]
+      ├── plus [type=int]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 3 [type=int]
+      └── const: false [type=bool]
 
 build
 SELECT *, ((x < y) OR x > 1000) FROM t.a
 ----
 project
- ├── columns: a.x:1 a.y:null:2 column3:null:3
+ ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
  ├── scan
- │    └── columns: a.x:1 a.y:null:2
- └── projections
-      ├── variable: a.x
-      ├── variable: a.y
-      └── or
-           ├── lt
-           │    ├── variable: a.x
-           │    └── variable: a.y
-           └── gt
-                ├── variable: a.x
-                └── const: 1000
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections [type=tuple{int, float, bool}]
+      ├── variable: a.x [type=int]
+      ├── variable: a.y [type=float]
+      └── or [type=bool]
+           ├── lt [type=bool]
+           │    ├── variable: a.x [type=int]
+           │    └── variable: a.y [type=float]
+           └── gt [type=bool]
+                ├── variable: a.x [type=int]
+                └── const: 1000 [type=int]
 
 build
 SELECT a.*, true FROM t.a
 ----
 project
- ├── columns: a.x:1 a.y:null:2 column3:null:3
+ ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
  ├── scan
- │    └── columns: a.x:1 a.y:null:2
- └── projections
-      ├── variable: a.x
-      ├── variable: a.y
-      └── const: true
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections [type=tuple{int, float, bool}]
+      ├── variable: a.x [type=int]
+      ├── variable: a.y [type=float]
+      └── const: true [type=bool]
