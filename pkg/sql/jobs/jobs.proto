@@ -84,6 +84,10 @@ message ImportDetails {
     int64 sst_size = 12 [(gogoproto.customname) = "SSTSize"];
     int64 walltime = 13;
     bool local = 14;
+    // samples is populated with the sampling phase's results. These must be
+    // used if a job is resumed to guarantee that AddSSTable will not attempt
+    // to add ranges with an old split point within them.
+    repeated bytes samples = 15;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 }
