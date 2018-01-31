@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -65,7 +66,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	byID := make(map[int64]tableMetadata)
+	byID := make(map[int64]basicMetadata)
 	for _, md := range mds {
 		byID[md.ID] = md
 	}
@@ -109,18 +110,26 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	if dumpCtx.dumpMode != dumpSchemaOnly {
 		for _, md := range mds {
-			if md.isView {
+			switch md.kind {
+			case "table":
+				if err := dumpTableData(w, conn, ts, md); err != nil {
+					return err
+				}
+			case "sequence":
+				if err := dumpSequenceData(w, conn, ts, md); err != nil {
+					return err
+				}
+			case "view":
 				continue
-			}
-			if err := dumpTableData(w, conn, ts, md); err != nil {
-				return err
+			default:
+				panic("unknown descriptor type: " + md.kind)
 			}
 		}
 	}
 	return nil
 }
 
-func collect(tid int64, byID map[int64]tableMetadata, seen map[int64]bool, collected *[]int64) {
+func collect(tid int64, byID map[int64]basicMetadata, seen map[int64]bool, collected *[]int64) {
 	// has this table already been collected previously?
 	if seen[tid] {
 		return
@@ -135,15 +144,20 @@ func collect(tid int64, byID map[int64]tableMetadata, seen map[int64]bool, colle
 	*collected = append(*collected, tid)
 }
 
+type basicMetadata struct {
+	ID         int64
+	name       *tree.TableName
+	createStmt string
+	dependsOn  []int64
+	kind       string // "string", "table", or "view"
+}
+
 // tableMetadata describes one table to dump.
 type tableMetadata struct {
-	ID          int64
-	name        *tree.TableName
+	basicMetadata
+
 	columnNames string
 	columnTypes map[string]string
-	createStmt  string
-	dependsOn   []int64
-	isView      bool
 }
 
 // getDumpMetadata retrieves the table information for the specified table(s).
@@ -151,7 +165,7 @@ type tableMetadata struct {
 // retrieved.
 func getDumpMetadata(
 	conn *sqlConn, dbName string, tableNames []string, asOf string,
-) (mds []tableMetadata, clusterTS string, err error) {
+) (mds []basicMetadata, clusterTS string, err error) {
 	if asOf == "" {
 		vals, err := conn.QueryRow("SELECT cluster_logical_timestamp()", nil)
 		if err != nil {
@@ -173,13 +187,13 @@ func getDumpMetadata(
 		}
 	}
 
-	mds = make([]tableMetadata, len(tableNames))
+	mds = make([]basicMetadata, len(tableNames))
 	for i, tableName := range tableNames {
-		md, err := getMetadataForTable(conn, dbName, tableName, clusterTS)
+		basicMD, err := getBasicMetadata(conn, dbName, tableName, clusterTS)
 		if err != nil {
 			return nil, "", err
 		}
-		mds[i] = md
+		mds[i] = basicMD
 	}
 
 	return mds, clusterTS, nil
@@ -188,11 +202,11 @@ func getDumpMetadata(
 // getTableNames retrieves all tables names in the given database.
 func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string, err error) {
 	rows, err := conn.Query(fmt.Sprintf(`
-		SELECT TABLE_NAME
-		FROM "".information_schema.tables
-		AS OF SYSTEM TIME '%s'
-		WHERE TABLE_SCHEMA = $1
-		`, ts), []driver.Value{dbName})
+		SELECT descriptor_name
+		FROM "".crdb_internal.create_statements
+		AS OF SYSTEM TIME %s
+		WHERE database_name = $1
+		`, lex.EscapeSQLString(ts)), []driver.Value{dbName})
 	if err != nil {
 		return nil, err
 	}
@@ -219,40 +233,93 @@ func getTableNames(conn *sqlConn, dbName string, ts string) (tableNames []string
 	return tableNames, nil
 }
 
-func getMetadataForTable(
-	conn *sqlConn, dbName, tableName string, ts string,
-) (tableMetadata, error) {
-	name := &tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
-
-	// Fetch table ID.
-	dbNameStr := tree.NameString(dbName)
+func getBasicMetadata(conn *sqlConn, dbName, tableName string, ts string) (basicMetadata, error) {
+	// Get id, create statement, and kind.
+	dbNameEscaped := tree.NameString(dbName)
 	vals, err := conn.QueryRow(fmt.Sprintf(`
-		SELECT table_id
-		FROM %s.crdb_internal.tables
-		AS OF SYSTEM TIME '%s'
-		WHERE DATABASE_NAME = $1
-			AND NAME = $2
-		`, dbNameStr, ts), []driver.Value{dbName, tableName})
+		SELECT
+			descriptor_id,
+			create_statement,
+			descriptor_type
+		FROM %s.crdb_internal.create_statements
+		AS OF SYSTEM TIME %s
+		WHERE database_name = $1
+			AND descriptor_name = $2
+	`, dbNameEscaped, lex.EscapeSQLString(ts)), []driver.Value{dbName, tableName})
 	if err != nil {
 		if err == io.EOF {
-			return tableMetadata{}, errors.Errorf("relation %s does not exist", name)
+			tn := tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
+			return basicMetadata{}, errors.Wrap(
+				errors.Errorf("relation %s does not exist", tree.ErrString(&tn)),
+				"getBasicMetadata",
+			)
 		}
-		return tableMetadata{}, err
+		return basicMetadata{}, errors.Wrap(err, "getBasicMetadata")
 	}
-	tableID := vals[0].(int64)
+	idI := vals[0]
+	id, ok := idI.(int64)
+	if !ok {
+		return basicMetadata{}, fmt.Errorf("unexpected value: %T", idI)
+	}
+	createStatementI := vals[1]
+	createStatement, ok := createStatementI.(string)
+	if !ok {
+		return basicMetadata{}, fmt.Errorf("unexpected value: %T", createStatementI)
+	}
+	kindI := vals[2]
+	kind, ok := kindI.(string)
+	if !ok {
+		return basicMetadata{}, fmt.Errorf("unexpected value: %T", kindI)
+	}
 
+	// Get dependencies.
+	rows, err := conn.Query(fmt.Sprintf(`
+		SELECT dependson_id
+		FROM %s.crdb_internal.backward_dependencies
+		AS OF SYSTEM TIME %s
+		WHERE descriptor_id = $1
+		`, dbNameEscaped, lex.EscapeSQLString(ts)), []driver.Value{id})
+	if err != nil {
+		return basicMetadata{}, err
+	}
+	vals = make([]driver.Value, 1)
+
+	var refs []int64
+	for {
+		if err := rows.Next(vals); err == io.EOF {
+			break
+		} else if err != nil {
+			return basicMetadata{}, err
+		}
+		id := vals[0].(int64)
+		refs = append(refs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return basicMetadata{}, err
+	}
+
+	return basicMetadata{
+		ID:         id,
+		name:       &tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)},
+		createStmt: createStatement,
+		dependsOn:  refs,
+		kind:       kind,
+	}, nil
+}
+
+func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetadata, error) {
 	// Fetch column types.
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE
 		FROM "".information_schema.columns
-		AS OF SYSTEM TIME '%s'
+		AS OF SYSTEM TIME %s
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
-		`, ts), []driver.Value{dbName, tableName})
+		`, lex.EscapeSQLString(ts)), []driver.Value{md.name.Database(), md.name.Table()})
 	if err != nil {
 		return tableMetadata{}, err
 	}
-	vals = make([]driver.Value, 2)
+	vals := make([]driver.Value, 2)
 	coltypes := make(map[string]string)
 	colnames := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	defer colnames.Close()
@@ -281,57 +348,16 @@ func getMetadataForTable(
 		return tableMetadata{}, err
 	}
 
-	vals, err = conn.QueryRow(fmt.Sprintf(`
-		SELECT create_statement, descriptor_type = 'view'
-		FROM %s.crdb_internal.create_statements
-		AS OF SYSTEM TIME '%s'
-		WHERE descriptor_name = $1
-			AND database_name = $2
-		`, dbNameStr, ts), []driver.Value{tableName, dbName})
-	if err != nil {
-		return tableMetadata{}, err
-	}
-	create := vals[0].(string)
-	descType := vals[1].(bool)
-
-	rows, err = conn.Query(fmt.Sprintf(`
-		SELECT dependson_id
-		FROM %s.crdb_internal.backward_dependencies
-		AS OF SYSTEM TIME '%s'
-		WHERE descriptor_id = $1
-		`, dbNameStr, ts), []driver.Value{tableID})
-	if err != nil {
-		return tableMetadata{}, err
-	}
-	vals = make([]driver.Value, 1)
-
-	var refs []int64
-	for {
-		if err := rows.Next(vals); err == io.EOF {
-			break
-		} else if err != nil {
-			return tableMetadata{}, err
-		}
-		id := vals[0].(int64)
-		refs = append(refs, id)
-	}
-	if err := rows.Close(); err != nil {
-		return tableMetadata{}, err
-	}
-
 	return tableMetadata{
-		ID:          tableID,
-		name:        name,
+		basicMetadata: md,
+
 		columnNames: colnames.String(),
 		columnTypes: coltypes,
-		createStmt:  create,
-		dependsOn:   refs,
-		isView:      descType,
 	}, nil
 }
 
 // dumpCreateTable dumps the CREATE statement of the specified table to w.
-func dumpCreateTable(w io.Writer, md tableMetadata) error {
+func dumpCreateTable(w io.Writer, md basicMetadata) error {
 	if _, err := w.Write([]byte(md.createStmt)); err != nil {
 		return err
 	}
@@ -346,11 +372,35 @@ const (
 	insertRows = 100
 )
 
+func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetadata) error {
+	vals, err := conn.QueryRow(fmt.Sprintf(
+		"SELECT last_value FROM %s AS OF SYSTEM TIME %s",
+		bmd.name, lex.EscapeSQLString(clusterTS),
+	), nil)
+	if err != nil {
+		return err
+	}
+
+	seqVal := vals[0].(int64)
+
+	fmt.Fprintln(w)
+	fmt.Fprintf(
+		w, "SELECT setval(%s, %d);\n", lex.EscapeSQLString(tree.NameString(bmd.name.Table())), seqVal,
+	)
+
+	return nil
+}
+
 // dumpTableData dumps the data of the specified table to w.
-func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadata) error {
-	bs := fmt.Sprintf("SELECT * FROM %s AS OF SYSTEM TIME '%s' ORDER BY PRIMARY KEY %[1]s",
+func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetadata) error {
+	md, err := getMetadataForTable(conn, bmd, clusterTS)
+	if err != nil {
+		return err
+	}
+
+	bs := fmt.Sprintf("SELECT * FROM %s AS OF SYSTEM TIME %s ORDER BY PRIMARY KEY %[1]s",
 		md.name,
-		clusterTS,
+		lex.EscapeSQLString(clusterTS),
 	)
 	inserts := make([]string, 0, insertRows)
 	rows, err := conn.Query(bs, nil)
@@ -510,8 +560,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, md tableMetadat
 	return g.Wait()
 }
 
-func writeInserts(w io.Writer, md tableMetadata, inserts []string) {
-	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", &md.name.TableName, md.columnNames)
+func writeInserts(w io.Writer, tmd tableMetadata, inserts []string) {
+	fmt.Fprintf(w, "\nINSERT INTO %s (%s) VALUES", &tmd.name.TableName, tmd.columnNames)
 	for idx, values := range inserts {
 		if idx > 0 {
 			fmt.Fprint(w, ",")
