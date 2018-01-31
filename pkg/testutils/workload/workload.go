@@ -22,10 +22,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -96,16 +99,14 @@ type Table struct {
 	// table after setup is completed.
 	InitialRowCount int
 	// InitialRowFn is a function to deterministically compute the datums in a
-	// row of the table's initial data given its index. They are returned as
-	// strings and must be pre-escaped for use directly in SQL/CSVs.
-	InitialRowFn func(int) []string
+	// row of the table's initial data given its index.
+	InitialRowFn func(int) []interface{}
 	// SplitCount is the initial number of splits that will be present in the
 	// table after setup is completed.
 	SplitCount int
 	// SplitFn is a function to deterministically compute the datums in a tuple
-	// of the table's initial splits given its index. They are returned as
-	// strings and must be pre-escaped for use directly in SQL/CSVs.
-	SplitFn func(int) []string
+	// of the table's initial splits given its index.
+	SplitFn func(int) []interface{}
 }
 
 // Operation represents some SQL query workload performable on a database
@@ -151,17 +152,28 @@ func Registered() []Meta {
 	return gens
 }
 
+// DatumSize returns the canonical size of a datum as returned from a call to
+// `Table.InitialRowFn`.
+func DatumSize(x interface{}) int64 {
+	switch t := x.(type) {
+	case int:
+		return int64(math.Log10(float64(t)))
+	case float64:
+		return int64(math.Log10(t))
+	case string:
+		return int64(len(t))
+	default:
+		panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+	}
+}
+
 // Setup creates the given tables and fills them with initial data via batched
 // INSERTs. batchSize will only be used when positive (but INSERTs are batched
 // either way).
 //
 // The size of the loaded data is returned in bytes, suitable for use with
-// SetBytes of benchmarks. This size is defined as the sum of lengths of the
-// string representations of the sql (e.g. `1` the int is 1 and `'x'` the string
-// is three).
-//
-// TODO(dan): Is there something better we could be doing here for the size of
-// the loaded data?
+// SetBytes of benchmarks. The exact definition of this is deferred to the
+// DatumSize implementation.
 func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 1000
@@ -190,25 +202,27 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 			insertStmtBuf.Reset()
 			fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s VALUES `, table.Name)
 
-			batchIdx := 0
-			for ; batchIdx < batchSize && rowIdx < table.InitialRowCount; batchIdx++ {
+			var params []interface{}
+			for batchIdx := 0; batchIdx < batchSize && rowIdx < table.InitialRowCount; batchIdx++ {
 				if batchIdx != 0 {
 					insertStmtBuf.WriteString(`,`)
 				}
 				insertStmtBuf.WriteString(`(`)
-				for i, datum := range table.InitialRowFn(rowIdx) {
-					size += int64(len(datum))
+				row := table.InitialRowFn(rowIdx)
+				for i, datum := range row {
+					size += DatumSize(datum)
 					if i != 0 {
 						insertStmtBuf.WriteString(`,`)
 					}
-					insertStmtBuf.WriteString(datum)
+					fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
 				}
+				params = append(params, row...)
 				insertStmtBuf.WriteString(`)`)
 				rowIdx++
 			}
-			if batchIdx > 0 {
+			if len(params) > 0 {
 				insertStmt := insertStmtBuf.String()
-				if _, err := db.Exec(insertStmt); err != nil {
+				if _, err := db.Exec(insertStmt, params...); err != nil {
 					return 0, err
 				}
 			}
@@ -222,11 +236,11 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	if table.SplitCount <= 0 {
 		return nil
 	}
-	splitPoints := make([][]string, table.SplitCount)
+	splitPoints := make([][]interface{}, table.SplitCount)
 	for splitIdx := 0; splitIdx < table.SplitCount; splitIdx++ {
 		splitPoints[splitIdx] = table.SplitFn(splitIdx)
 	}
-	sort.Sort(stringStringSlice(splitPoints))
+	sort.Sort(sliceSliceInterface(splitPoints))
 
 	type pair struct {
 		lo, hi int
@@ -249,7 +263,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 					break
 				}
 				m := (p.lo + p.hi) / 2
-				split := strings.Join(splitPoints[m], `,`)
+				split := strings.Join(StringTuple(splitPoints[m]), `,`)
 
 				buf.Reset()
 				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
@@ -296,17 +310,45 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	return nil
 }
 
-type stringStringSlice [][]string
+// StringTuple returns the given datums as strings suitable for use in directly
+// in SQL.
+//
+// TODO(dan): Remove this once SCATTER supports placeholders.
+func StringTuple(datums []interface{}) []string {
+	s := make([]string, len(datums))
+	for i, datum := range datums {
+		switch x := datum.(type) {
+		case int:
+			s[i] = strconv.Itoa(x)
+		case string:
+			s[i] = lex.EscapeSQLString(x)
+		default:
+			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+		}
+	}
+	return s
+}
 
-func (s stringStringSlice) Len() int      { return len(s) }
-func (s stringStringSlice) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
-func (s stringStringSlice) Less(i, j int) bool {
+type sliceSliceInterface [][]interface{}
+
+func (s sliceSliceInterface) Len() int      { return len(s) }
+func (s sliceSliceInterface) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s sliceSliceInterface) Less(i, j int) bool {
 	for offset := 0; ; offset++ {
 		iLen, jLen := len(s[i]), len(s[j])
 		if iLen <= offset || jLen <= offset {
 			return iLen < jLen
 		}
-		if cmp := strings.Compare(s[i][offset], s[j][offset]); cmp < 0 {
+		var cmp int
+		switch x := s[i][offset].(type) {
+		case int:
+			cmp = x - s[j][offset].(int)
+		case string:
+			cmp = strings.Compare(x, s[j][offset].(string))
+		default:
+			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+		}
+		if cmp < 0 {
 			return true
 		} else if cmp > 0 {
 			return false
