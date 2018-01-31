@@ -250,11 +250,19 @@ typedef struct {
   DBTimestamp max_timestamp;
 } DBTxn;
 
+typedef struct {
+  DBSlice *bufs;
+  // len is the number of DBSlices in bufs.
+  int32_t len;
+  // count is the number of key/value pairs in bufs.
+  int32_t count;
+} DBChunkedBuffer;
+
 // DBScanResults contains the key/value pairs and intents encoded
 // using the RocksDB batch repr format.
 typedef struct {
   DBStatus status;
-  DBSlice data;
+  DBChunkedBuffer data;
   DBSlice intents;
   DBTimestamp uncertainty_timestamp;
 } DBScanResults;
