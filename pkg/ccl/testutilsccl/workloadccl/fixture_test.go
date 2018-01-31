@@ -54,7 +54,9 @@ func (g fixtureTestGen) Tables() []workload.Table {
 		Name:            `fx`,
 		Schema:          `(key INT PRIMARY KEY, value INT)`,
 		InitialRowCount: fixtureTestGenRows,
-		InitialRowFn:    func(rowIdx int) []string { return []string{strconv.Itoa(rowIdx), g.val} },
+		InitialRowFn: func(rowIdx int) []interface{} {
+			return []interface{}{rowIdx, g.val}
+		},
 	}}
 }
 
