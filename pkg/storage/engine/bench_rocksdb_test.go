@@ -48,7 +48,7 @@ func setupMVCCInMemRocksDB(_ testing.TB, loc string) Engine {
 // Read benchmarks. All of them run with on-disk data.
 
 func BenchmarkMVCCScan_RocksDB(b *testing.B) {
-	for _, numRows := range []int{1, 10, 100, 1000} {
+	for _, numRows := range []int{1, 10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			for _, numVersions := range []int{1, 2, 10, 100} {
 				b.Run(fmt.Sprintf("versions=%d", numVersions), func(b *testing.B) {
