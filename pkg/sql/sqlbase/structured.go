@@ -395,8 +395,10 @@ func (desc *TableDescriptor) IsVirtualTable() bool {
 // physical Table that needs to be stored in the kv layer, as opposed to a
 // different resource like a view or a virtual table. Physical tables have
 // primary keys, column families, and indexes (unlike virtual tables).
+// Sequences count as physical tables because their values are stored in
+// the KV layer.
 func (desc *TableDescriptor) IsPhysicalTable() bool {
-	return desc.IsTable() && !desc.IsVirtualTable()
+	return desc.IsSequence() || (desc.IsTable() && !desc.IsVirtualTable())
 }
 
 // KeysPerRow returns the maximum number of keys used to encode a row for the

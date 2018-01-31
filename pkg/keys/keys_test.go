@@ -243,7 +243,7 @@ func TestUserKey(t *testing.T) {
 
 func TestSequenceKey(t *testing.T) {
 	actual := MakeSequenceKey(55)
-	expected := []byte("\xbfseqval")
+	expected := []byte("\xbf\x89\x88\x88")
 	if !bytes.Equal(actual, expected) {
 		t.Errorf("expected %q (len %d), got %q (len %d)", expected, len(expected), actual, len(actual))
 	}

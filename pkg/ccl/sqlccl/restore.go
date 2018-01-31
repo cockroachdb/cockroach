@@ -44,13 +44,15 @@ import (
 type tableRewriteMap map[sqlbase.ID]*jobs.RestoreDetails_TableRewrite
 
 const (
-	restoreOptIntoDB         = "into_db"
-	restoreOptSkipMissingFKs = "skip_missing_foreign_keys"
+	restoreOptIntoDB               = "into_db"
+	restoreOptSkipMissingFKs       = "skip_missing_foreign_keys"
+	restoreOptSkipMissingSequences = "skip_missing_sequences"
 )
 
 var restoreOptionExpectValues = map[string]bool{
-	restoreOptIntoDB:         true,
-	restoreOptSkipMissingFKs: false,
+	restoreOptIntoDB:               true,
+	restoreOptSkipMissingFKs:       false,
+	restoreOptSkipMissingSequences: false,
 }
 
 func loadBackupDescs(
@@ -140,6 +142,7 @@ func allocateTableRewrites(
 
 	// Fail fast if the tables to restore are incompatible with the specified
 	// options.
+	// Check that foreign key targets exist.
 	for _, table := range tablesByID {
 		if renaming && table.IsView() {
 			return nil, errors.Errorf("cannot restore view when using %q option", restoreOptIntoDB)
@@ -160,6 +163,20 @@ func allocateTableRewrites(
 			return nil
 		}); err != nil {
 			return nil, err
+		}
+
+		// Check that referenced sequences exist.
+		for _, col := range table.Columns {
+			for _, seqID := range col.UsesSequenceIds {
+				if _, ok := tablesByID[seqID]; !ok {
+					if _, ok := opts[restoreOptSkipMissingSequences]; !ok {
+						return nil, errors.Errorf(
+							"cannot restore table %q without referenced sequence %d (or %q option)",
+							table.Name, seqID, restoreOptSkipMissingSequences,
+						)
+					}
+				}
+			}
 		}
 	}
 
@@ -370,6 +387,26 @@ func rewriteTableDescs(tables []*sqlbase.TableDescriptor, tableRewrites tableRew
 				ref.ID = refRewrite.TableID
 				table.DependedOnBy = append(table.DependedOnBy, ref)
 			}
+		}
+
+		// Rewrite sequence references in column descriptors.
+		for idx, col := range table.Columns {
+			var newSeqRefs []sqlbase.ID
+			for _, seqID := range col.UsesSequenceIds {
+				if rewrite, ok := tableRewrites[seqID]; ok {
+					newSeqRefs = append(newSeqRefs, rewrite.TableID)
+				} else {
+					// The referenced sequence isn't being restored.
+					// Strip the DEFAULT expression and sequence references.
+					// To get here, the user must have specified 'skip_missing_sequences' --
+					// otherwise, would have errored out in allocateTableRewrites.
+					newSeqRefs = []sqlbase.ID{}
+					col.DefaultExpr = nil
+					break
+				}
+			}
+			col.UsesSequenceIds = newSeqRefs
+			table.Columns[idx] = col
 		}
 
 		// since this is a "new" table in eyes of new cluster, any leftover change
