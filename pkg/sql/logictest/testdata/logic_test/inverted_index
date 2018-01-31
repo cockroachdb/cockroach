@@ -286,6 +286,7 @@ SELECT * from d where b @> 'false' ORDER BY a;
 query IT
 SELECT * from d where b @> '1' ORDER BY a;
 ----
+2   [1, 2, 3, 4, "foo"]
 14  1
 
 query IT
@@ -399,6 +400,34 @@ SELECT * from d where b @> '[[]]' ORDER BY a;
 ----
 26  [[], {}]
 
+statement ok
+INSERT INTO d VALUES (27,  '[true, false, null, 1.23, "a"]')
+
+query IT
+SELECT * from d where b @> 'true' ORDER BY a;
+----
+12  true
+27  [true, false, null, 1.23, "a"]
+
+query IT
+SELECT * from d where b @> 'false' ORDER BY a;
+----
+13  false
+27  [true, false, null, 1.23, "a"]
+
+query IT
+SELECT * from d where b @> '1.23' ORDER BY a;
+----
+15  1.23
+27  [true, false, null, 1.23, "a"]
+
+query IT
+SELECT * from d where b @> '"a"' ORDER BY a;
+----
+10  "a"
+19  ["a", "a"]
+27  [true, false, null, 1.23, "a"]
+
 query IT
 SELECT * from d where b IS NULL;
 ----
@@ -428,3 +457,4 @@ query IT
 SELECT * from d where b @> 'null' ORDER BY a;
 ----
 11  null
+27  [true, false, null, 1.23, "a"]
