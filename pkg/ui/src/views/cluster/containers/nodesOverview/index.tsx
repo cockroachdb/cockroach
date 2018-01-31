@@ -6,7 +6,7 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
-  NodesSummary, nodesSummarySelector, LivenessStatus, deadTimeout,
+  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
@@ -81,12 +81,20 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             {
               title: "Address",
               cell: (ns) => {
-                const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.HEALTHY;
-                const s = LivenessStatus[status].toLowerCase();
-                const tooltip = (status === LivenessStatus.HEALTHY) ?
-                  "This node is currently healthy." :
-                  "This node has not recently reported as being live. " +
-                  "It may not be functioning correctly, but no automatic action has yet been taken.";
+                const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE;
+                const s = livenessNomenclature(status);
+                let tooltip: string;
+                switch (status) {
+                  case LivenessStatus.LIVE:
+                    tooltip = "This node is currently healthy.";
+                    break;
+                  case LivenessStatus.DECOMMISSIONING:
+                    tooltip = "This node is currently being decommissioned.";
+                    break;
+                  default:
+                    tooltip = "This node has not recently reported as being live. " +
+                      "It may not be functioning correctly, but no automatic action has yet been taken.";
+                }
                 return (
                   <div className="sort-table__unbounded-column">
                     <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
@@ -150,7 +158,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
  * NotLiveNodeListProps are the properties of NotLiveNodeList.
  */
 interface NotLiveNodeListProps extends NodeCategoryListProps {
-  status: LivenessStatus.DECOMMISSIONED | LivenessStatus.DEAD;
+  status: LivenessStatus.DECOMMISSIONING | LivenessStatus.DEAD;
 }
 
 /**
@@ -191,7 +199,11 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
                   <div>
                     <div
                       className="icon-circle-filled node-status-icon node-status-icon--dead"
-                      title={`This node has not reported as live for over ${deadTimeout.humanize()} and is considered dead.`}
+                      title={
+                        "This node has not reported as live for a significant period and is considered dead. " +
+                        "The cut-off period for dead nodes is configurable as cluster setting " +
+                        "'server.time_until_store_dead'"
+                      }
                     />
                     <Link to={`/cluster/nodes/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
@@ -242,8 +254,9 @@ const partitionedStatuses = createSelector(
       summary.nodeStatuses,
       (ns) => {
         switch (summary.livenessStatusByNodeID[ns.desc.node_id]) {
-          case LivenessStatus.HEALTHY:
-          case LivenessStatus.SUSPECT:
+          case LivenessStatus.LIVE:
+          case LivenessStatus.UNAVAILABLE:
+          case LivenessStatus.DECOMMISSIONING:
             return "live";
           case LivenessStatus.DECOMMISSIONED:
             return "decommissioned";
@@ -302,7 +315,7 @@ const DecommissionedNodesConnected = connect(
     const statuses = partitionedStatuses(state);
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
-      status: LivenessStatus.DECOMMISSIONED,
+      status: LivenessStatus.DECOMMISSIONING,
       statuses: statuses.decommissioned,
       nodesSummary: nodesSummarySelector(state),
     };
