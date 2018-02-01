@@ -6,7 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import * as d3 from "d3";
 import _ from "lodash";
 import * as protos from "src/js/protos";
 
@@ -74,10 +73,6 @@ export class LocalityTreeNode {
 // locality tiers present on each node.  Adding a node to this collection will
 // add the localities described by that node if they were not already created
 // by a previously added node.
-//
-// The locality collection is maintained primarily as a tree of
-// LocalityTreeNodes. If computeTreeMapLayout is called, each node in the tree
-// will contain its coordinates in a d3 treemap layout.
 export class LocalityCollection {
   tree = new LocalityTreeNode("root");
   byKey: {[key: string]: LocalityTreeNode} = {"root": this.tree};
@@ -87,15 +82,6 @@ export class LocalityCollection {
   addNode(node: SimulatedNodeStatus) {
     const locality = this.getOrCreateTreeNode(node.tiers());
     locality.children.push(new LocalityTreeNode(node));
-  }
-
-  computeTreeMapLayout(layoutSize: [number, number]) {
-    const treeMap = d3.layout.treemap<LocalityTreeNode>();
-    treeMap.size(layoutSize);
-    treeMap.ratio(1);
-    treeMap.padding(30);
-    treeMap.value(n => n.isNode() ? 1 : 0);
-    treeMap(this.tree);
   }
 
   private getOrCreateTreeNode(tiers: Tier[]): LocalityTreeNode {
