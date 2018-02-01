@@ -444,9 +444,9 @@ SELECT abs(sin(pi())) < 1e-12
 true
 
 query RR
-SELECT acos(-0.5), acos(0.5)
+SELECT acos(-0.5), round(acos(0.5), 15)
 ----
-2.0943951023931957 1.0471975511965976
+2.0943951023931957 1.047197551196598
 
 query RR
 SELECT cot(-0.5), cot(0.5)
@@ -469,7 +469,7 @@ SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 -1.1071487177940904 1.1071487177940904
 
 query RRR
-SELECT cbrt(-1.0::float), cbrt(27.0::float), cbrt(19.3::decimal)
+SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
 ----
 -1 3 2.6823725926296729544
 
@@ -802,9 +802,9 @@ query error cannot take square root of a negative number
 SELECT sqrt(-1.0::decimal)
 
 query RRR
-SELECT tan(-5.0), tan(0.0), tan(5.0)
+SELECT round(tan(-5.0), 14), tan(0.0), round(tan(5.0), 14)
 ----
-3.3805150062465854 0 -3.3805150062465854
+3.38051500624659 0 -3.38051500624659
 
 query RRRR
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
