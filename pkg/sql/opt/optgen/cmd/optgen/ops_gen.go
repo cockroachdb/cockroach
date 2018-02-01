@@ -23,14 +23,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
 
-func generateOps(compiled *lang.CompiledExpr, w io.Writer) {
+// opsGen generates the operator enumeration used by the optimizer.
+type opsGen struct {
+	compiled *lang.CompiledExpr
+	w        io.Writer
+}
+
+func (g *opsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
+	g.compiled = compiled
+	g.w = w
+
+	fmt.Fprintf(g.w, "package opt\n\n")
+
 	fmt.Fprintf(w, "const (\n")
 	fmt.Fprintf(w, "  UnknownOp Operator = iota\n\n")
 
-	for _, define := range compiled.Defines {
-		fmt.Fprintf(w, "  %sOp\n", define.Name)
-	}
+	g.genOperatorsByTag("Scalar")
+	g.genOperatorsByTag("Relational")
+	g.genOperatorsByTag("Enforcer")
 
+	fmt.Fprintf(w, "  // NumOperators tracks the total count of operators.\n")
+	fmt.Fprintf(w, "  NumOperators\n")
 	fmt.Fprintf(w, ")\n\n")
 
 	// Generate op names and indexes.
@@ -50,6 +63,18 @@ func generateOps(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(w, "const opNames = \"%s\"\n\n", names.String())
 
 	fmt.Fprintf(w, "var opIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
+}
+
+func (g *opsGen) genOperatorsByTag(tag string) {
+	fmt.Fprintf(g.w, "  // %s Operators\n", tag)
+	for _, define := range g.compiled.Defines {
+		if !define.Tags.Contains(tag) {
+			continue
+		}
+
+		fmt.Fprintf(g.w, "  %sOp\n", define.Name)
+	}
+	fmt.Fprintf(g.w, "\n")
 }
 
 // dashCase converts camel-case identifiers into "dash case", where uppercase

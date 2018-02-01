@@ -2,6 +2,10 @@
 
 package xform
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+)
+
 type childCountLookupFunc func(ev *ExprView) int
 
 var childCountLookup = [...]childCountLookupFunc{
@@ -25,6 +29,16 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0
 	},
 
+	// TrueOp
+	func(ev *ExprView) int {
+		return 0
+	},
+
+	// FalseOp
+	func(ev *ExprView) int {
+		return 0
+	},
+
 	// PlaceholderOp
 	func(ev *ExprView) int {
 		return 0
@@ -33,19 +47,19 @@ var childCountLookup = [...]childCountLookupFunc{
 	// TupleOp
 	func(ev *ExprView) int {
 		tupleExpr := (*tupleExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(tupleExpr.elems().len)
+		return 0 + int(tupleExpr.elems().Length)
 	},
 
 	// FiltersOp
 	func(ev *ExprView) int {
 		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(filtersExpr.conditions().len)
+		return 0 + int(filtersExpr.conditions().Length)
 	},
 
 	// ProjectionsOp
 	func(ev *ExprView) int {
 		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(projectionsExpr.items().len)
+		return 0 + int(projectionsExpr.items().Length)
 	},
 
 	// ExistsOp
@@ -276,17 +290,7 @@ var childCountLookup = [...]childCountLookupFunc{
 	// FunctionOp
 	func(ev *ExprView) int {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(functionExpr.args().len)
-	},
-
-	// TrueOp
-	func(ev *ExprView) int {
-		return 0
-	},
-
-	// FalseOp
-	func(ev *ExprView) int {
-		return 0
+		return 0 + int(functionExpr.args().Length)
 	},
 
 	// ScanOp
@@ -297,7 +301,7 @@ var childCountLookup = [...]childCountLookupFunc{
 	// ValuesOp
 	func(ev *ExprView) int {
 		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(valuesExpr.rows().len)
+		return 0 + int(valuesExpr.rows().Length)
 	},
 
 	// SelectOp
@@ -401,16 +405,16 @@ var childCountLookup = [...]childCountLookupFunc{
 	},
 }
 
-type childGroupLookupFunc func(ev *ExprView, n int) GroupID
+type childGroupLookupFunc func(ev *ExprView, n int) opt.GroupID
 
 var childGroupLookup = [...]childGroupLookupFunc{
 	// UnknownOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		panic("op type not initialized")
 	},
 
 	// SubqueryOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		subqueryExpr := (*subqueryExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -424,22 +428,32 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// VariableOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		panic("child index out of range")
 	},
 
 	// ConstOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
+		panic("child index out of range")
+	},
+
+	// TrueOp
+	func(ev *ExprView, n int) opt.GroupID {
+		panic("child index out of range")
+	},
+
+	// FalseOp
+	func(ev *ExprView, n int) opt.GroupID {
 		panic("child index out of range")
 	},
 
 	// PlaceholderOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		panic("child index out of range")
 	},
 
 	// TupleOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		tupleExpr := (*tupleExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -450,7 +464,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// FiltersOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -461,7 +475,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ProjectionsOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -472,7 +486,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ExistsOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		existsExpr := (*existsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -484,7 +498,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// AndOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		andExpr := (*andExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -498,7 +512,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// OrOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		orExpr := (*orExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -512,7 +526,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notExpr := (*notExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -524,7 +538,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// EqOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		eqExpr := (*eqExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -538,7 +552,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// LtOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		ltExpr := (*ltExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -552,7 +566,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// GtOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		gtExpr := (*gtExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -566,7 +580,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// LeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		leExpr := (*leExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -580,7 +594,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// GeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		geExpr := (*geExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -594,7 +608,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		neExpr := (*neExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -608,7 +622,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// InOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		inExpr := (*inExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -622,7 +636,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotInOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notInExpr := (*notInExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -636,7 +650,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// LikeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		likeExpr := (*likeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -650,7 +664,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotLikeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notLikeExpr := (*notLikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -664,7 +678,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ILikeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		iLikeExpr := (*iLikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -678,7 +692,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotILikeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notILikeExpr := (*notILikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -692,7 +706,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// SimilarToOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		similarToExpr := (*similarToExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -706,7 +720,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotSimilarToOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notSimilarToExpr := (*notSimilarToExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -720,7 +734,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// RegMatchOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		regMatchExpr := (*regMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -734,7 +748,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotRegMatchOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notRegMatchExpr := (*notRegMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -748,7 +762,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// RegIMatchOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		regIMatchExpr := (*regIMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -762,7 +776,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// NotRegIMatchOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		notRegIMatchExpr := (*notRegIMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -776,7 +790,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// IsDistinctFromOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		isDistinctFromExpr := (*isDistinctFromExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -790,7 +804,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// IsNotDistinctFromOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		isNotDistinctFromExpr := (*isNotDistinctFromExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -804,7 +818,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// IsOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		isExpr := (*isExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -818,7 +832,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// IsNotOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		isNotExpr := (*isNotExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -832,7 +846,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// AnyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		anyExpr := (*anyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -846,7 +860,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// SomeOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		someExpr := (*someExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -860,7 +874,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// AllOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		allExpr := (*allExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -874,7 +888,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// BitandOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		bitandExpr := (*bitandExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -888,7 +902,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// BitorOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		bitorExpr := (*bitorExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -902,7 +916,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// BitxorOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		bitxorExpr := (*bitxorExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -916,7 +930,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// PlusOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		plusExpr := (*plusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -930,7 +944,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// MinusOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		minusExpr := (*minusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -944,7 +958,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// MultOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		multExpr := (*multExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -958,7 +972,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// DivOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		divExpr := (*divExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -972,7 +986,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// FloorDivOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		floorDivExpr := (*floorDivExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -986,7 +1000,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ModOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		modExpr := (*modExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1000,7 +1014,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// PowOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		powExpr := (*powExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1014,7 +1028,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ConcatOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		concatExpr := (*concatExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1028,7 +1042,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// LShiftOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		lShiftExpr := (*lShiftExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1042,7 +1056,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// RShiftOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		rShiftExpr := (*rShiftExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1056,7 +1070,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// UnaryPlusOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		unaryPlusExpr := (*unaryPlusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1068,7 +1082,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// UnaryMinusOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		unaryMinusExpr := (*unaryMinusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1080,7 +1094,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// UnaryComplementOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		unaryComplementExpr := (*unaryComplementExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1092,7 +1106,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// FunctionOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1102,23 +1116,13 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
-	// TrueOp
-	func(ev *ExprView, n int) GroupID {
-		panic("child index out of range")
-	},
-
-	// FalseOp
-	func(ev *ExprView, n int) GroupID {
-		panic("child index out of range")
-	},
-
 	// ScanOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		panic("child index out of range")
 	},
 
 	// ValuesOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1129,7 +1133,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// SelectOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		selectExpr := (*selectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1143,7 +1147,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ProjectOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		projectExpr := (*projectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1157,7 +1161,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// InnerJoinOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		innerJoinExpr := (*innerJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1173,7 +1177,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// LeftJoinOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		leftJoinExpr := (*leftJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1189,7 +1193,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// RightJoinOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		rightJoinExpr := (*rightJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1205,7 +1209,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// FullJoinOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		fullJoinExpr := (*fullJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1221,7 +1225,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// SemiJoinOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		semiJoinExpr := (*semiJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1237,7 +1241,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// AntiJoinOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		antiJoinExpr := (*antiJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1253,7 +1257,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// InnerJoinApplyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		innerJoinApplyExpr := (*innerJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1269,7 +1273,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// LeftJoinApplyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		leftJoinApplyExpr := (*leftJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1285,7 +1289,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// RightJoinApplyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		rightJoinApplyExpr := (*rightJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1301,7 +1305,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// FullJoinApplyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		fullJoinApplyExpr := (*fullJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1317,7 +1321,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// SemiJoinApplyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		semiJoinApplyExpr := (*semiJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1333,7 +1337,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// AntiJoinApplyOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		antiJoinApplyExpr := (*antiJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1349,7 +1353,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// GroupByOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		groupByExpr := (*groupByExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1365,7 +1369,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// UnionOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		unionExpr := (*unionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1379,7 +1383,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// IntersectOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		intersectExpr := (*intersectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1393,7 +1397,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// ExceptOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		exceptExpr := (*exceptExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1407,7 +1411,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// SortOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		if n == 0 {
 			return ev.loc.group
 		}
@@ -1416,7 +1420,7 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 
 	// PresentOp
-	func(ev *ExprView, n int) GroupID {
+	func(ev *ExprView, n int) opt.GroupID {
 		if n == 0 {
 			return ev.loc.group
 		}
@@ -1425,404 +1429,404 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 }
 
-type privateLookupFunc func(ev *ExprView) PrivateID
+type privateLookupFunc func(ev *ExprView) opt.PrivateID
 
 var privateLookup = [...]privateLookupFunc{
 	// UnknownOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		panic("op type not initialized")
 	},
 
 	// SubqueryOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// VariableOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		variableExpr := (*variableExpr)(ev.mem.lookupExpr(ev.loc))
 		return variableExpr.col()
 	},
 
 	// ConstOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		constExpr := (*constExpr)(ev.mem.lookupExpr(ev.loc))
 		return constExpr.value()
 	},
 
+	// TrueOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// FalseOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
 	// PlaceholderOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		placeholderExpr := (*placeholderExpr)(ev.mem.lookupExpr(ev.loc))
 		return placeholderExpr.value()
 	},
 
 	// TupleOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// FiltersOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// ProjectionsOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 		return projectionsExpr.cols()
 	},
 
 	// ExistsOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// AndOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// OrOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// EqOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// LtOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// GtOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// LeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// GeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// InOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotInOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// LikeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotLikeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// ILikeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotILikeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// SimilarToOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotSimilarToOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// RegMatchOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotRegMatchOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// RegIMatchOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// NotRegIMatchOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// IsDistinctFromOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// IsNotDistinctFromOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// IsOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// IsNotOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// AnyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// SomeOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// AllOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// BitandOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// BitorOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// BitxorOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// PlusOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// MinusOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// MultOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// DivOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// FloorDivOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// ModOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// PowOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// ConcatOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// LShiftOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// RShiftOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// UnaryPlusOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// UnaryMinusOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// UnaryComplementOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// FunctionOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 		return functionExpr.def()
 	},
 
-	// TrueOp
-	func(ev *ExprView) PrivateID {
-		return 0
-	},
-
-	// FalseOp
-	func(ev *ExprView) PrivateID {
-		return 0
-	},
-
 	// ScanOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		scanExpr := (*scanExpr)(ev.mem.lookupExpr(ev.loc))
 		return scanExpr.table()
 	},
 
 	// ValuesOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 		return valuesExpr.cols()
 	},
 
 	// SelectOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// ProjectOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// InnerJoinOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// LeftJoinOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// RightJoinOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// FullJoinOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// SemiJoinOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// AntiJoinOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// InnerJoinApplyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// LeftJoinApplyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// RightJoinApplyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// FullJoinApplyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// SemiJoinApplyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// AntiJoinApplyOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// GroupByOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// UnionOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		unionExpr := (*unionExpr)(ev.mem.lookupExpr(ev.loc))
 		return unionExpr.colMap()
 	},
 
 	// IntersectOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// ExceptOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// SortOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// PresentOp
-	func(ev *ExprView) PrivateID {
+	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 }
@@ -1833,6 +1837,8 @@ var isScalarLookup = [...]bool{
 	true,  // SubqueryOp
 	true,  // VariableOp
 	true,  // ConstOp
+	true,  // TrueOp
+	true,  // FalseOp
 	true,  // PlaceholderOp
 	true,  // TupleOp
 	true,  // FiltersOp
@@ -1883,8 +1889,6 @@ var isScalarLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	true,  // FunctionOp
-	true,  // TrueOp
-	true,  // FalseOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -1915,6 +1919,8 @@ var isRelationalLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // FiltersOp
@@ -1965,8 +1971,6 @@ var isRelationalLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
-	false, // TrueOp
-	false, // FalseOp
 	true,  // ScanOp
 	true,  // ValuesOp
 	true,  // SelectOp
@@ -1997,6 +2001,8 @@ var isJoinLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // FiltersOp
@@ -2047,8 +2053,6 @@ var isJoinLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
-	false, // TrueOp
-	false, // FalseOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2079,6 +2083,8 @@ var isJoinApplyLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // FiltersOp
@@ -2129,8 +2135,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
-	false, // TrueOp
-	false, // FalseOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2161,6 +2165,8 @@ var isEnforcerLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // FiltersOp
@@ -2211,8 +2217,6 @@ var isEnforcerLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
-	false, // TrueOp
-	false, // FalseOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2259,16 +2263,16 @@ func (ev *ExprView) IsEnforcer() bool {
 
 type subqueryExpr memoExpr
 
-func makeSubqueryExpr(input GroupID, projection GroupID) subqueryExpr {
-	return subqueryExpr{op: SubqueryOp, state: exprState{uint32(input), uint32(projection)}}
+func makeSubqueryExpr(input opt.GroupID, projection opt.GroupID) subqueryExpr {
+	return subqueryExpr{op: opt.SubqueryOp, state: exprState{uint32(input), uint32(projection)}}
 }
 
-func (e *subqueryExpr) input() GroupID {
-	return GroupID(e.state[0])
+func (e *subqueryExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *subqueryExpr) projection() GroupID {
-	return GroupID(e.state[1])
+func (e *subqueryExpr) projection() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
 func (e *subqueryExpr) fingerprint() fingerprint {
@@ -2276,7 +2280,7 @@ func (e *subqueryExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asSubquery() *subqueryExpr {
-	if m.op != SubqueryOp {
+	if m.op != opt.SubqueryOp {
 		return nil
 	}
 	return (*subqueryExpr)(m)
@@ -2284,12 +2288,12 @@ func (m *memoExpr) asSubquery() *subqueryExpr {
 
 type variableExpr memoExpr
 
-func makeVariableExpr(col PrivateID) variableExpr {
-	return variableExpr{op: VariableOp, state: exprState{uint32(col)}}
+func makeVariableExpr(col opt.PrivateID) variableExpr {
+	return variableExpr{op: opt.VariableOp, state: exprState{uint32(col)}}
 }
 
-func (e *variableExpr) col() PrivateID {
-	return PrivateID(e.state[0])
+func (e *variableExpr) col() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
 }
 
 func (e *variableExpr) fingerprint() fingerprint {
@@ -2297,7 +2301,7 @@ func (e *variableExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asVariable() *variableExpr {
-	if m.op != VariableOp {
+	if m.op != opt.VariableOp {
 		return nil
 	}
 	return (*variableExpr)(m)
@@ -2305,12 +2309,12 @@ func (m *memoExpr) asVariable() *variableExpr {
 
 type constExpr memoExpr
 
-func makeConstExpr(value PrivateID) constExpr {
-	return constExpr{op: ConstOp, state: exprState{uint32(value)}}
+func makeConstExpr(value opt.PrivateID) constExpr {
+	return constExpr{op: opt.ConstOp, state: exprState{uint32(value)}}
 }
 
-func (e *constExpr) value() PrivateID {
-	return PrivateID(e.state[0])
+func (e *constExpr) value() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
 }
 
 func (e *constExpr) fingerprint() fingerprint {
@@ -2318,1234 +2322,16 @@ func (e *constExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asConst() *constExpr {
-	if m.op != ConstOp {
+	if m.op != opt.ConstOp {
 		return nil
 	}
 	return (*constExpr)(m)
 }
 
-type placeholderExpr memoExpr
-
-func makePlaceholderExpr(value PrivateID) placeholderExpr {
-	return placeholderExpr{op: PlaceholderOp, state: exprState{uint32(value)}}
-}
-
-func (e *placeholderExpr) value() PrivateID {
-	return PrivateID(e.state[0])
-}
-
-func (e *placeholderExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asPlaceholder() *placeholderExpr {
-	if m.op != PlaceholderOp {
-		return nil
-	}
-	return (*placeholderExpr)(m)
-}
-
-type tupleExpr memoExpr
-
-func makeTupleExpr(elems ListID) tupleExpr {
-	return tupleExpr{op: TupleOp, state: exprState{elems.offset, elems.len}}
-}
-
-func (e *tupleExpr) elems() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
-}
-
-func (e *tupleExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asTuple() *tupleExpr {
-	if m.op != TupleOp {
-		return nil
-	}
-	return (*tupleExpr)(m)
-}
-
-type filtersExpr memoExpr
-
-func makeFiltersExpr(conditions ListID) filtersExpr {
-	return filtersExpr{op: FiltersOp, state: exprState{conditions.offset, conditions.len}}
-}
-
-func (e *filtersExpr) conditions() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
-}
-
-func (e *filtersExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asFilters() *filtersExpr {
-	if m.op != FiltersOp {
-		return nil
-	}
-	return (*filtersExpr)(m)
-}
-
-type projectionsExpr memoExpr
-
-func makeProjectionsExpr(items ListID, cols PrivateID) projectionsExpr {
-	return projectionsExpr{op: ProjectionsOp, state: exprState{items.offset, items.len, uint32(cols)}}
-}
-
-func (e *projectionsExpr) items() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
-}
-
-func (e *projectionsExpr) cols() PrivateID {
-	return PrivateID(e.state[2])
-}
-
-func (e *projectionsExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asProjections() *projectionsExpr {
-	if m.op != ProjectionsOp {
-		return nil
-	}
-	return (*projectionsExpr)(m)
-}
-
-type existsExpr memoExpr
-
-func makeExistsExpr(input GroupID) existsExpr {
-	return existsExpr{op: ExistsOp, state: exprState{uint32(input)}}
-}
-
-func (e *existsExpr) input() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *existsExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asExists() *existsExpr {
-	if m.op != ExistsOp {
-		return nil
-	}
-	return (*existsExpr)(m)
-}
-
-type andExpr memoExpr
-
-func makeAndExpr(left GroupID, right GroupID) andExpr {
-	return andExpr{op: AndOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *andExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *andExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *andExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAnd() *andExpr {
-	if m.op != AndOp {
-		return nil
-	}
-	return (*andExpr)(m)
-}
-
-type orExpr memoExpr
-
-func makeOrExpr(left GroupID, right GroupID) orExpr {
-	return orExpr{op: OrOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *orExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *orExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *orExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asOr() *orExpr {
-	if m.op != OrOp {
-		return nil
-	}
-	return (*orExpr)(m)
-}
-
-type notExpr memoExpr
-
-func makeNotExpr(input GroupID) notExpr {
-	return notExpr{op: NotOp, state: exprState{uint32(input)}}
-}
-
-func (e *notExpr) input() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNot() *notExpr {
-	if m.op != NotOp {
-		return nil
-	}
-	return (*notExpr)(m)
-}
-
-type eqExpr memoExpr
-
-func makeEqExpr(left GroupID, right GroupID) eqExpr {
-	return eqExpr{op: EqOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *eqExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *eqExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *eqExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asEq() *eqExpr {
-	if m.op != EqOp {
-		return nil
-	}
-	return (*eqExpr)(m)
-}
-
-type ltExpr memoExpr
-
-func makeLtExpr(left GroupID, right GroupID) ltExpr {
-	return ltExpr{op: LtOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *ltExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *ltExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *ltExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLt() *ltExpr {
-	if m.op != LtOp {
-		return nil
-	}
-	return (*ltExpr)(m)
-}
-
-type gtExpr memoExpr
-
-func makeGtExpr(left GroupID, right GroupID) gtExpr {
-	return gtExpr{op: GtOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *gtExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *gtExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *gtExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asGt() *gtExpr {
-	if m.op != GtOp {
-		return nil
-	}
-	return (*gtExpr)(m)
-}
-
-type leExpr memoExpr
-
-func makeLeExpr(left GroupID, right GroupID) leExpr {
-	return leExpr{op: LeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *leExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *leExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *leExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLe() *leExpr {
-	if m.op != LeOp {
-		return nil
-	}
-	return (*leExpr)(m)
-}
-
-type geExpr memoExpr
-
-func makeGeExpr(left GroupID, right GroupID) geExpr {
-	return geExpr{op: GeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *geExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *geExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *geExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asGe() *geExpr {
-	if m.op != GeOp {
-		return nil
-	}
-	return (*geExpr)(m)
-}
-
-type neExpr memoExpr
-
-func makeNeExpr(left GroupID, right GroupID) neExpr {
-	return neExpr{op: NeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *neExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *neExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *neExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNe() *neExpr {
-	if m.op != NeOp {
-		return nil
-	}
-	return (*neExpr)(m)
-}
-
-type inExpr memoExpr
-
-func makeInExpr(left GroupID, right GroupID) inExpr {
-	return inExpr{op: InOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *inExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *inExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *inExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIn() *inExpr {
-	if m.op != InOp {
-		return nil
-	}
-	return (*inExpr)(m)
-}
-
-type notInExpr memoExpr
-
-func makeNotInExpr(left GroupID, right GroupID) notInExpr {
-	return notInExpr{op: NotInOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *notInExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notInExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *notInExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNotIn() *notInExpr {
-	if m.op != NotInOp {
-		return nil
-	}
-	return (*notInExpr)(m)
-}
-
-type likeExpr memoExpr
-
-func makeLikeExpr(left GroupID, right GroupID) likeExpr {
-	return likeExpr{op: LikeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *likeExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *likeExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *likeExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLike() *likeExpr {
-	if m.op != LikeOp {
-		return nil
-	}
-	return (*likeExpr)(m)
-}
-
-type notLikeExpr memoExpr
-
-func makeNotLikeExpr(left GroupID, right GroupID) notLikeExpr {
-	return notLikeExpr{op: NotLikeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *notLikeExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notLikeExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *notLikeExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNotLike() *notLikeExpr {
-	if m.op != NotLikeOp {
-		return nil
-	}
-	return (*notLikeExpr)(m)
-}
-
-type iLikeExpr memoExpr
-
-func makeILikeExpr(left GroupID, right GroupID) iLikeExpr {
-	return iLikeExpr{op: ILikeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *iLikeExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *iLikeExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *iLikeExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asILike() *iLikeExpr {
-	if m.op != ILikeOp {
-		return nil
-	}
-	return (*iLikeExpr)(m)
-}
-
-type notILikeExpr memoExpr
-
-func makeNotILikeExpr(left GroupID, right GroupID) notILikeExpr {
-	return notILikeExpr{op: NotILikeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *notILikeExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notILikeExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *notILikeExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNotILike() *notILikeExpr {
-	if m.op != NotILikeOp {
-		return nil
-	}
-	return (*notILikeExpr)(m)
-}
-
-type similarToExpr memoExpr
-
-func makeSimilarToExpr(left GroupID, right GroupID) similarToExpr {
-	return similarToExpr{op: SimilarToOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *similarToExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *similarToExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *similarToExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asSimilarTo() *similarToExpr {
-	if m.op != SimilarToOp {
-		return nil
-	}
-	return (*similarToExpr)(m)
-}
-
-type notSimilarToExpr memoExpr
-
-func makeNotSimilarToExpr(left GroupID, right GroupID) notSimilarToExpr {
-	return notSimilarToExpr{op: NotSimilarToOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *notSimilarToExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notSimilarToExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *notSimilarToExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNotSimilarTo() *notSimilarToExpr {
-	if m.op != NotSimilarToOp {
-		return nil
-	}
-	return (*notSimilarToExpr)(m)
-}
-
-type regMatchExpr memoExpr
-
-func makeRegMatchExpr(left GroupID, right GroupID) regMatchExpr {
-	return regMatchExpr{op: RegMatchOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *regMatchExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *regMatchExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *regMatchExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asRegMatch() *regMatchExpr {
-	if m.op != RegMatchOp {
-		return nil
-	}
-	return (*regMatchExpr)(m)
-}
-
-type notRegMatchExpr memoExpr
-
-func makeNotRegMatchExpr(left GroupID, right GroupID) notRegMatchExpr {
-	return notRegMatchExpr{op: NotRegMatchOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *notRegMatchExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notRegMatchExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *notRegMatchExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNotRegMatch() *notRegMatchExpr {
-	if m.op != NotRegMatchOp {
-		return nil
-	}
-	return (*notRegMatchExpr)(m)
-}
-
-type regIMatchExpr memoExpr
-
-func makeRegIMatchExpr(left GroupID, right GroupID) regIMatchExpr {
-	return regIMatchExpr{op: RegIMatchOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *regIMatchExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *regIMatchExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *regIMatchExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asRegIMatch() *regIMatchExpr {
-	if m.op != RegIMatchOp {
-		return nil
-	}
-	return (*regIMatchExpr)(m)
-}
-
-type notRegIMatchExpr memoExpr
-
-func makeNotRegIMatchExpr(left GroupID, right GroupID) notRegIMatchExpr {
-	return notRegIMatchExpr{op: NotRegIMatchOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *notRegIMatchExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *notRegIMatchExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *notRegIMatchExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asNotRegIMatch() *notRegIMatchExpr {
-	if m.op != NotRegIMatchOp {
-		return nil
-	}
-	return (*notRegIMatchExpr)(m)
-}
-
-type isDistinctFromExpr memoExpr
-
-func makeIsDistinctFromExpr(left GroupID, right GroupID) isDistinctFromExpr {
-	return isDistinctFromExpr{op: IsDistinctFromOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *isDistinctFromExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *isDistinctFromExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *isDistinctFromExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIsDistinctFrom() *isDistinctFromExpr {
-	if m.op != IsDistinctFromOp {
-		return nil
-	}
-	return (*isDistinctFromExpr)(m)
-}
-
-type isNotDistinctFromExpr memoExpr
-
-func makeIsNotDistinctFromExpr(left GroupID, right GroupID) isNotDistinctFromExpr {
-	return isNotDistinctFromExpr{op: IsNotDistinctFromOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *isNotDistinctFromExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *isNotDistinctFromExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *isNotDistinctFromExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIsNotDistinctFrom() *isNotDistinctFromExpr {
-	if m.op != IsNotDistinctFromOp {
-		return nil
-	}
-	return (*isNotDistinctFromExpr)(m)
-}
-
-type isExpr memoExpr
-
-func makeIsExpr(left GroupID, right GroupID) isExpr {
-	return isExpr{op: IsOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *isExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *isExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *isExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIs() *isExpr {
-	if m.op != IsOp {
-		return nil
-	}
-	return (*isExpr)(m)
-}
-
-type isNotExpr memoExpr
-
-func makeIsNotExpr(left GroupID, right GroupID) isNotExpr {
-	return isNotExpr{op: IsNotOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *isNotExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *isNotExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *isNotExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIsNot() *isNotExpr {
-	if m.op != IsNotOp {
-		return nil
-	}
-	return (*isNotExpr)(m)
-}
-
-type anyExpr memoExpr
-
-func makeAnyExpr(left GroupID, right GroupID) anyExpr {
-	return anyExpr{op: AnyOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *anyExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *anyExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *anyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAny() *anyExpr {
-	if m.op != AnyOp {
-		return nil
-	}
-	return (*anyExpr)(m)
-}
-
-type someExpr memoExpr
-
-func makeSomeExpr(left GroupID, right GroupID) someExpr {
-	return someExpr{op: SomeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *someExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *someExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *someExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asSome() *someExpr {
-	if m.op != SomeOp {
-		return nil
-	}
-	return (*someExpr)(m)
-}
-
-type allExpr memoExpr
-
-func makeAllExpr(left GroupID, right GroupID) allExpr {
-	return allExpr{op: AllOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *allExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *allExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *allExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAll() *allExpr {
-	if m.op != AllOp {
-		return nil
-	}
-	return (*allExpr)(m)
-}
-
-type bitandExpr memoExpr
-
-func makeBitandExpr(left GroupID, right GroupID) bitandExpr {
-	return bitandExpr{op: BitandOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *bitandExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *bitandExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *bitandExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asBitand() *bitandExpr {
-	if m.op != BitandOp {
-		return nil
-	}
-	return (*bitandExpr)(m)
-}
-
-type bitorExpr memoExpr
-
-func makeBitorExpr(left GroupID, right GroupID) bitorExpr {
-	return bitorExpr{op: BitorOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *bitorExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *bitorExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *bitorExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asBitor() *bitorExpr {
-	if m.op != BitorOp {
-		return nil
-	}
-	return (*bitorExpr)(m)
-}
-
-type bitxorExpr memoExpr
-
-func makeBitxorExpr(left GroupID, right GroupID) bitxorExpr {
-	return bitxorExpr{op: BitxorOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *bitxorExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *bitxorExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *bitxorExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asBitxor() *bitxorExpr {
-	if m.op != BitxorOp {
-		return nil
-	}
-	return (*bitxorExpr)(m)
-}
-
-type plusExpr memoExpr
-
-func makePlusExpr(left GroupID, right GroupID) plusExpr {
-	return plusExpr{op: PlusOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *plusExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *plusExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *plusExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asPlus() *plusExpr {
-	if m.op != PlusOp {
-		return nil
-	}
-	return (*plusExpr)(m)
-}
-
-type minusExpr memoExpr
-
-func makeMinusExpr(left GroupID, right GroupID) minusExpr {
-	return minusExpr{op: MinusOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *minusExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *minusExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *minusExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asMinus() *minusExpr {
-	if m.op != MinusOp {
-		return nil
-	}
-	return (*minusExpr)(m)
-}
-
-type multExpr memoExpr
-
-func makeMultExpr(left GroupID, right GroupID) multExpr {
-	return multExpr{op: MultOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *multExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *multExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *multExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asMult() *multExpr {
-	if m.op != MultOp {
-		return nil
-	}
-	return (*multExpr)(m)
-}
-
-type divExpr memoExpr
-
-func makeDivExpr(left GroupID, right GroupID) divExpr {
-	return divExpr{op: DivOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *divExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *divExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *divExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asDiv() *divExpr {
-	if m.op != DivOp {
-		return nil
-	}
-	return (*divExpr)(m)
-}
-
-type floorDivExpr memoExpr
-
-func makeFloorDivExpr(left GroupID, right GroupID) floorDivExpr {
-	return floorDivExpr{op: FloorDivOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *floorDivExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *floorDivExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *floorDivExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asFloorDiv() *floorDivExpr {
-	if m.op != FloorDivOp {
-		return nil
-	}
-	return (*floorDivExpr)(m)
-}
-
-type modExpr memoExpr
-
-func makeModExpr(left GroupID, right GroupID) modExpr {
-	return modExpr{op: ModOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *modExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *modExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *modExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asMod() *modExpr {
-	if m.op != ModOp {
-		return nil
-	}
-	return (*modExpr)(m)
-}
-
-type powExpr memoExpr
-
-func makePowExpr(left GroupID, right GroupID) powExpr {
-	return powExpr{op: PowOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *powExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *powExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *powExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asPow() *powExpr {
-	if m.op != PowOp {
-		return nil
-	}
-	return (*powExpr)(m)
-}
-
-type concatExpr memoExpr
-
-func makeConcatExpr(left GroupID, right GroupID) concatExpr {
-	return concatExpr{op: ConcatOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *concatExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *concatExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *concatExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asConcat() *concatExpr {
-	if m.op != ConcatOp {
-		return nil
-	}
-	return (*concatExpr)(m)
-}
-
-type lShiftExpr memoExpr
-
-func makeLShiftExpr(left GroupID, right GroupID) lShiftExpr {
-	return lShiftExpr{op: LShiftOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *lShiftExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *lShiftExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *lShiftExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLShift() *lShiftExpr {
-	if m.op != LShiftOp {
-		return nil
-	}
-	return (*lShiftExpr)(m)
-}
-
-type rShiftExpr memoExpr
-
-func makeRShiftExpr(left GroupID, right GroupID) rShiftExpr {
-	return rShiftExpr{op: RShiftOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *rShiftExpr) left() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *rShiftExpr) right() GroupID {
-	return GroupID(e.state[1])
-}
-
-func (e *rShiftExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asRShift() *rShiftExpr {
-	if m.op != RShiftOp {
-		return nil
-	}
-	return (*rShiftExpr)(m)
-}
-
-type unaryPlusExpr memoExpr
-
-func makeUnaryPlusExpr(input GroupID) unaryPlusExpr {
-	return unaryPlusExpr{op: UnaryPlusOp, state: exprState{uint32(input)}}
-}
-
-func (e *unaryPlusExpr) input() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *unaryPlusExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asUnaryPlus() *unaryPlusExpr {
-	if m.op != UnaryPlusOp {
-		return nil
-	}
-	return (*unaryPlusExpr)(m)
-}
-
-type unaryMinusExpr memoExpr
-
-func makeUnaryMinusExpr(input GroupID) unaryMinusExpr {
-	return unaryMinusExpr{op: UnaryMinusOp, state: exprState{uint32(input)}}
-}
-
-func (e *unaryMinusExpr) input() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *unaryMinusExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asUnaryMinus() *unaryMinusExpr {
-	if m.op != UnaryMinusOp {
-		return nil
-	}
-	return (*unaryMinusExpr)(m)
-}
-
-type unaryComplementExpr memoExpr
-
-func makeUnaryComplementExpr(input GroupID) unaryComplementExpr {
-	return unaryComplementExpr{op: UnaryComplementOp, state: exprState{uint32(input)}}
-}
-
-func (e *unaryComplementExpr) input() GroupID {
-	return GroupID(e.state[0])
-}
-
-func (e *unaryComplementExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asUnaryComplement() *unaryComplementExpr {
-	if m.op != UnaryComplementOp {
-		return nil
-	}
-	return (*unaryComplementExpr)(m)
-}
-
-type functionExpr memoExpr
-
-func makeFunctionExpr(args ListID, def PrivateID) functionExpr {
-	return functionExpr{op: FunctionOp, state: exprState{args.offset, args.len, uint32(def)}}
-}
-
-func (e *functionExpr) args() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
-}
-
-func (e *functionExpr) def() PrivateID {
-	return PrivateID(e.state[2])
-}
-
-func (e *functionExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asFunction() *functionExpr {
-	if m.op != FunctionOp {
-		return nil
-	}
-	return (*functionExpr)(m)
-}
-
 type trueExpr memoExpr
 
 func makeTrueExpr() trueExpr {
-	return trueExpr{op: TrueOp, state: exprState{}}
+	return trueExpr{op: opt.TrueOp, state: exprState{}}
 }
 
 func (e *trueExpr) fingerprint() fingerprint {
@@ -3553,7 +2339,7 @@ func (e *trueExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asTrue() *trueExpr {
-	if m.op != TrueOp {
+	if m.op != opt.TrueOp {
 		return nil
 	}
 	return (*trueExpr)(m)
@@ -3562,7 +2348,7 @@ func (m *memoExpr) asTrue() *trueExpr {
 type falseExpr memoExpr
 
 func makeFalseExpr() falseExpr {
-	return falseExpr{op: FalseOp, state: exprState{}}
+	return falseExpr{op: opt.FalseOp, state: exprState{}}
 }
 
 func (e *falseExpr) fingerprint() fingerprint {
@@ -3570,20 +2356,1238 @@ func (e *falseExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asFalse() *falseExpr {
-	if m.op != FalseOp {
+	if m.op != opt.FalseOp {
 		return nil
 	}
 	return (*falseExpr)(m)
 }
 
-type scanExpr memoExpr
+type placeholderExpr memoExpr
 
-func makeScanExpr(table PrivateID) scanExpr {
-	return scanExpr{op: ScanOp, state: exprState{uint32(table)}}
+func makePlaceholderExpr(value opt.PrivateID) placeholderExpr {
+	return placeholderExpr{op: opt.PlaceholderOp, state: exprState{uint32(value)}}
 }
 
-func (e *scanExpr) table() PrivateID {
-	return PrivateID(e.state[0])
+func (e *placeholderExpr) value() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
+}
+
+func (e *placeholderExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asPlaceholder() *placeholderExpr {
+	if m.op != opt.PlaceholderOp {
+		return nil
+	}
+	return (*placeholderExpr)(m)
+}
+
+type tupleExpr memoExpr
+
+func makeTupleExpr(elems opt.ListID) tupleExpr {
+	return tupleExpr{op: opt.TupleOp, state: exprState{elems.Offset, elems.Length}}
+}
+
+func (e *tupleExpr) elems() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *tupleExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asTuple() *tupleExpr {
+	if m.op != opt.TupleOp {
+		return nil
+	}
+	return (*tupleExpr)(m)
+}
+
+type filtersExpr memoExpr
+
+func makeFiltersExpr(conditions opt.ListID) filtersExpr {
+	return filtersExpr{op: opt.FiltersOp, state: exprState{conditions.Offset, conditions.Length}}
+}
+
+func (e *filtersExpr) conditions() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *filtersExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFilters() *filtersExpr {
+	if m.op != opt.FiltersOp {
+		return nil
+	}
+	return (*filtersExpr)(m)
+}
+
+type projectionsExpr memoExpr
+
+func makeProjectionsExpr(items opt.ListID, cols opt.PrivateID) projectionsExpr {
+	return projectionsExpr{op: opt.ProjectionsOp, state: exprState{items.Offset, items.Length, uint32(cols)}}
+}
+
+func (e *projectionsExpr) items() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *projectionsExpr) cols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *projectionsExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asProjections() *projectionsExpr {
+	if m.op != opt.ProjectionsOp {
+		return nil
+	}
+	return (*projectionsExpr)(m)
+}
+
+type existsExpr memoExpr
+
+func makeExistsExpr(input opt.GroupID) existsExpr {
+	return existsExpr{op: opt.ExistsOp, state: exprState{uint32(input)}}
+}
+
+func (e *existsExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *existsExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asExists() *existsExpr {
+	if m.op != opt.ExistsOp {
+		return nil
+	}
+	return (*existsExpr)(m)
+}
+
+type andExpr memoExpr
+
+func makeAndExpr(left opt.GroupID, right opt.GroupID) andExpr {
+	return andExpr{op: opt.AndOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *andExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *andExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *andExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asAnd() *andExpr {
+	if m.op != opt.AndOp {
+		return nil
+	}
+	return (*andExpr)(m)
+}
+
+type orExpr memoExpr
+
+func makeOrExpr(left opt.GroupID, right opt.GroupID) orExpr {
+	return orExpr{op: opt.OrOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *orExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *orExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *orExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asOr() *orExpr {
+	if m.op != opt.OrOp {
+		return nil
+	}
+	return (*orExpr)(m)
+}
+
+type notExpr memoExpr
+
+func makeNotExpr(input opt.GroupID) notExpr {
+	return notExpr{op: opt.NotOp, state: exprState{uint32(input)}}
+}
+
+func (e *notExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNot() *notExpr {
+	if m.op != opt.NotOp {
+		return nil
+	}
+	return (*notExpr)(m)
+}
+
+type eqExpr memoExpr
+
+func makeEqExpr(left opt.GroupID, right opt.GroupID) eqExpr {
+	return eqExpr{op: opt.EqOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *eqExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *eqExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *eqExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asEq() *eqExpr {
+	if m.op != opt.EqOp {
+		return nil
+	}
+	return (*eqExpr)(m)
+}
+
+type ltExpr memoExpr
+
+func makeLtExpr(left opt.GroupID, right opt.GroupID) ltExpr {
+	return ltExpr{op: opt.LtOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *ltExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *ltExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *ltExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLt() *ltExpr {
+	if m.op != opt.LtOp {
+		return nil
+	}
+	return (*ltExpr)(m)
+}
+
+type gtExpr memoExpr
+
+func makeGtExpr(left opt.GroupID, right opt.GroupID) gtExpr {
+	return gtExpr{op: opt.GtOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *gtExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *gtExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *gtExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asGt() *gtExpr {
+	if m.op != opt.GtOp {
+		return nil
+	}
+	return (*gtExpr)(m)
+}
+
+type leExpr memoExpr
+
+func makeLeExpr(left opt.GroupID, right opt.GroupID) leExpr {
+	return leExpr{op: opt.LeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *leExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *leExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *leExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLe() *leExpr {
+	if m.op != opt.LeOp {
+		return nil
+	}
+	return (*leExpr)(m)
+}
+
+type geExpr memoExpr
+
+func makeGeExpr(left opt.GroupID, right opt.GroupID) geExpr {
+	return geExpr{op: opt.GeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *geExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *geExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *geExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asGe() *geExpr {
+	if m.op != opt.GeOp {
+		return nil
+	}
+	return (*geExpr)(m)
+}
+
+type neExpr memoExpr
+
+func makeNeExpr(left opt.GroupID, right opt.GroupID) neExpr {
+	return neExpr{op: opt.NeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *neExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *neExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *neExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNe() *neExpr {
+	if m.op != opt.NeOp {
+		return nil
+	}
+	return (*neExpr)(m)
+}
+
+type inExpr memoExpr
+
+func makeInExpr(left opt.GroupID, right opt.GroupID) inExpr {
+	return inExpr{op: opt.InOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *inExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *inExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *inExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIn() *inExpr {
+	if m.op != opt.InOp {
+		return nil
+	}
+	return (*inExpr)(m)
+}
+
+type notInExpr memoExpr
+
+func makeNotInExpr(left opt.GroupID, right opt.GroupID) notInExpr {
+	return notInExpr{op: opt.NotInOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *notInExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notInExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *notInExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNotIn() *notInExpr {
+	if m.op != opt.NotInOp {
+		return nil
+	}
+	return (*notInExpr)(m)
+}
+
+type likeExpr memoExpr
+
+func makeLikeExpr(left opt.GroupID, right opt.GroupID) likeExpr {
+	return likeExpr{op: opt.LikeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *likeExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *likeExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *likeExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLike() *likeExpr {
+	if m.op != opt.LikeOp {
+		return nil
+	}
+	return (*likeExpr)(m)
+}
+
+type notLikeExpr memoExpr
+
+func makeNotLikeExpr(left opt.GroupID, right opt.GroupID) notLikeExpr {
+	return notLikeExpr{op: opt.NotLikeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *notLikeExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notLikeExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *notLikeExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNotLike() *notLikeExpr {
+	if m.op != opt.NotLikeOp {
+		return nil
+	}
+	return (*notLikeExpr)(m)
+}
+
+type iLikeExpr memoExpr
+
+func makeILikeExpr(left opt.GroupID, right opt.GroupID) iLikeExpr {
+	return iLikeExpr{op: opt.ILikeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *iLikeExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *iLikeExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *iLikeExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asILike() *iLikeExpr {
+	if m.op != opt.ILikeOp {
+		return nil
+	}
+	return (*iLikeExpr)(m)
+}
+
+type notILikeExpr memoExpr
+
+func makeNotILikeExpr(left opt.GroupID, right opt.GroupID) notILikeExpr {
+	return notILikeExpr{op: opt.NotILikeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *notILikeExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notILikeExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *notILikeExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNotILike() *notILikeExpr {
+	if m.op != opt.NotILikeOp {
+		return nil
+	}
+	return (*notILikeExpr)(m)
+}
+
+type similarToExpr memoExpr
+
+func makeSimilarToExpr(left opt.GroupID, right opt.GroupID) similarToExpr {
+	return similarToExpr{op: opt.SimilarToOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *similarToExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *similarToExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *similarToExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSimilarTo() *similarToExpr {
+	if m.op != opt.SimilarToOp {
+		return nil
+	}
+	return (*similarToExpr)(m)
+}
+
+type notSimilarToExpr memoExpr
+
+func makeNotSimilarToExpr(left opt.GroupID, right opt.GroupID) notSimilarToExpr {
+	return notSimilarToExpr{op: opt.NotSimilarToOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *notSimilarToExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notSimilarToExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *notSimilarToExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNotSimilarTo() *notSimilarToExpr {
+	if m.op != opt.NotSimilarToOp {
+		return nil
+	}
+	return (*notSimilarToExpr)(m)
+}
+
+type regMatchExpr memoExpr
+
+func makeRegMatchExpr(left opt.GroupID, right opt.GroupID) regMatchExpr {
+	return regMatchExpr{op: opt.RegMatchOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *regMatchExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *regMatchExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *regMatchExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asRegMatch() *regMatchExpr {
+	if m.op != opt.RegMatchOp {
+		return nil
+	}
+	return (*regMatchExpr)(m)
+}
+
+type notRegMatchExpr memoExpr
+
+func makeNotRegMatchExpr(left opt.GroupID, right opt.GroupID) notRegMatchExpr {
+	return notRegMatchExpr{op: opt.NotRegMatchOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *notRegMatchExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notRegMatchExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *notRegMatchExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNotRegMatch() *notRegMatchExpr {
+	if m.op != opt.NotRegMatchOp {
+		return nil
+	}
+	return (*notRegMatchExpr)(m)
+}
+
+type regIMatchExpr memoExpr
+
+func makeRegIMatchExpr(left opt.GroupID, right opt.GroupID) regIMatchExpr {
+	return regIMatchExpr{op: opt.RegIMatchOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *regIMatchExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *regIMatchExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *regIMatchExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asRegIMatch() *regIMatchExpr {
+	if m.op != opt.RegIMatchOp {
+		return nil
+	}
+	return (*regIMatchExpr)(m)
+}
+
+type notRegIMatchExpr memoExpr
+
+func makeNotRegIMatchExpr(left opt.GroupID, right opt.GroupID) notRegIMatchExpr {
+	return notRegIMatchExpr{op: opt.NotRegIMatchOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *notRegIMatchExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *notRegIMatchExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *notRegIMatchExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNotRegIMatch() *notRegIMatchExpr {
+	if m.op != opt.NotRegIMatchOp {
+		return nil
+	}
+	return (*notRegIMatchExpr)(m)
+}
+
+type isDistinctFromExpr memoExpr
+
+func makeIsDistinctFromExpr(left opt.GroupID, right opt.GroupID) isDistinctFromExpr {
+	return isDistinctFromExpr{op: opt.IsDistinctFromOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *isDistinctFromExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *isDistinctFromExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *isDistinctFromExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIsDistinctFrom() *isDistinctFromExpr {
+	if m.op != opt.IsDistinctFromOp {
+		return nil
+	}
+	return (*isDistinctFromExpr)(m)
+}
+
+type isNotDistinctFromExpr memoExpr
+
+func makeIsNotDistinctFromExpr(left opt.GroupID, right opt.GroupID) isNotDistinctFromExpr {
+	return isNotDistinctFromExpr{op: opt.IsNotDistinctFromOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *isNotDistinctFromExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *isNotDistinctFromExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *isNotDistinctFromExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIsNotDistinctFrom() *isNotDistinctFromExpr {
+	if m.op != opt.IsNotDistinctFromOp {
+		return nil
+	}
+	return (*isNotDistinctFromExpr)(m)
+}
+
+type isExpr memoExpr
+
+func makeIsExpr(left opt.GroupID, right opt.GroupID) isExpr {
+	return isExpr{op: opt.IsOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *isExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *isExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *isExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIs() *isExpr {
+	if m.op != opt.IsOp {
+		return nil
+	}
+	return (*isExpr)(m)
+}
+
+type isNotExpr memoExpr
+
+func makeIsNotExpr(left opt.GroupID, right opt.GroupID) isNotExpr {
+	return isNotExpr{op: opt.IsNotOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *isNotExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *isNotExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *isNotExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIsNot() *isNotExpr {
+	if m.op != opt.IsNotOp {
+		return nil
+	}
+	return (*isNotExpr)(m)
+}
+
+type anyExpr memoExpr
+
+func makeAnyExpr(left opt.GroupID, right opt.GroupID) anyExpr {
+	return anyExpr{op: opt.AnyOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *anyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *anyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *anyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asAny() *anyExpr {
+	if m.op != opt.AnyOp {
+		return nil
+	}
+	return (*anyExpr)(m)
+}
+
+type someExpr memoExpr
+
+func makeSomeExpr(left opt.GroupID, right opt.GroupID) someExpr {
+	return someExpr{op: opt.SomeOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *someExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *someExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *someExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSome() *someExpr {
+	if m.op != opt.SomeOp {
+		return nil
+	}
+	return (*someExpr)(m)
+}
+
+type allExpr memoExpr
+
+func makeAllExpr(left opt.GroupID, right opt.GroupID) allExpr {
+	return allExpr{op: opt.AllOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *allExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *allExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *allExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asAll() *allExpr {
+	if m.op != opt.AllOp {
+		return nil
+	}
+	return (*allExpr)(m)
+}
+
+type bitandExpr memoExpr
+
+func makeBitandExpr(left opt.GroupID, right opt.GroupID) bitandExpr {
+	return bitandExpr{op: opt.BitandOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *bitandExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *bitandExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *bitandExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asBitand() *bitandExpr {
+	if m.op != opt.BitandOp {
+		return nil
+	}
+	return (*bitandExpr)(m)
+}
+
+type bitorExpr memoExpr
+
+func makeBitorExpr(left opt.GroupID, right opt.GroupID) bitorExpr {
+	return bitorExpr{op: opt.BitorOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *bitorExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *bitorExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *bitorExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asBitor() *bitorExpr {
+	if m.op != opt.BitorOp {
+		return nil
+	}
+	return (*bitorExpr)(m)
+}
+
+type bitxorExpr memoExpr
+
+func makeBitxorExpr(left opt.GroupID, right opt.GroupID) bitxorExpr {
+	return bitxorExpr{op: opt.BitxorOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *bitxorExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *bitxorExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *bitxorExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asBitxor() *bitxorExpr {
+	if m.op != opt.BitxorOp {
+		return nil
+	}
+	return (*bitxorExpr)(m)
+}
+
+type plusExpr memoExpr
+
+func makePlusExpr(left opt.GroupID, right opt.GroupID) plusExpr {
+	return plusExpr{op: opt.PlusOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *plusExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *plusExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *plusExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asPlus() *plusExpr {
+	if m.op != opt.PlusOp {
+		return nil
+	}
+	return (*plusExpr)(m)
+}
+
+type minusExpr memoExpr
+
+func makeMinusExpr(left opt.GroupID, right opt.GroupID) minusExpr {
+	return minusExpr{op: opt.MinusOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *minusExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *minusExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *minusExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asMinus() *minusExpr {
+	if m.op != opt.MinusOp {
+		return nil
+	}
+	return (*minusExpr)(m)
+}
+
+type multExpr memoExpr
+
+func makeMultExpr(left opt.GroupID, right opt.GroupID) multExpr {
+	return multExpr{op: opt.MultOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *multExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *multExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *multExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asMult() *multExpr {
+	if m.op != opt.MultOp {
+		return nil
+	}
+	return (*multExpr)(m)
+}
+
+type divExpr memoExpr
+
+func makeDivExpr(left opt.GroupID, right opt.GroupID) divExpr {
+	return divExpr{op: opt.DivOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *divExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *divExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *divExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asDiv() *divExpr {
+	if m.op != opt.DivOp {
+		return nil
+	}
+	return (*divExpr)(m)
+}
+
+type floorDivExpr memoExpr
+
+func makeFloorDivExpr(left opt.GroupID, right opt.GroupID) floorDivExpr {
+	return floorDivExpr{op: opt.FloorDivOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *floorDivExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *floorDivExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *floorDivExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFloorDiv() *floorDivExpr {
+	if m.op != opt.FloorDivOp {
+		return nil
+	}
+	return (*floorDivExpr)(m)
+}
+
+type modExpr memoExpr
+
+func makeModExpr(left opt.GroupID, right opt.GroupID) modExpr {
+	return modExpr{op: opt.ModOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *modExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *modExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *modExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asMod() *modExpr {
+	if m.op != opt.ModOp {
+		return nil
+	}
+	return (*modExpr)(m)
+}
+
+type powExpr memoExpr
+
+func makePowExpr(left opt.GroupID, right opt.GroupID) powExpr {
+	return powExpr{op: opt.PowOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *powExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *powExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *powExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asPow() *powExpr {
+	if m.op != opt.PowOp {
+		return nil
+	}
+	return (*powExpr)(m)
+}
+
+type concatExpr memoExpr
+
+func makeConcatExpr(left opt.GroupID, right opt.GroupID) concatExpr {
+	return concatExpr{op: opt.ConcatOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *concatExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *concatExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *concatExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asConcat() *concatExpr {
+	if m.op != opt.ConcatOp {
+		return nil
+	}
+	return (*concatExpr)(m)
+}
+
+type lShiftExpr memoExpr
+
+func makeLShiftExpr(left opt.GroupID, right opt.GroupID) lShiftExpr {
+	return lShiftExpr{op: opt.LShiftOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *lShiftExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *lShiftExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *lShiftExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLShift() *lShiftExpr {
+	if m.op != opt.LShiftOp {
+		return nil
+	}
+	return (*lShiftExpr)(m)
+}
+
+type rShiftExpr memoExpr
+
+func makeRShiftExpr(left opt.GroupID, right opt.GroupID) rShiftExpr {
+	return rShiftExpr{op: opt.RShiftOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *rShiftExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *rShiftExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *rShiftExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asRShift() *rShiftExpr {
+	if m.op != opt.RShiftOp {
+		return nil
+	}
+	return (*rShiftExpr)(m)
+}
+
+type unaryPlusExpr memoExpr
+
+func makeUnaryPlusExpr(input opt.GroupID) unaryPlusExpr {
+	return unaryPlusExpr{op: opt.UnaryPlusOp, state: exprState{uint32(input)}}
+}
+
+func (e *unaryPlusExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unaryPlusExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnaryPlus() *unaryPlusExpr {
+	if m.op != opt.UnaryPlusOp {
+		return nil
+	}
+	return (*unaryPlusExpr)(m)
+}
+
+type unaryMinusExpr memoExpr
+
+func makeUnaryMinusExpr(input opt.GroupID) unaryMinusExpr {
+	return unaryMinusExpr{op: opt.UnaryMinusOp, state: exprState{uint32(input)}}
+}
+
+func (e *unaryMinusExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unaryMinusExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnaryMinus() *unaryMinusExpr {
+	if m.op != opt.UnaryMinusOp {
+		return nil
+	}
+	return (*unaryMinusExpr)(m)
+}
+
+type unaryComplementExpr memoExpr
+
+func makeUnaryComplementExpr(input opt.GroupID) unaryComplementExpr {
+	return unaryComplementExpr{op: opt.UnaryComplementOp, state: exprState{uint32(input)}}
+}
+
+func (e *unaryComplementExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unaryComplementExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnaryComplement() *unaryComplementExpr {
+	if m.op != opt.UnaryComplementOp {
+		return nil
+	}
+	return (*unaryComplementExpr)(m)
+}
+
+type functionExpr memoExpr
+
+func makeFunctionExpr(args opt.ListID, def opt.PrivateID) functionExpr {
+	return functionExpr{op: opt.FunctionOp, state: exprState{args.Offset, args.Length, uint32(def)}}
+}
+
+func (e *functionExpr) args() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *functionExpr) def() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *functionExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFunction() *functionExpr {
+	if m.op != opt.FunctionOp {
+		return nil
+	}
+	return (*functionExpr)(m)
+}
+
+type scanExpr memoExpr
+
+func makeScanExpr(table opt.PrivateID) scanExpr {
+	return scanExpr{op: opt.ScanOp, state: exprState{uint32(table)}}
+}
+
+func (e *scanExpr) table() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
 }
 
 func (e *scanExpr) fingerprint() fingerprint {
@@ -3591,7 +3595,7 @@ func (e *scanExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asScan() *scanExpr {
-	if m.op != ScanOp {
+	if m.op != opt.ScanOp {
 		return nil
 	}
 	return (*scanExpr)(m)
@@ -3599,16 +3603,16 @@ func (m *memoExpr) asScan() *scanExpr {
 
 type valuesExpr memoExpr
 
-func makeValuesExpr(rows ListID, cols PrivateID) valuesExpr {
-	return valuesExpr{op: ValuesOp, state: exprState{rows.offset, rows.len, uint32(cols)}}
+func makeValuesExpr(rows opt.ListID, cols opt.PrivateID) valuesExpr {
+	return valuesExpr{op: opt.ValuesOp, state: exprState{rows.Offset, rows.Length, uint32(cols)}}
 }
 
-func (e *valuesExpr) rows() ListID {
-	return ListID{offset: e.state[0], len: e.state[1]}
+func (e *valuesExpr) rows() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
 }
 
-func (e *valuesExpr) cols() PrivateID {
-	return PrivateID(e.state[2])
+func (e *valuesExpr) cols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *valuesExpr) fingerprint() fingerprint {
@@ -3616,7 +3620,7 @@ func (e *valuesExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asValues() *valuesExpr {
-	if m.op != ValuesOp {
+	if m.op != opt.ValuesOp {
 		return nil
 	}
 	return (*valuesExpr)(m)
@@ -3624,16 +3628,16 @@ func (m *memoExpr) asValues() *valuesExpr {
 
 type selectExpr memoExpr
 
-func makeSelectExpr(input GroupID, filter GroupID) selectExpr {
-	return selectExpr{op: SelectOp, state: exprState{uint32(input), uint32(filter)}}
+func makeSelectExpr(input opt.GroupID, filter opt.GroupID) selectExpr {
+	return selectExpr{op: opt.SelectOp, state: exprState{uint32(input), uint32(filter)}}
 }
 
-func (e *selectExpr) input() GroupID {
-	return GroupID(e.state[0])
+func (e *selectExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *selectExpr) filter() GroupID {
-	return GroupID(e.state[1])
+func (e *selectExpr) filter() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
 func (e *selectExpr) fingerprint() fingerprint {
@@ -3641,7 +3645,7 @@ func (e *selectExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asSelect() *selectExpr {
-	if m.op != SelectOp {
+	if m.op != opt.SelectOp {
 		return nil
 	}
 	return (*selectExpr)(m)
@@ -3649,16 +3653,16 @@ func (m *memoExpr) asSelect() *selectExpr {
 
 type projectExpr memoExpr
 
-func makeProjectExpr(input GroupID, projections GroupID) projectExpr {
-	return projectExpr{op: ProjectOp, state: exprState{uint32(input), uint32(projections)}}
+func makeProjectExpr(input opt.GroupID, projections opt.GroupID) projectExpr {
+	return projectExpr{op: opt.ProjectOp, state: exprState{uint32(input), uint32(projections)}}
 }
 
-func (e *projectExpr) input() GroupID {
-	return GroupID(e.state[0])
+func (e *projectExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *projectExpr) projections() GroupID {
-	return GroupID(e.state[1])
+func (e *projectExpr) projections() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
 func (e *projectExpr) fingerprint() fingerprint {
@@ -3666,7 +3670,7 @@ func (e *projectExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asProject() *projectExpr {
-	if m.op != ProjectOp {
+	if m.op != opt.ProjectOp {
 		return nil
 	}
 	return (*projectExpr)(m)
@@ -3674,20 +3678,20 @@ func (m *memoExpr) asProject() *projectExpr {
 
 type innerJoinExpr memoExpr
 
-func makeInnerJoinExpr(left GroupID, right GroupID, on GroupID) innerJoinExpr {
-	return innerJoinExpr{op: InnerJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeInnerJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinExpr {
+	return innerJoinExpr{op: opt.InnerJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *innerJoinExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *innerJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *innerJoinExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *innerJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *innerJoinExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *innerJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *innerJoinExpr) fingerprint() fingerprint {
@@ -3695,7 +3699,7 @@ func (e *innerJoinExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asInnerJoin() *innerJoinExpr {
-	if m.op != InnerJoinOp {
+	if m.op != opt.InnerJoinOp {
 		return nil
 	}
 	return (*innerJoinExpr)(m)
@@ -3703,20 +3707,20 @@ func (m *memoExpr) asInnerJoin() *innerJoinExpr {
 
 type leftJoinExpr memoExpr
 
-func makeLeftJoinExpr(left GroupID, right GroupID, on GroupID) leftJoinExpr {
-	return leftJoinExpr{op: LeftJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeLeftJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) leftJoinExpr {
+	return leftJoinExpr{op: opt.LeftJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *leftJoinExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *leftJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *leftJoinExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *leftJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *leftJoinExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *leftJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *leftJoinExpr) fingerprint() fingerprint {
@@ -3724,7 +3728,7 @@ func (e *leftJoinExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asLeftJoin() *leftJoinExpr {
-	if m.op != LeftJoinOp {
+	if m.op != opt.LeftJoinOp {
 		return nil
 	}
 	return (*leftJoinExpr)(m)
@@ -3732,20 +3736,20 @@ func (m *memoExpr) asLeftJoin() *leftJoinExpr {
 
 type rightJoinExpr memoExpr
 
-func makeRightJoinExpr(left GroupID, right GroupID, on GroupID) rightJoinExpr {
-	return rightJoinExpr{op: RightJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeRightJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) rightJoinExpr {
+	return rightJoinExpr{op: opt.RightJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *rightJoinExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *rightJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *rightJoinExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *rightJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *rightJoinExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *rightJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *rightJoinExpr) fingerprint() fingerprint {
@@ -3753,7 +3757,7 @@ func (e *rightJoinExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asRightJoin() *rightJoinExpr {
-	if m.op != RightJoinOp {
+	if m.op != opt.RightJoinOp {
 		return nil
 	}
 	return (*rightJoinExpr)(m)
@@ -3761,20 +3765,20 @@ func (m *memoExpr) asRightJoin() *rightJoinExpr {
 
 type fullJoinExpr memoExpr
 
-func makeFullJoinExpr(left GroupID, right GroupID, on GroupID) fullJoinExpr {
-	return fullJoinExpr{op: FullJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeFullJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) fullJoinExpr {
+	return fullJoinExpr{op: opt.FullJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *fullJoinExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *fullJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *fullJoinExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *fullJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *fullJoinExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *fullJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *fullJoinExpr) fingerprint() fingerprint {
@@ -3782,7 +3786,7 @@ func (e *fullJoinExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asFullJoin() *fullJoinExpr {
-	if m.op != FullJoinOp {
+	if m.op != opt.FullJoinOp {
 		return nil
 	}
 	return (*fullJoinExpr)(m)
@@ -3790,20 +3794,20 @@ func (m *memoExpr) asFullJoin() *fullJoinExpr {
 
 type semiJoinExpr memoExpr
 
-func makeSemiJoinExpr(left GroupID, right GroupID, on GroupID) semiJoinExpr {
-	return semiJoinExpr{op: SemiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeSemiJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) semiJoinExpr {
+	return semiJoinExpr{op: opt.SemiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *semiJoinExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *semiJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *semiJoinExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *semiJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *semiJoinExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *semiJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *semiJoinExpr) fingerprint() fingerprint {
@@ -3811,7 +3815,7 @@ func (e *semiJoinExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asSemiJoin() *semiJoinExpr {
-	if m.op != SemiJoinOp {
+	if m.op != opt.SemiJoinOp {
 		return nil
 	}
 	return (*semiJoinExpr)(m)
@@ -3819,20 +3823,20 @@ func (m *memoExpr) asSemiJoin() *semiJoinExpr {
 
 type antiJoinExpr memoExpr
 
-func makeAntiJoinExpr(left GroupID, right GroupID, on GroupID) antiJoinExpr {
-	return antiJoinExpr{op: AntiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeAntiJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) antiJoinExpr {
+	return antiJoinExpr{op: opt.AntiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *antiJoinExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *antiJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *antiJoinExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *antiJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *antiJoinExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *antiJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *antiJoinExpr) fingerprint() fingerprint {
@@ -3840,7 +3844,7 @@ func (e *antiJoinExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asAntiJoin() *antiJoinExpr {
-	if m.op != AntiJoinOp {
+	if m.op != opt.AntiJoinOp {
 		return nil
 	}
 	return (*antiJoinExpr)(m)
@@ -3848,20 +3852,20 @@ func (m *memoExpr) asAntiJoin() *antiJoinExpr {
 
 type innerJoinApplyExpr memoExpr
 
-func makeInnerJoinApplyExpr(left GroupID, right GroupID, on GroupID) innerJoinApplyExpr {
-	return innerJoinApplyExpr{op: InnerJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeInnerJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinApplyExpr {
+	return innerJoinApplyExpr{op: opt.InnerJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *innerJoinApplyExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *innerJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *innerJoinApplyExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *innerJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *innerJoinApplyExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *innerJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *innerJoinApplyExpr) fingerprint() fingerprint {
@@ -3869,7 +3873,7 @@ func (e *innerJoinApplyExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asInnerJoinApply() *innerJoinApplyExpr {
-	if m.op != InnerJoinApplyOp {
+	if m.op != opt.InnerJoinApplyOp {
 		return nil
 	}
 	return (*innerJoinApplyExpr)(m)
@@ -3877,20 +3881,20 @@ func (m *memoExpr) asInnerJoinApply() *innerJoinApplyExpr {
 
 type leftJoinApplyExpr memoExpr
 
-func makeLeftJoinApplyExpr(left GroupID, right GroupID, on GroupID) leftJoinApplyExpr {
-	return leftJoinApplyExpr{op: LeftJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeLeftJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) leftJoinApplyExpr {
+	return leftJoinApplyExpr{op: opt.LeftJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *leftJoinApplyExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *leftJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *leftJoinApplyExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *leftJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *leftJoinApplyExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *leftJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *leftJoinApplyExpr) fingerprint() fingerprint {
@@ -3898,7 +3902,7 @@ func (e *leftJoinApplyExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asLeftJoinApply() *leftJoinApplyExpr {
-	if m.op != LeftJoinApplyOp {
+	if m.op != opt.LeftJoinApplyOp {
 		return nil
 	}
 	return (*leftJoinApplyExpr)(m)
@@ -3906,20 +3910,20 @@ func (m *memoExpr) asLeftJoinApply() *leftJoinApplyExpr {
 
 type rightJoinApplyExpr memoExpr
 
-func makeRightJoinApplyExpr(left GroupID, right GroupID, on GroupID) rightJoinApplyExpr {
-	return rightJoinApplyExpr{op: RightJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeRightJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) rightJoinApplyExpr {
+	return rightJoinApplyExpr{op: opt.RightJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *rightJoinApplyExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *rightJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *rightJoinApplyExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *rightJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *rightJoinApplyExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *rightJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *rightJoinApplyExpr) fingerprint() fingerprint {
@@ -3927,7 +3931,7 @@ func (e *rightJoinApplyExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asRightJoinApply() *rightJoinApplyExpr {
-	if m.op != RightJoinApplyOp {
+	if m.op != opt.RightJoinApplyOp {
 		return nil
 	}
 	return (*rightJoinApplyExpr)(m)
@@ -3935,20 +3939,20 @@ func (m *memoExpr) asRightJoinApply() *rightJoinApplyExpr {
 
 type fullJoinApplyExpr memoExpr
 
-func makeFullJoinApplyExpr(left GroupID, right GroupID, on GroupID) fullJoinApplyExpr {
-	return fullJoinApplyExpr{op: FullJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeFullJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) fullJoinApplyExpr {
+	return fullJoinApplyExpr{op: opt.FullJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *fullJoinApplyExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *fullJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *fullJoinApplyExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *fullJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *fullJoinApplyExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *fullJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *fullJoinApplyExpr) fingerprint() fingerprint {
@@ -3956,7 +3960,7 @@ func (e *fullJoinApplyExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asFullJoinApply() *fullJoinApplyExpr {
-	if m.op != FullJoinApplyOp {
+	if m.op != opt.FullJoinApplyOp {
 		return nil
 	}
 	return (*fullJoinApplyExpr)(m)
@@ -3964,20 +3968,20 @@ func (m *memoExpr) asFullJoinApply() *fullJoinApplyExpr {
 
 type semiJoinApplyExpr memoExpr
 
-func makeSemiJoinApplyExpr(left GroupID, right GroupID, on GroupID) semiJoinApplyExpr {
-	return semiJoinApplyExpr{op: SemiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeSemiJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) semiJoinApplyExpr {
+	return semiJoinApplyExpr{op: opt.SemiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *semiJoinApplyExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *semiJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *semiJoinApplyExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *semiJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *semiJoinApplyExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *semiJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *semiJoinApplyExpr) fingerprint() fingerprint {
@@ -3985,7 +3989,7 @@ func (e *semiJoinApplyExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asSemiJoinApply() *semiJoinApplyExpr {
-	if m.op != SemiJoinApplyOp {
+	if m.op != opt.SemiJoinApplyOp {
 		return nil
 	}
 	return (*semiJoinApplyExpr)(m)
@@ -3993,20 +3997,20 @@ func (m *memoExpr) asSemiJoinApply() *semiJoinApplyExpr {
 
 type antiJoinApplyExpr memoExpr
 
-func makeAntiJoinApplyExpr(left GroupID, right GroupID, on GroupID) antiJoinApplyExpr {
-	return antiJoinApplyExpr{op: AntiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+func makeAntiJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) antiJoinApplyExpr {
+	return antiJoinApplyExpr{op: opt.AntiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
 }
 
-func (e *antiJoinApplyExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *antiJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *antiJoinApplyExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *antiJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *antiJoinApplyExpr) on() GroupID {
-	return GroupID(e.state[2])
+func (e *antiJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *antiJoinApplyExpr) fingerprint() fingerprint {
@@ -4014,7 +4018,7 @@ func (e *antiJoinApplyExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asAntiJoinApply() *antiJoinApplyExpr {
-	if m.op != AntiJoinApplyOp {
+	if m.op != opt.AntiJoinApplyOp {
 		return nil
 	}
 	return (*antiJoinApplyExpr)(m)
@@ -4022,20 +4026,20 @@ func (m *memoExpr) asAntiJoinApply() *antiJoinApplyExpr {
 
 type groupByExpr memoExpr
 
-func makeGroupByExpr(input GroupID, groupings GroupID, aggregations GroupID) groupByExpr {
-	return groupByExpr{op: GroupByOp, state: exprState{uint32(input), uint32(groupings), uint32(aggregations)}}
+func makeGroupByExpr(input opt.GroupID, groupings opt.GroupID, aggregations opt.GroupID) groupByExpr {
+	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(groupings), uint32(aggregations)}}
 }
 
-func (e *groupByExpr) input() GroupID {
-	return GroupID(e.state[0])
+func (e *groupByExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *groupByExpr) groupings() GroupID {
-	return GroupID(e.state[1])
+func (e *groupByExpr) groupings() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *groupByExpr) aggregations() GroupID {
-	return GroupID(e.state[2])
+func (e *groupByExpr) aggregations() opt.GroupID {
+	return opt.GroupID(e.state[2])
 }
 
 func (e *groupByExpr) fingerprint() fingerprint {
@@ -4043,7 +4047,7 @@ func (e *groupByExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asGroupBy() *groupByExpr {
-	if m.op != GroupByOp {
+	if m.op != opt.GroupByOp {
 		return nil
 	}
 	return (*groupByExpr)(m)
@@ -4051,20 +4055,20 @@ func (m *memoExpr) asGroupBy() *groupByExpr {
 
 type unionExpr memoExpr
 
-func makeUnionExpr(left GroupID, right GroupID, colMap PrivateID) unionExpr {
-	return unionExpr{op: UnionOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+func makeUnionExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionExpr {
+	return unionExpr{op: opt.UnionOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
 }
 
-func (e *unionExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *unionExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *unionExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *unionExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
-func (e *unionExpr) colMap() PrivateID {
-	return PrivateID(e.state[2])
+func (e *unionExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *unionExpr) fingerprint() fingerprint {
@@ -4072,7 +4076,7 @@ func (e *unionExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asUnion() *unionExpr {
-	if m.op != UnionOp {
+	if m.op != opt.UnionOp {
 		return nil
 	}
 	return (*unionExpr)(m)
@@ -4080,16 +4084,16 @@ func (m *memoExpr) asUnion() *unionExpr {
 
 type intersectExpr memoExpr
 
-func makeIntersectExpr(left GroupID, right GroupID) intersectExpr {
-	return intersectExpr{op: IntersectOp, state: exprState{uint32(left), uint32(right)}}
+func makeIntersectExpr(left opt.GroupID, right opt.GroupID) intersectExpr {
+	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right)}}
 }
 
-func (e *intersectExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *intersectExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *intersectExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *intersectExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
 func (e *intersectExpr) fingerprint() fingerprint {
@@ -4097,7 +4101,7 @@ func (e *intersectExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asIntersect() *intersectExpr {
-	if m.op != IntersectOp {
+	if m.op != opt.IntersectOp {
 		return nil
 	}
 	return (*intersectExpr)(m)
@@ -4105,16 +4109,16 @@ func (m *memoExpr) asIntersect() *intersectExpr {
 
 type exceptExpr memoExpr
 
-func makeExceptExpr(left GroupID, right GroupID) exceptExpr {
-	return exceptExpr{op: ExceptOp, state: exprState{uint32(left), uint32(right)}}
+func makeExceptExpr(left opt.GroupID, right opt.GroupID) exceptExpr {
+	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right)}}
 }
 
-func (e *exceptExpr) left() GroupID {
-	return GroupID(e.state[0])
+func (e *exceptExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
-func (e *exceptExpr) right() GroupID {
-	return GroupID(e.state[1])
+func (e *exceptExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
 }
 
 func (e *exceptExpr) fingerprint() fingerprint {
@@ -4122,7 +4126,7 @@ func (e *exceptExpr) fingerprint() fingerprint {
 }
 
 func (m *memoExpr) asExcept() *exceptExpr {
-	if m.op != ExceptOp {
+	if m.op != opt.ExceptOp {
 		return nil
 	}
 	return (*exceptExpr)(m)

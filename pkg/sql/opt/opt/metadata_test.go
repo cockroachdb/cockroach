@@ -12,88 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
 
 import (
-	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 )
 
-type testColumn struct {
-	isNullable bool
-	colName    string
-	datumType  types.T
-}
-
-var _ optbase.Column = &testColumn{}
-
-// IsNullable is part of the optbase.Column interface.
-func (c *testColumn) IsNullable() bool {
-	return c.isNullable
-}
-
-// ColName is part of the optbase.Column interface.
-func (c *testColumn) ColName() optbase.ColumnName {
-	return optbase.ColumnName(c.colName)
-}
-
-// DatumType is part of the optbase.Column interface.
-func (c *testColumn) DatumType() types.T {
-	return c.datumType
-}
-
-// IsHidden is part of the optbase.Column interface.
-func (c *testColumn) IsHidden() bool {
-	return false
-}
-
-type testTable struct {
-	tabName string
-	columns []*testColumn
-}
-
-var _ optbase.Table = &testTable{}
-
-// TabName is part of the optbase.Table interface.
-func (t *testTable) TabName() optbase.TableName {
-	return optbase.TableName(t.tabName)
-}
-
-// NumColumns is part of the optbase.Table interface.
-func (t *testTable) NumColumns() int {
-	return len(t.columns)
-}
-
-// Column is part of the optbase.Table interface.
-func (t *testTable) Column(i int) optbase.Column {
-	return t.columns[i]
-}
-
-type testCatalog struct {
-	tables map[string]*testTable
-}
-
-var _ optbase.Catalog = &testCatalog{}
-
-// FindTable is part of the optbase.Catalog interface.
-func (c *testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	return c.tables[name.Table()], nil
-}
-
-func (c *testCatalog) addTable(tbl *testTable) {
-	if c.tables == nil {
-		c.tables = make(map[string]*testTable)
-	}
-	c.tables[tbl.tabName] = tbl
-}
-
 func TestMetadataColumns(t *testing.T) {
-	cat := &testCatalog{}
-	md := newMetadata(cat)
+	cat := testutils.NewTestCatalog()
+	md := NewMetadata(cat)
 	if md.Catalog() != cat {
 		t.Fatal("metadata catalog didn't match catalog passed to newMetadata")
 	}
@@ -122,15 +51,17 @@ func TestMetadataColumns(t *testing.T) {
 }
 
 func TestMetadataTables(t *testing.T) {
-	cat := &testCatalog{}
-	md := newMetadata(cat)
+	cat := testutils.NewTestCatalog()
+	md := NewMetadata(cat)
 	if md.Catalog() != cat {
 		t.Fatal("metadata catalog didn't match catalog passed to newMetadata")
 	}
 
 	// Add a table reference to the metadata.
-	a := &testTable{tabName: "a"}
-	a.columns = append(a.columns, &testColumn{colName: "x"}, &testColumn{colName: "y"})
+	a := &testutils.TestTable{Name: "a"}
+	x := &testutils.TestColumn{Name: "x"}
+	y := &testutils.TestColumn{Name: "y"}
+	a.Columns = append(a.Columns, x, y)
 
 	tblIndex := md.AddTable(a)
 	if tblIndex != 1 {
@@ -153,8 +84,8 @@ func TestMetadataTables(t *testing.T) {
 	}
 
 	// Add a table reference without a name to the metadata.
-	b := &testTable{}
-	b.columns = append(b.columns, &testColumn{colName: "x"})
+	b := &testutils.TestTable{}
+	b.Columns = append(b.Columns, &testutils.TestColumn{Name: "x"})
 
 	tblIndex = md.AddTable(b)
 	if tblIndex != 3 {

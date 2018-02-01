@@ -18,64 +18,64 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-type unaryFactoryFunc func(f *xform.Factory, input xform.GroupID) xform.GroupID
-type binaryFactoryFunc func(f *xform.Factory, left, right xform.GroupID) xform.GroupID
+type unaryFactoryFunc func(f opt.Factory, input opt.GroupID) opt.GroupID
+type binaryFactoryFunc func(f opt.Factory, left, right opt.GroupID) opt.GroupID
 
 // Map from tree.ComparisonOperator to Factory constructor function.
 var comparisonOpMap = [...]binaryFactoryFunc{
-	tree.EQ:                (*xform.Factory).ConstructEq,
-	tree.LT:                (*xform.Factory).ConstructLt,
-	tree.GT:                (*xform.Factory).ConstructGt,
-	tree.LE:                (*xform.Factory).ConstructLe,
-	tree.GE:                (*xform.Factory).ConstructGe,
-	tree.NE:                (*xform.Factory).ConstructNe,
-	tree.In:                (*xform.Factory).ConstructIn,
-	tree.NotIn:             (*xform.Factory).ConstructNotIn,
-	tree.Like:              (*xform.Factory).ConstructLike,
-	tree.NotLike:           (*xform.Factory).ConstructNotLike,
-	tree.ILike:             (*xform.Factory).ConstructILike,
-	tree.NotILike:          (*xform.Factory).ConstructNotILike,
-	tree.SimilarTo:         (*xform.Factory).ConstructSimilarTo,
-	tree.NotSimilarTo:      (*xform.Factory).ConstructNotSimilarTo,
-	tree.RegMatch:          (*xform.Factory).ConstructRegMatch,
-	tree.NotRegMatch:       (*xform.Factory).ConstructNotRegMatch,
-	tree.RegIMatch:         (*xform.Factory).ConstructRegIMatch,
-	tree.NotRegIMatch:      (*xform.Factory).ConstructNotRegIMatch,
-	tree.IsDistinctFrom:    (*xform.Factory).ConstructIsDistinctFrom,
-	tree.IsNotDistinctFrom: (*xform.Factory).ConstructIsNotDistinctFrom,
-	tree.Any:               (*xform.Factory).ConstructAny,
-	tree.Some:              (*xform.Factory).ConstructSome,
-	tree.All:               (*xform.Factory).ConstructAll,
+	tree.EQ:                (opt.Factory).ConstructEq,
+	tree.LT:                (opt.Factory).ConstructLt,
+	tree.GT:                (opt.Factory).ConstructGt,
+	tree.LE:                (opt.Factory).ConstructLe,
+	tree.GE:                (opt.Factory).ConstructGe,
+	tree.NE:                (opt.Factory).ConstructNe,
+	tree.In:                (opt.Factory).ConstructIn,
+	tree.NotIn:             (opt.Factory).ConstructNotIn,
+	tree.Like:              (opt.Factory).ConstructLike,
+	tree.NotLike:           (opt.Factory).ConstructNotLike,
+	tree.ILike:             (opt.Factory).ConstructILike,
+	tree.NotILike:          (opt.Factory).ConstructNotILike,
+	tree.SimilarTo:         (opt.Factory).ConstructSimilarTo,
+	tree.NotSimilarTo:      (opt.Factory).ConstructNotSimilarTo,
+	tree.RegMatch:          (opt.Factory).ConstructRegMatch,
+	tree.NotRegMatch:       (opt.Factory).ConstructNotRegMatch,
+	tree.RegIMatch:         (opt.Factory).ConstructRegIMatch,
+	tree.NotRegIMatch:      (opt.Factory).ConstructNotRegIMatch,
+	tree.IsDistinctFrom:    (opt.Factory).ConstructIsDistinctFrom,
+	tree.IsNotDistinctFrom: (opt.Factory).ConstructIsNotDistinctFrom,
+	tree.Any:               (opt.Factory).ConstructAny,
+	tree.Some:              (opt.Factory).ConstructSome,
+	tree.All:               (opt.Factory).ConstructAll,
 }
 
 // Map from tree.BinaryOperator to Factory constructor function.
 var binaryOpMap = [...]binaryFactoryFunc{
-	tree.Bitand:   (*xform.Factory).ConstructBitand,
-	tree.Bitor:    (*xform.Factory).ConstructBitor,
-	tree.Bitxor:   (*xform.Factory).ConstructBitxor,
-	tree.Plus:     (*xform.Factory).ConstructPlus,
-	tree.Minus:    (*xform.Factory).ConstructMinus,
-	tree.Mult:     (*xform.Factory).ConstructMult,
-	tree.Div:      (*xform.Factory).ConstructDiv,
-	tree.FloorDiv: (*xform.Factory).ConstructFloorDiv,
-	tree.Mod:      (*xform.Factory).ConstructMod,
-	tree.Pow:      (*xform.Factory).ConstructPow,
-	tree.Concat:   (*xform.Factory).ConstructConcat,
-	tree.LShift:   (*xform.Factory).ConstructLShift,
-	tree.RShift:   (*xform.Factory).ConstructRShift,
+	tree.Bitand:   (opt.Factory).ConstructBitand,
+	tree.Bitor:    (opt.Factory).ConstructBitor,
+	tree.Bitxor:   (opt.Factory).ConstructBitxor,
+	tree.Plus:     (opt.Factory).ConstructPlus,
+	tree.Minus:    (opt.Factory).ConstructMinus,
+	tree.Mult:     (opt.Factory).ConstructMult,
+	tree.Div:      (opt.Factory).ConstructDiv,
+	tree.FloorDiv: (opt.Factory).ConstructFloorDiv,
+	tree.Mod:      (opt.Factory).ConstructMod,
+	tree.Pow:      (opt.Factory).ConstructPow,
+	tree.Concat:   (opt.Factory).ConstructConcat,
+	tree.LShift:   (opt.Factory).ConstructLShift,
+	tree.RShift:   (opt.Factory).ConstructRShift,
 }
 
 // Map from tree.UnaryOperator to Factory constructor function.
 var unaryOpMap = [...]unaryFactoryFunc{
-	tree.UnaryPlus:       (*xform.Factory).ConstructUnaryPlus,
-	tree.UnaryMinus:      (*xform.Factory).ConstructUnaryMinus,
-	tree.UnaryComplement: (*xform.Factory).ConstructUnaryComplement,
+	tree.UnaryPlus:       (opt.Factory).ConstructUnaryPlus,
+	tree.UnaryMinus:      (opt.Factory).ConstructUnaryMinus,
+	tree.UnaryComplement: (opt.Factory).ConstructUnaryComplement,
 }
 
 // Builder holds the context needed for building a memo structure from a SQL
@@ -101,7 +101,7 @@ var unaryOpMap = [...]unaryFactoryFunc{
 // See factory.go and memo.go inside the opt/xform package for more details
 // about the memo structure.
 type Builder struct {
-	factory *xform.Factory
+	factory opt.Factory
 	stmt    tree.Statement
 	semaCtx tree.SemaContext
 	ctx     context.Context
@@ -112,7 +112,7 @@ type Builder struct {
 
 // NewBuilder creates a new Builder structure initialized with the given
 // Context, Factory, and parsed SQL statement.
-func NewBuilder(ctx context.Context, factory *xform.Factory, stmt tree.Statement) *Builder {
+func NewBuilder(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
 	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
 
 	ivarHelper := tree.MakeIndexedVarHelper(b, 0)
@@ -131,7 +131,7 @@ func NewBuilder(ctx context.Context, factory *xform.Factory, stmt tree.Statement
 // (e.g., row and column ordering) that are required of the root memo group.
 // If any subroutines panic with a builderError as part of the build process,
 // the panic is caught here and returned as an error.
-func (b *Builder) Build() (root xform.GroupID, required *xform.PhysicalProps, err error) {
+func (b *Builder) Build() (root opt.GroupID, required *opt.PhysicalProps, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding
@@ -151,7 +151,7 @@ func (b *Builder) Build() (root xform.GroupID, required *xform.PhysicalProps, er
 
 	// TODO(rytaft): Add physical properties that are required of the root memo
 	// group.
-	required = &xform.PhysicalProps{}
+	required = &opt.PhysicalProps{}
 	return
 }
 
@@ -183,7 +183,7 @@ func errorf(format string, a ...interface{}) builderError {
 //           "parent" scope that is still visible.
 func (b *Builder) buildStmt(
 	stmt tree.Statement, inScope *scope,
-) (out xform.GroupID, outScope *scope) {
+) (out opt.GroupID, outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:
@@ -209,7 +209,7 @@ func (b *Builder) buildStmt(
 // return values.
 func (b *Builder) buildTable(
 	texpr tree.TableExpr, inScope *scope,
-) (out xform.GroupID, outScope *scope) {
+) (out opt.GroupID, outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
@@ -258,9 +258,7 @@ func (b *Builder) buildTable(
 //
 // See Builder.buildStmt above for a description of the remaining input and
 // return values.
-func (b *Builder) buildScan(
-	tbl optbase.Table, inScope *scope,
-) (out xform.GroupID, outScope *scope) {
+func (b *Builder) buildScan(tbl optbase.Table, inScope *scope) (out opt.GroupID, outScope *scope) {
 	tblIndex := b.factory.Metadata().AddTable(tbl)
 
 	outScope = inScope.push()
@@ -289,7 +287,7 @@ func (b *Builder) buildScan(
 // expression (e.g., passed in from an enclosing statement).
 // The return value corresponds to the top-level memo group ID for this scalar
 // expression.
-func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) xform.GroupID {
+func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID {
 	switch t := scalar.(type) {
 	case *columnProps:
 		return b.factory.ConstructVariable(b.factory.InternPrivate(t.index))
@@ -320,7 +318,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) xform.Group
 		)
 
 	case *tree.DTuple:
-		list := make([]xform.GroupID, len(t.D))
+		list := make([]opt.GroupID, len(t.D))
 		for i := range t.D {
 			list[i] = b.buildScalar(t.D[i], inScope)
 		}
@@ -346,7 +344,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) xform.Group
 		return b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
 
 	case *tree.Tuple:
-		list := make([]xform.GroupID, len(t.Exprs))
+		list := make([]opt.GroupID, len(t.Exprs))
 		for i := range t.Exprs {
 			list[i] = b.buildScalar(t.Exprs[i].(tree.TypedExpr), inScope)
 		}
@@ -373,7 +371,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) xform.Group
 // return values.
 func (b *Builder) buildSelect(
 	stmt *tree.Select, inScope *scope,
-) (out xform.GroupID, outScope *scope) {
+) (out opt.GroupID, outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.ParenSelect:
@@ -403,7 +401,7 @@ func (b *Builder) buildSelect(
 // return values.
 func (b *Builder) buildSelectClause(
 	stmt *tree.Select, inScope *scope,
-) (out xform.GroupID, outScope *scope) {
+) (out opt.GroupID, outScope *scope) {
 	sel := stmt.Select.(*tree.SelectClause)
 	if (sel.GroupBy != nil && len(sel.GroupBy) > 0) || stmt.OrderBy != nil || sel.Distinct {
 		panic(errorf("complex queries not yet supported: %s", sel.String()))
@@ -431,8 +429,8 @@ func (b *Builder) buildSelectClause(
 // return values.
 func (b *Builder) buildFrom(
 	from *tree.From, where *tree.Where, inScope *scope,
-) (out xform.GroupID, outScope *scope) {
-	var left, right xform.GroupID
+) (out opt.GroupID, outScope *scope) {
+	var left, right opt.GroupID
 
 	for _, table := range from.Tables {
 		var rightScope *scope
@@ -452,8 +450,8 @@ func (b *Builder) buildFrom(
 	if left == 0 {
 		// TODO(peter): This should be a table with 1 row and 0 columns to match
 		// current cockroach behavior.
-		rows := []xform.GroupID{b.factory.ConstructTuple(b.factory.StoreList(nil))}
-		out = b.factory.ConstructValues(b.factory.StoreList(rows), b.factory.InternPrivate(&xform.ColSet{}))
+		rows := []opt.GroupID{b.factory.ConstructTuple(b.factory.StoreList(nil))}
+		out = b.factory.ConstructValues(b.factory.StoreList(rows), b.factory.InternPrivate(&opt.ColSet{}))
 		outScope = inScope
 	} else {
 		out = left
@@ -477,13 +475,13 @@ func (b *Builder) buildFrom(
 // for a description of the remaining input and return values.
 func (b *Builder) buildProjectionList(
 	selects tree.SelectExprs, inScope *scope,
-) (projections []xform.GroupID, outScope *scope) {
+) (projections []opt.GroupID, outScope *scope) {
 	if len(selects) == 0 {
 		return nil, nil
 	}
 
 	outScope = inScope.push()
-	projections = make([]xform.GroupID, 0, len(selects))
+	projections = make([]opt.GroupID, 0, len(selects))
 	for _, e := range selects {
 		end := len(outScope.cols)
 		subset := b.buildProjection(e.Expr, string(e.As), inScope, outScope)
@@ -529,7 +527,7 @@ func (b *Builder) buildProjectionList(
 // returned by buildProjectionList).
 func (b *Builder) buildProjection(
 	projection tree.Expr, label string, inScope, outScope *scope,
-) (projections []xform.GroupID) {
+) (projections []opt.GroupID) {
 	// We only have to handle "*" and "<name>.*" in the switch below. Other names
 	// will be handled by scope.resolveType().
 	//
@@ -571,7 +569,7 @@ func (b *Builder) buildProjection(
 
 	default:
 		texpr := inScope.resolveType(projection, types.Any)
-		return []xform.GroupID{b.buildScalarProjection(texpr, label, inScope, outScope)}
+		return []opt.GroupID{b.buildScalarProjection(texpr, label, inScope, outScope)}
 	}
 }
 
@@ -589,7 +587,7 @@ func (b *Builder) buildProjection(
 // returned by buildProjectionList).
 func (b *Builder) buildScalarProjection(
 	texpr tree.TypedExpr, label string, inScope, outScope *scope,
-) xform.GroupID {
+) opt.GroupID {
 	// NB: The case statements are sorted lexicographically.
 	switch t := texpr.(type) {
 	case *columnProps:
@@ -628,7 +626,7 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 	return &scope.cols[len(scope.cols)-1]
 }
 
-func (b *Builder) constructProjectionList(items []xform.GroupID, cols []columnProps) xform.GroupID {
+func (b *Builder) constructProjectionList(items []opt.GroupID, cols []columnProps) opt.GroupID {
 	return b.factory.ConstructProjections(b.factory.StoreList(items), b.factory.InternPrivate(makeColSet(cols)))
 }
 
@@ -646,7 +644,7 @@ func (b *Builder) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, er
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (b *Builder) IndexedVarResolvedType(idx int) types.T {
-	return b.colMap[xform.ColumnIndex(idx)].typ
+	return b.colMap[opt.ColumnIndex(idx)].typ
 }
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
@@ -654,9 +652,9 @@ func (b *Builder) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented: Builder.IndexedVarNodeFormatter")
 }
 
-func makeColSet(cols []columnProps) *xform.ColSet {
+func makeColSet(cols []columnProps) *opt.ColSet {
 	// Create column index list parameter to the ProjectionList op.
-	var colSet xform.ColSet
+	var colSet opt.ColSet
 	for i := range cols {
 		colSet.Add(int(cols[i].index))
 	}
