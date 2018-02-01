@@ -4904,6 +4904,20 @@ func (r *Replica) applyRaftCommand(
 	r.mu.Lock()
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
+
+	// Exploit the fact that a split will result in a full stats
+	// recomputation to reset the ContainsEstimates flag.
+	//
+	// TODO(tschottdorf): We want to let the usual MVCCStats-delta
+	// machinery update our stats for the left-hand side. But there is no
+	// way to pass up an MVCCStats object that will clear out the
+	// ContainsEstimates flag. We should introduce one, but the migration
+	// makes this worth a separate effort (ContainsEstimates would need to
+	// have three possible values, 'UNCHANGED', 'NO', and 'YES').
+	// Until then, we're left with this rather crude hack.
+	if rResult.Split != nil {
+		r.mu.state.Stats.ContainsEstimates = false
+	}
 	ms := *r.mu.state.Stats
 	r.mu.Unlock()
 
