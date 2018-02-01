@@ -18,28 +18,14 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 )
-
-// PrivateID identifies custom private data used by a memo expression and
-// stored by the memo. Privates have numbers greater than 0; a PrivateID of 0
-// indicates an unknown private.
-type PrivateID uint32
-
-// ListID identifies a variable-sized list used by a memo expression and stored
-// by the memo. The ID consists of an offset into the memo's lists slice, plus
-// the number of elements in the list. Valid lists have offsets greater than 0;
-// a ListID with offset 0 indicates an undefined list (probable indicator of a
-// bug).
-type ListID struct {
-	offset uint32
-	len    uint32
-}
 
 // memoLoc describes the location of an expression in the memo, which is a
 // tuple of the expression's memo group and its index within that group.
 type memoLoc struct {
-	group GroupID
+	group opt.GroupID
 	expr  exprID
 }
 
@@ -104,13 +90,13 @@ type memoLoc struct {
 type memo struct {
 	// metadata provides access to database metadata and statistics, as well as
 	// information about the columns and tables used in this particular query.
-	metadata *Metadata
+	metadata *opt.Metadata
 
 	// exprMap maps from expression fingerprint (memoExpr.fingerprint()) to
 	// that expression's group. Multiple different fingerprints can map to the
 	// same group, but only one of them is the fingerprint of the group's
 	// normalized expression.
-	exprMap map[fingerprint]GroupID
+	exprMap map[fingerprint]opt.GroupID
 
 	// groups is the set of all groups in the memo, indexed by group ID. Note
 	// the group ID 0 is invalid in order to allow zero initialization of an
@@ -126,12 +112,12 @@ type memo struct {
 	// plus the count of children. The children are stored as a slice of this
 	// array. Note that ListID 0 is invalid in order to indicate an unknown
 	// list.
-	lists []GroupID
+	lists []opt.GroupID
 
 	// Intern the set of unique privates used by expressions in the memo, since
 	// there are so many duplicates. Note that PrivateID 0 is invalid in order
 	// to indicate an unknown private.
-	privatesMap map[interface{}]PrivateID
+	privatesMap map[interface{}]opt.PrivateID
 	privates    []interface{}
 }
 
@@ -141,11 +127,11 @@ func newMemo(catalog optbase.Catalog) *memo {
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
 	m := &memo{
-		metadata:    newMetadata(catalog),
-		exprMap:     make(map[fingerprint]GroupID),
+		metadata:    opt.NewMetadata(catalog),
+		exprMap:     make(map[fingerprint]opt.GroupID),
 		groups:      make([]memoGroup, 1),
-		lists:       make([]GroupID, 1),
-		privatesMap: make(map[interface{}]PrivateID),
+		lists:       make([]opt.GroupID, 1),
+		privatesMap: make(map[interface{}]opt.PrivateID),
 		privates:    make([]interface{}, 1),
 	}
 
@@ -155,7 +141,7 @@ func newMemo(catalog optbase.Catalog) *memo {
 
 // newGroup creates a new group and adds it to the memo.
 func (m *memo) newGroup(norm *memoExpr) *memoGroup {
-	id := GroupID(len(m.groups))
+	id := opt.GroupID(len(m.groups))
 	exprs := []memoExpr{*norm}
 	m.groups = append(m.groups, memoGroup{
 		id:    id,
@@ -167,13 +153,13 @@ func (m *memo) newGroup(norm *memoExpr) *memoGroup {
 // memoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression.
-func (m *memo) memoizeNormExpr(norm *memoExpr) GroupID {
+func (m *memo) memoizeNormExpr(norm *memoExpr) opt.GroupID {
 	if m.exprMap[norm.fingerprint()] != 0 {
 		panic("normalized expression has been entered into the memo more than once")
 	}
 
 	mgrp := m.newGroup(norm)
-	e := makeExprView(m, mgrp.id, minPhysPropsID)
+	e := makeExprView(m, mgrp.id, opt.MinPhysPropsID)
 	mgrp.logical = m.logPropsFactory.constructProps(&e)
 
 	m.exprMap[norm.fingerprint()] = mgrp.id
@@ -181,13 +167,13 @@ func (m *memo) memoizeNormExpr(norm *memoExpr) GroupID {
 }
 
 // lookupGroup returns the memo group for the given ID.
-func (m *memo) lookupGroup(group GroupID) *memoGroup {
+func (m *memo) lookupGroup(group opt.GroupID) *memoGroup {
 	return &m.groups[group]
 }
 
 // lookupGroupByFingerprint returns the group of the expression that has the
 // given fingerprint.
-func (m *memo) lookupGroupByFingerprint(f fingerprint) GroupID {
+func (m *memo) lookupGroupByFingerprint(f fingerprint) opt.GroupID {
 	return m.exprMap[f]
 }
 
@@ -199,16 +185,16 @@ func (m *memo) lookupExpr(loc memoLoc) *memoExpr {
 // storeList allocates storage for a list of group IDs in the memo and returns
 // an ID that can be used for later lookup.
 // TODO(andyk): lists should be interned.
-func (m *memo) storeList(items []GroupID) ListID {
-	id := ListID{offset: uint32(len(m.lists)), len: uint32(len(items))}
+func (m *memo) storeList(items []opt.GroupID) opt.ListID {
+	id := opt.ListID{Offset: uint32(len(m.lists)), Length: uint32(len(items))}
 	m.lists = append(m.lists, items...)
 	return id
 }
 
 // lookupList returns a list of group IDs that was earlier stored in the memo
 // by a call to storeList.
-func (m *memo) lookupList(id ListID) []GroupID {
-	return m.lists[id.offset : id.offset+id.len]
+func (m *memo) lookupList(id opt.ListID) []opt.GroupID {
+	return m.lists[id.Offset : id.Offset+id.Length]
 }
 
 // internPrivate adds the given private value to the memo and returns an ID
@@ -216,10 +202,10 @@ func (m *memo) lookupList(id ListID) []GroupID {
 // this method is a no-op and returns the ID of the previous value.
 // NOTE: Because the internment uses the private value as a map key, only data
 //       types which can be map types can be used here.
-func (m *memo) internPrivate(private interface{}) PrivateID {
+func (m *memo) internPrivate(private interface{}) opt.PrivateID {
 	id, ok := m.privatesMap[private]
 	if !ok {
-		id = PrivateID(len(m.privates))
+		id = opt.PrivateID(len(m.privates))
 		m.privates = append(m.privates, private)
 		m.privatesMap[private] = id
 	}
@@ -228,7 +214,7 @@ func (m *memo) internPrivate(private interface{}) PrivateID {
 
 // lookupPrivate returns a private value that was earlier interned in the memo
 // by a call to internPrivate.
-func (m *memo) lookupPrivate(id PrivateID) interface{} {
+func (m *memo) lookupPrivate(id opt.PrivateID) interface{} {
 	return m.privates[id]
 }
 

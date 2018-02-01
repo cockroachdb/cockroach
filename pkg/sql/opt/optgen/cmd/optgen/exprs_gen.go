@@ -32,6 +32,12 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
 	g.w = w
 
+	fmt.Fprintf(g.w, "package xform\n\n")
+
+	fmt.Fprintf(g.w, "import (\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/opt\"\n")
+	fmt.Fprintf(g.w, ")\n\n")
+
 	g.genChildCountLookup()
 	g.genChildGroupLookup()
 	g.genPrivateFieldLookup()
@@ -77,7 +83,7 @@ func (g *exprsGen) genChildCountLookup() {
 		if list != nil {
 			listName := unTitle(string(list.Name))
 			fmt.Fprintf(g.w, "    %s := (*%s)(ev.mem.lookupExpr(ev.loc))\n", varName, exprType)
-			fmt.Fprintf(g.w, "    return %d + int(%s.%s().len)\n", count-1, varName, listName)
+			fmt.Fprintf(g.w, "    return %d + int(%s.%s().Length)\n", count-1, varName, listName)
 		} else {
 			fmt.Fprintf(g.w, "    return %d\n", count)
 		}
@@ -91,11 +97,11 @@ func (g *exprsGen) genChildCountLookup() {
 // genChildGroupLookup generates a lookup table used to implement the ExprView
 // ChildGroup method for each different kind of memo expression.
 func (g *exprsGen) genChildGroupLookup() {
-	fmt.Fprintf(g.w, "type childGroupLookupFunc func(ev *ExprView, n int) GroupID\n")
+	fmt.Fprintf(g.w, "type childGroupLookupFunc func(ev *ExprView, n int) opt.GroupID\n")
 
 	fmt.Fprintf(g.w, "var childGroupLookup = [...]childGroupLookupFunc{\n")
 	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev *ExprView, n int) GroupID {\n")
+	fmt.Fprintf(g.w, "  func(ev *ExprView, n int) opt.GroupID {\n")
 	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
 	fmt.Fprintf(g.w, "  },\n\n")
 
@@ -104,7 +110,7 @@ func (g *exprsGen) genChildGroupLookup() {
 		varName := exprType
 
 		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev *ExprView, n int) GroupID {\n")
+		fmt.Fprintf(g.w, "  func(ev *ExprView, n int) opt.GroupID {\n")
 
 		count := len(define.Fields)
 		if privateField(define) != nil {
@@ -167,11 +173,11 @@ func (g *exprsGen) genChildGroupLookup() {
 // genPrivateFieldLookup generates a lookup table used to implement the
 // ExprView Private method for each different kind of memo expression.
 func (g *exprsGen) genPrivateFieldLookup() {
-	fmt.Fprintf(g.w, "type privateLookupFunc func(ev *ExprView) PrivateID\n")
+	fmt.Fprintf(g.w, "type privateLookupFunc func(ev *ExprView) opt.PrivateID\n")
 
 	fmt.Fprintf(g.w, "var privateLookup = [...]privateLookupFunc{\n")
 	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev *ExprView) PrivateID {\n")
+	fmt.Fprintf(g.w, "  func(ev *ExprView) opt.PrivateID {\n")
 	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
 	fmt.Fprintf(g.w, "  },\n\n")
 
@@ -180,7 +186,7 @@ func (g *exprsGen) genPrivateFieldLookup() {
 		varName := unTitle(exprType)
 
 		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev *ExprView) PrivateID {\n")
+		fmt.Fprintf(g.w, "  func(ev *ExprView) opt.PrivateID {\n")
 
 		private := privateField(define)
 		if private != nil {
@@ -241,10 +247,10 @@ func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 		if i != 0 {
 			fmt.Fprint(g.w, ", ")
 		}
-		fmt.Fprintf(g.w, "%s %s", unTitle(string(field.Name)), mapType(string(field.Type)))
+		fmt.Fprintf(g.w, "%s opt.%s", unTitle(string(field.Name)), mapType(string(field.Type)))
 	}
 	fmt.Fprintf(g.w, ") %s {\n", exprType)
-	fmt.Fprintf(g.w, "  return %s{op: %s, state: exprState{", exprType, opType)
+	fmt.Fprintf(g.w, "  return %s{op: opt.%s, state: exprState{", exprType, opType)
 
 	for i, field := range define.Fields {
 		fieldName := unTitle(string(field.Name))
@@ -254,7 +260,7 @@ func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 		}
 
 		if isListType(string(field.Type)) {
-			fmt.Fprintf(g.w, "%s.offset, %s.len", fieldName, fieldName)
+			fmt.Fprintf(g.w, "%s.Offset, %s.Length", fieldName, fieldName)
 		} else {
 			fmt.Fprintf(g.w, "uint32(%s)", fieldName)
 		}
@@ -275,16 +281,16 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 		fieldName := unTitle(string(field.Name))
 		fieldType := mapType(string(field.Type))
 
-		fmt.Fprintf(g.w, "func (e *%s) %s() %s {\n", exprType, fieldName, fieldType)
+		fmt.Fprintf(g.w, "func (e *%s) %s() opt.%s {\n", exprType, fieldName, fieldType)
 		if isListType(string(field.Type)) {
-			format := "  return ListID{offset: e.state[%d], len: e.state[%d]}\n"
+			format := "  return opt.ListID{Offset: e.state[%d], Length: e.state[%d]}\n"
 			fmt.Fprintf(g.w, format, stateIndex, stateIndex+1)
 			stateIndex += 2
 		} else if isPrivateType(string(field.Type)) {
-			fmt.Fprintf(g.w, "  return PrivateID(e.state[%d])\n", stateIndex)
+			fmt.Fprintf(g.w, "  return opt.PrivateID(e.state[%d])\n", stateIndex)
 			stateIndex++
 		} else {
-			fmt.Fprintf(g.w, "  return GroupID(e.state[%d])\n", stateIndex)
+			fmt.Fprintf(g.w, "  return opt.GroupID(e.state[%d])\n", stateIndex)
 			stateIndex++
 		}
 		fmt.Fprintf(g.w, "}\n\n")
@@ -305,7 +311,7 @@ func (g *exprsGen) genMemoFuncs(define *lang.DefineExpr) {
 	// Generate a conversion method from memoExpr to the more specialized
 	// expression type.
 	fmt.Fprintf(g.w, "func (m *memoExpr) as%s() *%s {\n", define.Name, exprType)
-	fmt.Fprintf(g.w, "  if m.op != %s {\n", opType)
+	fmt.Fprintf(g.w, "  if m.op != opt.%s {\n", opType)
 	fmt.Fprintf(g.w, "    return nil\n")
 	fmt.Fprintf(g.w, "  }\n")
 

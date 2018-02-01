@@ -16,6 +16,8 @@ package xform
 
 import (
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
 // logicalPropsFactory is a helper class that consolidates the code that
@@ -46,27 +48,27 @@ func (f *logicalPropsFactory) constructProps(ev *ExprView) LogicalProps {
 
 func (f *logicalPropsFactory) constructRelationalProps(ev *ExprView) LogicalProps {
 	switch ev.Operator() {
-	case ScanOp:
+	case opt.ScanOp:
 		return f.constructScanProps(ev)
 
-	case SelectOp:
+	case opt.SelectOp:
 		return f.constructSelectProps(ev)
 
-	case ProjectOp:
+	case opt.ProjectOp:
 		return f.constructProjectProps(ev)
 
-	case ValuesOp:
+	case opt.ValuesOp:
 		return f.constructValuesProps(ev)
 
-	case InnerJoinOp, LeftJoinOp, RightJoinOp, FullJoinOp,
-		SemiJoinOp, AntiJoinOp, InnerJoinApplyOp, LeftJoinApplyOp,
-		RightJoinApplyOp, FullJoinApplyOp, SemiJoinApplyOp, AntiJoinApplyOp:
+	case opt.InnerJoinOp, opt.LeftJoinOp, opt.RightJoinOp, opt.FullJoinOp,
+		opt.SemiJoinOp, opt.AntiJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinApplyOp,
+		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return f.constructJoinProps(ev)
 
-	case UnionOp:
+	case opt.UnionOp:
 		return f.constructSetProps(ev)
 
-	case GroupByOp:
+	case opt.GroupByOp:
 		return f.constructGroupByProps(ev)
 	}
 
@@ -76,7 +78,7 @@ func (f *logicalPropsFactory) constructRelationalProps(ev *ExprView) LogicalProp
 func (f *logicalPropsFactory) constructScanProps(ev *ExprView) (props LogicalProps) {
 	props.Relational = &RelationalProps{}
 
-	tblIndex := ev.Private().(TableIndex)
+	tblIndex := ev.Private().(opt.TableIndex)
 	tbl := f.mem.metadata.Table(tblIndex)
 
 	// A table's output column indexes are contiguous.
@@ -113,7 +115,7 @@ func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) (props Logical
 
 	// Use output columns from projection list.
 	projections := ev.Child(1)
-	props.Relational.OutputCols = *projections.Private().(*ColSet)
+	props.Relational.OutputCols = *projections.Private().(*opt.ColSet)
 
 	// Inherit not null columns from input.
 	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
@@ -132,7 +134,7 @@ func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) (props LogicalPro
 	// in case of semi and anti joins, which only project the left columns.
 	props.Relational.OutputCols = leftProps.Relational.OutputCols.Copy()
 	switch ev.Operator() {
-	case SemiJoinOp, AntiJoinOp, SemiJoinApplyOp, AntiJoinApplyOp:
+	case opt.SemiJoinOp, opt.AntiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 
 	default:
 		props.Relational.OutputCols.UnionWith(rightProps.Relational.OutputCols)
@@ -141,8 +143,8 @@ func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) (props LogicalPro
 	// Left/full outer joins can result in right columns becoming null.
 	// Otherwise, propagate not null setting from right child.
 	switch ev.Operator() {
-	case LeftJoinOp, FullJoinOp, LeftJoinApplyOp, FullJoinApplyOp,
-		SemiJoinOp, SemiJoinApplyOp, AntiJoinOp, AntiJoinApplyOp:
+	case opt.LeftJoinOp, opt.FullJoinOp, opt.LeftJoinApplyOp, opt.FullJoinApplyOp,
+		opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 
 	default:
 		props.Relational.NotNullCols = rightProps.Relational.NotNullCols.Copy()
@@ -151,7 +153,7 @@ func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) (props LogicalPro
 	// Right/full outer joins can result in left columns becoming null.
 	// Otherwise, propagate not null setting from left child.
 	switch ev.Operator() {
-	case RightJoinOp, FullJoinOp, RightJoinApplyOp, FullJoinApplyOp:
+	case opt.RightJoinOp, opt.FullJoinOp, opt.RightJoinApplyOp, opt.FullJoinApplyOp:
 
 	default:
 		props.Relational.NotNullCols.UnionWith(leftProps.Relational.NotNullCols)
@@ -166,9 +168,9 @@ func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) (props Logical
 	// Output columns are union of columns from grouping and aggregate
 	// projection lists.
 	groupings := ev.Child(1)
-	props.Relational.OutputCols = groupings.Private().(*ColSet).Copy()
+	props.Relational.OutputCols = groupings.Private().(*opt.ColSet).Copy()
 	agg := ev.Child(2)
-	props.Relational.OutputCols.UnionWith(*agg.Private().(*ColSet))
+	props.Relational.OutputCols.UnionWith(*agg.Private().(*opt.ColSet))
 
 	return
 }
@@ -178,7 +180,7 @@ func (f *logicalPropsFactory) constructSetProps(ev *ExprView) (props LogicalProp
 
 	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
 	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
-	colMap := *ev.Private().(*ColMap)
+	colMap := *ev.Private().(*opt.ColMap)
 
 	// Use left input's output columns.
 	props.Relational.OutputCols = leftProps.Relational.OutputCols
@@ -204,7 +206,7 @@ func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) (props LogicalP
 	props.Relational = &RelationalProps{}
 
 	// Use output columns that are attached to the values op.
-	props.Relational.OutputCols = *ev.Private().(*ColSet)
+	props.Relational.OutputCols = *ev.Private().(*opt.ColSet)
 	return
 }
 

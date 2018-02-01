@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
 
 import (
 	"fmt"
@@ -20,9 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
-
-// ColSet efficiently stores an unordered set of column indexes.
-type ColSet = util.FastIntSet
 
 // ColumnIndex uniquely identifies the usage of a column within the scope of a
 // query. See the comment for Metadata for more details.
@@ -32,6 +29,13 @@ type ColumnIndex int32
 // query. The indexes of its columns start at the table index and proceed
 // sequentially from there. See the comment for Metadata for more details.
 type TableIndex int32
+
+// ColSet efficiently stores an unordered set of column indexes.
+type ColSet = util.FastIntSet
+
+// ColMap provides a 1:1 mapping from one column index to another. It is used
+// by operators that need to match columns from its inputs.
+type ColMap map[ColumnIndex]ColumnIndex
 
 // Metadata indexes the columns, tables, and other metadata used within the
 // scope of a particular query. Because it is specific to one query, the
@@ -79,7 +83,9 @@ type Metadata struct {
 	tables map[TableIndex]optbase.Table
 }
 
-func newMetadata(catalog optbase.Catalog) *Metadata {
+// NewMetadata constructs a new instance of metadata based on the given
+// catalog.
+func NewMetadata(catalog optbase.Catalog) *Metadata {
 	// Skip label index 0 so that it is reserved for "unknown column".
 	return &Metadata{catalog: catalog, labels: make([]string, 1)}
 }

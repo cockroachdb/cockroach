@@ -17,7 +17,7 @@ package build
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -34,7 +34,7 @@ type columnProps struct {
 
 	// index is an identifier for this column, which is unique across all the
 	// columns in the query.
-	index  xform.ColumnIndex
+	index  opt.ColumnIndex
 	hidden bool
 }
 

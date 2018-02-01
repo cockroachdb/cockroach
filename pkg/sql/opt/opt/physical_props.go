@@ -12,18 +12,18 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
 
-// physicalPropsID identifies a set of physical properties that has been
+// PhysicalPropsID identifies a set of physical properties that has been
 // interned by a memo instance. If two ids are different, then the physical
 // properties are different.
-type physicalPropsID uint32
+type PhysicalPropsID uint32
 
 const (
-	// minPhysPropsID is the id of the well-known set of physical properties
+	// MinPhysPropsID is the id of the well-known set of physical properties
 	// that requires nothing of an operator. Therefore, every operator is
 	// guaranteed to provide this set of properties.
-	minPhysPropsID physicalPropsID = 1
+	MinPhysPropsID PhysicalPropsID = 1
 )
 
 // PhysicalProps are interesting characteristics of an expression that impact
@@ -43,6 +43,3 @@ const (
 // them.
 type PhysicalProps struct {
 }
-
-// Make the linter happy until we start using this.
-var _ = PhysicalProps{}
