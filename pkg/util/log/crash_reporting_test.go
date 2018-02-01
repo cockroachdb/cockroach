@@ -93,7 +93,9 @@ func TestCrashReportingSafeError(t *testing.T) {
 			// Verify that unknown sentinel errors print at least their type (regression test).
 			// Also, that its Error() is never called (since it would panic).
 			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:35: caused by *errors.withMessage: caused by crash_reporting_test.go:35: caused by *errors.withMessage: caused by struct { error }",
+			// gccgo is inconsistent with gc when printing types with embedded fields.
+			// See https://github.com/golang/go/issues/23620.
+			expErr: "?:0: %s | crash_reporting_test.go:35: caused by *errors.withMessage: caused by crash_reporting_test.go:35: caused by *errors.withMessage: caused by " + fmt.Sprintf("%T", errSentinel),
 		},
 		{
 			format: "", rs: []interface{}{errWrapped3},
