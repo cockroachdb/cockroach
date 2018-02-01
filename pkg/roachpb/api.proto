@@ -455,6 +455,10 @@ message EndTransactionRequest {
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
   bool require_1pc = 6 [(gogoproto.customname) = "Require1PC"];
+  // Set to true if this transaction is serializable isolation but has
+  // accummulated no refresh spans. This allows the executing server
+  // to retry it locally on the fast path.
+  bool no_refresh_spans = 7;
 }
 
 // An EndTransactionResponse is the return value from the
@@ -1371,8 +1375,8 @@ message BatchResponse {
     // error is non-nil if an error occurred.
     Error error = 1;
     // timestamp is set only for non-transactional responses and denotes the
-    // highest timestamp at which a command from the batch executed. At the
-    // time of writing, it is used solely for informational purposes and tests.
+    // timestamp at which the batch executed. The timestamp cache is updated
+    // at this timestamp.
     util.hlc.Timestamp Timestamp = 2 [(gogoproto.nullable) = false];
     // txn is non-nil if the request specified a non-nil
     // transaction. The transaction timestamp and/or priority may have
