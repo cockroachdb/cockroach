@@ -381,8 +381,8 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		//
 		// rpc error: code = Internal desc = connection error: desc = "transport: authentication
 		// handshake failed: write tcp 127.0.0.1:53936->127.0.0.1:53934: write: broken pipe".
-		s, ok := status.FromError(err)
-		return ok && (s.Code() == codes.Unavailable || s.Code() == codes.Internal)
+		code := status.Code(err)
+		return code == codes.Unavailable || code == codes.Internal
 	}
 
 	// Close all the connections until we see a failure on the main goroutine.
