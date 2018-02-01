@@ -1352,7 +1352,7 @@ func (r *batchIterator) MVCCScan(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	consistent, reverse bool,
-) (kvs []byte, intents []byte, err error) {
+) (kvs []byte, numKvs int64, intents []byte, err error) {
 	r.batch.flushMutations()
 	return r.iter.MVCCScan(start, end, max, timestamp, txn, consistent, reverse)
 }
@@ -2005,8 +2005,7 @@ func (r *rocksDBIterator) MVCCGet(
 
 	state := C.MVCCGet(
 		r.iter, goToCSlice(key), goToCTimestamp(timestamp),
-		goToCTxn(txn), C.bool(consistent),
-	)
+		goToCTxn(txn), C.bool(consistent))
 
 	if err := statusToError(state.status); err != nil {
 		return nil, nil, err
@@ -2026,29 +2025,24 @@ func (r *rocksDBIterator) MVCCGet(
 		return nil, intents, nil
 	}
 
-	// Extract the value from the batch data. This code would be slightly more
-	// compact using RocksDBBatchReader, but avoiding the allocation has a
-	// measurable impact on benchmarks.
-	repr := cSliceToUnsafeGoBytes(state.data)
-	count, repr, err := rocksDBBatchDecodeHeader(repr)
-	if err != nil {
-		return nil, nil, err
-	}
+	count := state.data.count
 	if count > 1 {
 		return nil, nil, errors.Errorf("expected 0 or 1 result, found %d", count)
 	}
 	if count == 0 {
 		return nil, intents, nil
 	}
-	mvccKey, rawValue, _, err := rocksDBBatchDecodeValue(repr)
+
+	// Extract the value from the batch data.
+	repr := copyFromSliceVector(state.data.bufs, state.data.len)
+	mvccKey, rawValue, _, err := mvccScanBatchDecodeValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
 	value := &roachpb.Value{
-		RawBytes:  make([]byte, len(rawValue)),
+		RawBytes:  rawValue,
 		Timestamp: mvccKey.Timestamp,
 	}
-	copy(value.RawBytes, rawValue)
 	return value, intents, nil
 }
 
@@ -2058,12 +2052,12 @@ func (r *rocksDBIterator) MVCCScan(
 	timestamp hlc.Timestamp,
 	txn *roachpb.Transaction,
 	consistent, reverse bool,
-) (kvs []byte, intents []byte, err error) {
+) (kvs []byte, numKvs int64, intents []byte, err error) {
 	if !consistent && txn != nil {
-		return nil, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
+		return nil, 0, nil, errors.Errorf("cannot allow inconsistent reads within a transaction")
 	}
 	if len(end) == 0 {
-		return nil, nil, emptyKeyError()
+		return nil, 0, nil, emptyKeyError()
 	}
 
 	state := C.MVCCScan(
@@ -2073,12 +2067,31 @@ func (r *rocksDBIterator) MVCCScan(
 	)
 
 	if err := statusToError(state.status); err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
 	if err := uncertaintyToError(timestamp, state.uncertainty_timestamp, txn); err != nil {
-		return nil, nil, err
+		return nil, 0, nil, err
 	}
-	return cSliceToGoBytes(state.data), cSliceToGoBytes(state.intents), nil
+	kvs = copyFromSliceVector(state.data.bufs, state.data.len)
+	return kvs, int64(state.data.count), cSliceToGoBytes(state.intents), nil
+}
+
+func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
+	if bufs == nil {
+		return nil
+	}
+
+	// Interpret the C pointer as a pointer to a Go array, then slice.
+	slices := (*[1 << 20]C.DBSlice)(unsafe.Pointer(bufs))[:len:len]
+	neededBytes := 0
+	for i := range slices {
+		neededBytes += int(slices[i].len)
+	}
+	data := rawbyteslice(neededBytes)[:0]
+	for i := range slices {
+		data = append(data, cSliceToUnsafeGoBytes(slices[i])...)
+	}
+	return data
 }
 
 func cStatsToGoStats(stats C.MVCCStatsResult, nowNanos int64) (enginepb.MVCCStats, error) {

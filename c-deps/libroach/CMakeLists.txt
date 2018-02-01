@@ -24,6 +24,7 @@ project(roachlib)
 add_library(roach
   batch.cc
   cache.cc
+  chunked_buffer.cc
   comparator.cc
   db.cc
   encoding.cc
