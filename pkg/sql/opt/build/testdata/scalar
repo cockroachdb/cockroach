@@ -199,7 +199,10 @@ error: not yet implemented: scalar expr: *tree.CaseExpr
 build-scalar vars=(string)
 LENGTH(@1) = 2
 ----
-error: not yet implemented: scalar expr: *tree.FuncExpr
+eq [type=bool]
+ ├── function: length [type=NULL]
+ │    └── variable: @1 [type=string]
+ └── const: 2 [type=int]
 
 
 build-scalar vars=(jsonb)

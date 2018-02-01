@@ -39,7 +39,7 @@ build
 SELECT (a.x, 1.5), a.y FROM a
 ----
 project
- ├── columns: a.y:int:null:2 column1:tuple{int, decimal}:null:3
+ ├── columns: a.y:int:null:2 column3:tuple{int, decimal}:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [type=tuple{tuple{int, decimal}, int}]
@@ -206,7 +206,7 @@ build
 SELECT a.x & a.y, a.x | a.y, a.x # a.y FROM a
 ----
 project
- ├── columns: column1:int:null:3 column2:int:null:4 column3:int:null:5
+ ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [type=tuple{int, int, int}]
@@ -225,7 +225,7 @@ build
 SELECT a.x + 1.5, DATE '2000-01-01' - 15, 10.10 * a.x, 1 / a.y, a.x // 1.5 FROM a
 ----
 project
- ├── columns: column1:decimal:null:3 column2:date:null:4 column3:decimal:null:5 column4:decimal:null:6 column5:decimal:null:7
+ ├── columns: column3:decimal:null:3 column4:date:null:4 column5:decimal:null:5 column6:decimal:null:6 column7:decimal:null:7
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [type=tuple{decimal, date, decimal, decimal, decimal}]
@@ -250,7 +250,7 @@ build
 SELECT 100.1 % a.x, a.x ^ 2.5, a.x << 3, a.y >> 2 FROM a
 ----
 project
- ├── columns: column1:decimal:null:3 column2:decimal:null:4 column3:int:null:5 column4:int:null:6
+ ├── columns: column3:decimal:null:3 column4:decimal:null:4 column5:int:null:5 column6:int:null:6
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [type=tuple{decimal, decimal, int, int}]
@@ -272,7 +272,7 @@ build
 SELECT b.x || 'more' FROM b
 ----
 project
- ├── columns: column1:string:null:3
+ ├── columns: column3:string:null:3
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
  └── projections [type=tuple{string}]
@@ -285,7 +285,7 @@ build
 SELECT +a.x, -a.y, ~a.x FROM a
 ----
 project
- ├── columns: column1:int:null:3 column2:int:null:4 column3:int:null:5
+ ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [type=tuple{int, int, int}]

@@ -43,6 +43,9 @@ var _ tree.TypedExpr = &columnProps{}
 var _ tree.VariableExpr = &columnProps{}
 
 func (c columnProps) String() string {
+	if c.name == "" {
+		return fmt.Sprintf("@%d", c.index+1)
+	}
 	if c.table == "" {
 		return tree.NameString(string(c.name))
 	}
@@ -67,7 +70,7 @@ func (c columnProps) matches(tblName optbase.TableName, colName optbase.ColumnNa
 
 // Format is part of the tree.Expr interface.
 func (c *columnProps) Format(ctx *tree.FmtCtx) {
-	ctx.Printf("@%d", c.index+1)
+	ctx.Printf(c.String())
 }
 
 // Walk is part of the tree.Expr interface.
