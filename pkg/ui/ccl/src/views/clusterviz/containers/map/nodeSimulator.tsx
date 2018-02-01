@@ -53,12 +53,10 @@ export class SimulatedNodeStatus {
   clientActivityRate: number;
   private statusHistory: NodeStatus[];
   private maxHistory = 2;
-  private location: Location;
 
-  constructor(initialStatus: NodeStatus, location: Location) {
+  constructor(initialStatus: NodeStatus) {
     this.statusHistory = [initialStatus];
     this.computeClientActivityRate();
-    this.location = location;
   }
 
   update(nextStatus: NodeStatus) {
@@ -78,18 +76,6 @@ export class SimulatedNodeStatus {
 
   latest() {
     return this.statusHistory[0];
-  }
-
-  longLat() {
-    if (_.isNil(this.location)) {
-      throw new Error("Node does not have location assigned!");
-    }
-
-    return ([this.location.longitude, this.location.latitude] as [number, number]);
-  }
-
-  tiers() {
-    return this.statusHistory[0].desc.locality.tiers;
   }
 
   private computeClientActivityRate() {
@@ -147,11 +133,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
     props.nodesSummary.nodeStatuses.map((status) => {
       const id = status.desc.node_id;
       if (!this.nodeHistories.hasOwnProperty(id)) {
-        // Yet another problem caused by the Protobuf.js-generated types.
-        const tiers = status.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
-
-        const loc = findMostSpecificLocation(props.locationTree, tiers);
-        this.nodeHistories[id] = new SimulatedNodeStatus(status, loc);
+        this.nodeHistories[id] = new SimulatedNodeStatus(status);
       } else {
         this.nodeHistories[id].update(status);
       }

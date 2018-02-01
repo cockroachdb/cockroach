@@ -17,3 +17,19 @@ export function parseLocalityRoute(route: string): LocalityTier[] {
     return { key, value };
   });
 }
+
+/*
+ * generateLocalityRoute generates the URL fragment to route to a particular
+ * locality from the locality tiers.
+ */
+export function generateLocalityRoute(tiers: LocalityTier[]): string {
+  return tiers.map(({ key, value }) => key + "=" + value).join("/");
+}
+
+/*
+ * getNodeLocalityTiers returns the locality tiers of a node, typed as an array
+ * of LocalityTier rather than Tier$Properties.
+ */
+export function getNodeLocalityTiers(node: NodeStatus$Properties): LocalityTier[] {
+  return node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+}

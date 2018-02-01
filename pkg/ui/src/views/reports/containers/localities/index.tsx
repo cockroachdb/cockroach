@@ -10,6 +10,7 @@ import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "
 import { selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
+import { getNodeLocalityTiers } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 
 import "./localities.styl";
@@ -35,8 +36,7 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
   };
 
   tree.nodes.forEach((node) => {
-    // Yet another problem caused by the Protobuf.js-generated types.
-    const tiers = node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+    const tiers = getNodeLocalityTiers(node);
 
     rows.push(
       <tr>

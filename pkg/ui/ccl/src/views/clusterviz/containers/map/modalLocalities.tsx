@@ -13,6 +13,7 @@ import { InjectedRouter, RouterState } from "react-router";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
+import { generateLocalityRoute, getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation } from "src/util/locations";
 import { NodeStatus$Properties } from "src/util/proto";
 
@@ -31,8 +32,7 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
   context: { router: InjectedRouter & RouterState };
 
   onClick = () => {
-    const tiers = this.props.locality.tiers.map(({ key, value }) => key + "=" + value).join("/");
-    const destination = "/clusterviz/" + tiers;
+    const destination = "/clusterviz/" + generateLocalityRoute(this.props.locality.tiers);
     this.context.router.push(destination);
   }
 
@@ -78,7 +78,7 @@ interface NodeBoxProps {
 
 class NodeBox extends React.Component<NodeBoxProps, any> {
   render() {
-    const tiers = this.props.node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+    const tiers = getNodeLocalityTiers(this.props.node);
     const location = findMostSpecificLocation(this.props.locationTree, tiers);
     const center = this.props.projection([location.longitude, location.latitude]);
     const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
