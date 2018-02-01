@@ -1,0 +1,1050 @@
+# tests adapted from logictest -- aggregate
+
+exec-raw
+CREATE DATABASE t
+----
+
+exec-raw
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  s STRING
+)
+----
+
+build
+SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8 column9:null:9 column10:null:10 column11:null:11 column12:null:12 column13:null:13 column14:null:14 column15:null:15
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      ├── function: min
+      │    └── const: 1
+      ├── function: max
+      │    └── const: 1
+      ├── function: count
+      │    └── const: 1
+      ├── function: sum_int
+      │    └── const: 1
+      ├── function: avg
+      │    └── const: 1
+      ├── function: sum
+      │    └── const: 1
+      ├── function: stddev
+      │    └── const: 1
+      ├── function: variance
+      │    └── const: 1
+      ├── function: bool_and
+      │    └── const: true
+      ├── function: bool_and
+      │    └── const: false
+      └── function: xor_agg
+           └── const: '\x01'
+
+build
+SELECT ARRAY_AGG(1) FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      └── function: array_agg
+           └── const: 1
+
+build
+SELECT JSON_AGG(v) FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      └── function: json_agg
+           └── variable: kv.v
+
+build
+SELECT JSONB_AGG(1)
+----
+group-by
+ ├── columns: column1:null:1
+ ├── values
+ │    └── tuple
+ ├── projections
+ └── projections
+      └── function: jsonb_agg
+           └── const: 1
+
+# Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
+build
+SELECT 1 FROM t.kv GROUP BY v
+----
+project
+ ├── columns: column5:null:5
+ ├── group-by
+ │    ├── columns: kv.v:null:2
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.v
+ │    └── projections
+ └── projections
+      └── const: 1
+
+build
+SELECT COUNT(*), k FROM t.kv
+----
+error: column kv.k must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT COUNT(*) FROM t.kv GROUP BY s < 5
+----
+error: unsupported comparison operator: <string> < <int>
+
+build
+SELECT COUNT(*), k FROM t.kv GROUP BY k
+----
+project
+ ├── columns: kv.k:null:1 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.k:null:1 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.k
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── variable: kv.k
+
+# GROUP BY specified using column index works.
+build
+SELECT COUNT(*), k FROM t.kv GROUP BY 2
+----
+project
+ ├── columns: kv.k:null:1 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.k:null:1 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.k
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── variable: kv.k
+
+build
+SELECT COUNT(*), k FROM t.kv GROUP BY 5
+----
+error: GROUP BY position 5 is not in select list
+
+build
+SELECT COUNT(*), k FROM t.kv GROUP BY 0
+----
+error: GROUP BY position 0 is not in select list
+
+build
+SELECT 1 GROUP BY 'a'
+----
+error: non-integer constant in GROUP BY
+
+# Qualifying a name in the SELECT, the GROUP BY, both or neither should not affect validation.
+build
+SELECT COUNT(*), kv.s FROM t.kv GROUP BY s
+----
+project
+ ├── columns: kv.s:null:4 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.s:null:4 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.s
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── variable: kv.s
+
+build
+SELECT COUNT(*), s FROM t.kv GROUP BY kv.s
+----
+project
+ ├── columns: kv.s:null:4 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.s:null:4 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.s
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── variable: kv.s
+
+build
+SELECT COUNT(*), kv.s FROM t.kv GROUP BY kv.s
+----
+project
+ ├── columns: kv.s:null:4 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.s:null:4 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.s
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── variable: kv.s
+
+build
+SELECT COUNT(*), s FROM t.kv GROUP BY s
+----
+project
+ ├── columns: kv.s:null:4 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.s:null:4 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.s
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── variable: kv.s
+
+# Grouping by more than one column works.
+build
+SELECT v, COUNT(*), w FROM t.kv GROUP BY v, w
+----
+project
+ ├── columns: kv.v:null:2 kv.w:null:3 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.v:null:2 kv.w:null:3 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    ├── variable: kv.v
+ │    │    └── variable: kv.w
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: kv.v
+      ├── variable: column5
+      └── variable: kv.w
+
+# Grouping by more than one column using column numbers works.
+build
+SELECT v, COUNT(*), w FROM t.kv GROUP BY 1, 3
+----
+project
+ ├── columns: kv.v:null:2 kv.w:null:3 column5:null:5
+ ├── group-by
+ │    ├── columns: kv.v:null:2 kv.w:null:3 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    ├── variable: kv.v
+ │    │    └── variable: kv.w
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: kv.v
+      ├── variable: column5
+      └── variable: kv.w
+
+# Selecting and grouping on a function expression works.
+# TODO(rytaft): This doesn't work yet because function lists are not interned.
+build
+SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY UPPER(s)
+----
+error: column kv.s must appear in the GROUP BY clause or be used in an aggregate function
+
+# Selecting and grouping on a constant works.
+build
+SELECT COUNT(*) FROM t.kv GROUP BY 1+2
+----
+project
+ ├── columns: column6:null:6
+ ├── group-by
+ │    ├── columns: column5:null:5 column6:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── plus
+ │    │         ├── const: 1
+ │    │         └── const: 2
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      └── variable: column6
+
+build
+SELECT COUNT(*) FROM t.kv GROUP BY length('abc')
+----
+project
+ ├── columns: column6:null:6
+ ├── group-by
+ │    ├── columns: column5:null:5 column6:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── function: length
+ │    │         └── const: 'abc'
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      └── variable: column6
+
+# Selecting a function of something which is grouped works.
+build
+SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY s
+----
+project
+ ├── columns: column5:null:5 column6:null:6
+ ├── group-by
+ │    ├── columns: kv.s:null:4 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── variable: kv.s
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── function: upper
+           └── variable: kv.s
+
+# Selecting a value that is not grouped, even if a function of it it, does not work.
+build
+SELECT COUNT(*), s FROM t.kv GROUP BY UPPER(s)
+----
+error: column kv.s must appear in the GROUP BY clause or be used in an aggregate function
+
+# Selecting and grouping on a more complex expression works.
+build
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
+----
+project
+ ├── columns: column5:null:5 column6:null:6
+ ├── group-by
+ │    ├── columns: column5:null:5 column6:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── plus
+ │    │         ├── variable: kv.k
+ │    │         └── variable: kv.v
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column6
+      └── variable: column5
+
+
+# Selecting a more complex expression, made up of things which are each grouped, works.
+build
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
+----
+project
+ ├── columns: column5:null:5 column6:null:6
+ ├── group-by
+ │    ├── columns: kv.k:null:1 kv.v:null:2 column5:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    ├── variable: kv.k
+ │    │    └── variable: kv.v
+ │    └── projections
+ │         └── function: count_rows
+ └── projections
+      ├── variable: column5
+      └── plus
+           ├── variable: kv.k
+           └── variable: kv.v
+
+build
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k
+----
+error: column kv.v must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT COUNT(*), k+v FROM t.kv GROUP BY v
+----
+error: column kv.k must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT COUNT(*), v/(k+v) FROM t.kv GROUP BY k+v
+----
+error: column kv.v must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT k FROM t.kv WHERE AVG(k) > 1
+----
+error: aggregate function is not allowed in this context
+
+build
+SELECT MAX(AVG(k)) FROM t.kv
+----
+error: aggregate function cannot be nested within another aggregate function
+
+# Test case from #2761.
+build
+SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM t.kv GROUP BY kv.v + kv.w
+----
+project
+ ├── columns: column5:null:5 count_1:null:6
+ ├── group-by
+ │    ├── columns: column5:null:5 count_1:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    └── plus
+ │    │         ├── variable: kv.v
+ │    │         └── variable: kv.w
+ │    └── projections
+ │         └── function: count
+ │              └── variable: kv.k
+ └── projections
+      ├── variable: count_1
+      └── variable: column5
+
+build
+SELECT COUNT(*)
+----
+group-by
+ ├── columns: column1:null:1
+ ├── values
+ │    └── tuple
+ ├── projections
+ └── projections
+      └── function: count_rows
+
+build
+SELECT COUNT(k) from t.kv
+----
+group-by
+ ├── columns: column5:null:5
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      └── function: count
+           └── variable: kv.k
+
+build
+SELECT COUNT(1)
+----
+group-by
+ ├── columns: column1:null:1
+ ├── values
+ │    └── tuple
+ ├── projections
+ └── projections
+      └── function: count
+           └── const: 1
+
+build
+SELECT COUNT(1) from t.kv
+----
+group-by
+ ├── columns: column5:null:5
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      └── function: count
+           └── const: 1
+
+build
+SELECT COUNT(k, v) FROM t.kv
+----
+error: unknown signature: count(int, int)
+
+build
+SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      ├── function: count_rows
+      ├── function: count
+      │    └── variable: kv.k
+      └── function: count
+           └── variable: kv.v
+
+# TODO(rytaft): This should work once we add support for the AllColumnSelector.
+build
+SELECT COUNT(kv.*) FROM t.kv
+----
+error: count(): cannot use "kv.*" in this context
+
+build
+SELECT COUNT((k, v)) FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      └── function: count
+           └── tuple
+                ├── variable: kv.k
+                └── variable: kv.v
+
+build
+SELECT COUNT(k)+COUNT(kv.v) FROM t.kv
+----
+project
+ ├── columns: column7:null:7
+ ├── group-by
+ │    ├── columns: column5:null:5 column6:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    └── projections
+ │         ├── function: count
+ │         │    └── variable: kv.k
+ │         └── function: count
+ │              └── variable: kv.v
+ └── projections
+      └── plus
+           ├── variable: column5
+           └── variable: column6
+
+build
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      ├── function: min
+      │    └── variable: kv.k
+      ├── function: max
+      │    └── variable: kv.k
+      ├── function: min
+      │    └── variable: kv.v
+      └── function: max
+           └── variable: kv.v
+
+build
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv WHERE k > 8
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8
+ ├── select
+ │    ├── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    └── gt
+ │         ├── variable: kv.k
+ │         └── const: 8
+ ├── projections
+ └── projections
+      ├── function: min
+      │    └── variable: kv.k
+      ├── function: max
+      │    └── variable: kv.k
+      ├── function: min
+      │    └── variable: kv.v
+      └── function: max
+           └── variable: kv.v
+
+build
+SELECT array_agg(s) FROM t.kv WHERE s IS NULL
+----
+group-by
+ ├── columns: column5:null:5
+ ├── select
+ │    ├── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    └── is-not-distinct-from
+ │         ├── variable: kv.s
+ │         └── const: NULL
+ ├── projections
+ └── projections
+      └── function: array_agg
+           └── variable: kv.s
+
+build
+SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM t.kv
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8
+ ├── scan
+ │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ ├── projections
+ └── projections
+      ├── function: avg
+      │    └── variable: kv.k
+      ├── function: avg
+      │    └── variable: kv.v
+      ├── function: sum
+      │    └── variable: kv.k
+      └── function: sum
+           └── variable: kv.v
+
+exec-raw
+CREATE TABLE t.abc (
+  a CHAR PRIMARY KEY,
+  b FLOAT,
+  c BOOLEAN,
+  d DECIMAL
+)
+----
+
+build
+SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM t.abc
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8
+ ├── scan
+ │    └── columns: abc.a:1 abc.b:null:2 abc.c:null:3 abc.d:null:4
+ ├── projections
+ └── projections
+      ├── function: min
+      │    └── variable: abc.a
+      ├── function: min
+      │    └── variable: abc.b
+      ├── function: min
+      │    └── variable: abc.c
+      └── function: min
+           └── variable: abc.d
+
+build
+SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM t.abc
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8
+ ├── scan
+ │    └── columns: abc.a:1 abc.b:null:2 abc.c:null:3 abc.d:null:4
+ ├── projections
+ └── projections
+      ├── function: max
+      │    └── variable: abc.a
+      ├── function: max
+      │    └── variable: abc.b
+      ├── function: max
+      │    └── variable: abc.c
+      └── function: max
+           └── variable: abc.d
+
+build
+SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM t.abc
+----
+group-by
+ ├── columns: column5:null:5 column6:null:6 column7:null:7 column8:null:8
+ ├── scan
+ │    └── columns: abc.a:1 abc.b:null:2 abc.c:null:3 abc.d:null:4
+ ├── projections
+ └── projections
+      ├── function: avg
+      │    └── variable: abc.b
+      ├── function: sum
+      │    └── variable: abc.b
+      ├── function: avg
+      │    └── variable: abc.d
+      └── function: sum
+           └── variable: abc.d
+
+# Verify summing of intervals
+exec-raw
+CREATE TABLE t.intervals (
+  a INTERVAL PRIMARY KEY
+)
+----
+
+build
+SELECT SUM(a) FROM t.intervals
+----
+group-by
+ ├── columns: column2:null:2
+ ├── scan
+ │    └── columns: intervals.a:1
+ ├── projections
+ └── projections
+      └── function: sum
+           └── variable: intervals.a
+
+build
+SELECT AVG(a) FROM t.abc
+----
+error: unknown signature: avg(string)
+
+build
+SELECT AVG(c) FROM t.abc
+----
+error: unknown signature: avg(bool)
+
+build
+SELECT AVG((a,c)) FROM t.abc
+----
+error: unknown signature: avg(tuple{string, bool})
+
+build
+SELECT SUM(a) FROM t.abc
+----
+error: unknown signature: sum(string)
+
+build
+SELECT SUM(c) FROM t.abc
+----
+error: unknown signature: sum(bool)
+
+build
+SELECT SUM((a,c)) FROM t.abc
+----
+error: unknown signature: sum(tuple{string, bool})
+
+exec-raw
+CREATE TABLE t.xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z FLOAT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x),
+  FAMILY (x),
+  FAMILY (y),
+  FAMILY (z)
+)
+----
+
+build
+SELECT MIN(x) FROM t.xyz
+----
+group-by
+ ├── columns: column4:null:4
+ ├── scan
+ │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ ├── projections
+ └── projections
+      └── function: min
+           └── variable: xyz.x
+
+build
+SELECT MIN(x) FROM t.xyz WHERE x in (0, 4, 7)
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── in
+ │         ├── variable: xyz.x
+ │         └── tuple
+ │              ├── const: 0
+ │              ├── const: 4
+ │              └── const: 7
+ ├── projections
+ └── projections
+      └── function: min
+           └── variable: xyz.x
+
+build
+SELECT MAX(x) FROM t.xyz
+----
+group-by
+ ├── columns: column4:null:4
+ ├── scan
+ │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ ├── projections
+ └── projections
+      └── function: max
+           └── variable: xyz.x
+
+build
+SELECT MAX(y) FROM t.xyz WHERE x = 1
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── eq
+ │         ├── variable: xyz.x
+ │         └── const: 1
+ ├── projections
+ └── projections
+      └── function: max
+           └── variable: xyz.y
+
+build
+SELECT MIN(y) FROM t.xyz WHERE x = 7
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── eq
+ │         ├── variable: xyz.x
+ │         └── const: 7
+ ├── projections
+ └── projections
+      └── function: min
+           └── variable: xyz.y
+
+build
+SELECT MIN(x) FROM t.xyz WHERE (y, z) = (2, 3.0)
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── eq
+ │         ├── tuple
+ │         │    ├── variable: xyz.y
+ │         │    └── variable: xyz.z
+ │         └── tuple
+ │              ├── const: 2
+ │              └── const: 3.0
+ ├── projections
+ └── projections
+      └── function: min
+           └── variable: xyz.x
+
+build
+SELECT MAX(x) FROM t.xyz WHERE (z, y) = (3.0, 2)
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── eq
+ │         ├── tuple
+ │         │    ├── variable: xyz.z
+ │         │    └── variable: xyz.y
+ │         └── tuple
+ │              ├── const: 3.0
+ │              └── const: 2
+ ├── projections
+ └── projections
+      └── function: max
+           └── variable: xyz.x
+
+
+# VARIANCE/STDDEV
+
+build
+SELECT VARIANCE(x) FROM t.xyz WHERE x = 10
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── eq
+ │         ├── variable: xyz.x
+ │         └── const: 10
+ ├── projections
+ └── projections
+      └── function: variance
+           └── variable: xyz.x
+
+build
+SELECT STDDEV(x) FROM t.xyz WHERE x = 1
+----
+group-by
+ ├── columns: column4:null:4
+ ├── select
+ │    ├── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:1 xyz.y:null:2 xyz.z:null:3
+ │    └── eq
+ │         ├── variable: xyz.x
+ │         └── const: 1
+ ├── projections
+ └── projections
+      └── function: stddev
+           └── variable: xyz.x
+
+exec-raw
+CREATE TABLE t.bools (b BOOL)
+----
+
+build
+SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+----
+group-by
+ ├── columns: column3:null:3 column4:null:4
+ ├── scan
+ │    └── columns: bools.b:null:1 bools.rowid:2
+ ├── projections
+ └── projections
+      ├── function: bool_and
+      │    └── variable: bools.b
+      └── function: bool_or
+           └── variable: bools.b
+
+
+# Tests with * inside GROUP BY.
+build
+SELECT 1 FROM t.kv GROUP BY kv.*;
+----
+project
+ ├── columns: column5:null:5
+ ├── group-by
+ │    ├── columns: kv.k:null:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    ├── variable: kv.k
+ │    │    ├── variable: kv.v
+ │    │    ├── variable: kv.w
+ │    │    └── variable: kv.s
+ │    └── projections
+ └── projections
+      └── const: 1
+
+exec-raw
+CREATE TABLE t.xor_bytes (a bytes, b int, c int)
+----
+
+build
+SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM t.xor_bytes
+----
+project
+ ├── columns: column6:null:6 column7:null:7
+ ├── group-by
+ │    ├── columns: column5:null:5 column7:null:7
+ │    ├── scan
+ │    │    └── columns: xor_bytes.a:null:1 xor_bytes.b:null:2 xor_bytes.c:null:3 xor_bytes.rowid:4
+ │    ├── projections
+ │    └── projections
+ │         ├── function: xor_agg
+ │         │    └── variable: xor_bytes.a
+ │         └── function: xor_agg
+ │              └── variable: xor_bytes.c
+ └── projections
+      ├── function: to_hex
+      │    └── variable: column5
+      └── variable: column7
+
+build
+SELECT MAX(true), MIN(true)
+----
+group-by
+ ├── columns: column1:null:1 column2:null:2
+ ├── values
+ │    └── tuple
+ ├── projections
+ └── projections
+      ├── function: max
+      │    └── const: true
+      └── function: min
+           └── const: true
+
+exec-raw
+CREATE TABLE t.ab (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+----
+
+exec-raw
+CREATE TABLE t.xy(x STRING, y STRING);
+----
+
+# Grouping and rendering tuples.
+build
+SELECT (b, a) FROM t.ab GROUP BY (b, a)
+----
+project
+ ├── columns: column3:null:3
+ ├── group-by
+ │    ├── columns: ab.a:null:1 ab.b:null:2
+ │    ├── scan
+ │    │    └── columns: ab.a:1 ab.b:null:2
+ │    ├── projections
+ │    │    ├── variable: ab.b
+ │    │    └── variable: ab.a
+ │    └── projections
+ └── projections
+      └── tuple
+           ├── variable: ab.b
+           └── variable: ab.a
+
+build
+SELECT MIN(y), (b, a)
+ FROM t.ab, t.xy GROUP BY (x, (a, b))
+----
+project
+ ├── columns: column6:null:6 column7:null:7
+ ├── group-by
+ │    ├── columns: ab.a:null:1 ab.b:null:2 xy.x:null:3 column6:null:6
+ │    ├── inner-join
+ │    │    ├── columns: ab.a:1 ab.b:null:2 xy.x:null:3 xy.y:null:4 xy.rowid:5
+ │    │    ├── scan
+ │    │    │    └── columns: ab.a:1 ab.b:null:2
+ │    │    ├── scan
+ │    │    │    └── columns: xy.x:null:3 xy.y:null:4 xy.rowid:5
+ │    │    └── true
+ │    ├── projections
+ │    │    ├── variable: xy.x
+ │    │    ├── variable: ab.a
+ │    │    └── variable: ab.b
+ │    └── projections
+ │         └── function: min
+ │              └── variable: xy.y
+ └── projections
+      ├── variable: column6
+      └── tuple
+           ├── variable: ab.b
+           └── variable: ab.a
+
+build
+SELECT (k+v)/(v+w) FROM t.kv GROUP BY k+v, v+w;
+----
+project
+ ├── columns: column7:null:7
+ ├── group-by
+ │    ├── columns: column5:null:5 column6:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:1 kv.v:null:2 kv.w:null:3 kv.s:null:4
+ │    ├── projections
+ │    │    ├── plus
+ │    │    │    ├── variable: kv.k
+ │    │    │    └── variable: kv.v
+ │    │    └── plus
+ │    │         ├── variable: kv.v
+ │    │         └── variable: kv.w
+ │    └── projections
+ └── projections
+      └── div
+           ├── plus
+           │    ├── variable: kv.k
+           │    └── variable: kv.v
+           └── plus
+                ├── variable: kv.v
+                └── variable: kv.w
