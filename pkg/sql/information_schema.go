@@ -292,6 +292,40 @@ CREATE TABLE information_schema.columns (
 	},
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-enabled-roles.html
+// MySQL:    missing
+var informationSchemaEnabledRoles = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.enabled_roles (
+	ROLE_NAME STRING NOT NULL
+);
+`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		currentUser := p.SessionData().User
+		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
+		if err != nil {
+			return err
+		}
+
+		// The current user is always listed.
+		if err := addRow(
+			tree.NewDString(currentUser), // role_name: the current user
+		); err != nil {
+			return err
+		}
+
+		for roleName := range memberMap {
+			if err := addRow(
+				tree.NewDString(roleName), // role_name
+			); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	},
+}
+
 func characterMaximumLength(colType sqlbase.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.MaxCharacterLength)
 }
@@ -372,40 +406,6 @@ CREATE TABLE information_schema.key_column_usage (
 			}
 			return nil
 		})
-	},
-}
-
-// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-enabled-roles.html
-// MySQL:    missing
-var informationSchemaEnabledRoles = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.enabled_roles (
-	ROLE_NAME STRING NOT NULL
-);
-`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		currentUser := p.SessionData().User
-		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
-		if err != nil {
-			return err
-		}
-
-		// The current user is always listed.
-		if err := addRow(
-			tree.NewDString(currentUser), // role_name: the current user
-		); err != nil {
-			return err
-		}
-
-		for roleName := range memberMap {
-			if err := addRow(
-				tree.NewDString(roleName), // role_name
-			); err != nil {
-				return err
-			}
-		}
-
-		return nil
 	},
 }
 
@@ -499,8 +499,6 @@ CREATE TABLE information_schema.referential_constraints (
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-role-table-grants.html
 // MySQL:    missing
-// This is the same as information_schema.role_table_grants but is duplicated here in case
-// they diverge.
 var informationSchemaRoleTableGrants = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.role_table_grants (
@@ -514,27 +512,10 @@ CREATE TABLE information_schema.role_table_grants (
 	WITH_HIERARCHY STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			for _, u := range table.Privileges.Show() {
-				for _, priv := range u.Privileges {
-					if err := addRow(
-						tree.DNull,                  // grantor
-						tree.NewDString(u.User),     // grantee
-						defString,                   // table_catalog
-						tree.NewDString(db.Name),    // table_schema
-						tree.NewDString(table.Name), // table_name
-						tree.NewDString(priv),       // privilege_type
-						tree.DNull,                  // is_grantable
-						tree.DNull,                  // with_hierarchy
-					); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		})
-	},
+	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
+	// not show tables with grants provided through PUBLIC, but table_privileges does.
+	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
+	populate: populateTablePrivileges,
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-schemata.html
@@ -831,27 +812,32 @@ CREATE TABLE information_schema.table_privileges (
 	WITH_HIERARCHY STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			for _, u := range table.Privileges.Show() {
-				for _, priv := range u.Privileges {
-					if err := addRow(
-						tree.DNull,                  // grantor
-						tree.NewDString(u.User),     // grantee
-						defString,                   // table_catalog
-						tree.NewDString(db.Name),    // table_schema
-						tree.NewDString(table.Name), // table_name
-						tree.NewDString(priv),       // privilege_type
-						tree.DNull,                  // is_grantable
-						tree.DNull,                  // with_hierarchy
-					); err != nil {
-						return err
-					}
+	populate: populateTablePrivileges,
+}
+
+// populateTablePrivileges is used to populate both table_privileges and role_table_grants.
+func populateTablePrivileges(
+	ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error,
+) error {
+	return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+		for _, u := range table.Privileges.Show() {
+			for _, priv := range u.Privileges {
+				if err := addRow(
+					tree.DNull,                  // grantor
+					tree.NewDString(u.User),     // grantee
+					defString,                   // table_catalog
+					tree.NewDString(db.Name),    // table_schema
+					tree.NewDString(table.Name), // table_name
+					tree.NewDString(priv),       // privilege_type
+					tree.DNull,                  // is_grantable
+					tree.DNull,                  // with_hierarchy
+				); err != nil {
+					return err
 				}
 			}
-			return nil
-		})
-	},
+		}
+		return nil
+	})
 }
 
 var (
