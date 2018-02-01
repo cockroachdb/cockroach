@@ -119,8 +119,8 @@ func (c *checkHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func (c *checkHelper) check(ctx *tree.EvalContext) error {
-	ctx.IVarHelper = c.ivarHelper
-	defer func() { ctx.IVarHelper = nil }()
+	ctx.PushIVarHelper(c.ivarHelper)
+	defer func() { ctx.PopIVarHelper() }()
 	for _, expr := range c.exprs {
 		if d, err := expr.Eval(ctx); err != nil {
 			return err

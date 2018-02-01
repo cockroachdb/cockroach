@@ -150,9 +150,9 @@ func (eh *exprHelper) init(
 // returns whether the filter passes.
 func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 	eh.row = row
-	eh.evalCtx.IVarHelper = &eh.vars
+	eh.evalCtx.PushIVarHelper(&eh.vars)
 	pass, err := sqlbase.RunFilter(eh.expr, eh.evalCtx)
-	eh.evalCtx.IVarHelper = nil
+	eh.evalCtx.PopIVarHelper()
 	return pass, err
 }
 
@@ -165,8 +165,8 @@ func (eh *exprHelper) evalFilter(row sqlbase.EncDatumRow) (bool, error) {
 func (eh *exprHelper) eval(row sqlbase.EncDatumRow) (tree.Datum, error) {
 	eh.row = row
 
-	eh.evalCtx.IVarHelper = &eh.vars
+	eh.evalCtx.PushIVarHelper(&eh.vars)
 	d, err := eh.expr.Eval(eh.evalCtx)
-	eh.evalCtx.IVarHelper = nil
+	eh.evalCtx.PopIVarHelper()
 	return d, err
 }

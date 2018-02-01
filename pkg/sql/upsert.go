@@ -177,8 +177,8 @@ func (uh *upsertHelper) eval(insertRow tree.Datums, existingRow tree.Datums) (tr
 
 	var err error
 	ret := make([]tree.Datum, len(uh.evalExprs))
-	uh.p.extendedEvalCtx.IVarHelper = uh.ivarHelper
-	defer func() { uh.p.extendedEvalCtx.IVarHelper = nil }()
+	uh.p.extendedEvalCtx.PushIVarHelper(uh.ivarHelper)
+	defer func() { uh.p.extendedEvalCtx.PopIVarHelper() }()
 	for i, evalExpr := range uh.evalExprs {
 		ret[i], err = evalExpr.Eval(uh.p.EvalContext())
 		if err != nil {
@@ -194,8 +194,8 @@ func (uh *upsertHelper) shouldUpdate(insertRow tree.Datums, existingRow tree.Dat
 	uh.curSourceRow = existingRow
 	uh.curExcludedRow = insertRow
 
-	uh.p.extendedEvalCtx.IVarHelper = uh.ivarHelper
-	defer func() { uh.p.extendedEvalCtx.IVarHelper = nil }()
+	uh.p.extendedEvalCtx.PushIVarHelper(uh.ivarHelper)
+	defer func() { uh.p.extendedEvalCtx.PopIVarHelper() }()
 	return sqlbase.RunFilter(uh.whereExpr, uh.p.EvalContext())
 }
 
