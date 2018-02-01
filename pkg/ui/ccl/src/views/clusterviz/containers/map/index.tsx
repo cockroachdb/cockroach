@@ -19,6 +19,8 @@ import "./sim.css";
 import NodeSimulator from "./nodeSimulator";
 import { WorldMap } from "./worldmap";
 import { Box, ZoomTransformer } from "./zoom";
+import { LocalityTier } from "src/redux/localities";
+import { Breadcrumbs } from "ccl/src/views/clusterviz/containers/map/breadcrumbs";
 
 interface ClusterVisualizationState {
   zoomTransform: ZoomTransformer;
@@ -92,7 +94,7 @@ export default class ClusterVisualization extends React.Component<RouterState, C
     window.removeEventListener("resize", this.debouncedOnResize);
   }
 
-  renderContent() {
+  renderContent(tiers: LocalityTier[]) {
     if (!this.state) {
       return null;
     }
@@ -107,8 +109,6 @@ export default class ClusterVisualization extends React.Component<RouterState, C
     projection.scale(projection.scale() * scale);
     projection.translate(vector.add(vector.mult(projection.translate(), scale), translate));
 
-    const tiers = parseLocalityRoute(this.props.params.splat);
-
     return (
       <g>
         <WorldMap projection={projection} />
@@ -118,17 +118,22 @@ export default class ClusterVisualization extends React.Component<RouterState, C
   }
 
   render() {
+    const tiers = parseLocalityRoute(this.props.params.splat);
+
     // We must render the SVG even before initializing the state, because we
     // need to read its dimensions from the DOM in order to initialize the
     // state.
     return (
-      <svg
-        style={{ width: "100%", height: "100%" }}
-        className="cluster-viz"
-        ref={svg => this.graphEl = svg}
-      >
-        { this.renderContent() }
-      </svg>
+      <div style={{ height: "100%" }}>
+        <Breadcrumbs tiers={tiers} />
+        <svg
+          style={{ width: "100%", height: "100%" }}
+          className="cluster-viz"
+          ref={svg => this.graphEl = svg}
+        >
+          { this.renderContent(tiers) }
+        </svg>
+      </div>
     );
   }
 }
