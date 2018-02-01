@@ -124,8 +124,6 @@ func NewServerWithInterceptor(
 		// A stats handler to measure server network stats.
 		grpc.StatsHandler(&ctx.stats),
 	}
-	// Compression is enabled separately from decompression to allow staged
-	// rollout.
 	if !ctx.Insecure {
 		tlsConfig, err := ctx.GetServerTLSConfig()
 		if err != nil {
