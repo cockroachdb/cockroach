@@ -19,12 +19,13 @@ import (
 	"regexp"
 	"testing"
 
+	raven "github.com/getsentry/raven-go"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	raven "github.com/getsentry/raven-go"
 )
 
 // interceptingTransport is an implementation of raven.Transport that delegates
