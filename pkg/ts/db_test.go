@@ -15,16 +15,14 @@
 package ts
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"math"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -36,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/gogo/protobuf/proto"
 )
 
 // testModel is a model-based testing structure used to verify that time
@@ -116,50 +114,12 @@ func (tm *testModel) getActualData() map[string]roachpb.Value {
 // engine. If the actual data does not match the model, this method will print
 // out detailed information about the differences between the two data sets.
 func (tm *testModel) assertModelCorrect() {
+	tm.t.Helper()
 	actualData := tm.getActualData()
 	if !reflect.DeepEqual(tm.modelData, actualData) {
-		// Provide a detailed differencing of the actual data and the expected
-		// model. This is done by comparing individual keys, and printing human
-		// readable information about any keys which differ in value between the
-		// two data sets.
-		var buf bytes.Buffer
-		buf.WriteString("Found unexpected differences in model data and actual data:\n")
-		for k, vActual := range actualData {
-			n, s, r, ts, err := DecodeDataKey([]byte(k))
-			if err != nil {
-				tm.t.Fatal(err)
-			}
-			if vModel, ok := tm.modelData[k]; !ok {
-				fmt.Fprintf(&buf, "\nKey %s/%s@%d, r:%d from actual data was not found in model", n, s, ts, r)
-			} else {
-				if !proto.Equal(&vActual, &vModel) {
-					fmt.Fprintf(&buf, "\nKey %s/%s@%d, r:%d differs between model and actual:", n, s, ts, r)
-					if its, err := vActual.GetTimeseries(); err != nil {
-						fmt.Fprintf(&buf, "\nActual value is not a valid time series: %v", vActual)
-					} else {
-						fmt.Fprintf(&buf, "\nActual value: %s", &its)
-					}
-					if its, err := vModel.GetTimeseries(); err != nil {
-						fmt.Fprintf(&buf, "\nModel value is not a valid time series: %v", vModel)
-					} else {
-						fmt.Fprintf(&buf, "\nModel value: %s", &its)
-					}
-				}
-			}
+		for _, diff := range pretty.Diff(tm.modelData, actualData) {
+			tm.t.Error(diff)
 		}
-
-		// Detect keys in model which were not present in the actual data.
-		for k := range tm.modelData {
-			n, s, r, ts, err := DecodeDataKey([]byte(k))
-			if err != nil {
-				tm.t.Fatal(err)
-			}
-			if _, ok := actualData[k]; !ok {
-				fmt.Fprintf(&buf, "Key %s/%s@%d, r:%d from model was not found in actual data", n, s, ts, r)
-			}
-		}
-
-		tm.t.Fatal(buf.String())
 	}
 }
 
