@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -373,7 +374,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	flow := &Flow{}
 	flow.Ctx = ctx
 	id := FlowID{uuid.MakeV4()}
-	registerFlow := func(id FlowID) {
+	registerFlow := func(t *testing.T, id FlowID) {
 		t.Helper()
 		if err := reg.RegisterFlow(
 			ctx, id, flow, nil /* inboundStreams */, 0, /* timeout */
@@ -385,7 +386,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	// WaitForFlow verifies that Drain waits for a flow to finish within the
 	// timeout.
 	t.Run("WaitForFlow", func(t *testing.T) {
-		registerFlow(id)
+		registerFlow(t, id)
 		drainDone := make(chan struct{})
 		go func() {
 			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */)
@@ -400,7 +401,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 
 	// DrainTimeout verifies that Drain returns once the timeout expires.
 	t.Run("DrainTimeout", func(t *testing.T) {
-		registerFlow(id)
+		registerFlow(t, id)
 		reg.Drain(0 /* flowDrainWait */, 0 /* minFlowDrainWait */)
 		reg.UnregisterFlow(id)
 		reg.Undrain()
@@ -409,7 +410,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 	// AcceptNewFlow verifies that a flowRegistry continues accepting flows
 	// while draining.
 	t.Run("AcceptNewFlow", func(t *testing.T) {
-		registerFlow(id)
+		registerFlow(t, id)
 		drainDone := make(chan struct{})
 		go func() {
 			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */)
@@ -418,7 +419,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		// Be relatively sure that the flowRegistry is draining.
 		time.Sleep(time.Microsecond)
 		newFlowID := FlowID{uuid.MakeV4()}
-		registerFlow(newFlowID)
+		registerFlow(t, newFlowID)
 		reg.UnregisterFlow(id)
 		select {
 		case <-drainDone:
@@ -439,22 +440,43 @@ func TestFlowRegistryDrain(t *testing.T) {
 	// MinFlowWait verifies that the flowRegistry waits a minimum amount of time
 	// for incoming flows to be registered.
 	t.Run("MinFlowWait", func(t *testing.T) {
-		minFlowDrainWait := 10 * time.Millisecond
 		// Case in which draining is initiated with zero running flows.
 		drainDone := make(chan struct{})
+		// Register a flow right before the flowRegistry waits for
+		// minFlowDrainWait. Use an errChan because draining is performed from
+		// another goroutine and cannot call t.Fatal.
+		errChan := make(chan error)
+		reg.runBeforeDrainSleep = func() {
+			if err := reg.RegisterFlow(
+				ctx, id, flow, nil /* inboundStreams */, 0, /* timeout */
+			); err != nil {
+				errChan <- err
+			}
+			errChan <- nil
+		}
 		go func() {
-			reg.Drain(math.MaxInt64 /* flowDrainWait */, minFlowDrainWait)
+			reg.Drain(math.MaxInt64 /* flowDrainWait */, 0 /* minFlowDrainWait */)
 			drainDone <- struct{}{}
 		}()
-		// Be relatively sure that the flowRegistry is draining.
-		time.Sleep(time.Microsecond)
-		registerFlow(id)
+		if err := <-errChan; err != nil {
+			t.Fatal(err)
+		}
 		reg.UnregisterFlow(id)
 		<-drainDone
 		reg.Undrain()
 
 		// Case in which a running flow finishes before the minimum wait time.
-		registerFlow(id)
+		registerFlow(t, id)
+		reg.runBeforeDrainSleep = func() {
+			if err := reg.RegisterFlow(
+				ctx, id, flow, nil /* inboundStreams */, 0, /* timeout */
+			); err != nil {
+				errChan <- err
+			}
+			errChan <- nil
+		}
+		minFlowDrainWait := 10 * time.Millisecond
+		start := timeutil.Now()
 		go func() {
 			reg.Drain(math.MaxInt64 /* flowDrainWait */, minFlowDrainWait)
 			drainDone <- struct{}{}
@@ -462,9 +484,24 @@ func TestFlowRegistryDrain(t *testing.T) {
 		// Be relatively sure that the flowRegistry is draining.
 		time.Sleep(time.Microsecond)
 		reg.UnregisterFlow(id)
-		registerFlow(id)
+		select {
+		// The draining process has finished. This is possible when the drain
+		// goroutine is much quicker. However, it must have at least waited the
+		// minimum time.
+		case <-drainDone:
+			if timeutil.Since(start) < minFlowDrainWait {
+				t.Fatal("flow registry did not wait at least minFlowDrainWait")
+			}
+			return
+		case err := <-errChan:
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 		reg.UnregisterFlow(id)
 		<-drainDone
+
 		reg.Undrain()
+		reg.runBeforeDrainSleep = nil
 	})
 }
