@@ -1703,12 +1703,12 @@ func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, error) 
 	}
 	var err error
 	for i := int64(0); i < max; i++ {
-		_, _, kvData, err = mvccScanBatchDecodeValue(kvData)
+		_, _, kvData, err = mvccScanDecodeKeyValue(kvData)
 		if err != nil {
 			return nil, err
 		}
 	}
-	key, _, _, err := mvccScanBatchDecodeValue(kvData)
+	key, _, _, err := mvccScanDecodeKeyValue(kvData)
 	if err != nil {
 		return nil, err
 	}
@@ -1754,7 +1754,7 @@ func buildScanResults(
 	var key MVCCKey
 	var rawBytes []byte
 	for i := range kvs {
-		key, rawBytes, kvData, err = mvccScanBatchDecodeValue(kvData)
+		key, rawBytes, kvData, err = mvccScanDecodeKeyValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -1765,7 +1765,7 @@ func buildScanResults(
 
 	var resumeKey roachpb.Key
 	if numKvs > max {
-		key, _, _, err = mvccScanBatchDecodeValue(kvData)
+		key, _, _, err = mvccScanDecodeKeyValue(kvData)
 		if err != nil {
 			return nil, nil, nil, err
 		}

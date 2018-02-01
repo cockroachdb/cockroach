@@ -49,7 +49,6 @@ class chunkedBuffer {
 
  private:
   void put(const char* data, int len, int next_size_hint);
-  void putLengthPrefixedSlice(const rocksdb::Slice& value);
 
  private:
   std::vector<DBSlice> bufs_;
