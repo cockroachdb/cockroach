@@ -28,6 +28,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -47,6 +48,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+// https://golang.org/cl/38533 and https://golang.org/cl/91115 changed the
+// validation message.
+func wrongArgCountString(want, got int) string {
+	if strings.HasPrefix(runtime.Version(), "go1.10") {
+		return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
+	}
+	return fmt.Sprintf("sql: statement expects %d inputs; got %d", want, got)
+}
 
 func trivialQuery(pgURL url.URL) error {
 	db, err := gosql.Open("postgres", pgURL.String())
@@ -643,7 +653,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Error(
 				"pq: no value provided for placeholder: $1",
 			).PreparedError(
-				"sql: statement expects 1 inputs; got 0",
+				wrongArgCountString(1, 0),
 			),
 		},
 		"SELECT $1::int > $2::float": {
@@ -810,7 +820,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Error(
 				"pq: no value provided for placeholders: $1, $2",
 			).PreparedError(
-				"sql: statement expects 2 inputs; got 0",
+				wrongArgCountString(2, 0),
 			),
 		},
 		"SELECT * FROM (VALUES (1), (2), (3), (4)) AS foo (a) LIMIT $1 OFFSET $2": {
