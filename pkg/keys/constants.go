@@ -125,18 +125,18 @@ var (
 	LocalRangeFrozenStatusSuffix = []byte("fzn-")
 	// LocalRangeLastGCSuffix is the suffix for the last GC.
 	LocalRangeLastGCSuffix = []byte("lgc-")
-	// LocalRaftAppliedIndexSuffix is the suffix for the raft applied index.
-	LocalRaftAppliedIndexSuffix = []byte("rfta")
+	// LocalRaftAppliedIndexLegacySuffix is the suffix for the raft applied index.
+	LocalRaftAppliedIndexLegacySuffix = []byte("rfta")
 	// LocalRaftTombstoneSuffix is the suffix for the raft tombstone.
 	LocalRaftTombstoneSuffix = []byte("rftb")
 	// LocalRaftTruncatedStateSuffix is the suffix for the RaftTruncatedState.
 	LocalRaftTruncatedStateSuffix = []byte("rftt")
 	// LocalRangeLeaseSuffix is the suffix for a range lease.
 	LocalRangeLeaseSuffix = []byte("rll-")
-	// LocalLeaseAppliedIndexSuffix is the suffix for the applied lease index.
-	LocalLeaseAppliedIndexSuffix = []byte("rlla")
-	// LocalRangeStatsSuffix is the suffix for range statistics.
-	LocalRangeStatsSuffix = []byte("stat")
+	// LocalLeaseAppliedIndexLegacySuffix is the suffix for the applied lease index.
+	LocalLeaseAppliedIndexLegacySuffix = []byte("rlla")
+	// LocalRangeStatsLegacySuffix is the suffix for range statistics.
+	LocalRangeStatsLegacySuffix = []byte("stat")
 	// LocalTxnSpanGCThresholdSuffix is the suffix for the last txn span GC's
 	// threshold.
 	LocalTxnSpanGCThresholdSuffix = []byte("tst-")

@@ -48,10 +48,10 @@ var (
 
 // AccountForSelf adjusts ms to account for the predicted impact it will have on
 // the values that it records when the structure is initially stored. Specifically,
-// MVCCStats is stored on the RangeStats key, which means that its creation will
-// have an impact on system-local data size and key count.
+// MVCCStats is stored on the RangeStats legacy key, which means that its creation
+// will have an impact on system-local data size and key count.
 func AccountForSelf(ms *enginepb.MVCCStats, rangeID roachpb.RangeID) error {
-	key := keys.RangeStatsKey(rangeID)
+	key := keys.RangeStatsLegacyKey(rangeID)
 	metaKey := MakeMVCCMetadataKey(key)
 
 	// MVCCStats is stored inline, so compute MVCCMetadata accordingly.
