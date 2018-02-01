@@ -4655,7 +4655,7 @@ func (r *Replica) processRaftCommand(
 		// values) here. If the key range we are ingesting into isn't empty,
 		// we're not using AddSSTable but a plain WriteBatch.
 		if raftCmd.ReplicatedEvalResult.AddSSTable != nil {
-			addSSTablePreApply(
+			copied := addSSTablePreApply(
 				ctx,
 				r.store.cfg.Settings,
 				r.store.engine,
@@ -4665,6 +4665,9 @@ func (r *Replica) processRaftCommand(
 				*raftCmd.ReplicatedEvalResult.AddSSTable,
 			)
 			r.store.metrics.AddSSTableApplications.Inc(1)
+			if copied {
+				r.store.metrics.AddSSTableApplicationCopies.Inc(1)
+			}
 			raftCmd.ReplicatedEvalResult.AddSSTable = nil
 		}
 
