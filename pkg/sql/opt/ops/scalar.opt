@@ -27,6 +27,20 @@ define Const {
     Value Datum
 }
 
+# True is the boolean true value that is equivalent to the tree.DBoolTrue datum
+# value. It is a separate operator to make matching and replacement simpler and
+# more efficient, as patterns can contain (True) expressions.
+[Scalar]
+define True {
+}
+
+# False is the boolean false value that is equivalent to the tree.DBoolFalse
+# datum value. It is a separate operator to make matching and replacement
+# simpler and more efficient, as patterns can contain (False) expressions.
+[Scalar]
+define False {
+}
+
 [Scalar]
 define Placeholder {
     Value Interface
@@ -321,18 +335,4 @@ define UnaryComplement {
 define Function {
     Args ExprList
     Def  FuncDef
-}
-
-# True is the boolean true value that is equivalent to the tree.DBoolTrue datum
-# value. It is a separate operator to make matching and replacement simpler and
-# more efficient, as patterns can contain (True) expressions.
-[Scalar]
-define True {
-}
-
-# False is the boolean false value that is equivalent to the tree.DBoolFalse
-# datum value. It is a separate operator to make matching and replacement
-# simpler and more efficient, as patterns can contain (False) expressions.
-[Scalar]
-define False {
 }

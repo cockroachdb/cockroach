@@ -2,10 +2,14 @@
 
 package xform
 
-func (_f *Factory) ConstructSubquery(
-	input GroupID,
-	projection GroupID,
-) GroupID {
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+)
+
+func (_f *factory) ConstructSubquery(
+	input opt.GroupID,
+	projection opt.GroupID,
+) opt.GroupID {
 	_subqueryExpr := makeSubqueryExpr(input, projection)
 	_group := _f.mem.lookupGroupByFingerprint(_subqueryExpr.fingerprint())
 	if _group != 0 {
@@ -15,9 +19,9 @@ func (_f *Factory) ConstructSubquery(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_subqueryExpr)))
 }
 
-func (_f *Factory) ConstructVariable(
-	col PrivateID,
-) GroupID {
+func (_f *factory) ConstructVariable(
+	col opt.PrivateID,
+) opt.GroupID {
 	_variableExpr := makeVariableExpr(col)
 	_group := _f.mem.lookupGroupByFingerprint(_variableExpr.fingerprint())
 	if _group != 0 {
@@ -27,9 +31,9 @@ func (_f *Factory) ConstructVariable(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr)))
 }
 
-func (_f *Factory) ConstructConst(
-	value PrivateID,
-) GroupID {
+func (_f *factory) ConstructConst(
+	value opt.PrivateID,
+) opt.GroupID {
 	_constExpr := makeConstExpr(value)
 	_group := _f.mem.lookupGroupByFingerprint(_constExpr.fingerprint())
 	if _group != 0 {
@@ -39,649 +43,7 @@ func (_f *Factory) ConstructConst(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_constExpr)))
 }
 
-func (_f *Factory) ConstructPlaceholder(
-	value PrivateID,
-) GroupID {
-	_placeholderExpr := makePlaceholderExpr(value)
-	_group := _f.mem.lookupGroupByFingerprint(_placeholderExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr)))
-}
-
-func (_f *Factory) ConstructTuple(
-	elems ListID,
-) GroupID {
-	_tupleExpr := makeTupleExpr(elems)
-	_group := _f.mem.lookupGroupByFingerprint(_tupleExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr)))
-}
-
-func (_f *Factory) ConstructFilters(
-	conditions ListID,
-) GroupID {
-	_filtersExpr := makeFiltersExpr(conditions)
-	_group := _f.mem.lookupGroupByFingerprint(_filtersExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr)))
-}
-
-func (_f *Factory) ConstructProjections(
-	items ListID,
-	cols PrivateID,
-) GroupID {
-	_projectionsExpr := makeProjectionsExpr(items, cols)
-	_group := _f.mem.lookupGroupByFingerprint(_projectionsExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
-}
-
-func (_f *Factory) ConstructExists(
-	input GroupID,
-) GroupID {
-	_existsExpr := makeExistsExpr(input)
-	_group := _f.mem.lookupGroupByFingerprint(_existsExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr)))
-}
-
-func (_f *Factory) ConstructAnd(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_andExpr := makeAndExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_andExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
-}
-
-func (_f *Factory) ConstructOr(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_orExpr := makeOrExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_orExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orExpr)))
-}
-
-func (_f *Factory) ConstructNot(
-	input GroupID,
-) GroupID {
-	_notExpr := makeNotExpr(input)
-	_group := _f.mem.lookupGroupByFingerprint(_notExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
-}
-
-func (_f *Factory) ConstructEq(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_eqExpr := makeEqExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_eqExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
-}
-
-func (_f *Factory) ConstructLt(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_ltExpr := makeLtExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_ltExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
-}
-
-func (_f *Factory) ConstructGt(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_gtExpr := makeGtExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_gtExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
-}
-
-func (_f *Factory) ConstructLe(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_leExpr := makeLeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_leExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leExpr)))
-}
-
-func (_f *Factory) ConstructGe(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_geExpr := makeGeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_geExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_geExpr)))
-}
-
-func (_f *Factory) ConstructNe(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_neExpr := makeNeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_neExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
-}
-
-func (_f *Factory) ConstructIn(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_inExpr := makeInExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_inExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_inExpr)))
-}
-
-func (_f *Factory) ConstructNotIn(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_notInExpr := makeNotInExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_notInExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr)))
-}
-
-func (_f *Factory) ConstructLike(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_likeExpr := makeLikeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_likeExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr)))
-}
-
-func (_f *Factory) ConstructNotLike(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_notLikeExpr := makeNotLikeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_notLikeExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr)))
-}
-
-func (_f *Factory) ConstructILike(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_iLikeExpr := makeILikeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_iLikeExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr)))
-}
-
-func (_f *Factory) ConstructNotILike(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_notILikeExpr := makeNotILikeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_notILikeExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr)))
-}
-
-func (_f *Factory) ConstructSimilarTo(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_similarToExpr := makeSimilarToExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_similarToExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr)))
-}
-
-func (_f *Factory) ConstructNotSimilarTo(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_notSimilarToExpr := makeNotSimilarToExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_notSimilarToExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr)))
-}
-
-func (_f *Factory) ConstructRegMatch(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_regMatchExpr := makeRegMatchExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_regMatchExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr)))
-}
-
-func (_f *Factory) ConstructNotRegMatch(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_notRegMatchExpr := makeNotRegMatchExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_notRegMatchExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr)))
-}
-
-func (_f *Factory) ConstructRegIMatch(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_regIMatchExpr := makeRegIMatchExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_regIMatchExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr)))
-}
-
-func (_f *Factory) ConstructNotRegIMatch(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_notRegIMatchExpr := makeNotRegIMatchExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_notRegIMatchExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
-}
-
-func (_f *Factory) ConstructIsDistinctFrom(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_isDistinctFromExpr := makeIsDistinctFromExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_isDistinctFromExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isDistinctFromExpr)))
-}
-
-func (_f *Factory) ConstructIsNotDistinctFrom(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_isNotDistinctFromExpr := makeIsNotDistinctFromExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_isNotDistinctFromExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotDistinctFromExpr)))
-}
-
-func (_f *Factory) ConstructIs(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_isExpr := makeIsExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_isExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isExpr)))
-}
-
-func (_f *Factory) ConstructIsNot(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_isNotExpr := makeIsNotExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_isNotExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr)))
-}
-
-func (_f *Factory) ConstructAny(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_anyExpr := makeAnyExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_anyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_anyExpr)))
-}
-
-func (_f *Factory) ConstructSome(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_someExpr := makeSomeExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_someExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_someExpr)))
-}
-
-func (_f *Factory) ConstructAll(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_allExpr := makeAllExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_allExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_allExpr)))
-}
-
-func (_f *Factory) ConstructBitand(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_bitandExpr := makeBitandExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_bitandExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr)))
-}
-
-func (_f *Factory) ConstructBitor(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_bitorExpr := makeBitorExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_bitorExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr)))
-}
-
-func (_f *Factory) ConstructBitxor(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_bitxorExpr := makeBitxorExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_bitxorExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr)))
-}
-
-func (_f *Factory) ConstructPlus(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_plusExpr := makePlusExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_plusExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
-}
-
-func (_f *Factory) ConstructMinus(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_minusExpr := makeMinusExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_minusExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
-}
-
-func (_f *Factory) ConstructMult(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_multExpr := makeMultExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_multExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_multExpr)))
-}
-
-func (_f *Factory) ConstructDiv(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_divExpr := makeDivExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_divExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_divExpr)))
-}
-
-func (_f *Factory) ConstructFloorDiv(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_floorDivExpr := makeFloorDivExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_floorDivExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr)))
-}
-
-func (_f *Factory) ConstructMod(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_modExpr := makeModExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_modExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_modExpr)))
-}
-
-func (_f *Factory) ConstructPow(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_powExpr := makePowExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_powExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_powExpr)))
-}
-
-func (_f *Factory) ConstructConcat(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_concatExpr := makeConcatExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_concatExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr)))
-}
-
-func (_f *Factory) ConstructLShift(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_lShiftExpr := makeLShiftExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_lShiftExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr)))
-}
-
-func (_f *Factory) ConstructRShift(
-	left GroupID,
-	right GroupID,
-) GroupID {
-	_rShiftExpr := makeRShiftExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_rShiftExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
-}
-
-func (_f *Factory) ConstructUnaryPlus(
-	input GroupID,
-) GroupID {
-	_unaryPlusExpr := makeUnaryPlusExpr(input)
-	_group := _f.mem.lookupGroupByFingerprint(_unaryPlusExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr)))
-}
-
-func (_f *Factory) ConstructUnaryMinus(
-	input GroupID,
-) GroupID {
-	_unaryMinusExpr := makeUnaryMinusExpr(input)
-	_group := _f.mem.lookupGroupByFingerprint(_unaryMinusExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr)))
-}
-
-func (_f *Factory) ConstructUnaryComplement(
-	input GroupID,
-) GroupID {
-	_unaryComplementExpr := makeUnaryComplementExpr(input)
-	_group := _f.mem.lookupGroupByFingerprint(_unaryComplementExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
-}
-
-func (_f *Factory) ConstructFunction(
-	args ListID,
-	def PrivateID,
-) GroupID {
-	_functionExpr := makeFunctionExpr(args, def)
-	_group := _f.mem.lookupGroupByFingerprint(_functionExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
-}
-
-func (_f *Factory) ConstructTrue() GroupID {
+func (_f *factory) ConstructTrue() opt.GroupID {
 	_trueExpr := makeTrueExpr()
 	_group := _f.mem.lookupGroupByFingerprint(_trueExpr.fingerprint())
 	if _group != 0 {
@@ -691,7 +53,7 @@ func (_f *Factory) ConstructTrue() GroupID {
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_trueExpr)))
 }
 
-func (_f *Factory) ConstructFalse() GroupID {
+func (_f *factory) ConstructFalse() opt.GroupID {
 	_falseExpr := makeFalseExpr()
 	_group := _f.mem.lookupGroupByFingerprint(_falseExpr.fingerprint())
 	if _group != 0 {
@@ -701,9 +63,651 @@ func (_f *Factory) ConstructFalse() GroupID {
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_falseExpr)))
 }
 
-func (_f *Factory) ConstructScan(
-	table PrivateID,
-) GroupID {
+func (_f *factory) ConstructPlaceholder(
+	value opt.PrivateID,
+) opt.GroupID {
+	_placeholderExpr := makePlaceholderExpr(value)
+	_group := _f.mem.lookupGroupByFingerprint(_placeholderExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr)))
+}
+
+func (_f *factory) ConstructTuple(
+	elems opt.ListID,
+) opt.GroupID {
+	_tupleExpr := makeTupleExpr(elems)
+	_group := _f.mem.lookupGroupByFingerprint(_tupleExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr)))
+}
+
+func (_f *factory) ConstructFilters(
+	conditions opt.ListID,
+) opt.GroupID {
+	_filtersExpr := makeFiltersExpr(conditions)
+	_group := _f.mem.lookupGroupByFingerprint(_filtersExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr)))
+}
+
+func (_f *factory) ConstructProjections(
+	items opt.ListID,
+	cols opt.PrivateID,
+) opt.GroupID {
+	_projectionsExpr := makeProjectionsExpr(items, cols)
+	_group := _f.mem.lookupGroupByFingerprint(_projectionsExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
+}
+
+func (_f *factory) ConstructExists(
+	input opt.GroupID,
+) opt.GroupID {
+	_existsExpr := makeExistsExpr(input)
+	_group := _f.mem.lookupGroupByFingerprint(_existsExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr)))
+}
+
+func (_f *factory) ConstructAnd(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_andExpr := makeAndExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_andExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
+}
+
+func (_f *factory) ConstructOr(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_orExpr := makeOrExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_orExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orExpr)))
+}
+
+func (_f *factory) ConstructNot(
+	input opt.GroupID,
+) opt.GroupID {
+	_notExpr := makeNotExpr(input)
+	_group := _f.mem.lookupGroupByFingerprint(_notExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
+}
+
+func (_f *factory) ConstructEq(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_eqExpr := makeEqExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_eqExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
+}
+
+func (_f *factory) ConstructLt(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_ltExpr := makeLtExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_ltExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
+}
+
+func (_f *factory) ConstructGt(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_gtExpr := makeGtExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_gtExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
+}
+
+func (_f *factory) ConstructLe(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_leExpr := makeLeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_leExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leExpr)))
+}
+
+func (_f *factory) ConstructGe(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_geExpr := makeGeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_geExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_geExpr)))
+}
+
+func (_f *factory) ConstructNe(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_neExpr := makeNeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_neExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
+}
+
+func (_f *factory) ConstructIn(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_inExpr := makeInExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_inExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_inExpr)))
+}
+
+func (_f *factory) ConstructNotIn(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_notInExpr := makeNotInExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_notInExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr)))
+}
+
+func (_f *factory) ConstructLike(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_likeExpr := makeLikeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_likeExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr)))
+}
+
+func (_f *factory) ConstructNotLike(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_notLikeExpr := makeNotLikeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_notLikeExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr)))
+}
+
+func (_f *factory) ConstructILike(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_iLikeExpr := makeILikeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_iLikeExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr)))
+}
+
+func (_f *factory) ConstructNotILike(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_notILikeExpr := makeNotILikeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_notILikeExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr)))
+}
+
+func (_f *factory) ConstructSimilarTo(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_similarToExpr := makeSimilarToExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_similarToExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr)))
+}
+
+func (_f *factory) ConstructNotSimilarTo(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_notSimilarToExpr := makeNotSimilarToExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_notSimilarToExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr)))
+}
+
+func (_f *factory) ConstructRegMatch(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_regMatchExpr := makeRegMatchExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_regMatchExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr)))
+}
+
+func (_f *factory) ConstructNotRegMatch(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_notRegMatchExpr := makeNotRegMatchExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_notRegMatchExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr)))
+}
+
+func (_f *factory) ConstructRegIMatch(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_regIMatchExpr := makeRegIMatchExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_regIMatchExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr)))
+}
+
+func (_f *factory) ConstructNotRegIMatch(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_notRegIMatchExpr := makeNotRegIMatchExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_notRegIMatchExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
+}
+
+func (_f *factory) ConstructIsDistinctFrom(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_isDistinctFromExpr := makeIsDistinctFromExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_isDistinctFromExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isDistinctFromExpr)))
+}
+
+func (_f *factory) ConstructIsNotDistinctFrom(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_isNotDistinctFromExpr := makeIsNotDistinctFromExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_isNotDistinctFromExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotDistinctFromExpr)))
+}
+
+func (_f *factory) ConstructIs(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_isExpr := makeIsExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_isExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isExpr)))
+}
+
+func (_f *factory) ConstructIsNot(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_isNotExpr := makeIsNotExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_isNotExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr)))
+}
+
+func (_f *factory) ConstructAny(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_anyExpr := makeAnyExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_anyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_anyExpr)))
+}
+
+func (_f *factory) ConstructSome(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_someExpr := makeSomeExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_someExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_someExpr)))
+}
+
+func (_f *factory) ConstructAll(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_allExpr := makeAllExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_allExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_allExpr)))
+}
+
+func (_f *factory) ConstructBitand(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_bitandExpr := makeBitandExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_bitandExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr)))
+}
+
+func (_f *factory) ConstructBitor(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_bitorExpr := makeBitorExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_bitorExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr)))
+}
+
+func (_f *factory) ConstructBitxor(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_bitxorExpr := makeBitxorExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_bitxorExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr)))
+}
+
+func (_f *factory) ConstructPlus(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_plusExpr := makePlusExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_plusExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
+}
+
+func (_f *factory) ConstructMinus(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_minusExpr := makeMinusExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_minusExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
+}
+
+func (_f *factory) ConstructMult(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_multExpr := makeMultExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_multExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_multExpr)))
+}
+
+func (_f *factory) ConstructDiv(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_divExpr := makeDivExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_divExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_divExpr)))
+}
+
+func (_f *factory) ConstructFloorDiv(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_floorDivExpr := makeFloorDivExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_floorDivExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr)))
+}
+
+func (_f *factory) ConstructMod(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_modExpr := makeModExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_modExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_modExpr)))
+}
+
+func (_f *factory) ConstructPow(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_powExpr := makePowExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_powExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_powExpr)))
+}
+
+func (_f *factory) ConstructConcat(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_concatExpr := makeConcatExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_concatExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr)))
+}
+
+func (_f *factory) ConstructLShift(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_lShiftExpr := makeLShiftExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_lShiftExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr)))
+}
+
+func (_f *factory) ConstructRShift(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_rShiftExpr := makeRShiftExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_rShiftExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
+}
+
+func (_f *factory) ConstructUnaryPlus(
+	input opt.GroupID,
+) opt.GroupID {
+	_unaryPlusExpr := makeUnaryPlusExpr(input)
+	_group := _f.mem.lookupGroupByFingerprint(_unaryPlusExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr)))
+}
+
+func (_f *factory) ConstructUnaryMinus(
+	input opt.GroupID,
+) opt.GroupID {
+	_unaryMinusExpr := makeUnaryMinusExpr(input)
+	_group := _f.mem.lookupGroupByFingerprint(_unaryMinusExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr)))
+}
+
+func (_f *factory) ConstructUnaryComplement(
+	input opt.GroupID,
+) opt.GroupID {
+	_unaryComplementExpr := makeUnaryComplementExpr(input)
+	_group := _f.mem.lookupGroupByFingerprint(_unaryComplementExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
+}
+
+func (_f *factory) ConstructFunction(
+	args opt.ListID,
+	def opt.PrivateID,
+) opt.GroupID {
+	_functionExpr := makeFunctionExpr(args, def)
+	_group := _f.mem.lookupGroupByFingerprint(_functionExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
+}
+
+func (_f *factory) ConstructScan(
+	table opt.PrivateID,
+) opt.GroupID {
 	_scanExpr := makeScanExpr(table)
 	_group := _f.mem.lookupGroupByFingerprint(_scanExpr.fingerprint())
 	if _group != 0 {
@@ -713,10 +717,10 @@ func (_f *Factory) ConstructScan(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_scanExpr)))
 }
 
-func (_f *Factory) ConstructValues(
-	rows ListID,
-	cols PrivateID,
-) GroupID {
+func (_f *factory) ConstructValues(
+	rows opt.ListID,
+	cols opt.PrivateID,
+) opt.GroupID {
 	_valuesExpr := makeValuesExpr(rows, cols)
 	_group := _f.mem.lookupGroupByFingerprint(_valuesExpr.fingerprint())
 	if _group != 0 {
@@ -726,10 +730,10 @@ func (_f *Factory) ConstructValues(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_valuesExpr)))
 }
 
-func (_f *Factory) ConstructSelect(
-	input GroupID,
-	filter GroupID,
-) GroupID {
+func (_f *factory) ConstructSelect(
+	input opt.GroupID,
+	filter opt.GroupID,
+) opt.GroupID {
 	_selectExpr := makeSelectExpr(input, filter)
 	_group := _f.mem.lookupGroupByFingerprint(_selectExpr.fingerprint())
 	if _group != 0 {
@@ -739,10 +743,10 @@ func (_f *Factory) ConstructSelect(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr)))
 }
 
-func (_f *Factory) ConstructProject(
-	input GroupID,
-	projections GroupID,
-) GroupID {
+func (_f *factory) ConstructProject(
+	input opt.GroupID,
+	projections opt.GroupID,
+) opt.GroupID {
 	_projectExpr := makeProjectExpr(input, projections)
 	_group := _f.mem.lookupGroupByFingerprint(_projectExpr.fingerprint())
 	if _group != 0 {
@@ -752,11 +756,11 @@ func (_f *Factory) ConstructProject(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr)))
 }
 
-func (_f *Factory) ConstructInnerJoin(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructInnerJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_innerJoinExpr := makeInnerJoinExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_innerJoinExpr.fingerprint())
 	if _group != 0 {
@@ -766,11 +770,11 @@ func (_f *Factory) ConstructInnerJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
 }
 
-func (_f *Factory) ConstructLeftJoin(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructLeftJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_leftJoinExpr := makeLeftJoinExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_leftJoinExpr.fingerprint())
 	if _group != 0 {
@@ -780,11 +784,11 @@ func (_f *Factory) ConstructLeftJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinExpr)))
 }
 
-func (_f *Factory) ConstructRightJoin(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructRightJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_rightJoinExpr := makeRightJoinExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_rightJoinExpr.fingerprint())
 	if _group != 0 {
@@ -794,11 +798,11 @@ func (_f *Factory) ConstructRightJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinExpr)))
 }
 
-func (_f *Factory) ConstructFullJoin(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructFullJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_fullJoinExpr := makeFullJoinExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_fullJoinExpr.fingerprint())
 	if _group != 0 {
@@ -808,11 +812,11 @@ func (_f *Factory) ConstructFullJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr)))
 }
 
-func (_f *Factory) ConstructSemiJoin(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructSemiJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_semiJoinExpr := makeSemiJoinExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_semiJoinExpr.fingerprint())
 	if _group != 0 {
@@ -822,11 +826,11 @@ func (_f *Factory) ConstructSemiJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinExpr)))
 }
 
-func (_f *Factory) ConstructAntiJoin(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructAntiJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_antiJoinExpr := makeAntiJoinExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_antiJoinExpr.fingerprint())
 	if _group != 0 {
@@ -836,11 +840,11 @@ func (_f *Factory) ConstructAntiJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinExpr)))
 }
 
-func (_f *Factory) ConstructInnerJoinApply(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructInnerJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_innerJoinApplyExpr := makeInnerJoinApplyExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_innerJoinApplyExpr.fingerprint())
 	if _group != 0 {
@@ -850,11 +854,11 @@ func (_f *Factory) ConstructInnerJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinApplyExpr)))
 }
 
-func (_f *Factory) ConstructLeftJoinApply(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructLeftJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_leftJoinApplyExpr := makeLeftJoinApplyExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_leftJoinApplyExpr.fingerprint())
 	if _group != 0 {
@@ -864,11 +868,11 @@ func (_f *Factory) ConstructLeftJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinApplyExpr)))
 }
 
-func (_f *Factory) ConstructRightJoinApply(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructRightJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_rightJoinApplyExpr := makeRightJoinApplyExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_rightJoinApplyExpr.fingerprint())
 	if _group != 0 {
@@ -878,11 +882,11 @@ func (_f *Factory) ConstructRightJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinApplyExpr)))
 }
 
-func (_f *Factory) ConstructFullJoinApply(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructFullJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_fullJoinApplyExpr := makeFullJoinApplyExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_fullJoinApplyExpr.fingerprint())
 	if _group != 0 {
@@ -892,11 +896,11 @@ func (_f *Factory) ConstructFullJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinApplyExpr)))
 }
 
-func (_f *Factory) ConstructSemiJoinApply(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructSemiJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_semiJoinApplyExpr := makeSemiJoinApplyExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_semiJoinApplyExpr.fingerprint())
 	if _group != 0 {
@@ -906,11 +910,11 @@ func (_f *Factory) ConstructSemiJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinApplyExpr)))
 }
 
-func (_f *Factory) ConstructAntiJoinApply(
-	left GroupID,
-	right GroupID,
-	on GroupID,
-) GroupID {
+func (_f *factory) ConstructAntiJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
 	_antiJoinApplyExpr := makeAntiJoinApplyExpr(left, right, on)
 	_group := _f.mem.lookupGroupByFingerprint(_antiJoinApplyExpr.fingerprint())
 	if _group != 0 {
@@ -920,11 +924,11 @@ func (_f *Factory) ConstructAntiJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinApplyExpr)))
 }
 
-func (_f *Factory) ConstructGroupBy(
-	input GroupID,
-	groupings GroupID,
-	aggregations GroupID,
-) GroupID {
+func (_f *factory) ConstructGroupBy(
+	input opt.GroupID,
+	groupings opt.GroupID,
+	aggregations opt.GroupID,
+) opt.GroupID {
 	_groupByExpr := makeGroupByExpr(input, groupings, aggregations)
 	_group := _f.mem.lookupGroupByFingerprint(_groupByExpr.fingerprint())
 	if _group != 0 {
@@ -934,11 +938,11 @@ func (_f *Factory) ConstructGroupBy(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupByExpr)))
 }
 
-func (_f *Factory) ConstructUnion(
-	left GroupID,
-	right GroupID,
-	colMap PrivateID,
-) GroupID {
+func (_f *factory) ConstructUnion(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
 	_unionExpr := makeUnionExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_unionExpr.fingerprint())
 	if _group != 0 {
@@ -948,10 +952,10 @@ func (_f *Factory) ConstructUnion(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr)))
 }
 
-func (_f *Factory) ConstructIntersect(
-	left GroupID,
-	right GroupID,
-) GroupID {
+func (_f *factory) ConstructIntersect(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
 	_intersectExpr := makeIntersectExpr(left, right)
 	_group := _f.mem.lookupGroupByFingerprint(_intersectExpr.fingerprint())
 	if _group != 0 {
@@ -961,10 +965,10 @@ func (_f *Factory) ConstructIntersect(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectExpr)))
 }
 
-func (_f *Factory) ConstructExcept(
-	left GroupID,
-	right GroupID,
-) GroupID {
+func (_f *factory) ConstructExcept(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
 	_exceptExpr := makeExceptExpr(left, right)
 	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
 	if _group != 0 {
@@ -974,393 +978,393 @@ func (_f *Factory) ConstructExcept(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr)))
 }
 
-type dynConstructLookupFunc func(f *Factory, children []GroupID, private PrivateID) GroupID
+type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
 var dynConstructLookup [76]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
-	dynConstructLookup[UnknownOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.UnknownOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		panic("op type not initialized")
 	}
 
 	// SubqueryOp
-	dynConstructLookup[SubqueryOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.SubqueryOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructSubquery(children[0], children[1])
 	}
 
 	// VariableOp
-	dynConstructLookup[VariableOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.VariableOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructVariable(private)
 	}
 
 	// ConstOp
-	dynConstructLookup[ConstOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.ConstOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructConst(private)
 	}
 
-	// PlaceholderOp
-	dynConstructLookup[PlaceholderOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructPlaceholder(private)
-	}
-
-	// TupleOp
-	dynConstructLookup[TupleOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructTuple(f.StoreList(children))
-	}
-
-	// FiltersOp
-	dynConstructLookup[FiltersOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructFilters(f.StoreList(children))
-	}
-
-	// ProjectionsOp
-	dynConstructLookup[ProjectionsOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructProjections(f.StoreList(children), private)
-	}
-
-	// ExistsOp
-	dynConstructLookup[ExistsOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructExists(children[0])
-	}
-
-	// AndOp
-	dynConstructLookup[AndOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructAnd(children[0], children[1])
-	}
-
-	// OrOp
-	dynConstructLookup[OrOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructOr(children[0], children[1])
-	}
-
-	// NotOp
-	dynConstructLookup[NotOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNot(children[0])
-	}
-
-	// EqOp
-	dynConstructLookup[EqOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructEq(children[0], children[1])
-	}
-
-	// LtOp
-	dynConstructLookup[LtOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructLt(children[0], children[1])
-	}
-
-	// GtOp
-	dynConstructLookup[GtOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructGt(children[0], children[1])
-	}
-
-	// LeOp
-	dynConstructLookup[LeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructLe(children[0], children[1])
-	}
-
-	// GeOp
-	dynConstructLookup[GeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructGe(children[0], children[1])
-	}
-
-	// NeOp
-	dynConstructLookup[NeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNe(children[0], children[1])
-	}
-
-	// InOp
-	dynConstructLookup[InOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructIn(children[0], children[1])
-	}
-
-	// NotInOp
-	dynConstructLookup[NotInOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNotIn(children[0], children[1])
-	}
-
-	// LikeOp
-	dynConstructLookup[LikeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructLike(children[0], children[1])
-	}
-
-	// NotLikeOp
-	dynConstructLookup[NotLikeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNotLike(children[0], children[1])
-	}
-
-	// ILikeOp
-	dynConstructLookup[ILikeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructILike(children[0], children[1])
-	}
-
-	// NotILikeOp
-	dynConstructLookup[NotILikeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNotILike(children[0], children[1])
-	}
-
-	// SimilarToOp
-	dynConstructLookup[SimilarToOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructSimilarTo(children[0], children[1])
-	}
-
-	// NotSimilarToOp
-	dynConstructLookup[NotSimilarToOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNotSimilarTo(children[0], children[1])
-	}
-
-	// RegMatchOp
-	dynConstructLookup[RegMatchOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructRegMatch(children[0], children[1])
-	}
-
-	// NotRegMatchOp
-	dynConstructLookup[NotRegMatchOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNotRegMatch(children[0], children[1])
-	}
-
-	// RegIMatchOp
-	dynConstructLookup[RegIMatchOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructRegIMatch(children[0], children[1])
-	}
-
-	// NotRegIMatchOp
-	dynConstructLookup[NotRegIMatchOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructNotRegIMatch(children[0], children[1])
-	}
-
-	// IsDistinctFromOp
-	dynConstructLookup[IsDistinctFromOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructIsDistinctFrom(children[0], children[1])
-	}
-
-	// IsNotDistinctFromOp
-	dynConstructLookup[IsNotDistinctFromOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructIsNotDistinctFrom(children[0], children[1])
-	}
-
-	// IsOp
-	dynConstructLookup[IsOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructIs(children[0], children[1])
-	}
-
-	// IsNotOp
-	dynConstructLookup[IsNotOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructIsNot(children[0], children[1])
-	}
-
-	// AnyOp
-	dynConstructLookup[AnyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructAny(children[0], children[1])
-	}
-
-	// SomeOp
-	dynConstructLookup[SomeOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructSome(children[0], children[1])
-	}
-
-	// AllOp
-	dynConstructLookup[AllOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructAll(children[0], children[1])
-	}
-
-	// BitandOp
-	dynConstructLookup[BitandOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructBitand(children[0], children[1])
-	}
-
-	// BitorOp
-	dynConstructLookup[BitorOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructBitor(children[0], children[1])
-	}
-
-	// BitxorOp
-	dynConstructLookup[BitxorOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructBitxor(children[0], children[1])
-	}
-
-	// PlusOp
-	dynConstructLookup[PlusOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructPlus(children[0], children[1])
-	}
-
-	// MinusOp
-	dynConstructLookup[MinusOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructMinus(children[0], children[1])
-	}
-
-	// MultOp
-	dynConstructLookup[MultOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructMult(children[0], children[1])
-	}
-
-	// DivOp
-	dynConstructLookup[DivOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructDiv(children[0], children[1])
-	}
-
-	// FloorDivOp
-	dynConstructLookup[FloorDivOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructFloorDiv(children[0], children[1])
-	}
-
-	// ModOp
-	dynConstructLookup[ModOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructMod(children[0], children[1])
-	}
-
-	// PowOp
-	dynConstructLookup[PowOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructPow(children[0], children[1])
-	}
-
-	// ConcatOp
-	dynConstructLookup[ConcatOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructConcat(children[0], children[1])
-	}
-
-	// LShiftOp
-	dynConstructLookup[LShiftOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructLShift(children[0], children[1])
-	}
-
-	// RShiftOp
-	dynConstructLookup[RShiftOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructRShift(children[0], children[1])
-	}
-
-	// UnaryPlusOp
-	dynConstructLookup[UnaryPlusOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructUnaryPlus(children[0])
-	}
-
-	// UnaryMinusOp
-	dynConstructLookup[UnaryMinusOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructUnaryMinus(children[0])
-	}
-
-	// UnaryComplementOp
-	dynConstructLookup[UnaryComplementOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructUnaryComplement(children[0])
-	}
-
-	// FunctionOp
-	dynConstructLookup[FunctionOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
-		return f.ConstructFunction(f.StoreList(children), private)
-	}
-
 	// TrueOp
-	dynConstructLookup[TrueOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.TrueOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructTrue()
 	}
 
 	// FalseOp
-	dynConstructLookup[FalseOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.FalseOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructFalse()
 	}
 
+	// PlaceholderOp
+	dynConstructLookup[opt.PlaceholderOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructPlaceholder(private)
+	}
+
+	// TupleOp
+	dynConstructLookup[opt.TupleOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructTuple(f.StoreList(children))
+	}
+
+	// FiltersOp
+	dynConstructLookup[opt.FiltersOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFilters(f.StoreList(children))
+	}
+
+	// ProjectionsOp
+	dynConstructLookup[opt.ProjectionsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructProjections(f.StoreList(children), private)
+	}
+
+	// ExistsOp
+	dynConstructLookup[opt.ExistsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructExists(children[0])
+	}
+
+	// AndOp
+	dynConstructLookup[opt.AndOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructAnd(children[0], children[1])
+	}
+
+	// OrOp
+	dynConstructLookup[opt.OrOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructOr(children[0], children[1])
+	}
+
+	// NotOp
+	dynConstructLookup[opt.NotOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNot(children[0])
+	}
+
+	// EqOp
+	dynConstructLookup[opt.EqOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructEq(children[0], children[1])
+	}
+
+	// LtOp
+	dynConstructLookup[opt.LtOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructLt(children[0], children[1])
+	}
+
+	// GtOp
+	dynConstructLookup[opt.GtOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructGt(children[0], children[1])
+	}
+
+	// LeOp
+	dynConstructLookup[opt.LeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructLe(children[0], children[1])
+	}
+
+	// GeOp
+	dynConstructLookup[opt.GeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructGe(children[0], children[1])
+	}
+
+	// NeOp
+	dynConstructLookup[opt.NeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNe(children[0], children[1])
+	}
+
+	// InOp
+	dynConstructLookup[opt.InOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIn(children[0], children[1])
+	}
+
+	// NotInOp
+	dynConstructLookup[opt.NotInOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNotIn(children[0], children[1])
+	}
+
+	// LikeOp
+	dynConstructLookup[opt.LikeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructLike(children[0], children[1])
+	}
+
+	// NotLikeOp
+	dynConstructLookup[opt.NotLikeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNotLike(children[0], children[1])
+	}
+
+	// ILikeOp
+	dynConstructLookup[opt.ILikeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructILike(children[0], children[1])
+	}
+
+	// NotILikeOp
+	dynConstructLookup[opt.NotILikeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNotILike(children[0], children[1])
+	}
+
+	// SimilarToOp
+	dynConstructLookup[opt.SimilarToOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructSimilarTo(children[0], children[1])
+	}
+
+	// NotSimilarToOp
+	dynConstructLookup[opt.NotSimilarToOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNotSimilarTo(children[0], children[1])
+	}
+
+	// RegMatchOp
+	dynConstructLookup[opt.RegMatchOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructRegMatch(children[0], children[1])
+	}
+
+	// NotRegMatchOp
+	dynConstructLookup[opt.NotRegMatchOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNotRegMatch(children[0], children[1])
+	}
+
+	// RegIMatchOp
+	dynConstructLookup[opt.RegIMatchOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructRegIMatch(children[0], children[1])
+	}
+
+	// NotRegIMatchOp
+	dynConstructLookup[opt.NotRegIMatchOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNotRegIMatch(children[0], children[1])
+	}
+
+	// IsDistinctFromOp
+	dynConstructLookup[opt.IsDistinctFromOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIsDistinctFrom(children[0], children[1])
+	}
+
+	// IsNotDistinctFromOp
+	dynConstructLookup[opt.IsNotDistinctFromOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIsNotDistinctFrom(children[0], children[1])
+	}
+
+	// IsOp
+	dynConstructLookup[opt.IsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIs(children[0], children[1])
+	}
+
+	// IsNotOp
+	dynConstructLookup[opt.IsNotOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIsNot(children[0], children[1])
+	}
+
+	// AnyOp
+	dynConstructLookup[opt.AnyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructAny(children[0], children[1])
+	}
+
+	// SomeOp
+	dynConstructLookup[opt.SomeOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructSome(children[0], children[1])
+	}
+
+	// AllOp
+	dynConstructLookup[opt.AllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructAll(children[0], children[1])
+	}
+
+	// BitandOp
+	dynConstructLookup[opt.BitandOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructBitand(children[0], children[1])
+	}
+
+	// BitorOp
+	dynConstructLookup[opt.BitorOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructBitor(children[0], children[1])
+	}
+
+	// BitxorOp
+	dynConstructLookup[opt.BitxorOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructBitxor(children[0], children[1])
+	}
+
+	// PlusOp
+	dynConstructLookup[opt.PlusOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructPlus(children[0], children[1])
+	}
+
+	// MinusOp
+	dynConstructLookup[opt.MinusOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructMinus(children[0], children[1])
+	}
+
+	// MultOp
+	dynConstructLookup[opt.MultOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructMult(children[0], children[1])
+	}
+
+	// DivOp
+	dynConstructLookup[opt.DivOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructDiv(children[0], children[1])
+	}
+
+	// FloorDivOp
+	dynConstructLookup[opt.FloorDivOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFloorDiv(children[0], children[1])
+	}
+
+	// ModOp
+	dynConstructLookup[opt.ModOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructMod(children[0], children[1])
+	}
+
+	// PowOp
+	dynConstructLookup[opt.PowOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructPow(children[0], children[1])
+	}
+
+	// ConcatOp
+	dynConstructLookup[opt.ConcatOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructConcat(children[0], children[1])
+	}
+
+	// LShiftOp
+	dynConstructLookup[opt.LShiftOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructLShift(children[0], children[1])
+	}
+
+	// RShiftOp
+	dynConstructLookup[opt.RShiftOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructRShift(children[0], children[1])
+	}
+
+	// UnaryPlusOp
+	dynConstructLookup[opt.UnaryPlusOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnaryPlus(children[0])
+	}
+
+	// UnaryMinusOp
+	dynConstructLookup[opt.UnaryMinusOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnaryMinus(children[0])
+	}
+
+	// UnaryComplementOp
+	dynConstructLookup[opt.UnaryComplementOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnaryComplement(children[0])
+	}
+
+	// FunctionOp
+	dynConstructLookup[opt.FunctionOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFunction(f.StoreList(children), private)
+	}
+
 	// ScanOp
-	dynConstructLookup[ScanOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.ScanOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructScan(private)
 	}
 
 	// ValuesOp
-	dynConstructLookup[ValuesOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.ValuesOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructValues(f.StoreList(children), private)
 	}
 
 	// SelectOp
-	dynConstructLookup[SelectOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.SelectOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructSelect(children[0], children[1])
 	}
 
 	// ProjectOp
-	dynConstructLookup[ProjectOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.ProjectOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructProject(children[0], children[1])
 	}
 
 	// InnerJoinOp
-	dynConstructLookup[InnerJoinOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.InnerJoinOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructInnerJoin(children[0], children[1], children[2])
 	}
 
 	// LeftJoinOp
-	dynConstructLookup[LeftJoinOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.LeftJoinOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructLeftJoin(children[0], children[1], children[2])
 	}
 
 	// RightJoinOp
-	dynConstructLookup[RightJoinOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.RightJoinOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructRightJoin(children[0], children[1], children[2])
 	}
 
 	// FullJoinOp
-	dynConstructLookup[FullJoinOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.FullJoinOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructFullJoin(children[0], children[1], children[2])
 	}
 
 	// SemiJoinOp
-	dynConstructLookup[SemiJoinOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.SemiJoinOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructSemiJoin(children[0], children[1], children[2])
 	}
 
 	// AntiJoinOp
-	dynConstructLookup[AntiJoinOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.AntiJoinOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructAntiJoin(children[0], children[1], children[2])
 	}
 
 	// InnerJoinApplyOp
-	dynConstructLookup[InnerJoinApplyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.InnerJoinApplyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructInnerJoinApply(children[0], children[1], children[2])
 	}
 
 	// LeftJoinApplyOp
-	dynConstructLookup[LeftJoinApplyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.LeftJoinApplyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructLeftJoinApply(children[0], children[1], children[2])
 	}
 
 	// RightJoinApplyOp
-	dynConstructLookup[RightJoinApplyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.RightJoinApplyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructRightJoinApply(children[0], children[1], children[2])
 	}
 
 	// FullJoinApplyOp
-	dynConstructLookup[FullJoinApplyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.FullJoinApplyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructFullJoinApply(children[0], children[1], children[2])
 	}
 
 	// SemiJoinApplyOp
-	dynConstructLookup[SemiJoinApplyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.SemiJoinApplyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructSemiJoinApply(children[0], children[1], children[2])
 	}
 
 	// AntiJoinApplyOp
-	dynConstructLookup[AntiJoinApplyOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.AntiJoinApplyOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructAntiJoinApply(children[0], children[1], children[2])
 	}
 
 	// GroupByOp
-	dynConstructLookup[GroupByOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.GroupByOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructGroupBy(children[0], children[1], children[2])
 	}
 
 	// UnionOp
-	dynConstructLookup[UnionOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.UnionOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructUnion(children[0], children[1], private)
 	}
 
 	// IntersectOp
-	dynConstructLookup[IntersectOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.IntersectOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructIntersect(children[0], children[1])
 	}
 
 	// ExceptOp
-	dynConstructLookup[ExceptOp] = func(f *Factory, children []GroupID, private PrivateID) GroupID {
+	dynConstructLookup[opt.ExceptOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructExcept(children[0], children[1])
 	}
 
 }
 
-func (f *Factory) DynamicConstruct(op Operator, children []GroupID, private PrivateID) GroupID {
+func (f *factory) DynamicConstruct(op opt.Operator, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 	return dynConstructLookup[op](f, children, private)
 }

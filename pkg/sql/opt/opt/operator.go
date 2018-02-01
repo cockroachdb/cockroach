@@ -12,13 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
 
 import (
 	"fmt"
 )
 
-//go:generate optgen -out operator.og.go -pkg xform ops ops/scalar.opt ops/relational.opt ops/enforcer.opt
+//go:generate optgen -out operator.og.go ops ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
 
 // Operator describes the type of operation that a memo expression performs.
 // Some operators are relational (join, select, project) and others are scalar

@@ -18,14 +18,11 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-//go:generate optgen -out expr.og.go -pkg xform exprs ops/scalar.opt ops/relational.opt ops/enforcer.opt
-
-// ColMap provides a 1:1 mapping from one column index to another. It is used
-// by operators that need to match columns from its inputs.
-type ColMap map[ColumnIndex]ColumnIndex
+//go:generate optgen -out expr.og.go exprs ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
 
 // ExprView provides a view of a single tree in the memo's forest of query plan
 // trees (see comment in memo.go for more details about the memo forest). Given
@@ -72,10 +69,10 @@ type ExprView struct {
 	loc memoLoc
 
 	// op is the type of the expression (select, inner-join, and, or, etc).
-	op Operator
+	op opt.Operator
 
 	// required are the physical properties that this expression must provide.
-	required physicalPropsID
+	required opt.PhysicalPropsID
 }
 
 // makeExprView creates a new ExprView instance that references the expression
@@ -84,10 +81,10 @@ type ExprView struct {
 // NOTE: While the minPhysPropsID property set always works, other property
 //       sets will only work once the optimizer has been invoked with that set,
 //       so that it's had an opportunity to compute the lowest cost path.
-func makeExprView(mem *memo, group GroupID, required physicalPropsID) ExprView {
+func makeExprView(mem *memo, group opt.GroupID, required opt.PhysicalPropsID) ExprView {
 	mgrp := mem.lookupGroup(group)
 
-	if required == minPhysPropsID {
+	if required == opt.MinPhysPropsID {
 		return ExprView{
 			mem:      mem,
 			loc:      memoLoc{group: group, expr: normExprID},
@@ -100,7 +97,7 @@ func makeExprView(mem *memo, group GroupID, required physicalPropsID) ExprView {
 }
 
 // Operator returns the type of the expression.
-func (ev *ExprView) Operator() Operator {
+func (ev *ExprView) Operator() opt.Operator {
 	return ev.op
 }
 
@@ -119,8 +116,8 @@ func (ev *ExprView) ChildCount() int {
 // It panics if the requested child does not exist.
 func (ev *ExprView) Child(nth int) ExprView {
 	group := ev.ChildGroup(nth)
-	if ev.required == minPhysPropsID {
-		return makeExprView(ev.mem, group, minPhysPropsID)
+	if ev.required == opt.MinPhysPropsID {
+		return makeExprView(ev.mem, group, opt.MinPhysPropsID)
 	}
 
 	panic("physical properties other than min are not yet implemented")
@@ -128,7 +125,7 @@ func (ev *ExprView) Child(nth int) ExprView {
 
 // ChildGroup returns the memo group containing the nth child of this parent
 // expression.
-func (ev *ExprView) ChildGroup(nth int) GroupID {
+func (ev *ExprView) ChildGroup(nth int) opt.GroupID {
 	return childGroupLookup[ev.op](ev, nth)
 }
 
@@ -146,7 +143,7 @@ func (ev *ExprView) String() string {
 	return tp.String()
 }
 
-func (ev *ExprView) privateID() PrivateID {
+func (ev *ExprView) privateID() opt.PrivateID {
 	return privateLookup[ev.op](ev)
 }
 
@@ -173,11 +170,11 @@ func (ev *ExprView) formatScalar(tp treeprinter.Node) {
 
 func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	switch ev.op {
-	case VariableOp:
-		colIndex := private.(ColumnIndex)
+	case opt.VariableOp:
+		colIndex := private.(opt.ColumnIndex)
 		private = ev.mem.metadata.ColumnLabel(colIndex)
 
-	case ProjectionsOp:
+	case opt.ProjectionsOp:
 		// Projections private data is similar to its output columns, so
 		// don't print it again.
 		private = nil

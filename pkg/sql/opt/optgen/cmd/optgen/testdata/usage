@@ -18,13 +18,12 @@ The commands are:
 	compile    generate the optgen compiled format
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
+	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 
 Flags:
   -out string
     	output file name of generated code
-  -pkg string
-    	package name used in generated files
 
 ----
 ----
@@ -48,13 +47,12 @@ The commands are:
 	compile    generate the optgen compiled format
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
+	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 
 Flags:
   -out string
     	output file name of generated code
-  -pkg string
-    	package name used in generated files
 
 ERROR: invalid number of arguments
 ----
@@ -79,13 +77,12 @@ The commands are:
 	compile    generate the optgen compiled format
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
+	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 
 Flags:
   -out string
     	output file name of generated code
-  -pkg string
-    	package name used in generated files
 
 ERROR: unrecognized command
 ----
