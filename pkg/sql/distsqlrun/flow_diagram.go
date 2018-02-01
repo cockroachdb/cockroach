@@ -132,10 +132,43 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	return "JoinReader", details
 }
 
+func joinTypeDetail(joinType JoinType) string {
+	var typeStr string
+	switch joinType {
+	case JoinType_INNER:
+		typeStr = "INNER JOIN"
+	case JoinType_LEFT_OUTER:
+		typeStr = "LEFT OUTER JOIN"
+	case JoinType_RIGHT_OUTER:
+		typeStr = "RIGHT OUTER JOIN"
+	case JoinType_FULL_OUTER:
+		typeStr = "FULL OUTER JOIN"
+	case JoinType_LEFT_SEMI:
+		typeStr = "LEFT SEMI JOIN"
+	case JoinType_LEFT_ANTI:
+		typeStr = "LEFT ANTI JOIN"
+	case JoinType_INTERSECT_ALL:
+		typeStr = "INTERSECT ALL"
+	case JoinType_EXCEPT_ALL:
+		typeStr = "EXCEPT ALL"
+	default:
+		panic(fmt.Sprintf("Unsupported join type: %s", JoinType_name[int32(joinType)]))
+	}
+	return fmt.Sprintf("Type: %s", typeStr)
+}
+
 // summary implements the diagramCellType interface.
 func (hj *HashJoinerSpec) summary() (string, []string) {
-	details := make([]string, 0, 3)
+	name := "HashJoiner"
+	if isSetOpJoin(joinType(hj.Type)) {
+		name = "HashSetOp"
+	}
 
+	details := make([]string, 0, 4)
+
+	if hj.Type != JoinType_INNER {
+		details = append(details, joinTypeDetail(hj.Type))
+	}
 	if len(hj.LeftEqColumns) > 0 {
 		details = append(details, fmt.Sprintf(
 			"left(%s)=right(%s)",
@@ -149,14 +182,18 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 		details = append(details, fmt.Sprintf("Merged columns: %d", len(hj.LeftEqColumns)))
 	}
 
-	return "HashJoiner", details
+	return name, details
 }
 
-func orderedJoinDetails(left, right Ordering, onExpr Expression) []string {
-	details := make([]string, 1, 2)
-	details[0] = fmt.Sprintf(
+func orderedJoinDetails(joinType JoinType, left, right Ordering, onExpr Expression) []string {
+	details := make([]string, 0, 3)
+
+	if joinType != JoinType_INNER {
+		details = append(details, joinTypeDetail(joinType))
+	}
+	details = append(details, fmt.Sprintf(
 		"left(%s)=right(%s)", left.diagramString(), right.diagramString(),
-	)
+	))
 
 	if onExpr.Expr != "" {
 		details = append(details, fmt.Sprintf("ON %s", onExpr.Expr))
@@ -167,8 +204,11 @@ func orderedJoinDetails(left, right Ordering, onExpr Expression) []string {
 
 // summary implements the diagramCellType interface.
 func (mj *MergeJoinerSpec) summary() (string, []string) {
-	details := orderedJoinDetails(mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
-	return "MergeJoiner", details
+	name := "MergeJoiner"
+	if isSetOpJoin(joinType(mj.Type)) {
+		name = "MergeSetOp"
+	}
+	return name, orderedJoinDetails(mj.Type, mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
 }
 
 // summary implements the diagramCellType interface.
@@ -192,7 +232,9 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 		details = append(details, table.Post.summaryWithPrefix(fmt.Sprintf("%s ", tableLabel))...)
 	}
 	details = append(details, "Joiner")
-	details = append(details, orderedJoinDetails(tables[0].Ordering, tables[1].Ordering, irj.OnExpr)...)
+	details = append(
+		details, orderedJoinDetails(irj.Type, tables[0].Ordering, tables[1].Ordering, irj.OnExpr)...,
+	)
 	return "InterleaveReaderJoiner", details
 }
 
