@@ -53,13 +53,20 @@ export function findMostSpecificLocation(locations: LocationTree, tiers: Localit
  */
 export function findOrCalculateLocation(locations: LocationTree, locality: LocalityTree) {
   // If a location is assigned to this locality, return it.
-  const thisLocation = findMostSpecificLocation(locations, locality.tiers);
+  const thisTier = locality.tiers[locality.tiers.length - 1];
+  const thisLocation = getLocation(locations, thisTier);
   if (!_.isNil(thisLocation)) {
     return thisLocation;
   }
 
   // If this locality has nodes directly, we can't calculate a location; bail.
   if (!_.isEmpty(locality.nodes)) {
+    return null;
+  }
+
+  // If this locality has no child localities, we can't calculate a location.
+  // Note, this shouldn't ever actually happen.
+  if (_.isEmpty(locality.localities)) {
     return null;
   }
 
