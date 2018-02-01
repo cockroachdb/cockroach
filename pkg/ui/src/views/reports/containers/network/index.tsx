@@ -340,10 +340,10 @@ class Network extends React.Component<NetworkProps, {}> {
 
     // Calculate the mean and sampled standard deviation.
     let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
-      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.HEALTHY)
+      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.LIVE)
       .map(nodeID => Number.parseInt(nodeID, 0));
     let staleIDsContext = _.chain(nodesSummary.nodeIDs)
-      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.SUSPECT)
+      .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.UNAVAILABLE)
       .map(nodeID => Number.parseInt(nodeID, 0));
     if (!_.isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
       healthyIDsContext = healthyIDsContext.filter(nodeID => filters.nodeIDs.has(nodeID));
