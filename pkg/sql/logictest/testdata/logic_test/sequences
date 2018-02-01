@@ -782,3 +782,47 @@ DROP TABLE drop_test_tbl
 
 statement ok
 DROP SEQUENCE drop_test
+
+# Test that sequences can only be modified with the UPDATE permission.
+
+statement ok
+CREATE SEQUENCE priv_test
+
+user testuser
+
+statement error pq: user testuser does not have SELECT privilege on relation priv_test
+SELECT * FROM priv_test
+
+statement error pq: nextval\(\): user testuser does not have UPDATE privilege on relation priv_test
+SELECT nextval('priv_test')
+
+statement error pq: setval\(\): user testuser does not have UPDATE privilege on relation priv_test
+SELECT setval('priv_test', 5)
+
+user root
+
+# Verify that the value hasn't been changed.
+query I
+SELECT last_value FROM priv_test
+----
+0
+
+statement ok
+GRANT UPDATE, SELECT ON priv_test TO testuser
+
+user testuser
+
+# After the grant, testuser can select, increment, and set.
+
+statement ok
+SELECT nextval('priv_test')
+
+statement ok
+SELECT setval('priv_test', 5)
+
+query I
+SELECT last_value FROM priv_test
+----
+5
+
+user root

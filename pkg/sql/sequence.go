@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,8 +34,12 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
 	}
+
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
+		return 0, err
+	}
+	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
 		return 0, err
 	}
 
@@ -104,10 +109,15 @@ func (p *planner) SetSequenceValue(
 	if p.EvalContext().TxnReadOnly {
 		return readOnlyError("setval()")
 	}
+
 	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
 	if err != nil {
 		return err
 	}
+	if err := p.CheckPrivilege(ctx, descriptor, privilege.UPDATE); err != nil {
+		return err
+	}
+
 	opts := descriptor.SequenceOpts
 	if newVal > opts.MaxValue || newVal < opts.MinValue {
 		return pgerror.NewErrorf(
@@ -119,6 +129,7 @@ func (p *planner) SetSequenceValue(
 	if !isCalled {
 		newVal = newVal - descriptor.SequenceOpts.Increment
 	}
+
 	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
 	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
