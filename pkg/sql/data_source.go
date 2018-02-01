@@ -727,6 +727,10 @@ func (p *planner) getGeneratorPlan(ctx context.Context, t *tree.FuncExpr) (planD
 func (p *planner) getSequenceSource(
 	ctx context.Context, tn tree.TableName, desc *sqlbase.TableDescriptor,
 ) (planDataSource, error) {
+	if err := p.CheckPrivilege(ctx, desc, privilege.SELECT); err != nil {
+		return planDataSource{}, err
+	}
+
 	node, err := p.SequenceSelectNode(desc)
 	if err != nil {
 		return planDataSource{}, err
