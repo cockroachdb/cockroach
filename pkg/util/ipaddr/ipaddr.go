@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+	"math"
 	"math/rand"
 	"net"
 	"strconv"
@@ -25,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"math"
 )
 
 var errResultOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "result out of range")
