@@ -18,14 +18,14 @@ import (
 	"context"
 	"net"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 )
 
 // MaybeDecorateGRPCError catches grpc errors and provides a more helpful error
