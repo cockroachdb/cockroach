@@ -331,9 +331,6 @@ func makeSimpleTableDescriptor(
 			*tree.UniqueConstraintTableDef:
 			// ignore
 		case *tree.ColumnTableDef:
-			if def.DefaultExpr.Expr != nil {
-				return nil, errors.Errorf("DEFAULT expressions not supported: %s", tree.AsString(def))
-			}
 			if def.Computed.Expr != nil {
 				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
 			}
@@ -344,7 +341,7 @@ func makeSimpleTableDescriptor(
 		}
 	}
 	semaCtx := tree.SemaContext{}
-	evalCtx := tree.EvalContext{}
+	evalCtx := tree.EvalContext{CtxProvider: ctxProvider{ctx}}
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
@@ -365,6 +362,14 @@ func makeSimpleTableDescriptor(
 	}
 
 	return &tableDesc, nil
+}
+
+type ctxProvider struct {
+	context.Context
+}
+
+func (c ctxProvider) Ctx() context.Context {
+	return c
 }
 
 // groupWorkers creates num worker go routines in an error group.

@@ -47,12 +47,10 @@ func TestMakeSimpleTableDescriptorErrors(t *testing.T) {
 			error: `foreign keys not supported: CONSTRAINT a FOREIGN KEY \(i\) REFERENCES c \(id\)`,
 		},
 		{
-			stmt:  "create table a (i int default 0)",
-			error: "DEFAULT expressions not supported: i INT DEFAULT 0",
-		},
-		{
 			stmt: `create table a (
 				i int check (i > 0),
+				b int default 1,
+				c serial,
 				constraint a check (i < 0),
 				primary key (i),
 				unique index (i),
