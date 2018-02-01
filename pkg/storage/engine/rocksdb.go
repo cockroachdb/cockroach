@@ -1377,10 +1377,6 @@ func (r *batchIterator) UnsafeValue() []byte {
 	return r.iter.UnsafeValue()
 }
 
-func (r *batchIterator) Less(key MVCCKey) bool {
-	return r.iter.Less(key)
-}
-
 func (r *batchIterator) getIter() *C.DBIterator {
 	return r.iter.iter
 }
@@ -1950,10 +1946,6 @@ func (r *rocksDBIterator) UnsafeKey() MVCCKey {
 
 func (r *rocksDBIterator) UnsafeValue() []byte {
 	return cSliceToUnsafeGoBytes(r.value)
-}
-
-func (r *rocksDBIterator) Less(key MVCCKey) bool {
-	return r.UnsafeKey().Less(key)
 }
 
 func (r *rocksDBIterator) setState(state C.DBIterState) {
