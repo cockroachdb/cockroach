@@ -50,7 +50,7 @@ const (
 	ordersSchema = `(
 		user_zone STRING,
 		user_email STRING,
-		id INT DEFAULT unique_rowid(),
+		id INT,
 		fulfilled BOOL,
 		PRIMARY KEY (user_zone, user_email, id),
 		FOREIGN KEY (user_zone, user_email) REFERENCES users
@@ -141,12 +141,12 @@ func (m *roachmart) Tables() []workload.Table {
 		Name:            `users`,
 		Schema:          usersSchema,
 		InitialRowCount: m.users,
-		InitialRowFn: func(rowIdx int) []string {
-			const emailTemplate = `'user-%d@roachmart.example'`
-			return []string{
-				`'` + zones[rowIdx%3] + `'`,                     // zone
-				fmt.Sprintf(emailTemplate, rowIdx),              // email
-				`'` + string(randutil.RandBytes(rng, 64)) + `'`, // address
+		InitialRowFn: func(rowIdx int) []interface{} {
+			const emailTemplate = `user-%d@roachmart.example`
+			return []interface{}{
+				zones[rowIdx%3],                     // zone
+				fmt.Sprintf(emailTemplate, rowIdx),  // email
+				string(randutil.RandBytes(rng, 64)), // address
 			}
 		},
 	}
@@ -154,14 +154,14 @@ func (m *roachmart) Tables() []workload.Table {
 		Name:            `orders`,
 		Schema:          ordersSchema,
 		InitialRowCount: m.orders,
-		InitialRowFn: func(rowIdx int) []string {
+		InitialRowFn: func(rowIdx int) []interface{} {
 			user := users.InitialRowFn(rowIdx % m.users)
 			zone, email := user[0], user[1]
-			return []string{
-				zone,                             // user_zone
-				email,                            // user_email
-				"DEFAULT",                        // id
-				[]string{`'f'`, `'t'`}[rowIdx%2], // fulfilled
+			return []interface{}{
+				zone,   // user_zone
+				email,  // user_email
+				rowIdx, // id
+				[]string{`f`, `t`}[rowIdx%2], // fulfilled
 			}
 		},
 	}
@@ -181,11 +181,11 @@ func (m *roachmart) Ops() []workload.Operation {
 
 				// Pick a random user and advance until we have one that matches
 				// our locality requirements.
-				var zone, email string
+				var zone, email interface{}
 				for i := rng.Int(); ; i++ {
 					user := usersTable.InitialRowFn(i % m.users)
 					zone, email = user[0], user[1]
-					userLocal := zone == `'`+m.localZone+`'`
+					userLocal := zone == m.localZone
 					if userLocal == wantLocal {
 						break
 					}
