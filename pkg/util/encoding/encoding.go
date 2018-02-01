@@ -159,8 +159,7 @@ func DecodeUint32Ascending(b []byte) ([]byte, uint32, error) {
 	if len(b) < 4 {
 		return nil, 0, errors.Errorf("insufficient bytes to decode uint32 int value")
 	}
-	v := (uint32(b[0]) << 24) | (uint32(b[1]) << 16) |
-		(uint32(b[2]) << 8) | uint32(b[3])
+	v := binary.BigEndian.Uint32(b)
 	return b[4:], v, nil
 }
 
@@ -195,10 +194,7 @@ func DecodeUint64Ascending(b []byte) ([]byte, uint64, error) {
 	if len(b) < 8 {
 		return nil, 0, errors.Errorf("insufficient bytes to decode uint64 int value")
 	}
-	v := (uint64(b[0]) << 56) | (uint64(b[1]) << 48) |
-		(uint64(b[2]) << 40) | (uint64(b[3]) << 32) |
-		(uint64(b[4]) << 24) | (uint64(b[5]) << 16) |
-		(uint64(b[6]) << 8) | uint64(b[7])
+	v := binary.BigEndian.Uint64(b)
 	return b[8:], v, nil
 }
 
