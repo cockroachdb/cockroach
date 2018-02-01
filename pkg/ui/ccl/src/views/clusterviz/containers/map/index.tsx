@@ -12,11 +12,11 @@ import * as d3 from "d3";
 import { RouterState } from "react-router";
 
 import { parseLocalityRoute } from "src/util/localities";
+import * as vector from "src/util/vector";
 
 import "./sim.css";
 
 import NodeSimulator from "./nodeSimulator";
-import * as Vector from "./vector";
 import { WorldMap } from "./worldmap";
 import { Box, ZoomTransformer } from "./zoom";
 
@@ -105,7 +105,7 @@ export default class ClusterVisualization extends React.Component<RouterState, C
     const translate = this.state.zoomTransform.translate();
     const projection = d3.geo.mercator();
     projection.scale(projection.scale() * scale);
-    projection.translate(Vector.add(Vector.mult(projection.translate(), scale), translate));
+    projection.translate(vector.add(vector.mult(projection.translate(), scale), translate));
 
     const tiers = parseLocalityRoute(this.props.params.splat);
 

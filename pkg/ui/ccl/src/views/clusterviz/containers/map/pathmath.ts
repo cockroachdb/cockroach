@@ -7,7 +7,8 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import * as d3 from "d3";
-import * as Vector from "./vector";
+
+import * as vector from "src/util/vector";
 
 // createArcPath returns an svg arc object. startAngle and endAngle are
 // expressed in radians.
@@ -44,13 +45,13 @@ export function findClosestPoint(s: [number, number], e: [number, number], p: [n
     // 0 = [s-p].x*u.x + tu.x^2 + [s-p].y*u.y + tu.y^2
     // t*(u.x^2 + u.y^2) = [s-p].x*u.x + [s-p].y*u.y
     // t = ([s-p].x*u.x + [s-p].y*u.y) / (u.x^2 + u.y^2)
-    const u = Vector.sub(e, s);
-    const d = Vector.sub(s, p);
+    const u = vector.sub(e, s);
+    const d = vector.sub(s, p);
     const t = -(d[0] * u[0] + d[1] * u[1]) / (u[0] * u[0] + u[1] * u[1]);
     if (t <= 0 || t >= 1) {
         return [0, 0];
     }
-    return Vector.add(s, Vector.mult(u, t));
+    return vector.add(s, vector.mult(u, t));
 }
 
 export function drawBox(w: number, h: number, cornerPct: number) {
