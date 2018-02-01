@@ -15,6 +15,10 @@
 package build
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -29,7 +33,45 @@ type scope struct {
 	builder *Builder
 	parent  *scope
 	cols    []columnProps
-	// TODO(rytaft): Add group by and ordering to scope.
+	groupby groupby
+	// TODO(rytaft): add ordering to scope.
+}
+
+type groupby struct {
+	// groupingsScope refers to another scope that groups columns in this
+	// scope. Any aggregate functions which contain column references to this
+	// scope trigger the creation of new grouping columns in the grouping
+	// scope. In addition, if an aggregate function contains no column
+	// references, then the aggregate will be added to the "nearest" grouping
+	// scope. For example:
+	//   SELECT MAX(1) FROM t1
+	groupingsScope *scope
+
+	// aggs contains all aggregation expressions that were extracted from the
+	// query and which will become columns in this scope.
+	aggs []xform.GroupID
+
+	// groupings contains all group by expressions that were extracted from the
+	// query and which will become columns in this scope.
+	groupings []xform.GroupID
+
+	// inAgg is true within the body of an aggregate function. inAgg is used
+	// to ensure that nested aggregates are disallowed.
+	inAgg bool
+
+	// refScope is the scope to which all column references contained by the
+	// aggregate function must refer. This is used to detect illegal cases
+	// where the aggregate contains column references that point to
+	// different scopes. For example:
+	//   SELECT a
+	//   FROM t1
+	//   GROUP BY a
+	//   HAVING EXISTS
+	//   (
+	//     SELECT MAX(t1.a+t2.b)
+	//     FROM t2
+	//   )
+	refScope *scope
 }
 
 // push creates a new scope with this scope as its parent.
@@ -47,12 +89,103 @@ func (s *scope) appendColumns(src *scope) {
 // with columnProps.
 func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr, _ = tree.WalkExpr(s, expr)
-	texpr, err := tree.TypeCheck(expr, &s.builder.semaCtx, desired)
+	// Important - we call the expr.TypeCheck method rather than the TypeCheck
+	// function to avoid folding of constant literals.
+	texpr, err := expr.TypeCheck(&s.builder.semaCtx, desired)
 	if err != nil {
 		panic(err)
 	}
 
 	return texpr
+}
+
+// hasColumn returns true if the given column index is found within this scope.
+func (s *scope) hasColumn(index xform.ColumnIndex) bool {
+	for curr := s; curr != nil; curr = curr.parent {
+		for i := range curr.cols {
+			col := &curr.cols[i]
+			if col.index == index {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// findAggregate finds the given aggregate among the bound variables
+// in this scope. Returns nil if the aggregate is not found.
+func (s *scope) findAggregate(agg xform.GroupID) *columnProps {
+	for i, a := range s.groupby.aggs {
+		if a == agg {
+			// Aggregate already exists, so return information about the
+			// existing column that computes it. Aggregates are always
+			// clustered at the end of the column list, in the same order
+			// as s.groupby.aggs.
+			return &s.cols[len(s.cols)-len(s.groupby.aggs)+i]
+		}
+	}
+
+	return nil
+}
+
+// findGrouping finds the given grouping expression among the bound variables
+// in the groupingsScope. Returns nil if the grouping is not found.
+func (s *scope) findGrouping(grouping xform.GroupID) *columnProps {
+	for i, g := range s.groupby.groupings {
+		if g == grouping {
+			// Grouping already exists, so return information about the
+			// existing column that computes it. Columns in the groupingsScope are
+			// always listed in the same order as s.groupby.groupings.
+			return &s.groupby.groupingsScope.cols[i]
+		}
+	}
+
+	return nil
+}
+
+// startAggFunc is called when the builder starts building an aggregate
+// function. It is used to disallow nested aggregates and ensure that aggregate
+// functions are only used in a groupings scope.
+func (s *scope) startAggFunc() {
+	var found bool
+	for curr := s; curr != nil; curr = curr.parent {
+		if curr.groupby.inAgg {
+			panic("aggregate function cannot be nested within another aggregate function")
+		}
+
+		if curr.groupby.groupingsScope != nil {
+			// The aggregate will be added to the innermost groupings scope.
+			s.groupby.refScope = curr.groupby.groupingsScope
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		panic("aggregate function is not allowed in this context")
+	}
+
+	s.groupby.inAgg = true
+}
+
+// endAggFunc is called when the builder finishes building an aggregate
+// function. It is used in combination with startAggFunc to disallow nested
+// aggregates and ensure that aggregate functions are only used in a groupings
+// scope. It returns the reference scope to which the new aggregate should be
+// added.
+func (s *scope) endAggFunc() (refScope *scope) {
+	if !s.groupby.inAgg {
+		panic("mismatched calls to start/end aggFunc")
+	}
+
+	refScope = s.groupby.refScope
+	if refScope == nil {
+		panic("not in grouping scope")
+	}
+
+	s.groupby.inAgg = false
+	return
 }
 
 // scope implements the tree.Visitor interface so that it can walk through
@@ -94,7 +227,52 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 		panic(errorf("unknown column %s", columnProps{name: colName, table: tblName}))
 
-		// TODO(rytaft): Implement function expressions and subquery replacement.
+	case *tree.FuncExpr:
+		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
+		if err != nil {
+			panic(fmt.Sprintf("%v", err))
+		}
+		if len(t.Exprs) != 1 {
+			break
+		}
+		vn, ok := t.Exprs[0].(tree.VarName)
+		if !ok {
+			break
+		}
+		vn, err = vn.NormalizeVarName()
+		if err != nil {
+			panic(err)
+		}
+		t.Exprs[0] = vn
+
+		if strings.EqualFold(def.Name, "count") && t.Type == 0 {
+			if _, ok := vn.(tree.UnqualifiedStar); ok {
+				// Special case handling for COUNT(*). This is a special construct to
+				// count the number of rows; in this case * does NOT refer to a set of
+				// columns. A * is invalid elsewhere (and will be caught by TypeCheck()).
+				// Replace the function with COUNT_ROWS (which doesn't take any
+				// arguments).
+				cr := tree.Name("COUNT_ROWS")
+				e := &tree.FuncExpr{
+					Func: tree.ResolvableFunctionReference{
+						FunctionReference: &tree.UnresolvedName{&cr},
+					},
+				}
+				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
+				// expression; we should not hit an error here.
+				if _, err := e.TypeCheck(&s.builder.semaCtx, types.Any); err != nil {
+					panic(err)
+				}
+				e.Filter = t.Filter
+				e.WindowDef = t.WindowDef
+				return true, e
+			}
+			// TODO(rytaft): Add handling for tree.AllColumnsSelector to support
+			// expressions like SELECT COUNT(kv.*) FROM kv
+			// Similar to the work done in PR #17833.
+		}
+
+		// TODO(rytaft): Implement subquery replacement.
 	}
 
 	return true, expr

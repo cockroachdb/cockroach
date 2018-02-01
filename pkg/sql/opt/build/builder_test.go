@@ -190,7 +190,7 @@ func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group xform.GroupID, err
 		}
 	}()
 
-	group = b.buildScalar(typedExpr, &scope{builder: b})
+	group, _ = b.buildScalar(typedExpr, false /* hasAgg */, &scope{builder: b})
 	return
 }
 
