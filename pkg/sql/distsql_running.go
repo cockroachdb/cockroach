@@ -98,23 +98,23 @@ func (dsp *DistSQLPlanner) initRunners() {
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
 //
-// Note that errors that happen while actually running the flow are reported to
-// recv, not returned by this function.
-// TODO(andrei): Some errors ocurring during the "starting" phase are also
-// reported to recv instead of being returned (see the flow.Start() call for the
-// local flow). Perhaps we should push all errors to recv and have this function
-// not return anything.
+// All errors encoutered are reported to the distSQLReceiver's resultWriter.
+// Additionally, if the error is a "communication error" (an error encoutered
+// while using that resultWriter), the error is also stored in
+// distSQLReceiver.commErr. That can be tested to see if a client session needs
+// to be closed.
 func (dsp *DistSQLPlanner) Run(
 	planCtx *planningCtx,
 	txn *client.Txn,
 	plan *physicalPlan,
 	recv *distSQLReceiver,
 	evalCtx *extendedEvalContext,
-) error {
+) {
 	ctx := planCtx.ctx
 
 	if err := planCtx.sanityCheckAddresses(); err != nil {
-		return err
+		recv.SetError(err)
+		return
 	}
 
 	flows := plan.GenerateFlowSpecs(dsp.nodeDesc.NodeID /* gateway */)
@@ -191,7 +191,8 @@ func (dsp *DistSQLPlanner) Run(
 		// into the local flow.
 	}
 	if firstErr != nil {
-		return firstErr
+		recv.SetError(firstErr)
+		return
 	}
 
 	// Set up the flow on this node.
@@ -203,7 +204,8 @@ func (dsp *DistSQLPlanner) Run(
 	}
 	ctx, flow, err := dsp.distSQLSrv.SetupSyncFlow(ctx, &localReq, recv)
 	if err != nil {
-		return err
+		recv.SetError(err)
+		return
 	}
 	// TODO(radu): this should go through the flow scheduler.
 	if err := flow.Start(ctx, func() {}); err != nil {
@@ -212,8 +214,6 @@ func (dsp *DistSQLPlanner) Run(
 	}
 	flow.Wait()
 	flow.Cleanup(ctx)
-
-	return nil
 }
 
 // distSQLReceiver is a RowReceiver that writes results to a rowResultWriter.
@@ -228,6 +228,8 @@ type distSQLReceiver struct {
 	// resultWriter is the interface which we send results to.
 	resultWriter rowResultWriter
 
+	stmtType tree.StatementType
+
 	// outputTypes are the types of the result columns produced by the plan.
 	outputTypes []sqlbase.ColumnType
 
@@ -235,12 +237,15 @@ type distSQLReceiver struct {
 	// stream.
 	resultToStreamColMap []int
 
-	// err represents the error that we received either from a producer or
-	// internally in the operation of the distSQLReceiver. If set, this will
-	// ultimately be returned as the error for the SQL query.
+	// commErr keeps track of the error received from interacting with the
+	// resultWriter. This represents a "communication error" and as such is unlike
+	// query execution errors: when the distSQLReceiver is used within a SQL
+	// session, such errors mean that we have to bail on the session.
+	// Query execution errors are reported to the resultWriter. For some client's
+	// convenience, communication errors are also reported to the resultWriter.
 	//
 	// Once set, no more rows are accepted.
-	err error
+	commErr error
 
 	// canceled is atomically set to an error when this distSQL receiver
 	// has been marked as canceled. Upon the next Push(), err is set to
@@ -268,17 +273,35 @@ type distSQLReceiver struct {
 	updateClock func(observedTs hlc.Timestamp)
 }
 
-// rowResultWriter is a subset of StatementResult to be used with the
+// rowResultWriter is a subset of StatementResultWriter to be used with the
 // distSQLReceiver. It's implemented by RowResultWriter.
 type rowResultWriter interface {
-	// AddRow takes the passed in row and adds it to the current result.
 	AddRow(ctx context.Context, row tree.Datums) error
-	// IncrementRowsAffected increments a counter by n. This is used for all
-	// result types other than tree.Rows.
 	IncrementRowsAffected(n int)
-	// GetStatementType returns the StatementType that corresponds to the type of
-	// results that should be sent to this interface.
-	StatementType() tree.StatementType
+	SetError(error)
+	Err() error
+}
+
+// errOnlyResultWriter is a rowResultWriter that only supports receiving an
+// error. All other functions that deal with producing results panic.
+type errOnlyResultWriter struct {
+	err error
+}
+
+var _ rowResultWriter = &errOnlyResultWriter{}
+
+func (w *errOnlyResultWriter) SetError(err error) {
+	w.err = err
+}
+func (w *errOnlyResultWriter) Err() error {
+	return w.err
+}
+
+func (w *errOnlyResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	panic("AddRow not supported by errOnlyResultWriter")
+}
+func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
+	panic("IncrementRowsAffected not supported by errOnlyResultWriter")
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
@@ -295,6 +318,7 @@ var _ distsqlrun.CancellableRowReceiver = &distSQLReceiver{}
 func makeDistSQLReceiver(
 	ctx context.Context,
 	resultWriter rowResultWriter,
+	stmtType tree.StatementType,
 	rangeCache *kv.RangeDescriptorCache,
 	leaseCache *kv.LeaseHolderCache,
 	txn *client.Txn,
@@ -307,6 +331,7 @@ func makeDistSQLReceiver(
 		leaseCache:   leaseCache,
 		txn:          txn,
 		updateClock:  updateClock,
+		stmtType:     stmtType,
 	}
 	// When the root transaction finishes (i.e. it is abandoned,
 	// aborted, or committed), ensure the dist SQL flow is canceled.
@@ -316,6 +341,13 @@ func makeDistSQLReceiver(
 		})
 	}
 	return r
+}
+
+// SetError provides a convenient way for a client to pass in an error, thus
+// pretending that a query execution error happened. The error is passed along
+// to the resultWriter.
+func (r *distSQLReceiver) SetError(err error) {
+	r.resultWriter.SetError(err)
 }
 
 // Push is part of the RowReceiver interface.
@@ -329,10 +361,11 @@ func (r *distSQLReceiver) Push(
 					r.txn.AugmentTxnCoordMeta(*meta.TxnMeta)
 				}
 			} else {
-				r.err = errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta)
+				r.resultWriter.SetError(
+					errors.Errorf("received a leaf TxnCoordMeta (%s); but have no root", meta.TxnMeta))
 			}
 		}
-		if meta.Err != nil && r.err == nil {
+		if meta.Err != nil && r.resultWriter.Err() == nil {
 			if r.txn != nil {
 				if retryErr, ok := meta.Err.(*roachpb.UnhandledRetryableError); ok {
 					// Update the txn in response to remote errors. In the non-DistSQL
@@ -348,28 +381,29 @@ func (r *distSQLReceiver) Push(
 					r.updateClock(retryErr.PErr.Now)
 				}
 			}
-			r.err = meta.Err
+			r.resultWriter.SetError(meta.Err)
 		}
 		if len(meta.Ranges) > 0 {
-			if err := r.updateCaches(r.ctx, meta.Ranges); err != nil && r.err == nil {
-				r.err = err
+			if err := r.updateCaches(r.ctx, meta.Ranges); err != nil && r.resultWriter.Err() == nil {
+				r.resultWriter.SetError(err)
 			}
 		}
 		if len(meta.TraceData) > 0 {
 			span := opentracing.SpanFromContext(r.ctx)
 			if span == nil {
-				r.err = errors.New("trying to ingest remote spans but there is no recording span set up")
+				r.resultWriter.SetError(
+					errors.New("trying to ingest remote spans but there is no recording span set up"))
 			} else if err := tracing.ImportRemoteSpans(span, meta.TraceData); err != nil {
-				r.err = errors.Errorf("error ingesting remote spans: %s", err)
+				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
 		}
 		return r.status
 	}
-	if r.err == nil && r.canceled.Load() != nil {
+	if r.resultWriter.Err() == nil && r.canceled.Load() != nil {
 		// Set the error to reflect query cancellation.
-		r.err = r.canceled.Load().(error)
+		r.resultWriter.SetError(r.canceled.Load().(error))
 	}
-	if r.err != nil {
+	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here.
 		return distsqlrun.ConsumerClosed
 	}
@@ -377,7 +411,7 @@ func (r *distSQLReceiver) Push(
 		return r.status
 	}
 
-	if r.resultWriter.StatementType() != tree.Rows {
+	if r.stmtType != tree.Rows {
 		// We only need the row count.
 		r.resultWriter.IncrementRowsAffected(1)
 		return r.status
@@ -388,15 +422,22 @@ func (r *distSQLReceiver) Push(
 	for i, resIdx := range r.resultToStreamColMap {
 		err := row[resIdx].EnsureDecoded(&r.outputTypes[resIdx], &r.alloc)
 		if err != nil {
-			r.err = err
+			r.resultWriter.SetError(err)
 			r.status = distsqlrun.ConsumerClosed
 			return r.status
 		}
 		r.row[i] = row[resIdx].Datum
 	}
 	// Note that AddRow accounts for the memory used by the Datums.
-	if err := r.resultWriter.AddRow(r.ctx, r.row); err != nil {
-		r.err = err
+	if commErr := r.resultWriter.AddRow(r.ctx, r.row); commErr != nil {
+		r.commErr = commErr
+		// Set the error on the resultWriter too, for the convenience of some of the
+		// clients. If clients don't care to differentiate between communication
+		// errors and query execution errors, they can simply inspect
+		// resultWriter.Err(). Also, this function itself doesn't care about the
+		// distinction and just uses resultWriter.Err() to see if we're still
+		// accepting results.
+		r.resultWriter.SetError(commErr)
 		// TODO(andrei): We should drain here. Metadata from this query would be
 		// useful, particularly as it was likely a large query (since AddRow()
 		// above failed, presumably with an out-of-memory error).
@@ -449,23 +490,27 @@ func (r *distSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
 // assumes that the tree is supported (see CheckSupport).
 //
-// Note that errors that happen while actually running the flow are reported to
-// recv, not returned by this function.
+// All errors encoutered are reported to the distSQLReceiver's resultWriter.
+// Additionally, if the error is a "communication error" (an error encoutered
+// while using that resultWriter), the error is also stored in
+// distSQLReceiver.commErr. That can be tested to see if a client session needs
+// to be closed.
 func (dsp *DistSQLPlanner) PlanAndRun(
 	ctx context.Context,
 	txn *client.Txn,
 	tree planNode,
 	recv *distSQLReceiver,
 	evalCtx *extendedEvalContext,
-) error {
+) {
 	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
 
 	log.VEvent(ctx, 1, "creating DistSQL plan")
 
 	plan, err := dsp.createPlanForNode(&planCtx, tree)
 	if err != nil {
-		return err
+		recv.SetError(err)
+		return
 	}
 	dsp.FinalizePlan(&planCtx, &plan)
-	return dsp.Run(&planCtx, txn, &plan, recv, evalCtx)
+	dsp.Run(&planCtx, txn, &plan, recv, evalCtx)
 }

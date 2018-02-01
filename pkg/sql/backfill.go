@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -522,9 +523,11 @@ func (sc *SchemaChanger) distBackfill(
 					otherTableDescs = append(otherTableDescs, *table)
 				}
 			}
+			rw := &errOnlyResultWriter{}
 			recv := makeDistSQLReceiver(
 				ctx,
-				nil, /* resultWriter */
+				rw,
+				tree.Rows, /* stmtType - doesn't matter here since no result are produced */
 				sc.rangeDescriptorCache,
 				sc.leaseHolderCache,
 				nil, /* txn - the flow does not run wholly in a txn */
@@ -539,13 +542,8 @@ func (sc *SchemaChanger) distBackfill(
 			if err != nil {
 				return err
 			}
-			if err := sc.distSQLPlanner.Run(
-				&planCtx, txn, &plan, recv, evalCtx,
-			); err != nil {
-				return err
-			}
-
-			return recv.err
+			sc.distSQLPlanner.Run(&planCtx, txn, &plan, recv, evalCtx)
+			return rw.Err()
 		}); err != nil {
 			return err
 		}
