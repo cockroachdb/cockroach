@@ -32,7 +32,7 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 56             test_kvi2        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
 56             test_kvi2        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
 57             test_v1          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-59             test_v2          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+58             test_v2          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
 
 query ITITTB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
@@ -51,7 +51,7 @@ descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique
 56             test_kvi2        1         primary          primary     true
 56             test_kvi2        2         test_kvi2_idx    secondary   true
 57             test_v1          0         ·                primary     false
-59             test_v2          0         ·                primary     false
+58             test_v2          0         ·                primary     false
 
 query ITITTITT colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
@@ -88,7 +88,7 @@ descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_typ
 55             test_kvi1        1         NULL       51            interleave      1                   NULL              SharedPrefixLen: 1
 56             test_kvi2        2         NULL       51            interleave      1                   NULL              SharedPrefixLen: 1
 57             test_v1          NULL      NULL       51            view            NULL                NULL              NULL
-59             test_v2          NULL      NULL       57            view            NULL                NULL              NULL
+58             test_v2          NULL      NULL       57            view            NULL                NULL              NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
@@ -100,7 +100,7 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 51             test_kv          1         55               interleave         1                      NULL               SharedPrefixLen: 0
 51             test_kv          1         56               interleave         2                      NULL               SharedPrefixLen: 0
 51             test_kv          2         54               fk                 2                      ·                  SharedPrefixLen: 0
-57             test_v1          NULL      59               view               0                      NULL               Columns: [1]
+57             test_v1          NULL      58               view               0                      NULL               Columns: [1]
 
 # Checks view dependencies (#17306)
 statement ok
@@ -111,13 +111,13 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-62             moretest_v       NULL      NULL       60            view            NULL                NULL            NULL
+60             moretest_v       NULL      NULL       59            view            NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-60             moretest_t       NULL      62               view               0                      NULL               Columns: [1 2 3]
+59             moretest_t       NULL      60               view               0                      NULL               Columns: [1 2 3]
 
 # Check sequence dependencies.
 
@@ -131,10 +131,10 @@ query ITIIITITT colnames rowsort
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'blog_posts'
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-65             blog_posts       NULL      1          63            sequence        NULL                NULL            NULL
+62             blog_posts       NULL      1          61            sequence        NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-63             blog_posts_id_seq  NULL      65               sequence           0                      NULL               Columns: [0]
+61             blog_posts_id_seq  NULL      62               sequence           0                      NULL               Columns: [0]

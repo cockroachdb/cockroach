@@ -347,6 +347,15 @@ message IntegerOverflowError {
   optional int64 increment_value = 3 [(gogoproto.nullable) = false];
 }
 
+// A MixedSuccessError indicates that some portion of the batch
+// request may have succeeded, but the batch as a whole failed with
+// the wrapped error.
+message MixedSuccessError {
+  option (gogoproto.equal) = true;
+
+  optional Error wrapped = 1;
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -384,6 +393,7 @@ message ErrorDetail {
   optional TxnPrevAttemptError txn_aborted_async_err = 30;
   optional IntegerOverflowError integer_overflow = 31;
   optional UnsupportedRequestError unsupported_request = 32;
+  optional MixedSuccessError mixed_success = 33;
 }
 
 // TransactionRestart indicates how an error should be handled in a
