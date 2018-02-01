@@ -1,0 +1,20 @@
+props
+SELECT * FROM a
+----
+relational
+ ├── columns: a.x:1 a.y:2
+ └── not null: a.x:1
+
+props
+SELECT * FROM a WHERE 1=1
+----
+relational
+ ├── columns: a.x:1 a.y:2
+ └── not null: a.x:1
+
+props
+SELECT b.z, false FROM b
+----
+relational
+ ├── columns: b.z:2 column2:3
+ └── not null: b.z:2

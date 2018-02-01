@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -41,12 +42,12 @@ type RelationalProps struct {
 	// OutputCols is the set of columns that can be projected by the
 	// expression. Ordering, naming, and duplication of columns is not
 	// representable by this property; those are physical properties.
-	OutputCols ColSet
+	OutputCols opt.ColSet
 
 	// NotNullCols is the subset of output columns which cannot be NULL.
 	// The NULL-ability of columns flows from the inputs and can also be
 	// derived from filters that are NULL-intolerant.
-	NotNullCols ColSet
+	NotNullCols opt.ColSet
 }
 
 func (p *LogicalProps) format(mem *memo, tp treeprinter.Node) {
@@ -58,7 +59,7 @@ func (p *LogicalProps) formatOutputCols(mem *memo, tp treeprinter.Node) {
 		var buf bytes.Buffer
 		buf.WriteString("columns:")
 		p.Relational.OutputCols.ForEach(func(i int) {
-			colIndex := ColumnIndex(i)
+			colIndex := opt.ColumnIndex(i)
 			label := mem.metadata.ColumnLabel(colIndex)
 			buf.WriteByte(' ')
 			buf.WriteString(label)

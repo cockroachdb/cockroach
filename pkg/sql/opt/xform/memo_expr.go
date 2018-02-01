@@ -14,6 +14,10 @@
 
 package xform
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+)
+
 // exprState is 12 bytes of opaque storage used to store operator-specific
 // fields in the memo expression.
 type exprState [3]uint32
@@ -33,7 +37,7 @@ type memoExpr struct {
 	// fields. To access these fields in a strongly-typed way, use the asXXX()
 	// generated methods to cast the memoExpr to the more specialized
 	// expression type.
-	op Operator
+	op opt.Operator
 
 	// state stores operator-specific state. Depending upon the value of the
 	// op field, this state will be interpreted in different ways.

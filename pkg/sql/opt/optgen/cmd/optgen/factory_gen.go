@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
 
+// factoryGen generates implementation code for the opt.Factory interface. See
+// the ifactoryGen comment for more details.
 type factoryGen struct {
 	compiled *lang.CompiledExpr
 	w        *matchWriter
@@ -29,6 +31,12 @@ type factoryGen struct {
 func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
 	g.w = &matchWriter{writer: w}
+
+	g.w.writeIndent("package xform\n\n")
+
+	g.w.nest("import (\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/opt\"\n")
+	g.w.unnest(1, ")\n\n")
 
 	g.genConstructFuncs()
 	g.genDynamicConstructLookup()
@@ -40,13 +48,14 @@ func (g *factoryGen) genConstructFuncs() {
 	for _, define := range filterEnforcerDefines(g.compiled.Defines) {
 		varName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
 
-		g.w.writeIndent("func (_f *Factory) Construct%s(\n", define.Name)
+		g.w.writeIndent("func (_f *factory) Construct%s(\n", define.Name)
 
 		for _, field := range define.Fields {
-			g.w.writeIndent("  %s %s,\n", unTitle(string(field.Name)), mapType(string(field.Type)))
+			fieldName := unTitle(string(field.Name))
+			g.w.writeIndent("  %s opt.%s,\n", fieldName, mapType(string(field.Type)))
 		}
 
-		g.w.nest(") GroupID {\n")
+		g.w.nest(") opt.GroupID {\n")
 
 		g.w.writeIndent("%s := make%sExpr(", varName, define.Name)
 
@@ -74,20 +83,20 @@ func (g *factoryGen) genConstructFuncs() {
 func (g *factoryGen) genDynamicConstructLookup() {
 	defines := filterEnforcerDefines(g.compiled.Defines)
 
-	funcType := "func(f *Factory, children []GroupID, private PrivateID) GroupID"
+	funcType := "func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
 
 	g.w.writeIndent("var dynConstructLookup [%d]dynConstructLookupFunc\n\n", len(defines)+1)
 
 	g.w.nest("func init() {\n")
 	g.w.writeIndent("// UnknownOp\n")
-	g.w.nest("dynConstructLookup[UnknownOp] = %s {\n", funcType)
+	g.w.nest("dynConstructLookup[opt.UnknownOp] = %s {\n", funcType)
 	g.w.writeIndent("  panic(\"op type not initialized\")\n")
 	g.w.unnest(1, "}\n\n")
 
 	for _, define := range defines {
 		g.w.writeIndent("// %sOp\n", define.Name)
-		g.w.nest("dynConstructLookup[%sOp] = %s {\n", define.Name, funcType)
+		g.w.nest("dynConstructLookup[opt.%sOp] = %s {\n", define.Name, funcType)
 
 		g.w.writeIndent("return f.Construct%s(", define.Name)
 		for i, field := range define.Fields {
@@ -114,8 +123,8 @@ func (g *factoryGen) genDynamicConstructLookup() {
 
 	g.w.unnest(1, "}\n\n")
 
-	args := "op Operator, children []GroupID, private PrivateID"
-	g.w.nest("func (f *Factory) DynamicConstruct(%s) GroupID {\n", args)
+	args := "op opt.Operator, children []opt.GroupID, private opt.PrivateID"
+	g.w.nest("func (f *factory) DynamicConstruct(%s) opt.GroupID {\n", args)
 	g.w.writeIndent("return dynConstructLookup[op](f, children, private)\n")
 	g.w.unnest(1, "}\n")
 }
