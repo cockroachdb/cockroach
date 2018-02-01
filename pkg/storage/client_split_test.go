@@ -261,7 +261,7 @@ func TestStoreRangeSplitIntents(t *testing.T) {
 	for iter.Seek(start); ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			t.Fatal(err)
-		} else if !ok || !iter.Less(end) {
+		} else if !ok || !iter.UnsafeKey().Less(end) {
 			break
 		}
 

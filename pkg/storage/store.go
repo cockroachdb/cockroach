@@ -53,7 +53,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
-	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -3516,7 +3515,6 @@ func sendSnapshot(
 	// Determine the unreplicated key prefix so we can drop any
 	// unreplicated keys from the snapshot.
 	unreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(header.State.Desc.RangeID)
-	var alloc bufalloc.ByteAllocator
 	n := 0
 	var b engine.Batch
 	for ; ; snap.Iter.Next() {
@@ -3525,11 +3523,12 @@ func sendSnapshot(
 		} else if !ok {
 			break
 		}
-		var key engine.MVCCKey
-		var value []byte
-		alloc, key, value = snap.Iter.AllocIterKeyValue(alloc)
+		key := snap.Iter.Key()
+		value := snap.Iter.Value()
 		if bytes.HasPrefix(key.Key, unreplicatedPrefix) {
-			continue
+			// This should never happen because we're using a
+			// ReplicaDataIterator with replicatedOnly=true.
+			log.Fatalf(ctx, "found unreplicated rangeID key: %v", key)
 		}
 		n++
 		mvccKey := engine.MVCCKey{
@@ -3553,8 +3552,9 @@ func sendSnapshot(
 			}
 			b = nil
 			// We no longer need the keys and values in the batch we just sent,
-			// so reset alloc and allow them to be garbage collected.
-			alloc = bufalloc.ByteAllocator{}
+			// so reset ReplicaDataIterator's allocator and allow its data to
+			// be garbage collected.
+			snap.Iter.ResetAllocator()
 		}
 	}
 	if b != nil {

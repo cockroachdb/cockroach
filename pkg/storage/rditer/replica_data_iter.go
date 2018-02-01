@@ -35,7 +35,8 @@ type KeyRange struct {
 type ReplicaDataIterator struct {
 	curIndex int
 	ranges   []KeyRange
-	iterator engine.Iterator
+	it       engine.SimpleIterator
+	a        bufalloc.ByteAllocator
 }
 
 // MakeAllKeyRanges returns all key ranges for the given Range.
@@ -83,15 +84,23 @@ func makeReplicaKeyRanges(
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
 ) *ReplicaDataIterator {
+	return WrapWithReplicaDataIterator(d, e.NewIterator(false), replicatedOnly)
+}
+
+// WrapWithReplicaDataIterator creates a ReplicaDataIterator for the given
+// replica that wraps the provided iterator.
+func WrapWithReplicaDataIterator(
+	d *roachpb.RangeDescriptor, it engine.SimpleIterator, replicatedOnly bool,
+) *ReplicaDataIterator {
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
 		rangeFunc = MakeReplicatedKeyRanges
 	}
 	ri := &ReplicaDataIterator{
-		ranges:   rangeFunc(d),
-		iterator: e.NewIterator(false),
+		ranges: rangeFunc(d),
+		it:     it,
 	}
-	ri.iterator.Seek(ri.ranges[ri.curIndex].Start)
+	ri.it.Seek(ri.ranges[ri.curIndex].Start)
 	ri.advance()
 	return ri
 }
@@ -99,12 +108,12 @@ func NewReplicaDataIterator(
 // Close the underlying iterator.
 func (ri *ReplicaDataIterator) Close() {
 	ri.curIndex = len(ri.ranges)
-	ri.iterator.Close()
+	ri.it.Close()
 }
 
 // Next advances to the next key in the iteration.
 func (ri *ReplicaDataIterator) Next() {
-	ri.iterator.Next()
+	ri.it.Next()
 	ri.advance()
 }
 
@@ -113,15 +122,15 @@ func (ri *ReplicaDataIterator) Next() {
 // invalid.
 func (ri *ReplicaDataIterator) advance() {
 	for {
-		if ok, _ := ri.Valid(); !ok || ri.iterator.Less(ri.ranges[ri.curIndex].End) {
+		if ok, _ := ri.Valid(); !ok || ri.it.UnsafeKey().Less(ri.ranges[ri.curIndex].End) {
 			return
 		}
 		ri.curIndex++
 		if ri.curIndex < len(ri.ranges) {
-			ri.iterator.Seek(ri.ranges[ri.curIndex].Start)
+			ri.it.Seek(ri.ranges[ri.curIndex].Start)
 		} else {
 			// Otherwise, seek to end to make iterator invalid.
-			ri.iterator.Seek(engine.MVCCKeyMax)
+			ri.it.Seek(engine.MVCCKeyMax)
 			return
 		}
 	}
@@ -129,23 +138,24 @@ func (ri *ReplicaDataIterator) advance() {
 
 // Valid returns true if the iterator currently points to a valid value.
 func (ri *ReplicaDataIterator) Valid() (bool, error) {
-	return ri.iterator.Valid()
+	return ri.it.Valid()
 }
 
 // Key returns the current key.
 func (ri *ReplicaDataIterator) Key() engine.MVCCKey {
-	return ri.iterator.Key()
+	key := ri.it.UnsafeKey()
+	ri.a, key.Key = ri.a.Copy(key.Key, 0)
+	return key
 }
 
 // Value returns the current value.
 func (ri *ReplicaDataIterator) Value() []byte {
-	return ri.iterator.Value()
+	value := ri.it.UnsafeValue()
+	ri.a, value = ri.a.Copy(value, 0)
+	return value
 }
 
-// AllocIterKeyValue returns ri.Key() and ri.Value() with the underlying
-// storage allocated from the passed ByteAllocator.
-func (ri *ReplicaDataIterator) AllocIterKeyValue(
-	a bufalloc.ByteAllocator,
-) (bufalloc.ByteAllocator, engine.MVCCKey, []byte) {
-	return engine.AllocIterKeyValue(a, ri.iterator)
+// ResetAllocator resets the ReplicaDataIterator's internal byte allocator.
+func (ri *ReplicaDataIterator) ResetAllocator() {
+	ri.a = nil
 }

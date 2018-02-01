@@ -144,11 +144,6 @@ func (s *Iterator) UnsafeValue() []byte {
 	return s.i.UnsafeValue()
 }
 
-// Less is part of the engine.Iterator interface.
-func (s *Iterator) Less(key engine.MVCCKey) bool {
-	return s.i.Less(key)
-}
-
 // ComputeStats is part of the engine.Iterator interface.
 func (s *Iterator) ComputeStats(
 	start, end engine.MVCCKey, nowNanos int64,
