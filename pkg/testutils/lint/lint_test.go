@@ -1078,7 +1078,7 @@ func TestLint(t *testing.T) {
 					GoVersion: goVersion,
 				}
 				for _, p := range linter.Lint(lprog) {
-					t.Errorf("%s: %s", p.Position, p)
+					t.Errorf("%s: %s", p.Position, &p)
 				}
 			})
 		}

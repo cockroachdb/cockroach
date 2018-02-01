@@ -150,7 +150,7 @@ func TestAdminDebugPprof(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 
-	body, err := getText(s, debugURL(s)+"pprof/block")
+	body, err := getText(s, debugURL(s)+"pprof/block?debug=1")
 	if err != nil {
 		t.Fatal(err)
 	}
