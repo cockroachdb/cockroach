@@ -956,6 +956,12 @@ func (t *Transaction) UpgradePriority(minPriority int32) {
 	}
 }
 
+// IsSerializable returns whether this transaction uses serializable
+// isolation.
+func (t *Transaction) IsSerializable() bool {
+	return t != nil && t.Isolation == enginepb.SERIALIZABLE
+}
+
 // String formats transaction into human readable string.
 func (t Transaction) String() string {
 	var buf bytes.Buffer
@@ -1096,7 +1102,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if txn == nil || txn.Isolation != enginepb.SERIALIZABLE {
+	if !txn.IsSerializable() {
 		return false, nil
 	}
 	timestamp := txn.Timestamp
@@ -1136,7 +1142,7 @@ func readWithinUncertaintyIntervalRetryTimestamp(
 			origin, err, txn, txn.ObservedTimestamps)
 	}
 	// Also forward by the existing timestamp.
-	ts.Forward(err.ExistingTimestamp)
+	ts.Forward(err.ExistingTimestamp.Add(0, 1))
 	return ts
 }
 

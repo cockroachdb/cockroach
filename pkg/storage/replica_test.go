@@ -8362,7 +8362,7 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	ba.Add(&txnPut)
 	ba.Add(&txnPut)
 
-	batch, _, _, _, pErr := tc.repl.evaluateTxnWriteBatch(ctx, makeIDKey(), ba, &allSpans)
+	batch, _, _, _, pErr := tc.repl.evaluateWriteBatch(ctx, makeIDKey(), ba, &allSpans)
 	defer batch.Close()
 	if pErr != nil {
 		t.Fatal(pErr)
@@ -9060,5 +9060,206 @@ func TestReplicaRecomputeStats(t *testing.T) {
 	runTest(testCase{"randdelta", sKey, expDelta, ""})
 	if !t.Failed() {
 		runTest(testCase{"noopagain", sKey, enginepb.MVCCStats{}, ""})
+	}
+}
+
+// TestReplicaLocalRetries verifies local retry logic for transactional
+// and non transactional batches. Verifies the timestamp cache is updated
+// to reflect the timestamp at which retried batches are executed.
+func TestReplicaLocalRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	newTxn := func(key string, ts hlc.Timestamp) *roachpb.Transaction {
+		txn := roachpb.MakeTransaction(
+			"test", roachpb.Key(key), roachpb.NormalUserPriority, enginepb.SERIALIZABLE, ts, 0,
+		)
+		return &txn
+	}
+	send := func(ba roachpb.BatchRequest) (hlc.Timestamp, error) {
+		br, pErr := tc.Sender().Send(context.Background(), ba)
+		if pErr != nil {
+			return hlc.Timestamp{}, pErr.GetDetail()
+		}
+		return br.Timestamp, nil
+	}
+	put := func(key, val string) (hlc.Timestamp, error) {
+		var ba roachpb.BatchRequest
+		put := putArgs(roachpb.Key(key), []byte(val))
+		ba.Add(&put)
+		return send(ba)
+	}
+
+	testCases := []struct {
+		name             string
+		setupFn          func() (hlc.Timestamp, error) // returns expected batch execution timestamp
+		batchFn          func(hlc.Timestamp) (roachpb.BatchRequest, hlc.Timestamp)
+		expErr           string
+		expTSCUpdateKeys []string
+	}{
+		{
+			name: "local retry of write too old on put",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("a", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				expTS = ts.Next()
+				put := putArgs(roachpb.Key("a"), []byte("put2"))
+				ba.Add(&put)
+				return
+			},
+		},
+		{
+			name: "local retry of write too old on cput",
+			setupFn: func() (hlc.Timestamp, error) {
+				// Note there are two different version of the value, but a
+				// non-txnal cput will evaluate the most recent version and
+				// avoid a condition failed error.
+				_, _ = put("b", "put1")
+				return put("b", "put2")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				expTS = ts.Next()
+				cput := cPutArgs(roachpb.Key("b"), []byte("cput"), []byte("put2"))
+				ba.Add(&cput)
+				return
+			},
+			expTSCUpdateKeys: []string{"b"},
+		},
+		// Non-1PC serializable txn cput will fail with write too old error.
+		{
+			name: "no local retry of write too old on non-1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				_, _ = put("c", "put")
+				return put("c", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("c", ts.Prev())
+				cput := cPutArgs(roachpb.Key("c"), []byte("cput"), []byte("put"))
+				ba.Add(&cput)
+				return
+			},
+			expErr: "write at timestamp .* too old",
+		},
+		// 1PC serializable transaction will fail instead of retrying if
+		// EndTransactionRequest.CanForwardCommitTimestamp is not true.
+		{
+			name: "no local retry of write too old on 1PC txn and refresh spans",
+			setupFn: func() (hlc.Timestamp, error) {
+				_, _ = put("d", "put")
+				return put("d", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("d", ts.Prev())
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				ba.Add(&bt)
+				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
+				ba.Add(&cput)
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				ba.Add(&et)
+				return
+			},
+			expErr: "RETRY_WRITE_TOO_OLD",
+		},
+		// 1PC serializable transaction will retry locally.
+		{
+			name: "local retry of write too old on 1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				_, _ = put("e", "put")
+				return put("e", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("e", ts.Prev())
+				expTS = ts.Next()
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				ba.Add(&bt)
+				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
+				ba.Add(&cput)
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				et.CanForwardCommitTimestamp = true // necessary to indicate local retry is possible
+				ba.Add(&et)
+				return
+			},
+			expTSCUpdateKeys: []string{"e"},
+		},
+		// Handle multiple write too old errors.
+		{
+			name: "local retry with multiple write too old errors",
+			setupFn: func() (hlc.Timestamp, error) {
+				if _, err := put("f1", "put"); err != nil {
+					return hlc.Timestamp{}, err
+				}
+				if _, err := put("f2", "put"); err != nil {
+					return hlc.Timestamp{}, err
+				}
+				return put("f3", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				expTS = ts.Next()
+				for i := 1; i <= 3; i++ {
+					cput := cPutArgs(roachpb.Key(fmt.Sprintf("f%d", i)), []byte("cput"), []byte("put"))
+					ba.Add(&cput)
+				}
+				return
+			},
+			expTSCUpdateKeys: []string{"f1", "f2", "f3"},
+		},
+		// Handle multiple write too old errors in 1PC transaction.
+		{
+			name: "local retry with multiple write too old errors",
+			setupFn: func() (hlc.Timestamp, error) {
+				if _, err := put("g1", "put"); err != nil {
+					return hlc.Timestamp{}, err
+				}
+				if _, err := put("g2", "put"); err != nil {
+					return hlc.Timestamp{}, err
+				}
+				return put("g3", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("g1", ts.Prev())
+				expTS = ts.Next()
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				ba.Add(&bt)
+				for i := 1; i <= 3; i++ {
+					cput := cPutArgs(roachpb.Key(fmt.Sprintf("g%d", i)), []byte("cput"), []byte("put"))
+					ba.Add(&cput)
+				}
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				et.CanForwardCommitTimestamp = true // necessary to indicate local retry is possible
+				ba.Add(&et)
+				return
+			},
+			expTSCUpdateKeys: []string{"g1", "g2", "g3"},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			ts, err := test.setupFn()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ba, expTS := test.batchFn(ts)
+			actualTS, err := send(ba)
+			if !testutils.IsError(err, test.expErr) {
+				t.Fatalf("expected error %q; got \"%v\"", test.expErr, err)
+			}
+			if actualTS != expTS {
+				t.Fatalf("expected ts=%s; got %s", expTS, actualTS)
+			}
+			for _, k := range test.expTSCUpdateKeys {
+				rTS, _ := tc.repl.store.tsCache.GetMaxRead(roachpb.Key(k), nil)
+				if rTS != expTS {
+					t.Fatalf("expected timestamp cache update for %s to %s; got %s", k, expTS, rTS)
+				}
+			}
+		})
 	}
 }

@@ -1995,7 +1995,13 @@ func (r *Replica) updateTimestampCache(
 	}
 
 	tc := r.store.tsCache
+	// Update the timestamp cache using the timestamp at which the batch
+	// was executed. Note this may have moved forward from ba.Timestamp,
+	// as when the request is retried locally on WriteTooOldErrors.
 	ts := ba.Timestamp
+	if br != nil {
+		ts = br.Timestamp
+	}
 	var txnID uuid.UUID
 	if ba.Txn != nil {
 		txnID = ba.Txn.ID
@@ -5041,7 +5047,7 @@ func (r *Replica) evaluateProposalInner(
 		var pErr *roachpb.Error
 		var ms enginepb.MVCCStats
 		var br *roachpb.BatchResponse
-		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
+		batch, ms, br, result, pErr = r.evaluateWriteBatch(ctx, idKey, ba, spans)
 		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
 			result.Replicated.Delta = ms.ToNetworkStats()
 		} else {
@@ -5112,18 +5118,17 @@ func checkIfTxnAborted(
 	return nil
 }
 
-// evaluateTxnWriteBatch attempts to execute transactional batches on
-// the 1-phase-commit path as just an atomic, non-transactional batch
-// of write commands. One phase commit batches contain transactional
-// writes sandwiched by BeginTransaction and EndTransaction requests.
+// evaluateWriteBatch evaluates the supplied batch.
 //
-// If the batch is transactional, and there's nothing to suggest that
-// the transaction will require retry or restart, the batch's txn is
-// stripped and it's executed as a normal batch write. If the writes
-// cannot all be completed at the intended timestamp, the batch's txn
-// is restored and it's re-executed as transactional. This allows it
-// to lay down intents and return an appropriate retryable error.
-func (r *Replica) evaluateTxnWriteBatch(
+// If the batch is transactional and has all the hallmarks of a 1PC
+// commit (i.e. includes BeginTransaction & EndTransaction, and
+// there's nothing to suggest that the transaction will require retry
+// or restart), the batch's txn is stripped and it's executed as an
+// atomic batch write. If the writes cannot all be completed at the
+// intended timestamp, the batch's txn is restored and it's
+// re-executed in full. This allows it to lay down intents and return
+// an appropriate retryable error.
+func (r *Replica) evaluateWriteBatch(
 	ctx context.Context, idKey storagebase.CmdIDKey, ba roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (engine.Batch, enginepb.MVCCStats, *roachpb.BatchResponse, result.Result, *roachpb.Error) {
 	ms := enginepb.MVCCStats{}
@@ -5140,17 +5145,24 @@ func (r *Replica) evaluateTxnWriteBatch(
 		strippedBa.Txn = nil
 		strippedBa.Requests = ba.Requests[1 : len(ba.Requests)-1] // strip begin/end txn reqs
 
+		// If there were no refreshable spans earlier in a serializable
+		// txn (e.g. earlier gets or scans), then the batch can be retried
+		// locally in the event of write too old errors.
+		retryLocally := ba.Txn.IsSerializable() && etArg.CanForwardCommitTimestamp
+
 		// If all writes occurred at the intended timestamp, we've succeeded on the fast path.
-		batch := r.store.Engine().NewBatch()
-		if util.RaceEnabled && spans != nil {
-			batch = spanset.NewBatch(batch, spans)
-		}
 		rec := NewReplicaEvalContext(r, spans)
-		br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, strippedBa)
-		if pErr == nil && ba.Timestamp == br.Timestamp {
+		batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
+			ctx, idKey, rec, &ms, strippedBa, spans, retryLocally,
+		)
+		if pErr == nil && (ba.Timestamp == br.Timestamp || retryLocally) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Writing = true
 			clonedTxn.Status = roachpb.COMMITTED
+			// Make sure the returned txn has the actual commit
+			// timestamp. This can be different if the stripped batch was
+			// executed at the server's hlc now timestamp.
+			clonedTxn.Timestamp = br.Timestamp
 
 			// If the end transaction is not committed, clear the batch and mark the status aborted.
 			if !etArg.Commit {
@@ -5193,13 +5205,43 @@ func (r *Replica) evaluateTxnWriteBatch(
 		log.VEventf(ctx, 2, "1PC execution failed, reverting to regular execution for batch")
 	}
 
-	batch := r.store.Engine().NewBatch()
-	if util.RaceEnabled && spans != nil {
-		batch = spanset.NewBatch(batch, spans)
-	}
 	rec := NewReplicaEvalContext(r, spans)
-	br, result, pErr := evaluateBatch(ctx, idKey, batch, rec, &ms, ba)
-	return batch, ms, br, result, pErr
+	// We can retry locally if this is a non-transactional request.
+	canRetry := ba.Txn == nil
+	batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(ctx, idKey, rec, &ms, ba, spans, canRetry)
+	return batch, ms, br, res, pErr
+}
+
+// evaluateWriteBatchWithLocalRetries invokes evaluateBatch and
+// retries in the event of a WriteTooOldError at a higher timestamp if
+// canRetry is true.
+func (r *Replica) evaluateWriteBatchWithLocalRetries(
+	ctx context.Context,
+	idKey storagebase.CmdIDKey,
+	rec batcheval.EvalContext,
+	ms *enginepb.MVCCStats,
+	ba roachpb.BatchRequest,
+	spans *spanset.SpanSet,
+	canRetry bool,
+) (batch engine.Batch, br *roachpb.BatchResponse, res result.Result, pErr *roachpb.Error) {
+	// Allow one retry.
+	for retries := 0; retries <= 1; retries++ {
+		if batch != nil {
+			batch.Close()
+		}
+		batch = r.store.Engine().NewBatch()
+		if util.RaceEnabled && spans != nil {
+			batch = spanset.NewBatch(batch, spans)
+		}
+		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba)
+		// If we can retry, set a higher batch timestamp and continue.
+		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
+			ba.Timestamp = wtoErr.ActualTimestamp
+			continue
+		}
+		break
+	}
+	return
 }
 
 // isOnePhaseCommit returns true iff the BatchRequest contains all commands in
@@ -5213,9 +5255,6 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}
-	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn); retry {
-		return false
-	}
 	if _, hasBegin := ba.GetArg(roachpb.BeginTransaction); !hasBegin {
 		return false
 	}
@@ -5226,6 +5265,16 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	etArg := arg.(*roachpb.EndTransactionRequest)
 	if isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg) {
 		return false
+	}
+	if retry, reason := isEndTransactionTriggeringRetryError(ba.Txn); retry {
+		// We can still attempt the one phase commit on serializable
+		// retries (caused by our timestamp getting pushed forward due to
+		// the timestamp cache) if the end transaction request specifies
+		// there are no refresh spans.
+		canIgnoreSerializableRetry := ba.Txn.IsSerializable() && etArg.CanForwardCommitTimestamp
+		if reason != roachpb.RETRY_SERIALIZABLE || !canIgnoreSerializableRetry {
+			return false
+		}
 	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC
 }
@@ -5387,6 +5436,9 @@ func evaluateBatch(
 	}
 
 	var result result.Result
+	var writeTooOldErr *roachpb.Error
+	returnWriteTooOldErr := true
+
 	for index, union := range ba.Requests {
 		// Execute the command.
 		args := union.GetInner()
@@ -5414,16 +5466,26 @@ func evaluateBatch(
 
 			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.WriteTooOldError:
-				// We got a WriteTooOldError. In case this is a transactional request,
-				// we want to run the other commands in the batch and let them lay
-				// intents so that other concurrent overlapping transactions are forced
-				// through intent resolution and the chances of this batch succeeding
-				// when it will be retried are increased.
-				if ba.Txn == nil {
-					return nil, result, pErr
+				// We got a WriteTooOldError. We continue on to run all
+				// commands in the batch in order to determine the highest
+				// timestamp for more efficient retries. If the batch is
+				// transactional, we continue to lay down intents so that
+				// other concurrent overlapping transactions are forced
+				// through intent resolution and the chances of this batch
+				// succeeding when it will be retried are increased.
+				if writeTooOldErr != nil {
+					writeTooOldErr.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(tErr.ActualTimestamp)
+				} else {
+					writeTooOldErr = pErr
+					// For transaction, we want to swallow the write too old error
+					// and just move the transaction timestamp forward and set the
+					// WriteTooOld flag. See below for exceptions.
+					if ba.Txn != nil {
+						returnWriteTooOldErr = false
+					}
 				}
 				// Return error early on some requests for serializable isolation.
-				if ba.Txn != nil && ba.Txn.Isolation == enginepb.SERIALIZABLE {
+				if ba.Txn.IsSerializable() {
 					switch args.(type) {
 					case *roachpb.ConditionalPutRequest:
 						// Conditional puts are an exception. Here, it makes less sense to
@@ -5434,23 +5496,22 @@ func evaluateBatch(
 						// already during the transaction, and then, if the cput results in a
 						// condition failed error, report that back to the client instead of a
 						// retryable error.
-						return nil, result, pErr
+						returnWriteTooOldErr = true
 					case *roachpb.IncrementRequest:
 						// Increments are an exception for similar reasons. If we wait until
 						// commit, we'll need a client-side retry, so we return immediately
 						// to see if we can do a txn coord sender retry instead.
-						return nil, result, pErr
+						returnWriteTooOldErr = true
 					}
 				}
-				// On WriteTooOldError, we've written a new value or an intent
-				// at a too-high timestamp and we must forward the batch txn or
-				// timestamp as appropriate so that it's returned.
-				ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
-				ba.Txn.WriteTooOld = true
-				// Clear the WriteTooOldError; we're done processing it by having
-				// moved the batch or txn timestamps forward and set WriteTooOld
-				// if this is a transactional write. The EndTransaction will detect this
-				// pushed timestamp and return a TransactionRetryError.
+				if ba.Txn != nil {
+					ba.Txn.Timestamp.Forward(tErr.ActualTimestamp)
+					ba.Txn.WriteTooOld = true
+				}
+				// Clear pErr; we're done processing it by having moved the
+				// batch or txn timestamps forward and set WriteTooOld if this
+				// is a transactional write. The EndTransaction will detect
+				// this pushed timestamp and return a TransactionRetryError.
 				pErr = nil
 			default:
 				return nil, result, pErr
@@ -5476,13 +5537,19 @@ func evaluateBatch(
 		}
 	}
 
+	// If there's a write too old error, return now that we've found
+	// the high water timestamp for retries.
+	if writeTooOldErr != nil && returnWriteTooOldErr {
+		return nil, result, writeTooOldErr
+	}
+
 	if ba.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = ba.Txn
-	} else {
-		// When non-transactional, use the timestamp field.
-		br.Timestamp.Forward(ba.Timestamp)
 	}
+	// Always update the batch response timestamp field to the timestamp at
+	// which the batch executed.
+	br.Timestamp.Forward(ba.Timestamp)
 
 	return br, result, nil
 }
