@@ -2088,6 +2088,10 @@ type EvalContext struct {
 	Placeholders *PlaceholderInfo
 
 	IVarHelper *IndexedVarHelper
+	// iVarHelperStack is used when we swap out IVarHelpers in order to evaluate
+	// an intermediate expression. This keeps track of those which we need to
+	// restore once we finish evaluating it.
+	iVarHelperStack []*IndexedVarHelper
 
 	// CtxProvider holds the context in which the expression is evaluated. This
 	// will point to the session, which is itself a provider of contexts.
@@ -2150,6 +2154,21 @@ func MakeTestingEvalContext() EvalContext {
 	ctx.SetStmtTimestamp(now)
 	ctx.SetClusterTimestamp(hlc.Timestamp{WallTime: now.Unix()})
 	return ctx
+}
+
+// PushIVarHelper replaces the current IVarHelper with a different one -
+// pushing the current one onto a stack to be replaced later once PopIVarHelper
+// is called.
+func (ctx *EvalContext) PushIVarHelper(i *IndexedVarHelper) {
+	ctx.iVarHelperStack = append(ctx.iVarHelperStack, ctx.IVarHelper)
+	ctx.IVarHelper = i
+}
+
+// PopIVarHelper discards the current IVarHelper on the EvalContext, replacing
+// it with an older one.
+func (ctx *EvalContext) PopIVarHelper() {
+	ctx.IVarHelper = ctx.iVarHelperStack[len(ctx.iVarHelperStack)-1]
+	ctx.iVarHelperStack = ctx.iVarHelperStack[:len(ctx.iVarHelperStack)-1]
 }
 
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext

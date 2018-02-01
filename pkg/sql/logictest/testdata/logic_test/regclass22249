@@ -1,0 +1,18 @@
+# LogicTest: default parallel-stmts
+
+# This still fails in DistSQL, #22264.
+
+statement ok
+CREATE TABLE d (id INT PRIMARY KEY, str STRING);
+
+statement ok
+CREATE TABLE e (id INT PRIMARY KEY, did INT REFERENCES d (id), str STRING);
+
+statement ok
+INSERT INTO d VALUES (4, 'd');
+
+statement ok
+INSERT INTO e VALUES (5, 4, 'd');
+
+statement ok
+SELECT e.str FROM e INNER JOIN d on (e.str::REGCLASS = d.str::REGCLASS);
