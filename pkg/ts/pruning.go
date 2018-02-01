@@ -108,7 +108,7 @@ func (tsdb *DB) findTimeSeries(
 	for iter.Seek(next); ; iter.Seek(next) {
 		if ok, err := iter.Valid(); err != nil {
 			return nil, err
-		} else if !ok || !iter.Less(end) {
+		} else if !ok || !iter.UnsafeKey().Less(end) {
 			break
 		}
 		foundKey := iter.Key().Key

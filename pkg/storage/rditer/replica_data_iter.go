@@ -113,7 +113,7 @@ func (ri *ReplicaDataIterator) Next() {
 // invalid.
 func (ri *ReplicaDataIterator) advance() {
 	for {
-		if ok, _ := ri.Valid(); !ok || ri.iterator.Less(ri.ranges[ri.curIndex].End) {
+		if ok, _ := ri.Valid(); !ok || ri.iterator.UnsafeKey().Less(ri.ranges[ri.curIndex].End) {
 			return
 		}
 		ri.curIndex++

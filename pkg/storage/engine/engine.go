@@ -82,9 +82,6 @@ type Iterator interface {
 	// ValueProto unmarshals the value the iterator is currently
 	// pointing to using a protobuf decoder.
 	ValueProto(msg protoutil.Message) error
-	// Less returns true if the key the iterator is currently positioned at is
-	// less than the specified key.
-	Less(key MVCCKey) bool
 	// ComputeStats scans the underlying engine from start to end keys and
 	// computes stats counters based on the values. This method is used after a
 	// range is split to recompute stats for each subrange. The start key is
