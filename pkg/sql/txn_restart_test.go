@@ -129,7 +129,9 @@ func injectErrors(
 		// injection for some additional randomness.
 		injections := injectionApproaches{
 			{counts: magicVals.restartCounts, errFn: func() error {
-				return roachpb.NewReadWithinUncertaintyIntervalError(hlc.Timestamp{}, hlc.Timestamp{}, nil)
+				// Note we use a retry error that cannot be automatically retried
+				// by the transaction coord sender.
+				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
 				return roachpb.NewTransactionAbortedError()
@@ -595,7 +597,7 @@ BEGIN;
 	// Continue the txn in a new request, which is not retriable.
 	_, err := sqlDB.Exec("INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
 	if !testutils.IsError(
-		err, "encountered previous write with future timestamp") {
+		err, "RETRY_POSSIBLE_REPLAY") {
 		t.Errorf("didn't get expected injected error. Got: %v", err)
 	}
 }
@@ -908,7 +910,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			magicVals: createFilterVals(
 				map[string]int{"boulanger": 2}, // restartCounts
 				nil),
-			expectedErr: ".*encountered previous write with future timestamp.*",
+			expectedErr: ".*RETRY_POSSIBLE_REPLAY.*",
 		},
 		{
 			magicVals: createFilterVals(
@@ -1299,7 +1301,9 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 	var restartDone int32
 	cleanupFilter := cmdFilters.AppendFilter(
 		func(args storagebase.FilterArgs) *roachpb.Error {
-			if atomic.LoadInt32(&restartDone) > 0 {
+			// Allow two restarts so that the auto retry on the first uncertainty
+			// interval error also fails.
+			if atomic.LoadInt32(&restartDone) > 1 {
 				return nil
 			}
 
@@ -1338,8 +1342,8 @@ SELECT * from t.test WHERE k = 'test_key';
 	if u := atomic.LoadInt32(&clockUpdate); u != 1 {
 		t.Errorf("expected exacltly one clock update, but got %d", u)
 	}
-	if u := atomic.LoadInt32(&restartDone); u != 1 {
-		t.Errorf("expected exactly one restart, but got %d", u)
+	if u := atomic.LoadInt32(&restartDone); u != 2 {
+		t.Errorf("expected exactly two restarts, but got %d", u)
 	}
 }
 
@@ -1636,100 +1640,6 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// Test that a serializable txn that has pushed its timestamp is detected and
-// retried automatically while the SQL txn can still be retried automatically.
-// It also tests that, once the SQL txn can no longer be retried automatically,
-// the pushed timestamp is no longer detected - the txn is left alone to run
-// until completion and lay down its intents, and only finds out that it can't
-// commit at COMMIT time.
-func TestPushedTxnDetection(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	const marker = "marker"
-	var injectRead int64
-	var sqlDB *gosql.DB
-	var s serverutils.TestServerInterface
-	params, _ := tests.CreateTestServerParams()
-	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		StatementFilter: func(ctx context.Context, stmt string, r sql.ResultsWriter, err error) error {
-			if atomic.LoadInt64(&injectRead) == 0 {
-				return nil
-			}
-			if strings.Contains(stmt, marker) {
-				// Outside of the transaction, do a read. This will conflict with the
-				// next writer.
-				if _, err := sqlDB.Exec(`SELECT COUNT(1) FROM t.test`); err != nil {
-					t.Error(err)
-				}
-				// Only do the filter once, to allow retries to succeed.
-				atomic.StoreInt64(&injectRead, 0)
-			}
-			return nil
-		},
-	}
-	s, sqlDB, _ = serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY);
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Two tests, one where the txn is pushed while the transaction can still be retried,
-	// one where it's pushed too late for auto-retries. moveOutOfAutoRetry dictates whether
-	// we move the transaction from state AutoRetry to Open before starting the batch of statements
-	// that will encounter the push. When moveOutOfAutoRetry is set, we expect to get a retriable error.
-	// When it's not, we expect to see no error because the transaction is retried automatically.
-	for i, moveOutOfAutoRetry := range []bool{false, true} {
-		t.Run(fmt.Sprintf("%t", moveOutOfAutoRetry),
-			func(t *testing.T) {
-				// Start our transaction and get a timestamp.
-				tx, err := sqlDB.Begin()
-				if err != nil {
-					t.Fatal(err)
-				}
-
-				if moveOutOfAutoRetry {
-					if _, err := tx.Exec(`SELECT 1`); err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				atomic.StoreInt64(&injectRead, 1)
-
-				// Do a couple of operations on the txn, in the same batch:
-				//   - a KV operation to make sure the txn is properly initialized and
-				//     gets a timestamp.
-				// 	   TODO(andrei): This can go once #16908 is resolved, and instead of
-				// 	   a statement filter, we can do the read in the main routine, after
-				// 	   the BEGIN.
-				//   - a marker statement recognized by the filter.
-				//   - a write that will conflict with the read done by the filter and
-				//     will cause the txn's timestamp to be pushed.
-				_, err = tx.Exec(
-					fmt.Sprintf(
-						`SHOW DATABASES; SELECT '%s'; INSERT INTO t.test VALUES (%d)`,
-						marker, i))
-				if moveOutOfAutoRetry {
-					if !isRetryableErr(err) {
-						t.Fatalf("expected retryable error, got: %v", err)
-					}
-					if err := tx.Rollback(); err != nil {
-						t.Fatal(err)
-					}
-				} else {
-					if err != nil {
-						t.Fatal(err)
-					}
-					if err := tx.Commit(); err != nil {
-						t.Fatal(err)
-					}
-				}
-			})
 	}
 }
 

@@ -24,11 +24,19 @@ SELECT * FROM t
 
 user testuser
 
+# A select alone would not be enough to cause a restart; we also write
+# a key at a later timestamp than the transaction's, which will cause
+# the transaction to retry at the clint level, after trying to update
+# previously read spans.
+statement ok
+INSERT INTO t(a) VALUES (2)
+
 # Touch all (relevant) keys with a timestamp ahead of the Transaction. This
-# means that its future attempts to write increase its timestamp.
+# means that its future attempts to write will increase its timestamp.
 query I
 SELECT * FROM t
 ----
+2
 
 user root
 
@@ -49,3 +57,4 @@ ROLLBACK TO SAVEPOINT cockroach_restart
 query I
 SELECT * FROM t
 ----
+2

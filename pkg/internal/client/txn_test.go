@@ -366,7 +366,7 @@ func TestBeginTransactionErrorIndex(t *testing.T) {
 			t.Fatalf("unexpected error %s", pErr)
 		}
 		if pErr.Index != nil {
-			t.Errorf("error index must not be set, but got %s", pErr.Index)
+			t.Errorf("error index must not be set, but got %d", pErr.Index)
 		}
 		return err
 	})

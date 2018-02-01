@@ -1425,6 +1425,14 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* release_epoch_zero_timestamp();
   void set_allocated_epoch_zero_timestamp(::cockroach::util::hlc::Timestamp* epoch_zero_timestamp);
 
+  bool has_refreshed_timestamp() const;
+  void clear_refreshed_timestamp();
+  static const int kRefreshedTimestampFieldNumber = 15;
+  const ::cockroach::util::hlc::Timestamp& refreshed_timestamp() const;
+  ::cockroach::util::hlc::Timestamp* mutable_refreshed_timestamp();
+  ::cockroach::util::hlc::Timestamp* release_refreshed_timestamp();
+  void set_allocated_refreshed_timestamp(::cockroach::util::hlc::Timestamp* refreshed_timestamp);
+
   // .cockroach.roachpb.TransactionStatus status = 4;
   void clear_status();
   static const int kStatusFieldNumber = 4;
@@ -1461,6 +1469,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* orig_timestamp_;
   ::cockroach::util::hlc::Timestamp* max_timestamp_;
   ::cockroach::util::hlc::Timestamp* epoch_zero_timestamp_;
+  ::cockroach::util::hlc::Timestamp* refreshed_timestamp_;
   int status_;
   bool writing_;
   bool write_too_old_;
@@ -1937,6 +1946,28 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
       intents() const;
 
+  int refresh_reads_size() const;
+  void clear_refresh_reads();
+  static const int kRefreshReadsFieldNumber = 4;
+  const ::cockroach::roachpb::Span& refresh_reads(int index) const;
+  ::cockroach::roachpb::Span* mutable_refresh_reads(int index);
+  ::cockroach::roachpb::Span* add_refresh_reads();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+      mutable_refresh_reads();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      refresh_reads() const;
+
+  int refresh_writes_size() const;
+  void clear_refresh_writes();
+  static const int kRefreshWritesFieldNumber = 5;
+  const ::cockroach::roachpb::Span& refresh_writes(int index) const;
+  ::cockroach::roachpb::Span* mutable_refresh_writes(int index);
+  ::cockroach::roachpb::Span* add_refresh_writes();
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+      mutable_refresh_writes();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+      refresh_writes() const;
+
   bool has_txn() const;
   void clear_txn();
   static const int kTxnFieldNumber = 1;
@@ -1951,13 +1982,22 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::int32 command_count() const;
   void set_command_count(::google::protobuf::int32 value);
 
+  // bool refresh_valid = 6;
+  void clear_refresh_valid();
+  static const int kRefreshValidFieldNumber = 6;
+  bool refresh_valid() const;
+  void set_refresh_valid(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.TxnCoordMeta)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_reads_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_writes_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 command_count_;
+  bool refresh_valid_;
   mutable int _cached_size_;
   friend struct protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -3118,6 +3158,45 @@ inline void Transaction::set_allocated_max_timestamp(::cockroach::util::hlc::Tim
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.max_timestamp)
 }
 
+inline bool Transaction::has_refreshed_timestamp() const {
+  return this != internal_default_instance() && refreshed_timestamp_ != NULL;
+}
+inline void Transaction::clear_refreshed_timestamp() {
+  if (GetArenaNoVirtual() == NULL && refreshed_timestamp_ != NULL) delete refreshed_timestamp_;
+  refreshed_timestamp_ = NULL;
+}
+inline const ::cockroach::util::hlc::Timestamp& Transaction::refreshed_timestamp() const {
+  const ::cockroach::util::hlc::Timestamp* p = refreshed_timestamp_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.refreshed_timestamp)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::util::hlc::Timestamp*>(
+      &::cockroach::util::hlc::_Timestamp_default_instance_);
+}
+inline ::cockroach::util::hlc::Timestamp* Transaction::mutable_refreshed_timestamp() {
+  
+  if (refreshed_timestamp_ == NULL) {
+    refreshed_timestamp_ = new ::cockroach::util::hlc::Timestamp;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.refreshed_timestamp)
+  return refreshed_timestamp_;
+}
+inline ::cockroach::util::hlc::Timestamp* Transaction::release_refreshed_timestamp() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.refreshed_timestamp)
+  
+  ::cockroach::util::hlc::Timestamp* temp = refreshed_timestamp_;
+  refreshed_timestamp_ = NULL;
+  return temp;
+}
+inline void Transaction::set_allocated_refreshed_timestamp(::cockroach::util::hlc::Timestamp* refreshed_timestamp) {
+  delete refreshed_timestamp_;
+  refreshed_timestamp_ = refreshed_timestamp;
+  if (refreshed_timestamp) {
+    
+  } else {
+    
+  }
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.refreshed_timestamp)
+}
+
 inline int Transaction::observed_timestamps_size() const {
   return observed_timestamps_.size();
 }
@@ -3772,6 +3851,78 @@ inline void TxnCoordMeta::set_command_count(::google::protobuf::int32 value) {
   
   command_count_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.command_count)
+}
+
+inline int TxnCoordMeta::refresh_reads_size() const {
+  return refresh_reads_.size();
+}
+inline void TxnCoordMeta::clear_refresh_reads() {
+  refresh_reads_.Clear();
+}
+inline const ::cockroach::roachpb::Span& TxnCoordMeta::refresh_reads(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.refresh_reads)
+  return refresh_reads_.Get(index);
+}
+inline ::cockroach::roachpb::Span* TxnCoordMeta::mutable_refresh_reads(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.refresh_reads)
+  return refresh_reads_.Mutable(index);
+}
+inline ::cockroach::roachpb::Span* TxnCoordMeta::add_refresh_reads() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.refresh_reads)
+  return refresh_reads_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+TxnCoordMeta::mutable_refresh_reads() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.refresh_reads)
+  return &refresh_reads_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+TxnCoordMeta::refresh_reads() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.refresh_reads)
+  return refresh_reads_;
+}
+
+inline int TxnCoordMeta::refresh_writes_size() const {
+  return refresh_writes_.size();
+}
+inline void TxnCoordMeta::clear_refresh_writes() {
+  refresh_writes_.Clear();
+}
+inline const ::cockroach::roachpb::Span& TxnCoordMeta::refresh_writes(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.refresh_writes)
+  return refresh_writes_.Get(index);
+}
+inline ::cockroach::roachpb::Span* TxnCoordMeta::mutable_refresh_writes(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.refresh_writes)
+  return refresh_writes_.Mutable(index);
+}
+inline ::cockroach::roachpb::Span* TxnCoordMeta::add_refresh_writes() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.refresh_writes)
+  return refresh_writes_.Add();
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
+TxnCoordMeta::mutable_refresh_writes() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.refresh_writes)
+  return &refresh_writes_;
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
+TxnCoordMeta::refresh_writes() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.refresh_writes)
+  return refresh_writes_;
+}
+
+// bool refresh_valid = 6;
+inline void TxnCoordMeta::clear_refresh_valid() {
+  refresh_valid_ = false;
+}
+inline bool TxnCoordMeta::refresh_valid() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.refresh_valid)
+  return refresh_valid_;
+}
+inline void TxnCoordMeta::set_refresh_valid(bool value) {
+  
+  refresh_valid_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.refresh_valid)
 }
 
 #ifdef __GNUC__

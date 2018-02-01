@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -53,6 +54,15 @@ const (
 var maxTxnIntentsBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_intents_bytes",
 	"maximum number of bytes used to track write intents in transactions",
+	256*1000,
+)
+
+// maxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
+// on the coordinator during the lifetime of a transaction. Refresh spans
+// are used for SERIALIZABLE transactions to avoid client restarts.
+var maxTxnRefreshSpansBytes = settings.RegisterIntSetting(
+	"kv.transaction.max_refresh_spans_bytes",
+	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,
 )
 
@@ -98,6 +108,10 @@ type TxnCoordSender struct {
 		// intentsSizeBytes is the size in bytes of the intent spans in the
 		// meta, maintained to efficiently check the threshold.
 		intentsSizeBytes int64
+		// refreshSpansBytes is the total size in bytes of the spans
+		// encountered during this transaction that need to be refreshed to
+		// avoid serializable restart.
+		refreshSpansBytes int64
 		// lastUpdateNanos is the latest wall time in nanos the client sent
 		// transaction operations to this coordinator. Accessed and updated
 		// atomically.
@@ -130,11 +144,12 @@ var _ client.TxnSender = &TxnCoordSender{}
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts     *metric.CounterWithRates
-	Commits    *metric.CounterWithRates
-	Commits1PC *metric.CounterWithRates // Commits which finished in a single phase
-	Abandons   *metric.CounterWithRates
-	Durations  *metric.Histogram
+	Aborts      *metric.CounterWithRates
+	Commits     *metric.CounterWithRates
+	Commits1PC  *metric.CounterWithRates // Commits which finished in a single phase
+	AutoRetries *metric.CounterWithRates // Auto retries which avoid client-side restarts
+	Abandons    *metric.CounterWithRates
+	Durations   *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
 	Restarts *metric.Histogram
@@ -156,6 +171,9 @@ var (
 	metaCommits1PCRates = metric.Metadata{
 		Name: "txn.commits1PC",
 		Help: "Number of committed one-phase KV transactions"}
+	metaAutoRetriesRates = metric.Metadata{
+		Name: "txn.autoretries",
+		Help: "Number of automatic retries to avoid serializable restarts"}
 	metaAbandonsRates = metric.Metadata{
 		Name: "txn.abandons",
 		Help: "Number of abandoned KV transactions"}
@@ -186,6 +204,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Aborts:                 metric.NewCounterWithRates(metaAbortsRates),
 		Commits:                metric.NewCounterWithRates(metaCommitsRates),
 		Commits1PC:             metric.NewCounterWithRates(metaCommits1PCRates),
+		AutoRetries:            metric.NewCounterWithRates(metaAutoRetriesRates),
 		Abandons:               metric.NewCounterWithRates(metaAbandonsRates),
 		Durations:              metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:               metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
@@ -243,10 +262,17 @@ func NewTxnCoordSenderFactory(
 
 // New is part of the TxnCoordSenderFactory interface.
 func (tcf *TxnCoordSenderFactory) New(typ client.TxnType) client.TxnSender {
-	return &TxnCoordSender{
+	tcs := &TxnCoordSender{
 		typ: typ,
 		TxnCoordSenderFactory: tcf,
 	}
+	tcs.mu.meta.RefreshValid = true
+	return tcs
+}
+
+// Metrics returns the factory's metrics struct.
+func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
+	return tcf.metrics
 }
 
 // GetMeta is part of the client.TxnSender interface.
@@ -257,6 +283,10 @@ func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
 	meta := tc.mu.meta
 	meta.Txn = tc.mu.meta.Txn.Clone()
 	meta.Intents = append([]roachpb.Span(nil), tc.mu.meta.Intents...)
+	if tc.mu.meta.RefreshValid {
+		meta.RefreshReads = append([]roachpb.Span(nil), tc.mu.meta.RefreshReads...)
+		meta.RefreshWrites = append([]roachpb.Span(nil), tc.mu.meta.RefreshWrites...)
+	}
 	return meta
 }
 
@@ -265,7 +295,7 @@ func (tc *TxnCoordSender) AugmentMeta(meta roachpb.TxnCoordMeta) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	// Sanity check: don't combine if the meta is for a different txn ID.
-	if tc.mu.meta.Txn.ID != meta.Txn.ID {
+	if tc.mu.meta.Txn.ID != (uuid.UUID{}) && tc.mu.meta.Txn.ID != meta.Txn.ID {
 		return
 	}
 	tc.mu.meta.Txn.Update(&meta.Txn)
@@ -273,12 +303,32 @@ func (tc *TxnCoordSender) AugmentMeta(meta roachpb.TxnCoordMeta) {
 	tc.mu.meta.Intents, _ = roachpb.MergeSpans(
 		append(append([]roachpb.Span(nil), tc.mu.meta.Intents...), meta.Intents...),
 	)
+	if !meta.RefreshValid {
+		tc.mu.meta.RefreshValid = false
+		tc.mu.meta.RefreshReads = nil
+		tc.mu.meta.RefreshWrites = nil
+	} else if tc.mu.meta.RefreshValid {
+		tc.mu.meta.RefreshReads, _ = roachpb.MergeSpans(
+			append(append([]roachpb.Span(nil), tc.mu.meta.RefreshReads...), meta.RefreshReads...),
+		)
+		tc.mu.meta.RefreshWrites, _ = roachpb.MergeSpans(
+			append(append([]roachpb.Span(nil), tc.mu.meta.RefreshWrites...), meta.RefreshWrites...),
+		)
+	}
 	tc.mu.meta.CommandCount += meta.CommandCount
 
 	// Recompute the size of the intents.
 	tc.mu.intentsSizeBytes = 0
 	for _, i := range tc.mu.meta.Intents {
 		tc.mu.intentsSizeBytes += int64(len(i.Key) + len(i.EndKey))
+	}
+	// Recompute the size of the refreshes.
+	tc.mu.refreshSpansBytes = 0
+	for _, u := range tc.mu.meta.RefreshReads {
+		tc.mu.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
+	}
+	for _, u := range tc.mu.meta.RefreshWrites {
+		tc.mu.refreshSpansBytes += int64(len(u.Key) + len(u.EndKey))
 	}
 }
 
@@ -315,6 +365,11 @@ func (tc *TxnCoordSender) Send(
 	startNS := tc.clock.PhysicalNow()
 
 	if ba.Txn != nil {
+		ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(ba.Txn.ID))
+		if log.V(2) {
+			ctx = log.WithLogTag(ctx, "ts", ba.Txn.Timestamp)
+		}
+
 		// If this request is part of a transaction...
 		if err := tc.validateTxnForBatch(ctx, &ba); err != nil {
 			return nil, roachpb.NewError(err)
@@ -322,8 +377,7 @@ func (tc *TxnCoordSender) Send(
 
 		txnID := ba.Txn.ID
 
-		// Associate the txnID with the trace. We need to do this after the
-		// maybeBeginTxn call.
+		// Associate the txnID with the trace.
 		txnIDStr := txnID.String()
 		sp.SetBaggageItem("txnID", txnIDStr)
 
@@ -350,6 +404,7 @@ func (tc *TxnCoordSender) Send(
 		if pErr := func() *roachpb.Error {
 			tc.mu.Lock()
 			defer tc.mu.Unlock()
+
 			if tc.mu.meta.Txn.ID == (uuid.UUID{}) {
 				// Ensure that the txn is bound.
 				tc.mu.meta.Txn = ba.Txn.Clone()
@@ -371,7 +426,7 @@ func (tc *TxnCoordSender) Send(
 
 			// Populate et.IntentSpans, taking into account both any existing
 			// and new writes, and taking care to perform proper deduplication.
-			et.IntentSpans = tc.mu.meta.Intents
+			et.IntentSpans = append([]roachpb.Span(nil), tc.mu.meta.Intents...)
 			intentsSizeBytes := tc.mu.intentsSizeBytes
 			// Defensively set distinctSpans to false if we had any previous
 			// writes in this transaction. This effectively limits the distinct
@@ -383,17 +438,10 @@ func (tc *TxnCoordSender) Send(
 			// affect queries such as `DELETE FROM my.table LIMIT 10` when
 			// executed as a 1PC transaction. e.g.: a (BeginTransaction,
 			// DeleteRange, EndTransaction) batch.
-			ba.IntentSpanIterate(nil, func(key, endKey roachpb.Key) {
-				et.IntentSpans = append(et.IntentSpans, roachpb.Span{
-					Key:    key,
-					EndKey: endKey,
-				})
-				intentsSizeBytes += int64(len(key) + len(endKey))
+			ba.IntentSpanIterate(nil, func(span roachpb.Span) {
+				et.IntentSpans = append(et.IntentSpans, span)
+				intentsSizeBytes += int64(len(span.Key) + len(span.EndKey))
 			})
-			// The request might already be used by an outgoing goroutine,
-			// so we can't safely mutate anything in-place (as
-			// maybeCondenseIntentSpans and MergeSpans do).
-			et.IntentSpans = append([]roachpb.Span(nil), et.IntentSpans...)
 			var err error
 			if et.IntentSpans, intentsSizeBytes, err = tc.maybeCondenseIntentSpans(
 				ctx, et.IntentSpans, intentsSizeBytes,
@@ -421,24 +469,47 @@ func (tc *TxnCoordSender) Send(
 
 		if hasET && log.V(1) {
 			for _, intent := range et.IntentSpans {
-				log.Eventf(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+				log.VEventf(ctx, 3, "intent: [%s,%s)", intent.Key, intent.EndKey)
 			}
 		}
 	}
 
-	// Send the command through wrapped sender, taking appropriate measures
-	// on error.
+	// Send the command through wrapped sender, handling retry
+	// opportunities in case of error.
 	var br *roachpb.BatchResponse
 	{
 		var pErr *roachpb.Error
-		br, pErr = tc.wrapped.Send(ctx, ba)
+		if br, pErr = tc.wrapped.Send(ctx, ba); pErr != nil {
+			br, pErr = tc.maybeRetrySend(ctx, &ba, br, pErr)
+		}
 
-		if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); ok {
-			br, pErr = tc.resendWithTxn(ctx, ba)
+		// Iterate over and aggregate refresh spans in the requests,
+		// qualified by possible resume spans in the responses, if the txn
+		// has serializable isolation and we haven't yet exceeded the max
+		// read key bytes.
+		if pErr == nil && ba.Txn != nil && ba.Txn.Isolation == enginepb.SERIALIZABLE {
+			tc.mu.Lock()
+			if tc.mu.meta.RefreshValid {
+				if !tc.appendRefreshSpansLocked(ctx, ba, br) {
+					// The refresh spans are out of date, return a generic client-side retry error.
+					pErr = roachpb.NewErrorWithTxn(
+						roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), &tc.mu.meta.Txn,
+					)
+				} else if tc.mu.refreshSpansBytes > maxTxnRefreshSpansBytes.Get(&tc.st.SV) {
+					// Verify and enforce the size in bytes of all read-only spans
+					// doesn't exceed the max threshold.
+					log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
+					tc.mu.meta.RefreshReads = nil
+					tc.mu.meta.RefreshWrites = nil
+					tc.mu.meta.RefreshValid = false
+					tc.mu.refreshSpansBytes = 0
+				}
+			}
+			tc.mu.Unlock()
 		}
 
 		if pErr = tc.updateState(ctx, startNS, ba, br, pErr); pErr != nil {
-			log.Eventf(ctx, "error: %s", pErr)
+			log.VEventf(ctx, 2, "error: %s", pErr)
 			return nil, pErr
 		}
 	}
@@ -483,6 +554,203 @@ func (tc *TxnCoordSender) Send(
 	return br, nil
 }
 
+// maybeRetrySend handles two retry cases at the txn coord sender level.
+//
+// 1) If the batch requires a transaction, it's wrapped in a new
+//    transaction and resent.
+// 2) If the error is a retry condition which might be retried directly
+//    if the spans collected during the transaction can be refreshed,
+//    proving that the transaction can be committed at a higher timestamp.
+func (tc *TxnCoordSender) maybeRetrySend(
+	ctx context.Context, ba *roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+
+	if _, ok := pErr.GetDetail().(*roachpb.OpRequiresTxnError); ok {
+		return tc.resendWithTxn(ctx, *ba)
+	}
+
+	// With mixed success, we can't attempt a retry without potentially
+	// succeeding at the same conditional put or increment request
+	// twice; return the wrapped error instead. Because the dist sender
+	// splits up batches to send to multiple ranges in parallel, and
+	// then combines the results, partial success makes it very
+	// difficult to determine what can be retried.
+	if aPSErr, ok := pErr.GetDetail().(*roachpb.MixedSuccessError); ok {
+		log.VEventf(ctx, 2, "got partial success; cannot retry %s (pErr=%s)", ba, aPSErr.Wrapped)
+		return nil, aPSErr.Wrapped
+	}
+
+	// Check for an error which can be retried after updating spans.
+	//
+	// Note that we can only restart on root transactions because those are the
+	// only places where we have all of the refresh spans. If this is a leaf, as
+	// in a distributed sql flow, we need to propagate the error to the root for
+	// an epoch restart.
+	canRetry, retryTxn := roachpb.CanTransactionRetryAtRefreshedTimestamp(ctx, pErr)
+	if !canRetry || tc.typ == client.LeafTxn ||
+		!tc.st.Version.IsMinSupported(cluster.VersionTxnSpanRefresh) {
+		return nil, pErr
+	}
+
+	// If a prefix of the batch was executed, collect refresh spans for
+	// that executed portion, and retry the remainder. The canonical
+	// case is a batch split between everything up to but not including
+	// the EndTransaction. Requests up to the EndTransaction succeed,
+	// but the EndTransaction fails with a retryable error. We want to
+	// retry only the EndTransaction.
+	ba.UpdateTxn(retryTxn)
+	retryBa := *ba
+	if br != nil {
+		doneBa := *ba
+		doneBa.Requests = ba.Requests[:len(br.Responses)]
+		log.VEventf(ctx, 2, "collecting refresh spans after partial batch execution of %s", doneBa)
+		tc.mu.Lock()
+		if !tc.appendRefreshSpansLocked(ctx, doneBa, br) {
+			tc.mu.Unlock()
+			return nil, pErr
+		}
+		tc.mu.meta.Txn.RefreshedTimestamp.Forward(retryTxn.RefreshedTimestamp)
+		tc.mu.Unlock()
+		retryBa.Requests = ba.Requests[len(br.Responses):]
+	}
+
+	log.VEventf(ctx, 2, "retrying %s at refreshed timestamp %s because of %s",
+		retryBa, retryTxn.RefreshedTimestamp, pErr)
+
+	// Try updating the txn spans so we can retry.
+	if ok := tc.tryUpdatingTxnSpans(ctx, retryTxn); !ok {
+		return nil, pErr
+	}
+
+	// We've refreshed all of the read spans successfully and set
+	// newBa.Txn.RefreshedTimestamp to the current timestamp. Submit the
+	// batch again.
+	retryBr, retryErr := tc.wrapped.Send(ctx, retryBa)
+	if retryErr != nil {
+		log.VEventf(ctx, 2, "retry failed with %s", retryErr)
+		return nil, retryErr
+	}
+	log.VEventf(ctx, 2, "retry successful @%s", retryBa.Txn.Timestamp)
+
+	// On success, combine responses if applicable and set error to nil.
+	if br != nil {
+		br.Responses = append(br.Responses, retryBr.Responses...)
+		retryBr.CollectedSpans = append(br.CollectedSpans, retryBr.CollectedSpans...)
+		br.BatchResponse_Header = retryBr.BatchResponse_Header
+	} else {
+		br = retryBr
+	}
+
+	tc.metrics.AutoRetries.Inc(1)
+
+	return br, nil
+}
+
+// appendRefreshSpansLocked appends refresh spans from the supplied batch
+// request, qualified by the batch response where appropriate. Returns
+// whether the batch transaction's refreshed timestamp is greater or equal
+// to the max refreshed timestamp used so far with this sender.
+//
+// The batch refreshed timestamp and the max refreshed timestamp for
+// the sender can get out of step because the txn coord sender can be
+// used concurrently (i.e. when using the "RETURNING NOTHING"
+// syntax). What we don't want is to append refreshes which are
+// already too old compared to the max refreshed timestamp that's already
+// in use with this sender. In that case the caller should return an
+// error for client-side retry.
+func (tc *TxnCoordSender) appendRefreshSpansLocked(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+) bool {
+	origTS := ba.Txn.OrigTimestamp
+	origTS.Forward(ba.Txn.RefreshedTimestamp)
+	if origTS.Less(tc.mu.meta.Txn.RefreshedTimestamp) {
+		log.VEventf(ctx, 2, "txn orig timestamp %s < sender refreshed timestamp %s",
+			origTS, tc.mu.meta.Txn.RefreshedTimestamp)
+		return false
+	}
+	ba.RefreshSpanIterate(br, func(span roachpb.Span, write bool) {
+		log.VEventf(ctx, 2, "refresh: %s write=%t", span, write)
+		if write {
+			tc.mu.meta.RefreshWrites = append(tc.mu.meta.RefreshWrites, span)
+		} else {
+			tc.mu.meta.RefreshReads = append(tc.mu.meta.RefreshReads, span)
+		}
+		tc.mu.refreshSpansBytes += int64(len(span.Key) + len(span.EndKey))
+	})
+	return true
+}
+
+// tryUpdatingTxnSpans sends Refresh and RefreshRange commands to all
+// spans read during the transaction to ensure that no writes were
+// written more recently than the original transaction timestamp. All
+// implicated timestamp caches are updated with the final transaction
+// timestamp. On success, returns true and an updated BatchRequest
+// containing a transaction whose original timestamp and timestamp
+// have been set to the same value.
+func (tc *TxnCoordSender) tryUpdatingTxnSpans(
+	ctx context.Context, refreshTxn *roachpb.Transaction,
+) bool {
+	tc.mu.Lock()
+	refreshReads := tc.mu.meta.RefreshReads
+	refreshWrites := tc.mu.meta.RefreshWrites
+	refreshValid := tc.mu.meta.RefreshValid
+	tc.mu.Unlock()
+
+	if !refreshValid {
+		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")
+		return false
+	} else if len(refreshReads) == 0 && len(refreshWrites) == 0 {
+		log.VEvent(ctx, 2, "there are no txn spans to refresh")
+		return true
+	}
+
+	// Refresh all spans (merge first).
+	refreshSpanBa := roachpb.BatchRequest{}
+	refreshSpanBa.Txn = refreshTxn
+	addRefreshes := func(refreshes []roachpb.Span, write bool) {
+		for _, u := range refreshes {
+			var req roachpb.Request
+			if len(u.EndKey) == 0 {
+				req = &roachpb.RefreshRequest{
+					Span:  u,
+					Write: write,
+				}
+			} else {
+				req = &roachpb.RefreshRangeRequest{
+					Span:  u,
+					Write: write,
+				}
+			}
+			refreshSpanBa.Add(req)
+			log.VEventf(ctx, 2, "updating span %s @%s - @%s to avoid serializable restart",
+				req.Header(), refreshTxn.OrigTimestamp, refreshTxn.Timestamp)
+		}
+	}
+	addRefreshes(refreshReads, false)
+	addRefreshes(refreshWrites, true)
+	if _, batchErr := tc.wrapped.Send(ctx, refreshSpanBa); batchErr != nil {
+		log.VEventf(ctx, 2, "failed to refresh txn spans (%s); propagating original retry error", batchErr)
+		return false
+	}
+
+	return true
+}
+
+func (tc *TxnCoordSender) appendAndCondenseIntentsLocked(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+) {
+	ba.IntentSpanIterate(br, func(span roachpb.Span) {
+		tc.mu.meta.Intents = append(tc.mu.meta.Intents, span)
+		tc.mu.intentsSizeBytes += int64(len(span.Key) + len(span.EndKey))
+	})
+	if condensedIntents, condensedIntentsSize, err :=
+		tc.maybeCondenseIntentSpans(ctx, tc.mu.meta.Intents, tc.mu.intentsSizeBytes); err != nil {
+		log.VEventf(ctx, 2, "failed to condense intent spans (%s); skipping", err)
+	} else {
+		tc.mu.meta.Intents, tc.mu.intentsSizeBytes = condensedIntents, condensedIntentsSize
+	}
+}
+
 type spanBucket struct {
 	rangeID roachpb.RangeID
 	size    int64
@@ -493,7 +761,8 @@ type spanBucket struct {
 // requests which can consume excessive memory at evaluation time and
 // in the txn coordinator sender itself. Spans are condensed based on
 // current range boundaries. Returns the condensed set of spans and
-// the new total spans size.
+// the new total spans size. Note that errors can be returned if the
+// range iterator fails.
 func (tc *TxnCoordSender) maybeCondenseIntentSpans(
 	ctx context.Context, spans []roachpb.Span, spansSize int64,
 ) ([]roachpb.Span, int64, error) {
@@ -647,7 +916,7 @@ func (tc *TxnCoordSender) cleanupTxnLocked(ctx context.Context, state txnCoordSt
 		return
 	}
 	// Trigger heartbeat shutdown.
-	log.Event(ctx, "coordinator stops")
+	log.VEvent(ctx, 2, "coordinator stops")
 	close(tc.mu.txnEnd)
 	tc.mu.txnEnd = nil
 }
@@ -720,7 +989,7 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 			// responsible for timing out transactions. If ctx.Done() is not nil, then
 			// then heartbeat loop ignores the timeout check and this case is
 			// responsible for client timeouts.
-			log.Eventf(ctx, "transaction heartbeat stopped: %s", ctx.Err())
+			log.VEventf(ctx, 2, "transaction heartbeat stopped: %s", ctx.Err())
 			tc.tryAsyncAbort(ctx)
 			return
 		case <-tc.stopper.ShouldQuiesce():
@@ -816,10 +1085,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	// any more; the client will be trusted to always send an EndRequest when it's
 	// done with a transaction.
 	if ctx.Done() == nil && hasAbandoned {
-		if log.V(1) {
-			log.Infof(ctx, "transaction %s abandoned; stopping heartbeat", txn)
-		}
-		log.Eventf(ctx, "transaction abandoned heartbeat stopped")
+		log.VEvent(ctx, 2, "transaction abandoned heartbeat stopped")
 		tc.tryAsyncAbort(ctx)
 		return false
 	}
@@ -833,7 +1099,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	hb.Key = txn.Key
 	ba.Add(hb)
 
-	log.Event(ctx, "heartbeat")
+	log.VEvent(ctx, 2, "heartbeat")
 	br, pErr := tc.wrapped.Send(ctx, ba)
 
 	// Correctness mandates that when we can't heartbeat the transaction, we
@@ -841,7 +1107,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 	// in the case of an ABORTED transaction, but event if we can't reach the
 	// transaction record at all, we have to assume it's been aborted as well.
 	if pErr != nil {
-		log.Eventf(ctx, "heartbeat failed to %s: %s", txn, pErr)
+		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
 		if errTxn := pErr.GetTxn(); errTxn != nil {
 			tc.mu.Lock()
 			tc.mu.meta.Txn.Update(errTxn)
@@ -850,7 +1116,7 @@ func (tc *TxnCoordSender) heartbeat(ctx context.Context) bool {
 		// We're not going to let the client carry out additional requests, so
 		// try to clean up if the known txn disposition remains PENDING.
 		if txn.Status == roachpb.PENDING {
-			log.Eventf(ctx, "transaction heartbeat failed: %s", pErr)
+			log.VEventf(ctx, 2, "transaction heartbeat failed: %s", pErr)
 			tc.tryAsyncAbort(ctx)
 		}
 		// Stop the heartbeat.
@@ -925,9 +1191,15 @@ func (tc *TxnCoordSender) updateState(
 			}
 			newTxn = roachpb.PrepareTransactionForRetry(ctx, pErr, ba.UserPriority, tc.clock)
 
-			// Reset the statement count as this is a retryable txn error.
+			// Reset state as this is a retryable txn error. Note that
+			// intents are tracked cumulatively across epochs on retries.
 			tc.mu.Lock()
+			log.VEventf(ctx, 2, "resetting epoch-based coordinator state on retry")
 			tc.mu.meta.CommandCount = 0
+			tc.mu.meta.RefreshReads = nil
+			tc.mu.meta.RefreshWrites = nil
+			tc.mu.meta.RefreshValid = true
+			tc.mu.refreshSpansBytes = 0
 			tc.mu.Unlock()
 
 			// Pass a HandledRetryableTxnError up to the next layer.
@@ -973,6 +1245,11 @@ func (tc *TxnCoordSender) updateState(
 	// the updated transaction record to be sent along with the reply.
 	// The transaction metadata is created with the first writing operation.
 	//
+	// For serializable requests, keep the read spans in the event we get
+	// a serializable retry error. We can use the set of read spans to
+	// avoid retrying the transaction if all the spans can be updated to
+	// the current transaction timestamp.
+	//
 	// A tricky edge case is that of a transaction which "fails" on the
 	// first writing request, but actually manages to write some intents
 	// (for example, due to being multi-range). In this case, there will
@@ -997,20 +1274,10 @@ func (tc *TxnCoordSender) updateState(
 		// Adding the intents even on error reduces the likelihood of dangling
 		// intents blocking concurrent writers for extended periods of time.
 		// See #3346.
-		intents := tc.mu.meta.Intents
-		intentsSizeBytes := tc.mu.intentsSizeBytes
-		ba.IntentSpanIterate(br, func(key, endKey roachpb.Key) {
-			intents = append(intents, roachpb.Span{Key: key, EndKey: endKey})
-			intentsSizeBytes += int64(len(key) + len(endKey))
-		})
-		if condensedIntents, condensedIntentsSize, err := tc.maybeCondenseIntentSpans(ctx, intents, intentsSizeBytes); err != nil {
-			log.ErrEventf(ctx, "failed to condense intent spans (%s); skipping", err)
-		} else {
-			intents, intentsSizeBytes = condensedIntents, condensedIntentsSize
-		}
+		tc.appendAndCondenseIntentsLocked(ctx, ba, br)
 
 		// Initialize the first update time and maybe start the heartbeat.
-		if tc.mu.firstUpdateNanos == 0 && len(intents) > 0 {
+		if tc.mu.firstUpdateNanos == 0 && len(tc.mu.meta.Intents) > 0 {
 			// If the transaction is already over, there's no point in
 			// launching a one-off heartbeat which will shut down right
 			// away. If we ended up here with an error, we'll always start
@@ -1045,8 +1312,6 @@ func (tc *TxnCoordSender) updateState(
 				tc.updateStats(tc.clock.PhysicalNow()-startNS, 0, newTxn.Status, ok && etArgs.OnePhaseCommit)
 			}
 		}
-		tc.mu.meta.Intents = intents
-		tc.mu.intentsSizeBytes = intentsSizeBytes
 	}
 
 	// Update our record of this transaction, even on error.

@@ -1747,3 +1747,456 @@ func TestPropagateTxnOnError(t *testing.T) {
 		t.Errorf("unexpected epoch; the txn must be retried exactly once, but got %d", epoch)
 	}
 }
+
+// TestTxnStarvation pits a transaction against an adversarial
+// concurrent writer which will continually cause write-too-old
+// errors unless the transaction is able to lay down intents on
+// retry.
+func TestTxnStarvation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	haveWritten := make(chan struct{})
+	txnDone := make(chan struct{})
+	errCh := make(chan error)
+
+	// Busy write new values to the same key.
+	go func() {
+		for i := 0; ; i++ {
+			if err := s.DB().Put(ctx, "key", fmt.Sprintf("%10d", i)); err != nil {
+				errCh <- err
+				return
+			}
+			// Signal after the first write.
+			if i == 0 {
+				close(haveWritten)
+			}
+			select {
+			case <-txnDone:
+				errCh <- nil
+				return
+			default:
+			}
+		}
+	}()
+
+	epoch := 0
+	if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		epoch++
+		<-haveWritten
+		time.Sleep(1 * time.Millisecond)
+		b := txn.NewBatch()
+		b.Put("key", "txn-value")
+		return txn.CommitInBatch(ctx, b)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	close(txnDone)
+
+	if epoch > 2 {
+		t.Fatalf("expected at most two epochs; got %d", epoch)
+	}
+
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestTxnCoordSenderRetries verifies that the txn coord sender
+// can automatically retry transactions in many different cases,
+// but still fail in others, depending on different conditions.
+func TestTxnCoordSenderRetries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var filterFn atomic.Value
+	var storeKnobs storage.StoreTestingKnobs
+	storeKnobs.EvalKnobs.TestingEvalFilter =
+		func(fArgs storagebase.FilterArgs) *roachpb.Error {
+			fnVal := filterFn.Load()
+			if fn, ok := fnVal.(func(storagebase.FilterArgs) *roachpb.Error); ok && fn != nil {
+				return fn(fArgs)
+			}
+			return nil
+		}
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	newUncertaintyFilter := func(key roachpb.Key) func(storagebase.FilterArgs) *roachpb.Error {
+		var count int32
+		return func(fArgs storagebase.FilterArgs) *roachpb.Error {
+			if (fArgs.Req.Header().Key.Equal(key) || fArgs.Req.Header().ContainsKey(key)) && fArgs.Hdr.Txn != nil {
+				if atomic.AddInt32(&count, 1) > 1 {
+					return nil
+				}
+				pErr := roachpb.NewReadWithinUncertaintyIntervalError(
+					fArgs.Hdr.Timestamp, fArgs.Hdr.Timestamp.Add(1, 0), fArgs.Hdr.Txn)
+				return roachpb.NewErrorWithTxn(pErr, fArgs.Hdr.Txn)
+			}
+			return nil
+		}
+	}
+
+	// Setup two userspace ranges: /Min-b, b-/Max.
+	db := s.DB()
+	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		name           string
+		beforeTxnStart func(context.Context, *client.DB) error  // called before the txn starts
+		afterTxnStart  func(context.Context, *client.DB) error  // called after the txn chooses a timestamp
+		retryable      func(context.Context, *client.Txn) error // called during the txn; may be retried
+		filter         func(storagebase.FilterArgs) *roachpb.Error
+		txnCoordRetry  bool
+	}{
+		{
+			name: "forwarded timestamp with get and put",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, "a", "put") // put to advance txn ts
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with get and initput",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "a", "put", false) // put to advance txn ts
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with get and initput value exists",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				err := txn.InitPut(ctx, "a", "init-put", false) // put to advance txn ts
+				// Swallow expected condition failed error.
+				if _, ok := err.(*roachpb.ConditionFailedError); !ok {
+					if err != nil {
+						return errors.New("expected condition failed error")
+					}
+					return err
+				}
+				return nil
+			},
+			filter:        nil,
+			txnCoordRetry: false,
+		},
+		{
+			name: "forwarded timestamp with get and cput",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.CPut(ctx, "a", "cput", "put") // cput to advance txn ts, set update span
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with scan and cput",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Scan(ctx, "a", "az", 0) // scan sets ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.CPut(ctx, "ab", "cput", nil) // cput advances, sets update span
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with batch commit",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				return txn.CommitInBatch(ctx, b) // will be a 1PC, but will get an auto retry
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with put",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, "a", "put")
+			},
+			filter:        nil,
+			txnCoordRetry: false,
+		},
+		{
+			name: "write too old with cput",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.CPut(ctx, "a", "cput", "value")
+			},
+			filter:        nil,
+			txnCoordRetry: false, // A write-too-old error on cput will result in a client-side retry
+		},
+		{
+			name: "multi-range batch with forwarded timestamp",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "c") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "multi-range batch with forwarded timestamp and cput",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.CPut("a", "cput", "value")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "multi-range batch with write too old",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+			},
+			filter:        nil,
+			txnCoordRetry: true,
+		},
+		{
+			name: "multi-range batch with write too old and cput",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "orig")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.CPut("a", "cput", "orig")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b)
+			},
+			filter:        nil,
+			txnCoordRetry: false, // cput with write too old requires restart
+		},
+		{
+			name: "cput within uncertainty interval",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.CPut(ctx, "a", "cput", "value")
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			txnCoordRetry: true,
+		},
+		{
+			name: "reads within uncertainty interval",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if _, err := txn.Get(ctx, "aa"); err != nil {
+					return err
+				}
+				if _, err := txn.Get(ctx, "ab"); err != nil {
+					return err
+				}
+				if _, err := txn.Get(ctx, "ac"); err != nil {
+					return err
+				}
+				return txn.CPut(ctx, "a", "cput", "value")
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("ac"))),
+			txnCoordRetry: true,
+		},
+		{
+			name: "reads within uncertainty interval and violating concurrent put",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "ab", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if _, err := txn.Get(ctx, "aa"); err != nil {
+					return err
+				}
+				if _, err := txn.Get(ctx, "ab"); err != nil {
+					return err
+				}
+				if _, err := txn.Get(ctx, "ac"); err != nil {
+					return err
+				}
+				return nil
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("ac"))),
+			txnCoordRetry: false, // note this txn is read-only but still restarts
+		},
+		{
+			name: "multi range batch with uncertainty interval error",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				b := txn.NewBatch()
+				b.CPut("c", "cput", "value")
+				return txn.CommitInBatch(ctx, b)
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			txnCoordRetry: true, // will succeed because no mixed success
+		},
+		{
+			name: "multi range batch with uncertainty interval error and violating put",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "d", "value2")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				b := txn.NewBatch()
+				b.CPut("c", "cput", "value")
+				return txn.CommitInBatch(ctx, b)
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			txnCoordRetry: false, // will fail because of write too old on cput
+		},
+		{
+			name: "multi range batch with uncertainty interval error and mixed success",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.Put("a", "put")
+				b.CPut("c", "cput", "value")
+				return txn.CommitInBatch(ctx, b)
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			txnCoordRetry: false, // client-side retry required as this will be an mixed success
+		},
+		{
+			name: "multi range scan with uncertainty interval error",
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				_, err := txn.Scan(ctx, "a", "d", 0)
+				return err
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			txnCoordRetry: true, // can restart at higher timestamp despite mixed success because read-only
+		},
+		{
+			name: "multi range DelRange with uncertainty interval error",
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.DelRange(ctx, "a", "d")
+			},
+			filter:        newUncertaintyFilter(roachpb.Key([]byte("c"))),
+			txnCoordRetry: false, // can't restart because of mixed success and write batch
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.beforeTxnStart != nil {
+				if err := tc.beforeTxnStart(ctx, db); err != nil {
+					t.Fatalf("failed beforeTxnStart: %s", err)
+				}
+			}
+
+			if tc.filter != nil {
+				filterFn.Store(tc.filter)
+				defer filterFn.Store((func(storagebase.FilterArgs) *roachpb.Error)(nil))
+			}
+
+			var metrics kv.TxnMetrics
+			var lastAutoRetries int64
+			epoch := 0
+			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				if epoch > 0 {
+					if tc.txnCoordRetry {
+						t.Fatal("expected txn coord sender to retry, but got client-side retry")
+					}
+					// We expected a new epoch and got it; return success.
+					return nil
+				}
+				defer func() { epoch++ }()
+
+				if tc.afterTxnStart != nil {
+					if err := tc.afterTxnStart(ctx, db); err != nil {
+						t.Fatalf("failed afterTxnStart: %s", err)
+					}
+				}
+
+				metrics = txn.Sender().(*kv.TxnCoordSender).TxnCoordSenderFactory.Metrics()
+				lastAutoRetries = metrics.AutoRetries.Count()
+
+				return tc.retryable(ctx, txn)
+			}); err != nil {
+				t.Fatal(err)
+			}
+			// Verify auto retry metric. Because there's a chance that splits
+			// from the cluster setup are still ongoing and can experience
+			// their own retries, this might increase by more than one, so we
+			// can only check here that it's >= 1.
+			autoRetries := metrics.AutoRetries.Count() - lastAutoRetries
+			if tc.txnCoordRetry && autoRetries == 0 {
+				t.Errorf("expected [at least] one auto retry; got %d", autoRetries)
+			}
+		})
+	}
+}
