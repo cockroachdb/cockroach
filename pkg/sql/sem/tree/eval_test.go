@@ -1248,7 +1248,7 @@ func TestEvalError(t *testing.T) {
 			`could not parse "abcd" as type interval: interval: missing unit`},
 		{`'1- 2:3:4 9'::interval`,
 			`could not parse "1- 2:3:4 9" as type interval: invalid input syntax for type interval 1- 2:3:4 9`},
-		{`e'\\x6sdfsd36174'::BYTES`, `could not parse "\\x6sdfsd36174" as type bytes: encoding/hex: odd length hex string`},
+		{`e'\\xdedf0d36174'::BYTES`, `could not parse "\\xdedf0d36174" as type bytes: encoding/hex: odd length hex string`},
 		{`ARRAY[NULL, ARRAY[1, 2]]`, `multidimensional arrays must have array expressions with matching dimensions`},
 		{`ARRAY[ARRAY[1, 2], NULL]`, `multidimensional arrays must have array expressions with matching dimensions`},
 		{`ARRAY[ARRAY[1, 2], ARRAY[1]]`, `multidimensional arrays must have array expressions with matching dimensions`},
