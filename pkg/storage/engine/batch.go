@@ -384,24 +384,6 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 	return repr[:v], repr[v:], nil
 }
 
-// Decode an MVCC scan batch repr key/value pair, returning both the key/value
-// and the suffix of data remaining in the batch.
-func mvccScanBatchDecodeValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
-	if len(repr) == 0 {
-		return key, nil, repr, errors.Errorf("unexpected batch EOF")
-	}
-	rawKey, repr, err := rocksDBBatchVarString(repr)
-	if err != nil {
-		return key, nil, repr, err
-	}
-	value, repr, err = rocksDBBatchVarString(repr)
-	if err != nil {
-		return key, nil, repr, err
-	}
-	key, err = DecodeKey(rawKey)
-	return key, value, repr, err
-}
-
 // RocksDBBatchReader is used to iterate the entries in a RocksDB batch
 // representation.
 //

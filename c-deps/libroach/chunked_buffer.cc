@@ -20,8 +20,14 @@ namespace cockroach {
 
 // Write a key/value pair to this chunkedBuffer.
 void chunkedBuffer::Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
-  putLengthPrefixedSlice(key);
-  putLengthPrefixedSlice(value);
+  const uint64_t v = uint64_t(key.size()) << 32 | uint64_t(value.size());
+  const uint8_t size_buf[sizeof(v)] = {
+      uint8_t(v >> 56), uint8_t(v >> 48), uint8_t(v >> 40), uint8_t(v >> 32),
+      uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8),  uint8_t(v),
+  };
+  put((const char*)size_buf, sizeof(size_buf), key.size() + value.size());
+  put(key.data(), key.size(), value.size());
+  put(value.data(), value.size(), 0);
   count_++;
 }
 
@@ -65,19 +71,6 @@ void chunkedBuffer::put(const char* data, int len, int next_size_hint) {
 
   memcpy(buf_ptr_, data, len);
   buf_ptr_ += len;
-}
-
-// putLengthPrefixedSlice writes the input value to the iterator's output
-// slice, prefixed by the value's length encoded as a Varint32. This matches
-// the RocksDB WriteBatch format *without* the leading 1-byte value tag.
-void chunkedBuffer::putLengthPrefixedSlice(const rocksdb::Slice& value) {
-  // Encode the value length into a buffer to determine the size of the length
-  // encoding.
-  char buf[5];
-  char* ptr = EncodeVarint32(buf, value.size());
-  const int put_size = ptr - buf;
-  put(buf, put_size, value.size());
-  put(value.data(), value.size(), 0);
 }
 
 }  // namespace cockroach
