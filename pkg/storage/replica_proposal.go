@@ -439,7 +439,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	r.mu.Unlock()
 
 	r.store.metrics.addMVCCStats(deltaStats)
-	rResult.Delta = enginepb.MVCCNetworkStats{}
+	rResult.Delta = enginepb.MVCCStatsDelta{}
 
 	if needsSplitBySize {
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())

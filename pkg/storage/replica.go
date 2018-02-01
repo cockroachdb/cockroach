@@ -4643,7 +4643,7 @@ func (r *Replica) processRaftCommand(
 		}
 
 		if deprecatedDelta := raftCmd.ReplicatedEvalResult.DeprecatedDelta; deprecatedDelta != nil {
-			raftCmd.ReplicatedEvalResult.Delta = deprecatedDelta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.Delta = deprecatedDelta.ToStatsDelta()
 			raftCmd.ReplicatedEvalResult.DeprecatedDelta = nil
 		}
 
@@ -4693,7 +4693,7 @@ func (r *Replica) processRaftCommand(
 			var err error
 			delta, err = r.applyRaftCommand(
 				ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
-			raftCmd.ReplicatedEvalResult.Delta = delta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.Delta = delta.ToStatsDelta()
 
 			// applyRaftCommand returned an error, which usually indicates
 			// either a serious logic bug in CockroachDB or a disk
@@ -5043,7 +5043,7 @@ func (r *Replica) evaluateProposalInner(
 		var br *roachpb.BatchResponse
 		batch, ms, br, result, pErr = r.evaluateTxnWriteBatch(ctx, idKey, ba, spans)
 		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-			result.Replicated.Delta = ms.ToNetworkStats()
+			result.Replicated.Delta = ms.ToStatsDelta()
 		} else {
 			result.Replicated.DeprecatedDelta = &ms
 		}

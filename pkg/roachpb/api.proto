@@ -407,7 +407,7 @@ message RecomputeStatsResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   // added_delta is the adjustment made to the range's stats, i.e. `new_stats = old_stats + added_delta`.
-  storage.engine.enginepb.MVCCNetworkStats added_delta = 2 [(gogoproto.nullable) = false];
+  storage.engine.enginepb.MVCCStatsDelta added_delta = 2 [(gogoproto.nullable) = false];
 }
 
 // A BeginTransactionRequest is the argument to the BeginTransaction() method.

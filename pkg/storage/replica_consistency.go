@@ -346,7 +346,7 @@ func (r *Replica) computeChecksumDone(
 
 			delta := result.PersistedMS
 			delta.Subtract(result.RecomputedMS)
-			c.Delta = enginepb.MVCCNetworkStats(delta)
+			c.Delta = enginepb.MVCCStatsDelta(delta)
 		}
 		c.gcTimestamp = timeutil.Now().Add(batcheval.ReplicaChecksumGCInterval)
 		c.Snapshot = snapshot

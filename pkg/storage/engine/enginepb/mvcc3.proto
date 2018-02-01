@@ -67,12 +67,15 @@ message TxnMeta {
   int32 batch_index = 8;
 }
 
-// MVCCNetworkStats is convertible to MVCCStats, but uses variable width
-// encodings for most fields. This makes the encodings incompatible. Note that
-// with proto3, zero-valued primitive types will not be encoded at all.
-message MVCCNetworkStats {
+// MVCCStatsDelta is convertible to MVCCStats, but uses signed variable width
+// encodings for most fields which make it more efficient to store negative
+// values. This makes the encodings incompatible.
+message MVCCStatsDelta {
   option (gogoproto.equal) = true;
 
+  // TODO(nvanbenschoten): now that we've split MVCCPersistentStats
+  // from this MVCCStatsDelta type, we can turn contains_estimates 
+  // into a three-valued type ('UNCHANGED', 'NO', and 'YES').
   bool contains_estimates = 14;
   sfixed64 last_update_nanos = 1;
   sfixed64 intent_age = 2;

@@ -114,6 +114,6 @@ func RecomputeStats(
 		cArgs.Stats.Add(delta)
 	}
 
-	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCNetworkStats(delta)
+	resp.(*roachpb.RecomputeStatsResponse).AddedDelta = enginepb.MVCCStatsDelta(delta)
 	return result.Result{}, nil
 }
