@@ -910,7 +910,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ReferenceActions> reference_actions
 %type <tree.ReferenceAction> reference_action reference_on_delete reference_on_update
 
-%type <tree.Expr>  func_application func_expr_common_subexpr
+%type <tree.Expr>  func_application func_expr_common_subexpr special_function
 %type <tree.Expr>  func_expr func_expr_windowless
 %type <empty> opt_with
 %type <*tree.With> with_clause opt_with_clause
@@ -5000,11 +5000,15 @@ table_ref:
   {
     $$.val = &tree.AliasedTableExpr{Expr: $1.newNormalizableTableNameFromUnresolvedName(), Hints: $2.indexHints(), Ordinality: $3.bool(), As: $4.aliasClause() }
   }
-| qualified_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
+| func_name '(' opt_expr_list ')' opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.FuncExpr{Func: $1.resolvableFunctionReferenceFromUnresolvedName(), Exprs: $3.exprs()}, Ordinality: $5.bool(), As: $6.aliasClause() }
   }
-| qualified_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReferenceFromUnresolvedName()) }
+| func_name '(' error { return helpWithFunction(sqllex, $1.resolvableFunctionReferenceFromUnresolvedName()) }
+| special_function opt_ordinality opt_alias_clause
+  {
+      $$.val = &tree.AliasedTableExpr{Expr: $1.expr().(tree.TableExpr), Ordinality: $2.bool(), As: $3.aliasClause() }
+  }
 | select_with_parens opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.Subquery{Select: $1.selectStmt()}, Ordinality: $2.bool(), As: $3.aliasClause() }
@@ -6335,39 +6339,19 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
-| CURRENT_DATE '(' ')'
-  {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
-  }
-  | CURRENT_DATE '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_SCHEMA
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
-| CURRENT_SCHEMA '(' ')'
-  {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
-  }
-| CURRENT_SCHEMA '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_TIMESTAMP
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
-| CURRENT_TIMESTAMP '(' ')'
-  {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
-  }
-| CURRENT_TIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
 | CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
-| CURRENT_USER '(' ')'
-  {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
-  }
-| CURRENT_USER '(' error { return helpWithFunctionByName(sqllex, $1) }
 | SESSION_USER
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_user")}
@@ -6384,6 +6368,45 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.AnnotateTypeExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: tree.AnnotateExplicit}
   }
+| IF '(' a_expr ',' a_expr ',' a_expr ')'
+  {
+    $$.val = &tree.IfExpr{Cond: $3.expr(), True: $5.expr(), Else: $7.expr()}
+  }
+| NULLIF '(' a_expr ',' a_expr ')'
+  {
+    $$.val = &tree.NullIfExpr{Expr1: $3.expr(), Expr2: $5.expr()}
+  }
+| IFNULL '(' a_expr ',' a_expr ')'
+  {
+    $$.val = &tree.CoalesceExpr{Name: "IFNULL", Exprs: tree.Exprs{$3.expr(), $5.expr()}}
+  }
+| COALESCE '(' expr_list ')'
+  {
+    $$.val = &tree.CoalesceExpr{Name: "COALESCE", Exprs: $3.exprs()}
+  }
+| special_function
+
+special_function:
+  CURRENT_DATE '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| CURRENT_DATE '(' error { return helpWithFunctionByName(sqllex, $1) }
+| CURRENT_SCHEMA '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| CURRENT_SCHEMA '(' error { return helpWithFunctionByName(sqllex, $1) }
+| CURRENT_TIMESTAMP '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| CURRENT_TIMESTAMP '(' error { return helpWithFunctionByName(sqllex, $1) }
+| CURRENT_USER '(' ')'
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+| CURRENT_USER '(' error { return helpWithFunctionByName(sqllex, $1) }
 | EXTRACT '(' extract_list ')'
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
@@ -6425,22 +6448,6 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("BTRIM"), Exprs: $3.exprs()}
   }
-| IF '(' a_expr ',' a_expr ',' a_expr ')'
-  {
-    $$.val = &tree.IfExpr{Cond: $3.expr(), True: $5.expr(), Else: $7.expr()}
-  }
-| NULLIF '(' a_expr ',' a_expr ')'
-  {
-    $$.val = &tree.NullIfExpr{Expr1: $3.expr(), Expr2: $5.expr()}
-  }
-| IFNULL '(' a_expr ',' a_expr ')'
-  {
-    $$.val = &tree.CoalesceExpr{Name: "IFNULL", Exprs: tree.Exprs{$3.expr(), $5.expr()}}
-  }
-| COALESCE '(' expr_list ')'
-  {
-    $$.val = &tree.CoalesceExpr{Name: "COALESCE", Exprs: $3.exprs()}
-  }
 | GREATEST '(' expr_list ')'
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
@@ -6451,6 +6458,7 @@ func_expr_common_subexpr:
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1), Exprs: $3.exprs()}
   }
 | LEAST '(' error { return helpWithFunctionByName(sqllex, $1) }
+
 
 // Aggregate decoration clauses
 within_group_clause:
