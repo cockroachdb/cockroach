@@ -307,3 +307,9 @@ SELECT * FROM upper('abc')
 ----
 upper
 ABC
+
+query TI colnames
+SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
+----
+b    ordinality
+test 1
