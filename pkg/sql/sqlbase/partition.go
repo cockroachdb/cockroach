@@ -31,9 +31,9 @@ const (
 	// PartitionDefaultVal represents the special DEFAULT value.
 	PartitionDefaultVal PartitionSpecialValCode = 0
 	// PartitionMaxVal represents the special MAXVALUE value.
-	PartitionMaxVal = 1
+	PartitionMaxVal PartitionSpecialValCode = 1
 	// PartitionMinVal represents the special MINVALUE value.
-	PartitionMinVal = 2
+	PartitionMinVal PartitionSpecialValCode = 2
 )
 
 func (c PartitionSpecialValCode) String() string {

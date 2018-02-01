@@ -45,15 +45,15 @@ const (
 
 // Priorities for the replica GC queue.
 const (
-	replicaGCPriorityDefault float64 = 0
+	replicaGCPriorityDefault = 0.0
 
 	// Replicas that have been removed from the range spend a lot of
 	// time in the candidate state, so treat them as higher priority.
-	replicaGCPriorityCandidate = 1
+	replicaGCPriorityCandidate = 1.0
 
 	// The highest priority is used when we have definite evidence
 	// (external to replicaGCQueue) that the replica has been removed.
-	replicaGCPriorityRemoved = 2
+	replicaGCPriorityRemoved = 2.0
 )
 
 var (

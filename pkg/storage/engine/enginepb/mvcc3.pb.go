@@ -116,10 +116,7 @@ func init() {
 }
 func (this *TxnMeta) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TxnMeta)
@@ -132,10 +129,7 @@ func (this *TxnMeta) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -167,10 +161,7 @@ func (this *TxnMeta) Equal(that interface{}) bool {
 }
 func (this *MVCCNetworkStats) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*MVCCNetworkStats)
@@ -183,10 +174,7 @@ func (this *MVCCNetworkStats) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}

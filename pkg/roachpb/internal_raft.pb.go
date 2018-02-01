@@ -77,10 +77,7 @@ func init() {
 }
 func (this *RaftTruncatedState) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RaftTruncatedState)
@@ -93,10 +90,7 @@ func (this *RaftTruncatedState) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
