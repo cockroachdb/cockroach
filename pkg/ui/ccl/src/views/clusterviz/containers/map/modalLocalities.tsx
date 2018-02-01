@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import * as d3 from "d3";
+import _ from "lodash";
 import PropTypes from "prop-types";
 import React from "react";
 import { InjectedRouter, RouterState } from "react-router";
@@ -52,13 +53,13 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
 
 interface LocalityBoxProps {
   projection: d3.geo.Projection;
-  node: LocalityTree;
+  locality: LocalityTree;
   locationTree: LocationTree;
 }
 
 class LocalityBox extends React.Component<LocalityBoxProps, any> {
   render() {
-    const location = findMostSpecificLocation(this.props.locationTree, this.props.node.tiers);
+    const location = findMostSpecificLocation(this.props.locationTree, this.props.locality.tiers);
     const center = this.props.projection([location.longitude, location.latitude]);
     const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
     return (
@@ -106,12 +107,10 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
   renderChildLocalities(tree: LocalityTree) {
     const children: React.ReactNode[] = [];
 
-    Object.keys(tree.localities).forEach((key) => {
-      Object.keys(tree.localities[key]).forEach((value) => {
-        const child = tree.localities[key][value];
-
+    _.values(tree.localities).forEach((tier) => {
+      _.values(tier).forEach((locality) => {
         children.push(
-          <LocalityBox projection={this.props.projection} node={child} locationTree={this.props.locationTree} />,
+          <LocalityBox projection={this.props.projection} locality={locality} locationTree={this.props.locationTree} />,
         );
       });
     });
