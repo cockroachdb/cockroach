@@ -17,11 +17,9 @@ package xform
 import (
 	"bytes"
 	"fmt"
-)
 
-// GroupID identifies a memo group. Groups have numbers greater than 0; a
-// GroupID of 0 indicates an invalid group.
-type GroupID uint32
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+)
 
 // exprID is the index of an expression within its group. exprID = 0 is always
 // the normalized expression for the group.
@@ -40,7 +38,7 @@ const (
 // TODO(andyk): Need to add the lowest cost expression map.
 type memoGroup struct {
 	// Id is the index of this group within the memo.
-	id GroupID
+	id opt.GroupID
 
 	// logical is the set of logical properties that all memo expressions in
 	// the group share.
@@ -70,7 +68,7 @@ func (g *memoGroup) memoGroupString(mem *memo) string {
 			mem:      mem,
 			loc:      memoLoc{group: g.id, expr: exprID(i)},
 			op:       mexpr.op,
-			required: minPhysPropsID,
+			required: opt.MinPhysPropsID,
 		}
 
 		fmt.Fprintf(&buf, "[%s", e.Operator())
@@ -79,11 +77,11 @@ func (g *memoGroup) memoGroupString(mem *memo) string {
 		if private != nil {
 			switch t := private.(type) {
 			case nil:
-			case TableIndex:
+			case opt.TableIndex:
 				fmt.Fprintf(&buf, " %s", mem.metadata.Table(t).TabName())
-			case ColumnIndex:
+			case opt.ColumnIndex:
 				fmt.Fprintf(&buf, " %s", mem.metadata.ColumnLabel(t))
-			case *ColSet, *ColMap:
+			case *opt.ColSet, *opt.ColMap:
 				// Don't show anything, because it's mostly redundant.
 			default:
 				fmt.Fprintf(&buf, " %s", private)

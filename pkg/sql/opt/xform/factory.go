@@ -14,9 +14,12 @@
 
 package xform
 
-import "github.com/cockroachdb/cockroach/pkg/sql/optbase"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+)
 
-//go:generate optgen -out factory.og.go -pkg xform factory ops/scalar.opt ops/relational.opt ops/enforcer.opt
+//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -31,7 +34,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/optbase"
 // invoked by normalization patterns. While most patterns are specified in the
 // optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
-type Factory struct {
+type factory struct {
 	mem *memo
 
 	// maxSteps sets the maximum number of normalization patterns that the
@@ -42,41 +45,36 @@ type Factory struct {
 	maxSteps int
 }
 
+var _ opt.Factory = &factory{}
+
 // NewFactory returns a new Factory structure with a new, blank memo
 // structure inside.
-func NewFactory(catalog optbase.Catalog, maxSteps int) *Factory {
-	return &Factory{mem: newMemo(catalog), maxSteps: maxSteps}
-}
-
-// ExprView returns the "expression view" of the memo in this factory
-// (i.e., a view of the designated lowest cost tree in the memo forest)
-// with the given top level group ID.
-func (f *Factory) ExprView(group GroupID) ExprView {
-	return makeExprView(f.mem, group, minPhysPropsID)
+func newFactory(catalog optbase.Catalog, maxSteps int) *factory {
+	return &factory{mem: newMemo(catalog), maxSteps: maxSteps}
 }
 
 // Metadata returns the query-specific metadata, which includes information
 // about the columns and tables used in this particular query.
-func (f *Factory) Metadata() *Metadata {
+func (f *factory) Metadata() *opt.Metadata {
 	return f.mem.metadata
 }
 
 // StoreList allocates storage for a list of group IDs in the memo and returns
 // an ID that can be used for later lookup.
-func (f *Factory) StoreList(items []GroupID) ListID {
+func (f *factory) StoreList(items []opt.GroupID) opt.ListID {
 	return f.mem.storeList(items)
 }
 
 // InternPrivate adds the given private value to the memo and returns an ID
 // that can be used for later lookup. If the same value was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (f *Factory) InternPrivate(private interface{}) PrivateID {
+func (f *factory) InternPrivate(private interface{}) opt.PrivateID {
 	return f.mem.internPrivate(private)
 }
 
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
-func (f *Factory) onConstruct(group GroupID) GroupID {
+func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
 	if f.maxSteps <= 0 {
 		return group
 	}

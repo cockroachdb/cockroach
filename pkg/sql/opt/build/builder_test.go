@@ -54,6 +54,7 @@ import (
 
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -136,14 +137,14 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					f := xform.NewFactory(catalog, 0 /* maxSteps */)
-					b := NewBuilder(ctx, f, stmt)
-					root, _, err := build(b)
+					o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
+					b := NewBuilder(ctx, o.Factory(), stmt)
+					root, props, err := build(b)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
-					exprView := f.ExprView(root)
-					return (&exprView).String()
+					exprView := o.Optimize(root, props)
+					return exprView.String()
 
 				case "build-scalar":
 					typedExpr, err := testutils.ParseScalarExpr(d.Input, &iVarHelper)
@@ -151,15 +152,15 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					f := xform.NewFactory(catalog, 0 /* maxSteps */)
-					b := newScalarBuilder(f, &iVarHelper)
+					o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
+					b := newScalarBuilder(o.Factory(), &iVarHelper)
 
 					group, err := buildScalar(b, typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
-					exprView := f.ExprView(group)
-					return (&exprView).String()
+					exprView := o.Optimize(group, &opt.PhysicalProps{})
+					return exprView.String()
 
 				default:
 					d.Fatalf(t, "unsupported command: %s", d.Cmd)
@@ -172,7 +173,7 @@ func TestBuilder(t *testing.T) {
 
 // newScalarBuilder constructs a Builder to be used for building scalar
 // expressions.
-func newScalarBuilder(factory *xform.Factory, ivh *tree.IndexedVarHelper) *Builder {
+func newScalarBuilder(factory opt.Factory, ivh *tree.IndexedVarHelper) *Builder {
 	b := &Builder{factory: factory, colMap: make([]columnProps, 1)}
 
 	b.semaCtx.IVarHelper = ivh
@@ -183,7 +184,7 @@ func newScalarBuilder(factory *xform.Factory, ivh *tree.IndexedVarHelper) *Build
 
 // buildScalar is a wrapper for Builder.buildScalar which catches panics and
 // converts them to errors.
-func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group xform.GroupID, err error) {
+func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group opt.GroupID, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
@@ -196,7 +197,7 @@ func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group xform.GroupID, err
 
 // build is a wrapper for Builder.Build which catches panics and
 // converts them to errors.
-func build(b *Builder) (root xform.GroupID, required *xform.PhysicalProps, err error) {
+func build(b *Builder) (root opt.GroupID, required *opt.PhysicalProps, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
