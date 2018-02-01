@@ -76,7 +76,7 @@ func ZoneSpecifierFromID(
 	if err != nil {
 		return tree.ZoneSpecifier{}, err
 	}
-	tn := &tree.TableName{DatabaseName: tree.Name(db), TableName: tree.Name(name)}
+	tn := &tree.TableName{SchemaName: tree.Name(db), TableName: tree.Name(name)}
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableNameWithIndex{
 			Table: tree.NormalizableTableName{TableNameReference: tn},
@@ -147,7 +147,7 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 	if zs.Partition != "" {
 		tn := ti.Table.TableName()
 		ti.Table = tree.NormalizableTableName{
-			TableNameReference: &tree.UnresolvedName{&tn.DatabaseName, &tn.TableName, &zs.Partition},
+			TableNameReference: &tree.UnresolvedName{&tn.SchemaName, &tn.TableName, &zs.Partition},
 		}
 		// The index is redundant when the partition is specified, so omit it.
 		ti.Index = ""
@@ -180,7 +180,7 @@ func ResolveZoneSpecifier(
 	if err != nil {
 		return 0, err
 	}
-	databaseID, err := resolveName(keys.RootNamespaceID, tn.Database())
+	databaseID, err := resolveName(keys.RootNamespaceID, tn.Schema())
 	if err != nil {
 		return 0, err
 	}

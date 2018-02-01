@@ -85,7 +85,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 					if tblName == "" && col.table != "" {
 						// TODO(andy): why is this necessary??
 						t.TableName.TableName = tree.Name(col.table)
-						t.TableName.OmitDBNameDuringFormatting = true
+						t.TableName.OmitSchemaNameDuringFormatting = true
 					}
 					return false, col
 				}

@@ -800,8 +800,8 @@ func (c *cascader) updateRows(
 										"cannot cascade a null value into %q as it violates a NOT NULL constraint",
 										tree.ErrString(&tree.ColumnItem{
 											TableName: tree.TableName{
-												DatabaseName: tree.Name(database.Name),
-												TableName:    tree.Name(referencingTable.Name),
+												SchemaName: tree.Name(database.Name),
+												TableName:  tree.Name(referencingTable.Name),
 											},
 											ColumnName: tree.Name(column.Name),
 										}),

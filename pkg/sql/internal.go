@@ -106,7 +106,7 @@ func (ie *InternalExecutor) GetTableSpan(
 	defer cleanup()
 	ie.initSession(p)
 
-	tn := tree.TableName{DatabaseName: tree.Name(dbName), TableName: tree.Name(tableName)}
+	tn := tree.TableName{SchemaName: tree.Name(dbName), TableName: tree.Name(tableName)}
 	tableID, err := getTableID(ctx, p, &tn)
 	if err != nil {
 		return roachpb.Span{}, err
@@ -142,7 +142,7 @@ func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID
 		return retryable(ctx, p.txn)
 	}
 
-	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Database())
+	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Schema())
 	if err != nil {
 		return 0, err
 	}
