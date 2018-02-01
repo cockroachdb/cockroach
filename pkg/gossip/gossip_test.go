@@ -593,12 +593,12 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		g[0].mu.Lock()
 		defer g[0].mu.Unlock()
 		if a, e := len(g[0].mu.nodeMap), 1; a != e {
-			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
+			return errors.Errorf("expected %v to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
 		}
 		g[1].mu.Lock()
 		defer g[1].mu.Unlock()
 		if a, e := len(g[1].mu.nodeMap), 0; a != e {
-			return errors.Errorf("expected %s to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
+			return errors.Errorf("expected %v to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
 		}
 		return nil
 	})
@@ -611,7 +611,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 
 	g[1].mu.Lock()
 	if a, e := len(g[1].mu.nodeMap), 0; a != e {
-		t.Errorf("expected %s to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
+		t.Errorf("expected %v to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
 	}
 	g[1].mu.Unlock()
 }

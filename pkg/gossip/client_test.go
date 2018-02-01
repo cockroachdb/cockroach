@@ -459,7 +459,7 @@ func TestClientRegisterWithInitNodeID(t *testing.T) {
 		g[0].mu.Lock()
 		defer g[0].mu.Unlock()
 		if a, e := len(g[0].mu.nodeMap), 2; a != e {
-			return errors.Errorf("expected %s to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
+			return errors.Errorf("expected %v to contain %d nodes, got %d", g[0].mu.nodeMap, e, a)
 		}
 		return nil
 	})
