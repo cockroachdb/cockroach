@@ -1956,26 +1956,19 @@ func commitSQLTransaction(
 // exectDistSQL converts the current logical plan to a distributed SQL
 // physical plan and runs it.
 func (e *Executor) execDistSQL(
-	planner *planner, plan planNode, rowResultWriter StatementResult,
+	planner *planner, plan planNode, rowResultWriter StatementResult, stmtType tree.StatementType,
 ) error {
 	ctx := planner.EvalContext().Ctx()
 	recv := makeDistSQLReceiver(
-		ctx, rowResultWriter,
+		ctx, rowResultWriter, stmtType,
 		e.cfg.RangeDescriptorCache, e.cfg.LeaseHolderCache,
 		planner.txn,
 		func(ts hlc.Timestamp) {
 			_ = e.cfg.Clock.Update(ts)
 		},
 	)
-	if err := e.distSQLPlanner.PlanAndRun(
-		ctx, planner.txn, plan, recv, &planner.extendedEvalCtx,
-	); err != nil {
-		return err
-	}
-	if recv.err != nil {
-		return recv.err
-	}
-	return nil
+	e.distSQLPlanner.PlanAndRun(ctx, planner.txn, plan, recv, &planner.extendedEvalCtx)
+	return rowResultWriter.Err()
 }
 
 // execLocal runs the given logical plan using the local
@@ -2155,7 +2148,7 @@ func (e *Executor) execStmt(
 	planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 	session.setQueryExecutionMode(stmt.queryID, useDistSQL, false /* isParallel */)
 	if useDistSQL {
-		err = e.execDistSQL(planner, planner.curPlan.plan, res)
+		err = e.execDistSQL(planner, planner.curPlan.plan, res, stmt.AST.StatementType())
 	} else {
 		err = e.execLocal(planner, planner.curPlan.plan, res)
 	}
