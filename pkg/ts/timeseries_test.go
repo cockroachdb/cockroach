@@ -160,10 +160,14 @@ func TestDiscardEarlierSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if maxVal := out.Samples[0].Max; maxVal != nil {
-		t.Fatal("Expected maximum of sample 0 to be nil; samples are no longer merged.")
-	}
-	if a, e := out.Samples[0].Sum, -2.0; a != e {
-		t.Fatalf("Expected sum of sample 0 to be %f after initial merge, was %f", e, a)
+	if len(out.Samples) > 0 {
+		if maxVal := out.Samples[0].Max; maxVal != nil {
+			t.Fatal("Expected maximum of sample 0 to be nil; samples are no longer merged")
+		}
+		if a, e := out.Samples[0].Sum, -2.0; a != e {
+			t.Fatalf("Expected sum of sample 0 to be %f after initial merge, was %f", e, a)
+		}
+	} else {
+		t.Fatal("All samples unexpectedly discarded")
 	}
 }
