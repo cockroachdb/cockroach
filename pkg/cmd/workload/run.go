@@ -78,8 +78,14 @@ var histFile = runFlags.String(
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
-		genFlags := gen.Flags()
-		genHooks := gen.Hooks()
+		var genFlags *pflag.FlagSet
+		if f, ok := gen.(workload.Flagser); ok {
+			genFlags = f.Flags()
+		}
+		var genHooks workload.Hooks
+		if h, ok := gen.(workload.Hookser); ok {
+			genHooks = h.Hooks()
+		}
 
 		genInitCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
 		genInitCmd.Flags().AddFlagSet(initFlags)
@@ -304,11 +310,15 @@ func runRun(gen workload.Generator, args []string) error {
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
 	}
 
-	ops := gen.Ops()
-	if len(ops) != 1 {
-		return errors.Errorf(`generators with more than one operation are not yet supported`)
+	var op *workload.Operation
+	if o, ok := gen.(workload.Opser); ok {
+		if ops := o.Ops(); len(ops) == 1 {
+			op = &ops[0]
+		}
 	}
-	op := ops[0]
+	if op == nil {
+		return errors.Errorf(`only generators with one operation are currently supported`)
+	}
 
 	lastNow := timeutil.Now()
 	start := lastNow
@@ -352,10 +362,12 @@ func runRun(gen workload.Generator, args []string) error {
 			fmt.Sprintf("concurrency=%d", *concurrency),
 			fmt.Sprintf("duration=%s", *duration),
 		}, "/")
-		// NB: This visits in a deterministic order.
-		gen.Flags().Visit(func(f *pflag.Flag) {
-			benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
-		})
+		if f, ok := gen.(workload.Flagser); ok {
+			// NB: This visits in a deterministic order.
+			f.Flags().Visit(func(f *pflag.Flag) {
+				benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
+			})
+		}
 
 		result := testing.BenchmarkResult{
 			N: int(numOps),

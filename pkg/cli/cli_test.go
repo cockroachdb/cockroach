@@ -2073,7 +2073,7 @@ func TestJunkPositionalArguments(t *testing.T) {
 		"sql junk",
 		"gen man junk",
 		"gen autocomplete junk",
-		"gen example-data file junk",
+		"gen example-data intro junk",
 	} {
 		out, err := c.RunWithCapture(test)
 		if err != nil {
