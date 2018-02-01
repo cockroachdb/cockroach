@@ -8,9 +8,9 @@
 
 import _ from "lodash";
 import * as protos from "src/js/protos";
+import * as vector from "src/util/vector";
 
 import { SimulatedNodeStatus } from "./nodeSimulator";
-import * as vector from "./vector";
 
 type Tier = protos.cockroach.roachpb.Tier$Properties;
 

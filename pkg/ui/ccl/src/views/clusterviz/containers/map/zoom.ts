@@ -7,7 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import _ from "lodash";
-import * as Vector from "./vector";
+import * as vector from "src/util/vector";
 
 // Box is an immutable construct for a box.
 export class Box {
@@ -53,8 +53,8 @@ export class Box {
     return new Box(this.x, this.y, this.w * scale, this.h * scale);
   }
 
-  translate(vector: Point): Box {
-    return new Box(this.x + vector[0], this.y + vector[1], this.w, this.h);
+  translate(vec: Point): Box {
+    return new Box(this.x + vec[0], this.y + vec[1], this.w, this.h);
   }
 }
 
@@ -81,7 +81,7 @@ export class ZoomTransformer {
     this._bounds = bounds;
     this._viewportSize = viewportSize;
     this._scale = this.minScale();
-    this._translate = Vector.sub(Vector.mult(viewportSize, 0.5 / this._scale), bounds.center());
+    this._translate = vector.sub(vector.mult(viewportSize, 0.5 / this._scale), bounds.center());
   }
 
   minScale() {
