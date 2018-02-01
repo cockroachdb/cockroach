@@ -28,7 +28,6 @@ import (
 )
 
 type valuesNode struct {
-	n       *tree.ValuesClause
 	columns sqlbase.ResultColumns
 	tuples  [][]tree.TypedExpr
 	// isConst is set if the valuesNode only contains constant expressions (no
@@ -45,7 +44,6 @@ func (p *planner) Values(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
-		n:       n,
 		isConst: true,
 	}
 	if len(n.Tuples) == 0 {
@@ -142,7 +140,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	n.rows = sqlbase.NewRowContainer(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
-		len(n.n.Tuples),
+		len(n.tuples),
 	)
 
 	row := make([]tree.Datum, len(n.columns))

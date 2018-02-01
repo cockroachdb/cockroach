@@ -379,10 +379,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
 
 	case *valuesNode:
-		if n.n == nil {
-			return 0, newQueryNotSupportedErrorf("unsupported node %T without SQL VALUES clause", node)
-		}
-
 		for _, tuple := range n.tuples {
 			for _, expr := range tuple {
 				if err := dsp.checkExpr(expr); err != nil {
