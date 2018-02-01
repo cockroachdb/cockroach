@@ -53,7 +53,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), tn.Database())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), tn.Schema())
 	if err != nil {
 		return nil, err
 	}
@@ -518,8 +518,8 @@ func resolveFK(
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint",
 					tree.ErrString(&tree.ColumnItem{
 						TableName: tree.TableName{
-							DatabaseName: tree.Name(database.Name),
-							TableName:    tree.Name(tbl.Name),
+							SchemaName: tree.Name(database.Name),
+							TableName:  tree.Name(tbl.Name),
 						},
 						ColumnName: tree.Name(sourceColumn.Name),
 					}),
@@ -541,8 +541,8 @@ func resolveFK(
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression",
 					tree.ErrString(&tree.ColumnItem{
 						TableName: tree.TableName{
-							DatabaseName: tree.Name(database.Name),
-							TableName:    tree.Name(tbl.Name),
+							SchemaName: tree.Name(database.Name),
+							TableName:  tree.Name(tbl.Name),
 						},
 						ColumnName: tree.Name(sourceColumn.Name),
 					}),
