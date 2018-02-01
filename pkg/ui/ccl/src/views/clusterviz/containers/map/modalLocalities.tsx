@@ -15,16 +15,19 @@ import { InjectedRouter, RouterState } from "react-router";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
-import { generateLocalityRoute, getLocality } from "src/util/localities";
+import { generateLocalityRoute, getLeaves, getLocality } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 import { NodeStatus$Properties } from "src/util/proto";
 
 import { SimulatedNodeStatus } from "./nodeSimulator";
 import { NodeView } from "./nodeView";
 import { Box, ZoomTransformer } from "./zoom";
+import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
+import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 
 interface LocalityViewProps {
-  locality: LocalityTree;
+  localityTree: LocalityTree;
+  liveness: { [id: string]: LivenessStatus };
 }
 
 class LocalityView extends React.Component<LocalityViewProps, any> {
@@ -34,38 +37,45 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
   context: { router: InjectedRouter & RouterState };
 
   onClick = () => {
-    const destination = CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(this.props.locality.tiers);
+    const localityTree = this.props.localityTree;
+    const destination = CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(localityTree.tiers);
     this.context.router.push(destination);
   }
 
   render() {
-    const { tiers } = this.props.locality;
+    const { tiers } = this.props.localityTree;
     const thisTier = tiers[tiers.length - 1];
 
+    const leavesUnderMe = getLeaves(this.props.localityTree);
+    const { capacityUsable, capacityUsed } = sumNodeStats(leavesUnderMe, this.props.liveness);
+
     return (
-      <text x={15} y={15} onClick={this.onClick} style={{ cursor: "pointer" }}>
-        {
-          thisTier.key + "=" + thisTier.value
-        }
-      </text>
+      <g onClick={this.onClick} style={{ cursor: "pointer" }}>
+        <StatsView
+          usableCapacity={capacityUsable}
+          usedCapacity={capacityUsed}
+          label={`${thisTier.key}=${thisTier.value}`}
+        />
+      </g>
     );
   }
 }
 
 interface LocalityBoxProps {
   projection: d3.geo.Projection;
-  locality: LocalityTree;
+  localityTree: LocalityTree;
   locationTree: LocationTree;
+  liveness: { [id: string]: LivenessStatus };
 }
 
 class LocalityBox extends React.Component<LocalityBoxProps, any> {
   render() {
-    const location = findOrCalculateLocation(this.props.locationTree, this.props.locality);
+    const location = findOrCalculateLocation(this.props.locationTree, this.props.localityTree);
     const center = this.props.projection([location.longitude, location.latitude]);
     const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
     return (
       <g transform={`translate(${box.center()})`}>
-        <LocalityView locality={this.props.locality} />
+        <LocalityView localityTree={this.props.localityTree} liveness={this.props.liveness} />
       </g>
     );
   }
@@ -74,6 +84,7 @@ class LocalityBox extends React.Component<LocalityBoxProps, any> {
 interface NodeBoxProps {
   node: NodeStatus$Properties;
   nodeHistory: SimulatedNodeStatus;
+  liveness: { [id: string]: LivenessStatus };
 }
 
 class NodeBox extends React.Component<NodeBoxProps, any> {
@@ -82,8 +93,10 @@ class NodeBox extends React.Component<NodeBoxProps, any> {
     return (
       <g>
         <NodeView
+          node={this.props.node}
           nodeHistory={this.props.nodeHistory}
           maxClientActivityRate={10000}
+          liveness={this.props.liveness}
         />
       </g>
     );
@@ -97,6 +110,7 @@ interface ModalLocalitiesViewProps {
   nodeHistories: { [id: string]: SimulatedNodeStatus };
   projection: d3.geo.Projection;
   zoom: ZoomTransformer;
+  liveness: { [id: string]: LivenessStatus };
 }
 
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
@@ -111,7 +125,12 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
     _.values(tree.localities).forEach((tier) => {
       _.values(tier).forEach((locality) => {
         children.push(
-          <LocalityBox projection={this.props.projection} locality={locality} locationTree={this.props.locationTree} />,
+          <LocalityBox
+            projection={this.props.projection}
+            localityTree={locality}
+            locationTree={this.props.locationTree}
+            liveness={this.props.liveness}
+          />,
         );
       });
     });
@@ -126,7 +145,7 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
       const nodeHistory = this.props.nodeHistories[node.desc.node_id];
 
       children.push(
-        <NodeBox node={node} nodeHistory={nodeHistory} />,
+        <NodeBox node={node} liveness={this.props.liveness} nodeHistory={nodeHistory} />,
       );
     });
 
