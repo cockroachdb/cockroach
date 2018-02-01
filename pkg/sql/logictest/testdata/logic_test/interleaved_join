@@ -662,7 +662,7 @@ NULL       /0       20        {5}       5
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzslMFq4zAQhu_7FGZOCTsLke3kYFjQacFLSEqgp2KKsSapwZHMSC4twe9eZNPGSZPSkqtvlmY-_tFnmANoo2iV78lC8gACEEJAiAAhBoQ5ZAg1m4KsNexbeiBVL5DMEEpdN85fZwiFYYLkAK50FUECqXbEFeXPtKFcEf83pSYGBEUuL6sub0lbBz6h3Of8Kk3jiB9rP4WvBOvGJYEUKP1Mm3L39Lm5EO-lQTfKCKWf_yOzoq2bSPF7-pd9b_fpQdKKOAnSf6v75XLi4WiKgQwxkDEGco6BXEDWIpjGHZ9qXb4jSESLV3QcLTTasCImdfLwrL0gbGX-mPqs7XJweBIsxv8w1BGOOoY6olHHUEc86ri2tC7o2JCtjbb0ra0080uN1I76DWhNwwXdsSm6mP647rjuQpF1fVX0h1R3pW7AISy-hBcn8OwcDm9Jjm6B41vg-Y_grP31FgAA___ZxXLK
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslEFr3DAQhe_9FWJOCZ3CyvbmICjo0oCDsYvJnoopxppsDY5kJLk0BP_3Ips2u9tt8LJX3yTNvHnDJ3ivoI2ivH4mB-IbcECIACEGhAQQtlAh9NY05JyxoWUWpOoXiA1Cq_vBh-cKoTGWQLyCb31HICDVnmxH9U8qqVZkH0yryQKCIl-33eSX0ZOH4NA-1_ZFmsGT_d6HLUKFFYMXTHKUYaey3f_4t7nhf0oH3ShjlGH_v56PLz0Jdr_LMlbsHr-U7KFIc0Do6MnfSP7x9rMNM6ZjGEhakRUsvc93WXYThsa3yGSETCbI5BaZvINqRDCDf0PgfL0nEHzE_2B6ozNoYxVZUkdAqvEMyNx8Mv1J23nj6MiYr_-z5H-iFdMSTPGKaQmmZMV0aSiewVSS6412tCj1NiE0Se1pTlhnBtvQV2uayWa-FpNuelDk_Fzl8yXVU2la8FDM3xXfHYk3p-LoGuf4GnFyjXh7kbgaP_wOAAD__6_sk-A=
 
 query IIIII rowsort,colnames
 SELECT * FROM outer_p1 FULL OUTER JOIN outer_c1 USING (pid1)
@@ -698,7 +698,7 @@ pid1  pa1  cid1  cid2  ca1
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzslM-K2zAQh-99CjOnhEwh_pe2hoJOBZeQlEBPxRRjTbwGRzKSvOwS_O6LZEjiJLvs4j36ODP69BOfYI4gJKdNfiANyT_wASEAhBAQIkCIIUNolCxIa6nskR5I-RMkS4RKNK2x7QyhkIogOYKpTE2QQCoMqZryR9pRzkn9lpUgBQicTF7VLm9NewM2oTrk6pnJ1pD6Xxb2GXbkbVuTeMxHFiALkUXIYkDYVeXDLeYoN7rBAOGUXtPezJi_QBYskIWL-U9lmUHLXkSCk0q89Nfm73o9s5et5ngqA2TfLsoQ2fc5eixCj8XosR-QdQiyNWc92uQlQeJ3-IrCs7lWSMVJER_Iyro7kjfyq2yujt0PDgbB_vR3Y_8umBSOVRhOCscqjCaFn7mE7yjckW6k0PSuLbu0S5p4Sf1G17JVBf1RsnAxfbl1nGtw0qaf-n2RCjdyD7yE_Tfh1QBeXsPBmORwDByNgeMPwVn35SUAAP__bLys9A==
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslV1r2zAUhu_3K8R71ZAziD_SbYaBblZwMckIzdUww1inmSGVjCSPlZL_PiRD27TZ2AjpVS7POXr0ikcgPUAbxYvmjh2Kb0hASEHIQMhBmKMm9Na07JyxYckIlOoXihmh0_3gQ7smtMYyigf4zm8ZBUrt2W65-ckrbhTba9NptiAo9k23jXkV33qEhO6usffSDJ7t900bjhFGYjn4QsiEZEoyI5mTnIOw6jY_XmORiqNXGAiP6Tf3PRfial1VYrm--bIS18tyAcKWb_2FTKYk0ynJbDr5bMNee60QwFqxLUR5tVhX1UUIuZzQY5mS_PCszEh-nJCQOQk5JyE_od4RzOCftDnfbBhFsqM_qH0yOmhjFVtWexLr3QH5C_Pe9C-WHQ5O94KT852e6k7Ts9pTqc3Oak-lNj-rfYtH_oDaFbveaMf_9IrPwifAasPjj-HMYFv-ak0bY8ZyGbnYUOz8OE3GotRxFA_4HE7-Cl_uwbOXcHpMcnYMnB8Dz_8LrnfvfgcAAP__FlDOCg==
 
 query IIIIII rowsort,colnames
 SELECT * FROM outer_gc1 FULL OUTER JOIN outer_c1 USING (pid1, cid1, cid2)
@@ -727,7 +727,7 @@ pid1  cid1  cid2  gcid1  gca1  ca1
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzklE9Lw0AQxe9-ivJOiiN0k-ohIOy1Iq30KkFCdloD6W7Y3YhS8t1lN2j_WP_RY27ZefPjzRuYbKCN4lmxZofsEQKEBIQUhAlyQmNNyc4ZG-S-eapekY0JlW5aH8o5oTSWkW3gK18zMky1Z1tz8cILLhTbO1NptiAo9kVVR697XnoEh2pd2DdpWs_2qQwTBGU0b302koJkQjIlOQFhUa2evyKN-JB2GBA-PWte-nMpLi9ubeiKnyAcGpC8Qd4RTOu3wZwvVoxMdPRN-G3mVhur2LLai5l3R9YzM1emOWg7bpzsGYshbz0Zcvh0yOF_-dks2DVGO_7TQY3DPbJacX-8zrS25AdrymjTP-eRiwXFzveq6B9THaU44C4sfoSv9-DxIZyc4pyeAk_-Befd2XsAAAD__9UR-Ns=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzslE9Lw0AQxe9-ivBOiiN0k-ohIORSIaU0EupJgoTstAbSbNjdiKXku0sStH8tSq-9ZfftjzfzhskapZI8TZds4L9CgOCC4IEwREKotMrYGKVbuX8cyk_4A0JeVrVtrxNCpjTDX8PmtmD4CEvLuuD0g2NOJeuxykvWIEi2aV50XhOeW7QO-TLVq0DVlvVb1lbQKk5UW98JBAUuBR4FQxDifPF-iFTiW9piQPjxnK0q9p3J6GnmRC-zUeyMo3AKQsFzex2I25tH3dLdJwj7xhQ8IGkIqrabho1NFwxfNPRLKJss6lJpyZrlTvtJcyS2qbpT1d6z48bujrG4TONwGu4llMNQvEsop_f2SCgxm0qVhv-0mIN2r1kuuP8JGFXrjJ-1yjqb_hh1XHch2dheFf0hLDupK3AbFifh-x14sA-75zh758DDf8FJc_UVAAD__6AEE0I=
 
 query IIIII rowsort,colnames
 SELECT * FROM outer_c1 LEFT OUTER JOIN outer_p1 USING (pid1) WHERE pid1 >= 0 AND pid1 < 40
@@ -752,7 +752,7 @@ pid1  cid1  cid2  ca1  pa1
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzslM1q6zAUhPf3KcKs7uWeQmQnLQgK2qaUpGRbTDHWiWtwLCPJpSX43Ytk2vw0_SPb7CzNfIzOwPEGjdE8z9fsIO8hQEhASEGYICO01hTsnLFBHswz_Qw5JlRN2_lwnREKYxlyA1_5miExazzbmvMnXnKu2d6YqmELgmafV3XMuuWVR0io1rl9UabzbB_a8IKgjBadlyMlSIX3LKvy8aO5LMSbtmMnlZKakJqC8J5b88r_VeL_v2sb7PEThIFKIxUQUpekrpD1BNP57XzO5yVDip4-6WA7etcYq9my3ps264-0NDcXpj2wHQ9O9oLFuXyZnDuQ6bmD735ES3ataRz_aMvGYUlZlzxstDOdLfjOmiLGDMdF5OKFZucHVQyHWROl-MBdWHwJT_fg8SGcnJKcngJPfgVn_Z_XAAAA__83-f-X
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzsVE1r4zAQve-vMHPaZWchspMtGAq6lNahxMWkp2KKsSauwZGMJJeG4P9eJNPmo0lJyTU3S2_ee-M3jNYglaBZsSQD8RMwQAgBIQKEMeQIrVYlGaO0g4fiRLxBPEKoZdtZd50jlEoTxGuwtW0IYkikJd1Q8UoZFYL0VNWSNCAIskXdeK97WlhwDvWy0CuuOkv6uXUdOCRIOxsHnCF3_WR19fK1uCrZB7ZVjjxCPkY-AYRP3_mqpTjIktu7eZA-zm-yYJomM0BoaGF_c_b3z7V2Ov4TEAa5yMs5LeT_kV9B3iOozm5-3NiiIohZj0fC2WTSSaUFaRI7MeT9gfhm6p9q98oOG4c7xuwyleNTCS_hHA8nuoRz2j4fCCcj0ypp6KSFHbl9J1HR8DgY1emSHrQqvc1wTD3PXwgydkDZcEikh3yD22T2LXmyQx7tk8NznKNzyOMfkfP-13sAAAD__0HOG0o=
 
 query IIIIII rowsort,colnames
 SELECT * FROM outer_p1 RIGHT OUTER JOIN outer_gc1 USING (pid1) WHERE pid1 >= 1 AND pid1 <= 20
