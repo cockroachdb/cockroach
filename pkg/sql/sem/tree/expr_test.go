@@ -74,9 +74,6 @@ func TestNormalizeNameInExpr(t *testing.T) {
 		{`"".foo`, ``, `empty table name`},
 		{`"".*`, ``, `empty table name`},
 		{`""`, ``, `empty column name`},
-		{`foo.*.bar`, ``, `invalid table name: "foo.*"`},
-		{`foo.*.bar[baz]`, ``, `invalid table name: "foo.*"`},
-		{`test.foo.*.bar[foo]`, ``, `invalid table name: "test.foo.*"`},
 	}
 
 	for _, tc := range testCases {
