@@ -116,7 +116,7 @@ const nodeSumsSelector = createSelector(
 
 export function sumNodeStats(
   nodeStatuses: NodeStatus$Properties[],
-  livenessStatusByNodeID: Dictionary<LivenessStatus>,
+  livenessStatusByNodeID: { [id: string]: LivenessStatus },
 ) {
   const result = {
     nodeCounts: {
