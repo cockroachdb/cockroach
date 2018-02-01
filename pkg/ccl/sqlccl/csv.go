@@ -1165,7 +1165,7 @@ func doDistributedCSVTransform(
 		evalCtx,
 		p.ExecCfg().NodeID.Get(),
 		nodes,
-		sql.NewRowResultWriter(tree.Rows, rows),
+		sql.NewRowResultWriter(rows),
 		tableDesc,
 		files,
 		temp,
