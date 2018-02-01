@@ -1,8 +1,8 @@
 required = [
- "github.com/golang/dep/cmd/dep",
  "github.com/client9/misspell/cmd/misspell",
  "github.com/cockroachdb/crlfmt",
  "github.com/cockroachdb/stress",
+ "github.com/golang/dep/cmd/dep",
  "github.com/golang/lint/golint",
  "github.com/google/pprof",
  "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway",
@@ -28,6 +28,8 @@ ignored = [
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
 # https://github.com/coreos/etcd/commit/f03ed33
+#
+# https://github.com/coreos/etcd/commit/ce0ad377
 [[constraint]]
   name = "github.com/coreos/etcd"
   branch = "master"
@@ -47,20 +49,10 @@ ignored = [
   name = "github.com/go-sql-driver/mysql"
   branch = "master"
 
-# https://github.com/grpc-ecosystem/grpc-gateway/commit/8db8c1a
-[[constraint]]
-  name = "github.com/grpc-ecosystem/grpc-gateway"
-  branch = "master"
-
 # https://github.com/jteeuwen/go-bindata/pull/158
 [[constraint]]
   name = "github.com/jteeuwen/go-bindata"
   source = "https://github.com/dim13/go-bindata"
-  branch = "master"
-
-# https://github.com/mattn/goveralls/commit/42c8a69
-[[constraint]]
-  name = "github.com/mattn/goveralls"
   branch = "master"
 
 # https://github.com/montanaflynn/stats/releases (latest is 2015-10-14)
@@ -73,31 +65,6 @@ ignored = [
   name = "github.com/rubyist/circuitbreaker"
   branch = "master"
 
-# https://github.com/sasha-s/go-deadlock/commit/3bab8aa
-[[constraint]]
-  name = "github.com/sasha-s/go-deadlock"
-  branch = "master"
-
-# https://github.com/satori/go.uuid/commit/0aa62d5
-[[constraint]]
-  name = "github.com/satori/go.uuid"
-  branch = "master"
-
-# https://github.com/dominikh/go-tools/commit/7c098cc
-[[constraint]]
-  name = "honnef.co/go/tools"
-  branch = "master"
-
-# https://github.com/gogo/protobuf/commit/620da83
-[[constraint]]
-name = "github.com/gogo/protobuf"
-branch = "master"
-
-# https://github.com/apache/thrift/commit/5b4c6bf
-[[override]]
-  name = "github.com/apache/thrift"
-  branch = "master"
-
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
 #
@@ -107,10 +74,21 @@ branch = "master"
   name = "github.com/docker/distribution"
   branch = "master"
 
-# go-ole has not made a release in over two years, but go-sigar requires
-# features introduced in the last two years.
-#
-# https://github.com/go-ole/go-ole/releases
-[[override]]
- name = "github.com/go-ole/go-ole"
- branch = "master"
+[prune]
+  go-tests = true
+  unused-packages = true
+
+  # Avoid pruning projects containing needed protos.
+
+  [[prune.project]]
+    name = "github.com/gogo/protobuf"
+    unused-packages = false
+
+  [[prune.project]]
+    name = "github.com/grpc-ecosystem/grpc-gateway"
+    unused-packages = false
+
+  # Contains packages with used C files.
+  [[prune.project]]
+    name = "github.com/knz/go-libedit"
+    unused-packages = false
