@@ -1406,13 +1406,13 @@ cafef00ddeadbeef
 cafef00ddeadbeef
 63616665-6630-3064-6465-616462656566
 
-query error uuid: UUID string too short
+query error uuid: incorrect UUID length
 SELECT TO_UUID('63616665-6630-3064-6465')
 
-query error uuid: UUID string too long
+query error uuid: incorrect UUID length
 SELECT TO_UUID('63616665-6630-3064-6465-616462656566-123')
 
-query error uuid: invalid string format
+query error uuid: incorrect UUID format
 SELECT TO_UUID('6361666512-6630-3064-6465-616462656566')
 
 query error uuid: UUID must be exactly 16 bytes long, got 4 bytes

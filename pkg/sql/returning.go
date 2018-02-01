@@ -42,8 +42,6 @@ type returningHelper struct {
 	// IndexedVarContainer and the IndexedVar objects in sub-expressions
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
-	//
-	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 }
 

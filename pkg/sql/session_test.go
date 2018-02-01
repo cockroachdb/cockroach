@@ -120,7 +120,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			pgURL, cleanupDB := sqlutils.PGUrl(
 				t, s.ServingAddr(), state.String(), url.User(security.RootUser))
 			defer cleanupDB()
-			conn, err := pq.Open(pgURL.String())
+			c, err := pq.Open(pgURL.String())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,17 +129,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				if connClosed {
 					return
 				}
-				if err := conn.Close(); err != nil {
+				if err := c.Close(); err != nil {
 					t.Fatal(err)
 				}
 			}()
 
-			txn, err := conn.Begin()
+			ctx := context.TODO()
+			conn := c.(driver.ConnBeginTx)
+			txn, err := conn.BeginTx(ctx, driver.TxOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
 			tx := txn.(driver.ExecerContext)
-			ctx := context.TODO()
 			if _, err := tx.ExecContext(ctx, "SET TRANSACTION PRIORITY NORMAL", nil); err != nil {
 				t.Fatal(err)
 			}
@@ -179,7 +180,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 			// Abruptly close the connection.
 			connClosed = true
-			if err := conn.Close(); err != nil {
+			if err := c.Close(); err != nil {
 				t.Fatal(err)
 			}
 
