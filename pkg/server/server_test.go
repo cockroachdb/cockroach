@@ -492,13 +492,10 @@ func TestOfficializeAddr(t *testing.T) {
 			"notarealhost.local.:0",
 			util.NewUnresolvedAddr("tcp", "0.0.0.0:1234"),
 			os.Hostname,
-		); !testutils.IsError(err, "lookup notarealhost.local.(?: on .+)?: (no such host|Name or service not known)") {
+		); !testutils.IsError(err, "lookup notarealhost.local.(?: on .+)?: no such host") {
 			// On Linux but not on macOS, the error returned from
 			// (*net.Resolver).LookupHost reports the DNS server used; permit
 			// both.
-			//
-			// gccgo's error message is inconsistent with gc's. See
-			// https://github.com/golang/go/issues/23645.
 			t.Fatalf("unexpected error %v", err)
 		}
 	})
