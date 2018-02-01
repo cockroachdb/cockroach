@@ -18,8 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -152,7 +157,7 @@ func (b *Builder) Build() (root opt.GroupID, required *opt.PhysicalProps, err er
 	// TODO(rytaft): Add physical properties that are required of the root memo
 	// group.
 	required = &opt.PhysicalProps{}
-	return
+	return root, required, nil
 }
 
 // builderError is used for semantic errors that occur during the build process
@@ -229,7 +234,7 @@ func (b *Builder) buildTable(
 			}
 		}
 
-		return
+		return out, outScope
 
 	case *tree.NormalizableTableName:
 		tn, err := source.Normalize()
@@ -283,23 +288,26 @@ func (b *Builder) buildScan(tbl optbase.Table, inScope *scope) (out opt.GroupID,
 // buildScalar builds a set of memo groups that represent the given scalar
 // expression.
 //
-// inScope contains the name bindings that are visible for this scalar
-// expression (e.g., passed in from an enclosing statement).
-// The return value corresponds to the top-level memo group ID for this scalar
-// expression.
-func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID {
+// See Builder.buildStmt above for a description of the remaining input and
+// return values.
+func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.GroupID) {
+	inGroupingContext := inScope.inGroupingContext() && !inScope.groupby.inAgg
+	varsUsedIn := len(inScope.groupby.varsUsed)
 	switch t := scalar.(type) {
 	case *columnProps:
+		if inGroupingContext && !inScope.groupby.groupingsScope.hasColumn(t.index) {
+			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.index)
+		}
 		return b.factory.ConstructVariable(b.factory.InternPrivate(t.index))
 
 	case *tree.AndExpr:
-		return b.factory.ConstructAnd(
+		out = b.factory.ConstructAnd(
 			b.buildScalar(t.TypedLeft(), inScope),
 			b.buildScalar(t.TypedRight(), inScope),
 		)
 
 	case *tree.BinaryExpr:
-		return binaryOpMap[t.Operator](b.factory,
+		out = binaryOpMap[t.Operator](b.factory,
 			b.buildScalar(t.TypedLeft(), inScope),
 			b.buildScalar(t.TypedRight(), inScope),
 		)
@@ -312,7 +320,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID
 		}
 
 		// TODO(peter): handle t.SubOperator.
-		return comparisonOpMap[t.Operator](b.factory,
+		out = comparisonOpMap[t.Operator](b.factory,
 			b.buildScalar(t.TypedLeft(), inScope),
 			b.buildScalar(t.TypedRight(), inScope),
 		)
@@ -322,46 +330,128 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID
 		for i := range t.D {
 			list[i] = b.buildScalar(t.D[i], inScope)
 		}
-		return b.factory.ConstructTuple(b.factory.InternList(list))
+		out = b.factory.ConstructTuple(b.factory.InternList(list))
+
+	case *tree.FuncExpr:
+		out, _ = b.buildFunction(t, "", inScope)
 
 	case *tree.IndexedVar:
 		colProps := b.synthesizeColumn(inScope, fmt.Sprintf("@%d", t.Idx+1), t.ResolvedType())
-		return b.factory.ConstructVariable(b.factory.InternPrivate(colProps.index))
+		out = b.factory.ConstructVariable(b.factory.InternPrivate(colProps.index))
+		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.NotExpr:
-		return b.factory.ConstructNot(b.buildScalar(t.TypedInnerExpr(), inScope))
+		out = b.factory.ConstructNot(b.buildScalar(t.TypedInnerExpr(), inScope))
 
 	case *tree.OrExpr:
-		return b.factory.ConstructOr(
+		out = b.factory.ConstructOr(
 			b.buildScalar(t.TypedLeft(), inScope),
 			b.buildScalar(t.TypedRight(), inScope),
 		)
 
 	case *tree.ParenExpr:
-		return b.buildScalar(t.TypedInnerExpr(), inScope)
+		out = b.buildScalar(t.TypedInnerExpr(), inScope)
 
 	case *tree.Placeholder:
-		return b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
+		out = b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
+		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.Tuple:
 		list := make([]opt.GroupID, len(t.Exprs))
 		for i := range t.Exprs {
 			list[i] = b.buildScalar(t.Exprs[i].(tree.TypedExpr), inScope)
 		}
-		return b.factory.ConstructTuple(b.factory.InternList(list))
+		out = b.factory.ConstructTuple(b.factory.InternList(list))
 
 	case *tree.UnaryExpr:
-		return unaryOpMap[t.Operator](b.factory, b.buildScalar(t.TypedInnerExpr(), inScope))
+		out = unaryOpMap[t.Operator](b.factory, b.buildScalar(t.TypedInnerExpr(), inScope))
 
 	// NB: this is the exception to the sorting of the case statements. The
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
 	case tree.Datum:
-		return b.factory.ConstructConst(b.factory.InternPrivate(t))
+		out = b.factory.ConstructConst(b.factory.InternPrivate(t))
 
 	default:
 		panic(errorf("not yet implemented: scalar expr: %T", scalar))
 	}
+
+	// If we are in a grouping context and this expression corresponds to
+	// a GROUP BY expression, truncate varsUsed.
+	if inGroupingContext {
+		if _, ok := inScope.groupby.groupStrs[symbolicExprStr(scalar)]; ok {
+			inScope.groupby.varsUsed = inScope.groupby.varsUsed[:varsUsedIn]
+		}
+	}
+
+	return out
+}
+
+// symbolicExprStr returns a string representation of the expression using
+// symbolic notation. Because the symbolic notation disambiguates columns, this
+// string can be used to determine if two expressions are equivalent.
+func symbolicExprStr(expr tree.Expr) string {
+	return tree.AsStringWithFlags(expr, tree.FmtCheckEquivalence)
+}
+
+// buildFunction builds a set of memo groups that represent a function
+// expression.
+//
+// f       The given function expression.
+// label   If a new column is synthesized, it will be labeled with this
+//         string.
+//
+// If the function is an aggregate, the second return value, col,
+// corresponds to the columnProps that represents the aggregate.
+// See Builder.buildStmt above for a description of the remaining input and
+// return values.
+func (b *Builder) buildFunction(
+	f *tree.FuncExpr, label string, inScope *scope,
+) (out opt.GroupID, col *columnProps) {
+	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
+	if err != nil {
+		panic(builderError(err))
+	}
+
+	isAgg := isAggregate(def)
+	if isAgg {
+		inScope.startAggFunc()
+	}
+
+	argList := make([]opt.GroupID, 0, len(f.Exprs))
+	for _, pexpr := range f.Exprs {
+		var arg opt.GroupID
+		if _, ok := pexpr.(tree.UnqualifiedStar); ok {
+			arg = b.factory.ConstructConst(b.factory.InternPrivate(tree.NewDInt(1)))
+		} else {
+			arg = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
+		}
+
+		argList = append(argList, arg)
+	}
+
+	out = b.factory.ConstructFunction(b.factory.InternList(argList), b.factory.InternPrivate(def))
+
+	if isAgg {
+		refScope := inScope.endAggFunc()
+
+		// If the aggregate already exists as a column, use that. Otherwise
+		// create a new column and add it the list of aggregates that need to
+		// be computed by the groupby expression.
+		col = refScope.findAggregate(out)
+		if col == nil {
+			col = b.synthesizeColumn(refScope, label, f.ResolvedType())
+
+			// Add the aggregate to the list of aggregates that need to be computed by
+			// the groupby expression.
+			refScope.groupby.aggs = append(refScope.groupby.aggs, out)
+		}
+
+		// Replace the function call with a reference to the column.
+		out = b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+	}
+
+	return out, col
 }
 
 // buildSelect builds a set of memo groups that represent the given select
@@ -386,7 +476,8 @@ func (b *Builder) buildSelect(
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
 	}
 
-	// TODO(rytaft): Add support for order by expression.
+	// TODO(rytaft): Add support for ORDER BY expression.
+	// TODO(rytaft): Support FILTER expression.
 	// TODO(peter): stmt.Limit
 }
 
@@ -395,7 +486,7 @@ func (b *Builder) buildSelect(
 // select clause in order to handle ORDER BY scoping rules. ORDER BY can sort
 // results using columns from the FROM/GROUP BY clause and/or from the
 // projection list.
-// TODO(rytaft): Add support for groupings, having, order by, and distinct.
+// TODO(rytaft): Add support for ORDER BY, DISTINCT and HAVING.
 //
 // See Builder.buildStmt above for a description of the remaining input and
 // return values.
@@ -403,15 +494,70 @@ func (b *Builder) buildSelectClause(
 	stmt *tree.Select, inScope *scope,
 ) (out opt.GroupID, outScope *scope) {
 	sel := stmt.Select.(*tree.SelectClause)
-	if (sel.GroupBy != nil && len(sel.GroupBy) > 0) || stmt.OrderBy != nil || sel.Distinct {
-		panic(errorf("complex queries not yet supported: %s", sel.String()))
+
+	var fromScope *scope
+	out, fromScope = b.buildFrom(sel.From, sel.Where, inScope)
+
+	// The "from" columns are visible to any grouping expressions.
+	groupings, groupingsScope := b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope)
+
+	if groupings != nil {
+		fromScope.groupby.groupings = groupings
+	} else if sel.Having != nil || b.hasAggregates(sel.Exprs) {
+		// Even though there is no groupby clause, create a grouping scope
+		// anyway, since a HAVING clause or one or more aggregate functions
+		// in the projection list triggers an implicit groupby.
+		groupingsScope = fromScope.replace()
 	}
 
-	out, outScope = b.buildFrom(sel.From, sel.Where, inScope)
+	// Set the grouping scope so that any aggregates will be added to the set
+	// of grouping columns.
+	fromScope.groupby.groupingsScope = groupingsScope
+
+	// Any "grouping" columns are visible to both the "having" and "projection"
+	// expressions. The build has the side effect of extracting aggregation
+	// columns.
+	var having opt.GroupID
+	if sel.Having != nil {
+		// TODO(rytaft): Build HAVING.
+		panic(errorf("HAVING not yet supported: %s", stmt.String()))
+	}
 
 	// If the projection is empty or a simple pass-through, then
 	// buildProjectionList will return nil values.
-	projections, projectionsScope := b.buildProjectionList(sel.Exprs, outScope)
+	projections, projectionsScope := b.buildProjectionList(sel.Exprs, fromScope)
+
+	// Wrap with groupby operator if groupings or aggregates exist.
+	if fromScope.inGroupingContext() {
+		// Any aggregate columns that were discovered would have been added to
+		// the grouping scope.
+		aggCols := groupingsScope.getAggregateCols()
+		aggList := b.constructProjectionList(groupingsScope.groupby.aggs, aggCols)
+
+		var groupingCols []columnProps
+		if groupings != nil {
+			groupingCols = groupingsScope.cols
+		}
+
+		groupingList := b.constructProjectionList(groupings, groupingCols)
+		out = b.factory.ConstructGroupBy(out, groupingList, aggList)
+
+		// Wrap with having filter if it exists.
+		if having != 0 {
+			out = b.factory.ConstructSelect(out, having)
+		}
+
+		outScope = groupingsScope
+	} else {
+		// No aggregates, so current output scope is the "from" scope.
+		outScope = fromScope
+	}
+
+	if stmt.OrderBy != nil {
+		// TODO(rytaft): Build Order By. Order By relies on the existence of
+		// ordering physical properties.
+		panic(errorf("ORDER BY not yet supported: %s", stmt.String()))
+	}
 
 	// Wrap with project operator if it exists.
 	if projections != nil {
@@ -419,7 +565,7 @@ func (b *Builder) buildSelectClause(
 		outScope = projectionsScope
 	}
 
-	return
+	return out, outScope
 }
 
 // buildFrom builds a set of memo groups that represent the given FROM statement
@@ -464,11 +610,224 @@ func (b *Builder) buildFrom(
 		out = b.factory.ConstructSelect(out, filter)
 	}
 
-	return
+	return out, outScope
+}
+
+// buildGroupingList builds a set of memo groups that represent a list of
+// GROUP BY expressions.
+//
+// groupBy  The given GROUP BY expressions.
+// selects  The select expressions are needed in case one of the GROUP BY
+//          expressions is an index into to the select list. For example,
+//              SELECT count(*), k FROM t GROUP BY 2
+//          indicates that the grouping is on the second select expression, k.
+//
+// The first return value `groupings` is an ordered list of top-level memo
+// groups corresponding to each GROUP BY expression. See Builder.buildStmt
+// above for a description of the remaining input and return values.
+func (b *Builder) buildGroupingList(
+	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope,
+) (groupings []opt.GroupID, outScope *scope) {
+	if groupBy == nil {
+		return nil, nil
+	}
+
+	// After GROUP BY, variables from inScope are hidden
+	outScope = inScope.replace()
+
+	groupings = make([]opt.GroupID, 0, len(groupBy))
+	inScope.groupby.groupStrs = make(groupByStrSet, len(groupBy))
+	for _, e := range groupBy {
+		subset := b.buildGrouping(e, selects, inScope, outScope)
+		groupings = append(groupings, subset...)
+	}
+
+	return groupings, outScope
+}
+
+// buildGrouping builds a set of memo groups that represent a GROUP BY
+// expression.
+//
+// groupBy  The given GROUP BY expression.
+// selects  The select expressions are needed in case the GROUP BY expression
+//          is an index into to the select list.
+//
+// The return value is an ordered list of top-level memo groups corresponding
+// to the expression. The list generally consists of a single memo group except
+// in the case of "*", where the expression is expanded to multiple columns.
+//
+// See Builder.buildStmt above for a description of the remaining input values
+// (outScope is passed as a parameter here rather than a return value because
+// the newly bound variables are appended to a growing list to be returned by
+// buildGroupingList).
+func (b *Builder) buildGrouping(
+	groupBy tree.Expr, selects tree.SelectExprs, inScope, outScope *scope,
+) []opt.GroupID {
+	// Unwrap parenthesized expressions like "((a))" to "a".
+	groupBy = tree.StripParens(groupBy)
+
+	// Check whether the GROUP BY clause refers to a column in the SELECT list
+	// by index, e.g. `SELECT a, SUM(b) FROM y GROUP BY 1`.
+	col := colIndex(len(selects), groupBy, "GROUP BY")
+	label := ""
+	if col != -1 {
+		groupBy = selects[col].Expr
+		label = string(selects[col].As)
+	}
+
+	// Resolve types, expand stars, and flatten tuples.
+	exprs := b.expandStarAndResolveType(groupBy, inScope)
+	exprs = flattenTuples(exprs)
+
+	// Finally, build each of the GROUP BY columns.
+	out := make([]opt.GroupID, 0, len(exprs))
+	for _, e := range exprs {
+		// Save a representation of the GROUP BY expression for validation of the
+		// SELECT and HAVING expressions. This enables queries such as:
+		//    SELECT x+y FROM t GROUP BY x+y
+		inScope.groupby.groupStrs[symbolicExprStr(e)] = exists
+		out = append(out, b.buildScalarProjection(e, label, inScope, outScope))
+	}
+	return out
+}
+
+// colIndex takes an expression that refers to a column using an integer,
+// verifies it refers to a valid target in the SELECT list, and returns the
+// corresponding column index. For example:
+//    SELECT a from T ORDER by 1
+// Here "1" refers to the first item in the SELECT list, "a". The returned index
+// is 0.
+func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
+	ord := int64(-1)
+	switch i := expr.(type) {
+	case *tree.NumVal:
+		if i.ShouldBeInt64() {
+			val, err := i.AsInt64()
+			if err != nil {
+				panic(builderError(err))
+			}
+			ord = val
+		} else {
+			panic(errorf("non-integer constant in %s: %s", context, expr))
+		}
+	case *tree.DInt:
+		if *i >= 0 {
+			ord = int64(*i)
+		}
+	case *tree.StrVal:
+		panic(errorf("non-integer constant in %s: %s", context, expr))
+	case tree.Datum:
+		panic(errorf("non-integer constant in %s: %s", context, expr))
+	}
+	if ord != -1 {
+		if ord < 1 || ord > int64(numOriginalCols) {
+			panic(errorf("%s position %s is not in select list", context, expr))
+		}
+		ord--
+	}
+	return int(ord)
+}
+
+// expandStarAndResolveType expands expr into a list of columns if expr
+// corresponds to a "*" or "<table>.*". Otherwise, expandStarAndResolveType
+// resolves the type of expr and returns it as a []TypedExpr.
+func (b *Builder) expandStarAndResolveType(
+	expr tree.Expr, inScope *scope,
+) (exprs []tree.TypedExpr) {
+	// NB: The case statements are sorted lexicographically.
+	switch t := expr.(type) {
+	case *tree.AllColumnsSelector:
+		tableName := optbase.TableName(t.TableName.Table())
+		for i := range inScope.cols {
+			col := inScope.cols[i]
+			if col.table == tableName && !col.hidden {
+				exprs = append(exprs, &col)
+			}
+		}
+		if len(exprs) == 0 {
+			panic(errorf("unknown table %s", t))
+		}
+
+	case tree.UnqualifiedStar:
+		for i := range inScope.cols {
+			col := inScope.cols[i]
+			if !col.hidden {
+				exprs = append(exprs, &col)
+			}
+		}
+		if len(exprs) == 0 {
+			panic(errorf("failed to expand *"))
+		}
+
+	case *tree.UnresolvedName:
+		vn, err := t.NormalizeVarName()
+		if err != nil {
+			panic(builderError(err))
+		}
+		return b.expandStarAndResolveType(vn, inScope)
+
+	default:
+		texpr := inScope.resolveType(t, types.Any)
+		exprs = []tree.TypedExpr{texpr}
+	}
+
+	return exprs
+}
+
+// flattenTuples extracts the members of tuples into a list of columns.
+func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
+	// We want to avoid allocating new slices unless strictly necessary.
+	var newExprs []tree.TypedExpr
+	for i, e := range exprs {
+		if t, ok := e.(*tree.Tuple); ok {
+			if newExprs == nil {
+				// All right, it was necessary to allocate the slices after all.
+				newExprs = make([]tree.TypedExpr, i, len(exprs))
+				copy(newExprs, exprs[:i])
+			}
+
+			newExprs = flattenTuple(t, newExprs)
+		} else if newExprs != nil {
+			newExprs = append(newExprs, e)
+		}
+	}
+	if newExprs != nil {
+		return newExprs
+	}
+	return exprs
+}
+
+// flattenTuple recursively extracts the members of a tuple into a list of
+// expressions.
+func flattenTuple(t *tree.Tuple, exprs []tree.TypedExpr) []tree.TypedExpr {
+	for _, e := range t.Exprs {
+		if eT, ok := e.(*tree.Tuple); ok {
+			exprs = flattenTuple(eT, exprs)
+		} else {
+			expr := e.(tree.TypedExpr)
+			exprs = append(exprs, expr)
+		}
+	}
+	return exprs
+}
+
+// hasAggregates determines if any of the given select expressions contain an
+// aggregate function.
+func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
+	exprTransformCtx := transform.ExprTransformContext{}
+	for _, sel := range selects {
+		// TODO(rytaft): This function does not recurse into subqueries, so this
+		// will be incorrect for correlated subqueries.
+		if exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // buildProjectionList builds a set of memo groups that represent the given
-// select expressions.
+// list of select expressions.
 //
 // The first return value `projections` is an ordered list of top-level memo
 // groups corresponding to each select expression. See Builder.buildStmt above
@@ -480,7 +839,13 @@ func (b *Builder) buildProjectionList(
 		return nil, nil
 	}
 
-	outScope = inScope.push()
+	if inScope.inGroupingContext() {
+		// In the case of grouping, FROM columns are no longer visible.
+		outScope = inScope.replace()
+	} else {
+		outScope = inScope.push()
+	}
+
 	projections = make([]opt.GroupID, 0, len(selects))
 	for _, e := range selects {
 		end := len(outScope.cols)
@@ -493,6 +858,12 @@ func (b *Builder) buildProjectionList(
 				outScope.cols[i].name = optbase.ColumnName(e.As)
 			}
 		}
+	}
+
+	// Don't add an unnecessary "pass through" project expression.
+	if inScope.inGroupingContext() {
+		// If aggregates will be projected, check against them instead.
+		inScope = inScope.groupby.groupingsScope
 	}
 
 	if len(outScope.cols) == len(inScope.cols) {
@@ -509,90 +880,73 @@ func (b *Builder) buildProjectionList(
 		}
 	}
 
-	return
+	return projections, outScope
 }
 
-// buildProjection builds a set of memo groups that represent the given
-// projection expression. If a new column is synthesized (e.g., for a scalar
-// expression), it will be labeled with the given label.
+// buildProjection builds a set of memo groups that represent a projection
+// expression.
 //
-// The first return value `projections` is an ordered list of top-level memo
+// projection  The given projection expression.
+// label       If a new column is synthesized (e.g., for a scalar expression),
+//             it will be labeled with this string.
+//
+// The return value `projections` is an ordered list of top-level memo
 // groups corresponding to the expression. The list generally consists of a
 // single memo group except in the case of "*", where the expression is
 // expanded to multiple columns.
 //
-// See Builder.buildStmt above for a description of the remaining input and
-// return values (outScope is passed as a parameter here rather than a return
-// value because the newly bound variables are appended to a growing list to be
-// returned by buildProjectionList).
+// See Builder.buildStmt above for a description of the remaining input values
+// (outScope is passed as a parameter here rather than a return value because
+// the newly bound variables are appended to a growing list to be returned by
+// buildProjectionList).
 func (b *Builder) buildProjection(
 	projection tree.Expr, label string, inScope, outScope *scope,
 ) (projections []opt.GroupID) {
-	// We only have to handle "*" and "<name>.*" in the switch below. Other names
-	// will be handled by scope.resolveType().
-	//
-	// NB: The case statements are sorted lexicographically.
-	switch t := projection.(type) {
-	case *tree.AllColumnsSelector:
-		tableName := optbase.TableName(t.TableName.Table())
-		for _, col := range inScope.cols {
-			if col.table == tableName && !col.hidden {
-				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
-				projections = append(projections, v)
-				outScope.cols = append(outScope.cols, col)
-			}
-		}
-		if len(projections) == 0 {
-			panic(errorf("unknown table %s", t))
-		}
-		return
-
-	case tree.UnqualifiedStar:
-		for _, col := range inScope.cols {
-			if !col.hidden {
-				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
-				projections = append(projections, v)
-				outScope.cols = append(outScope.cols, col)
-			}
-		}
-		if len(projections) == 0 {
-			panic(errorf("failed to expand *"))
-		}
-		return
-
-	case *tree.UnresolvedName:
-		vn, err := t.NormalizeVarName()
-		if err != nil {
-			panic(builderError(err))
-		}
-		return b.buildProjection(vn, label, inScope, outScope)
-
-	default:
-		texpr := inScope.resolveType(projection, types.Any)
-		return []opt.GroupID{b.buildScalarProjection(texpr, label, inScope, outScope)}
+	exprs := b.expandStarAndResolveType(projection, inScope)
+	if len(exprs) > 1 && label != "" {
+		panic(errorf("\"%s\" cannot be aliased", projection))
 	}
+
+	projections = make([]opt.GroupID, 0, len(exprs))
+	for _, e := range exprs {
+		projections = append(projections, b.buildScalarProjection(e, label, inScope, outScope))
+	}
+
+	return projections
 }
 
-// buildScalarProjection builds a set of memo groups that represent the given
-// scalar expression. If a new column is synthesized, it will be labeled with
-// the given label. For example, the query `SELECT (x + 1) AS "x_incr" FROM t`
-// has a projection with a synthesized column "x_incr".
+// buildScalarProjection builds a set of memo groups that represent a scalar
+// expression.
+//
+// texpr   The given scalar expression.
+// label   If a new column is synthesized, it will be labeled with this string.
+//         For example, the query `SELECT (x + 1) AS "x_incr" FROM t` has a
+//         projection with a synthesized column "x_incr".
 //
 // The return value corresponds to the top-level memo group ID for this scalar
 // expression.
 //
-// See Builder.buildStmt above for a description of the remaining input and
-// return values (outScope is passed as a parameter here rather than a return
-// value because the newly bound variables are appended to a growing list to be
-// returned by buildProjectionList).
+// See Builder.buildStmt above for a description of the remaining input values
+// (outScope is passed as a parameter here rather than a return value because
+// the newly bound variables are appended to a growing list to be returned by
+// buildProjectionList).
 func (b *Builder) buildScalarProjection(
 	texpr tree.TypedExpr, label string, inScope, outScope *scope,
 ) opt.GroupID {
 	// NB: The case statements are sorted lexicographically.
 	switch t := texpr.(type) {
 	case *columnProps:
-		out := b.factory.ConstructVariable(b.factory.InternPrivate(t.index))
-		outScope.cols = append(outScope.cols, b.colMap[t.index])
+		return b.buildVariableProjection(b.colMap[t.index], inScope, outScope)
+
+	case *tree.FuncExpr:
+		out, col := b.buildFunction(t, label, inScope)
+		if col != nil {
+			// Function was mapped to a column reference, such as in the case
+			// of an aggregate.
+			outScope.cols = append(outScope.cols, b.colMap[col.index])
+		} else {
+			out = b.buildDefaultScalarProjection(texpr, out, label, inScope, outScope)
+		}
 		return out
 
 	case *tree.ParenExpr:
@@ -600,9 +954,78 @@ func (b *Builder) buildScalarProjection(
 
 	default:
 		out := b.buildScalar(texpr, inScope)
-		b.synthesizeColumn(outScope, label, texpr.ResolvedType())
+		out = b.buildDefaultScalarProjection(texpr, out, label, inScope, outScope)
 		return out
 	}
+}
+
+// buildVariableProjection builds a memo group that represents the given
+// column.
+//
+// The return value corresponds to the top-level memo group ID for this scalar
+// expression.
+//
+// See Builder.buildStmt above for a description of the remaining input values
+// (outScope is passed as a parameter here rather than a return value because
+// the newly bound variables are appended to a growing list to be returned by
+// buildProjectionList).
+func (b *Builder) buildVariableProjection(col columnProps, inScope, outScope *scope) opt.GroupID {
+	if inScope.inGroupingContext() && !inScope.groupby.groupingsScope.hasColumn(col.index) {
+		panic(groupingError(col.String()))
+	}
+	out := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+	outScope.cols = append(outScope.cols, col)
+	return out
+}
+
+// buildDefaultScalarProjection builds a set of memo groups that represent
+// a scalar expression.
+//
+// texpr     The given scalar expression. The expression is any scalar
+//           expression except for a bare variable or aggregate (those are
+//           handled separately in buildVariableProjection and
+//           buildFunction).
+// group     The memo group that has already been built for the given
+//           expression. It may be replaced by a variable reference if the
+//           expression already exists (e.g., as a GROUP BY column).
+// label     If a new column is synthesized, it will be labeled with this
+//           string.
+//
+// The return value corresponds to the top-level memo group ID for this scalar
+// expression.
+//
+// See Builder.buildStmt above for a description of the remaining input values
+// (outScope is passed as a parameter here rather than a return value because
+// the newly bound variables are appended to a growing list to be returned by
+// buildProjectionList).
+func (b *Builder) buildDefaultScalarProjection(
+	texpr tree.TypedExpr, group opt.GroupID, label string, inScope, outScope *scope,
+) opt.GroupID {
+	if inScope.inGroupingContext() {
+		if len(inScope.groupby.varsUsed) > 0 {
+			if _, ok := inScope.groupby.groupStrs[symbolicExprStr(texpr)]; !ok {
+				// This expression was not found among the GROUP BY expressions.
+				i := inScope.groupby.varsUsed[0]
+				col := b.colMap[i]
+				panic(groupingError(col.String()))
+			}
+		}
+
+		if col := inScope.findGrouping(group); col != nil {
+			// The column already exists, so use that instead.
+			col = &b.colMap[col.index]
+			if label != "" {
+				col.name = optbase.ColumnName(label)
+			}
+			outScope.cols = append(outScope.cols, *col)
+
+			// Replace the expression with a reference to the column.
+			return b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+		}
+	}
+
+	b.synthesizeColumn(outScope, label, texpr.ResolvedType())
+	return group
 }
 
 // synthesizeColumn is used to synthesize new columns. This is needed for
@@ -610,13 +1033,16 @@ func (b *Builder) buildScalarProjection(
 // example, the query `SELECT (x + 1) AS "x_incr" FROM t` has a projection with
 // a synthesized column "x_incr".
 //
-// scope is passed in so it can can be updated with the newly bound variable.
-// label is an optional label for the new column (e.g., if specified with the
-// AS keyword), and typ is the type of the column. The new column is returned
-// as a columnProps object.
+// scope  The scope is passed in so it can can be updated with the newly bound
+//        variable.
+// label  This is an optional label for the new column (e.g., if specified with
+//        the AS keyword).
+// typ    The type of the column.
+//
+// The new column is returned as a columnProps object.
 func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *columnProps {
 	if label == "" {
-		label = fmt.Sprintf("column%d", len(scope.cols)+1)
+		label = fmt.Sprintf("column%d", len(b.colMap))
 	}
 
 	colIndex := b.factory.Metadata().AddColumn(label, typ)
@@ -652,6 +1078,11 @@ func (b *Builder) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented: Builder.IndexedVarNodeFormatter")
 }
 
+func isAggregate(def *tree.FunctionDefinition) bool {
+	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
+	return ok
+}
+
 func makeColSet(cols []columnProps) *opt.ColSet {
 	// Create column index list parameter to the ProjectionList op.
 	var colSet opt.ColSet
@@ -659,4 +1090,8 @@ func makeColSet(cols []columnProps) *opt.ColSet {
 		colSet.Add(int(cols[i].index))
 	}
 	return &colSet
+}
+
+func groupingError(colName string) error {
+	return errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", colName)
 }
