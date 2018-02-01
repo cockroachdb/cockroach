@@ -17,7 +17,6 @@ package batcheval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -90,14 +89,9 @@ func RecomputeStats(
 		return result.Result{}, err
 	}
 
-	var currentStats enginepb.MVCCStats
-	if ok, err := engine.MVCCGetProto(
-		ctx, snap, keys.RangeStatsKey(cArgs.Header.RangeID), hlc.Timestamp{}, true /* consistent */, nil /* txn */, &currentStats,
-	); err != nil {
+	currentStats, err := MakeStateLoader(cArgs.EvalCtx).LoadMVCCStats(ctx, snap)
+	if err != nil {
 		return result.Result{}, err
-	} else if !ok {
-		// This should never happen.
-		return result.Result{}, errors.New("range stats not found")
 	}
 
 	delta := actualMS

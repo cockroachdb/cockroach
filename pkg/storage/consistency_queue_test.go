@@ -27,11 +27,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -283,17 +283,10 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		}
 		defer eng.Close()
 
-		statsKey := keys.RangeStatsKey(rangeID)
-
-		var ms enginepb.MVCCStats
-		ok, err := engine.MVCCGetProto(
-			ctx, eng, statsKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &ms,
-		)
+		rsl := stateloader.Make(nil /* st */, rangeID)
+		ms, err := rsl.LoadMVCCStats(ctx, eng)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if !ok {
-			t.Fatal("no persisted stats")
 		}
 
 		// Put some garbage in the stats that we're hoping the consistency queue will
@@ -305,9 +298,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		// Overwrite with the new stats; remember that this range hasn't upreplicated,
 		// so the consistency checker won't see any replica divergence when it runs,
 		// but it should definitely see that its recomputed stats mismatch.
-		if err := engine.MVCCPutProto(
-			ctx, eng, nil, statsKey, hlc.Timestamp{}, nil, &ms,
-		); err != nil {
+		if err := rsl.SetMVCCStats(ctx, eng, &ms); err != nil {
 			t.Fatal(err)
 		}
 	}()

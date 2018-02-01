@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -5743,7 +5744,7 @@ func TestReplicaResolveIntentRange(t *testing.T) {
 }
 
 func verifyRangeStats(eng engine.Reader, rangeID roachpb.RangeID, expMS enginepb.MVCCStats) error {
-	ms, err := engine.MVCCGetRangeStats(context.Background(), eng, rangeID)
+	ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), eng)
 	if err != nil {
 		return err
 	}

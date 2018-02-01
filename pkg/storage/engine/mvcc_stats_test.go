@@ -20,7 +20,6 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
-	"unsafe"
 
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -1469,36 +1468,4 @@ func TestMVCCComputeStatsError(t *testing.T) {
 			}
 		})
 	}
-}
-
-// BenchmarkMVCCStats set MVCCStats values.
-func BenchmarkMVCCStats(b *testing.B) {
-	rocksdb := NewInMem(roachpb.Attributes{Attrs: []string{"ssd"}}, testCacheSize)
-	defer rocksdb.Close()
-
-	ms := enginepb.MVCCStats{
-		LiveBytes:       1,
-		KeyBytes:        1,
-		ValBytes:        1,
-		IntentBytes:     1,
-		LiveCount:       1,
-		KeyCount:        1,
-		ValCount:        1,
-		IntentCount:     1,
-		IntentAge:       1,
-		GCBytesAge:      1,
-		SysBytes:        1,
-		SysCount:        1,
-		LastUpdateNanos: 1,
-	}
-	b.SetBytes(int64(unsafe.Sizeof(ms)))
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		if err := MVCCSetRangeStats(context.Background(), rocksdb, 1, &ms); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.StopTimer()
 }
