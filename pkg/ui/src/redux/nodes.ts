@@ -1,4 +1,4 @@
-import _ from "lodash";
+import _, { Dictionary } from "lodash";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";

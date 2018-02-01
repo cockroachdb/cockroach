@@ -2,7 +2,10 @@ import { assert } from "chai";
 
 import * as protos from "src/js/protos";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { generateLocalityRoute, parseLocalityRoute, getNodeLocalityTiers, getLocality } from "./localities";
+import {
+  generateLocalityRoute, parseLocalityRoute, getNodeLocalityTiers, getLocality,
+  getLeaves,
+} from "./localities";
 
 describe("parseLocalityRoute", function() {
   describe("with an empty route", function() {
@@ -238,5 +241,65 @@ describe("getLocality", function() {
 
       assert.equal(tree, null);
     });
+  });
+});
+
+describe("getLeaves", function() {
+  it("returns the leaves of a locality tree", function() {
+    const node1 = {
+      desc: {
+        node_id: 1,
+        locality: {
+          tiers: [
+            { key: "region", value: "us-east" },
+            { key: "zone", value: "us-east-1" },
+          ],
+        },
+      },
+    };
+    const node2 = {
+      desc: {
+        node_id: 1,
+        locality: {
+          tiers: [
+            { key: "region", value: "us-east" },
+          ],
+        },
+      },
+    };
+    // Uneven tree depth is intentional.
+    const localityTree: LocalityTree = {
+      tiers: [],
+      localities: {
+        region: {
+          "us-east": {
+            tiers: [{ key: "region", value: "us-east" }],
+            localities: {
+              zone: {
+                "us-east-1": {
+                  tiers: [
+                    { key: "region", value: "us-east" },
+                    { key: "zone", value: "us-east-1" },
+                  ],
+                  localities: {},
+                  nodes: [node1],
+                },
+              },
+            },
+            nodes: [],
+          },
+          "us-west": {
+            tiers: [{ key: "region", value: "us-west" }],
+            localities: {},
+            nodes: [node2],
+          },
+        },
+      },
+      nodes: [],
+    };
+
+    const leaves = getLeaves(localityTree);
+
+    assert.deepEqual(leaves, [node1, node2]);
   });
 });

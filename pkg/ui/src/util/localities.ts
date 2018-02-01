@@ -57,3 +57,18 @@ export function getLocality(localityTree: LocalityTree, tiers: LocalityTier[]): 
 
   return result;
 }
+
+/* getLeaves returns the leaves under the given locality tree. Confusingly,
+ * in this tree the "leaves" of the tree are nodes, i.e. servers.
+ */
+export function getLeaves(tree: LocalityTree): NodeStatus$Properties[] {
+  const output: NodeStatus$Properties[] = [];
+  function recur(curTree: LocalityTree) {
+    output.push(...curTree.nodes);
+    _.forEach(curTree.localities, (localityValues) => {
+      _.forEach(localityValues, recur);
+    });
+  }
+  recur(tree);
+  return output;
+}

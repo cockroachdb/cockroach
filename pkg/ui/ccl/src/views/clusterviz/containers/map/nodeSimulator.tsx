@@ -7,6 +7,7 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
+import { Dictionary } from "lodash";
 import { connect } from "react-redux";
 import * as d3 from "d3";
 import * as protos from "src/js/protos";
@@ -16,7 +17,10 @@ import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiRe
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
 import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
-import { nodesSummarySelector, NodesSummary, selectNodeRequestStatus } from "src/redux/nodes";
+import {
+  nodesSummarySelector, NodesSummary, selectNodeRequestStatus,
+  selectLivenessRequestStatus, livenessStatusByNodeIDSelector,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";
 
@@ -24,6 +28,8 @@ import { ZoomTransformer } from "./zoom";
 import { ModalLocalitiesView } from "./modalLocalities";
 
 import spinner from "assets/spinner.gif";
+import {cockroach} from "oss/src/js/protos";
+import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 type NodeStatus = protos.cockroach.server.status.NodeStatus$Properties;
 
@@ -96,6 +102,8 @@ interface NodeSimulatorProps {
   localityStatus: CachedDataReducerState<any>;
   locationTree: LocationTree;
   locationStatus: CachedDataReducerState<any>;
+  liveness: Dictionary<NodeLivenessStatus>;
+  livenessStatus: CachedDataReducerState<any>;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
   refreshLocations: typeof refreshLocations;
@@ -163,6 +171,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
           nodeHistories={this.nodeHistories}
           localityTree={this.props.localityTree}
           locationTree={this.props.locationTree}
+          liveness={this.props.liveness}
           tiers={this.props.tiers}
           projection={this.props.projection}
           zoom={this.props.zoom}
@@ -179,6 +188,8 @@ export default connect(
     localityStatus: selectNodeRequestStatus(state),
     locationTree: selectLocationTree(state),
     locationStatus: selectLocationsRequestStatus(state),
+    liveness: livenessStatusByNodeIDSelector(state),
+    livenessStatus: selectLivenessRequestStatus(state),
   }),
   {
     refreshNodes,
