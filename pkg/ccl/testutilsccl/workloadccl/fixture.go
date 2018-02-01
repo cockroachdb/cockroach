@@ -136,7 +136,12 @@ func writeCSVs(
 				return ctx.Err()
 			default:
 			}
-			if err := csvW.Write(table.InitialRowFn(rowIdx)); err != nil {
+			row := table.InitialRowFn(rowIdx)
+			rowStrings := make([]string, len(row))
+			for i, datum := range row {
+				rowStrings[i] = fmt.Sprintf(`%v`, datum)
+			}
+			if err := csvW.Write(rowStrings); err != nil {
 				return err
 			}
 		}

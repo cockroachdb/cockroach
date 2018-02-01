@@ -54,7 +54,7 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 	var stmts bytes.Buffer
 	fmt.Fprintf(&stmts, "CREATE TABLE %s %s;\n", data.Name, data.Schema)
 	for rowIdx := 0; rowIdx < data.InitialRowCount; rowIdx++ {
-		row := data.InitialRowFn(rowIdx)
+		row := workload.StringTuple(data.InitialRowFn(rowIdx))
 		fmt.Fprintf(&stmts, "INSERT INTO %s VALUES (%s);\n", data.Name, strings.Join(row, `,`))
 	}
 

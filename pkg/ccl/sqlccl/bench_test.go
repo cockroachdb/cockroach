@@ -18,6 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
+	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -27,7 +28,7 @@ func bankBuf(numAccounts int) *bytes.Buffer {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
 	for rowIdx := 0; rowIdx < bankData.InitialRowCount; rowIdx++ {
-		row := bankData.InitialRowFn(rowIdx)
+		row := workload.StringTuple(bankData.InitialRowFn(rowIdx))
 		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row, `,`))
 	}
 	return &buf
