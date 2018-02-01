@@ -39,16 +39,14 @@ type fixtureTestGen struct {
 	val   string
 }
 
-func makeTestWorkload() workload.Generator {
+func makeTestWorkload() workload.Flagser {
 	g := &fixtureTestGen{flags: pflag.NewFlagSet(`fx`, pflag.ContinueOnError)}
 	g.flags.StringVar(&g.val, `val`, `default`, `The value for each row`)
 	return g
 }
 
-func (fixtureTestGen) Meta() workload.Meta       { return workload.Meta{Name: `fixture`} }
-func (g fixtureTestGen) Flags() *pflag.FlagSet   { return g.flags }
-func (g fixtureTestGen) Hooks() workload.Hooks   { return workload.Hooks{} }
-func (fixtureTestGen) Ops() []workload.Operation { return nil }
+func (fixtureTestGen) Meta() workload.Meta     { return workload.Meta{Name: `fixture`} }
+func (g fixtureTestGen) Flags() *pflag.FlagSet { return g.flags }
 func (g fixtureTestGen) Tables() []workload.Table {
 	return []workload.Table{{
 		Name:            `fx`,

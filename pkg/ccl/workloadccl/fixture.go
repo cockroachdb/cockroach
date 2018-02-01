@@ -66,9 +66,13 @@ type FixtureTable struct {
 // serializeOptions deterministically represents the configuration of a
 // Generator as a string.
 func serializeOptions(gen workload.Generator) string {
+	f, ok := gen.(workload.Flagser)
+	if !ok {
+		return ``
+	}
 	// NB: VisitAll visits in a deterministic (alphabetical) order.
 	var buf bytes.Buffer
-	gen.Flags().VisitAll(func(f *pflag.Flag) {
+	f.Flags().VisitAll(func(f *pflag.Flag) {
 		if buf.Len() > 0 {
 			buf.WriteString(`,`)
 		}
