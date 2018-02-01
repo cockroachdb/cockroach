@@ -236,6 +236,7 @@ const (
 	tableDisplaySQL
 	tableDisplayHTML
 	tableDisplayRaw
+	tableDisplayLastFormat
 )
 
 // Type implements the pflag.Value interface.

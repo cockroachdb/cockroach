@@ -323,7 +323,7 @@ func (p *htmlReporter) describe(w io.Writer, cols []string) error {
 	fmt.Fprint(w, "<table>\n<thead><tr>")
 	fmt.Fprint(w, "<th>row</th>")
 	for _, col := range cols {
-		fmt.Fprintf(w, "<th>%s</th>", html.EscapeString(col))
+		fmt.Fprintf(w, "<th>%s</th>", strings.Replace(html.EscapeString(col), "\n", "<br/>", -1))
 	}
 	fmt.Fprintln(w, "</tr></head>")
 	return nil
@@ -357,16 +357,21 @@ func (p *htmlReporter) doneRows(w io.Writer, nRows int) error {
 
 type recordReporter struct {
 	cols        []string
+	colRest     [][]string
 	maxColWidth int
 }
 
 func (p *recordReporter) describe(w io.Writer, cols []string) error {
-	p.cols = cols
 	for _, col := range cols {
-		colLen := utf8.RuneCountInString(col)
-		if colLen > p.maxColWidth {
-			p.maxColWidth = colLen
+		parts := strings.Split(col, "\n")
+		for _, part := range parts {
+			colLen := utf8.RuneCountInString(part)
+			if colLen > p.maxColWidth {
+				p.maxColWidth = colLen
+			}
 		}
+		p.cols = append(p.cols, parts[0])
+		p.colRest = append(p.colRest, parts[1:])
 	}
 	return nil
 }
@@ -386,8 +391,19 @@ func (p *recordReporter) iter(w io.Writer, rowIdx int, row []string) error {
 			}
 			// Note: special characters, including a vertical bar, in
 			// the colLabel are not escaped here. This is in accordance
-			// with the same behavior in PostgreSQL.
-			fmt.Fprintf(w, "%-*s | %s\n", p.maxColWidth, colLabel, line)
+			// with the same behavior in PostgreSQL. However there is
+			// special behavior for newlines.
+			contChar := " "
+			if len(p.colRest[j]) > 0 {
+				contChar = "+"
+			}
+			fmt.Fprintf(w, "%-*s%s| %s\n", p.maxColWidth, colLabel, contChar, line)
+			for k, cont := range p.colRest[j] {
+				if k == len(p.colRest[j])-1 {
+					contChar = " "
+				}
+				fmt.Fprintf(w, "%-*s%s|\n", p.maxColWidth, cont, contChar)
+			}
 		}
 	}
 	return nil
