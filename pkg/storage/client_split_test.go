@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -418,7 +419,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 	}
 
 	// Get the original stats for key and value bytes.
-	ms, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID)
+	ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,12 +494,12 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 
 	// Compare stats of split ranges to ensure they are non zero and
 	// exceed the original range when summed.
-	left, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID)
+	left, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}
 	lKeyBytes, lValBytes := left.KeyBytes, left.ValBytes
-	right, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), newRng.RangeID)
+	right, err := stateloader.Make(nil /* st */, newRng.RangeID).LoadMVCCStats(context.Background(), store.Engine())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,11 +532,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	ctx := context.Background()
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	args := adminSplitArgs(keyPrefix)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
@@ -553,7 +555,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 	// Get the range stats now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	ms, err := engine.MVCCGetRangeStats(context.Background(), snap, repl.RangeID)
+	ms, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -568,7 +570,7 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	// Split the range at approximate halfway point.
 	args = adminSplitArgs(midKey)
-	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+	if _, pErr := client.SendWrappedWith(ctx, rg1(store), roachpb.Header{
 		RangeID: repl.RangeID,
 	}, args); pErr != nil {
 		t.Fatal(pErr)
@@ -576,12 +578,12 @@ func TestStoreRangeSplitStats(t *testing.T) {
 
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	msLeft, err := engine.MVCCGetRangeStats(context.Background(), snap, repl.RangeID)
+	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replRight := store.LookupReplica(midKey, nil)
-	msRight, err := engine.MVCCGetRangeStats(context.Background(), snap, replRight.RangeID)
+	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -729,11 +731,12 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	ctx := context.Background()
 
 	// Split the range after the last table data key.
 	keyPrefix := keys.MakeTablePrefix(keys.MaxReservedDescID + 1)
 	args := adminSplitArgs(keyPrefix)
-	if _, pErr := client.SendWrapped(context.Background(), rg1(store), args); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, rg1(store), args); pErr != nil {
 		t.Fatal(pErr)
 	}
 	// Verify empty range has empty stats.
@@ -751,7 +754,7 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	// Split the range at approximate halfway point.
 	args = adminSplitArgs(midKey)
-	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+	if _, pErr := client.SendWrappedWith(ctx, rg1(store), roachpb.Header{
 		RangeID: repl.RangeID,
 	}, args); pErr != nil {
 		t.Fatal(pErr)
@@ -759,12 +762,12 @@ func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	msLeft, err := engine.MVCCGetRangeStats(context.Background(), snap, repl.RangeID)
+	msLeft, err := stateloader.Make(nil /* st */, repl.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
 	replRight := store.LookupReplica(midKey, nil)
-	msRight, err := engine.MVCCGetRangeStats(context.Background(), snap, replRight.RangeID)
+	msRight, err := stateloader.Make(nil /* st */, replRight.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -794,7 +797,7 @@ func fillRange(
 ) {
 	src := rand.New(rand.NewSource(0))
 	for {
-		ms, err := engine.MVCCGetRangeStats(context.Background(), store.Engine(), rangeID)
+		ms, err := stateloader.Make(nil /* st */, rangeID).LoadMVCCStats(context.Background(), store.Engine())
 		if err != nil {
 			t.Fatal(err)
 		}

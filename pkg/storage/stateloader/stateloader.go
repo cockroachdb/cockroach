@@ -90,9 +90,11 @@ func (rsl StateLoader) Load(
 		return storagebase.ReplicaState{}, err
 	}
 
-	if s.Stats, err = rsl.LoadMVCCStats(ctx, reader); err != nil {
+	ms, err := rsl.LoadMVCCStats(ctx, reader)
+	if err != nil {
 		return storagebase.ReplicaState{}, err
 	}
+	s.Stats = &ms
 
 	// The truncated state should not be optional (i.e. the pointer is
 	// pointless), but it is and the migration is not worth it.
@@ -338,10 +340,10 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 // LoadMVCCStats loads the MVCC stats.
 func (rsl StateLoader) LoadMVCCStats(
 	ctx context.Context, reader engine.Reader,
-) (*enginepb.MVCCStats, error) {
+) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.Timestamp{}, true, nil, &ms)
-	return &ms, err
+	return ms, err
 }
 
 // SetMVCCStats overwrites the MVCC stats.

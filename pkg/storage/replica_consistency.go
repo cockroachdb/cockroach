@@ -24,16 +24,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -440,16 +441,11 @@ func (r *Replica) sha512(
 	result.RecomputedMS = ms
 	hasher.Sum(result.SHA512[:0])
 
-	ok, err := engine.MVCCGetProto(
-		ctx, snap, keys.RangeStatsKey(desc.RangeID), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, &result.PersistedMS,
-	)
+	curMS, err := stateloader.Make(r.store.cfg.Settings, desc.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, errors.New("no MVCCStats persisted")
-	}
+	result.PersistedMS = curMS
 
 	// We're not required to do so, but it looks nicer if both stats are aged to
 	// the same timestamp.

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -377,6 +378,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
+	ctx := context.Background()
 
 	// Split the range.
 	aDesc, bDesc, pErr := createSplitRanges(store)
@@ -391,11 +393,11 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for both ranges now that we have data.
 	snap := store.Engine().NewSnapshot()
 	defer snap.Close()
-	msA, err := engine.MVCCGetRangeStats(context.Background(), snap, aDesc.RangeID)
+	msA, err := stateloader.Make(nil /* st */, aDesc.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
-	msB, err := engine.MVCCGetRangeStats(context.Background(), snap, bDesc.RangeID)
+	msB, err := stateloader.Make(nil /* st */, bDesc.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -412,7 +414,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(roachpb.KeyMin)
-	if _, err := client.SendWrapped(context.Background(), rg1(store), args); err != nil {
+	if _, err := client.SendWrapped(ctx, rg1(store), args); err != nil {
 		t.Fatal(err)
 	}
 	replMerged := store.LookupReplica(aDesc.StartKey, nil)
@@ -420,7 +422,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Get the range stats for the merged range and verify.
 	snap = store.Engine().NewSnapshot()
 	defer snap.Close()
-	msMerged, err := engine.MVCCGetRangeStats(context.Background(), snap, replMerged.RangeID)
+	msMerged, err := stateloader.Make(nil /* st */, replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3291,7 +3291,6 @@ func TestValidSplitKeys(t *testing.T) {
 
 func TestFindSplitKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rangeID := roachpb.RangeID(1)
 	engine := createTestEngine()
 	defer engine.Close()
 
@@ -3310,10 +3309,6 @@ func TestFindSplitKey(t *testing.T) {
 		if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
 			t.Fatal(err)
 		}
-	}
-	// write stats
-	if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
-		t.Fatal(err)
 	}
 
 	testData := []struct {
@@ -3363,7 +3358,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 		return splitKey
 	}
 
-	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
 		keys       []roachpb.Key
 		rangeStart roachpb.Key // optional
@@ -3508,10 +3502,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			// write stats
-			if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
-				t.Fatal(err)
-			}
 			rangeStart := test.keys[0]
 			if len(test.rangeStart) > 0 {
 				rangeStart = test.rangeStart
@@ -3548,7 +3538,6 @@ func TestFindValidSplitKeys(t *testing.T) {
 // the left and right halves are equally balanced.
 func TestFindBalancedSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	rangeID := roachpb.RangeID(1)
 	testCases := []struct {
 		keySizes []int
 		valSizes []int
@@ -3608,10 +3597,6 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 				if err := MVCCPut(context.Background(), engine, ms, key, hlc.Timestamp{Logical: 1}, val, nil); err != nil {
 					t.Fatal(err)
 				}
-			}
-			// write stats
-			if err := MVCCSetRangeStats(context.Background(), engine, rangeID, ms); err != nil {
-				t.Fatal(err)
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
 			splitKey, err := MVCCFindSplitKey(context.Background(), engine,

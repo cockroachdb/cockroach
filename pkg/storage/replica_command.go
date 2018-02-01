@@ -1455,7 +1455,7 @@ func mergeTrigger(
 
 	// Add in stats for right hand side of merge, excluding system-local
 	// stats, which will need to be recomputed.
-	rightMS, err := engine.MVCCGetRangeStats(ctx, batch, rightRangeID)
+	rightMS, err := stateloader.Make(rec.ClusterSettings(), rightRangeID).LoadMVCCStats(ctx, batch)
 	if err != nil {
 		return result.Result{}, err
 	}
