@@ -1091,7 +1091,7 @@ func (desc *TableDescriptor) ValidateTable() error {
 		columnIDs[column.ID] = column.Name
 
 		if column.ID >= desc.NextColumnID {
-			return fmt.Errorf("column %q invalid ID (%d) > next column ID (%d)",
+			return fmt.Errorf("column %q invalid ID (%d) >= next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
 		}
 	}

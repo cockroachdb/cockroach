@@ -144,8 +144,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.
-	err = desc.ValidateTable()
-	if err != nil {
+	if err := desc.ValidateTable(); err != nil {
 		return err
 	}
 

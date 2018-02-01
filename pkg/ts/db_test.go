@@ -98,7 +98,7 @@ func (tm *testModel) getActualData() map[string]roachpb.Value {
 	endKey := startKey.PrefixEnd()
 	keyValues, _, _, err := engine.MVCCScan(context.Background(), tm.Eng, startKey, endKey, math.MaxInt64, tm.Clock.Now(), true, nil)
 	if err != nil {
-		tm.t.Fatalf("error scanning TS data from engine: %s", err.Error())
+		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}
 
 	kvMap := make(map[string]roachpb.Value)
@@ -143,7 +143,7 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 	// Process and store data in the model.
 	internalData, err := data.ToInternal(r.SlabDuration(), r.SampleDuration())
 	if err != nil {
-		tm.t.Fatalf("test could not convert time series to internal format: %s", err.Error())
+		tm.t.Fatalf("test could not convert time series to internal format: %s", err)
 	}
 
 	for _, idata := range internalData {
@@ -155,16 +155,16 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 		if ok {
 			existingTs, err := existing.GetTimeseries()
 			if err != nil {
-				tm.t.Fatalf("test could not extract time series from existing model value: %s", err.Error())
+				tm.t.Fatalf("test could not extract time series from existing model value: %s", err)
 			}
 			newTs, err = engine.MergeInternalTimeSeriesData(existingTs, idata)
 			if err != nil {
-				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
+				tm.t.Fatalf("test could not merge time series into model value: %s", err)
 			}
 		} else {
 			newTs, err = engine.MergeInternalTimeSeriesData(idata)
 			if err != nil {
-				tm.t.Fatalf("test could not merge time series into model value: %s", err.Error())
+				tm.t.Fatalf("test could not merge time series into model value: %s", err)
 			}
 		}
 		var val roachpb.Value
@@ -180,7 +180,7 @@ func (tm *testModel) storeInModel(r Resolution, data tspb.TimeSeriesData) {
 func (tm *testModel) storeTimeSeriesData(r Resolution, data []tspb.TimeSeriesData) {
 	// Store data in the system under test.
 	if err := tm.DB.StoreData(context.TODO(), r, data); err != nil {
-		tm.t.Fatalf("error storing time series data: %s", err.Error())
+		tm.t.Fatalf("error storing time series data: %s", err)
 	}
 
 	// Store data in the model.
