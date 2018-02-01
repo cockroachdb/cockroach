@@ -20,7 +20,7 @@ if ! raw_version=$("$go" version 2>&1); then
   exit
 fi
 
-if ! version=$(grep -oE "[0-9]+\.[0-9]+" <<< "$raw_version"); then
+if ! version=$(grep -oE "[0-9]+\.[0-9]+" <<< "$raw_version" | head -n1); then
   echo "unable to parse go version '$raw_version'"
   exit
 fi
