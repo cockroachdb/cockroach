@@ -796,8 +796,10 @@ func (t *tableState) acquireFreshestFromStoreLocked(ctx context.Context, m *Leas
 func (t *tableState) upsertLocked(ctx context.Context, table *tableVersionState, m *LeaseManager) {
 	s := t.mu.active.find(table.Version)
 	if s == nil {
+		if t.mu.active.findNewest() != nil {
+			log.Infof(ctx, "new lease: %s", table)
+		}
 		t.mu.active.insert(table)
-		log.Eventf(ctx, "new lease: %s with %s", s, table)
 		return
 	}
 
