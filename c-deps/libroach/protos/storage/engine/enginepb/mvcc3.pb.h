@@ -35,9 +35,9 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
-class MVCCNetworkStats;
-class MVCCNetworkStatsDefaultTypeInternal;
-extern MVCCNetworkStatsDefaultTypeInternal _MVCCNetworkStats_default_instance_;
+class MVCCStatsDelta;
+class MVCCStatsDeltaDefaultTypeInternal;
+extern MVCCStatsDeltaDefaultTypeInternal _MVCCStatsDelta_default_instance_;
 class TxnMeta;
 class TxnMetaDefaultTypeInternal;
 extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
@@ -240,24 +240,24 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
 };
 // -------------------------------------------------------------------
 
-class MVCCNetworkStats : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCNetworkStats) */ {
+class MVCCStatsDelta : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCStatsDelta) */ {
  public:
-  MVCCNetworkStats();
-  virtual ~MVCCNetworkStats();
+  MVCCStatsDelta();
+  virtual ~MVCCStatsDelta();
 
-  MVCCNetworkStats(const MVCCNetworkStats& from);
+  MVCCStatsDelta(const MVCCStatsDelta& from);
 
-  inline MVCCNetworkStats& operator=(const MVCCNetworkStats& from) {
+  inline MVCCStatsDelta& operator=(const MVCCStatsDelta& from) {
     CopyFrom(from);
     return *this;
   }
   #if LANG_CXX11
-  MVCCNetworkStats(MVCCNetworkStats&& from) noexcept
-    : MVCCNetworkStats() {
+  MVCCStatsDelta(MVCCStatsDelta&& from) noexcept
+    : MVCCStatsDelta() {
     *this = ::std::move(from);
   }
 
-  inline MVCCNetworkStats& operator=(MVCCNetworkStats&& from) noexcept {
+  inline MVCCStatsDelta& operator=(MVCCStatsDelta&& from) noexcept {
     if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
       if (this != &from) InternalSwap(&from);
     } else {
@@ -266,29 +266,29 @@ class MVCCNetworkStats : public ::google::protobuf::MessageLite /* @@protoc_inse
     return *this;
   }
   #endif
-  static const MVCCNetworkStats& default_instance();
+  static const MVCCStatsDelta& default_instance();
 
-  static inline const MVCCNetworkStats* internal_default_instance() {
-    return reinterpret_cast<const MVCCNetworkStats*>(
-               &_MVCCNetworkStats_default_instance_);
+  static inline const MVCCStatsDelta* internal_default_instance() {
+    return reinterpret_cast<const MVCCStatsDelta*>(
+               &_MVCCStatsDelta_default_instance_);
   }
   static PROTOBUF_CONSTEXPR int const kIndexInFileMessages =
     1;
 
-  void Swap(MVCCNetworkStats* other);
-  friend void swap(MVCCNetworkStats& a, MVCCNetworkStats& b) {
+  void Swap(MVCCStatsDelta* other);
+  friend void swap(MVCCStatsDelta& a, MVCCStatsDelta& b) {
     a.Swap(&b);
   }
 
   // implements Message ----------------------------------------------
 
-  inline MVCCNetworkStats* New() const PROTOBUF_FINAL { return New(NULL); }
+  inline MVCCStatsDelta* New() const PROTOBUF_FINAL { return New(NULL); }
 
-  MVCCNetworkStats* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
+  MVCCStatsDelta* New(::google::protobuf::Arena* arena) const PROTOBUF_FINAL;
   void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
     PROTOBUF_FINAL;
-  void CopyFrom(const MVCCNetworkStats& from);
-  void MergeFrom(const MVCCNetworkStats& from);
+  void CopyFrom(const MVCCStatsDelta& from);
+  void MergeFrom(const MVCCStatsDelta& from);
   void Clear() PROTOBUF_FINAL;
   bool IsInitialized() const PROTOBUF_FINAL;
 
@@ -303,7 +303,7 @@ class MVCCNetworkStats : public ::google::protobuf::MessageLite /* @@protoc_inse
   void SharedCtor();
   void SharedDtor();
   void SetCachedSize(int size) const;
-  void InternalSwap(MVCCNetworkStats* other);
+  void InternalSwap(MVCCStatsDelta* other);
   private:
   inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
     return NULL;
@@ -402,7 +402,7 @@ class MVCCNetworkStats : public ::google::protobuf::MessageLite /* @@protoc_inse
   bool contains_estimates() const;
   void set_contains_estimates(bool value);
 
-  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCNetworkStats)
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCStatsDelta)
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
@@ -651,201 +651,201 @@ inline void TxnMeta::set_batch_index(::google::protobuf::int32 value) {
 
 // -------------------------------------------------------------------
 
-// MVCCNetworkStats
+// MVCCStatsDelta
 
 // bool contains_estimates = 14;
-inline void MVCCNetworkStats::clear_contains_estimates() {
+inline void MVCCStatsDelta::clear_contains_estimates() {
   contains_estimates_ = false;
 }
-inline bool MVCCNetworkStats::contains_estimates() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.contains_estimates)
+inline bool MVCCStatsDelta::contains_estimates() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.contains_estimates)
   return contains_estimates_;
 }
-inline void MVCCNetworkStats::set_contains_estimates(bool value) {
+inline void MVCCStatsDelta::set_contains_estimates(bool value) {
   
   contains_estimates_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.contains_estimates)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.contains_estimates)
 }
 
 // sfixed64 last_update_nanos = 1;
-inline void MVCCNetworkStats::clear_last_update_nanos() {
+inline void MVCCStatsDelta::clear_last_update_nanos() {
   last_update_nanos_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::last_update_nanos() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.last_update_nanos)
+inline ::google::protobuf::int64 MVCCStatsDelta::last_update_nanos() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.last_update_nanos)
   return last_update_nanos_;
 }
-inline void MVCCNetworkStats::set_last_update_nanos(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_last_update_nanos(::google::protobuf::int64 value) {
   
   last_update_nanos_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.last_update_nanos)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.last_update_nanos)
 }
 
 // sfixed64 intent_age = 2;
-inline void MVCCNetworkStats::clear_intent_age() {
+inline void MVCCStatsDelta::clear_intent_age() {
   intent_age_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::intent_age() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.intent_age)
+inline ::google::protobuf::int64 MVCCStatsDelta::intent_age() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.intent_age)
   return intent_age_;
 }
-inline void MVCCNetworkStats::set_intent_age(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_intent_age(::google::protobuf::int64 value) {
   
   intent_age_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.intent_age)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.intent_age)
 }
 
-inline void MVCCNetworkStats::clear_gc_bytes_age() {
+inline void MVCCStatsDelta::clear_gc_bytes_age() {
   gc_bytes_age_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::gc_bytes_age() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.gc_bytes_age)
+inline ::google::protobuf::int64 MVCCStatsDelta::gc_bytes_age() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.gc_bytes_age)
   return gc_bytes_age_;
 }
-inline void MVCCNetworkStats::set_gc_bytes_age(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_gc_bytes_age(::google::protobuf::int64 value) {
   
   gc_bytes_age_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.gc_bytes_age)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.gc_bytes_age)
 }
 
 // sint64 live_bytes = 4;
-inline void MVCCNetworkStats::clear_live_bytes() {
+inline void MVCCStatsDelta::clear_live_bytes() {
   live_bytes_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::live_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.live_bytes)
+inline ::google::protobuf::int64 MVCCStatsDelta::live_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.live_bytes)
   return live_bytes_;
 }
-inline void MVCCNetworkStats::set_live_bytes(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_live_bytes(::google::protobuf::int64 value) {
   
   live_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.live_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.live_bytes)
 }
 
 // sint64 live_count = 5;
-inline void MVCCNetworkStats::clear_live_count() {
+inline void MVCCStatsDelta::clear_live_count() {
   live_count_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::live_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.live_count)
+inline ::google::protobuf::int64 MVCCStatsDelta::live_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.live_count)
   return live_count_;
 }
-inline void MVCCNetworkStats::set_live_count(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_live_count(::google::protobuf::int64 value) {
   
   live_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.live_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.live_count)
 }
 
 // sint64 key_bytes = 6;
-inline void MVCCNetworkStats::clear_key_bytes() {
+inline void MVCCStatsDelta::clear_key_bytes() {
   key_bytes_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::key_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.key_bytes)
+inline ::google::protobuf::int64 MVCCStatsDelta::key_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.key_bytes)
   return key_bytes_;
 }
-inline void MVCCNetworkStats::set_key_bytes(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_key_bytes(::google::protobuf::int64 value) {
   
   key_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.key_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.key_bytes)
 }
 
 // sint64 key_count = 7;
-inline void MVCCNetworkStats::clear_key_count() {
+inline void MVCCStatsDelta::clear_key_count() {
   key_count_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::key_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.key_count)
+inline ::google::protobuf::int64 MVCCStatsDelta::key_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.key_count)
   return key_count_;
 }
-inline void MVCCNetworkStats::set_key_count(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_key_count(::google::protobuf::int64 value) {
   
   key_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.key_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.key_count)
 }
 
 // sint64 val_bytes = 8;
-inline void MVCCNetworkStats::clear_val_bytes() {
+inline void MVCCStatsDelta::clear_val_bytes() {
   val_bytes_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::val_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.val_bytes)
+inline ::google::protobuf::int64 MVCCStatsDelta::val_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.val_bytes)
   return val_bytes_;
 }
-inline void MVCCNetworkStats::set_val_bytes(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_val_bytes(::google::protobuf::int64 value) {
   
   val_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.val_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.val_bytes)
 }
 
 // sint64 val_count = 9;
-inline void MVCCNetworkStats::clear_val_count() {
+inline void MVCCStatsDelta::clear_val_count() {
   val_count_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::val_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.val_count)
+inline ::google::protobuf::int64 MVCCStatsDelta::val_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.val_count)
   return val_count_;
 }
-inline void MVCCNetworkStats::set_val_count(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_val_count(::google::protobuf::int64 value) {
   
   val_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.val_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.val_count)
 }
 
 // sint64 intent_bytes = 10;
-inline void MVCCNetworkStats::clear_intent_bytes() {
+inline void MVCCStatsDelta::clear_intent_bytes() {
   intent_bytes_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::intent_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.intent_bytes)
+inline ::google::protobuf::int64 MVCCStatsDelta::intent_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.intent_bytes)
   return intent_bytes_;
 }
-inline void MVCCNetworkStats::set_intent_bytes(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_intent_bytes(::google::protobuf::int64 value) {
   
   intent_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.intent_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.intent_bytes)
 }
 
 // sint64 intent_count = 11;
-inline void MVCCNetworkStats::clear_intent_count() {
+inline void MVCCStatsDelta::clear_intent_count() {
   intent_count_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::intent_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.intent_count)
+inline ::google::protobuf::int64 MVCCStatsDelta::intent_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.intent_count)
   return intent_count_;
 }
-inline void MVCCNetworkStats::set_intent_count(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_intent_count(::google::protobuf::int64 value) {
   
   intent_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.intent_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.intent_count)
 }
 
 // sint64 sys_bytes = 12;
-inline void MVCCNetworkStats::clear_sys_bytes() {
+inline void MVCCStatsDelta::clear_sys_bytes() {
   sys_bytes_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::sys_bytes() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.sys_bytes)
+inline ::google::protobuf::int64 MVCCStatsDelta::sys_bytes() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.sys_bytes)
   return sys_bytes_;
 }
-inline void MVCCNetworkStats::set_sys_bytes(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_sys_bytes(::google::protobuf::int64 value) {
   
   sys_bytes_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.sys_bytes)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.sys_bytes)
 }
 
 // sint64 sys_count = 13;
-inline void MVCCNetworkStats::clear_sys_count() {
+inline void MVCCStatsDelta::clear_sys_count() {
   sys_count_ = GOOGLE_LONGLONG(0);
 }
-inline ::google::protobuf::int64 MVCCNetworkStats::sys_count() const {
-  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCNetworkStats.sys_count)
+inline ::google::protobuf::int64 MVCCStatsDelta::sys_count() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCStatsDelta.sys_count)
   return sys_count_;
 }
-inline void MVCCNetworkStats::set_sys_count(::google::protobuf::int64 value) {
+inline void MVCCStatsDelta::set_sys_count(::google::protobuf::int64 value) {
   
   sys_count_ = value;
-  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCNetworkStats.sys_count)
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCStatsDelta.sys_count)
 }
 
 #ifdef __GNUC__

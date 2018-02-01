@@ -51,7 +51,7 @@ message CollectChecksumResponse {
   // See https://github.com/cockroachdb/cockroach/issues/21128.
   roachpb.RaftSnapshotData snapshot = 2;
   // delta carries the stats of the range minus the recomputed stats.
-  storage.engine.enginepb.MVCCNetworkStats delta = 3 [(gogoproto.nullable) = false];
+  storage.engine.enginepb.MVCCStatsDelta delta = 3 [(gogoproto.nullable) = false];
 }
 
 service Consistency {

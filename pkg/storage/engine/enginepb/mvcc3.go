@@ -17,13 +17,13 @@ package enginepb
 import proto "github.com/gogo/protobuf/proto"
 
 // ToStats converts the receiver to an MVCCStats.
-func (ms *MVCCNetworkStats) ToStats() MVCCStats {
+func (ms *MVCCStatsDelta) ToStats() MVCCStats {
 	return MVCCStats(*ms)
 }
 
-// ToNetworkStats converts the receiver to an MVCCNetworkStats.
-func (ms *MVCCStats) ToNetworkStats() MVCCNetworkStats {
-	return MVCCNetworkStats(*ms)
+// ToStatsDelta converts the receiver to an MVCCStatsDelta.
+func (ms *MVCCStats) ToStatsDelta() MVCCStatsDelta {
+	return MVCCStatsDelta(*ms)
 }
 
 var isolationTypeLowerCase = map[int32]string{
