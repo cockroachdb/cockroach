@@ -75,7 +75,7 @@ communicate with a secure cluster).
 
 		// Is it a GRPC-observed context cancellation (i.e. timeout) or a GRPC
 		// connection error?
-		if s, ok := status.FromError(err); ok && s.Code() == codes.DeadlineExceeded {
+		if status.Code(err) == codes.DeadlineExceeded {
 			return opTimeout()
 		} else if grpcutil.IsClosedConnection(unwrappedErr) {
 			return connDropped()
