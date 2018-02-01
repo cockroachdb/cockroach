@@ -19,12 +19,14 @@
 */
 package config
 
-import proto "github.com/gogo/protobuf/proto"
+import proto "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/gogoproto"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import io "io"
+import io "github.com/cockroachdb/cockroach/pkg/io"
+import fmt "github.com/cockroachdb/cockroach/pkg/fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal

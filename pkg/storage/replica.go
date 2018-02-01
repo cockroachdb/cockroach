@@ -5409,6 +5409,9 @@ func evaluateBatch(
 		}
 
 		if pErr != nil {
+			// Initialize the error index.
+			pErr.SetErrorIndex(int32(index))
+
 			switch tErr := pErr.GetDetail().(type) {
 			case *roachpb.WriteTooOldError:
 				// We got a WriteTooOldError. In case this is a transactional request,
@@ -5416,8 +5419,24 @@ func evaluateBatch(
 				// intents so that other concurrent overlapping transactions are forced
 				// through intent resolution and the chances of this batch succeeding
 				// when it will be retried are increased.
-
 				if ba.Txn == nil {
+					return nil, result, pErr
+				}
+				switch args.(type) {
+				case *roachpb.ConditionalPutRequest:
+					// Conditional puts are an exception. Here, it makes less sense to
+					// continue because it's likely that the cput will fail on retry (a
+					// newer value is less likely to match the expected value). It's
+					// better to return the WriteTooOldError directly, allowing the txn
+					// coord sender to retry if it can refresh all other spans encountered
+					// already during the transaction, and then, if the cput results in a
+					// condition failed error, report that back to the client instead of a
+					// retryable error.
+					return nil, result, pErr
+				case *roachpb.IncrementRequest:
+					// Increments are an excpetion for similar reasons. If we wait until
+					// commit, we'll need a client-side retry, so we return immediately
+					// to see if we can do a txn coord sender retry instead.
 					return nil, result, pErr
 				}
 				// On WriteTooOldError, we've written a new value or an intent
@@ -5431,8 +5450,6 @@ func evaluateBatch(
 				// pushed timestamp and return a TransactionRetryError.
 				pErr = nil
 			default:
-				// Initialize the error index.
-				pErr.SetErrorIndex(int32(index))
 				return nil, result, pErr
 			}
 		}

@@ -14,13 +14,15 @@
 */
 package enginepbccl
 
-import proto "github.com/gogo/protobuf/proto"
+import proto "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/gogoproto"
 
-import sortkeys "github.com/gogo/protobuf/sortkeys"
+import sortkeys "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/sortkeys"
 
-import io "io"
+import io "github.com/cockroachdb/cockroach/pkg/io"
+import fmt "github.com/cockroachdb/cockroach/pkg/fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -138,7 +140,7 @@ func (m *DataKeysRegistry) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	if len(m.StoreKeys) > 0 {
 		keysForStoreKeys := make([]string, 0, len(m.StoreKeys))
-		for k := range m.StoreKeys {
+		for k, _ := range m.StoreKeys {
 			keysForStoreKeys = append(keysForStoreKeys, string(k))
 		}
 		sortkeys.Strings(keysForStoreKeys)
@@ -171,7 +173,7 @@ func (m *DataKeysRegistry) MarshalTo(dAtA []byte) (int, error) {
 	}
 	if len(m.DataKeys) > 0 {
 		keysForDataKeys := make([]string, 0, len(m.DataKeys))
-		for k := range m.DataKeys {
+		for k, _ := range m.DataKeys {
 			keysForDataKeys = append(keysForDataKeys, string(k))
 		}
 		sortkeys.Strings(keysForDataKeys)

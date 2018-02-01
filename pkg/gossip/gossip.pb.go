@@ -16,22 +16,24 @@
 */
 package gossip
 
-import proto "github.com/gogo/protobuf/proto"
+import proto "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 import cockroach_util "github.com/cockroachdb/cockroach/pkg/util"
+import _ "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/gogoproto"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 
-import context "context"
-import grpc "google.golang.org/grpc"
+import context "github.com/cockroachdb/cockroach/pkg/golang.org/x/net/context"
+import grpc "github.com/cockroachdb/cockroach/pkg/google.golang.org/grpc"
 
-import sortkeys "github.com/gogo/protobuf/sortkeys"
+import sortkeys "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/sortkeys"
 
-import io "io"
+import io "github.com/cockroachdb/cockroach/pkg/io"
+import fmt "github.com/cockroachdb/cockroach/pkg/fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
@@ -313,7 +315,7 @@ func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 	i += n2
 	if len(m.HighWaterStamps) > 0 {
 		keysForHighWaterStamps := make([]int32, 0, len(m.HighWaterStamps))
-		for k := range m.HighWaterStamps {
+		for k, _ := range m.HighWaterStamps {
 			keysForHighWaterStamps = append(keysForHighWaterStamps, int32(k))
 		}
 		sortkeys.Int32s(keysForHighWaterStamps)
@@ -333,7 +335,7 @@ func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 	}
 	if len(m.Delta) > 0 {
 		keysForDelta := make([]string, 0, len(m.Delta))
-		for k := range m.Delta {
+		for k, _ := range m.Delta {
 			keysForDelta = append(keysForDelta, string(k))
 		}
 		sortkeys.Strings(keysForDelta)
@@ -420,7 +422,7 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 	}
 	if len(m.Delta) > 0 {
 		keysForDelta := make([]string, 0, len(m.Delta))
-		for k := range m.Delta {
+		for k, _ := range m.Delta {
 			keysForDelta = append(keysForDelta, string(k))
 		}
 		sortkeys.Strings(keysForDelta)
@@ -453,7 +455,7 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 	}
 	if len(m.HighWaterStamps) > 0 {
 		keysForHighWaterStamps := make([]int32, 0, len(m.HighWaterStamps))
-		for k := range m.HighWaterStamps {
+		for k, _ := range m.HighWaterStamps {
 			keysForHighWaterStamps = append(keysForHighWaterStamps, int32(k))
 		}
 		sortkeys.Int32s(keysForHighWaterStamps)
@@ -491,7 +493,7 @@ func (m *InfoStatus) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	if len(m.Infos) > 0 {
 		keysForInfos := make([]string, 0, len(m.Infos))
-		for k := range m.Infos {
+		for k, _ := range m.Infos {
 			keysForInfos = append(keysForInfos, string(k))
 		}
 		sortkeys.Strings(keysForInfos)

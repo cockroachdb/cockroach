@@ -3,15 +3,17 @@
 
 package config
 
-import proto "github.com/gogo/protobuf/proto"
+import proto "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import _ "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/gogoproto"
 
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import bytes "bytes"
+import bytes "github.com/cockroachdb/cockroach/pkg/bytes"
 
-import io "io"
+import io "github.com/cockroachdb/cockroach/pkg/io"
+import fmt "github.com/cockroachdb/cockroach/pkg/fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal

@@ -12,7 +12,7 @@
 */
 package sqlccl
 
-import proto "github.com/gogo/protobuf/proto"
+import proto "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_build "github.com/cockroachdb/cockroach/pkg/build"
@@ -20,12 +20,14 @@ import cockroach_roachpb3 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_sql_sqlbase1 "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
+import _ "github.com/cockroachdb/cockroach/pkg/github.com/gogo/protobuf/gogoproto"
 
 import github_com_cockroachdb_cockroach_pkg_sql_sqlbase "github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
 import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
-import io "io"
+import io "github.com/cockroachdb/cockroach/pkg/io"
+import fmt "github.com/cockroachdb/cockroach/pkg/fmt"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
