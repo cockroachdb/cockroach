@@ -140,6 +140,10 @@ type v3Conn struct {
 	sqlMemoryPool *mon.BytesMonitor
 
 	streamingState streamingState
+
+	// curStmtErr is the error encountered during the execution of the current SQL
+	// statement.
+	curStmtErr error
 }
 
 type streamingState struct {
@@ -1030,7 +1034,18 @@ func (c *v3Conn) SetEmptyQuery() {
 
 // SetEmptyQuery implements the ResultsGroup interface.
 func (c *v3Conn) NewStatementResult() sql.StatementResult {
+	c.curStmtErr = nil
 	return c
+}
+
+// SetError is part of the sql.StatementResult interface.
+func (c *v3Conn) SetError(err error) {
+	c.curStmtErr = err
+}
+
+// Err is part of the sql.StatementResult interface.
+func (c *v3Conn) Err() error {
+	return c.curStmtErr
 }
 
 // ResultsSentToClient implements the ResultsGroup interface.
@@ -1097,6 +1112,8 @@ func (c *v3Conn) RowsAffected() int {
 // CloseResult implements the StatementResult interface.
 // It sends a "command complete" server message.
 func (c *v3Conn) CloseResult() error {
+	c.curStmtErr = nil
+
 	state := &c.streamingState
 	if state.err != nil {
 		return state.err

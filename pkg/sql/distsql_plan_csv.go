@@ -41,21 +41,16 @@ type DistLoader struct {
 
 // RowResultWriter is a thin wrapper around a RowContainer.
 type RowResultWriter struct {
-	statementType tree.StatementType
-	rowContainer  *sqlbase.RowContainer
-	rowsAffected  int
+	rowContainer *sqlbase.RowContainer
+	rowsAffected int
+	err          error
 }
+
+var _ rowResultWriter = &RowResultWriter{}
 
 // NewRowResultWriter creates a new RowResultWriter.
-func NewRowResultWriter(
-	statementType tree.StatementType, rowContainer *sqlbase.RowContainer,
-) *RowResultWriter {
-	return &RowResultWriter{statementType: statementType, rowContainer: rowContainer}
-}
-
-// StatementType implements the rowResultWriter interface.
-func (b *RowResultWriter) StatementType() tree.StatementType {
-	return b.statementType
+func NewRowResultWriter(rowContainer *sqlbase.RowContainer) *RowResultWriter {
+	return &RowResultWriter{rowContainer: rowContainer}
 }
 
 // IncrementRowsAffected implements the rowResultWriter interface.
@@ -69,28 +64,46 @@ func (b *RowResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
 	return err
 }
 
+// SetError is part of the rowResultWriter interface.
+func (b *RowResultWriter) SetError(err error) {
+	b.err = err
+}
+
+// Err is part of the rowResultWriter interface.
+func (b *RowResultWriter) Err() error {
+	return b.err
+}
+
 // callbackResultWriter is a rowResultWriter that runs a callback function
 // on AddRow.
-type callbackResultWriter func(ctx context.Context, row tree.Datums) error
+type callbackResultWriter struct {
+	fn  func(ctx context.Context, row tree.Datums) error
+	err error
+}
 
-// newCallbackResultWriter creates a new callbackResultWriter.
+var _ rowResultWriter = &callbackResultWriter{}
+
+// makeCallbackResultWriter creates a new callbackResultWriter.
 func newCallbackResultWriter(
 	fn func(ctx context.Context, row tree.Datums) error,
 ) callbackResultWriter {
-	return callbackResultWriter(fn)
+	return callbackResultWriter{fn: fn}
 }
 
-// StatementType implements the rowResultWriter interface.
-func (callbackResultWriter) StatementType() tree.StatementType {
-	return tree.Rows
+func (*callbackResultWriter) IncrementRowsAffected(n int) {
+	panic("IncrementRowsAffected not supported by callbackResultWriter")
 }
 
-// IncrementRowsAffected implements the rowResultWriter interface.
-func (callbackResultWriter) IncrementRowsAffected(n int) {}
+func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
+	return c.fn(ctx, row)
+}
 
-// AddRow implements the rowResultWriter interface.
-func (c callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) error {
-	return c(ctx, row)
+func (c *callbackResultWriter) SetError(err error) {
+	c.err = err
+}
+
+func (c *callbackResultWriter) Err() error {
+	return c.err
 }
 
 // LoadCSV performs a distributed transformation of the CSV files at from
@@ -253,7 +266,8 @@ func (l *DistLoader) LoadCSV(
 
 	recv := makeDistSQLReceiver(
 		ctx,
-		rowResultWriter,
+		&rowResultWriter,
+		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
@@ -273,12 +287,10 @@ func (l *DistLoader) LoadCSV(
 			}
 		}
 
-		return l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
+		l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
+		return rowResultWriter.err
 	}); err != nil {
 		return err
-	}
-	if recv.err != nil {
-		return recv.err
 	}
 
 	// Add the closing span.
@@ -389,6 +401,7 @@ func (l *DistLoader) LoadCSV(
 	recv = makeDistSQLReceiver(
 		ctx,
 		resultRows,
+		tree.Rows,
 		nil, /* rangeCache */
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
@@ -398,14 +411,8 @@ func (l *DistLoader) LoadCSV(
 	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
 	// TODO(dan): We really don't need the txn for this flow, so remove it once
 	// Run works without one.
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		return l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
-	}); err != nil {
-		return err
-	}
-	if recv.err != nil {
-		return recv.err
-	}
-
-	return nil
+	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		l.distSQLPlanner.Run(&planCtx, txn, &p, recv, evalCtx)
+		return resultRows.err
+	})
 }

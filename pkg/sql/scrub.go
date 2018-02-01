@@ -554,10 +554,11 @@ func scrubRunDistSQL(
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	rows := sqlbase.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
-	rowResultWriter := NewRowResultWriter(tree.Rows, rows)
+	rowResultWriter := NewRowResultWriter(rows)
 	recv := makeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
+		tree.Rows,
 		p.ExecCfg().RangeDescriptorCache,
 		p.ExecCfg().LeaseHolderCache,
 		p.txn,
@@ -566,10 +567,9 @@ func scrubRunDistSQL(
 		},
 	)
 
-	if err := p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx); err != nil {
-		return rows, err
-	} else if recv.err != nil {
-		return rows, recv.err
+	p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx)
+	if rowResultWriter.Err() != nil {
+		return rows, rowResultWriter.Err()
 	} else if rows.Len() == 0 {
 		rows.Close(ctx)
 		return nil, nil

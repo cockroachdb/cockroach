@@ -169,6 +169,11 @@ type StatementResult interface {
 	// CloseResult cannot be called unless there's a corresponding BeginResult
 	// prior.
 	CloseResult() error
+
+	// SetError allows an error to be  stored on the StatementResult.
+	SetError(err error)
+	// Err returns the error previously set with SetError(), if any.
+	Err() error
 }
 
 type bufferedWriter struct {
@@ -183,10 +188,22 @@ type bufferedWriter struct {
 	// currentResult and resultInProgress spans a statement.
 	currentResult    Result
 	resultInProgress bool
+
+	err error
 }
 
 func newBufferedWriter(acc mon.BoundAccount) *bufferedWriter {
 	return &bufferedWriter{acc: acc}
+}
+
+// SetError is part of the ResultsWriter interface.
+func (b *bufferedWriter) SetError(err error) {
+	b.err = err
+}
+
+// Err is part of the ResultsWriter interface.
+func (b *bufferedWriter) Err() error {
+	return b.err
 }
 
 func (b *bufferedWriter) results() StatementResults {
