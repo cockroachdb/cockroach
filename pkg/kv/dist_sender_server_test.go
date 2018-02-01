@@ -1875,7 +1875,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.InitPut(ctx, "a", "put", false) // put to advance txn ts
 			},
-			filter:        nil,
 			txnCoordRetry: true,
 		},
 		{
@@ -1898,7 +1897,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				}
 				return nil
 			},
-			filter:        nil,
 			txnCoordRetry: false,
 		},
 		{
