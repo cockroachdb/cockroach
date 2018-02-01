@@ -3012,7 +3012,7 @@ func (r *Replica) evaluateProposal(
 		res.Replicated.IsLeaseRequest = ba.IsLeaseRequest()
 		res.Replicated.Timestamp = ba.Timestamp
 		if r.store.cfg.Settings.Version.IsActive(cluster.VersionMVCCNetworkStats) {
-			res.Replicated.Delta = ms.ToNetworkStats()
+			res.Replicated.Delta = ms.ToStatsDelta()
 		} else {
 			res.Replicated.DeprecatedDelta = &ms
 		}
@@ -4809,7 +4809,7 @@ func (r *Replica) processRaftCommand(
 		}
 
 		if deprecatedDelta := raftCmd.ReplicatedEvalResult.DeprecatedDelta; deprecatedDelta != nil {
-			raftCmd.ReplicatedEvalResult.Delta = deprecatedDelta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.Delta = deprecatedDelta.ToStatsDelta()
 			raftCmd.ReplicatedEvalResult.DeprecatedDelta = nil
 		}
 
@@ -4863,7 +4863,7 @@ func (r *Replica) processRaftCommand(
 			var err error
 			delta, err = r.applyRaftCommand(
 				ctx, idKey, raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex, writeBatch)
-			raftCmd.ReplicatedEvalResult.Delta = delta.ToNetworkStats()
+			raftCmd.ReplicatedEvalResult.Delta = delta.ToStatsDelta()
 
 			// applyRaftCommand returned an error, which usually indicates
 			// either a serious logic bug in CockroachDB or a disk
