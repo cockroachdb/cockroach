@@ -589,7 +589,7 @@
   branch = "master"
   name = "github.com/olekukonko/tablewriter"
   packages = ["."]
-  revision = "a7a4c189eb47ed33ce7b35f2880070a0c82a67d4"
+  revision = "b8a9be070da40449e501c3c4730a889e42d87a9e"
 
 [[projects]]
   name = "github.com/opencontainers/go-digest"

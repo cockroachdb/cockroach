@@ -595,7 +595,7 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 			return false, nil
 		}
 
-		cols := getColumnStrings(rows)
+		cols := getColumnStrings(rows, true)
 		reporter, err := makeReporter()
 		if err != nil {
 			return err
@@ -624,14 +624,14 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 }
 
 // sqlRowsToStrings turns 'rows' into a list of rows, each of which
-// is a  list of column values.
+// is a list of column values.
 // 'rows' should be closed by the caller.
 // It returns the header row followed by all data rows.
 // If both the header row and list of rows are empty, it means no row
 // information was returned (eg: statement was not a query).
 // If showMoreChars is true, then more characters are not escaped.
 func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, error) {
-	cols := getColumnStrings(rows)
+	cols := getColumnStrings(rows, showMoreChars)
 	allRows, err := getAllRowStrings(rows, showMoreChars)
 	if err != nil {
 		return nil, nil, err
@@ -639,11 +639,11 @@ func sqlRowsToStrings(rows *sqlRows, showMoreChars bool) ([]string, [][]string, 
 	return cols, allRows, nil
 }
 
-func getColumnStrings(rows *sqlRows) []string {
+func getColumnStrings(rows *sqlRows, showMoreChars bool) []string {
 	srcCols := rows.Columns()
 	cols := make([]string, len(srcCols))
 	for i, c := range srcCols {
-		cols[i] = formatVal(c, true, false)
+		cols[i] = formatVal(c, showMoreChars, showMoreChars)
 	}
 	return cols
 }
@@ -726,7 +726,10 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 				return t
 			}
 		}
-		return fmt.Sprintf("%+q", t)
+		s := fmt.Sprintf("%+q", t)
+		// Strip the start and final quotes. The surrounding display
+		// format (e.g. CSV/TSV) will add its own quotes.
+		return s[1 : len(s)-1]
 
 	case []byte:
 		if showPrintableUnicode {
@@ -742,7 +745,10 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 				return string(t)
 			}
 		}
-		return fmt.Sprintf("%+q", t)
+		// Strip the start and final quotes. The surrounding display
+		// format (e.g. CSV/TSV) will add its own quotes.
+		s := fmt.Sprintf("%+q", t)
+		return s[1 : len(s)-1]
 
 	case time.Time:
 		return t.Format(tree.TimestampOutputFormat)
