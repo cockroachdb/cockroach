@@ -29,7 +29,9 @@ import (
 func inferType(ev *ExprView) types.T {
 	fn := typingFuncMap[ev.Operator()]
 	if fn == nil {
-		panic(fmt.Sprintf("type inference for %v is not yet implemented", ev.Operator()))
+		// TODO(rytaft): This should cause a panic, but for now just return NULL
+		// so the builder code can be implemented and tested.
+		return types.Null
 	}
 	return fn(ev)
 }
