@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -59,7 +57,6 @@ const (
 	importOptionLocal     = "local"
 	importOptionNullIf    = "nullif"
 	importOptionTransform = "transform"
-	importOptionSSTSize   = "sstsize"
 )
 
 var importOptionExpectValues = map[string]bool{
@@ -68,7 +65,6 @@ var importOptionExpectValues = map[string]bool{
 	importOptionLocal:     false,
 	importOptionNullIf:    true,
 	importOptionTransform: true,
-	importOptionSSTSize:   true,
 	restoreOptIntoDB:      true,
 }
 
@@ -990,15 +986,6 @@ func importPlanHook(
 			nullif = &override
 		}
 
-		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
-		if override, ok := opts[importOptionSSTSize]; ok {
-			sz, err := humanizeutil.ParseBytes(override)
-			if err != nil {
-				return err
-			}
-			sstSize = sz
-		}
-
 		var create *tree.CreateTable
 		if importStmt.CreateDefs != nil {
 			normName := tree.NormalizableTableName{TableNameReference: &importStmt.Table}
@@ -1070,12 +1057,12 @@ func importPlanHook(
 			importErr = doDistributedCSVTransform(
 				ctx, job, files, p, parentID, tableDesc, transform,
 				comma, comment, nullif, walltime,
-				sstSize,
 			)
 		} else {
 			if transform == "" {
 				return errors.Errorf("%s option required for local import", importOptionTransform)
 			}
+			sstSize := storageccl.MaxImportBatchSize(p.ExecCfg().Settings)
 			_, _, _, importErr = doLocalCSVTransform(
 				ctx, job, parentID, tableDesc, transform, files,
 				comma, comment, nullif, sstSize,
@@ -1130,7 +1117,6 @@ func doDistributedCSVTransform(
 	comma, comment rune,
 	nullif *string,
 	walltime int64,
-	sstSize int64,
 ) error {
 	evalCtx := p.ExtendedEvalContext()
 
@@ -1172,7 +1158,6 @@ func doDistributedCSVTransform(
 		comma, comment,
 		nullif,
 		walltime,
-		sstSize,
 	); err != nil {
 		// If the job was canceled, any of the distsql processors could have been
 		// the first to encounter the .Progress error. This error's string is sent
