@@ -320,7 +320,7 @@ func addSSTablePreApply(
 	sideloaded sideloadStorage,
 	term, index uint64,
 	sst storagebase.ReplicatedEvalResult_AddSSTable,
-) {
+) bool {
 	checksum := util.CRC32(sst.Data)
 
 	if checksum != sst.CRC32 {
@@ -339,29 +339,31 @@ func addSSTablePreApply(
 		log.Fatalf(ctx, "sideloaded SSTable at term %d, index %d is missing", term, index)
 	}
 
+	copied := false
 	if inmem, ok := eng.(engine.InMem); ok {
 		path = fmt.Sprintf("%x", checksum)
 		if err := inmem.WriteFile(path, sst.Data); err != nil {
 			panic(err)
 		}
 	} else {
-		// The SST may already be on disk, thanks to the sideloading mechanism.  If so
-		// we can try to add that file directly, rather than writing another copy of
-		// it, so long as doing so does not modify the file, which would be bad since
-		// it is still part of an immutable raft log message. We *can* tell Rocks that
-		// it is not allowed to modify the file though, in which case it will return
-		// and error if it would have tried to do so (see note in db.cc about what
-		// causes that), at which point we can fall back to writing a copy for Rocks.
+		// The SST may already be on disk, thanks to the sideloading mechanism.  If
+		// so we can try to add that file directly, rather than writing another copy
+		// of it, so long as doing so does not modify the file, which would be bad
+		// since it is still part of an immutable raft log message. We *can* tell
+		// Rocks that it is not allowed to modify the file though, in which case it
+		// will return and error if it would have tried to do so (see note on
+		// DBIngestExternalFile in db.cc about what causes that), at which point we
+		// can fall back to writing a copy for Rocks.
 		if _, err := os.Stat(path); err == nil {
-			if err := eng.IngestExternalFile(ctx, path, move, noModify); err == nil {
+			err = eng.IngestExternalFile(ctx, path, move, noModify)
+			if err == nil {
 				// Adding without modification succeeded, no copy necessary.
 				log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
-				return
-			} else {
-				const seqNoMsg = "Global seqno is required, but disabled"
-				if err, ok := err.(*engine.RocksDBError); ok && !strings.Contains(err.Error(), seqNoMsg) {
-					log.Fatalf(ctx, "while ingesting %s: %s", path, err)
-				}
+				return false
+			}
+			const seqNoMsg = "Global seqno is required, but disabled"
+			if err, ok := err.(*engine.RocksDBError); ok && !strings.Contains(err.Error(), seqNoMsg) {
+				log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 			}
 		}
 
@@ -388,12 +390,14 @@ func addSSTablePreApply(
 		if err := fileutil.WriteFileSyncing(path, sst.Data, 0600, sstWriteSyncRate.Get(&st.SV)); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
+		copied = true
 	}
 
 	if err := eng.IngestExternalFile(ctx, path, move, modify); err != nil {
 		log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
+	return copied
 }
 
 // maybeTransferRaftLeadership attempts to transfer the leadership
