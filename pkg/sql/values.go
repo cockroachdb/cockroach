@@ -28,7 +28,6 @@ import (
 )
 
 type valuesNode struct {
-	n       *tree.ValuesClause
 	columns sqlbase.ResultColumns
 	tuples  [][]tree.TypedExpr
 	// isConst is set if the valuesNode only contains constant expressions (no
@@ -36,6 +35,12 @@ type valuesNode struct {
 	// to planNode.Start and memoized for future consumption. A valuesNode with
 	// isConst = true can serve its values multiple times. See valuesNode.Reset.
 	isConst bool
+
+	// specifiedInQuery is set if the valuesNode represents a literal
+	// relational expression that was present in the original SQL text,
+	// as opposed to e.g. a valuesNode resulting from the expansion of
+	// a vtable value generator. This changes distsql physical planning.
+	specifiedInQuery bool
 
 	valuesRun
 }
@@ -45,8 +50,8 @@ func (p *planner) Values(
 	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
-		n:       n,
-		isConst: true,
+		specifiedInQuery: true,
+		isConst:          true,
 	}
 	if len(n.Tuples) == 0 {
 		return v, nil
@@ -142,7 +147,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	n.rows = sqlbase.NewRowContainer(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),
 		sqlbase.ColTypeInfoFromResCols(n.columns),
-		len(n.n.Tuples),
+		len(n.tuples),
 	)
 
 	row := make([]tree.Datum, len(n.columns))
