@@ -101,6 +101,11 @@ type flowRegistry struct {
 
 	// flowDone is signaled whenever the size of flows decreases.
 	flowDone *sync.Cond
+
+	// testingRunBeforeDrainSleep is a testing knob executed when a draining
+	// flowRegistry has no registered flows but must still wait for a minimum time
+	// for any incoming flows to register.
+	testingRunBeforeDrainSleep func()
 }
 
 // makeFlowRegistry creates a new flowRegistry.
@@ -301,6 +306,13 @@ func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time
 	start := timeutil.Now()
 	stopWaiting := false
 
+	sleep := func(t time.Duration) {
+		if fr.testingRunBeforeDrainSleep != nil {
+			fr.testingRunBeforeDrainSleep()
+		}
+		time.Sleep(t)
+	}
+
 	defer func() {
 		// At this stage, we have either hit the flowDrainWait timeout or we have no
 		// flows left. We wait for an expectedConnectionTime longer so that we give
@@ -323,7 +335,7 @@ func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time
 	fr.Lock()
 	if len(fr.flows) == 0 {
 		fr.Unlock()
-		time.Sleep(minFlowDrainWait)
+		sleep(minFlowDrainWait)
 		fr.Lock()
 		// No flows were registered, return.
 		if len(fr.flows) == 0 {
@@ -353,7 +365,7 @@ func (fr *flowRegistry) Drain(flowDrainWait time.Duration, minFlowDrainWait time
 	// finish.
 	waitTime := timeutil.Since(start)
 	if waitTime < minFlowDrainWait {
-		time.Sleep(minFlowDrainWait - waitTime)
+		sleep(minFlowDrainWait - waitTime)
 		fr.Lock()
 		for !(stopWaiting || len(fr.flows) == 0) {
 			fr.flowDone.Wait()
