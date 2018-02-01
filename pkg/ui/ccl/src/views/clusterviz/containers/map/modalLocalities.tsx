@@ -14,8 +14,8 @@ import { InjectedRouter, RouterState } from "react-router";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
-import { generateLocalityRoute, getNodeLocalityTiers } from "src/util/localities";
-import { findMostSpecificLocation } from "src/util/locations";
+import { generateLocalityRoute } from "src/util/localities";
+import { findOrCalculateLocation } from "src/util/locations";
 import { NodeStatus$Properties } from "src/util/proto";
 
 import { SimulatedNodeStatus } from "./nodeSimulator";
@@ -59,32 +59,27 @@ interface LocalityBoxProps {
 
 class LocalityBox extends React.Component<LocalityBoxProps, any> {
   render() {
-    const location = findMostSpecificLocation(this.props.locationTree, this.props.locality.tiers);
+    const location = findOrCalculateLocation(this.props.locationTree, this.props.locality);
     const center = this.props.projection([location.longitude, location.latitude]);
     const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
     return (
       <g transform={`translate(${box.center()})`}>
-        <LocalityView locality={this.props.node} />
+        <LocalityView locality={this.props.locality} />
       </g>
     );
   }
 }
 
 interface NodeBoxProps {
-  projection: d3.geo.Projection;
   node: NodeStatus$Properties;
   nodeHistory: SimulatedNodeStatus;
-  locationTree: LocationTree;
 }
 
 class NodeBox extends React.Component<NodeBoxProps, any> {
+  // TODO: layout!
   render() {
-    const tiers = getNodeLocalityTiers(this.props.node);
-    const location = findMostSpecificLocation(this.props.locationTree, tiers);
-    const center = this.props.projection([location.longitude, location.latitude]);
-    const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
     return (
-      <g transform={`translate(${box.center()})`}>
+      <g>
         <NodeView
           nodeHistory={this.props.nodeHistory}
           maxClientActivityRate={10000}
@@ -125,7 +120,7 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
       const nodeHistory = this.props.nodeHistories[node.desc.node_id];
 
       children.push(
-        <NodeBox projection={this.props.projection} node={node} nodeHistory={nodeHistory} locationTree={this.props.locationTree} />,
+        <NodeBox node={node} nodeHistory={nodeHistory} />,
       );
     });
 

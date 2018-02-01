@@ -6,7 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
 import * as d3 from "d3";
@@ -16,10 +15,9 @@ import { NanoToMilli } from "src/util/convert";
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
-import { selectLocationsRequestStatus, selectLocationTree, Location, LocationTree } from "src/redux/locations";
+import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
 import { nodesSummarySelector, NodesSummary, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { findMostSpecificLocation } from "src/util/locations";
 import Loading from "src/views/shared/components/loading";
 
 import { ZoomTransformer } from "./zoom";

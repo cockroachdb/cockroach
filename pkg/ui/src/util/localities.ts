@@ -1,6 +1,7 @@
 import _ from "lodash";
 
 import { LocalityTier } from "src/redux/localities";
+import { NodeStatus$Properties } from "src/util/proto";
 
 /*
  * parseLocalityRoute parses the URL fragment used to route to a particular
