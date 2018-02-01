@@ -52,3 +52,17 @@ export interface LocalityTree {
   };
   nodes: NodeStatus$Properties[];
 }
+
+export function getLeaves(tree: LocalityTree): NodeStatus$Properties[] {
+  const output: NodeStatus$Properties[] = [];
+  function recur(curTree: LocalityTree) {
+    output.push(...curTree.nodes);
+    _.forEach(curTree.localities, (localityValues) => {
+      _.forEach(localityValues, (localityValue) => {
+        recur(localityValue);
+      });
+    });
+  }
+  recur(tree);
+  return output;
+}
