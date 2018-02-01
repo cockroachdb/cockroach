@@ -188,9 +188,20 @@ message TableReaderSpec {
 // performs KV operations to retrieve specific rows that correspond to the
 // values in the input stream (join by lookup).
 //
-// The "internal columns" of a JoinReader (see ProcessorSpec) are all the
-// columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are be populated.
+// The "internal columns" of a JoinReader (see ProcessorSpec) are either the
+// columns of the table or the concatenation of the columns of the input stream
+// with the table columns, depending on the lookup columns specified.
+// Internally, only the values for the columns needed by the post-processing
+// stage are be populated.
+//
+// Example:
+// Input stream columns: | a | b |              Table columns: | c |
+// 
+// If performing a lookup join on a = c (lookup columns are [0, 2]):
+//        Internal columns: | a | b | c |
+// 
+// If performing an index join (lookup columns is []):
+//        Internal columns: | c |
 message JoinReaderSpec {
   optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
@@ -199,8 +210,15 @@ message JoinReaderSpec {
   // TODO(radu): figure out the correct semantics when joining with an index.
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
 
-  // TODO(radu): add field to describe the input columns and allow plumbing
-  // through values that aren't used for the lookup.
+  // Column indicies in the input stream specifying the columns which match with
+  // the index columns. These are the equality columns of the join.
+  // If empty, the start of the input stream schema is assumed to match the index
+  // columns. The joinReader will perform an index join and the "internal
+  // columns" will be the columns of the table.
+  // If populated, the `joinReader` will perform a lookup join and the "internal
+  // columns" will be the concatenation of the input stream columns followed by
+  // the table columns.
+  repeated uint32 lookup_columns = 3 [packed = true];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
