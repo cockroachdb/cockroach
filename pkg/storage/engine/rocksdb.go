@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -2035,7 +2036,7 @@ func (r *rocksDBIterator) MVCCGet(
 
 	// Extract the value from the batch data.
 	repr := copyFromSliceVector(state.data.bufs, state.data.len)
-	mvccKey, rawValue, _, err := mvccScanBatchDecodeValue(repr)
+	mvccKey, rawValue, _, err := mvccScanDecodeKeyValue(repr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -2540,4 +2541,28 @@ func lockFile(filename string) (C.DBFileLock, error) {
 // unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.
 func unlockFile(lock C.DBFileLock) error {
 	return statusToError(C.DBUnlockFile(lock))
+}
+
+// Decode a key/value pair returned in an MVCCScan "batch" (this is not the
+// RocksDB batch repr format), returning both the key/value and the suffix of
+// data remaining in the batch.
+func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
+	if len(repr) == 0 {
+		return key, nil, repr, errors.Errorf("unexpected batch EOF")
+	}
+	repr, v, err := encoding.DecodeUint64Ascending(repr)
+	if err != nil {
+		return key, nil, nil, err
+	}
+	keySize := v >> 32
+	valSize := v & ((1 << 32) - 1)
+	if (keySize + valSize) > uint64(len(repr)) {
+		return key, nil, nil, fmt.Errorf("expected %d bytes, but only %d remaining",
+			keySize+valSize, len(repr))
+	}
+	rawKey := repr[:keySize]
+	value = repr[keySize : keySize+valSize]
+	repr = repr[keySize+valSize:]
+	key, err = DecodeKey(rawKey)
+	return key, value, repr, err
 }
