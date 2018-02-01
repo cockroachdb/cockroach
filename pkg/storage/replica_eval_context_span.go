@@ -133,7 +133,7 @@ func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 // GetMVCCStats returns the Replica's MVCCStats.
 func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
-		roachpb.Span{Key: keys.RangeStatsKey(rec.GetRangeID())},
+		roachpb.Span{Key: keys.RangeStatsLegacyKey(rec.GetRangeID())},
 	)
 	return rec.i.GetMVCCStats()
 }

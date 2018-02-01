@@ -166,7 +166,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	ctx context.Context, reader engine.Reader,
 ) (uint64, uint64, error) {
 	var appliedIndex uint64
-	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexKey(),
+	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -180,7 +180,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	}
 	// TODO(tschottdorf): code duplication.
 	var leaseAppliedIndex uint64
-	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexKey(),
+	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{}, true, nil)
 	if err != nil {
 		return 0, 0, err
@@ -208,7 +208,7 @@ func (rsl StateLoader) SetAppliedIndex(
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 	if err := engine.MVCCPut(ctx, eng, ms,
-		rsl.RaftAppliedIndexKey(),
+		rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */); err != nil {
@@ -216,7 +216,7 @@ func (rsl StateLoader) SetAppliedIndex(
 	}
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCPut(ctx, eng, ms,
-		rsl.LeaseAppliedIndexKey(),
+		rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */)
@@ -237,7 +237,7 @@ func (rsl StateLoader) SetAppliedIndexBlind(
 	var value roachpb.Value
 	value.SetInt(int64(appliedIndex))
 	if err := engine.MVCCBlindPut(ctx, eng, ms,
-		rsl.RaftAppliedIndexKey(),
+		rsl.RaftAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */); err != nil {
@@ -245,7 +245,7 @@ func (rsl StateLoader) SetAppliedIndexBlind(
 	}
 	value.SetInt(int64(leaseAppliedIndex))
 	return engine.MVCCBlindPut(ctx, eng, ms,
-		rsl.LeaseAppliedIndexKey(),
+		rsl.LeaseAppliedIndexLegacyKey(),
 		hlc.Timestamp{},
 		value,
 		nil /* txn */)
@@ -261,8 +261,8 @@ func inlineValueIntEncodedSize(v int64) int {
 // CalcAppliedIndexSysBytes calculates the size (MVCCStats.SysBytes) of the {raft,lease} applied
 // index keys/values.
 func (rsl StateLoader) CalcAppliedIndexSysBytes(appliedIndex, leaseAppliedIndex uint64) int64 {
-	return int64(engine.MakeMVCCMetadataKey(rsl.RaftAppliedIndexKey()).EncodedSize() +
-		engine.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexKey()).EncodedSize() +
+	return int64(engine.MakeMVCCMetadataKey(rsl.RaftAppliedIndexLegacyKey()).EncodedSize() +
+		engine.MakeMVCCMetadataKey(rsl.LeaseAppliedIndexLegacyKey()).EncodedSize() +
 		inlineValueIntEncodedSize(int64(appliedIndex)) +
 		inlineValueIntEncodedSize(int64(leaseAppliedIndex)))
 }
@@ -342,7 +342,7 @@ func (rsl StateLoader) LoadMVCCStats(
 	ctx context.Context, reader engine.Reader,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsKey(), hlc.Timestamp{}, true, nil, &ms)
+	_, err := engine.MVCCGetProto(ctx, reader, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, true, nil, &ms)
 	return ms, err
 }
 
@@ -350,7 +350,7 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetMVCCStats(
 	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.Timestamp{}, nil, newMS)
+	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsLegacyKey(), hlc.Timestamp{}, nil, newMS)
 }
 
 // The rest is not technically part of ReplicaState.
