@@ -7,7 +7,7 @@ import _ from "lodash";
 import "./nodeOverview.styl";
 
 import {
-  NodesSummary, nodesSummarySelector, LivenessStatus,
+  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector,
 } from "src/redux/nodes";
 import { nodeIDAttr } from "src/util/constants";
 import { AdminUIState } from "src/redux/state";
@@ -50,8 +50,8 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
       );
     }
 
-    const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.HEALTHY;
-    const livenessString = LivenessStatus[liveness].toLowerCase();
+    const liveness = nodesSummary.livenessStatusByNodeID[node.desc.node_id] || LivenessStatus.LIVE;
+    const livenessString = livenessNomenclature(liveness);
 
     return (
       <div>

@@ -52,4 +52,7 @@ enum NodeLivenessStatus {
   LIVE = 3;
   // DECOMMISSIONING indicates a node that is in the decommissioning process.
   DECOMMISSIONING = 4;
+  // DECOMMISSIONED indicates a node that has finished the decommissioning
+  // process.
+  DECOMMISSIONED = 5;
 }

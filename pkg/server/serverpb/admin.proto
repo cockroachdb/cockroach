@@ -404,6 +404,10 @@ message LivenessRequest {
 // LivenessResponse contains the liveness status of each node on the cluster.
 message LivenessResponse {
   repeated cockroach.storage.Liveness livenesses = 1 [(gogoproto.nullable) = false];
+  map<int32, cockroach.storage.NodeLivenessStatus> statuses = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
 }
 
 // JobsRequest requests system job information of the given status and type.
