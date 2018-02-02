@@ -193,14 +193,14 @@ CREATE TABLE information_schema.applicable_roles (
 var informationSchemaColumnPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.column_privileges (
-	GRANTOR STRING NOT NULL,
+	GRANTOR STRING,
 	GRANTEE STRING NOT NULL,
 	TABLE_CATALOG STRING NOT NULL,
 	TABLE_SCHEMA STRING NOT NULL,
 	TABLE_NAME STRING NOT NULL,
 	COLUMN_NAME STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL
+	IS_GRANTABLE STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -343,9 +343,9 @@ func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
 var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.key_column_usage (
-	CONSTRAINT_CATALOG STRING,
-	CONSTRAINT_SCHEMA STRING,
-	CONSTRAINT_NAME STRING,
+	CONSTRAINT_CATALOG STRING NOT NULL,
+	CONSTRAINT_SCHEMA STRING NOT NULL,
+	CONSTRAINT_NAME STRING NOT NULL,
 	TABLE_CATALOG STRING NOT NULL,
 	TABLE_SCHEMA STRING NOT NULL,
 	TABLE_NAME STRING NOT NULL,
@@ -383,7 +383,7 @@ CREATE TABLE information_schema.key_column_usage (
 					if err := addRow(
 						defString,                   // constraint_catalog
 						tree.NewDString(db.Name),    // constraint_schema
-						dStringOrNull(name),         // constraint_name
+						tree.NewDString(name),       // constraint_name
 						defString,                   // table_catalog
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
@@ -493,14 +493,14 @@ CREATE TABLE information_schema.referential_constraints (
 var informationSchemaRoleTableGrants = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.role_table_grants (
-	GRANTOR STRING NOT NULL,
+	GRANTOR STRING,
 	GRANTEE STRING NOT NULL,
 	TABLE_CATALOG STRING NOT NULL,
 	TABLE_SCHEMA STRING NOT NULL,
 	TABLE_NAME STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL,
-	WITH_HIERARCHY STRING NOT NULL
+	IS_GRANTABLE STRING,
+	WITH_HIERARCHY STRING
 );
 `,
 	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
@@ -516,7 +516,7 @@ var informationSchemaSchemataTable = virtualSchemaTable{
 CREATE TABLE information_schema.schemata (
 	CATALOG_NAME STRING NOT NULL,
 	SCHEMA_NAME STRING NOT NULL,
-	DEFAULT_CHARACTER_SET_NAME STRING NOT NULL,
+	DEFAULT_CHARACTER_SET_NAME STRING,
 	SQL_PATH STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -540,7 +540,7 @@ CREATE TABLE information_schema.schema_privileges (
 	TABLE_CATALOG STRING NOT NULL,
 	TABLE_SCHEMA STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL
+	IS_GRANTABLE STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
@@ -633,8 +633,8 @@ CREATE TABLE information_schema.statistics (
 	INDEX_NAME STRING NOT NULL,
 	SEQ_IN_INDEX INT NOT NULL,
 	COLUMN_NAME STRING NOT NULL,
-	"COLLATION" STRING NOT NULL,
-	CARDINALITY INT NOT NULL,
+	"COLLATION" STRING,
+	CARDINALITY INT,
 	DIRECTION STRING NOT NULL,
 	STORING STRING NOT NULL,
 	IMPLICIT STRING NOT NULL
@@ -744,7 +744,7 @@ CREATE TABLE information_schema.table_constraints (
 				if err := addRow(
 					defString,                       // constraint_catalog
 					tree.NewDString(db.Name),        // constraint_schema
-					dStringOrNull(name),             // constraint_name
+					tree.NewDString(name),           // constraint_name
 					defString,                       // table_catalog
 					tree.NewDString(db.Name),        // table_schema
 					tree.NewDString(table.Name),     // table_name
@@ -768,7 +768,7 @@ CREATE TABLE information_schema.user_privileges (
 	GRANTEE STRING NOT NULL,
 	TABLE_CATALOG STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL
+	IS_GRANTABLE STRING
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
@@ -793,14 +793,14 @@ CREATE TABLE information_schema.user_privileges (
 var informationSchemaTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_privileges (
-	GRANTOR STRING NOT NULL,
+	GRANTOR STRING,
 	GRANTEE STRING NOT NULL,
 	TABLE_CATALOG STRING NOT NULL,
 	TABLE_SCHEMA STRING NOT NULL,
 	TABLE_NAME STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL,
-	WITH_HIERARCHY STRING NOT NULL
+	IS_GRANTABLE STRING,
+	WITH_HIERARCHY STRING
 );
 `,
 	populate: populateTablePrivileges,
@@ -879,12 +879,12 @@ CREATE TABLE information_schema.views (
     TABLE_SCHEMA STRING NOT NULL,
     TABLE_NAME STRING NOT NULL,
     VIEW_DEFINITION STRING NOT NULL,
-    CHECK_OPTION STRING NOT NULL,
-    IS_UPDATABLE STRING NOT NULL,
-    IS_INSERTABLE_INTO STRING NOT NULL,
-    IS_TRIGGER_UPDATABLE STRING NOT NULL,
-    IS_TRIGGER_DELETABLE STRING NOT NULL,
-    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
+    CHECK_OPTION STRING,
+    IS_UPDATABLE STRING,
+    IS_INSERTABLE_INTO STRING,
+    IS_TRIGGER_UPDATABLE STRING,
+    IS_TRIGGER_DELETABLE STRING,
+    IS_TRIGGER_INSERTABLE_INTO STRING
 );`,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
