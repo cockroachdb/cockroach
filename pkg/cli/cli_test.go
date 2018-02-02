@@ -818,21 +818,21 @@ thenshort`,
 	// 0	0	0	0	0	0	0	0
 	// # 1 row
 	// sql --format=pretty -e show columns from t.u
-	// +-----------------+------+------+---------+---------+
-	// |      Field      | Type | Null | Default | Indices |
-	// +-----------------+------+------+---------+---------+
-	// | f"oo            | INT  | true | NULL    | {}      |
-	// | f'oo            | INT  | true | NULL    | {}      |
-	// | f\oo            | INT  | true | NULL    | {}      |
-	// | short␤          | INT  | true | NULL    | {}      |
-	// | very very long␤ |      |      |         |         |
-	// | not much        |      |      |         |         |
-	// | very very long␤ | INT  | true | NULL    | {}      |
-	// | thenshort       |      |      |         |         |
-	// | κόσμε           | INT  | true | NULL    | {}      |
-	// | a|b             | INT  | true | NULL    | {}      |
-	// | ܈85             | INT  | true | NULL    | {}      |
-	// +-----------------+------+------+---------+---------+
+	// +----------------+------+------+---------+---------+---+
+	// |     Field      | Type | Null | Default | Indices |   |
+	// +----------------+------+------+---------+---------+---+
+	// | f"oo           | INT  | true | NULL    | {}      |
+	// | f'oo           | INT  | true | NULL    | {}      |
+	// | f\oo           | INT  | true | NULL    | {}      |
+	// | short          | INT  | true | NULL    | {}      | + |
+	// | very very long |      |      |         |         | + |
+	// | not much       |      |      |         |         |   |
+	// | very very long | INT  | true | NULL    | {}      | + |
+	// | thenshort      |      |      |         |         |   |
+	// | κόσμε          | INT  | true | NULL    | {}      |
+	// | a|b            | INT  | true | NULL    | {}      |
+	// | ܈85            | INT  | true | NULL    | {}      |
+	// +----------------+------+------+---------+---------+---+
 	// (8 rows)
 	// sql --format=pretty -e select * from t.u
 	// +------+------+------+----------------+----------------+-------+-----+-----+
@@ -1316,21 +1316,21 @@ func Example_sql_table() {
 	// 12	123123213	12313",tabs
 	// # 9 rows
 	// sql --format=pretty -e select * from t.t
-	// +---------------------+--------------------------------+
-	// |          s          |               d                |
-	// +---------------------+--------------------------------+
+	// +---------------------+--------------------------------+---+
+	// |          s          |               d                |   |
+	// +---------------------+--------------------------------+---+
 	// | foo                 | printable ASCII                |
 	// | "foo                | printable ASCII with quotes    |
 	// | \foo                | printable ASCII with backslash |
-	// | foo␤                | non-printable ASCII            |
-	// | bar                 |                                |
+	// | foo                 | non-printable ASCII            | + |
+	// | bar                 |                                |   |
 	// | κόσμε               | printable UTF8                 |
 	// | ñ                   | printable UTF8 using escapes   |
 	// | \x01                | non-printable UTF8 string      |
 	// | ܈85                 | UTF8 string with RTL char      |
-	// | a   b         c␤    | tabs                           |
-	// | 12  123123213 12313 |                                |
-	// +---------------------+--------------------------------+
+	// | a   b         c     | tabs                           | + |
+	// | 12  123123213 12313 |                                |   |
+	// +---------------------+--------------------------------+---+
 	// (9 rows)
 	// sql --format=records -e select * from t.t
 	// -[ RECORD 1 ]

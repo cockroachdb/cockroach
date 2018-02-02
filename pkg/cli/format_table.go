@@ -230,7 +230,7 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 		for i, c := range cols {
 			p.buf.Reset()
 			fmt.Fprint(p.w, c)
-			p.w.Flush()
+			_ = p.w.Flush()
 			expandedCols[i] = p.buf.String()
 		}
 
@@ -253,17 +253,33 @@ func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
 		return nil
 	}
 
+	maxNls := 0
 	for i, r := range row {
+		if nls := strings.Count(r, "\n"); nls > maxNls {
+			// Remember that there was a multi-line cell for below.
+			maxNls = nls
+		}
 		p.buf.Reset()
-		// Marking newline characters is especially important in
-		// single-column results where the underlying TableWriter would
-		// not otherwise show the difference between one multi-line row
-		// and two one-line rows.
+		fmt.Fprint(p.w, r)
+		_ = p.w.Flush()
+		row[i] = p.buf.String()
+	}
+	if maxNls > 0 {
+		// If there was a multi-line cell in the row, add line
+		// continuation markers in an extra pseudo-column on the right.
+		//
+		// Marking mult-line rows is especially important in single-column
+		// results where the underlying TableWriter would not otherwise
+		// show the difference between one multi-line row and two one-line
+		// rows.
+		//
 		// This is not necessary for the column headers (above)
 		// because there is at most one "row" of column headers.
-		fmt.Fprint(p.w, strings.Replace(r, "\n", "␤\n", -1))
-		p.w.Flush()
-		row[i] = p.buf.String()
+		var marker bytes.Buffer
+		for i := 0; i < maxNls; i++ {
+			marker.WriteString("+\n")
+		}
+		row = append(row, marker.String())
 	}
 	p.table.Append(row)
 	return nil
