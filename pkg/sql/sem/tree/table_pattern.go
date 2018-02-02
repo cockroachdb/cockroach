@@ -77,11 +77,11 @@ func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
 			ExplicitSchema: n.NumParts >= 2,
 		}, nil
 	}
-	return &TableName{
+	return &TableName{tblName{
 		SchemaName:     Name(n.Parts[1]),
 		TableName:      Name(n.Parts[0]),
 		ExplicitSchema: n.NumParts >= 2,
-	}, nil
+	}}, nil
 }
 
 // NormalizeTablePattern implements the TablePattern interface.
