@@ -112,6 +112,8 @@ func (p *planner) Update(
 	if _, retExprs := n.Returning.(*tree.ReturningExprs); retExprs || len(en.tableDesc.Checks) > 0 {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
+		// TODO(nvanbenschoten): This could be made tighter, just the rows needed for
+		// the CHECK exprs.
 		requestedCols = en.tableDesc.Columns
 	}
 

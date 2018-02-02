@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -2481,6 +2482,14 @@ func (desc *ColumnDescriptor) SQLString() string {
 		f.WriteString(" STORED")
 	}
 	return f.CloseAndGetString()
+}
+
+// UsesColumnID returns whether the check constraint uses the specified column.
+func (cc *TableDescriptor_CheckConstraint) UsesColumnID(colID ColumnID) bool {
+	i := sort.Search(len(cc.ColumnIDs), func(i int) bool {
+		return cc.ColumnIDs[i] >= colID
+	})
+	return i < len(cc.ColumnIDs) && cc.ColumnIDs[i] == colID
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
