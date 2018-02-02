@@ -92,13 +92,13 @@ type TableNameReference interface {
 	NormalizeTableName() (*TableName, error)
 }
 
-// TableName corresponds to the name of a table in a FROM clause,
+// tblName corresponds to the name of a table in a FROM clause,
 // INSERT or UPDATE statement (and possibly other places).
 //
-// Note: user code out of this package should probably not construct
-// instances of this directly, and instead use the NewTableName /
-// MakeTableName functions underneath.
-type TableName struct {
+// Note: user code out of this package should not construct instances
+// of this directly, and instead use the NewTableName / MakeTableName
+// functions underneath.
+type tblName struct {
 	CatalogName Name
 	SchemaName  Name
 
@@ -112,13 +112,20 @@ type TableName struct {
 	ExplicitSchema bool
 }
 
+// TableName is the public type for tblName. It exposes the fields
+// and can be default-constructed but cannot be instantiated with a
+// non-default value; this encourages the use of the constructors below.
+type TableName struct {
+	tblName
+}
+
 // MakeTableName creates a new table name qualified with just a schema.
 func MakeTableName(db, tbl Name) TableName {
-	return TableName{
+	return TableName{tblName{
 		SchemaName:     db,
 		TableName:      tbl,
 		ExplicitSchema: true,
-	}
+	}}
 }
 
 // NewTableName creates a new qualified table name.
@@ -129,20 +136,20 @@ func NewTableName(db, tbl Name) *TableName {
 
 // MakeTableNameWithCatalog creates a new fully qualified table name.
 func MakeTableNameWithCatalog(db, schema, tbl Name) TableName {
-	return TableName{
+	return TableName{tblName{
 		CatalogName:     db,
 		SchemaName:      schema,
 		TableName:       tbl,
 		ExplicitSchema:  true,
 		ExplicitCatalog: true,
-	}
+	}}
 }
 
 // MakeUnqualifiedTableName creates a new base table name.
 func MakeUnqualifiedTableName(tbl Name) TableName {
-	return TableName{
+	return TableName{tblName{
 		TableName: tbl,
-	}
+	}}
 }
 
 // NewUnqualifiedTableName creates a new base table name.
@@ -206,13 +213,13 @@ func (n *UnresolvedName) normalizeTableNameAsValue() (res TableName, err error) 
 	// It's ok if the prefix is empty. We allow this in e.g.
 	// `select * from "".crdb_internal.tables`.
 
-	res = TableName{
+	res = TableName{tblName{
 		TableName:       Name(n.Parts[0]),
 		SchemaName:      Name(n.Parts[1]),
 		CatalogName:     Name(n.Parts[2]),
 		ExplicitSchema:  n.NumParts >= 2,
 		ExplicitCatalog: n.NumParts >= 3,
-	}
+	}}
 
 	return res, nil
 }
