@@ -16,11 +16,11 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -118,13 +118,17 @@ func (e virtualTableEntry) getPlanInfo(
 
 		err := e.tableDef.populate(ctx, p, prefix, func(datums ...tree.Datum) error {
 			if r, c := len(datums), len(v.columns); r != c {
-				panic(fmt.Sprintf("datum row count and column count differ: %d vs %d", r, c))
+				log.Fatalf(ctx, "datum row count and column count differ: %d vs %d", r, c)
 			}
 			for i, col := range v.columns {
 				datum := datums[i]
-				if !(datum == tree.DNull || datum.ResolvedType().Equivalent(col.Typ)) {
-					panic(fmt.Sprintf("datum column %q expected to be type %s; found type %s",
-						col.Name, col.Typ, datum.ResolvedType()))
+				if datum == tree.DNull {
+					if !e.desc.Columns[i].Nullable {
+						log.Fatalf(ctx, "datum column %q not nullable, found NULL value", col.Name)
+					}
+				} else if !datum.ResolvedType().Equivalent(col.Typ) {
+					log.Fatalf(ctx, "datum column %q expected to be type %s; found type %s",
+						col.Name, col.Typ, datum.ResolvedType())
 				}
 			}
 			_, err := v.rows.AddRow(ctx, datums)

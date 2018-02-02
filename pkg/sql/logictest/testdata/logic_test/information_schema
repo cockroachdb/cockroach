@@ -1128,14 +1128,14 @@ query TTBTT colnames
 SHOW COLUMNS FROM information_schema.column_privileges
 ----
 Field           Type    Null   Default  Indices
-grantor         STRING  false  NULL     {}
+grantor         STRING  true   NULL     {}
 grantee         STRING  false  NULL     {}
 table_catalog   STRING  false  NULL     {}
 table_schema    STRING  false  NULL     {}
 table_name      STRING  false  NULL     {}
 column_name     STRING  false  NULL     {}
 privilege_type  STRING  false  NULL     {}
-is_grantable    STRING  false  NULL     {}
+is_grantable    STRING  true   NULL     {}
 
 
 query TTTTTTTT colnames
