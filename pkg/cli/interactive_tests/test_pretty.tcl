@@ -50,7 +50,8 @@ eexpect ":/# "
 send "$argv sql --format=tsv\r"
 eexpect root@
 send "select 42; select 1;\r"
-eexpect "42\r\n# 1 row\r\n1\r\n1\r\n# 1 row\r\n"
+eexpect "42\r\n# 1 row\r\n"
+eexpect "1\r\n1\r\n# 1 row\r\n"
 eexpect root@
 send "\\q\r"
 end_test
