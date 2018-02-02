@@ -1347,7 +1347,7 @@ func Example_sql_table() {
 	// s | \foo
 	// d | printable ASCII with backslash
 	// -[ RECORD 4 ]
-	// s | foo
+	// s | foo+
 	//   | bar
 	// d | non-printable ASCII
 	// -[ RECORD 5 ]
@@ -1363,7 +1363,7 @@ func Example_sql_table() {
 	// s | ܈85
 	// d | UTF8 string with RTL char
 	// -[ RECORD 9 ]
-	// s | a	b	c
+	// s | a	b	c+
 	//   | 12	123123213	12313
 	// d | tabs
 	// sql --format=sql -e select * from t.t
