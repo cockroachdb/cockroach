@@ -632,7 +632,7 @@ ORDER BY con.oid
 conname    conislocal  coninhcount  connoinherit  conkey
 t1_a_key   true        0            true          {2}
 index_key  true        0            true          {3,4}
-check_b    true        0            true          NULL
+check_b    true        0            true          {2}
 primary    true        0            true          {1}
 fk         true        0            true          {1,2}
 fk         true        0            true          {1}
