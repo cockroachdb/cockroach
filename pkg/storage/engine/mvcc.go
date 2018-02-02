@@ -1712,7 +1712,8 @@ func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, error) 
 	if err != nil {
 		return nil, err
 	}
-	return key.Key, nil
+	resumeKey := append(roachpb.Key(nil), key.Key...)
+	return resumeKey, nil
 }
 
 func buildScanResults(
@@ -1769,7 +1770,7 @@ func buildScanResults(
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		resumeKey = key.Key
+		resumeKey = append(roachpb.Key(nil), key.Key...)
 	}
 
 	return kvs, resumeKey, intents, nil
