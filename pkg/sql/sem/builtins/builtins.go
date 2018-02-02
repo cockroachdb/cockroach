@@ -20,6 +20,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -522,15 +523,22 @@ var Builtins = map[string][]tree.Builtin{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := string(*args[0].(*tree.DBytes)), string(tree.MustBeDString(args[1]))
-				if format != "hex" {
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for ENCODE")
-				}
 				if !utf8.ValidString(data) {
 					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
 				}
-				var buf bytes.Buffer
-				lex.HexEncodeString(&buf, data)
-				return tree.NewDString(buf.String()), nil
+				switch format {
+				case "hex":
+					var buf bytes.Buffer
+					lex.HexEncodeString(&buf, data)
+					return tree.NewDString(buf.String()), nil
+				case "escape":
+					return tree.NewDString(data), nil
+				case "base64":
+					enc := base64.StdEncoding.EncodeToString([]byte(data))
+					return tree.NewDString(enc), nil
+				default:
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex', 'escape', and 'base64' formats are supported for ENCODE")
+				}
 			},
 			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" is supported).",
 		},
@@ -542,14 +550,26 @@ var Builtins = map[string][]tree.Builtin{
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				if format != "hex" {
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
+				switch format {
+				case "hex":
+					decoded, err := hex.DecodeString(data)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(decoded)), nil
+				case "escape":
+					var buf bytes.Buffer
+					lex.HexEncodeString(&buf, data)
+					return tree.NewDBytes(tree.DBytes(buf.Bytes())), nil
+				case "base64":
+					dec, err := base64.StdEncoding.DecodeString(data)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(dec)), nil
+				default:
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex', 'escape', and 'base64' formats are supported for DECODE")
 				}
-				decoded, err := hex.DecodeString(data)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(decoded)), nil
 			},
 			Info: "Decodes `data` as the format specified by `format` (only \"hex\" is supported).",
 		},
