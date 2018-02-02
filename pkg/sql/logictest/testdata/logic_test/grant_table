@@ -267,7 +267,7 @@ a         t      readwrite  ALL
 a         t      root       ALL
 
 statement ok
-INSERT INTO system.users VALUES('test-user','');
+INSERT INTO system.public.users VALUES('test-user','');
 
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"

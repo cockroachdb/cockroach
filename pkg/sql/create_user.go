@@ -92,7 +92,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		params.ctx,
 		opName,
 		params.p.txn,
-		"INSERT INTO system.users VALUES ($1, $2, $3);",
+		"INSERT INTO system.public.users VALUES ($1, $2, $3);",
 		normalizedUsername,
 		hashedPassword,
 		n.isRole,

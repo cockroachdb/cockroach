@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 ##################
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'create_table'
 ----
 51 1
@@ -34,7 +34,7 @@ WHERE "eventType" = 'create_table'
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE test.a%'
 ----
@@ -42,7 +42,7 @@ WHERE "eventType" = 'create_table'
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE IF NOT EXISTS test.b%'
 ----
@@ -53,7 +53,7 @@ WHERE "eventType" = 'create_table'
 
 query I
 SELECT COUNT(*)
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'create_table'
   AND info LIKE '%CREATE TABLE badtable%'
 ----
@@ -63,7 +63,7 @@ WHERE "eventType" = 'create_table'
 ##################
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 4  1
@@ -73,7 +73,7 @@ statement ok
 ALTER TABLE test.a ADD val INT
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 4  1
@@ -81,14 +81,14 @@ WHERE "eventType" = 'alter_table'
 51 1
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 4  1
 51 1
 
 query II
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
 
@@ -96,7 +96,7 @@ WHERE "eventType" = 'reverse_schema_change'
 # statement.
 ##################
 query II
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'alter_table'
   AND info LIKE '%ALTER TABLE test.a%'
 ----
@@ -113,7 +113,7 @@ statement error pq: duplicate key value \(val\)=\(1\) violates unique constraint
 ALTER TABLE test.a ADD CONSTRAINT foo UNIQUE(val)
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 4  1
@@ -122,21 +122,21 @@ WHERE "eventType" = 'alter_table'
 51 1
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 4  1
 51 1
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
 51 1
 
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'finish_schema_change_rollback'
 ----
 51 1
@@ -148,14 +148,14 @@ statement ok
 CREATE INDEX a_foo ON test.a (val)
 
 query II
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'create_index'
   AND info LIKE '%a_foo%'
 ----
 51 1
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 4  1
@@ -169,14 +169,14 @@ statement ok
 DROP INDEX test.a@a_foo
 
 query II
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'drop_index'
   AND info LIKE '%a_foo%'
 ----
 51 1
 
 query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+SELECT "targetID", "reportingID" FROM system.public.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
 4  1
@@ -203,7 +203,7 @@ DROP TABLE IF EXISTS test.b
 
 query II rowsort
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'drop_table'
 ----
 51 1
@@ -214,7 +214,7 @@ WHERE "eventType" = 'drop_table'
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'drop_table'
   AND info LIKE '%DROP TABLE test.a%'
 ----
@@ -222,7 +222,7 @@ WHERE "eventType" = 'drop_table'
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'drop_table'
   AND info LIKE '%DROP TABLE IF EXISTS test.b%'
 ----
@@ -251,7 +251,7 @@ CREATE DATABASE IF NOT EXISTS othereventlogtest
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'create_database'
   AND info LIKE '%CREATE DATABASE eventlogtest%'
 ----
@@ -259,7 +259,7 @@ WHERE "eventType" = 'create_database'
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'create_database'
   AND info LIKE '%CREATE DATABASE IF NOT EXISTS othereventlogtest%'
 ----
@@ -294,7 +294,7 @@ DROP DATABASE IF EXISTS othereventlogtest CASCADE
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'drop_database'
   AND info LIKE '%DROP DATABASE eventlogtest%'
 ----
@@ -302,7 +302,7 @@ WHERE "eventType" = 'drop_database'
 
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'drop_database'
   AND info LIKE '%DROP DATABASE IF EXISTS othereventlogtest%'
 ----
@@ -312,7 +312,7 @@ WHERE "eventType" = 'drop_database'
 ##################
 query II
 SELECT "targetID", "reportingID"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'drop_database'
   AND info LIKE '%testtable%'
   AND info LIKE '%anothertesttable%'
@@ -336,7 +336,7 @@ SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = DEFAULT
 ##################
 query IIT
 SELECT "targetID", "reportingID", "info"
-FROM system.eventlog
+FROM system.public.eventlog
 WHERE "eventType" = 'set_cluster_setting' AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%'
 ORDER BY "timestamp"
 ----

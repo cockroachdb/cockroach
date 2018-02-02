@@ -65,7 +65,7 @@ func testEventLogInner(
 		// Query all node join events. There should be one for each node in the
 		// cluster.
 		rows, err := db.Query(
-			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = $1`,
+			`SELECT "targetID", info FROM system.public.eventlog WHERE "eventType" = $1`,
 			string(csql.EventLogNodeJoin))
 		if err != nil {
 			return err
@@ -135,7 +135,7 @@ func testEventLogInner(
 
 		// Query all node restart events. There should only be one.
 		rows, err := db.Query(
-			`SELECT "targetID", info FROM system.eventlog WHERE "eventType" = $1`,
+			`SELECT "targetID", info FROM system.public.eventlog WHERE "eventType" = $1`,
 			string(csql.EventLogNodeRestart))
 		if err != nil {
 			return err

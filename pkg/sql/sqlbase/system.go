@@ -32,7 +32,7 @@ import (
 // These system tables are part of the system config.
 const (
 	NamespaceTableSchema = `
-CREATE TABLE system.namespace (
+CREATE TABLE system.public.namespace (
   "parentID" INT,
   name       STRING,
   id         INT,
@@ -40,26 +40,26 @@ CREATE TABLE system.namespace (
 );`
 
 	DescriptorTableSchema = `
-CREATE TABLE system.descriptor (
+CREATE TABLE system.public.descriptor (
   id         INT PRIMARY KEY,
   descriptor BYTES
 );`
 
 	UsersTableSchema = `
-CREATE TABLE system.users (
+CREATE TABLE system.public.users (
   username         STRING PRIMARY KEY,
   "hashedPassword" BYTES
 );`
 
 	// Zone settings per DB/Table.
 	ZonesTableSchema = `
-CREATE TABLE system.zones (
+CREATE TABLE system.public.zones (
   id     INT PRIMARY KEY,
   config BYTES
 );`
 
 	SettingsTableSchema = `
-CREATE TABLE system.settings (
+CREATE TABLE system.public.settings (
 	name              STRING    NOT NULL PRIMARY KEY,
 	value             STRING    NOT NULL,
 	"lastUpdated"     TIMESTAMP NOT NULL DEFAULT now(),
@@ -71,7 +71,7 @@ CREATE TABLE system.settings (
 // These system tables are not part of the system config.
 const (
 	LeaseTableSchema = `
-CREATE TABLE system.lease (
+CREATE TABLE system.public.lease (
   "descID"   INT,
   version    INT,
   "nodeID"   INT,
@@ -80,7 +80,7 @@ CREATE TABLE system.lease (
 );`
 
 	EventLogTableSchema = `
-CREATE TABLE system.eventlog (
+CREATE TABLE system.public.eventlog (
   timestamp     TIMESTAMP  NOT NULL,
   "eventType"   STRING     NOT NULL,
   "targetID"    INT        NOT NULL,
@@ -93,7 +93,7 @@ CREATE TABLE system.eventlog (
 	// rangelog is currently envisioned as a wide table; many different event
 	// types can be recorded to the table.
 	RangeEventTableSchema = `
-CREATE TABLE system.rangelog (
+CREATE TABLE system.public.rangelog (
   timestamp      TIMESTAMP  NOT NULL,
   "rangeID"      INT        NOT NULL,
   "storeID"      INT        NOT NULL,
@@ -105,14 +105,14 @@ CREATE TABLE system.rangelog (
 );`
 
 	UITableSchema = `
-CREATE TABLE system.ui (
+CREATE TABLE system.public.ui (
 	key           STRING PRIMARY KEY,
 	value         BYTES,
 	"lastUpdated" TIMESTAMP NOT NULL
 );`
 
 	JobsTableSchema = `
-CREATE TABLE system.jobs (
+CREATE TABLE system.public.jobs (
 	id                INT       DEFAULT unique_rowid() PRIMARY KEY,
 	status            STRING    NOT NULL,
 	created           TIMESTAMP NOT NULL DEFAULT now(),
@@ -126,7 +126,7 @@ CREATE TABLE system.jobs (
 	// UI.
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
-CREATE TABLE system.web_sessions (
+CREATE TABLE system.public.web_sessions (
 	id             SERIAL     PRIMARY KEY,
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
@@ -147,7 +147,7 @@ CREATE TABLE system.web_sessions (
 	//
 	// Design outlined in /docs/RFCS/20170908_sql_optimizer_statistics.md
 	TableStatisticsTableSchema = `
-CREATE TABLE system.table_statistics (
+CREATE TABLE system.public.table_statistics (
 	"tableID"       INT        NOT NULL,
 	"statisticID"   INT        NOT NULL DEFAULT unique_rowid(),
 	name            STRING,
@@ -164,7 +164,7 @@ CREATE TABLE system.table_statistics (
 	// locations are used to map a locality specified by a node to geographic
 	// latitude, longitude coordinates, specified as degrees.
 	LocationsTableSchema = `
-CREATE TABLE system.locations (
+CREATE TABLE system.public.locations (
   "localityKey"   STRING,
   "localityValue" STRING,
   latitude        DECIMAL(18,15) NOT NULL,
@@ -175,7 +175,7 @@ CREATE TABLE system.locations (
 
 	// role_members stores relationships between roles (role->role and role->user).
 	RoleMembersTableSchema = `
-CREATE TABLE system.role_members (
+CREATE TABLE system.public.role_members (
   "role"   STRING NOT NULL,
   "member" STRING NOT NULL,
   "isAdmin"  BOOL NOT NULL,

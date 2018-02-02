@@ -102,7 +102,7 @@ func TestSessionFinishRollsBackTxn(t *testing.T) {
 	}
 	if _, err := mainDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				}
 			}
 
-			insertStmt := "INSERT INTO t.test(k, v) VALUES (1, 'a')"
+			insertStmt := "INSERT INTO t.public.test(k, v) VALUES (1, 'a')"
 			if state == sql.RestartWait {
 				// To get a txn in RestartWait, we'll use an aborter.
 				if err := aborter.QueueStmtForAbortion(
@@ -204,7 +204,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 			}
 			ts := timeutil.Now()
 			var count int
-			if err := txCheck.QueryRow("SELECT count(1) FROM t.test").Scan(&count); err != nil {
+			if err := txCheck.QueryRow("SELECT count(1) FROM t.public.test").Scan(&count); err != nil {
 				t.Fatal(err)
 			}
 			// CommitWait actually committed, so we'll need to clean up.
@@ -213,7 +213,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatalf("expected no rows, got: %d", count)
 				}
 			} else {
-				if _, err := txCheck.Exec("DELETE FROM t.test"); err != nil {
+				if _, err := txCheck.Exec("DELETE FROM t.public.test"); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -313,7 +313,7 @@ func TestErrorOnRollback(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -325,7 +325,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 
 	// Perform a write so that the EndTransaction we're going to send doesn't get
 	// elided.
-	if _, err := tx.ExecContext(ctx, "INSERT INTO t.test(k, v) VALUES (1, 'abc')"); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO t.public.test(k, v) VALUES (1, 'abc')"); err != nil {
 		t.Fatal(err)
 	}
 

@@ -13,7 +13,7 @@ statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
 
 query TIT
-SELECT t.name, t.version, t.state FROM crdb_internal.tables AS t JOIN system.namespace AS n ON (n.id = t.parent_id and n.name = 'testdb');
+SELECT t.name, t.version, t.state FROM crdb_internal.tables AS t JOIN system.public.namespace AS n ON (n.id = t.parent_id and n.name = 'testdb');
 ----
 foo 1 PUBLIC
 
@@ -24,7 +24,7 @@ SELECT * FROM testdb.foo
 
 # Check the lease.
 query T
-SELECT l.name FROM crdb_internal.leases AS l JOIN system.namespace AS n ON (n.id = l.table_id and n.name = 'foo');
+SELECT l.name FROM crdb_internal.leases AS l JOIN system.public.namespace AS n ON (n.id = l.table_id and n.name = 'foo');
 ----
 foo
 
@@ -164,7 +164,7 @@ SELECT * FROM crdb_internal.zones WHERE false
 id  cli_specifier  config_yaml  config_proto
 
 statement ok
-INSERT INTO system.zones (id, config) VALUES
+INSERT INTO system.public.zones (id, config) VALUES
   (17, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
   (18, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
   (51, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
@@ -174,13 +174,13 @@ query IT
 SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
 ----
 0   .default
-15  system.jobs
+15  system.public.jobs
 16  .meta
 17  .system
 18  .timeseries
 22  .liveness
 51  testdb
-52  testdb.foo
+52  testdb.public.foo
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')

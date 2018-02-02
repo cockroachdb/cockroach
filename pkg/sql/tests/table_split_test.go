@@ -43,8 +43,8 @@ func TestSplitAtTableBoundary(t *testing.T) {
 	runner.Exec(t, `CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`)
 
 	const tableIDQuery = `
-SELECT tables.id FROM system.namespace tables
-  JOIN system.namespace dbs ON dbs.id = tables."parentID"
+SELECT tables.id FROM system.public.namespace tables
+  JOIN system.public.namespace dbs ON dbs.id = tables."parentID"
   WHERE dbs.name = $1 AND tables.name = $2
 `
 	var tableID uint32

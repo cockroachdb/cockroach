@@ -41,7 +41,7 @@ func GetUserHashedPassword(
 		p, cleanup := newInternalPlanner(
 			"get-pwd", txn, security.RootUser, metrics, &executor.cfg)
 		defer cleanup()
-		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
+		const getHashedPassword = `SELECT "hashedPassword" FROM system.public.users ` +
 			`WHERE username=$1 AND "isRole" = false`
 		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
 		if err != nil {
@@ -60,7 +60,7 @@ func GetUserHashedPassword(
 
 // The map value is true if the map key is a role, false if it is a user.
 func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
-	query := `SELECT username,"isRole"  FROM system.users`
+	query := `SELECT username,"isRole"  FROM system.public.users`
 	newPlanner, cleanup := newInternalPlanner(
 		"get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 	defer cleanup()
@@ -87,7 +87,7 @@ func existingUserIsRole(
 		ctx,
 		opName,
 		txn,
-		`SELECT "isRole" FROM system.users WHERE username=$1`,
+		`SELECT "isRole" FROM system.public.users WHERE username=$1`,
 		username)
 	if err != nil {
 		return false, errors.Errorf("error looking up user %s", username)

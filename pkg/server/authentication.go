@@ -165,7 +165,7 @@ func (s *authenticationServer) verifySession(
 	// Look up session in database and verify hashed secret value.
 	const sessionQuery = `
 SELECT "hashedSecret", "username", "expiresAt", "revokedAt"
-FROM system.web_sessions
+FROM system.public.web_sessions
 WHERE id = $1`
 
 	var (
@@ -264,7 +264,7 @@ func (s *authenticationServer) newAuthSession(
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
 	insertSessionStmt := `
-INSERT INTO system.web_sessions ("hashedSecret", username, "expiresAt")
+INSERT INTO system.public.web_sessions ("hashedSecret", username, "expiresAt")
 VALUES($1, $2, $3)
 RETURNING id
 `

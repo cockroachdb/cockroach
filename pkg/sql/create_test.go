@@ -189,7 +189,7 @@ func createTestTable(
 	<-signal
 
 	tableSQL := fmt.Sprintf(`
-		CREATE TABLE IF NOT EXISTS "test"."table_%d" (
+		CREATE TABLE IF NOT EXISTS test.public.table_%d (
 			id INT PRIMARY KEY,
 			val INT
 		)`, id)
@@ -384,7 +384,7 @@ func TestTableReadErrorsBeforeTableCreation(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.timestamp (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -392,9 +392,9 @@ CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
 	testCases := []struct {
 		schema string
 	}{
-		{"CREATE TABLE t.kv0 (k CHAR PRIMARY KEY, v CHAR)"},
-		{"CREATE TABLE t.kv1 AS SELECT * FROM t.kv0"},
-		{"CREATE VIEW t.kv2 AS SELECT k, v FROM t.kv0"},
+		{"CREATE TABLE t.public.kv0 (k CHAR PRIMARY KEY, v CHAR)"},
+		{"CREATE TABLE t.public.kv1 AS SELECT * FROM t.public.kv0"},
+		{"CREATE VIEW t.public.kv2 AS SELECT k, v FROM t.public.kv0"},
 	}
 
 	for i, testCase := range testCases {
@@ -406,7 +406,7 @@ CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
 		// Insert an entry so that the transaction is guaranteed to be
 		// assigned a timestamp.
 		if _, err := tx.Exec(fmt.Sprintf(`
-INSERT INTO t.timestamp VALUES ('%d', 'b');
+INSERT INTO t.public.timestamp VALUES ('%d', 'b');
 `, i)); err != nil {
 			t.Fatal(err)
 		}
@@ -417,14 +417,14 @@ INSERT INTO t.timestamp VALUES ('%d', 'b');
 		}
 
 		if _, err := sqlDB.Exec(fmt.Sprintf(`
-SELECT * FROM t.kv%d
+SELECT * FROM t.public.kv%d
 `, i)); err != nil {
 			t.Fatal(err)
 		}
 
 		// This select should not see any data.
 		if _, err := tx.Query(fmt.Sprintf(
-			`SELECT * FROM t.kv%d`, i,
+			`SELECT * FROM t.public.kv%d`, i,
 		)); !testutils.IsError(err, fmt.Sprintf("id %d is not a table", 52+i)) {
 			t.Fatalf("err = %v", err)
 		}
@@ -452,7 +452,7 @@ func TestCreateStatementType(t *testing.T) {
 	session.StartUnlimitedMonitor()
 	defer session.Finish(e)
 
-	query := "CREATE DATABASE t; CREATE TABLE t.foo(x INT); CREATE TABLE t.bar AS SELECT * FROM generate_series(1,10)"
+	query := "CREATE DATABASE t; CREATE TABLE t.public.foo(x INT); CREATE TABLE t.public.bar AS SELECT * FROM generate_series(1,10)"
 	res, err := e.ExecuteStatementsBuffered(session, query, nil, 3)
 	if err != nil {
 		t.Fatal("expected no error, got", err)

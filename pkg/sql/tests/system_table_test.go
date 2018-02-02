@@ -49,7 +49,7 @@ func TestInitialKeys(t *testing.T) {
 		context.TODO(),
 		keys.SystemDatabaseID,
 		keys.MaxReservedDescID,
-		"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
+		"CREATE TABLE system.public.x (val INTEGER PRIMARY KEY)",
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 	)
 	if err != nil {

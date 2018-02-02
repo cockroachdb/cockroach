@@ -201,7 +201,7 @@ statement error variable "node_id" cannot be changed
 SET node_id = 123
 
 query TT
-SELECT name, value FROM system.settings WHERE name = 'testing.str'
+SELECT name, value FROM system.public.settings WHERE name = 'testing.str'
 ----
 
 # quoted identifiers

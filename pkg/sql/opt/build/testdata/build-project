@@ -3,11 +3,11 @@ CREATE DATABASE t
 ----
 
 exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE t.public.a (x INT PRIMARY KEY, y FLOAT)
 ----
 
 exec-raw
-CREATE TABLE t.b (x INT, y FLOAT)
+CREATE TABLE t.public.b (x INT, y FLOAT)
 ----
 
 build
@@ -21,7 +21,7 @@ project
       └── const: 5 [type=int]
 
 build
-SELECT a.x FROM t.a
+SELECT a.x FROM t.public.a
 ----
 project
  ├── columns: a.x:int:1
@@ -31,13 +31,13 @@ project
       └── variable: a.x [type=int]
 
 build
-SELECT a.x, a.y FROM t.a
+SELECT a.x, a.y FROM t.public.a
 ----
 scan
  └── columns: a.x:int:1 a.y:float:null:2
 
 build
-SELECT a.y, a.x FROM t.a
+SELECT a.y, a.x FROM t.public.a
 ----
 project
  ├── columns: a.x:int:1 a.y:float:null:2
@@ -48,7 +48,7 @@ project
       └── variable: a.x [type=int]
 
 build
-SELECT * FROM t.a
+SELECT * FROM t.public.a
 ----
 scan
  └── columns: a.x:int:1 a.y:float:null:2
@@ -56,7 +56,7 @@ scan
 # Note that an explicit projection operator is added for table b (unlike for
 # table a) to avoid projecting the hidden rowid column.
 build
-SELECT * FROM t.b
+SELECT * FROM t.public.b
 ----
 project
  ├── columns: b.x:int:null:1 b.y:float:null:2
@@ -67,7 +67,7 @@ project
       └── variable: b.y [type=float]
 
 build
-SELECT (a.x + 3) AS "X", false AS "Y" FROM t.a
+SELECT (a.x + 3) AS "X", false AS "Y" FROM t.public.a
 ----
 project
  ├── columns: X:int:null:3 Y:bool:null:4
@@ -80,7 +80,7 @@ project
       └── const: false [type=bool]
 
 build
-SELECT *, ((x < y) OR x > 1000) FROM t.a
+SELECT *, ((x < y) OR x > 1000) FROM t.public.a
 ----
 project
  ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
@@ -98,7 +98,7 @@ project
                 └── const: 1000 [type=int]
 
 build
-SELECT a.*, true FROM t.a
+SELECT a.*, true FROM t.public.a
 ----
 project
  ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3

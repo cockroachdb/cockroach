@@ -3,35 +3,35 @@ CREATE DATABASE t
 ----
 
 exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE t.public.a (x INT PRIMARY KEY, y FLOAT)
 ----
 
 exec-raw
-INSERT INTO t.a VALUES (1, 1.0), (2, 2.0), (3, 3.0)
+INSERT INTO t.public.a VALUES (1, 1.0), (2, 2.0), (3, 3.0)
 ----
 
 build
-SELECT * FROM t.a
+SELECT * FROM t.public.a
 ----
 scan
  └── columns: a.x:int:1 a.y:float:null:2
 
 exec-explain
-SELECT * FROM t.a
+SELECT * FROM t.public.a
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  a@primary  ·       ·
 ·     0  ·     spans  ALL        ·       ·
 
 exec
-SELECT * FROM t.a
+SELECT * FROM t.public.a
 ----
 1  1.0
 2  2.0
 3  3.0
 
 exec-explain
-SELECT * FROM t.a WHERE x > 1
+SELECT * FROM t.public.a WHERE x > 1
 ----
 filter     0  filter  ·       ·          (x, y)  ·
  │         0  ·       filter  @1 > 1     ·       ·
@@ -40,13 +40,13 @@ filter     0  filter  ·       ·          (x, y)  ·
 ·          1  ·       spans   ALL        ·       ·
 
 exec
-SELECT * FROM t.a WHERE x > 1
+SELECT * FROM t.public.a WHERE x > 1
 ----
 2  2.0
 3  3.0
 
 exec-explain
-SELECT * FROM t.a WHERE x > 1 AND x < 3
+SELECT * FROM t.public.a WHERE x > 1 AND x < 3
 ----
 filter     0  filter  ·       ·                      (x, y)  ·
  │         0  ·       filter  (@1 > 1) AND (@1 < 3)  ·       ·
@@ -55,6 +55,6 @@ filter     0  filter  ·       ·                      (x, y)  ·
 ·          1  ·       spans   ALL                    ·       ·
 
 exec
-SELECT * FROM t.a WHERE x > 1 AND x < 3
+SELECT * FROM t.public.a WHERE x > 1 AND x < 3
 ----
 2  2.0

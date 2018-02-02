@@ -3,19 +3,19 @@ CREATE DATABASE t
 ----
 
 exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE t.public.a (x INT PRIMARY KEY, y FLOAT)
 ----
 
 exec-raw
-CREATE TABLE t.b (x INT, y FLOAT)
+CREATE TABLE t.public.b (x INT, y FLOAT)
 ----
 
 exec-raw
-CREATE TABLE t.c (x INT, y FLOAT, z VARCHAR, CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES t.a (x))
+CREATE TABLE t.public.c (x INT, y FLOAT, z VARCHAR, CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES t.public.a (x))
 ----
 
 build
-SELECT * FROM t.a, t.b
+SELECT * FROM t.public.a, t.public.b
 ----
 project
  ├── columns: a.x:int:1 a.y:float:null:2 b.x:int:null:3 b.y:float:null:4
@@ -33,7 +33,7 @@ project
       └── variable: b.y [type=float]
 
 build
-SELECT a.x, b.y FROM t.a, t.b WHERE a.x = b.x
+SELECT a.x, b.y FROM t.public.a, t.public.b WHERE a.x = b.x
 ----
 project
  ├── columns: a.x:int:1 b.y:float:null:4
@@ -54,7 +54,7 @@ project
       └── variable: b.y [type=float]
 
 build
-SELECT * FROM t.c, t.b, t.a WHERE c.x = a.x AND b.x = a.x
+SELECT * FROM t.public.c, t.public.b, t.public.a WHERE c.x = a.x AND b.x = a.x
 ----
 project
  ├── columns: c.x:int:null:1 c.y:float:null:2 c.z:string:null:3 b.x:int:null:5 b.y:float:null:6 a.x:int:8 a.y:float:null:9

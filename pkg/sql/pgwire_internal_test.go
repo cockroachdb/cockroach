@@ -51,7 +51,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 	if _, err := ex.ExecContext(ctx, "CREATE DATABASE test", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ex.ExecContext(ctx, "CREATE TABLE test.t (i INT PRIMARY KEY)", nil); err != nil {
+	if _, err := ex.ExecContext(ctx, "CREATE TABLE test.public.t (i INT PRIMARY KEY)", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Start a txn so leases are accumulated by queries.
@@ -59,7 +59,7 @@ func TestPGWireConnectionCloseReleasesLeases(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Get a table lease.
-	if _, err := ex.ExecContext(ctx, "SELECT * FROM test.t", nil); err != nil {
+	if _, err := ex.ExecContext(ctx, "SELECT * FROM test.public.t", nil); err != nil {
 		t.Fatal(err)
 	}
 	// Abruptly close the connection.

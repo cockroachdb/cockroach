@@ -233,11 +233,11 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 			`index "foo" not in any of the tables`,
 		},
 		{
-			"ALTER PARTITION p0 OF TABLE system.jobs EXPERIMENTAL CONFIGURE ZONE 'foo'",
+			"ALTER PARTITION p0 OF TABLE system.public.jobs EXPERIMENTAL CONFIGURE ZONE 'foo'",
 			`partition "p0" does not exist`,
 		},
 		{
-			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p0 OF TABLE system.jobs",
+			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION p0 OF TABLE system.public.jobs",
 			`partition "p0" does not exist`,
 		},
 	} {

@@ -41,7 +41,7 @@ import (
 // database ID doesn't match the expected parameter. If expected
 // is nil, then we verify no zone config exists.
 func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id sqlbase.ID) error {
-	rows, err := sqlDB.Query(`SELECT * FROM system.zones WHERE id = $1`, id)
+	rows, err := sqlDB.Query(`SELECT * FROM system.public.zones WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id sqlbase.ID) err
 
 // Returns an error if a descriptor "exists" for the table id.
 func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
-	rows, err := sqlDB.Query(`SELECT * FROM system.descriptor WHERE id = $1`, id)
+	rows, err := sqlDB.Query(`SELECT * FROM system.public.descriptor WHERE id = $1`, id)
 	if err != nil {
 		return err
 	}
@@ -101,8 +101,8 @@ func TestDropDatabase(t *testing.T) {
 	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
+INSERT INTO t.public.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -142,10 +142,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -219,8 +219,8 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	// family heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR, FAMILY (k), FAMILY (v));
+INSERT INTO t.public.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -261,10 +261,10 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -330,8 +330,8 @@ func TestShowTablesAfterRecreateDatabase(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.public.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +381,7 @@ func TestDropIndex(t *testing.T) {
 	indexSpan := tableDesc.IndexSpan(idx.ID)
 
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
-	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+	if _, err := sqlDB.Exec(`DROP INDEX t.public.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
@@ -432,19 +432,19 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.Exec(t, `INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
-	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+	sqlDB.Exec(t, `INSERT INTO system.public.zones VALUES ($1, $2)`, tableDesc.ID, zoneConfigBytes)
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.public.kv@foo"); !exists {
 		t.Fatal("zone config for index does not exist")
 	}
 
 	// Verify that dropping the index fails with a "CCL required" error.
-	_, err = sqlDB.DB.Exec(`DROP INDEX t.kv@foo`)
+	_, err = sqlDB.DB.Exec(`DROP INDEX t.public.kv@foo`)
 	if pqErr, ok := err.(*pq.Error); !ok || pqErr.Code != sqlbase.CodeCCLRequired {
 		t.Fatalf("expected pq error with CCLRequired code, but got %v", err)
 	}
 
 	// Verify that the index and its zone config still exist.
-	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); !exists {
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.public.kv@foo"); !exists {
 		t.Fatal("zone config for index no longer exists")
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
@@ -453,11 +453,11 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 
 	// Manually remove the zone config. (Again, doing this through the normal
 	// channels requires a CCL binary.)
-	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id = $1`, tableDesc.ID)
+	sqlDB.Exec(t, `DELETE FROM system.public.zones WHERE id = $1`, tableDesc.ID)
 
 	// Verify the index can now be properly dropped from an OSS binary.
-	sqlDB.Exec(t, `DROP INDEX t.kv@foo`)
-	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); exists {
+	sqlDB.Exec(t, `DROP INDEX t.public.kv@foo`)
+	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.public.kv@foo"); exists {
 		t.Fatal("zone config for index still exists after dropping index")
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
@@ -487,7 +487,7 @@ func TestDropIndexInterleaved(t *testing.T) {
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
 
-	if _, err := sqlDB.Exec(`DROP INDEX t.intlv@intlv_idx`); err != nil {
+	if _, err := sqlDB.Exec(`DROP INDEX t.public.intlv@intlv_idx`); err != nil {
 		t.Fatal(err)
 	}
 	tests.CheckKeyCount(t, kvDB, tableSpan, 2*numRows)
@@ -538,7 +538,7 @@ func TestDropTable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -548,7 +548,7 @@ func TestDropTable(t *testing.T) {
 
 	tableSpan := tableDesc.TableSpan()
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+	if _, err := sqlDB.Exec(`DROP TABLE t.public.kv`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -556,8 +556,8 @@ func TestDropTable(t *testing.T) {
 	// regressions where name -> descriptor ID caches might make
 	// this statement erronously work.
 	if _, err := sqlDB.Exec(
-		`SELECT * FROM t.kv`,
-	); !testutils.IsError(err, `relation "t.kv" does not exist`) {
+		`SELECT * FROM t.public.kv`,
+	); !testutils.IsError(err, `relation "t.public.kv" does not exist`) {
 		t.Fatalf("different error than expected: %+v", err)
 	}
 
@@ -621,7 +621,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -631,7 +631,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 	tableSpan := tableDesc.TableSpan()
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+	if _, err := sqlDB.Exec(`DROP TABLE t.public.kv`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -691,7 +691,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	sqlutils.CreateTable(t, sqlDB.DB, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
 	// Set TTL so the data is deleted immediately.
-	sqlDB.Exec(t, `ALTER TABLE test.t EXPERIMENTAL CONFIGURE ZONE '{gc: {ttlseconds: 0}}'`)
+	sqlDB.Exec(t, `ALTER TABLE test.public.t EXPERIMENTAL CONFIGURE ZONE '{gc: {ttlseconds: 0}}'`)
 
 	// Give the table an old format version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
@@ -703,7 +703,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	tableSpan := tableDesc.TableSpan()
 	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
 
-	sqlDB.Exec(t, `DROP TABLE test.t`)
+	sqlDB.Exec(t, `DROP TABLE test.public.t`)
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
@@ -748,14 +748,14 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 	tableSpan := tableDesc.TableSpan()
 
 	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
+	if _, err := sqlDB.Exec(`DROP TABLE t.public.intlv`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Test that deleted table cannot be used. This prevents regressions where
 	// name -> descriptor ID caches might make this statement erronously work.
-	if _, err := sqlDB.Exec(`SELECT * FROM t.intlv`); !testutils.IsError(
-		err, `relation "t.intlv" does not exist`,
+	if _, err := sqlDB.Exec(`SELECT * FROM t.public.intlv`); !testutils.IsError(
+		err, `relation "t.public.intlv" does not exist`,
 	) {
 		t.Fatalf("different error than expected: %v", err)
 	}
@@ -775,7 +775,7 @@ func TestDropTableInTxn(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -785,13 +785,13 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 		t.Fatal(err)
 	}
 
-	if _, err := tx.Exec(`DROP TABLE t.kv`); err != nil {
+	if _, err := tx.Exec(`DROP TABLE t.public.kv`); err != nil {
 		t.Fatal(err)
 	}
 
 	// We might still be able to read/write in the table inside this transaction
 	// until the schema changer runs, but we shouldn't be able to ALTER it.
-	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
+	if _, err := tx.Exec(`ALTER TABLE t.public.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
 		`table "kv" is being dropped`) {
 		t.Fatalf("different error than expected: %v", err)
 	}
@@ -867,14 +867,14 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 
 	sql := `
 CREATE DATABASE test;
-CREATE TABLE test.t(a INT PRIMARY KEY);
+CREATE TABLE test.public.t(a INT PRIMARY KEY);
 `
 	if _, err := db.Exec(sql); err != nil {
 		t.Fatal(err)
 	}
 
 	// DROP the table
-	if _, err := db.Exec(`DROP TABLE test.t`); err != nil {
+	if _, err := db.Exec(`DROP TABLE test.public.t`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -890,12 +890,12 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Check that CREATE TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`CREATE TABLE test.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `relation "t" already exists`) {
+	if _, err := db.Exec(`CREATE TABLE test.public.t(a INT PRIMARY KEY)`); !testutils.IsError(err, `relation "t" already exists`) {
 		t.Fatal(err)
 	}
 
 	// Check that DROP TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `table "t" is being dropped`) {
+	if _, err := db.Exec(`DROP TABLE test.public.t`); !testutils.IsError(err, `table "t" is being dropped`) {
 		t.Fatal(err)
 	}
 }

@@ -419,7 +419,7 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 }
 
 func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
-	const alterStmt = `ALTER TABLE system.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4()`
+	const alterStmt = `ALTER TABLE system.public.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4()`
 
 	// System tables can only be modified by a privileged internal user.
 	session := r.newRootSession(ctx)
@@ -553,7 +553,7 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 	// the insert below.
 	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
 		session,
-		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', NOW(), 'm') ON CONFLICT(name) DO NOTHING`, b),
+		fmt.Sprintf(`INSERT INTO system.public.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', NOW(), 'm') ON CONFLICT(name) DO NOTHING`, b),
 		nil, 1,
 	); err == nil {
 		res.Close(ctx)
@@ -587,7 +587,7 @@ func addRootUser(ctx context.Context, r runner) error {
 	defer session.Finish(r.sqlExecutor)
 
 	// Upsert the root user into the table. We intentionally override any existing entry.
-	const upsertRootStmt = `UPSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`
+	const upsertRootStmt = `UPSERT INTO system.public.users (username, "hashedPassword") VALUES ($1, '')`
 
 	pl := tree.MakePlaceholderInfo()
 	pl.SetValue("1", tree.NewDString(security.RootUser))
@@ -634,7 +634,7 @@ func upsertZoneConfig(ctx context.Context, r runner, id uint32, zone config.Zone
 		return err
 	}
 
-	const stmt = `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`
+	const stmt = `UPSERT INTO system.public.zones (id, config) VALUES ($1, $2)`
 	pl := tree.MakePlaceholderInfo()
 	pl.SetValue("1", tree.NewDInt(tree.DInt(id)))
 	pl.SetValue("2", tree.NewDString(string(buf)))
@@ -711,7 +711,7 @@ func addRoles(ctx context.Context, r runner) error {
 
 	// Add the roles column to the system.users table.
 	const alterStmt = `
-					ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL NOT NULL DEFAULT false
+					ALTER TABLE system.public.users ADD COLUMN IF NOT EXISTS "isRole" BOOL NOT NULL DEFAULT false
 					`
 
 	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
@@ -723,7 +723,7 @@ func addRoles(ctx context.Context, r runner) error {
 
 	// Create the `admin` role.
 	const insertAdminStmt = `
-					INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
+					INSERT INTO system.public.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
 					`
 
 	// Add the `admin` role. We retry a few times as the schema change may still be backfilling.
@@ -749,7 +749,7 @@ func addRoles(ctx context.Context, r runner) error {
 		// We perform this check here rather than before the INSERT so that we don't needlessly retry
 		// a SELECT on something that doesn't usually exist.
 		// We look for a user named "admin" that is NOT a role (the only possibility before the ALTER above).
-		selectStmt := `SELECT username FROM system.users WHERE username = $1 AND "isRole" = false`
+		selectStmt := `SELECT username FROM system.public.users WHERE username = $1 AND "isRole" = false`
 
 		// Do not overwrite err or res.
 		var selectRes sql.StatementResults
@@ -839,7 +839,7 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	defer session.Finish(r.sqlExecutor)
 
 	const upsertAdminStmt = `
-					UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
+					UPSERT INTO system.public.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
 					`
 
 	pl := tree.MakePlaceholderInfo()
@@ -932,18 +932,18 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 
 func purgeClusterSettingKVGCBatchSize(ctx context.Context, r runner) error {
 	// This cluster setting has been removed.
-	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.gc.batch_size'`)
+	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM system.public.settings WHERE name='kv.gc.batch_size'`)
 }
 
 func purgeClusterSettingKVTransactionMaxIntents(ctx context.Context, r runner) error {
 	// This cluster setting has been removed.
-	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.transaction.max_intents'`)
+	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM system.public.settings WHERE name='kv.transaction.max_intents'`)
 }
 
 func addDefaultSystemJobsZoneConfig(ctx context.Context, r runner) error {
 	defaultTTLSeconds := config.DefaultZoneConfig().GC.TTLSeconds
 
-	jobsZone, err := getZoneConfig(ctx, r, "TABLE system.jobs")
+	jobsZone, err := getZoneConfig(ctx, r, "TABLE system.public.jobs")
 	if err != nil {
 		return err
 	}

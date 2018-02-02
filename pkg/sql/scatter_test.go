@@ -46,10 +46,10 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
 	// Introduce 99 splits to get 100 ranges.
-	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
+	r.Exec(t, "ALTER TABLE test.public.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
 	getLeaseholders := func() (map[int]int, error) {
-		rows := r.Query(t, `SELECT "Range ID", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE test.t]`)
+		rows := r.Query(t, `SELECT "Range ID", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE test.public.t]`)
 		leaseholders := make(map[int]int)
 		numRows := 0
 		for ; rows.Next(); numRows++ {
@@ -83,7 +83,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 		// Ensure that scattering changes the leaseholders, which is really all
 		// that randomizing the lease placements can probabilistically guarantee -
 		// it doesn't guarantee a uniform distribution.
-		r.Exec(t, "ALTER TABLE test.t SCATTER")
+		r.Exec(t, "ALTER TABLE test.public.t SCATTER")
 		newLeaseholders, err := getLeaseholders()
 		if err != nil {
 			t.Fatal(err)
@@ -116,8 +116,8 @@ func TestScatterResponse(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
-	rows := r.Query(t, "ALTER TABLE test.t SCATTER")
+	r.Exec(t, "ALTER TABLE test.public.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
+	rows := r.Query(t, "ALTER TABLE test.public.t SCATTER")
 
 	i := 0
 	for ; rows.Next(); i++ {

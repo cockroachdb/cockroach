@@ -43,15 +43,15 @@ func CreateKVTable(sqlDB *gosql.DB, numRows int) error {
 	// heuristics are updated.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE IF NOT EXISTS t;
-CREATE TABLE t.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
-CREATE INDEX foo on t.kv (v);
+CREATE TABLE t.public.kv (k INT PRIMARY KEY, v INT, FAMILY (k), FAMILY (v));
+CREATE INDEX foo on t.public.kv (v);
 `); err != nil {
 		return err
 	}
 
 	// Bulk insert.
 	var insert bytes.Buffer
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
+	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.public.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
 		return err
 	}
 	for i := 1; i < numRows; i++ {
@@ -79,7 +79,7 @@ CREATE INDEX intlv_idx ON intlv (k, n) INTERLEAVE IN PARENT kv (k);
 	}
 
 	var insert bytes.Buffer
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
+	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.public.kv VALUES (%d, %d)`, 0, numRows-1)); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numRows; i++ {
@@ -91,7 +91,7 @@ CREATE INDEX intlv_idx ON intlv (k, n) INTERLEAVE IN PARENT kv (k);
 		t.Fatal(err)
 	}
 	insert.Reset()
-	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.intlv VALUES (%d, %d, %d)`, 0, numRows-1, numRows-1)); err != nil {
+	if _, err := insert.WriteString(fmt.Sprintf(`INSERT INTO t.public.intlv VALUES (%d, %d, %d)`, 0, numRows-1, numRows-1)); err != nil {
 		t.Fatal(err)
 	}
 	for i := 1; i < numRows; i++ {

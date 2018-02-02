@@ -128,8 +128,8 @@ CREATE TABLE IF NOT EXISTS accounts (
 	}
 
 	tableIDQuery := `
-SELECT tables.id FROM system.namespace tables
-  JOIN system.namespace dbs ON dbs.id = tables."parentID"
+SELECT tables.id FROM system.public.namespace tables
+  JOIN system.public.namespace dbs ON dbs.id = tables."parentID"
   WHERE dbs.name = $1 AND tables.name = $2
 `
 	var tableID uint32

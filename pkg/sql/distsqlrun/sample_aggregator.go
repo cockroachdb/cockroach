@@ -232,7 +232,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 
 			if _, err := s.flowCtx.executor.ExecuteStatementInTransaction(
 				ctx, "insert-statistic", txn,
-				`INSERT INTO system.table_statistics (
+				`INSERT INTO system.public.table_statistics (
 					"tableID",
 					"name",
 					"columnIDs",

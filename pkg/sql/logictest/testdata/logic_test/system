@@ -28,7 +28,7 @@ web_sessions
 zones
 
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM system.namespace]
+SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM system.public.namespace]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /namespace/primary/0/'system'/id -> 1
@@ -65,7 +65,7 @@ fetched: /namespace/primary/1/'zones'/id -> 5
 output row: [1 'zones' 5]
 
 query ITI rowsort
-SELECT * FROM system.namespace
+SELECT * FROM system.public.namespace
 ----
 0  system            1
 0  test              50
@@ -85,7 +85,7 @@ SELECT * FROM system.namespace
 1  zones             5
 
 query I rowsort
-SELECT id FROM system.descriptor
+SELECT id FROM system.public.descriptor
 ----
 1
 2
@@ -106,39 +106,39 @@ SELECT id FROM system.descriptor
 
 # Verify we can read "protobuf" columns.
 query I
-SELECT length(descriptor) * (id - 1) FROM system.descriptor WHERE id = 1
+SELECT length(descriptor) * (id - 1) FROM system.public.descriptor WHERE id = 1
 ----
 0
 
 # Verify format of system tables.
 query TTBTT
-SHOW COLUMNS FROM system.namespace
+SHOW COLUMNS FROM system.public.namespace
 ----
 parentID  INT     false  NULL  {"primary"}
 name      STRING  false  NULL  {"primary"}
 id        INT     true   NULL  {}
 
 query TTBTT
-SHOW COLUMNS FROM system.descriptor
+SHOW COLUMNS FROM system.public.descriptor
 ----
 id         INT   false NULL {"primary"}
 descriptor BYTES true  NULL {}
 
 query TTBTT
-SHOW COLUMNS FROM system.users
+SHOW COLUMNS FROM system.public.users
 ----
 username        STRING  false  NULL  {"primary"}
 hashedPassword  BYTES   true   NULL  {}
 isRole          BOOL    false  false {}
 
 query TTBTT
-SHOW COLUMNS FROM system.zones
+SHOW COLUMNS FROM system.public.zones
 ----
 id     INT   false NULL {"primary"}
 config BYTES true  NULL {}
 
 query TTBTT
-SHOW COLUMNS FROM system.lease
+SHOW COLUMNS FROM system.public.lease
 ----
 descID      INT        false  NULL  {"primary"}
 version     INT        false  NULL  {"primary"}
@@ -146,7 +146,7 @@ nodeID      INT        false  NULL  {"primary"}
 expiration  TIMESTAMP  false  NULL  {"primary"}
 
 query TTBTT
-SHOW COLUMNS FROM system.eventlog
+SHOW COLUMNS FROM system.public.eventlog
 ----
 timestamp    TIMESTAMP  false  NULL       {"primary"}
 eventType    STRING     false  NULL       {}
@@ -156,7 +156,7 @@ info         STRING     true   NULL       {}
 uniqueID     BYTES      false  uuid_v4()  {"primary"}
 
 query TTBTT
-SHOW COLUMNS FROM system.rangelog
+SHOW COLUMNS FROM system.public.rangelog
 ----
 timestamp     TIMESTAMP  false  NULL            {"primary"}
 rangeID       INT        false  NULL            {}
@@ -167,14 +167,14 @@ info          STRING     true   NULL            {}
 uniqueID      INT        false  unique_rowid()  {"primary"}
 
 query TTBTT
-SHOW COLUMNS FROM system.ui
+SHOW COLUMNS FROM system.public.ui
 ----
 key          STRING     false  NULL  {"primary"}
 value        BYTES      true   NULL  {}
 lastUpdated  TIMESTAMP  false  NULL  {}
 
 query TTBTT
-SHOW COLUMNS FROM system.jobs
+SHOW COLUMNS FROM system.public.jobs
 ----
 id       INT        false  unique_rowid()  {"primary","jobs_status_created_idx"}
 status   STRING     false  NULL            {"jobs_status_created_idx"}
@@ -182,7 +182,7 @@ created  TIMESTAMP  false  now()           {"jobs_status_created_idx"}
 payload  BYTES      false  NULL            {}
 
 query TTBTT
-SHOW COLUMNS FROM system.settings
+SHOW COLUMNS FROM system.public.settings
 ----
 name         STRING     false  NULL   {"primary"}
 value        STRING     false  NULL   {}
@@ -190,7 +190,7 @@ lastUpdated  TIMESTAMP  false  now()  {}
 valueType    STRING     true   NULL   {}
 
 query TTBTT
-SHOW COLUMNS FROM system.role_members
+SHOW COLUMNS FROM system.public.role_members
 ----
 role     STRING  false  NULL  {"primary","role_members_role_idx","role_members_member_idx"}
 member   STRING  false  NULL  {"primary","role_members_role_idx","role_members_member_idx"}
@@ -207,7 +207,7 @@ system  root   GRANT
 system  root   SELECT
 
 query TTTT
-SHOW GRANTS ON system.*
+SHOW GRANTS ON system.public.*
 ----
 system  descriptor        admin  GRANT
 system  descriptor        admin  SELECT
@@ -356,16 +356,16 @@ statement ok
 GRANT GRANT, SELECT ON DATABASE system TO testuser
 
 statement error user testuser must not have ALL privileges on this system object
-GRANT ALL ON system.namespace TO testuser
+GRANT ALL ON system.public.namespace TO testuser
 
 statement error user testuser must not have INSERT privileges on this system object
-GRANT GRANT, SELECT, INSERT ON system.namespace TO testuser
+GRANT GRANT, SELECT, INSERT ON system.public.namespace TO testuser
 
 statement ok
-GRANT GRANT, SELECT ON system.namespace TO testuser
+GRANT GRANT, SELECT ON system.public.namespace TO testuser
 
 statement ok
-GRANT SELECT ON system.descriptor TO testuser
+GRANT SELECT ON system.public.descriptor TO testuser
 
 statement error user root must have exactly {GRANT, SELECT} privileges on this system object
 GRANT ALL ON DATABASE system TO root
@@ -374,52 +374,52 @@ statement error user root must have exactly {GRANT, SELECT} privileges on this s
 GRANT DELETE, INSERT ON DATABASE system TO root
 
 statement error user root must have exactly {GRANT, SELECT} privileges on this system object
-GRANT ALL ON system.namespace TO root
+GRANT ALL ON system.public.namespace TO root
 
 statement error user root must have exactly {GRANT, SELECT} privileges on this system object
-GRANT DELETE, INSERT ON system.descriptor TO root
+GRANT DELETE, INSERT ON system.public.descriptor TO root
 
 statement error user root must have exactly {GRANT, SELECT} privileges on this system object
-GRANT ALL ON system.descriptor TO root
+GRANT ALL ON system.public.descriptor TO root
 
 statement error user root must have exactly {GRANT, SELECT} privileges on this system object
 REVOKE GRANT ON DATABASE system FROM root
 
 statement error user root must have exactly {GRANT, SELECT} privileges on this system object
-REVOKE GRANT ON system.namespace FROM root
+REVOKE GRANT ON system.public.namespace FROM root
 
 statement error user root does not have privileges
-REVOKE ALL ON system.namespace FROM root
+REVOKE ALL ON system.public.namespace FROM root
 
-# Some tables (we test system.lease here) allow multiple privilege sets for
+# Some tables (we test system.public.lease here) allow multiple privilege sets for
 # backwards compatibility, but still enforce that no user has more privileges
 # than root.
 statement error user testuser must not have ALL privileges on this system object
-GRANT ALL ON system.lease TO testuser
+GRANT ALL ON system.public.lease TO testuser
 
 statement error user root must have exactly {GRANT, SELECT, INSERT, DELETE, UPDATE} or {ALL} privileges on this system object
-GRANT CREATE on system.lease to root
+GRANT CREATE on system.public.lease to root
 
 statement ok
-GRANT ALL ON system.lease TO root
+GRANT ALL ON system.public.lease TO root
 
 statement ok
-GRANT ALL ON system.lease TO testuser
+GRANT ALL ON system.public.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
 # This is somewhat surprising.
 query T
-select name from system.settings where name != 'sql.defaults.distsql' order by name
+select name from system.public.settings where name != 'sql.defaults.distsql' order by name
 ----
 diagnostics.reporting.enabled
 trace.debug.enable
 version
 
 statement ok
-INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
+INSERT INTO system.public.settings (name, value) VALUES ('somesetting', 'somevalue')
 
 query TT
-select name, value from system.settings where name != 'version' AND name != 'sql.defaults.distsql' order by name
+select name, value from system.public.settings where name != 'version' AND name != 'sql.defaults.distsql' order by name
 ----
 diagnostics.reporting.enabled  true
 somesetting                    somevalue
@@ -428,14 +428,14 @@ trace.debug.enable             false
 user testuser
 
 statement error user testuser does not have SELECT privilege on relation settings
-select name from system.settings
+select name from system.public.settings
 
 statement error user testuser does not have INSERT privilege on relation settings
-UPSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalueother')
+UPSERT INTO system.public.settings (name, value) VALUES ('somesetting', 'somevalueother')
 
 user root
 
 query TTB
-SELECT * from system.role_members
+SELECT * from system.public.role_members
 ----
 admin  root  true

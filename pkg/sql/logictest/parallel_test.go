@@ -220,7 +220,7 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 			t.Fatal(err)
 		}
 		objID := keys.RootNamespaceID
-		r0.Exec(t, `UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf)
+		r0.Exec(t, `UPDATE system.public.zones SET config = $2 WHERE id = $1`, objID, buf)
 	}
 
 	if testing.Verbose() || log.V(1) {

@@ -372,7 +372,7 @@ func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}
-	_, err = c.Nodes[0].DB().Exec(`UPSERT INTO system.zones (id, config) VALUES (0, $1)`, buf)
+	_, err = c.Nodes[0].DB().Exec(`UPSERT INTO system.public.zones (id, config) VALUES (0, $1)`, buf)
 	if err != nil {
 		log.Fatal(context.Background(), err)
 	}

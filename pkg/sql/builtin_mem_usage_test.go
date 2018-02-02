@@ -51,13 +51,13 @@ const numRows = 50
 func createTableWithLongStrings(sqlDB *gosql.DB) error {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE d;
-CREATE TABLE d.t (a STRING)
+CREATE TABLE d.public.t (a STRING)
 `); err != nil {
 		return err
 	}
 
 	for i := 0; i < numRows; i++ {
-		if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (REPEAT('a', $1))`, rowSize); err != nil {
+		if _, err := sqlDB.Exec(`INSERT INTO d.public.t VALUES (REPEAT('a', $1))`, rowSize); err != nil {
 			return err
 		}
 	}
@@ -73,9 +73,9 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 	// besides the aggregate itself from being able to catch the
 	// large memory usage.
 	statements := []string{
-		`SELECT LENGTH(CONCAT_AGG(a)) FROM d.t`,
-		`SELECT ARRAY_LENGTH(ARRAY_AGG(a), 1) FROM d.t`,
-		`SELECT JSON_TYPEOF(JSON_AGG(A)) FROM d.t`,
+		`SELECT LENGTH(CONCAT_AGG(a)) FROM d.public.t`,
+		`SELECT ARRAY_LENGTH(ARRAY_AGG(a), 1) FROM d.public.t`,
+		`SELECT JSON_TYPEOF(JSON_AGG(A)) FROM d.public.t`,
 	}
 
 	for _, statement := range statements {

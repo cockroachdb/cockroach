@@ -396,7 +396,7 @@ CREATE TABLE crdb_internal.jobs (
 			"jobs", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 		defer cleanup()
 		rows, _ /* cols */, err := p.queryRows(
-			ctx, `SELECT id, status, created, payload FROM system.jobs`)
+			ctx, `SELECT id, status, created, payload FROM system.public.jobs`)
 		if err != nil {
 			return err
 		}
@@ -1514,7 +1514,7 @@ CREATE TABLE crdb_internal.zones (
 		p, cleanup := newInternalPlanner(
 			"zones", p.txn, p.SessionData().User, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
 		defer cleanup()
-		rows, _ /* cols */, err := p.queryRows(ctx, `SELECT id, config FROM system.zones`)
+		rows, _ /* cols */, err := p.queryRows(ctx, `SELECT id, config FROM system.public.zones`)
 		if err != nil {
 			return err
 		}

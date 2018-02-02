@@ -472,7 +472,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: could not determine data type of placeholder $1",
 		"SELECT $1 > 0 AND NOT $1":                  "pq: placeholder 1 already has type int, cannot assign bool",
 		"CREATE TABLE $1 (id INT)":                  "pq: syntax error at or near \"1\"",
-		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <placeholder{1}> (desired <string>)",
+		"UPDATE d.public.t SET s = i + $1":          "pq: unsupported binary operator: <int> + <placeholder{1}> (desired <string>)",
 		"SELECT $0 > 0":                             "pq: invalid placeholder name: $0",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
@@ -482,7 +482,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT ($1 + 2) + ($1 + 2.5::FLOAT)":       "pq: unsupported binary operator: <int> + <float>",
 	}
 
-	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.t (i INT, s STRING, d INT)`); err != nil {
+	if _, err := db.Exec(`CREATE DATABASE d; CREATE TABLE d.public.t (i INT, s STRING, d INT)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -523,12 +523,12 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 
 		if _, err := tx.Exec(`
 	CREATE DATABASE d;
-	CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR);
+	CREATE TABLE d.public.kv (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 			t.Fatal(err)
 		}
 
-		stmt, err := tx.Prepare(`INSERT INTO d.kv (k,v) VALUES ($1, $2);`)
+		stmt, err := tx.Prepare(`INSERT INTO d.public.kv (k,v) VALUES ($1, $2);`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -558,14 +558,14 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 		}
 
 		if _, err := tx.Exec(`
-	DROP TABLE d.kv;
+	DROP TABLE d.public.kv;
 `); err != nil {
 			t.Fatal(err)
 		}
 
 		if _, err := tx.Prepare(`
-INSERT INTO d.kv (k,v) VALUES ($1, $2);
-`); !testutils.IsError(err, "relation \"d.kv\" does not exist") {
+INSERT INTO d.public.kv (k,v) VALUES ($1, $2);
+`); !testutils.IsError(err, "relation \"d.public.kv\" does not exist") {
 			t.Fatalf("err = %v", err)
 		}
 
@@ -705,10 +705,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW DATABASE": {
 			baseTest.Results(""),
 		},
-		"SELECT descriptor FROM system.descriptor WHERE descriptor != $1 LIMIT 1": {
+		"SELECT descriptor FROM system.public.descriptor WHERE descriptor != $1 LIMIT 1": {
 			baseTest.SetArgs([]byte("abc")).Results([]byte("\x12!\n\x06system\x10\x01\x1a\x15\n\t\n\x05admin\x100\n\b\n\x04root\x100")),
 		},
-		"SHOW COLUMNS FROM system.users": {
+		"SHOW COLUMNS FROM system.public.users": {
 			baseTest.
 				Results("username", "STRING", false, gosql.NullBool{}, "{\"primary\"}").
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "{}").
@@ -717,7 +717,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW DATABASES": {
 			baseTest.Results("crdb_internal").Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
 		},
-		"SHOW GRANTS ON system.users": {
+		"SHOW GRANTS ON system.public.users": {
 			baseTest.Results("system", "users", sqlbase.AdminRole, "DELETE").
 				Results("system", "users", sqlbase.AdminRole, "GRANT").
 				Results("system", "users", sqlbase.AdminRole, "INSERT").
@@ -729,13 +729,13 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("system", "users", security.RootUser, "SELECT").
 				Results("system", "users", security.RootUser, "UPDATE"),
 		},
-		"SHOW INDEXES FROM system.users": {
+		"SHOW INDEXES FROM system.public.users": {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),
 		},
 		"SHOW TABLES FROM system": {
 			baseTest.Results("descriptor").Others(13),
 		},
-		"SHOW CONSTRAINTS FROM system.users": {
+		"SHOW CONSTRAINTS FROM system.public.users": {
 			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),
 		},
 		"SHOW TIME ZONE": {
@@ -867,20 +867,20 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(nil).Results("strLit"),
 			baseTest.SetArgs("123456").Results("123456"),
 		},
-		"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *": {
+		"INSERT INTO d.public.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *": {
 			baseTest.SetArgs(123).Results(123, "hello 123"),
 		},
-		"SELECT * from d.T WHERE a = ANY($1)": {
+		"SELECT * from d.public.T WHERE a = ANY($1)": {
 			baseTest.SetArgs(pq.Array([]int{10})).Results(10),
 		},
 		"SELECT s from (VALUES ('foo'), ('bar')) as t(s) WHERE s = ANY($1)": {
 			baseTest.SetArgs(pq.StringArray([]string{"foo"})).Results("foo"),
 		},
 		// #13725
-		"SELECT * FROM d.emptynorows": {
+		"SELECT * FROM d.public.emptynorows": {
 			baseTest.SetArgs(),
 		},
-		"SELECT * FROM d.emptyrows": {
+		"SELECT * FROM d.public.emptyrows": {
 			baseTest.SetArgs().Results().Results().Results(),
 		},
 		// #14238
@@ -1033,10 +1033,10 @@ func TestPGPreparedQuery(t *testing.T) {
 
 	initStmt := `
 CREATE DATABASE d;
-CREATE TABLE d.t (a INT);
-INSERT INTO d.t VALUES (10),(11);
-CREATE TABLE d.ts (a TIMESTAMP, b DATE);
-CREATE TABLE d.two (a INT, b INT);
+CREATE TABLE d.public.t (a INT);
+INSERT INTO d.public.t VALUES (10),(11);
+CREATE TABLE d.public.ts (a TIMESTAMP, b DATE);
+CREATE TABLE d.public.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
 CREATE TABLE d.str (s STRING, b BYTES);
 CREATE TABLE d.emptynorows (); -- zero columns, zero rows
@@ -1114,88 +1114,88 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
-			"CREATE TABLE d.t (i INT, s STRING, d INT)",
+			"CREATE TABLE d.public.t (i INT, s STRING, d INT)",
 			[]preparedExecTest{
 				baseTest,
 				baseTest.Error(`pq: relation "t" already exists`),
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1, $2, $3)",
+			"INSERT INTO d.public.t VALUES ($1, $2, $3)",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, "one", 2).RowsAffected(1),
 				baseTest.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "two": invalid syntax`),
 			},
 		},
 		{
-			"UPDATE d.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4",
+			"UPDATE d.public.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4",
 			[]preparedExecTest{
 				baseTest.SetArgs(4, 3, 2, 1).RowsAffected(1),
 			},
 		},
 		{
-			"UPDATE d.t SET i = $1 WHERE (i, s) = ($2, $3)",
+			"UPDATE d.public.t SET i = $1 WHERE (i, s) = ($2, $3)",
 			[]preparedExecTest{
 				baseTest.SetArgs(8, 4, "4").RowsAffected(1),
 			},
 		},
 		{
-			"DELETE FROM d.t WHERE s = $1 and i = $2 and d = 2 + $3",
+			"DELETE FROM d.public.t WHERE s = $1 and i = $2 and d = 2 + $3",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, 2, 3).RowsAffected(0),
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1), ($2)",
+			"INSERT INTO d.public.t VALUES ($1), ($2)",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, 2).RowsAffected(2),
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1), ($2) RETURNING $3 + 1",
+			"INSERT INTO d.public.t VALUES ($1), ($2) RETURNING $3 + 1",
 			[]preparedExecTest{
 				baseTest.SetArgs(3, 4, 5).RowsAffected(2),
 			},
 		},
 		{
-			"UPDATE d.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
+			"UPDATE d.public.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				baseTest.SetArgs(true, true, 3).RowsAffected(5),
 			},
 		},
 		{
-			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
+			"UPDATE d.public.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, 2, 3).RowsAffected(5),
 			},
 		},
 		{
-			"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END",
+			"UPDATE d.public.t SET d = CASE WHEN TRUE THEN $1 END",
 			[]preparedExecTest{
 				baseTest.SetArgs(2).RowsAffected(5),
 			},
 		},
 		{
-			"DELETE FROM d.t RETURNING $1+1",
+			"DELETE FROM d.public.t RETURNING $1+1",
 			[]preparedExecTest{
 				baseTest.SetArgs(1).RowsAffected(5),
 			},
 		},
 		{
-			"DROP TABLE d.t",
+			"DROP TABLE d.public.t",
 			[]preparedExecTest{
 				baseTest,
-				baseTest.Error(`pq: relation "d.t" does not exist`),
+				baseTest.Error(`pq: relation "d.public.t" does not exist`),
 			},
 		},
 		{
-			"CREATE TABLE d.types (i int, f float, s string, b bytes, d date, m timestamp, z timestamp with time zone, n interval, o bool, e decimal)",
+			"CREATE TABLE d.public.types (i int, f float, s string, b bytes, d date, m timestamp, z timestamp with time zone, n interval, o bool, e decimal)",
 			[]preparedExecTest{
 				baseTest,
 			},
 		},
 		{
-			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+			"INSERT INTO d.public.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
 			[]preparedExecTest{
 				baseTest.RowsAffected(1).SetArgs(
 					int64(0),
@@ -1756,17 +1756,17 @@ func TestPGWireResultChange(t *testing.T) {
 	if _, err := db.Exec(`CREATE DATABASE testing`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE testing.f (v INT)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE testing.public.f (v INT)`); err != nil {
 		t.Fatal(err)
 	}
-	stmt, err := db.Prepare(`SELECT * FROM testing.f`)
+	stmt, err := db.Prepare(`SELECT * FROM testing.public.f`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`ALTER TABLE testing.f ADD COLUMN u int`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE testing.public.f ADD COLUMN u int`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`INSERT INTO testing.f VALUES (1, 2)`); err != nil {
+	if _, err := db.Exec(`INSERT INTO testing.public.f VALUES (1, 2)`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := stmt.Exec(); !testutils.IsError(err, "must not change result type") {
@@ -1777,15 +1777,15 @@ func TestPGWireResultChange(t *testing.T) {
 	}
 
 	// Test that an INSERT RETURNING will not commit data.
-	stmt, err = db.Prepare(`INSERT INTO testing.f VALUES ($1, $2) RETURNING *`)
+	stmt, err = db.Prepare(`INSERT INTO testing.public.f VALUES ($1, $2) RETURNING *`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`ALTER TABLE testing.f ADD COLUMN t int`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE testing.public.f ADD COLUMN t int`); err != nil {
 		t.Fatal(err)
 	}
 	var count int
-	if err := db.QueryRow(`SELECT count(*) FROM testing.f`).Scan(&count); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM testing.public.f`).Scan(&count); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := stmt.Exec(3, 4); !testutils.IsError(err, "must not change result type") {
@@ -1795,7 +1795,7 @@ func TestPGWireResultChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	var countAfter int
-	if err := db.QueryRow(`SELECT count(*) FROM testing.f`).Scan(&countAfter); err != nil {
+	if err := db.QueryRow(`SELECT count(*) FROM testing.public.f`).Scan(&countAfter); err != nil {
 		t.Fatal(err)
 	}
 	if count != countAfter {

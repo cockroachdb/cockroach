@@ -57,7 +57,7 @@ func (expected *expectation) verify(id *int64, expectedStatus jobs.Status) error
 	var created time.Time
 	var payloadBytes []byte
 	if err := expected.DB.QueryRow(
-		`SELECT status, created, payload FROM system.jobs WHERE id = $1`, id,
+		`SELECT status, created, payload FROM system.public.jobs WHERE id = $1`, id,
 	).Scan(
 		&statusString, &created, &payloadBytes,
 	); err != nil {
@@ -758,7 +758,7 @@ func TestJobLifecycle(t *testing.T) {
 		t.Run("internal errors are not swallowed if marking job as successful", func(t *testing.T) {
 			job, _ := createDefaultJob()
 			if _, err := sqlDB.Exec(
-				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
+				`UPDATE system.public.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -770,7 +770,7 @@ func TestJobLifecycle(t *testing.T) {
 		t.Run("internal errors are not swallowed if marking job as failed", func(t *testing.T) {
 			job, _ := createDefaultJob()
 			if _, err := sqlDB.Exec(
-				`UPDATE system.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
+				`UPDATE system.public.jobs SET payload = 'garbage' WHERE id = $1`, *job.ID(),
 			); err != nil {
 				t.Fatal(err)
 			}

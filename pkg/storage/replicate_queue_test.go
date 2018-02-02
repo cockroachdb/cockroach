@@ -253,7 +253,7 @@ func verifyRangeLog(
 	conn *gosql.DB, eventType storage.RangeLogEventType, reason storage.RangeLogEventReason,
 ) error {
 	rows, err := conn.Query(
-		"SELECT info FROM system.rangelog WHERE \"eventType\" = $1;", eventType.String())
+		`SELECT info FROM system.public.rangelog WHERE "eventType" = $1;`, eventType.String())
 	if err != nil {
 		return err
 	}

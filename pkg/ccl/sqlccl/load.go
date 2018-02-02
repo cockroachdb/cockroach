@@ -76,7 +76,7 @@ func Load(
 	if err := db.QueryRow(`
 		SELECT
 			d.descriptor
-		FROM system.namespace n INNER JOIN system.descriptor d ON n.id = d.id
+		FROM system.public.namespace n INNER JOIN system.public.descriptor d ON n.id = d.id
 		WHERE n."parentID" = $1
 		AND n.name = $2`,
 		keys.RootNamespaceID,

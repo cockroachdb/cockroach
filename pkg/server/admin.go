@@ -664,7 +664,7 @@ func (s *adminServer) Users(
 	args := sql.SessionArgs{User: s.getUser(req)}
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
-	query := `SELECT username FROM system.users WHERE "isRole" = false`
+	query := `SELECT username FROM system.public.users WHERE "isRole" = false`
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -699,7 +699,7 @@ func (s *adminServer) Events(
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "eventType", "targetID", "reportingID", info, "uniqueID" `)
-	q.Append("FROM system.eventlog ")
+	q.Append("FROM system.public.eventlog ")
 	q.Append("WHERE true ") // This simplifies the WHERE clause logic below.
 	if len(req.Type) > 0 {
 		q.Append(`AND "eventType" = $ `, tree.NewDString(req.Type))
@@ -774,7 +774,7 @@ func (s *adminServer) RangeLog(
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info `)
-	q.Append("FROM system.rangelog ")
+	q.Append("FROM system.public.rangelog ")
 	if req.RangeId > 0 {
 		rangeID := tree.NewDInt(tree.DInt(req.RangeId))
 		q.Append(`WHERE "rangeID" = $ OR "otherRangeID" = $`, rangeID, rangeID)
@@ -878,7 +878,7 @@ func (s *adminServer) getUIData(
 
 	// Query database.
 	query := makeSQLQuery()
-	query.Append(`SELECT key, value, "lastUpdated" FROM system.ui WHERE key IN (`)
+	query.Append(`SELECT key, value, "lastUpdated" FROM system.public.ui WHERE key IN (`)
 	for i, key := range keys {
 		if i != 0 {
 			query.Append(",")
@@ -936,7 +936,7 @@ func (s *adminServer) SetUIData(
 	for key, val := range req.KeyValues {
 		// Do an upsert of the key. We update each key in a separate transaction to
 		// avoid long-running transactions and possible deadlocks.
-		query := `UPSERT INTO system.ui (key, value, "lastUpdated") VALUES ($1, $2, NOW())`
+		query := `UPSERT INTO system.public.ui (key, value, "lastUpdated") VALUES ($1, $2, NOW())`
 		qargs := tree.MakePlaceholderInfo()
 		qargs.SetValue(`1`, tree.NewDString(key))
 		qargs.SetValue(`2`, tree.NewDBytes(tree.DBytes(val)))
@@ -1133,7 +1133,7 @@ func (s *adminServer) Locations(
 	defer session.Finish(s.server.sqlExecutor)
 
 	q := makeSQLQuery()
-	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.locations`)
+	q.Append(`SELECT "localityKey", "localityValue", latitude, longitude FROM system.public.locations`)
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, q.String(), nil, 1)
 	if err != nil {
 		return nil, s.serverError(err)
@@ -1566,7 +1566,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 func (s *adminServer) queryZone(
 	ctx context.Context, session *sql.Session, id sqlbase.ID,
 ) (config.ZoneConfig, bool, error) {
-	const query = `SELECT config FROM system.zones WHERE id = $1`
+	const query = `SELECT config FROM system.public.zones WHERE id = $1`
 	params := tree.MakePlaceholderInfo()
 	params.SetValue(`1`, tree.NewDInt(tree.DInt(id)))
 	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, query, &params, 1)
@@ -1614,7 +1614,7 @@ func (s *adminServer) queryZonePath(
 func (s *adminServer) queryNamespaceID(
 	ctx context.Context, session *sql.Session, parentID sqlbase.ID, name string,
 ) (sqlbase.ID, error) {
-	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
+	const query = `SELECT id FROM system.public.namespace WHERE "parentID" = $1 AND name = $2`
 	params := tree.MakePlaceholderInfo()
 	params.SetValue(`1`, tree.NewDInt(tree.DInt(parentID)))
 	params.SetValue(`2`, tree.NewDString(name))

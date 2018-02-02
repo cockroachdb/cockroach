@@ -43,9 +43,9 @@ func TestScrubIndexMissingIndexEntry(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-CREATE INDEX secondary ON t.test (v);
-INSERT INTO t.test VALUES (10, 20);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.public.test (v);
+INSERT INTO t.public.test VALUES (10, 20);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -77,7 +77,7 @@ INSERT INTO t.test VALUES (10, 20);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS INDEX ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -119,8 +119,8 @@ func TestScrubIndexDanglingIndexReference(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-CREATE INDEX secondary ON t.test (v);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
+CREATE INDEX secondary ON t.public.test (v);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -150,7 +150,7 @@ CREATE INDEX secondary ON t.test (v);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS INDEX ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -211,9 +211,9 @@ func TestScrubIndexCatchesStoringMismatch(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, data INT);
-CREATE INDEX secondary ON t.test (v) STORING (data);
-INSERT INTO t.test VALUES (10, 20, 1337);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, data INT);
+CREATE INDEX secondary ON t.public.test (v) STORING (data);
+INSERT INTO t.public.test VALUES (10, 20, 1337);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -256,7 +256,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	}
 
 	// Run SCRUB and find the index errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS INDEX ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS INDEX ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -331,8 +331,8 @@ func TestScrubCheckConstraint(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, CHECK (v > 1));
-INSERT INTO t.test VALUES (10, 2);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, CHECK (v > 1));
+INSERT INTO t.public.test VALUES (10, 2);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -374,7 +374,7 @@ INSERT INTO t.test VALUES (10, 2);
 		t.Fatalf("unexpected error: %s", err)
 	}
 	// Run SCRUB and find the CHECK violation created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS CONSTRAINT ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS CONSTRAINT ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -420,17 +420,17 @@ func TestScrubFKConstraintFKMissing(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.parent (
+CREATE TABLE t.public.parent (
 	id INT PRIMARY KEY
 );
-CREATE TABLE t.child (
+CREATE TABLE t.public.child (
 	child_id INT PRIMARY KEY,
 	parent_id INT,
 	INDEX (parent_id),
-	FOREIGN KEY (parent_id) REFERENCES t.parent (id)
+	FOREIGN KEY (parent_id) REFERENCES t.public.parent (id)
 );
-INSERT INTO t.parent VALUES (314);
-INSERT INTO t.child VALUES (10, 314);
+INSERT INTO t.public.parent VALUES (314);
+INSERT INTO t.public.child VALUES (10, 314);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -483,7 +483,7 @@ INSERT INTO t.child VALUES (10, 314);
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.child WITH OPTIONS CONSTRAINT ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -530,20 +530,20 @@ func TestScrubFKConstraintFKIsNullAndMissing(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.parent (
+CREATE TABLE t.public.parent (
 	id INT PRIMARY KEY,
 	id2 INT,
 	UNIQUE INDEX (id, id2)
 );
-CREATE TABLE t.child (
+CREATE TABLE t.public.child (
 	child_id INT PRIMARY KEY,
 	parent_id INT,
 	parent_id2 INT,
 	INDEX (parent_id, parent_id2),
-	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.parent (id, id2)
+	FOREIGN KEY (parent_id, parent_id2) REFERENCES t.public.parent (id, id2)
 );
-INSERT INTO t.parent VALUES (1337, 300);
-INSERT INTO t.child VALUES (11, 1337, 300);
+INSERT INTO t.public.parent VALUES (1337, 300);
+INSERT INTO t.public.child VALUES (11, 1337, 300);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -591,7 +591,7 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 	}
 
 	// Run SCRUB and find the FOREIGN KEY violation created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.child WITH OPTIONS CONSTRAINT ALL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.child WITH OPTIONS CONSTRAINT ALL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -639,8 +639,8 @@ func TestScrubPhysicalNonnullableNullInSingleColumnFamily(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL);
-INSERT INTO t.test VALUES (217, 314);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT NOT NULL);
+INSERT INTO t.public.test VALUES (217, 314);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -675,7 +675,7 @@ INSERT INTO t.test VALUES (217, 314);
 	}
 
 	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS PHYSICAL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -719,8 +719,8 @@ func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, b INT NOT NULL, FAMILY (k), FAMILY(v, b));
-INSERT INTO t.test VALUES (217, 314, 1337);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT NOT NULL, b INT NOT NULL, FAMILY (k), FAMILY(v, b));
+INSERT INTO t.public.test VALUES (217, 314, 1337);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -765,7 +765,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	}
 
 	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS PHYSICAL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -811,7 +811,7 @@ func TestScrubPhysicalUnexpectedFamilyID(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (
+CREATE TABLE t.public.test (
 	k INT PRIMARY KEY,
 	v1 INT NOT NULL,
 	v2 INT NOT NULL,
@@ -825,7 +825,7 @@ CREATE TABLE t.test (
 	oldTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Drop the first column family.
-	if _, err := db.Exec(`ALTER TABLE t.test DROP COLUMN v1`); err != nil {
+	if _, err := db.Exec(`ALTER TABLE t.public.test DROP COLUMN v1`); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
@@ -882,7 +882,7 @@ CREATE TABLE t.test (
 	}
 
 	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS PHYSICAL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -927,7 +927,7 @@ func TestScrubPhysicalIncorrectPrimaryIndexValueColumn(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
@@ -974,7 +974,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	}
 
 	// Run SCRUB and find the errors we created.
-	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.test WITH OPTIONS PHYSICAL`)
+	rows, err := db.Query(`EXPERIMENTAL SCRUB TABLE t.public.test WITH OPTIONS PHYSICAL`)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

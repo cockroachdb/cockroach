@@ -87,7 +87,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 	)
 	r := sqlutils.MakeSQLRunner(sqlDB)
 	// Insert additional rows into child1 not interleaved in parent.
-	r.Exec(t, fmt.Sprintf(`INSERT INTO %s.child1 VALUES
+	r.Exec(t, fmt.Sprintf(`INSERT INTO %s.public.child1 VALUES
 	(-1, -1, 0),
 	(0, 0, 0),
 	(63, 63, 6),
@@ -102,7 +102,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		0,
 		sqlutils.ToRowFn(),
 	)
-	r.Exec(t, fmt.Sprintf(`INSERT INTO %s.child3 VALUES
+	r.Exec(t, fmt.Sprintf(`INSERT INTO %s.public.child3 VALUES
 	(-1, -1, '-1'),
 	(-1, -101, '-101'),
 	(0, 0, '0'),

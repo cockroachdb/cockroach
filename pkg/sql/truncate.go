@@ -232,7 +232,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	if err != nil {
 		return err
 	}
-	const insertZoneCfg = `INSERT INTO system.zones (id, config) VALUES ($1, $2)`
+	const insertZoneCfg = `INSERT INTO system.public.zones (id, config) VALUES ($1, $2)`
 	_, err = p.exec(ctx, insertZoneCfg, newID, zoneCfg)
 	return err
 }

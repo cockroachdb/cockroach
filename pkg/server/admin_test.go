@@ -580,12 +580,12 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+		ctx, sql.SessionArgs{User: security.RootUser, Database: "test"}, ts.sqlExecutor,
 		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	setupQueries := []string{
 		"CREATE DATABASE test",
-		"CREATE TABLE test.tbl (val STRING)",
+		"CREATE TABLE tbl (val STRING)",
 	}
 	for _, q := range setupQueries {
 		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, q, nil, 1)
@@ -641,7 +641,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		const query = `INSERT INTO system.zones VALUES($1, $2)`
+		const query = `INSERT INTO system.public.zones VALUES($1, $2)`
 		params := tree.MakePlaceholderInfo()
 		params.SetValue(`1`, tree.NewDInt(tree.DInt(id)))
 		params.SetValue(`2`, tree.NewDBytes(tree.DBytes(zoneBytes)))
@@ -696,7 +696,7 @@ func TestAdminAPIUsers(t *testing.T) {
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	query := `
-INSERT INTO system.users (username, "hashedPassword")
+INSERT INTO system.public.users (username, "hashedPassword")
 VALUES ('adminUser', 'abc'), ('bob', 'xyz')`
 	res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, query, nil, 1)
 	if err != nil {
@@ -736,17 +736,17 @@ func TestAdminAPIEvents(t *testing.T) {
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 	session := sql.NewSession(
-		ctx, sql.SessionArgs{User: security.RootUser}, ts.sqlExecutor,
+		ctx, sql.SessionArgs{User: security.RootUser, Database: "api_test"}, ts.sqlExecutor,
 		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(ts.sqlExecutor)
 	setupQueries := []string{
 		"CREATE DATABASE api_test",
-		"CREATE TABLE api_test.tbl1 (a INT)",
-		"CREATE TABLE api_test.tbl2 (a INT)",
-		"CREATE TABLE api_test.tbl3 (a INT)",
-		"DROP TABLE api_test.tbl1",
-		"DROP TABLE api_test.tbl2",
+		"CREATE TABLE tbl1 (a INT)",
+		"CREATE TABLE tbl2 (a INT)",
+		"CREATE TABLE tbl3 (a INT)",
+		"DROP TABLE tbl1",
+		"DROP TABLE tbl2",
 		"SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;",
 	}
 	for _, q := range setupQueries {
@@ -1176,7 +1176,7 @@ func TestAdminAPIJobs(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
+			`INSERT INTO system.public.jobs (id, status, payload) VALUES ($1, $2, $3)`,
 			job.id, job.status, payloadBytes,
 		)
 	}
@@ -1232,7 +1232,7 @@ func TestAdminAPILocations(t *testing.T) {
 	}
 	for _, loc := range testLocations {
 		sqlDB.Exec(t,
-			`INSERT INTO system.locations ("localityKey", "localityValue", latitude, longitude) VALUES ($1, $2, $3, $4)`,
+			`INSERT INTO system.public.locations ("localityKey", "localityValue", latitude, longitude) VALUES ($1, $2, $3, $4)`,
 			loc.localityKey, loc.localityValue, loc.latitude, loc.longitude,
 		)
 	}
@@ -1261,15 +1261,15 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
 	sqlDB.Exec(t, `CREATE DATABASE api_test`)
-	sqlDB.Exec(t, `CREATE TABLE api_test.t1 (id int primary key, name string)`)
-	sqlDB.Exec(t, `CREATE TABLE api_test.t2 (id int primary key, name string)`)
+	sqlDB.Exec(t, `CREATE TABLE api_test.public.t1 (id int primary key, name string)`)
+	sqlDB.Exec(t, `CREATE TABLE api_test.public.t2 (id int primary key, name string)`)
 
 	testCases := []struct {
 		query string
 		exp   []string
 	}{
-		{"SELECT sum(id) FROM api_test.t1", []string{"nodeNames\":[\"1\"]", "Out: @1"}},
-		{"SELECT sum(1) FROM api_test.t1 JOIN api_test.t2 on t1.id = t2.id", []string{"nodeNames\":[\"1\"]", "Out: @1", "MergeJoiner"}},
+		{"SELECT sum(id) FROM api_test.public.t1", []string{"nodeNames\":[\"1\"]", "Out: @1"}},
+		{"SELECT sum(1) FROM api_test.public.t1 JOIN api_test.public.t2 on t1.id = t2.id", []string{"nodeNames\":[\"1\"]", "Out: @1", "MergeJoiner"}},
 	}
 	for i, testCase := range testCases {
 		var res serverpb.QueryPlanResponse

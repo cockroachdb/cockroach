@@ -73,7 +73,7 @@ func TestSchemaChangeLease(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -196,8 +196,8 @@ func TestSchemaChangeProcess(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo(v));
-INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo(v));
+INSERT INTO t.public.test VALUES ('a', 'b'), ('c', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -337,8 +337,8 @@ func TestAsyncSchemaChanger(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.public.test VALUES ('a', 'b'), ('c', 'd');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 	// Run some schema change
 	if _, err := sqlDB.Exec(`
-CREATE INDEX foo ON t.test (v)
+CREATE INDEX foo ON t.public.test (v)
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -373,7 +373,7 @@ CREATE INDEX foo ON t.test (v)
 
 	// Ensure that the indexes have been created.
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
-	indexQuery := `SELECT v FROM t.test@foo`
+	indexQuery := `SELECT v FROM t.public.test@foo`
 	mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 
 	// Ensure that the version has been incremented.
@@ -386,7 +386,7 @@ CREATE INDEX foo ON t.test (v)
 	// Apply a schema change that only sets the UpVersion bit.
 	expectedVersion = newVersion + 1
 
-	mTest.Exec(t, `ALTER INDEX t.test@foo RENAME TO ufo`)
+	mTest.Exec(t, `ALTER INDEX t.public.test@foo RENAME TO ufo`)
 
 	for r := retry.Start(retryOpts); r.Next(); {
 		// Ensure that the version gets incremented.
@@ -405,7 +405,7 @@ CREATE INDEX foo ON t.test (v)
 	// that they all get executed.
 	count := 5
 	for i := 0; i < count; i++ {
-		mTest.Exec(t, fmt.Sprintf(`CREATE INDEX foo%d ON t.test (v)`, i))
+		mTest.Exec(t, fmt.Sprintf(`CREATE INDEX foo%d ON t.public.test (v)`, i))
 	}
 	// Wait until indexes are created.
 	for r := retry.Start(retryOpts); r.Next(); {
@@ -415,7 +415,7 @@ CREATE INDEX foo ON t.test (v)
 		}
 	}
 	for i := 0; i < count; i++ {
-		indexQuery := fmt.Sprintf(`SELECT v FROM t.test@foo%d`, i)
+		indexQuery := fmt.Sprintf(`SELECT v FROM t.public.test@foo%d`, i)
 		mTest.CheckQueryResults(t, indexQuery, [][]string{{"b"}, {"d"}})
 	}
 
@@ -484,7 +484,7 @@ func runSchemaChangeWithOperations(
 	for i := 0; i < 10; i++ {
 		k := rand.Intn(maxValue)
 		v := maxValue + i + 1
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, v, k); err != nil {
+		if _, err := sqlDB.Exec(`UPDATE t.public.test SET v = $1 WHERE k = $2`, v, k); err != nil {
 			t.Error(err)
 		}
 		updatedKeys = append(updatedKeys, k)
@@ -492,7 +492,7 @@ func runSchemaChangeWithOperations(
 
 	// Reupdate updated values back to what they were before.
 	for _, k := range updatedKeys {
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
+		if _, err := sqlDB.Exec(`UPDATE t.public.test SET v = $1 WHERE k = $2`, maxValue-k, k); err != nil {
 			t.Error(err)
 		}
 	}
@@ -500,14 +500,14 @@ func runSchemaChangeWithOperations(
 	// Delete some rows.
 	deleteStartKey := rand.Intn(maxValue - 10)
 	for i := 0; i < 10; i++ {
-		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, deleteStartKey+i); err != nil {
+		if _, err := sqlDB.Exec(`DELETE FROM t.public.test WHERE k = $1`, deleteStartKey+i); err != nil {
 			t.Error(err)
 		}
 	}
 	// Reinsert deleted rows.
 	for i := 0; i < 10; i++ {
 		k := deleteStartKey + i
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, k, maxValue-k); err != nil {
+		if _, err := sqlDB.Exec(`INSERT INTO t.public.test VALUES($1, $2)`, k, maxValue-k); err != nil {
 			t.Error(err)
 		}
 	}
@@ -516,7 +516,7 @@ func runSchemaChangeWithOperations(
 	numInserts := 10
 	for i := 0; i < numInserts; i++ {
 		k := maxValue + i + 1
-		if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $1)`, k); err != nil {
+		if _, err := sqlDB.Exec(`INSERT INTO t.public.test VALUES($1, $1)`, k); err != nil {
 			t.Error(err)
 		}
 	}
@@ -534,19 +534,19 @@ func runSchemaChangeWithOperations(
 
 	// Delete the rows inserted.
 	for i := 0; i < numInserts; i++ {
-		if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, maxValue+i+1); err != nil {
+		if _, err := sqlDB.Exec(`DELETE FROM t.public.test WHERE k = $1`, maxValue+i+1); err != nil {
 			t.Error(err)
 		}
 	}
 }
 
-// bulkInsertIntoTable fills up table t.test with (maxValue + 1) rows.
+// bulkInsertIntoTable fills up table t.public.test with (maxValue + 1) rows.
 func bulkInsertIntoTable(sqlDB *gosql.DB, maxValue int) error {
 	inserts := make([]string, maxValue+1)
 	for i := 0; i < maxValue+1; i++ {
 		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
 	}
-	_, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ","))
+	_, err := sqlDB.Exec(`INSERT INTO t.public.test VALUES ` + strings.Join(inserts, ","))
 	return err
 }
 
@@ -616,8 +616,8 @@ func TestRaceWithBackfill(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
-CREATE UNIQUE INDEX vidx ON t.test (v);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE UNIQUE INDEX vidx ON t.public.test (v);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -654,7 +654,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
+		"ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
 		maxValue,
 		2,
 		initBackfillNotification(),
@@ -666,7 +666,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"ALTER TABLE t.test DROP pi",
+		"ALTER TABLE t.public.test DROP pi",
 		maxValue,
 		2,
 		initBackfillNotification(),
@@ -678,7 +678,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"CREATE UNIQUE INDEX foo ON t.test (v)",
+		"CREATE UNIQUE INDEX foo ON t.public.test (v)",
 		maxValue,
 		3,
 		initBackfillNotification(),
@@ -690,7 +690,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"DROP INDEX t.test@vidx CASCADE",
+		"DROP INDEX t.public.test@vidx CASCADE",
 		maxValue,
 		2,
 		initBackfillNotification(),
@@ -698,7 +698,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
-	rows, err := sqlDB.Query(`SELECT v, x from t.test@foo`)
+	rows, err := sqlDB.Query(`SELECT v, x from t.public.test@foo`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -786,8 +786,8 @@ func TestDropWhileBackfill(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
-CREATE UNIQUE INDEX vidx ON t.test (v);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE UNIQUE INDEX vidx ON t.public.test (v);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -822,7 +822,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	wg.Add(1)
 	go func() {
 		// Start schema change that eventually runs a partial backfill.
-		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.test (v)"); err != nil {
+		if _, err := sqlDB.Exec("CREATE UNIQUE INDEX bar ON t.public.test (v)"); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -831,7 +831,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// Wait until the schema change backfill is partially complete.
 	<-notification
 
-	if _, err := sqlDB.Exec("DROP TABLE t.test"); err != nil {
+	if _, err := sqlDB.Exec("DROP TABLE t.public.test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -884,7 +884,7 @@ func TestBackfillErrors(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -904,7 +904,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	const numUpdatedRows = 10
 	for i := 0; i < numUpdatedRows; i++ {
 		k := rand.Intn(maxValue - numUpdatedRows)
-		if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, 1, k); err != nil {
+		if _, err := sqlDB.Exec(`UPDATE t.public.test SET v = $1 WHERE k = $2`, 1, k); err != nil {
 			t.Error(err)
 		}
 	}
@@ -924,7 +924,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	if _, err := sqlDB.Exec(`
-CREATE UNIQUE INDEX vidx ON t.test (v);
+CREATE UNIQUE INDEX vidx ON t.public.test (v);
 `); !testutils.IsError(err, `duplicate key value \(v\)=\(1\) violates unique constraint "vidx"`) {
 		t.Fatalf("got err=%s", err)
 	}
@@ -934,7 +934,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	if _, err := sqlDB.Exec(`
-	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
+	   ALTER TABLE t.public.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
 	   `); !testutils.IsError(err, `could not parse "1-3" as type decimal`) {
 		t.Fatalf("got err=%s", err)
 	}
@@ -944,7 +944,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	}
 
 	if _, err := sqlDB.Exec(`
-	ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL;
+	ALTER TABLE t.public.test ADD COLUMN p DECIMAL NOT NULL;
 	`); !testutils.IsError(err, `null value in column \"p\" violates not-null constraint`) {
 		t.Fatalf("got err=%s", err)
 	}
@@ -1046,7 +1046,7 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1056,7 +1056,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	for i := 0; i < maxValue+1; i++ {
 		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, i)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ",")); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO t.public.test VALUES ` + strings.Join(inserts, ",")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1070,10 +1070,10 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// number of keys representing a table row.
 		expectedNumKeysPerRow int
 	}{
-		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
-		{"ALTER TABLE t.test DROP x", 1},
-		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
-		{"DROP INDEX t.test@foo CASCADE", 1},
+		{"ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
+		{"ALTER TABLE t.public.test DROP x", 1},
+		{"CREATE UNIQUE INDEX foo ON t.public.test (v)", 2},
+		{"DROP INDEX t.public.test@foo CASCADE", 1},
 	}
 
 	for _, testCase := range testCases {
@@ -1082,7 +1082,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			// chunk. The two values will be added later to make the table larger
 			// than a backfill chunk after the schema change backfill is aborted.
 			for i := 0; i < 2; i++ {
-				if _, err := sqlDB.Exec(`DELETE FROM t.test WHERE k = $1`, i); err != nil {
+				if _, err := sqlDB.Exec(`DELETE FROM t.public.test WHERE k = $1`, i); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1109,7 +1109,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			// Delete a row that will push the backfill transaction.
 			if _, err := sqlDB.Exec(`
 BEGIN TRANSACTION PRIORITY HIGH;
-DELETE FROM t.test WHERE k = 2;
+DELETE FROM t.public.test WHERE k = 2;
 COMMIT;
 			`); err != nil {
 				t.Fatal(err)
@@ -1118,7 +1118,7 @@ COMMIT;
 			// Add missing rows so that the table exceeds the size of a
 			// backfill chunk.
 			for i := 0; i < 3; i++ {
-				if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES($1, $2)`, i, i); err != nil {
+				if _, err := sqlDB.Exec(`INSERT INTO t.public.test VALUES($1, $2)`, i, i); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -1150,13 +1150,13 @@ COMMIT;
 func addIndexSchemaChange(
 	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
 ) {
-	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.test (v)"); err != nil {
+	if _, err := sqlDB.Exec("CREATE UNIQUE INDEX foo ON t.public.test (v)"); err != nil {
 		t.Fatal(err)
 	}
 
 	// The schema change succeeded. Verify that the index foo over v is
 	// consistent.
-	rows, err := sqlDB.Query(`SELECT v from t.test@foo`)
+	rows, err := sqlDB.Query(`SELECT v from t.public.test@foo`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1191,10 +1191,10 @@ func addIndexSchemaChange(
 func addColumnSchemaChange(
 	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
 ) {
-	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')"); err != nil {
+	if _, err := sqlDB.Exec("ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')"); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := sqlDB.Query(`SELECT x from t.test`)
+	rows, err := sqlDB.Query(`SELECT x from t.public.test`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1228,7 +1228,7 @@ func addColumnSchemaChange(
 func dropColumnSchemaChange(
 	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
 ) {
-	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP x"); err != nil {
+	if _, err := sqlDB.Exec("ALTER TABLE t.public.test DROP x"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1244,7 +1244,7 @@ func dropColumnSchemaChange(
 func dropIndexSchemaChange(
 	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
 ) {
-	if _, err := sqlDB.Exec("DROP INDEX t.test@foo CASCADE"); err != nil {
+	if _, err := sqlDB.Exec("DROP INDEX t.public.test@foo CASCADE"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1263,7 +1263,7 @@ func TestDropColumn(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (
+CREATE TABLE t.public.test (
   k INT PRIMARY KEY,
   v INT CONSTRAINT check_v CHECK (v >= 0),
   a INT DEFAULT 0 CONSTRAINT check_av CHECK (a <= v),
@@ -1279,7 +1279,7 @@ CREATE TABLE t.test (
 		t.Fatalf("Expected 3 checks but got %d ", len(tableDesc.Checks))
 	}
 
-	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP v"); err != nil {
+	if _, err := sqlDB.Exec("ALTER TABLE t.public.test DROP v"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1346,7 +1346,7 @@ func TestSchemaChangeRetry(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1435,7 +1435,7 @@ func TestSchemaChangeRetryOnVersionChange(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1547,7 +1547,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1560,14 +1560,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Add a row with a duplicate value for v
 	if _, err := sqlDB.Exec(
-		`INSERT INTO t.test VALUES ($1, $2)`, maxValue+1, maxValue,
+		`INSERT INTO t.public.test VALUES ($1, $2)`, maxValue+1, maxValue,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// A schema change that violates integrity constraints.
 	if _, err := sqlDB.Exec(
-		"CREATE UNIQUE INDEX foo ON t.test (v)",
+		"CREATE UNIQUE INDEX foo ON t.public.test (v)",
 	); !testutils.IsError(err, "violates unique constraint") {
 		t.Fatal(err)
 	}
@@ -1579,7 +1579,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// The index doesn't exist
 	if _, err := sqlDB.Query(
-		`SELECT v from t.test@foo`,
+		`SELECT v from t.public.test@foo`,
 	); !testutils.IsError(err, "index .* not found") {
 		t.Fatal(err)
 	}
@@ -1669,7 +1669,7 @@ func TestSchemaChangeReverseMutations(t *testing.T) {
 	// Create a k-v table.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -1683,13 +1683,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Create a column that is not NULL. This schema change doesn't return an
 	// error only because we've turned off the synchronous execution path; it
 	// will eventually fail when run by the asynchronous path.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD a INT DEFAULT 0 UNIQUE, ADD c INT`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD a INT DEFAULT 0 UNIQUE, ADD c INT`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Add an index over a column that will be purged. This index will
 	// eventually not get added.
-	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_a ON t.test (a)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_a ON t.public.test (a)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1698,14 +1698,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Drop column 'v' moves along just fine. The constraint 'foo' will not be
 	// enforced because c is not added.
 	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test DROP v, ADD CONSTRAINT foo UNIQUE (c)`,
+		`ALTER TABLE t.public.test DROP v, ADD CONSTRAINT foo UNIQUE (c)`,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Add unique column 'b' moves along creating column b and the index on
 	// it.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b INT UNIQUE`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD b INT UNIQUE`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1730,7 +1730,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// Verify that t.test has the expected data. Read the table data while
 		// ensuring that the correct table lease is in use.
 		var err error
-		rows, err = sqlDB.Query(`SELECT * from t.test`)
+		rows, err = sqlDB.Query(`SELECT * from t.public.test`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1793,7 +1793,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Check that the index on b eventually goes live even though a schema
 	// change in front of it in the queue got purged.
-	rows, err := sqlDB.Query(`SELECT * from t.test@test_b_key`)
+	rows, err := sqlDB.Query(`SELECT * from t.public.test@test_b_key`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1809,7 +1809,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Check that the index on c gets purged.
-	if _, err = sqlDB.Query(`SELECT * from t.test@foo`); err == nil {
+	if _, err = sqlDB.Query(`SELECT * from t.public.test@foo`); err == nil {
 		t.Fatal("SELECT over index 'foo' works")
 	}
 
@@ -1841,7 +1841,7 @@ func TestParseSentinelValueWithNewColumnInSentinelFamily(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (
+CREATE TABLE t.public.test (
 	k INT PRIMARY KEY,
 	FAMILY F1 (k)
 );
@@ -1859,7 +1859,7 @@ CREATE TABLE t.test (
 	for i := range inserts {
 		inserts[i] = fmt.Sprintf(`(%d)`, i)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES ` + strings.Join(inserts, ",")); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO t.public.test VALUES ` + strings.Join(inserts, ",")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1887,7 +1887,7 @@ CREATE TABLE t.test (
 
 	// Add a new column that gets added to column family 0,
 	// updating DefaultColumnID.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN v INT FAMILY F1`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD COLUMN v INT FAMILY F1`); err != nil {
 		t.Fatal(err)
 	}
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
@@ -1898,7 +1898,7 @@ CREATE TABLE t.test (
 	// Update one of the rows.
 	const setKey = 5
 	const setVal = maxValue - setKey
-	if _, err := sqlDB.Exec(`UPDATE t.test SET v = $1 WHERE k = $2`, setVal, setKey); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE t.public.test SET v = $1 WHERE k = $2`, setVal, setKey); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1907,7 +1907,7 @@ CREATE TABLE t.test (
 	}
 
 	// The table contains the one updated value and remaining NULL values.
-	rows, err := sqlDB.Query(`SELECT v from t.test`)
+	rows, err := sqlDB.Query(`SELECT v from t.public.test`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1969,7 +1969,7 @@ func TestAddColumnDuringColumnDrop(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (
+CREATE TABLE t.public.test (
     k INT PRIMARY KEY NOT NULL,
     v INT NOT NULL
 );
@@ -1985,14 +1985,14 @@ CREATE TABLE t.test (
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP column v;`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.public.test DROP column v;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
 	}()
 
 	<-notification
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD column v INT DEFAULT 0;`); !testutils.IsError(err, `column "v" being dropped, try again later`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD column v INT DEFAULT 0;`); !testutils.IsError(err, `column "v" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 
@@ -2034,7 +2034,7 @@ func TestUpdateDuringColumnBackfill(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (
+CREATE TABLE t.public.test (
     k INT NOT NULL,
     v INT NOT NULL,
     length INT NOT NULL,
@@ -2042,7 +2042,7 @@ CREATE TABLE t.test (
     INDEX v_idx (v),
     FAMILY "primary" (k, v, length)
 );
-INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
+INSERT INTO t.public.test (k, v, length) VALUES (0, 1, 1);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2052,7 +2052,7 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD id int NOT NULL DEFAULT 0;`); err != nil {
+		if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD id int NOT NULL DEFAULT 0;`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2061,12 +2061,12 @@ INSERT INTO t.test (k, v, length) VALUES (0, 1, 1);
 	<-notification
 
 	// UPDATE the row using the secondary index.
-	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27000 WHERE v = 1`); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE t.public.test SET length = 27000 WHERE v = 1`); err != nil {
 		t.Error(err)
 	}
 
 	// UPDATE the row using the primary index.
-	if _, err := sqlDB.Exec(`UPDATE t.test SET length = 27001 WHERE k = 0`); err != nil {
+	if _, err := sqlDB.Exec(`UPDATE t.public.test SET length = 27001 WHERE k = 0`); err != nil {
 		t.Error(err)
 	}
 
@@ -2113,8 +2113,8 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
  CREATE DATABASE t;
- CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
- CREATE UNIQUE INDEX vidx ON t.test (v);
+ CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+ CREATE UNIQUE INDEX vidx ON t.public.test (v);
  `); err != nil {
 		t.Fatal(err)
 	}
@@ -2137,10 +2137,10 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		sql           string
 		numKeysPerRow int
 	}{
-		{sql: "ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
-		{sql: "ALTER TABLE t.test DROP pi", numKeysPerRow: 2},
-		{sql: "CREATE UNIQUE INDEX foo ON t.test (v)", numKeysPerRow: 3},
-		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 2},
+		{sql: "ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
+		{sql: "ALTER TABLE t.public.test DROP pi", numKeysPerRow: 2},
+		{sql: "CREATE UNIQUE INDEX foo ON t.public.test (v)", numKeysPerRow: 3},
+		{sql: "DROP INDEX t.public.test@vidx CASCADE", numKeysPerRow: 2},
 	}
 
 	for _, tc := range testCases {
@@ -2173,8 +2173,8 @@ func TestSchemaChangeInTxn(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('a', 'b');
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.public.kv VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2186,25 +2186,25 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		expectedErr string
 	}{
 		// DROP TABLE followed by CREATE TABLE case.
-		{`drop-create`, `DROP TABLE t.kv`, `CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR)`,
+		{`drop-create`, `DROP TABLE t.public.kv`, `CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR)`,
 			`relation "kv" already exists`},
 		// schema change followed by another statement works.
-		{`createindex-insert`, `CREATE INDEX foo ON t.kv (v)`, `INSERT INTO t.kv VALUES ('c', 'd')`,
+		{`createindex-insert`, `CREATE INDEX foo ON t.public.kv (v)`, `INSERT INTO t.public.kv VALUES ('c', 'd')`,
 			``},
 		// CREATE TABLE followed by INSERT works.
-		{`createtable-insert`, `CREATE TABLE t.origin (k CHAR PRIMARY KEY, v CHAR);`,
+		{`createtable-insert`, `CREATE TABLE t.public.origin (k CHAR PRIMARY KEY, v CHAR);`,
 			`INSERT INTO t.origin VALUES ('c', 'd')`, ``},
 		// Support multiple schema changes for ORMs: #15269
 		// Support insert into another table after schema changes: #15297
 		{`multiple-schema-change`,
-			`CREATE TABLE t.orm1 (k CHAR PRIMARY KEY, v CHAR); CREATE TABLE t.orm2 (k CHAR PRIMARY KEY, v CHAR);`,
+			`CREATE TABLE t.public.orm1 (k CHAR PRIMARY KEY, v CHAR); CREATE TABLE t.public.orm2 (k CHAR PRIMARY KEY, v CHAR);`,
 			`CREATE INDEX foo ON t.orm1 (v); CREATE INDEX foo ON t.orm2 (v); INSERT INTO t.origin VALUES ('e', 'f')`,
 			``},
 		// schema change at the end of a transaction that has written.
-		{`insert-create`, `INSERT INTO t.kv VALUES ('e', 'f')`, `CREATE INDEX foo ON t.kv (v)`,
+		{`insert-create`, `INSERT INTO t.public.kv VALUES ('e', 'f')`, `CREATE INDEX foo ON t.public.kv (v)`,
 			`schema change statement cannot follow a statement that has written in the same transaction`},
 		// schema change at the end of a read only transaction.
-		{`select-create`, `SELECT * FROM t.kv`, `CREATE INDEX bar ON t.kv (v)`, ``},
+		{`select-create`, `SELECT * FROM t.public.kv`, `CREATE INDEX bar ON t.public.kv (v)`, ``},
 	}
 
 	for _, testCase := range testCases {
@@ -2253,7 +2253,7 @@ func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE d;
-CREATE TABLE d.t (
+CREATE TABLE d.public.t (
   k INT PRIMARY KEY,
   a INT,
   b INT,
@@ -2284,11 +2284,11 @@ CREATE TABLE d.t (
 	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO d.t VALUES (11, 1, 2);`); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO d.public.t VALUES (11, 1, 2);`); err != nil {
 		t.Fatal(err)
 	}
 	// Force another ID allocation to ensure that the old encoding persists.
-	if _, err := sqlDB.Exec(`ALTER TABLE d.t ADD COLUMN c INT;`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE d.public.t ADD COLUMN c INT;`); err != nil {
 		t.Fatal(err)
 	}
 	// Ensure that the decoder sees the old encoding.
@@ -2299,7 +2299,7 @@ CREATE TABLE d.t (
 		{
 			rows, err := sqlDB.Query(
 				fmt.Sprintf(
-					`SELECT message FROM [SHOW KV TRACE FOR SELECT k, a, b FROM d.t@%s] `+
+					`SELECT message FROM [SHOW KV TRACE FOR SELECT k, a, b FROM d.public.t@%s] `+
 						`WHERE message LIKE 'fetched:%%'`,
 					indexName,
 				))
@@ -2326,7 +2326,7 @@ CREATE TABLE d.t (
 			}
 		}
 		{
-			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT k, a, b FROM d.t@%s;`, indexName))
+			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT k, a, b FROM d.public.t@%s;`, indexName))
 			if err != nil {
 				t.Error(err)
 				continue
@@ -2386,7 +2386,7 @@ func TestSchemaChangeEvalContext(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2408,7 +2408,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		sql    string
 		column string
 	}{
-		{"ALTER TABLE t.test ADD COLUMN x TIMESTAMP DEFAULT current_timestamp;", "x"},
+		{"ALTER TABLE t.public.test ADD COLUMN x TIMESTAMP DEFAULT current_timestamp;", "x"},
 	}
 
 	for _, testCase := range testCases {
@@ -2418,7 +2418,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 				t.Fatal(err)
 			}
 
-			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT DISTINCT %s from t.test`, testCase.column))
+			rows, err := sqlDB.Query(fmt.Sprintf(`SELECT DISTINCT %s from t.public.test`, testCase.column))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2467,7 +2467,7 @@ func TestSchemaChangeCompletion(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2493,7 +2493,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	restartSchemaChange = make(chan struct{})
 	restart := restartSchemaChange
 	go func() {
-		if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+		if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX foo ON t.public.test (v)`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2504,7 +2504,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	notifySchemaChange = make(chan struct{})
 	restartSchemaChange = make(chan struct{})
 	go func() {
-		if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX bar ON t.test (v)`); err != nil {
+		if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX bar ON t.public.test (v)`); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2558,7 +2558,7 @@ func TestTruncateInternals(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2583,7 +2583,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2591,7 +2591,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+	if _, err := sqlDB.Exec("TRUNCATE TABLE t.public.test"); err != nil {
 		t.Error(err)
 	}
 
@@ -2654,13 +2654,13 @@ func TestTruncateCompletion(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.pi (d DECIMAL PRIMARY KEY);
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DEFAULT (DECIMAL '3.14'));
+CREATE TABLE t.public.pi (d DECIMAL PRIMARY KEY);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.public.pi (d) DEFAULT (DECIMAL '3.14'));
 `); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`INSERT INTO t.pi VALUES (3.14)`); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO t.public.pi VALUES (3.14)`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2685,7 +2685,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+	if _, err := sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2693,7 +2693,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+	if _, err := sqlDB.Exec("TRUNCATE TABLE t.public.test"); err != nil {
 		t.Error(err)
 	}
 
@@ -2716,7 +2716,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 
 	// Ensure that the FK property still holds.
 	if _, err := sqlDB.Exec(
-		`INSERT INTO t.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
+		`INSERT INTO t.public.test VALUES ($1 , $2, $3)`, maxValue+2, maxValue+2, 3.15,
 	); !testutils.IsError(err, "foreign key violation") {
 		t.Fatalf("err = %v", err)
 	}
@@ -2805,7 +2805,7 @@ func TestTruncateWhileColumnBackfill(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2818,11 +2818,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	notify := backfillNotification
 
-	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL NOT NULL DEFAULT (DECIMAL '1.4')"); err != nil {
+	if _, err := sqlDB.Exec("ALTER TABLE t.public.test ADD COLUMN x DECIMAL NOT NULL DEFAULT (DECIMAL '1.4')"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec("ALTER TABLE t.test DROP COLUMN v"); err != nil {
+	if _, err := sqlDB.Exec("ALTER TABLE t.public.test DROP COLUMN v"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2837,7 +2837,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	wg.Add(1)
 	go func() {
 		<-notify
-		if _, err := sqlDB.Exec("TRUNCATE TABLE t.test"); err != nil {
+		if _, err := sqlDB.Exec("TRUNCATE TABLE t.public.test"); err != nil {
 			t.Error(err)
 		}
 		wg.Done()
@@ -2876,8 +2876,8 @@ func TestSchemaChangeErrorOnCommit(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
+CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
+INSERT INTO t.public.test (k, v) VALUES (1, 99), (2, 99);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2889,7 +2889,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 
 	// This schema change is invalid because of the duplicate v, but its error is
 	// only reported later.
-	if _, err := tx.Exec("ALTER TABLE t.test ADD CONSTRAINT v_unique UNIQUE (v)"); err != nil {
+	if _, err := tx.Exec("ALTER TABLE t.public.test ADD CONSTRAINT v_unique UNIQUE (v)"); err != nil {
 		t.Fatal(err)
 	}
 

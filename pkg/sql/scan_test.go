@@ -76,7 +76,7 @@ func testScanBatchQuery(t *testing.T, db *gosql.DB, numSpans, numAs, numBs int, 
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("SELECT a,b FROM test.scan WHERE b >= %d AND b <= %d", bStart, bEnd))
+	buf.WriteString(fmt.Sprintf("SELECT a,b FROM test.public.scan WHERE b >= %d AND b <= %d", bStart, bEnd))
 	for i, a := range aVals {
 		if i == 0 {
 			buf.WriteString(fmt.Sprintf(" AND a IN (%d", a))
@@ -143,15 +143,15 @@ func TestScanBatches(t *testing.T) {
 	numAs := 5
 	numBs := 20
 
-	if _, err := db.Exec(`DROP TABLE IF EXISTS test.scan`); err != nil {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS test.public.scan`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(`CREATE TABLE test.scan (a INT, b INT, v STRING, PRIMARY KEY (a, b))`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE test.public.scan (a INT, b INT, v STRING, PRIMARY KEY (a, b))`); err != nil {
 		t.Fatal(err)
 	}
 
 	var buf bytes.Buffer
-	buf.WriteString(`INSERT INTO test.scan VALUES `)
+	buf.WriteString(`INSERT INTO test.public.scan VALUES `)
 	for a := 0; a < numAs; a++ {
 		for b := 0; b < numBs; b++ {
 			if a+b > 0 {
@@ -182,7 +182,7 @@ func TestScanBatches(t *testing.T) {
 		}
 	}
 
-	if _, err := db.Exec(`DROP TABLE test.scan`); err != nil {
+	if _, err := db.Exec(`DROP TABLE test.public.scan`); err != nil {
 		t.Fatal(err)
 	}
 }

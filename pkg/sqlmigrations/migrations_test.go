@@ -447,7 +447,7 @@ func TestRemoveClusterSettingKVGCBatchSize(t *testing.T) {
 
 	mt.start(t, base.TestServerArgs{})
 
-	mt.sqlDB.Exec(t, `INSERT INTO system.settings (name, "lastUpdated", "valueType", value) `+
+	mt.sqlDB.Exec(t, `INSERT INTO system.public.settings (name, "lastUpdated", "valueType", value) `+
 		`values('kv.gc.batch_size', NOW(), 'i', '10000')`)
 
 	if err := mt.runMigration(ctx); err != nil {
@@ -455,7 +455,7 @@ func TestRemoveClusterSettingKVGCBatchSize(t *testing.T) {
 	}
 	var n int
 	if err := mt.sqlDB.DB.QueryRow(
-		`SELECT COUNT(*) from system.settings WHERE name = 'kv.gc.batch_size'`,
+		`SELECT COUNT(*) from system.public.settings WHERE name = 'kv.gc.batch_size'`,
 	).Scan(&n); err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +560,7 @@ CREATE VIEW v2 AS SELECT x FROM v1;
 CREATE TABLE u(x INT, y INT);
 CREATE VIEW v3 AS SELECT x FROM (SELECT x, y FROM u);
 
-CREATE VIEW v4 AS SELECT id from system.descriptor;
+CREATE VIEW v4 AS SELECT id from system.public.descriptor;
 
 CREATE TABLE w(x INT);
 CREATE VIEW test2.v5 AS SELECT x FROM w;
@@ -683,7 +683,7 @@ func testZoneConfigMigration(
 
 	for _, id := range ids {
 		var s string
-		err := mt.sqlDB.DB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+		err := mt.sqlDB.DB.QueryRow(`SELECT config FROM system.public.zones WHERE id = $1`, id).Scan(&s)
 		if err != gosql.ErrNoRows {
 			t.Fatalf("expected no rows, but found %v", err)
 		}
@@ -700,7 +700,7 @@ func checkZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, expected c
 	t.Helper()
 
 	var s string
-	sqlDB.QueryRow(t, `SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+	sqlDB.QueryRow(t, `SELECT config FROM system.public.zones WHERE id = $1`, id).Scan(&s)
 	var zone config.ZoneConfig
 	if err := protoutil.Unmarshal([]byte(s), &zone); err != nil {
 		t.Fatal(err)
@@ -711,7 +711,7 @@ func checkZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, expected c
 }
 
 func deleteZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int) {
-	sqlDB.Exec(t, `DELETE FROM system.zones WHERE id=$1`, id)
+	sqlDB.Exec(t, `DELETE FROM system.public.zones WHERE id=$1`, id)
 }
 
 func setZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, zone config.ZoneConfig) {
@@ -719,7 +719,7 @@ func setZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, zone config.
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.Exec(t, `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`, id, buf)
+	sqlDB.Exec(t, `UPSERT INTO system.public.zones (id, config) VALUES ($1, $2)`, id, buf)
 }
 
 func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
@@ -791,7 +791,7 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 
 func TestAddSystemJobsMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, mt, cleanup := testZoneConfigMigration(t, "add default system.jobs zone config", keys.JobsTableID)
+	ctx, mt, cleanup := testZoneConfigMigration(t, "add default system.public.jobs zone config", keys.JobsTableID)
 	defer cleanup()
 
 	expected := config.DefaultZoneConfig()
@@ -832,7 +832,7 @@ func TestAdminUserExists(t *testing.T) {
 
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
-	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
+	mt.sqlDB.Exec(t, `INSERT INTO system.public.users (username, "hashedPassword") VALUES ($1, '')`,
 		sqlbase.AdminRole)
 
 	e := `cannot create role "admin", a user with that name exists.`

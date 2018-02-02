@@ -161,7 +161,7 @@ func TestAmbiguousCommit(t *testing.T) {
 		if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := sqlDB.Exec(`CREATE TABLE test.t (k SERIAL PRIMARY KEY, v INT)`); err != nil {
+		if _, err := sqlDB.Exec(`CREATE TABLE test.public.t (k SERIAL PRIMARY KEY, v INT)`); err != nil {
 			t.Fatal(err)
 		}
 
@@ -178,13 +178,13 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		// Ensure that the dist sender's cache is up to date before
 		// fault injection.
-		if rows, err := sqlDB.Query(`SELECT * FROM test.t`); err != nil {
+		if rows, err := sqlDB.Query(`SELECT * FROM test.public.t`); err != nil {
 			t.Fatal(err)
 		} else if err := rows.Close(); err != nil {
 			t.Fatal(err)
 		}
 
-		if _, err := sqlDB.Exec(`INSERT INTO test.t (v) VALUES (1)`); ambiguousSuccess {
+		if _, err := sqlDB.Exec(`INSERT INTO test.public.t (v) VALUES (1)`); ambiguousSuccess {
 			if pqErr, ok := err.(*pq.Error); ok {
 				if pqErr.Code != pgerror.CodeStatementCompletionUnknownError {
 					t.Errorf("expected code %q, got %q (err: %s)",
@@ -201,7 +201,7 @@ func TestAmbiguousCommit(t *testing.T) {
 
 		// Verify a single row exists in the table.
 		var rowCount int
-		if err := sqlDB.QueryRow(`SELECT count(*) FROM test.t`).Scan(&rowCount); err != nil {
+		if err := sqlDB.QueryRow(`SELECT count(*) FROM test.public.t`).Scan(&rowCount); err != nil {
 			t.Fatal(err)
 		}
 		if e := 1; rowCount != e {

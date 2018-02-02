@@ -296,7 +296,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		// properly).
 		for i := 1; i <= nNulls; i++ {
 			r.Exec(t, fmt.Sprintf(
-				`INSERT INTO %s.%s VALUES (%d, NULL, %d, %d);`,
+				`INSERT INTO %s.public.%s VALUES (%d, NULL, %d, %d);`,
 				sqlutils.TestDB,
 				tableName,
 				table.nRows+i,
@@ -596,7 +596,7 @@ func TestNextRowInterleaved(t *testing.T) {
 	// This is only possible since nrows(ggc1) < nrows(p2) thus c1 is
 	// unique.
 	ggc1idx.indexSchema = fmt.Sprintf(
-		`CREATE UNIQUE INDEX ggc1_unique_idx ON %s.grandgrandchild1 (p2) INTERLEAVE IN PARENT %s.parent2 (p2);`,
+		`CREATE UNIQUE INDEX ggc1_unique_idx ON %s.public.grandgrandchild1 (p2) INTERLEAVE IN PARENT %s.public.parent2 (p2);`,
 		sqlutils.TestDB,
 		sqlutils.TestDB,
 	)

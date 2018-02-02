@@ -35,8 +35,8 @@ func TestTableRefs(t *testing.T) {
 	// Populate the test database.
 	stmt := `
 CREATE DATABASE test;
-CREATE TABLE test.t(a INT PRIMARY KEY, xx INT, b INT, c INT);
-CREATE INDEX bc ON test.t(b, c);
+CREATE TABLE test.public.t(a INT PRIMARY KEY, xx INT, b INT, c INT);
+CREATE INDEX bc ON test.public.t(b, c);
 `
 	_, err := db.Exec(stmt)
 	if err != nil {
@@ -62,9 +62,9 @@ CREATE INDEX bc ON test.t(b, c);
 
 	// Make some schema changes meant to shuffle the ID/name mapping.
 	stmt = `
-ALTER TABLE test.t RENAME COLUMN b TO d;
-ALTER TABLE test.t RENAME COLUMN a TO p;
-ALTER TABLE test.t DROP COLUMN xx;
+ALTER TABLE test.public.t RENAME COLUMN b TO d;
+ALTER TABLE test.public.t RENAME COLUMN a TO p;
+ALTER TABLE test.public.t DROP COLUMN xx;
 `
 	_, err = db.Exec(stmt)
 	if err != nil {
@@ -90,9 +90,9 @@ ALTER TABLE test.t DROP COLUMN xx;
 		{fmt.Sprintf("[%d() as t]", tID), `()`, ``},
 		{`[666() as t]`, ``, `pq: [666() AS t]: relation "[666]" does not exist`},
 		{fmt.Sprintf("[%d(666) as t]", tID), ``, `pq: column [666] does not exist`},
-		{fmt.Sprintf("test.t@[%d]", pkID), `(p, d, c)`, ``},
-		{fmt.Sprintf("test.t@[%d]", secID), `(p, d, c)`, ``},
-		{`test.t@[666]`, ``, `pq: index [666] not found`},
+		{fmt.Sprintf("test.public.t@[%d]", pkID), `(p, d, c)`, ``},
+		{fmt.Sprintf("test.public.t@[%d]", secID), `(p, d, c)`, ``},
+		{`test.public.t@[666]`, ``, `pq: index [666] not found`},
 		{fmt.Sprintf("[%d as t]@[%d]", tID, pkID), `(p, d, c)`, ``},
 		{fmt.Sprintf("[%d(%d) as t]@[%d]", tID, aID, pkID), `(p)`, ``},
 		{fmt.Sprintf("[%d(%d) as t]@[%d]", tID, bID, pkID), `(d)`, ``},

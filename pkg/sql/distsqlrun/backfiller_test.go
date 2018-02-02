@@ -57,8 +57,8 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 	CREATE DATABASE t;
-	CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
-	CREATE UNIQUE INDEX vidx ON t.test (v);
+	CREATE TABLE t.public.test (k INT PRIMARY KEY, v INT);
+	CREATE UNIQUE INDEX vidx ON t.public.test (v);
 	`); err != nil {
 		t.Fatal(err)
 	}

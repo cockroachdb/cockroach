@@ -60,14 +60,14 @@ root level contains databases and the database level contains tables. The
 "system.namespace" and "system.descriptor" tables implement the mapping from
 database/table name to ID and from ID to descriptor:
 
-  CREATE TABLE system.namespace (
+  CREATE TABLE system.public.namespace (
     "parentID" INT,
     "name"     CHAR,
     "id"       INT,
     PRIMARY KEY ("parentID", name)
   );
 
-  Create TABLE system.descriptor (
+  Create TABLE system.public.descriptor (
     "id"         INT PRIMARY KEY,
     "descriptor" BLOB
   );
@@ -77,12 +77,12 @@ databases reside. In order to look up the ID of a database given its name, the
 system runs the underlying key-value operations that correspond to the following
 query:
 
-  SELECT id FROM system.namespace WHERE "parentID" = 0 AND name = <database-name>
+  SELECT id FROM system.public.namespace WHERE "parentID" = 0 AND name = <database-name>
 
 And given a database/table ID, the system looks up the descriptor using the
 following query:
 
-  SELECT descriptor FROM system.descriptor WHERE id = <ID>
+  SELECT descriptor FROM system.public.descriptor WHERE id = <ID>
 
 
 Let's also create two new tables to use as running examples, one relatively

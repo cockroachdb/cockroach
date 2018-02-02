@@ -148,7 +148,7 @@ func grantRolePlanHook(
 
 	// Add memberships. Existing memberships are allowed.
 	// If admin option is false, we do not remove it from existing memberships.
-	memberStmt := `INSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
+	memberStmt := `INSERT INTO system.public.role_members ("role", "member", "isAdmin") VALUES ($1, $2, $3) ON CONFLICT ("role", "member")`
 	if grant.AdminOption {
 		// admin option: true, set "isAdmin" even if the membership exists.
 		memberStmt += ` DO UPDATE SET "isAdmin" = true`
@@ -229,10 +229,10 @@ func revokeRolePlanHook(
 	var memberStmt string
 	if revoke.AdminOption {
 		// ADMIN OPTION FOR is specified, we don't remove memberships just remove the admin option.
-		memberStmt = `UPDATE system.role_members SET "isAdmin" = false WHERE "role" = $1 AND "member" = $2`
+		memberStmt = `UPDATE system.public.role_members SET "isAdmin" = false WHERE "role" = $1 AND "member" = $2`
 	} else {
 		// Admin option not specified: remove membership if it exists.
-		memberStmt = `DELETE FROM system.role_members WHERE "role" = $1 AND "member" = $2`
+		memberStmt = `DELETE FROM system.public.role_members WHERE "role" = $1 AND "member" = $2`
 	}
 
 	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
