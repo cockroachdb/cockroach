@@ -84,11 +84,11 @@ const (
 	// containedByOp is the <@ JSON operator.
 	containedByOp
 	// existenceOp is the ? JSON operator.
-	existenceOp
+	jsonExistsOp
 	// allExistenceOp is the ?& JSON operator.
-	allExistenceOp
+	jsonAllExistsOp
 	// someExistenceOp is the ?| JSON operator.
-	someExistenceOp
+	jsonSomeExistsOp
 
 	anyOp
 	someOp
@@ -107,10 +107,10 @@ const (
 	concatOp
 	lShiftOp
 	rShiftOp
-	fetchValOp
-	fetchTextOp
-	fetchValPathOp
-	fetchTextPathOp
+	jsonFetchValOp
+	jsonFetchTextOp
+	jsonFetchValPathOp
+	jsonFetchTextPathOp
 
 	unaryPlusOp
 	unaryMinusOp
