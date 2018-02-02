@@ -444,7 +444,7 @@ func newNameFromStr(s string) *tree.Name {
 
 // Ordinary key words in alphabetical order.
 %token <str>   ABORT ACTION ADD ADMIN
-%token <str>   ALL ALL_EXISTENCE ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
+%token <str>   ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
 %token <str>   ASYMMETRIC AT
 
 %token <str>   BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
@@ -479,7 +479,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO INVERTED IS ISOLATION
 
-%token <str>   JOB JOBS JOIN JSON JSONB
+%token <str>   JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
 %token <str>   KEY KEYS KV
 
@@ -510,7 +510,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
-%token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SOME_EXISTENCE SPLIT SQL
+%token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
 
 %token <str>   START STATISTICS STATUS STDIN STRICT STRING STORE STORED STORING SUBSTRING
 %token <str>   SYMMETRIC SYNTAX SYSTEM
@@ -930,7 +930,7 @@ func newNameFromStr(s string) *tree.Name {
 %left      AND
 %right     NOT
 %nonassoc  IS                  // IS sets precedence for IS NULL, etc
-%nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS CONTAINS CONTAINED_BY '?' SOME_EXISTENCE ALL_EXISTENCE
+%nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS CONTAINS CONTAINED_BY '?' JSON_SOME_EXISTS JSON_ALL_EXISTS
 %nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
 %nonassoc  OVERLAPS
@@ -5819,15 +5819,15 @@ a_expr:
   }
 | a_expr '?' a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.Existence, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: tree.JSONExists, Left: $1.expr(), Right: $3.expr()}
   }
-| a_expr SOME_EXISTENCE a_expr
+| a_expr JSON_SOME_EXISTS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.SomeExistence, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: tree.JSONSomeExists, Left: $1.expr(), Right: $3.expr()}
   }
-| a_expr ALL_EXISTENCE a_expr
+| a_expr JSON_ALL_EXISTS a_expr
   {
-    $$.val = &tree.ComparisonExpr{Operator: tree.AllExistence, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.ComparisonExpr{Operator: tree.JSONAllExists, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr CONTAINS a_expr
   {
@@ -5855,19 +5855,19 @@ a_expr:
   }
 | a_expr FETCHVAL a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.FetchVal, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchVal, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHTEXT a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.FetchText, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchText, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHVAL_PATH a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.FetchValPath, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchValPath, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr FETCHTEXT_PATH a_expr
   {
-    $$.val = &tree.BinaryExpr{Operator: tree.FetchTextPath, Left: $1.expr(), Right: $3.expr()}
+    $$.val = &tree.BinaryExpr{Operator: tree.JSONFetchTextPath, Left: $1.expr(), Right: $3.expr()}
   }
 | a_expr REMOVE_PATH a_expr
   {
