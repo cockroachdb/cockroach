@@ -492,12 +492,12 @@ CREATE TABLE pg_catalog.pg_constraint (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 			if err != nil {
 				return err
 			}
 
-			for name, c := range info {
+			for conName, con := range conInfo {
 				oid := tree.DNull
 				contype := tree.DNull
 				conindid := oidZero
@@ -512,100 +512,93 @@ CREATE TABLE pg_catalog.pg_constraint (
 				condef := tree.DNull
 
 				// Determine constraint kind-specific fields.
-				switch c.Kind {
+				var err error
+				switch con.Kind {
 				case sqlbase.ConstraintTypePK:
-					oid = h.PrimaryKeyConstraintOid(db, table, c.Index)
+					oid = h.PrimaryKeyConstraintOid(db, table, con.Index)
 					contype = conTypePKey
-					conindid = h.IndexOid(db, table, c.Index)
-
-					var err error
-					conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
-					if err != nil {
+					conindid = h.IndexOid(db, table, con.Index)
+					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
 						return err
 					}
 					condef = tree.NewDString(table.PrimaryKeyString())
 
 				case sqlbase.ConstraintTypeFK:
-					referencedDB, _ := tableLookup(c.ReferencedTable.ID)
+					referencedDB, _ := tableLookup(con.ReferencedTable.ID)
 					if referencedDB == nil {
-						panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
+						panic(fmt.Sprintf("could not find database of %+v", con.ReferencedTable))
 					}
 
-					oid = h.ForeignKeyConstraintOid(db, table, c.FK)
+					oid = h.ForeignKeyConstraintOid(db, table, con.FK)
 					contype = conTypeFK
-					conindid = h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
-					confrelid = h.TableOid(referencedDB, c.ReferencedTable)
+					conindid = h.IndexOid(referencedDB, con.ReferencedTable, con.ReferencedIndex)
+					confrelid = h.TableOid(referencedDB, con.ReferencedTable)
 					confupdtype = fkActionNone
 					confdeltype = fkActionNone
 					confmatchtype = fkMatchTypeSimple
-					var err error
-					conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
-					if err != nil {
+					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
 						return err
 					}
-					confkey, err = colIDArrayToDatum(c.ReferencedIndex.ColumnIDs)
-					if err != nil {
+					if confkey, err = colIDArrayToDatum(con.ReferencedIndex.ColumnIDs); err != nil {
 						return err
 					}
 					var buf bytes.Buffer
-					if err := p.printForeignKeyConstraint(ctx, &buf, db.Name, c.Index); err != nil {
+					if err = p.printForeignKeyConstraint(ctx, &buf, db.Name, con.Index); err != nil {
 						return err
 					}
 					condef = tree.NewDString(buf.String())
 
 				case sqlbase.ConstraintTypeUnique:
-					oid = h.UniqueConstraintOid(db, table, c.Index)
+					oid = h.UniqueConstraintOid(db, table, con.Index)
 					contype = conTypeUnique
-					conindid = h.IndexOid(db, table, c.Index)
-					var err error
-					conkey, err = colIDArrayToDatum(c.Index.ColumnIDs)
-					if err != nil {
+					conindid = h.IndexOid(db, table, con.Index)
+					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
 						return err
 					}
 					f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 					f.WriteString("UNIQUE (")
-					c.Index.ColNamesFormat(f)
+					con.Index.ColNamesFormat(f)
 					f.WriteByte(')')
 					condef = tree.NewDString(f.CloseAndGetString())
 
 				case sqlbase.ConstraintTypeCheck:
-					oid = h.CheckConstraintOid(db, table, c.CheckConstraint)
+					oid = h.CheckConstraintOid(db, table, con.CheckConstraint)
 					contype = conTypeCheck
 					// TODO(nvanbenschoten): We currently do not store the referenced columns for a check
 					// constraint. We should add an array of column indexes to
 					// sqlbase.TableDescriptor_CheckConstraint and use that here.
-					consrc = tree.NewDString(c.Details)
+					consrc = tree.NewDString(con.Details)
 					conbin = consrc
-					condef = tree.NewDString(fmt.Sprintf("CHECK (%s)", c.Details))
+					condef = tree.NewDString(fmt.Sprintf("CHECK (%s)", con.Details))
 				}
 
 				if err := addRow(
-					oid,                                        // oid
-					dNameOrNull(name),                          // conname
-					pgNamespaceForDB(db, h).Oid,                // connamespace
-					contype,                                    // contype
-					tree.DBoolFalse,                            // condeferrable
-					tree.DBoolFalse,                            // condeferred
-					tree.MakeDBool(tree.DBool(!c.Unvalidated)), // convalidated
-					h.TableOid(db, table),                      // conrelid
-					oidZero,                                    // contypid
-					conindid,                                   // conindid
-					confrelid,                                  // confrelid
-					confupdtype,                                // confupdtype
-					confdeltype,                                // confdeltype
-					confmatchtype,                              // confmatchtype
-					tree.DBoolTrue,                             // conislocal
-					zeroVal,                                    // coninhcount
-					tree.DBoolTrue,                             // connoinherit
-					conkey,                                     // conkey
-					confkey,                                    // confkey
-					tree.DNull,                                 // conpfeqop
-					tree.DNull,                                 // conppeqop
-					tree.DNull,                                 // conffeqop
-					tree.DNull,                                 // conexclop
-					conbin,                                     // conbin
-					consrc,                                     // consrc
-					condef,                                     // condef
+					oid,                                          // oid
+					dNameOrNull(conName),                         // conname
+					pgNamespaceForDB(db, h).Oid,                  // connamespace
+					contype,                                      // contype
+					tree.DBoolFalse,                              // condeferrable
+					tree.DBoolFalse,                              // condeferred
+					tree.MakeDBool(tree.DBool(!con.Unvalidated)), // convalidated
+					h.TableOid(db, table),                        // conrelid
+					oidZero,                                      // contypid
+					conindid,                                     // conindid
+					confrelid,                                    // confrelid
+					confupdtype,                                  // confupdtype
+					confdeltype,                                  // confdeltype
+					confmatchtype,                                // confmatchtype
+					tree.DBoolTrue,                               // conislocal
+					zeroVal,                                      // coninhcount
+					tree.DBoolTrue,                               // connoinherit
+					conkey,                                       // conkey
+					confkey,                                      // confkey
+					tree.DNull,                                   // conpfeqop
+					tree.DNull,                                   // conppeqop
+					tree.DNull,                                   // conffeqop
+					tree.DNull,                                   // conexclop
+					conbin,                                       // conbin
+					consrc,                                       // consrc
+					condef,                                       // condef
 				); err != nil {
 					return err
 				}
@@ -756,21 +749,21 @@ CREATE TABLE pg_catalog.pg_depend (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 			if err != nil {
 				return err
 			}
-			for _, c := range info {
-				if c.Kind != sqlbase.ConstraintTypeFK {
+			for _, con := range conInfo {
+				if con.Kind != sqlbase.ConstraintTypeFK {
 					continue
 				}
-				referencedDB, _ := tableLookup(c.ReferencedTable.ID)
+				referencedDB, _ := tableLookup(con.ReferencedTable.ID)
 				if referencedDB == nil {
-					panic(fmt.Sprintf("could not find database of %+v", c.ReferencedTable))
+					panic(fmt.Sprintf("could not find database of %+v", con.ReferencedTable))
 				}
 
-				constraintOid := h.ForeignKeyConstraintOid(db, table, c.FK)
-				refObjID := h.IndexOid(referencedDB, c.ReferencedTable, c.ReferencedIndex)
+				constraintOid := h.ForeignKeyConstraintOid(db, table, con.FK)
+				refObjID := h.IndexOid(referencedDB, con.ReferencedTable, con.ReferencedIndex)
 
 				if err := addRow(
 					pgConstraintTableOid, // classid
