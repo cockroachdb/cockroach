@@ -119,7 +119,7 @@ func (a *appStats) recordStatement(
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr
 	} else {
-		key.stmt = a.getStrForStmt(stmt)
+		key.stmt = anonymizeStmt(stmt)
 	}
 
 	// Get the statistics object.
@@ -159,7 +159,7 @@ func (a *appStats) getStatsForStmt(key stmtKey) *stmtStats {
 	return s
 }
 
-func (a *appStats) getStrForStmt(stmt Statement) string {
+func anonymizeStmt(stmt Statement) string {
 	return tree.AsStringWithFlags(stmt.AST, tree.FmtHideConstants)
 }
 
