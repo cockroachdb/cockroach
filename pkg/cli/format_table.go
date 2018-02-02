@@ -458,7 +458,10 @@ func (p *sqlReporter) iter(w io.Writer, _ int, row []string) error {
 
 func (p *sqlReporter) beforeFirstRow(_ io.Writer, _ rowStrIter) error { return nil }
 func (p *sqlReporter) doneNoRows(_ io.Writer) error                   { return nil }
-func (p *sqlReporter) doneRows(_ io.Writer, _ int) error              { return nil }
+func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
+	fmt.Fprintf(w, "-- %d row%s\n", seenRows, util.Pluralize(int64(seenRows)))
+	return nil
+}
 
 func makeReporter() (rowReporter, error) {
 	switch cliCtx.tableDisplayFormat {
