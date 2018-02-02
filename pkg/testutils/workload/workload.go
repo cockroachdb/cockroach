@@ -155,6 +155,9 @@ func Registered() []Meta {
 // DatumSize returns the canonical size of a datum as returned from a call to
 // `Table.InitialRowFn`.
 func DatumSize(x interface{}) int64 {
+	if x == nil {
+		return 0
+	}
 	switch t := x.(type) {
 	case int:
 		return int64(math.Log10(float64(t)))
@@ -185,7 +188,7 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 
 	var size int64
 	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE %s %s`, table.Name, table.Schema)
+		createStmt := fmt.Sprintf(`CREATE TABLE "%s" %s`, table.Name, table.Schema)
 		if _, err := db.Exec(createStmt); err != nil {
 			return 0, err
 		}
@@ -200,7 +203,7 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 	for _, table := range tables {
 		for rowIdx := 0; rowIdx < table.InitialRowCount; {
 			insertStmtBuf.Reset()
-			fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s VALUES `, table.Name)
+			fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
 
 			var params []interface{}
 			for batchIdx := 0; batchIdx < batchSize && rowIdx < table.InitialRowCount; batchIdx++ {
