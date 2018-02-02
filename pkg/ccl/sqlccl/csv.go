@@ -990,7 +990,10 @@ func importPlanHook(
 			nullif = &override
 		}
 
-		sstSize := config.DefaultZoneConfig().RangeMaxBytes / 2
+		// sstSize, if 0, will be set to an appropriate default by the specific
+		// implementation (local or distributed) since each has different optimal
+		// settings.
+		var sstSize int64
 		if override, ok := opts[importOptionSSTSize]; ok {
 			sz, err := humanizeutil.ParseBytes(override)
 			if err != nil {
@@ -1066,6 +1069,17 @@ func importPlanHook(
 
 		var importErr error
 		if _, local := opts[importOptionLocal]; !local {
+			if sstSize == 0 {
+				// The distributed importer will correctly chunk up large ranges into
+				// multiple ssts that can be imported. In order to reduce the number of
+				// ranges and increase the average range size after import, set a target of
+				// some arbitrary multiple larger than the maximum sst size. Without this
+				// the range sizes were somewhere between 1MB and > 64MB. Targeting a much
+				// higher size should cause many ranges to be somewhere around the max range
+				// size. This should also cause the distsql plan and range router to be much
+				// smaller since there are fewer overall ranges.
+				sstSize = storageccl.MaxImportBatchSize(p.ExecCfg().Settings) * 5
+			}
 			importErr = doDistributedCSVTransform(
 				ctx, job, files, p, parentID, tableDesc, transform,
 				comma, comment, nullif, walltime,
@@ -1074,6 +1088,9 @@ func importPlanHook(
 		} else {
 			if transform == "" {
 				return errors.Errorf("%s option required for local import", importOptionTransform)
+			}
+			if sstSize == 0 {
+				sstSize = config.DefaultZoneConfig().RangeMaxBytes / 2
 			}
 			_, _, _, importErr = doLocalCSVTransform(
 				ctx, job, parentID, tableDesc, transform, files,
