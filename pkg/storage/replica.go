@@ -4946,17 +4946,12 @@ func (r *Replica) applyRaftCommand(
 	// remaining writes are the raft applied index and the updated MVCC stats.
 	writer := batch.Distinct()
 
-	// Advance the last applied index. We use a blind write in order to avoid
-	// reading the previous applied index keys on every write operation. This
-	// requires a little additional work in order maintain the MVCC stats.
-	var appliedIndexNewMS enginepb.MVCCStats
-	if err := r.raftMu.stateLoader.SetAppliedIndexBlind(ctx, writer, &appliedIndexNewMS,
-		raftAppliedIndex, leaseAppliedIndex); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set applied index")
-	}
-	rResult.Delta.SysBytes += appliedIndexNewMS.SysBytes -
-		r.raftMu.stateLoader.CalcAppliedIndexSysBytes(oldRaftAppliedIndex, oldLeaseAppliedIndex)
-
+	// To maintain consistency with replicas not using the range applied state
+	// key, we mock out the impact that updating the applied indices would have
+	// had on the stats.
+	rResult.Delta.SysBytes += r.raftMu.stateLoader.CalcAppliedIndicesSysBytesDiff(
+		oldRaftAppliedIndex, oldLeaseAppliedIndex, raftAppliedIndex, leaseAppliedIndex,
+	)
 	// Special-cased MVCC stats handling to exploit commutativity of stats
 	// delta upgrades. Thanks to commutativity, the command queue does not
 	// have to serialize on the stats key.
@@ -4965,8 +4960,12 @@ func (r *Replica) applyRaftCommand(
 	// decreasing (and thus LastUpdateNanos tracks the maximum LastUpdateNanos
 	// across all deltaStats).
 	ms.Add(deltaStats)
-	if err := r.raftMu.stateLoader.SetMVCCStats(ctx, writer, &ms); err != nil {
-		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to update MVCCStats")
+
+	// Set the range applied state, which includes the last applied raft and
+	// lease index along with the mvcc stats, all in one key.
+	if err := r.raftMu.stateLoader.SetRangeAppliedState(ctx, writer,
+		raftAppliedIndex, leaseAppliedIndex, &ms); err != nil {
+		return enginepb.MVCCStats{}, errors.Wrap(err, "unable to set range applied state")
 	}
 
 	// TODO(peter): We did not close the writer in an earlier version of

@@ -2546,7 +2546,7 @@ func ComputeStatsGo(
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
 
-	meta := &enginepb.MVCCMetadata{}
+	var meta enginepb.MVCCMetadata
 	var prevKey []byte
 	first := false
 
@@ -2557,6 +2557,7 @@ func ComputeStatsGo(
 	// of the point in time at which the current key begins to age.
 	var accrueGCAgeNanos int64
 
+	iter = NewMigrationIterator(iter)
 	iter.Seek(start)
 	for ; ; iter.Next() {
 		ok, err := iter.Valid()
@@ -2576,7 +2577,7 @@ func ComputeStatsGo(
 			}
 		}
 
-		isSys := bytes.Compare(unsafeKey.Key, keys.LocalMax) < 0
+		isSys := isSysLocal(unsafeKey.Key)
 		isValue := unsafeKey.IsValue()
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
@@ -2600,7 +2601,7 @@ func ComputeStatsGo(
 			first = true
 
 			if !implicitMeta {
-				if err := protoutil.Unmarshal(unsafeValue, meta); err != nil {
+				if err := protoutil.Unmarshal(unsafeValue, &meta); err != nil {
 					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
 				}
 			}

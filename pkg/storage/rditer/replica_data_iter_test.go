@@ -81,6 +81,7 @@ func createRangeData(
 		{keys.AbortSpanKey(desc.RangeID, testTxnID2), ts0},
 		{keys.RangeFrozenStatusKey(desc.RangeID), ts0},
 		{keys.RangeLastGCKey(desc.RangeID), ts0},
+		{keys.RangeAppliedStateKey(desc.RangeID), ts0},
 		{keys.RaftAppliedIndexLegacyKey(desc.RangeID), ts0},
 		{keys.RaftTruncatedStateKey(desc.RangeID), ts0},
 		{keys.RangeLeaseKey(desc.RangeID), ts0},

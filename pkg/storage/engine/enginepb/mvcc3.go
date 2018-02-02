@@ -26,6 +26,16 @@ func (ms *MVCCStats) ToStatsDelta() MVCCStatsDelta {
 	return MVCCStatsDelta(*ms)
 }
 
+// ToStats converts the receiver to an MVCCStats.
+func (ms *MVCCPersistentStats) ToStats() MVCCStats {
+	return MVCCStats(*ms)
+}
+
+// ToPersistentStats converts the receiver to an MVCCPersistentStats.
+func (ms *MVCCStats) ToPersistentStats() MVCCPersistentStats {
+	return MVCCPersistentStats(*ms)
+}
+
 var isolationTypeLowerCase = map[int32]string{
 	0: "serializable",
 	1: "snapshot",

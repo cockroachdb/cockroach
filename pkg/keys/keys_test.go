@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"math"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -110,6 +111,29 @@ func TestAbortSpanEncodeDecode(t *testing.T) {
 	}
 	if txnID != testTxnID {
 		t.Fatalf("expected txnID %q, got %q", testTxnID, txnID)
+	}
+}
+
+func funcName(f interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+}
+
+// TestRangeAppliedStateKeySorting verifies that the sort order guarantee of
+// RangeAppliedStateKey (see comment) is preserved.
+func TestRangeAppliedStateKeySorting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const rangeID = 123
+
+	key := RangeAppliedStateKey(rangeID)
+	for _, f := range []func(rangeID roachpb.RangeID) roachpb.Key{
+		RaftAppliedIndexLegacyKey,
+		LeaseAppliedIndexLegacyKey,
+		RangeStatsLegacyKey,
+	} {
+		otherKey := f(rangeID)
+		if key.Compare(otherKey) >= 0 {
+			t.Errorf("expected %s to sort before %s", funcName(RangeAppliedStateKey), funcName(f))
+		}
 	}
 }
 

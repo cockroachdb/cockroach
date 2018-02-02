@@ -66,12 +66,12 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     7551962144604783939,
 		populatedSum: 3716674106872807900,
 	},
-	reflect.TypeOf(&enginepb.MVCCStats{}): {
+	reflect.TypeOf(&enginepb.RangeAppliedState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return enginepb.NewPopulatedMVCCStats(r, false)
+			return enginepb.NewPopulatedRangeAppliedState(r, false)
 		},
-		emptySum:     18064891702890239528,
-		populatedSum: 4287370248246326846,
+		emptySum:     615555020845646359,
+		populatedSum: 94706924697857278,
 	},
 	reflect.TypeOf(&raftpb.HardState{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {

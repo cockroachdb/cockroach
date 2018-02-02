@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1960,26 +1959,30 @@ func (r *rocksDBIterator) setState(state C.DBIterState) {
 func (r *rocksDBIterator) ComputeStats(
 	start, end MVCCKey, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
-	stats, err := cStatsToGoStats(result, nowNanos)
-	if util.RaceEnabled {
-		// If we've come here via batchIterator, then flushMutations (which forces
-		// reseek) was called just before C.MVCCComputeStats. Set it here as well
-		// to match.
-		r.reseek = true
-		// C.MVCCComputeStats and ComputeStatsGo must behave identically.
-		// There are unit tests to ensure that they return the same result, but
-		// as an additional check, use the race builds to check any edge cases
-		// that the tests may miss.
-		verifyStats, verifyErr := ComputeStatsGo(r, start, end, nowNanos)
-		if (err != nil) != (verifyErr != nil) {
-			panic(fmt.Sprintf("C.MVCCComputeStats differed from ComputeStatsGo: err %v vs %v", err, verifyErr))
-		}
-		if !stats.Equal(verifyStats) {
-			panic(fmt.Sprintf("C.MVCCComputeStats differed from ComputeStatsGo: stats %+v vs %+v", stats, verifyStats))
-		}
-	}
-	return stats, err
+	// WIP re-enable once C++ is fixed. Waiting on confirmation that
+	// this is actually the approach we want to take first.
+	return ComputeStatsGo(r, start, end, nowNanos)
+
+	// result := C.MVCCComputeStats(r.iter, goToCKey(start), goToCKey(end), C.int64_t(nowNanos))
+	// stats, err := cStatsToGoStats(result, nowNanos)
+	// if util.RaceEnabled {
+	// 	// If we've come here via batchIterator, then flushMutations (which forces
+	// 	// reseek) was called just before C.MVCCComputeStats. Set it here as well
+	// 	// to match.
+	// 	r.reseek = true
+	// 	// C.MVCCComputeStats and ComputeStatsGo must behave identically.
+	// 	// There are unit tests to ensure that they return the same result, but
+	// 	// as an additional check, use the race builds to check any edge cases
+	// 	// that the tests may miss.
+	// 	verifyStats, verifyErr := ComputeStatsGo(r, start, end, nowNanos)
+	// 	if (err != nil) != (verifyErr != nil) {
+	// 		panic(fmt.Sprintf("C.MVCCComputeStats differed from ComputeStatsGo: err %v vs %v", err, verifyErr))
+	// 	}
+	// 	if !stats.Equal(verifyStats) {
+	// 		panic(fmt.Sprintf("C.MVCCComputeStats differed from ComputeStatsGo: stats %+v vs %+v", stats, verifyStats))
+	// 	}
+	// }
+	// return stats, err
 }
 
 func (r *rocksDBIterator) FindSplitKey(

@@ -85,7 +85,7 @@ func writeInitialReplicaState(
 		log.Fatalf(ctx, "expected trivial TxnSpanGCThreshold, but found %+v", existingTxnSpanGCThreshold)
 	}
 
-	newMS, err := rsl.Save(ctx, eng, s)
+	newMS, err := rsl.Save(ctx, eng, s, true /* bootstrap */)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}

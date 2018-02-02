@@ -511,9 +511,14 @@ func snapshot(
 		return OutgoingSnapshot{}, err
 	}
 
+	// Wrap the snapshot reader in a MigrationIterator, which will translate any
+	// keys that may not be recognized by older versions of Cockroach into their
+	// legacy representations.
+	mi := engine.NewMigrationIterator(snap.NewIterator(false))
+
 	// Intentionally let this iterator and the snapshot escape so that the
 	// streamer can send chunks from it bit by bit.
-	iter := rditer.NewReplicaDataIterator(&desc, snap, true /* replicatedOnly */)
+	iter := rditer.WrapWithReplicaDataIterator(&desc, mi, true /* replicatedOnly */)
 	snapUUID := uuid.MakeV4()
 
 	log.Infof(ctx, "generated %s snapshot %s at index %d",
