@@ -123,3 +123,13 @@ func randCLastSyllables(n int) string {
 func randCLast(rng *rand.Rand) string {
 	return randCLastSyllables(((rng.Intn(256) | rng.Intn(1000)) + cLoad) % 1000)
 }
+
+// Return a non-uniform random customer ID. See 2.1.6.
+func randCustomerID(rng *rand.Rand) int {
+	return ((rng.Intn(1024) | (rng.Intn(3000) + 1) + cCustomerID) % 3000) + 1
+}
+
+// Return a non-uniform random item ID. See 2.1.6.
+func randItemID(rng *rand.Rand) int {
+	return ((rng.Intn(8190) | (rng.Intn(100000) + 1) + cItemID) % 100000) + 1
+}

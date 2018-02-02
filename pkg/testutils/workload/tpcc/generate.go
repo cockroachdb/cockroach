@@ -41,7 +41,8 @@ const (
 	hackOrderLinesPerWarehouse = hackOrderLinesPerDistrict * numDistrictsPerWarehouse
 
 	originalString = "ORIGINAL"
-	ytd            = 30000.00 // also used by warehouse
+	wYtd           = 300000.00
+	ytd            = 30000.00
 	nextOrderID    = 3001
 	creditLimit    = 50000.00
 	balance        = -10.00
@@ -81,7 +82,7 @@ func (w *tpcc) tpccWarehouseInitialRow(rowIdx int) []interface{} {
 		randState(rng),
 		randZip(rng),
 		randTax(rng),
-		ytd,
+		wYtd,
 	}
 }
 
@@ -89,7 +90,7 @@ func (w *tpcc) tpccStockInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
-	wID := (rowIdx / numStockPerWarehouse) + 1
+	wID := (rowIdx / numStockPerWarehouse)
 
 	return []interface{}{
 		sID, wID,
@@ -115,7 +116,7 @@ func (w *tpcc) tpccDistrictInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
-	wID := (rowIdx / numDistrictsPerWarehouse) + 1
+	wID := (rowIdx / numDistrictsPerWarehouse)
 
 	return []interface{}{
 		dID,
@@ -136,8 +137,8 @@ func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
-	dID := (rowIdx / numCustomersPerDistrict) + 1
-	wID := (rowIdx / numCustomersPerWarehouse) + 1
+	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
+	wID := (rowIdx / numCustomersPerWarehouse)
 
 	// 10% of the customer rows have bad credit.
 	// See section 4.3, under the CUSTOMER table population section.
@@ -182,8 +183,8 @@ func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
-	dID := (rowIdx / numCustomersPerDistrict) + 1
-	wID := (rowIdx / numCustomersPerWarehouse) + 1
+	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
+	wID := (rowIdx / numCustomersPerWarehouse)
 
 	return []interface{}{
 		cID, dID, wID, dID, wID, w.nowString, 10.00, randAString(rng, 12, 24),
@@ -194,8 +195,8 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
-	dID := (rowIdx / numOrdersPerDistrict) + 1
-	wID := (rowIdx / numOrdersPerWarehouse) + 1
+	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
+	wID := (rowIdx / numOrdersPerWarehouse)
 
 	// We need a random permutation of customers that stable for all orders in a
 	// district, so use the district ID to seed the random permuation.
@@ -223,8 +224,8 @@ func (w *tpcc) tpccNewOrderInitialRow(rowIdx int) []interface{} {
 	// The last numNewOrdersPerDistrict orders have entries in new orders.
 	const firstNewOrderOffset = numOrdersPerDistrict - numNewOrdersPerDistrict
 	oID := (rowIdx % numNewOrdersPerDistrict) + firstNewOrderOffset + 1
-	dID := (rowIdx / numNewOrdersPerDistrict) + 1
-	wID := (rowIdx / numNewOrdersPerWarehouse) + 1
+	dID := ((rowIdx / numNewOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
+	wID := (rowIdx / numNewOrdersPerWarehouse)
 
 	return []interface{}{
 		oID, dID, wID,
@@ -235,9 +236,9 @@ func (w *tpcc) tpccOrderLineInitialRow(rowIdx int) []interface{} {
 	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
 
 	olNumber := (rowIdx % hackOrderLinesPerOrder) + 1
-	oID := (rowIdx / hackOrderLinesPerOrder) + 1
-	dID := (rowIdx / hackOrderLinesPerDistrict) + 1
-	wID := (rowIdx / hackOrderLinesPerWarehouse) + 1
+	oID := ((rowIdx / hackOrderLinesPerOrder) % numOrdersPerDistrict) + 1
+	dID := ((rowIdx / hackOrderLinesPerDistrict) % numDistrictsPerWarehouse) + 1
+	wID := (rowIdx / hackOrderLinesPerWarehouse)
 
 	var amount float64
 	var deliveryD interface{}

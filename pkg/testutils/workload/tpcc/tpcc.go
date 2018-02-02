@@ -16,6 +16,10 @@
 package tpcc
 
 import (
+	"context"
+	gosql "database/sql"
+	"sync/atomic"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/spf13/pflag"
 )
@@ -26,8 +30,14 @@ type tpcc struct {
 	seed        int64
 	warehouses  int
 	interleaved bool
+	nowString   string
 
-	nowString string
+	mix     string
+	doWaits bool
+
+	txs         []tx
+	totalWeight int
+	workers     int64 // Access only via atomic
 }
 
 func init() {
@@ -45,6 +55,12 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		g.flags.StringVar(&g.nowString, `now`, `2006-01-02 15:04:05`,
 			`Timestamp to use in data generation`)
+
+		g.flags.StringVar(&g.mix, `mix`,
+			`newOrder=45,payment=43,orderStatus=4,delivery=4,stockLevel=4`,
+			`Weights for the transaction mix. The default matches the TPCC spec.`)
+		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
+
 		return g
 	},
 }
@@ -58,13 +74,19 @@ func (w *tpcc) Flags() *pflag.FlagSet {
 }
 
 // Hooks implements the Generator interface.
-func (*tpcc) Hooks() workload.Hooks {
-	return workload.Hooks{}
+func (w *tpcc) Hooks() workload.Hooks {
+	return workload.Hooks{
+		Validate: func() error {
+			// TODO(dan): When doWaits is true, verify that the concurrency
+			// matches what is expected given the number of warehouses used.
+
+			return initializeMix(w)
+		},
+	}
 }
 
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
-
 	warehouse := workload.Table{
 		Name:            `warehouse`,
 		Schema:          tpccWarehouseSchema,
@@ -137,6 +159,14 @@ func (w *tpcc) Tables() []workload.Table {
 
 // Ops implements the Generator interface.
 func (w *tpcc) Ops() []workload.Operation {
-	// TODO(dan): Implement these.
-	return nil
+	return []workload.Operation{{
+		Name: `tpmC`,
+		Fn: func(db *gosql.DB) (func(context.Context) error, error) {
+			idx := int(atomic.AddInt64(&w.workers, 1)) - 1
+			warehouse := idx / numWorkersPerWarehouse
+			worker := &worker{config: w, idx: idx, db: db, warehouse: warehouse}
+			fn := func(_ context.Context) error { return worker.run() }
+			return fn, nil
+		},
+	}}
 }
