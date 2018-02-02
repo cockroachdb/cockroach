@@ -76,6 +76,10 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		return err
 	}
 
+	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+		return errors.New("cluster in insecure mode; user cannot use password authentication")
+	}
+
 	var opName string
 	if n.isRole {
 		opName = "create-role"

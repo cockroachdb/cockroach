@@ -73,6 +73,10 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 		return errors.Errorf("user %s cannot use password authentication", security.RootUser)
 	}
 
+	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
+		return errors.New("cluster in insecure mode; user cannot use password authentication")
+	}
+
 	internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
 	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 		params.ctx,
