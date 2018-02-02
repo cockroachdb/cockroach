@@ -389,6 +389,10 @@ func (p *recordReporter) iter(w io.Writer, rowIdx int, row []string) error {
 			if l > 0 {
 				colLabel = ""
 			}
+			lineCont := "+"
+			if l == len(lines)-1 {
+				lineCont = ""
+			}
 			// Note: special characters, including a vertical bar, in
 			// the colLabel are not escaped here. This is in accordance
 			// with the same behavior in PostgreSQL. However there is
@@ -397,7 +401,7 @@ func (p *recordReporter) iter(w io.Writer, rowIdx int, row []string) error {
 			if len(p.colRest[j]) > 0 {
 				contChar = "+"
 			}
-			fmt.Fprintf(w, "%-*s%s| %s\n", p.maxColWidth, colLabel, contChar, line)
+			fmt.Fprintf(w, "%-*s%s| %s%s\n", p.maxColWidth, colLabel, contChar, line, lineCont)
 			for k, cont := range p.colRest[j] {
 				if k == len(p.colRest[j])-1 {
 					contChar = " "
