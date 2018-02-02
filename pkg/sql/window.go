@@ -783,9 +783,9 @@ func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalConte
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
-				evalCtx.IVarHelper = n.ivarHelper
+				evalCtx.PushIVarHelper(n.ivarHelper)
 				res, err := curWindowRender.Eval(evalCtx)
-				evalCtx.IVarHelper = nil
+				evalCtx.PopIVarHelper()
 				if err != nil {
 					return err
 				}
