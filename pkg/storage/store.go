@@ -116,6 +116,9 @@ var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(
 var enablePreVote = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_PREVOTE", false)
 
+var enableTickQuiesced = envutil.EnvOrDefaultBool(
+	"COCKROACH_ENABLE_TICK_QUIESCED", true)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
