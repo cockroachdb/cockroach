@@ -135,6 +135,13 @@ func (ev *ExprView) Private() interface{} {
 	return ev.mem.lookupPrivate(ev.privateID())
 }
 
+// Metadata returns the metadata that's specific to this expression tree. Some
+// operator types refer to the metadata in their private fields. For example,
+// the Scan operator holds a metadata table index.
+func (ev *ExprView) Metadata() *opt.Metadata {
+	return ev.mem.metadata
+}
+
 // String returns a string representation of this expression for testing and
 // debugging.
 func (ev *ExprView) String() string {
@@ -160,6 +167,17 @@ func (ev *ExprView) formatScalar(tp treeprinter.Node) {
 
 	fmt.Fprintf(&buf, "%v", ev.op)
 	ev.formatPrivate(&buf, ev.Private())
+
+	scalar := ev.Logical().Scalar
+	if scalar != nil {
+		buf.WriteString(" [")
+		fmt.Fprintf(&buf, "type=%s", scalar.Type)
+		buf.WriteString("]")
+	} else {
+		// Don't panic if scalar properties don't yet exist when printing
+		// expression.
+		buf.WriteString(" [type=undefined]")
+	}
 
 	tp = tp.Child(buf.String())
 	for i := 0; i < ev.ChildCount(); i++ {

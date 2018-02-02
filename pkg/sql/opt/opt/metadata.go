@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -36,6 +37,19 @@ type ColSet = util.FastIntSet
 // ColMap provides a 1:1 mapping from one column index to another. It is used
 // by operators that need to match columns from its inputs.
 type ColMap = util.FastIntMap
+
+// mdCol stores information about one of the columns stored in the metadata,
+// including its label and type.
+type mdCol struct {
+	// label is the best-effort name of this column. Since the same column can
+	// have multiple labels (using aliasing), one of those is chosen to be used
+	// for pretty-printing and debugging. This might be different than what is
+	// stored in the physical properties and is presented to end users.
+	label string
+
+	// typ is the scalar SQL type of this column.
+	typ types.T
+}
 
 // Metadata indexes the columns, tables, and other metadata used within the
 // scope of a particular query. Because it is specific to one query, the
@@ -68,10 +82,9 @@ type Metadata struct {
 	// catalog contains system-wide metadata.
 	catalog optbase.Catalog
 
-	// labels are the set of column labels, indexed by ColumnIndex. These
-	// labels are used for pretty-printing and debugging. Skip index 0 so that
-	// it is reserved for "unknown column".
-	labels []string
+	// cols stores information about each metadata column, indexed by
+	// ColumnIndex. Skip index 0 so that it is reserved for "unknown column".
+	cols []mdCol
 
 	// nextCol keeps track of the index that will be assigned to the next
 	// table or column added to the metadata.
@@ -87,7 +100,7 @@ type Metadata struct {
 // catalog.
 func NewMetadata(catalog optbase.Catalog) *Metadata {
 	// Skip label index 0 so that it is reserved for "unknown column".
-	return &Metadata{catalog: catalog, labels: make([]string, 1)}
+	return &Metadata{catalog: catalog, cols: make([]mdCol, 1)}
 }
 
 // Catalog returns the system catalog from which query metadata is derived.
@@ -97,10 +110,10 @@ func (md *Metadata) Catalog() optbase.Catalog {
 
 // AddColumn indexes a new reference to a column within the query and records
 // its label.
-func (md *Metadata) AddColumn(label string) ColumnIndex {
+func (md *Metadata) AddColumn(label string, typ types.T) ColumnIndex {
 	// Skip index 0 so that it is reserved for "unknown column".
 	md.nextCol++
-	md.labels = append(md.labels, label)
+	md.cols = append(md.cols, mdCol{label: label, typ: typ})
 	return md.nextCol
 }
 
@@ -111,7 +124,16 @@ func (md *Metadata) ColumnLabel(index ColumnIndex) string {
 		panic("uninitialized column id 0")
 	}
 
-	return md.labels[index]
+	return md.cols[index].label
+}
+
+// ColumnType returns the SQL scalar type of the given column.
+func (md *Metadata) ColumnType(index ColumnIndex) types.T {
+	if index == 0 {
+		panic("uninitialized column id 0")
+	}
+
+	return md.cols[index].typ
 }
 
 // AddTable indexes a new reference to a table within the query. Separate
@@ -123,9 +145,9 @@ func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
 	for i := 0; i < tbl.NumColumns(); i++ {
 		col := tbl.Column(i)
 		if tbl.TabName() == "" {
-			md.AddColumn(string(col.ColName()))
+			md.AddColumn(string(col.ColName()), col.DatumType())
 		} else {
-			md.AddColumn(fmt.Sprintf("%s.%s", tbl.TabName(), col.ColName()))
+			md.AddColumn(fmt.Sprintf("%s.%s", tbl.TabName(), col.ColName()), col.DatumType())
 		}
 	}
 

@@ -87,6 +87,19 @@ func (_f *factory) ConstructTuple(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr)))
 }
 
+func (_f *factory) ConstructProjections(
+	elems opt.ListID,
+	cols opt.PrivateID,
+) opt.GroupID {
+	_projectionsExpr := makeProjectionsExpr(elems, cols)
+	_group := _f.mem.lookupGroupByFingerprint(_projectionsExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
+}
+
 func (_f *factory) ConstructFilters(
 	conditions opt.ListID,
 ) opt.GroupID {
@@ -97,19 +110,6 @@ func (_f *factory) ConstructFilters(
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr)))
-}
-
-func (_f *factory) ConstructProjections(
-	items opt.ListID,
-	cols opt.PrivateID,
-) opt.GroupID {
-	_projectionsExpr := makeProjectionsExpr(items, cols)
-	_group := _f.mem.lookupGroupByFingerprint(_projectionsExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
 }
 
 func (_f *factory) ConstructExists(
@@ -396,32 +396,6 @@ func (_f *factory) ConstructNotRegIMatch(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
 }
 
-func (_f *factory) ConstructIsDistinctFrom(
-	left opt.GroupID,
-	right opt.GroupID,
-) opt.GroupID {
-	_isDistinctFromExpr := makeIsDistinctFromExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_isDistinctFromExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isDistinctFromExpr)))
-}
-
-func (_f *factory) ConstructIsNotDistinctFrom(
-	left opt.GroupID,
-	right opt.GroupID,
-) opt.GroupID {
-	_isNotDistinctFromExpr := makeIsNotDistinctFromExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_isNotDistinctFromExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotDistinctFromExpr)))
-}
-
 func (_f *factory) ConstructIs(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -446,6 +420,32 @@ func (_f *factory) ConstructIsNot(
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr)))
+}
+
+func (_f *factory) ConstructContains(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_containsExpr := makeContainsExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_containsExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr)))
+}
+
+func (_f *factory) ConstructContainedBy(
+	left opt.GroupID,
+	right opt.GroupID,
+) opt.GroupID {
+	_containedByExpr := makeContainedByExpr(left, right)
+	_group := _f.mem.lookupGroupByFingerprint(_containedByExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr)))
 }
 
 func (_f *factory) ConstructAny(
@@ -654,6 +654,58 @@ func (_f *factory) ConstructRShift(
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
+}
+
+func (_f *factory) ConstructFetchVal(
+	json opt.GroupID,
+	index opt.GroupID,
+) opt.GroupID {
+	_fetchValExpr := makeFetchValExpr(json, index)
+	_group := _f.mem.lookupGroupByFingerprint(_fetchValExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr)))
+}
+
+func (_f *factory) ConstructFetchText(
+	json opt.GroupID,
+	index opt.GroupID,
+) opt.GroupID {
+	_fetchTextExpr := makeFetchTextExpr(json, index)
+	_group := _f.mem.lookupGroupByFingerprint(_fetchTextExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr)))
+}
+
+func (_f *factory) ConstructFetchValPath(
+	json opt.GroupID,
+	path opt.GroupID,
+) opt.GroupID {
+	_fetchValPathExpr := makeFetchValPathExpr(json, path)
+	_group := _f.mem.lookupGroupByFingerprint(_fetchValPathExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr)))
+}
+
+func (_f *factory) ConstructFetchTextPath(
+	json opt.GroupID,
+	path opt.GroupID,
+) opt.GroupID {
+	_fetchTextPathExpr := makeFetchTextPathExpr(json, path)
+	_group := _f.mem.lookupGroupByFingerprint(_fetchTextPathExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr)))
 }
 
 func (_f *factory) ConstructUnaryPlus(
@@ -980,7 +1032,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [76]dynConstructLookupFunc
+var dynConstructLookup [80]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1023,14 +1075,14 @@ func init() {
 		return f.ConstructTuple(f.StoreList(children))
 	}
 
-	// FiltersOp
-	dynConstructLookup[opt.FiltersOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructFilters(f.StoreList(children))
-	}
-
 	// ProjectionsOp
 	dynConstructLookup[opt.ProjectionsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructProjections(f.StoreList(children), private)
+	}
+
+	// FiltersOp
+	dynConstructLookup[opt.FiltersOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFilters(f.StoreList(children))
 	}
 
 	// ExistsOp
@@ -1143,16 +1195,6 @@ func init() {
 		return f.ConstructNotRegIMatch(children[0], children[1])
 	}
 
-	// IsDistinctFromOp
-	dynConstructLookup[opt.IsDistinctFromOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructIsDistinctFrom(children[0], children[1])
-	}
-
-	// IsNotDistinctFromOp
-	dynConstructLookup[opt.IsNotDistinctFromOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructIsNotDistinctFrom(children[0], children[1])
-	}
-
 	// IsOp
 	dynConstructLookup[opt.IsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructIs(children[0], children[1])
@@ -1161,6 +1203,16 @@ func init() {
 	// IsNotOp
 	dynConstructLookup[opt.IsNotOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructIsNot(children[0], children[1])
+	}
+
+	// ContainsOp
+	dynConstructLookup[opt.ContainsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructContains(children[0], children[1])
+	}
+
+	// ContainedByOp
+	dynConstructLookup[opt.ContainedByOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructContainedBy(children[0], children[1])
 	}
 
 	// AnyOp
@@ -1241,6 +1293,26 @@ func init() {
 	// RShiftOp
 	dynConstructLookup[opt.RShiftOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructRShift(children[0], children[1])
+	}
+
+	// FetchValOp
+	dynConstructLookup[opt.FetchValOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFetchVal(children[0], children[1])
+	}
+
+	// FetchTextOp
+	dynConstructLookup[opt.FetchTextOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFetchText(children[0], children[1])
+	}
+
+	// FetchValPathOp
+	dynConstructLookup[opt.FetchValPathOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFetchValPath(children[0], children[1])
+	}
+
+	// FetchTextPathOp
+	dynConstructLookup[opt.FetchTextPathOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFetchTextPath(children[0], children[1])
 	}
 
 	// UnaryPlusOp

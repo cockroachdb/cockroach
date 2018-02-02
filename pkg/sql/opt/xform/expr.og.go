@@ -50,16 +50,16 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0 + int(tupleExpr.elems().Length)
 	},
 
+	// ProjectionsOp
+	func(ev *ExprView) int {
+		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(projectionsExpr.elems().Length)
+	},
+
 	// FiltersOp
 	func(ev *ExprView) int {
 		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(filtersExpr.conditions().Length)
-	},
-
-	// ProjectionsOp
-	func(ev *ExprView) int {
-		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(projectionsExpr.items().Length)
 	},
 
 	// ExistsOp
@@ -172,22 +172,22 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 2
 	},
 
-	// IsDistinctFromOp
-	func(ev *ExprView) int {
-		return 2
-	},
-
-	// IsNotDistinctFromOp
-	func(ev *ExprView) int {
-		return 2
-	},
-
 	// IsOp
 	func(ev *ExprView) int {
 		return 2
 	},
 
 	// IsNotOp
+	func(ev *ExprView) int {
+		return 2
+	},
+
+	// ContainsOp
+	func(ev *ExprView) int {
+		return 2
+	},
+
+	// ContainedByOp
 	func(ev *ExprView) int {
 		return 2
 	},
@@ -268,6 +268,26 @@ var childCountLookup = [...]childCountLookupFunc{
 	},
 
 	// RShiftOp
+	func(ev *ExprView) int {
+		return 2
+	},
+
+	// FetchValOp
+	func(ev *ExprView) int {
+		return 2
+	},
+
+	// FetchTextOp
+	func(ev *ExprView) int {
+		return 2
+	},
+
+	// FetchValPathOp
+	func(ev *ExprView) int {
+		return 2
+	},
+
+	// FetchTextPathOp
 	func(ev *ExprView) int {
 		return 2
 	},
@@ -463,6 +483,17 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
+	// ProjectionsOp
+	func(ev *ExprView, n int) opt.GroupID {
+		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		default:
+			list := ev.mem.lookupList(projectionsExpr.elems())
+			return list[n-0]
+		}
+	},
+
 	// FiltersOp
 	func(ev *ExprView, n int) opt.GroupID {
 		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
@@ -470,17 +501,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		switch n {
 		default:
 			list := ev.mem.lookupList(filtersExpr.conditions())
-			return list[n-0]
-		}
-	},
-
-	// ProjectionsOp
-	func(ev *ExprView, n int) opt.GroupID {
-		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		default:
-			list := ev.mem.lookupList(projectionsExpr.items())
 			return list[n-0]
 		}
 	},
@@ -789,34 +809,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
-	// IsDistinctFromOp
-	func(ev *ExprView, n int) opt.GroupID {
-		isDistinctFromExpr := (*isDistinctFromExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return isDistinctFromExpr.left()
-		case 1:
-			return isDistinctFromExpr.right()
-		default:
-			panic("child index out of range")
-		}
-	},
-
-	// IsNotDistinctFromOp
-	func(ev *ExprView, n int) opt.GroupID {
-		isNotDistinctFromExpr := (*isNotDistinctFromExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return isNotDistinctFromExpr.left()
-		case 1:
-			return isNotDistinctFromExpr.right()
-		default:
-			panic("child index out of range")
-		}
-	},
-
 	// IsOp
 	func(ev *ExprView, n int) opt.GroupID {
 		isExpr := (*isExpr)(ev.mem.lookupExpr(ev.loc))
@@ -840,6 +832,34 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			return isNotExpr.left()
 		case 1:
 			return isNotExpr.right()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// ContainsOp
+	func(ev *ExprView, n int) opt.GroupID {
+		containsExpr := (*containsExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return containsExpr.left()
+		case 1:
+			return containsExpr.right()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// ContainedByOp
+	func(ev *ExprView, n int) opt.GroupID {
+		containedByExpr := (*containedByExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return containedByExpr.left()
+		case 1:
+			return containedByExpr.right()
 		default:
 			panic("child index out of range")
 		}
@@ -1064,6 +1084,62 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			return rShiftExpr.left()
 		case 1:
 			return rShiftExpr.right()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// FetchValOp
+	func(ev *ExprView, n int) opt.GroupID {
+		fetchValExpr := (*fetchValExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return fetchValExpr.json()
+		case 1:
+			return fetchValExpr.index()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// FetchTextOp
+	func(ev *ExprView, n int) opt.GroupID {
+		fetchTextExpr := (*fetchTextExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return fetchTextExpr.json()
+		case 1:
+			return fetchTextExpr.index()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// FetchValPathOp
+	func(ev *ExprView, n int) opt.GroupID {
+		fetchValPathExpr := (*fetchValPathExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return fetchValPathExpr.json()
+		case 1:
+			return fetchValPathExpr.path()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// FetchTextPathOp
+	func(ev *ExprView, n int) opt.GroupID {
+		fetchTextPathExpr := (*fetchTextPathExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return fetchTextPathExpr.json()
+		case 1:
+			return fetchTextPathExpr.path()
 		default:
 			panic("child index out of range")
 		}
@@ -1475,15 +1551,15 @@ var privateLookup = [...]privateLookupFunc{
 		return 0
 	},
 
-	// FiltersOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
 	// ProjectionsOp
 	func(ev *ExprView) opt.PrivateID {
 		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 		return projectionsExpr.cols()
+	},
+
+	// FiltersOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
 	},
 
 	// ExistsOp
@@ -1596,22 +1672,22 @@ var privateLookup = [...]privateLookupFunc{
 		return 0
 	},
 
-	// IsDistinctFromOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
-	// IsNotDistinctFromOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
 	// IsOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
 
 	// IsNotOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// ContainsOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// ContainedByOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
@@ -1692,6 +1768,26 @@ var privateLookup = [...]privateLookupFunc{
 	},
 
 	// RShiftOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// FetchValOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// FetchTextOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// FetchValPathOp
+	func(ev *ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// FetchTextPathOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
@@ -1841,8 +1937,8 @@ var isScalarLookup = [...]bool{
 	true,  // FalseOp
 	true,  // PlaceholderOp
 	true,  // TupleOp
-	true,  // FiltersOp
 	true,  // ProjectionsOp
+	true,  // FiltersOp
 	true,  // ExistsOp
 	true,  // AndOp
 	true,  // OrOp
@@ -1865,10 +1961,10 @@ var isScalarLookup = [...]bool{
 	true,  // NotRegMatchOp
 	true,  // RegIMatchOp
 	true,  // NotRegIMatchOp
-	true,  // IsDistinctFromOp
-	true,  // IsNotDistinctFromOp
 	true,  // IsOp
 	true,  // IsNotOp
+	true,  // ContainsOp
+	true,  // ContainedByOp
 	true,  // AnyOp
 	true,  // SomeOp
 	true,  // AllOp
@@ -1885,6 +1981,10 @@ var isScalarLookup = [...]bool{
 	true,  // ConcatOp
 	true,  // LShiftOp
 	true,  // RShiftOp
+	true,  // FetchValOp
+	true,  // FetchTextOp
+	true,  // FetchValPathOp
+	true,  // FetchTextPathOp
 	true,  // UnaryPlusOp
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
@@ -1923,8 +2023,8 @@ var isRelationalLookup = [...]bool{
 	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
-	false, // FiltersOp
 	false, // ProjectionsOp
+	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -1947,10 +2047,10 @@ var isRelationalLookup = [...]bool{
 	false, // NotRegMatchOp
 	false, // RegIMatchOp
 	false, // NotRegIMatchOp
-	false, // IsDistinctFromOp
-	false, // IsNotDistinctFromOp
 	false, // IsOp
 	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
 	false, // AnyOp
 	false, // SomeOp
 	false, // AllOp
@@ -1967,6 +2067,10 @@ var isRelationalLookup = [...]bool{
 	false, // ConcatOp
 	false, // LShiftOp
 	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
@@ -2005,8 +2109,8 @@ var isJoinLookup = [...]bool{
 	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
-	false, // FiltersOp
 	false, // ProjectionsOp
+	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2029,10 +2133,10 @@ var isJoinLookup = [...]bool{
 	false, // NotRegMatchOp
 	false, // RegIMatchOp
 	false, // NotRegIMatchOp
-	false, // IsDistinctFromOp
-	false, // IsNotDistinctFromOp
 	false, // IsOp
 	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
 	false, // AnyOp
 	false, // SomeOp
 	false, // AllOp
@@ -2049,6 +2153,10 @@ var isJoinLookup = [...]bool{
 	false, // ConcatOp
 	false, // LShiftOp
 	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
@@ -2087,8 +2195,8 @@ var isJoinApplyLookup = [...]bool{
 	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
-	false, // FiltersOp
 	false, // ProjectionsOp
+	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2111,10 +2219,10 @@ var isJoinApplyLookup = [...]bool{
 	false, // NotRegMatchOp
 	false, // RegIMatchOp
 	false, // NotRegIMatchOp
-	false, // IsDistinctFromOp
-	false, // IsNotDistinctFromOp
 	false, // IsOp
 	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
 	false, // AnyOp
 	false, // SomeOp
 	false, // AllOp
@@ -2131,6 +2239,10 @@ var isJoinApplyLookup = [...]bool{
 	false, // ConcatOp
 	false, // LShiftOp
 	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
@@ -2169,8 +2281,8 @@ var isEnforcerLookup = [...]bool{
 	false, // FalseOp
 	false, // PlaceholderOp
 	false, // TupleOp
-	false, // FiltersOp
 	false, // ProjectionsOp
+	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2193,10 +2305,10 @@ var isEnforcerLookup = [...]bool{
 	false, // NotRegMatchOp
 	false, // RegIMatchOp
 	false, // NotRegIMatchOp
-	false, // IsDistinctFromOp
-	false, // IsNotDistinctFromOp
 	false, // IsOp
 	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
 	false, // AnyOp
 	false, // SomeOp
 	false, // AllOp
@@ -2213,6 +2325,10 @@ var isEnforcerLookup = [...]bool{
 	false, // ConcatOp
 	false, // LShiftOp
 	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
@@ -2404,6 +2520,31 @@ func (m *memoExpr) asTuple() *tupleExpr {
 	return (*tupleExpr)(m)
 }
 
+type projectionsExpr memoExpr
+
+func makeProjectionsExpr(elems opt.ListID, cols opt.PrivateID) projectionsExpr {
+	return projectionsExpr{op: opt.ProjectionsOp, state: exprState{elems.Offset, elems.Length, uint32(cols)}}
+}
+
+func (e *projectionsExpr) elems() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *projectionsExpr) cols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *projectionsExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asProjections() *projectionsExpr {
+	if m.op != opt.ProjectionsOp {
+		return nil
+	}
+	return (*projectionsExpr)(m)
+}
+
 type filtersExpr memoExpr
 
 func makeFiltersExpr(conditions opt.ListID) filtersExpr {
@@ -2423,31 +2564,6 @@ func (m *memoExpr) asFilters() *filtersExpr {
 		return nil
 	}
 	return (*filtersExpr)(m)
-}
-
-type projectionsExpr memoExpr
-
-func makeProjectionsExpr(items opt.ListID, cols opt.PrivateID) projectionsExpr {
-	return projectionsExpr{op: opt.ProjectionsOp, state: exprState{items.Offset, items.Length, uint32(cols)}}
-}
-
-func (e *projectionsExpr) items() opt.ListID {
-	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
-}
-
-func (e *projectionsExpr) cols() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *projectionsExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asProjections() *projectionsExpr {
-	if m.op != opt.ProjectionsOp {
-		return nil
-	}
-	return (*projectionsExpr)(m)
 }
 
 type existsExpr memoExpr
@@ -2992,56 +3108,6 @@ func (m *memoExpr) asNotRegIMatch() *notRegIMatchExpr {
 	return (*notRegIMatchExpr)(m)
 }
 
-type isDistinctFromExpr memoExpr
-
-func makeIsDistinctFromExpr(left opt.GroupID, right opt.GroupID) isDistinctFromExpr {
-	return isDistinctFromExpr{op: opt.IsDistinctFromOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *isDistinctFromExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *isDistinctFromExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *isDistinctFromExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIsDistinctFrom() *isDistinctFromExpr {
-	if m.op != opt.IsDistinctFromOp {
-		return nil
-	}
-	return (*isDistinctFromExpr)(m)
-}
-
-type isNotDistinctFromExpr memoExpr
-
-func makeIsNotDistinctFromExpr(left opt.GroupID, right opt.GroupID) isNotDistinctFromExpr {
-	return isNotDistinctFromExpr{op: opt.IsNotDistinctFromOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *isNotDistinctFromExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *isNotDistinctFromExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *isNotDistinctFromExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIsNotDistinctFrom() *isNotDistinctFromExpr {
-	if m.op != opt.IsNotDistinctFromOp {
-		return nil
-	}
-	return (*isNotDistinctFromExpr)(m)
-}
-
 type isExpr memoExpr
 
 func makeIsExpr(left opt.GroupID, right opt.GroupID) isExpr {
@@ -3090,6 +3156,56 @@ func (m *memoExpr) asIsNot() *isNotExpr {
 		return nil
 	}
 	return (*isNotExpr)(m)
+}
+
+type containsExpr memoExpr
+
+func makeContainsExpr(left opt.GroupID, right opt.GroupID) containsExpr {
+	return containsExpr{op: opt.ContainsOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *containsExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *containsExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *containsExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asContains() *containsExpr {
+	if m.op != opt.ContainsOp {
+		return nil
+	}
+	return (*containsExpr)(m)
+}
+
+type containedByExpr memoExpr
+
+func makeContainedByExpr(left opt.GroupID, right opt.GroupID) containedByExpr {
+	return containedByExpr{op: opt.ContainedByOp, state: exprState{uint32(left), uint32(right)}}
+}
+
+func (e *containedByExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *containedByExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *containedByExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asContainedBy() *containedByExpr {
+	if m.op != opt.ContainedByOp {
+		return nil
+	}
+	return (*containedByExpr)(m)
 }
 
 type anyExpr memoExpr
@@ -3490,6 +3606,106 @@ func (m *memoExpr) asRShift() *rShiftExpr {
 		return nil
 	}
 	return (*rShiftExpr)(m)
+}
+
+type fetchValExpr memoExpr
+
+func makeFetchValExpr(json opt.GroupID, index opt.GroupID) fetchValExpr {
+	return fetchValExpr{op: opt.FetchValOp, state: exprState{uint32(json), uint32(index)}}
+}
+
+func (e *fetchValExpr) json() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *fetchValExpr) index() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *fetchValExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFetchVal() *fetchValExpr {
+	if m.op != opt.FetchValOp {
+		return nil
+	}
+	return (*fetchValExpr)(m)
+}
+
+type fetchTextExpr memoExpr
+
+func makeFetchTextExpr(json opt.GroupID, index opt.GroupID) fetchTextExpr {
+	return fetchTextExpr{op: opt.FetchTextOp, state: exprState{uint32(json), uint32(index)}}
+}
+
+func (e *fetchTextExpr) json() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *fetchTextExpr) index() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *fetchTextExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFetchText() *fetchTextExpr {
+	if m.op != opt.FetchTextOp {
+		return nil
+	}
+	return (*fetchTextExpr)(m)
+}
+
+type fetchValPathExpr memoExpr
+
+func makeFetchValPathExpr(json opt.GroupID, path opt.GroupID) fetchValPathExpr {
+	return fetchValPathExpr{op: opt.FetchValPathOp, state: exprState{uint32(json), uint32(path)}}
+}
+
+func (e *fetchValPathExpr) json() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *fetchValPathExpr) path() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *fetchValPathExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFetchValPath() *fetchValPathExpr {
+	if m.op != opt.FetchValPathOp {
+		return nil
+	}
+	return (*fetchValPathExpr)(m)
+}
+
+type fetchTextPathExpr memoExpr
+
+func makeFetchTextPathExpr(json opt.GroupID, path opt.GroupID) fetchTextPathExpr {
+	return fetchTextPathExpr{op: opt.FetchTextPathOp, state: exprState{uint32(json), uint32(path)}}
+}
+
+func (e *fetchTextPathExpr) json() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *fetchTextPathExpr) path() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *fetchTextPathExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFetchTextPath() *fetchTextPathExpr {
+	if m.op != opt.FetchTextPathOp {
+		return nil
+	}
+	return (*fetchTextPathExpr)(m)
 }
 
 type unaryPlusExpr memoExpr
