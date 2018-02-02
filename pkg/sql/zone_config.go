@@ -137,20 +137,6 @@ func GetZoneConfigInTxn(
 	)
 }
 
-// GetTableDesc returns the table descriptor for the table with 'id'.
-// Returns nil if the descriptor is not present, or is present but is not a
-// table.
-func GetTableDesc(cfg config.SystemConfig, id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
-	if descVal := cfg.GetValue(sqlbase.MakeDescMetadataKey(id)); descVal != nil {
-		desc := &sqlbase.Descriptor{}
-		if err := descVal.GetProto(desc); err != nil {
-			return nil, err
-		}
-		return desc.GetTable(), nil
-	}
-	return nil, nil
-}
-
 // GenerateSubzoneSpans is a hook point for a CCL function that constructs from
 // a TableDescriptor the entries mapping zone config spans to subzones for use
 // in the SubzonzeSpans field of config.ZoneConfig. If no CCL hook is installed,

@@ -21,7 +21,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -307,15 +306,8 @@ func (p *planner) dropTableImpl(
 		droppedViews = append(droppedViews, viewDesc.Name)
 	}
 
-	if err := p.initiateDropTable(ctx, tableDesc, true /* drain name */); err != nil {
-		return droppedViews, err
-	}
-
-	p.testingVerifyMetadata().setTestingVerifyMetadata(
-		func(systemConfig config.SystemConfig) error {
-			return verifyDropTableMetadata(systemConfig, tableDesc.ID, "table")
-		})
-	return droppedViews, nil
+	err := p.initiateDropTable(ctx, tableDesc, true /* drain name */)
+	return droppedViews, err
 }
 
 // drainName when set implies that the name needs to go through the draining
@@ -439,22 +431,6 @@ func (p *planner) removeInterleaveBackReference(
 		return p.saveNonmutationAndNotify(ctx, t)
 	}
 	return nil
-}
-
-func verifyDropTableMetadata(
-	systemConfig config.SystemConfig, tableID sqlbase.ID, objType string,
-) error {
-	desc, err := GetTableDesc(systemConfig, tableID)
-	if err != nil {
-		return err
-	}
-	if desc == nil {
-		return errors.Errorf("%s %d missing", objType, tableID)
-	}
-	if desc.Dropped() {
-		return nil
-	}
-	return errors.Errorf("expected %s %d to be marked as deleted", objType, tableID)
 }
 
 // removeMatchingReferences removes all refs from the provided slice that
