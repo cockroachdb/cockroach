@@ -19,4 +19,5 @@
 extern "C" {
 void __attribute__((weak)) rocksDBLog(char*, int);
 char* __attribute__((weak)) prettyPrintKey(DBKey);
+void __attribute__((weak)) iterNewChunk(void*, int, DBSlice* result);
 }  // extern "C"

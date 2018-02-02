@@ -21,7 +21,8 @@ namespace cockroach {
 
 class chunkedBuffer {
  public:
-  chunkedBuffer() {
+  chunkedBuffer(uintptr_t chunks_ref)
+      : chunks_ref_((void*)chunks_ref) {
     Clear();
   }
   ~chunkedBuffer() {
@@ -51,6 +52,7 @@ class chunkedBuffer {
   void put(const char* data, int len, int next_size_hint);
 
  private:
+  void* chunks_ref_;
   std::vector<DBSlice> bufs_;
   int64_t count_;
   char* buf_ptr_;

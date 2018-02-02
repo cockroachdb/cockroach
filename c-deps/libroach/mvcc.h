@@ -50,7 +50,7 @@ static const int kMaxItersBeforeSeek = 10;
 template <bool reverse> class mvccScanner {
  public:
   mvccScanner(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp, int64_t max_keys,
-              DBTxn txn, bool consistent)
+              DBTxn txn, bool consistent, uintptr_t chunks_ref)
       : iter_(iter),
         iter_rep_(iter->rep.get()),
         start_key_(ToSlice(start)),
@@ -62,7 +62,7 @@ template <bool reverse> class mvccScanner {
         txn_max_timestamp_(txn.max_timestamp),
         consistent_(consistent),
         check_uncertainty_(timestamp < txn.max_timestamp),
-        kvs_(new chunkedBuffer),
+        kvs_(new chunkedBuffer(chunks_ref)),
         intents_(new rocksdb::WriteBatch),
         peeked_(false),
         is_get_(false),

@@ -15,6 +15,7 @@
 #include "chunked_buffer.h"
 #include <rocksdb/db.h>
 #include "encoding.h"
+#include "godefs.h"
 
 namespace cockroach {
 
@@ -32,9 +33,6 @@ void chunkedBuffer::Put(const rocksdb::Slice& key, const rocksdb::Slice& value) 
 }
 
 void chunkedBuffer::Clear() {
-  for (int i = 0; i < bufs_.size(); i++) {
-    delete[] bufs_[i].data;
-  }
   count_ = 0;
   buf_ptr_ = nullptr;
   bufs_.clear();
@@ -48,21 +46,16 @@ void chunkedBuffer::put(const char* data, int len, int next_size_hint) {
   const int avail = bufs_.empty() ? 0 :
       (bufs_.back().len - (buf_ptr_ - bufs_.back().data));
   if (len > avail) {
-    // If it's bigger than the last buf's capacity, we fill the last buf,
-    // allocate a new one, and write the remainder to the new one.  Our new
-    // buf's size will be the next power of two past the size of the last buf
-    // that can accomodate the new data, plus a size hint if available.
-    memcpy(buf_ptr_, data, avail);
-    data += avail;
-    len -= avail;
+    if (!bufs_.empty()) {
+      bufs_.back().len = buf_ptr_ - bufs_.back().data;
+    }
 
     int new_size = bufs_.empty() ? 16 : bufs_.back().len * 2;
     for (; new_size < len + next_size_hint; new_size *= 2) {
     }
 
     DBSlice new_buf;
-    new_buf.data = new char[new_size];
-    new_buf.len = new_size;
+    iterNewChunk(chunks_ref_, new_size, &new_buf);
     bufs_.push_back(new_buf);
 
     // Now reset so that we'll write the remainder below.
