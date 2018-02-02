@@ -90,10 +90,6 @@ type testingVerifyMetadata interface {
 type planner struct {
 	txn *client.Txn
 
-	// preparedStatements points to the Session's collection of prepared
-	// statements.
-	preparedStatements *PreparedStatements
-
 	// Reference to the corresponding sql Statement for this query.
 	stmt *Statement
 
@@ -104,6 +100,8 @@ type planner struct {
 	// sessionDataMutator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
 	sessionDataMutator sessionDataMutator
+
+	preparedStatements preparedStatementsAccessor
 
 	// statsCollector is used to collect statistics about SQL statement execution.
 	statsCollector sqlStatsCollector

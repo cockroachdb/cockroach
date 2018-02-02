@@ -55,7 +55,7 @@ func (p *planner) Execute(ctx context.Context, n *tree.Execute) (planNode, error
 // placeholder info.
 // See https://www.postgresql.org/docs/current/static/sql-execute.html for details.
 func getPreparedStatementForExecute(
-	preparedStmts *PreparedStatements, searchPath sessiondata.SearchPath, s *tree.Execute,
+	preparedStmts preparedStatementsAccessor, searchPath sessiondata.SearchPath, s *tree.Execute,
 ) (ps *PreparedStatement, pInfo *tree.PlaceholderInfo, err error) {
 	name := s.Name.String()
 	prepared, ok := preparedStmts.Get(name)
