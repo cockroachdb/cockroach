@@ -713,7 +713,7 @@ func (p *planner) createSchemaChangeJob(
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
-		return sqlbase.InvalidMutationID, nil
+		return sqlbase.InvalidMutationID, err
 	}
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 		MutationID: mutationID, JobID: *job.ID()})

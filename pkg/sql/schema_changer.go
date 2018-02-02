@@ -626,8 +626,7 @@ func (sc *SchemaChanger) done(ctx context.Context, isRollback bool) (*sqlbase.De
 		return nil
 	}, func(txn *client.Txn) error {
 		if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-			log.Warningf(ctx, "schema change ignoring error while marking job %d as successful: %+v",
-				*sc.job.ID(), err)
+			return errors.Wrapf(err, "failed to mark job %d as as successful", *sc.job.ID())
 		}
 
 		schemaChangeEventType := EventLogFinishSchemaChange
