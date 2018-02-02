@@ -58,12 +58,29 @@ func (p *PreparedStatement) close(ctx context.Context) {
 	p.memAcc.Close(ctx)
 }
 
+// preparedStatementsAccessor gives a planner access to a session's collection
+// of prepared statements.
+type preparedStatementsAccessor interface {
+	// Get returns the prepared statement with the given name. The returned bool
+	// is false if a statement with the given name doesn't exist.
+	Get(name string) (*PreparedStatement, bool)
+	// Delete removes the PreparedStatement with the provided name from the
+	// collection. If a portal exists for that statement, it is also removed.
+	// The method returns true if statement with that name was found and removed,
+	// false otherwise.
+	Delete(ctx context.Context, name string) bool
+	// DeleteAll removes all prepared statements and portals from the coolection.
+	DeleteAll(ctx context.Context)
+}
+
 // PreparedStatements is a mapping of PreparedStatement names to their
 // corresponding PreparedStatements.
 type PreparedStatements struct {
 	session *Session
 	stmts   map[string]*PreparedStatement
 }
+
+var _ preparedStatementsAccessor = &PreparedStatements{}
 
 func makePreparedStatements(s *Session) PreparedStatements {
 	return PreparedStatements{
@@ -73,7 +90,7 @@ func makePreparedStatements(s *Session) PreparedStatements {
 }
 
 // Get returns the PreparedStatement with the provided name.
-func (ps PreparedStatements) Get(name string) (*PreparedStatement, bool) {
+func (ps *PreparedStatements) Get(name string) (*PreparedStatement, bool) {
 	stmt, ok := ps.stmts[name]
 	return stmt, ok
 }
@@ -143,9 +160,8 @@ func (ps PreparedStatements) New(
 	return pStmt, nil
 }
 
-// Delete removes the PreparedStatement with the provided name from the PreparedStatements.
-// The method returns whether a statement with that name was found and removed.
-func (ps PreparedStatements) Delete(ctx context.Context, name string) bool {
+// Delete is part of the preparedStatementsAccessor interface.
+func (ps *PreparedStatements) Delete(ctx context.Context, name string) bool {
 	if stmt, ok := ps.Get(name); ok {
 		if ps.session.PreparedPortals.portals != nil {
 			for portalName := range stmt.portalNames {
@@ -180,10 +196,7 @@ func (s *Session) ClearStatementsAndPortals(ctx context.Context) {
 	s.PreparedPortals.portals = nil
 }
 
-// DeleteAll removes all PreparedStatements from the PreparedStatements. This will in turn
-// remove all PreparedPortals from the session's PreparedPortals.
-// This is used by the "delete" message in the pgwire protocol; after DeleteAll
-// statements and portals can be added again.
+// DeleteAll is part of the preparedStatementsAccessor interface.
 func (ps *PreparedStatements) DeleteAll(ctx context.Context) {
 	ps.closeAll(ctx, ps.session)
 	ps.stmts = make(map[string]*PreparedStatement)
@@ -214,7 +227,7 @@ func makePreparedPortals(s *Session) PreparedPortals {
 	}
 }
 
-// Get returns the PreparedPortal with the provided name.
+// Get is part of the preparedStatementsAccessor interface.
 func (pp PreparedPortals) Get(name string) (*PreparedPortal, bool) {
 	portal, ok := pp.portals[name]
 	return portal, ok
