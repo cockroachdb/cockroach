@@ -564,8 +564,7 @@ func (sc *SchemaChanger) backfillIndexes(
 		if details.ReadAsOf == (hlc.Timestamp{}) {
 			details.ReadAsOf = txn.OrigTimestamp()
 			if err := sc.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-				log.Warningf(ctx, "failed to store readAsOf on job %v after completing state machine: %v",
-					sc.job.ID(), err)
+				return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
 			}
 		}
 		sc.readAsOf = details.ReadAsOf

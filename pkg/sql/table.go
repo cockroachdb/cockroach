@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -650,7 +651,14 @@ func (p *planner) createSchemaChangeJob(
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
-		return sqlbase.InvalidMutationID, nil
+		if pgErr, ok := pgerror.GetPGCause(err); ok {
+			// Ignore error if system.jobs table does not exist. This will be
+			// the case if the migration that added the table has not completed.
+			if pgErr.Code == pgerror.CodeUndefinedTableError {
+				err = nil
+			}
+		}
+		return sqlbase.InvalidMutationID, err
 	}
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 		MutationID: mutationID, JobID: *job.ID()})
