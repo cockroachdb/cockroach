@@ -23,7 +23,6 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
-	"text/tabwriter"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -685,21 +684,6 @@ func getNextRowStrings(rows *sqlRows, showMoreChars bool) ([]string, error) {
 		rowStrings[i] = formatVal(v, showMoreChars, showMoreChars)
 	}
 	return rowStrings, nil
-}
-
-// expandTabsAndNewLines ensures that multi-line row strings that may
-// contain tabs are properly formatted: tabs are expanded to spaces,
-// and newline characters are marked visually. Marking newline
-// characters is especially important in single-column results where
-// the underlying TableWriter would not otherwise show the difference
-// between one multi-line row and two one-line rows.
-func expandTabsAndNewLines(s string) string {
-	var buf bytes.Buffer
-	// 4-wide columns, 1 character minimum width.
-	w := tabwriter.NewWriter(&buf, 4, 0, 1, ' ', 0)
-	fmt.Fprint(w, strings.Replace(s, "\n", "␤\n", -1))
-	_ = w.Flush()
-	return buf.String()
 }
 
 func isNotPrintableASCII(r rune) bool { return r < 0x20 || r > 0x7e || r == '"' || r == '\\' }
