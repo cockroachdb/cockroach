@@ -318,9 +318,9 @@ func (p *joinPredicate) eval(
 		p.curRow = result
 		copy(p.curRow[:len(leftRow)], leftRow)
 		copy(p.curRow[len(leftRow):], rightRow)
-		ctx.IVarHelper = &p.iVarHelper
+		ctx.PushIVarHelper(&p.iVarHelper)
 		pred, err := sqlbase.RunFilter(p.onCond, ctx)
-		ctx.IVarHelper = nil
+		ctx.PopIVarHelper()
 		return pred, err
 	}
 	return true, nil
