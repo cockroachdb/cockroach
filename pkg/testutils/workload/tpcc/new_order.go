@@ -13,10 +13,10 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package tpcc
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -25,6 +25,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -44,7 +45,6 @@ type orderItem struct {
 	olIID        int    // item id
 	iName        string // item name
 	olQuantity   int    // order quantity
-	sQuantity    int    // stock quantity
 	brandGeneric string
 	iPrice       float64 // item price
 	olAmount     float64 // order amount
@@ -77,12 +77,14 @@ type newOrder struct{}
 
 var _ tpccTx = newOrder{}
 
-func (n newOrder) run(db *sql.DB, wID int) (interface{}, error) {
+func (n newOrder) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
 	d := newOrderData{
 		wID:    wID,
-		dID:    randInt(1, 10),
-		cID:    randCustomerID(),
-		oOlCnt: randInt(5, 15),
+		dID:    randInt(rng, 1, 10),
+		cID:    randCustomerID(rng),
+		oOlCnt: randInt(rng, 5, 15),
 	}
 	d.items = make([]orderItem, d.oOlCnt)
 
@@ -103,26 +105,26 @@ func (n newOrder) run(db *sql.DB, wID int) (interface{}, error) {
 		if rollback && i == d.oOlCnt-1 {
 			item.olIID = -1
 		} else {
-			item.olIID = randItemID()
+			item.olIID = randItemID(rng)
 		}
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
 		item.remoteWarehouse = rand.Intn(100) == 0
 		if item.remoteWarehouse {
 			allLocal = 0
-			item.olSupplyWID = rand.Intn(*warehouses)
+			item.olSupplyWID = rand.Intn(config.warehouses)
 		} else {
 			item.olSupplyWID = wID
 		}
 		d.items[i] = item
 	}
 
-	d.oEntryD = time.Now()
+	d.oEntryD = timeutil.Now()
 
 	err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&sql.TxOptions{Isolation: sql.LevelSerializable},
-		func(tx *sql.Tx) error {
+		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		func(tx *gosql.Tx) error {
 			// Select the warehouse tax rate.
 			if err := tx.QueryRow(
 				`SELECT w_tax FROM warehouse WHERE w_id = $1`,
@@ -163,7 +165,7 @@ func (n newOrder) run(db *sql.DB, wID int) (interface{}, error) {
 				return err
 			}
 			if _, err := tx.Exec(`
-				INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
+				INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
 				VALUES ($1, $2, $3)`,
 				d.oID, d.dID, d.wID); err != nil {
 				return err

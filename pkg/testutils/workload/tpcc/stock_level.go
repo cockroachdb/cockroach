@@ -13,15 +13,16 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package tpcc
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"math/rand"
 
 	"context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // 2.8 The Stock-Level Transaction
@@ -49,19 +50,21 @@ type stockLevel struct{}
 
 var _ tpccTx = stockLevel{}
 
-func (s stockLevel) run(db *sql.DB, wID int) (interface{}, error) {
+func (s stockLevel) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
 	// within [10..20].
 	d := stockLevelData{
-		threshold: randInt(10, 20),
+		threshold: randInt(rng, 10, 20),
 		dID:       rand.Intn(9) + 1,
 	}
 
 	if err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&sql.TxOptions{Isolation: sql.LevelSerializable},
-		func(tx *sql.Tx) error {
+		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		func(tx *gosql.Tx) error {
 			var dNextOID int
 			if err := tx.QueryRow(`
 				SELECT d_next_o_id
@@ -74,7 +77,7 @@ func (s stockLevel) run(db *sql.DB, wID int) (interface{}, error) {
 
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
-			if err := tx.QueryRow(`
+			return tx.QueryRow(`
 				SELECT COUNT(DISTINCT(s_i_id))
 				FROM order_line
 				JOIN stock
@@ -85,10 +88,7 @@ func (s stockLevel) run(db *sql.DB, wID int) (interface{}, error) {
 				  AND s_w_id = $1
 				  AND s_quantity < $4`,
 				wID, d.dID, dNextOID, d.threshold,
-			).Scan(&d.lowStock); err != nil {
-				return err
-			}
-			return nil
+			).Scan(&d.lowStock)
 		}); err != nil {
 		return nil, err
 	}
