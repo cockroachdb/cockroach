@@ -1243,7 +1243,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
-	FetchVal: {
+	JSONFetchVal: {
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.String,
@@ -1276,7 +1276,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
-	FetchValPath: {
+	JSONFetchValPath: {
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.TArray{Typ: types.String},
@@ -1287,7 +1287,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
-	FetchText: {
+	JSONFetchText: {
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.String,
@@ -1334,7 +1334,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 		},
 	},
 
-	FetchTextPath: {
+	JSONFetchTextPath: {
 		BinOp{
 			LeftType:   types.JSON,
 			RightType:  types.TArray{Typ: types.String},
@@ -1660,7 +1660,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		},
 	},
 
-	Existence: {
+	JSONExists: {
 		CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.String,
@@ -1677,7 +1677,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		},
 	},
 
-	SomeExistence: {
+	JSONSomeExists: {
 		CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
@@ -1697,7 +1697,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 		},
 	},
 
-	AllExistence: {
+	JSONAllExists: {
 		CmpOp{
 			LeftType:  types.JSON,
 			RightType: types.TArray{Typ: types.String},
