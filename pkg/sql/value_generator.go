@@ -17,8 +17,6 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -49,27 +47,35 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 		return nil, err
 	}
 
+	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
 	normalized, err := p.analyzeExpr(
 		ctx, t, multiSourceInfo{}, tree.IndexedVarHelper{}, types.Any, false, "FROM",
 	)
 	if err != nil {
 		return nil, err
 	}
+	isConst := (len(p.curPlan.subqueryPlans) == lastKnownSubqueryIndex)
 
-	tType, ok := normalized.ResolvedType().(types.TTable)
-	if !ok {
-		return nil, errors.Errorf("FROM expression is not a generator: %s", t)
+	if tType, ok := normalized.ResolvedType().(types.TTable); ok {
+		// Set-generating functions: generate_series() etc.
+		columns := make(sqlbase.ResultColumns, len(tType.Cols))
+		for i := range columns {
+			columns[i].Name = tType.Labels[i]
+			columns[i].Typ = tType.Cols[i]
+		}
+
+		return &valueGenerator{
+			expr:    normalized,
+			columns: columns,
+		}, nil
 	}
 
-	columns := make(sqlbase.ResultColumns, len(tType.Cols))
-	for i := range columns {
-		columns[i].Name = tType.Labels[i]
-		columns[i].Typ = tType.Cols[i]
-	}
-
-	return &valueGenerator{
-		expr:    normalized,
-		columns: columns,
+	// Scalar functions: cos, etc.
+	return &valuesNode{
+		columns:          sqlbase.ResultColumns{{Name: t.Func.String(), Typ: normalized.ResolvedType()}},
+		tuples:           [][]tree.TypedExpr{{normalized}},
+		isConst:          isConst,
+		specifiedInQuery: true,
 	}, nil
 }
 
