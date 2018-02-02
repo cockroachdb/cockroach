@@ -47,7 +47,7 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{SchemaName: "system", TableName: "users"})
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), userTableName)
 	if err != nil {
 		return nil, err
 	}
@@ -117,13 +117,10 @@ func (n *DropUserNode) startExec(params runParams) error {
 		func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
 			for _, u := range table.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
-					tn := tree.TableName{
-						SchemaName: tree.Name(db.Name),
-						TableName:  tree.Name(table.Name),
-					}
 					if f.Len() > 0 {
 						f.WriteString(", ")
 					}
+					tn := tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name))
 					f.FormatNode(&tn)
 				}
 			}

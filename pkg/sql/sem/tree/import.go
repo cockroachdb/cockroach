@@ -16,7 +16,7 @@ package tree
 
 // Import represents a IMPORT statement.
 type Import struct {
-	Table      UnresolvedName
+	Table      NormalizableTableName
 	CreateFile Expr
 	CreateDefs TableDefs
 	FileFormat string

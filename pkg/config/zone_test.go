@@ -280,7 +280,7 @@ func TestZoneSpecifiers(t *testing.T) {
 		{"db.tbl.prt", 51, ""},
 		{`db.tbl@idx`, 51, ""},
 		{`db.tbl.prt@idx`, -1, "index and partition cannot be specified simultaneously"},
-		{"db.tbl.too.many.dots", 0, "invalid table name"},
+		{"db.tbl.too.many.dots", 0, `malformed name: "db.tbl.too.many.dots"`},
 		{`db.tbl@primary`, 51, ""},
 		{"tbl", -1, `"tbl" not found`},
 		{"table", -1, `malformed name: "table"`}, // SQL keyword; requires quotes

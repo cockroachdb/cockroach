@@ -465,3 +465,7 @@ CREATE TABLE test.t1 (a DECIMAL DEFAULT (DECIMAL 'blah'));
 
 statement error could not parse "blah" as type decimal
 create table test.t1 (c decimal default if(false, 1, 'blah'::decimal));
+
+# Until #21456 move forwards
+query error invalid table name: "a.b.c"
+select a.b.c.d from a.b.c

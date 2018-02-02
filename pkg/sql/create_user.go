@@ -35,6 +35,8 @@ type CreateUserNode struct {
 	run createUserRun
 }
 
+var userTableName = tree.NewTableName("system", "users")
+
 // CreateUser creates a user.
 // Privileges: INSERT on system.users.
 //   notes: postgres allows the creation of users with an empty password. We do
@@ -47,7 +49,7 @@ func (p *planner) CreateUser(ctx context.Context, n *tree.CreateUser) (planNode,
 func (p *planner) CreateUserNode(
 	ctx context.Context, nameE, passwordE tree.Expr, ifNotExists bool, isRole bool, opName string,
 ) (*CreateUserNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), &tree.TableName{SchemaName: "system", TableName: "users"})
+	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), userTableName)
 	if err != nil {
 		return nil, err
 	}
