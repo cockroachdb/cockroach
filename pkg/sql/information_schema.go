@@ -38,6 +38,7 @@ var informationSchema = virtualSchema{
 	tables: []virtualSchemaTable{
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
+		informationSchemaConstraintColumnUsageTable,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaReferentialConstraintsTable,
 		informationSchemaSchemataTable,
@@ -228,6 +229,59 @@ func numericScale(colType sqlbase.ColumnType) tree.Datum {
 func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
 	// We currently do not support a datetime precision.
 	return tree.DNull
+}
+
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-constraint-column-usage.html
+// MySQL:    missing
+var informationSchemaConstraintColumnUsageTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.constraint_column_usage (
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	COLUMN_NAME STRING NOT NULL,
+	CONSTRAINT_CATALOG STRING NOT NULL,
+	CONSTRAINT_SCHEMA STRING NOT NULL,
+	CONSTRAINT_NAME STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
+			db *sqlbase.DatabaseDescriptor,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			if err != nil {
+				return err
+			}
+
+			for conName, con := range conInfo {
+				conTable := table
+				conCols := con.Columns
+				if con.Kind == sqlbase.ConstraintTypeFK {
+					// For foreign key constraint, constraint_column_usage
+					// identifies the table/columns that the foreign key
+					// references.
+					conTable = con.ReferencedTable
+					conCols = con.ReferencedIndex.ColumnNames
+				}
+				for _, col := range conCols {
+					if err := addRow(
+						defString,                      // table_catalog
+						tree.NewDString(db.Name),       // table_schema
+						tree.NewDString(conTable.Name), // table_name
+						tree.NewDString(col),           // column_name
+						defString,                      // constraint_catalog
+						tree.NewDString(db.Name),       // constraint_schema
+						tree.NewDString(conName),       // constraint_name
+					); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+	},
 }
 
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-key-column-usage.html
