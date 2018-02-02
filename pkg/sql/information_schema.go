@@ -361,14 +361,14 @@ CREATE TABLE information_schema.key_column_usage (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 			if err != nil {
 				return err
 			}
 
-			for name, c := range info {
+			for conName, con := range conInfo {
 				// Only Primary Key, Foreign Key, and Unique constraints are included.
-				switch c.Kind {
+				switch con.Kind {
 				case sqlbase.ConstraintTypePK:
 				case sqlbase.ConstraintTypeFK:
 				case sqlbase.ConstraintTypeUnique:
@@ -376,20 +376,20 @@ CREATE TABLE information_schema.key_column_usage (
 					continue
 				}
 
-				for pos, column := range c.Columns {
+				for pos, col := range con.Columns {
 					ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
 					uniquePos := tree.DNull
-					if c.Kind == sqlbase.ConstraintTypeFK {
+					if con.Kind == sqlbase.ConstraintTypeFK {
 						uniquePos = ordinalPos
 					}
 					if err := addRow(
 						defString,                   // constraint_catalog
 						tree.NewDString(db.Name),    // constraint_schema
-						tree.NewDString(name),       // constraint_name
+						tree.NewDString(conName),    // constraint_name
 						defString,                   // table_catalog
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
-						tree.NewDString(column),     // column_name
+						tree.NewDString(col),        // column_name
 						ordinalPos,                  // ordinal_position, 1-indexed
 						uniquePos,                   // position_in_unique_constraint
 					); err != nil {
@@ -737,22 +737,22 @@ CREATE TABLE information_schema.table_constraints (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 			if err != nil {
 				return err
 			}
 
-			for name, c := range info {
+			for conName, con := range conInfo {
 				if err := addRow(
-					defString,                       // constraint_catalog
-					tree.NewDString(db.Name),        // constraint_schema
-					tree.NewDString(name),           // constraint_name
-					defString,                       // table_catalog
-					tree.NewDString(db.Name),        // table_schema
-					tree.NewDString(table.Name),     // table_name
-					tree.NewDString(string(c.Kind)), // constraint_type
-					yesOrNoDatum(false),             // is_deferrable
-					yesOrNoDatum(false),             // initially_deferred
+					defString,                         // constraint_catalog
+					tree.NewDString(db.Name),          // constraint_schema
+					tree.NewDString(conName),          // constraint_name
+					defString,                         // table_catalog
+					tree.NewDString(db.Name),          // table_schema
+					tree.NewDString(table.Name),       // table_name
+					tree.NewDString(string(con.Kind)), // constraint_type
+					yesOrNoDatum(false),               // is_deferrable
+					yesOrNoDatum(false),               // initially_deferred
 				); err != nil {
 					return err
 				}
