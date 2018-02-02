@@ -13,16 +13,17 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package tpcc
 
 import (
 	"context"
-	"database/sql"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -77,12 +78,14 @@ type payment struct{}
 
 var _ tpccTx = payment{}
 
-func (p payment) run(db *sql.DB, wID int) (interface{}, error) {
+func (p payment) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
 	d := paymentData{
 		dID: rand.Intn(10) + 1,
 		// hAmount is randomly selected within [1.00..5000.00]
-		hAmount: float64(randInt(100, 500000)) / float64(100.0),
-		hDate:   time.Now(),
+		hAmount: float64(randInt(rng, 100, 500000)) / float64(100.0),
+		hDate:   timeutil.Now(),
 	}
 
 	// 2.5.1.2: 85% chance of paying through home warehouse, otherwise
@@ -91,10 +94,10 @@ func (p payment) run(db *sql.DB, wID int) (interface{}, error) {
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
-		d.cWID = rand.Intn(*warehouses)
+		d.cWID = rand.Intn(config.warehouses)
 		// Find a cWID != w_id if there's more than 1 configured warehouse.
-		for d.cWID == wID && *warehouses > 1 {
-			d.cWID = rand.Intn(*warehouses)
+		for d.cWID == wID && config.warehouses > 1 {
+			d.cWID = rand.Intn(config.warehouses)
 		}
 		d.cDID = rand.Intn(10) + 1
 	}
@@ -102,16 +105,16 @@ func (p payment) run(db *sql.DB, wID int) (interface{}, error) {
 	// 2.5.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
 	if rand.Intn(9) < 6 {
-		d.cLast = randCLast()
+		d.cLast = randCLast(rng)
 	} else {
-		d.cID = randCustomerID()
+		d.cID = randCustomerID(rng)
 	}
 
 	if err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&sql.TxOptions{Isolation: sql.LevelSerializable},
-		func(tx *sql.Tx) error {
+		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		func(tx *gosql.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
 			if err := tx.QueryRow(`
@@ -194,14 +197,12 @@ func (p payment) run(db *sql.DB, wID int) (interface{}, error) {
 			hData := fmt.Sprintf("%s    %s", wName, dName)
 
 			// Insert history line.
-			if _, err := tx.Exec(`
-				INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_data)
-				VALUES ($1, $2, $3, $4, $5, $6)`,
-				d.cID, d.cDID, d.cWID, d.dID, wID, hData,
-			); err != nil {
-				return err
-			}
-			return nil
+			_, err := tx.Exec(`
+				INSERT INTO history (h_c_id, h_c_d_id, h_c_w_id, h_d_id, h_w_id, h_amount, h_date, h_data)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				d.cID, d.cDID, d.cWID, d.dID, wID, d.hAmount, d.hDate, hData,
+			)
+			return err
 		}); err != nil {
 		return nil, err
 	}

@@ -13,16 +13,16 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package tpcc
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"math/rand"
-	"time"
 
 	"context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // 2.7 The Delivery Transaction
@@ -44,15 +44,15 @@ type delivery struct{}
 
 var _ tpccTx = newOrder{}
 
-func (del delivery) run(db *sql.DB, wID int) (interface{}, error) {
+func (del delivery) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
 	oCarrierID := rand.Intn(10) + 1
-	olDeliveryD := time.Now()
+	olDeliveryD := timeutil.Now()
 
-	if err := crdb.ExecuteTx(
+	err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&sql.TxOptions{Isolation: sql.LevelSerializable},
-		func(tx *sql.Tx) error {
+		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		func(tx *gosql.Tx) error {
 			getNewOrder, err := tx.Prepare(`
 			SELECT no_o_id
 			FROM new_order
@@ -103,7 +103,7 @@ func (del delivery) run(db *sql.DB, wID int) (interface{}, error) {
 				var oID int
 				if err := getNewOrder.QueryRow(wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
-					if err != sql.ErrNoRows {
+					if err != gosql.ErrNoRows {
 						return err
 					}
 					continue
@@ -127,8 +127,7 @@ func (del delivery) run(db *sql.DB, wID int) (interface{}, error) {
 				}
 			}
 			return nil
-		}); err != nil {
-		return nil, err
-	}
-	return nil, nil
+		},
+	)
+	return nil, err
 }

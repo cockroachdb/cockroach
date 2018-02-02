@@ -13,10 +13,10 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package main
+package tpcc
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"math/rand"
 	"time"
 
@@ -25,6 +25,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // From the TPCC spec, section 2.6:
@@ -45,7 +46,7 @@ type orderStatusData struct {
 	cBalance   float64
 	oID        int
 	oEntryD    time.Time
-	oCarrierID sql.NullInt64
+	oCarrierID gosql.NullInt64
 
 	items []orderItem
 }
@@ -61,7 +62,9 @@ type orderStatus struct{}
 
 var _ tpccTx = orderStatus{}
 
-func (o orderStatus) run(db *sql.DB, wID int) (interface{}, error) {
+func (o orderStatus) run(_ *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
 	d := orderStatusData{
 		dID: rand.Intn(9) + 1,
 	}
@@ -69,16 +72,16 @@ func (o orderStatus) run(db *sql.DB, wID int) (interface{}, error) {
 	// 2.6.1.2: The customer is randomly selected 60% of the time by last name
 	// and 40% by number.
 	if rand.Intn(9) < 6 {
-		d.cLast = randCLast()
+		d.cLast = randCLast(rng)
 	} else {
-		d.cID = randCustomerID()
+		d.cID = randCustomerID(rng)
 	}
 
 	if err := crdb.ExecuteTx(
 		context.Background(),
 		db,
-		&sql.TxOptions{Isolation: sql.LevelSerializable},
-		func(tx *sql.Tx) error {
+		&gosql.TxOptions{Isolation: gosql.LevelSerializable},
+		func(tx *gosql.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
 
 			// Select the customer
