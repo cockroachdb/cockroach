@@ -145,6 +145,7 @@ func testDecommissionInner(
 		InitialBackoff: time.Second,
 		MaxBackoff:     5 * time.Second,
 		Multiplier:     1,
+		MaxRetries:     20,
 	}
 	for r := retry.Start(retryOpts); r.Next(); {
 		o, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none", "--format", "csv")
