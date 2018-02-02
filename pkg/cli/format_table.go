@@ -230,15 +230,23 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 		for i, c := range cols {
 			p.buf.Reset()
 			fmt.Fprint(p.w, c)
-			p.w.Flush()
+			_ = p.w.Flush()
 			expandedCols[i] = p.buf.String()
 		}
 
 		// Initialize tablewriter and set column names as the header row.
 		p.table = tablewriter.NewWriter(w)
 		p.table.SetAutoFormatHeaders(false)
-		p.table.SetAutoWrapText(false)
+		p.table.SetAutoWrapText(true)
+		p.table.SetReflowDuringAutoWrap(false)
 		p.table.SetHeader(expandedCols)
+		// This width is sufficient to show a "standard text line width"
+		// on the screen when viewed as a single column on a 80-wide terminal.
+		//
+		// It's also wide enough for the output of SHOW CREATE TABLE on
+		// moderately long column definitions (e.g. including FK
+		// constraints).
+		p.table.SetColWidth(72)
 	}
 	return nil
 }
@@ -255,14 +263,8 @@ func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
 
 	for i, r := range row {
 		p.buf.Reset()
-		// Marking newline characters is especially important in
-		// single-column results where the underlying TableWriter would
-		// not otherwise show the difference between one multi-line row
-		// and two one-line rows.
-		// This is not necessary for the column headers (above)
-		// because there is at most one "row" of column headers.
-		fmt.Fprint(p.w, strings.Replace(r, "\n", "␤\n", -1))
-		p.w.Flush()
+		fmt.Fprint(p.w, r)
+		_ = p.w.Flush()
 		row[i] = p.buf.String()
 	}
 	p.table.Append(row)
