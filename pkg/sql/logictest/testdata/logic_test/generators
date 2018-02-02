@@ -300,3 +300,16 @@ SELECT 'a', crdb_internal.unary_table() b, 'c' LIMIT 1
 ----
 'a'  b   'c'
 a    ()  c
+
+# Regular scalar functions can be used as functions too. #22312
+query T colnames
+SELECT * FROM upper('abc')
+----
+upper
+ABC
+
+query TI colnames
+SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
+----
+b    ordinality
+test 1
