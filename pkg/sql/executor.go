@@ -317,12 +317,6 @@ type ExecutorTestingKnobs struct {
 	// statement has been executed.
 	StatementFilter StatementFilter
 
-	// BeforePrepare is called by the Executor before preparing any statement. It
-	// gives access to the planner that will be used to do the prepare. If any of
-	// the return values are not nil, the values are used as the prepare results
-	// and normal preparation is short-circuited.
-	BeforePrepare func(ctx context.Context, stmt string, planner *planner) (*PreparedStatement, error)
-
 	// BeforeExecute is called by the Executor before plan execution. It is useful
 	// for synchronizing statement execution, such as with parallel statemets.
 	BeforeExecute func(ctx context.Context, stmt string, isParallel bool)
@@ -527,13 +521,6 @@ func (e *Executor) Prepare(
 		// known to the cache.
 		planner.avoidCachedDescriptors = true
 		txn.SetFixedTimestamp(session.Ctx(), *protoTS)
-	}
-
-	if filter := e.cfg.TestingKnobs.BeforePrepare; filter != nil {
-		res, err := filter(session.Ctx(), stmtStr, planner)
-		if res != nil || err != nil {
-			return res, err
-		}
 	}
 
 	if err := planner.prepare(session.Ctx(), stmt.AST); err != nil {
