@@ -15,12 +15,14 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"html"
 	"io"
 	"reflect"
 	"strings"
+	"text/tabwriter"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -208,18 +210,35 @@ func render(
 }
 
 type prettyReporter struct {
-	cols  []string
 	table *tablewriter.Table
+	buf   bytes.Buffer
+	w     *tabwriter.Writer
+}
+
+func newPrettyReporter() *prettyReporter {
+	n := &prettyReporter{}
+	// 4-wide columns, 1 character minimum width.
+	n.w = tabwriter.NewWriter(&n.buf, 4, 0, 1, ' ', 0)
+	return n
 }
 
 func (p *prettyReporter) describe(w io.Writer, cols []string) error {
-	p.cols = cols
 	if len(cols) > 0 {
+		// Ensure that tabs are converted to spaces and newlines are
+		// doubled so they can be recognized in the output.
+		expandedCols := make([]string, len(cols))
+		for i, c := range cols {
+			p.buf.Reset()
+			fmt.Fprint(p.w, c)
+			p.w.Flush()
+			expandedCols[i] = p.buf.String()
+		}
+
 		// Initialize tablewriter and set column names as the header row.
 		p.table = tablewriter.NewWriter(w)
 		p.table.SetAutoFormatHeaders(false)
 		p.table.SetAutoWrapText(false)
-		p.table.SetHeader(p.cols)
+		p.table.SetHeader(expandedCols)
 	}
 	return nil
 }
@@ -235,7 +254,16 @@ func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
 	}
 
 	for i, r := range row {
-		row[i] = expandTabsAndNewLines(r)
+		p.buf.Reset()
+		// Marking newline characters is especially important in
+		// single-column results where the underlying TableWriter would
+		// not otherwise show the difference between one multi-line row
+		// and two one-line rows.
+		// This is not necessary for the column headers (above)
+		// because there is at most one "row" of column headers.
+		fmt.Fprint(p.w, strings.Replace(r, "\n", "␤\n", -1))
+		p.w.Flush()
+		row[i] = p.buf.String()
 	}
 	p.table.Append(row)
 	return nil
@@ -470,7 +498,7 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 func makeReporter() (rowReporter, error) {
 	switch cliCtx.tableDisplayFormat {
 	case tableDisplayPretty:
-		return &prettyReporter{}, nil
+		return newPrettyReporter(), nil
 
 	case tableDisplayTSV:
 		fallthrough
