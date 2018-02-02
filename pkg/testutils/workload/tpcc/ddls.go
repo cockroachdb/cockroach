@@ -63,7 +63,8 @@ const (
 		c_payment_cnt  integer,
 		c_delivery_cnt integer,
 		c_data         varchar(500),
-		primary key (c_w_id, c_d_id, c_id)
+		primary key (c_w_id, c_d_id, c_id),
+		index customer_idx (c_w_id, c_d_id, c_last, c_first)
 	)`
 	tpccCustomerSchemaInterleave = ` interleave in parent district (c_w_id, c_d_id)`
 	// No PK necessary for this table.
@@ -75,7 +76,9 @@ const (
 		h_w_id   integer,
 		h_date   timestamp,
 		h_amount decimal(6,2),
-		h_data   varchar(24)
+		h_data   varchar(24),
+		index (h_w_id, h_d_id),
+		index (h_c_w_id, h_c_d_id, h_c_id)
 	)`
 	tpccOrderSchema = `(
 		o_id         integer      not null,
@@ -86,7 +89,9 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key (o_w_id, o_d_id, o_id DESC)
+		primary key (o_w_id, o_d_id, o_id DESC),
+		unique index order_idx (o_w_id, o_d_id, o_carrier_id, o_id),
+		index (o_w_id, o_d_id, o_c_id)
 	)`
 	tpccOrderSchemaInterleave = ` interleave in parent district (o_w_id, o_d_id)`
 	tpccNewOrderSchema        = `(
@@ -122,7 +127,8 @@ const (
 		s_order_cnt  integer,
 		s_remote_cnt integer,
 		s_data       varchar(50),
-		primary key (s_w_id, s_i_id)
+		primary key (s_w_id, s_i_id),
+		index (s_i_id)
 	)`
 	tpccStockSchemaInterleave = ` interleave in parent warehouse (s_w_id)`
 	tpccOrderLineSchema       = `(
@@ -136,7 +142,8 @@ const (
 		ol_quantity     integer,
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
-		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)
+		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
+		index order_line_fk (ol_supply_w_id, ol_d_id)
 	)`
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
