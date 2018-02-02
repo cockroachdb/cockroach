@@ -480,7 +480,7 @@ func (e *Executor) Prepare(
 	}
 
 	prepared.Statement = stmt.AST
-	prepared.AnonymizedStr = session.appStats.getStrForStmt(stmt)
+	prepared.AnonymizedStr = anonymizeStmt(stmt)
 
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
