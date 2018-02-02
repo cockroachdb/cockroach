@@ -72,6 +72,7 @@ typedef struct {
   int max_open_files;
   bool use_switching_env;
   bool must_exist;
+  bool read_only;
   DBSlice extra_options;
 } DBOptions;
 
