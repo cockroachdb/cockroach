@@ -187,7 +187,6 @@ func (t *parallelTest) setup(spec *parTestSpec) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				SQLExecutor: &sql.ExecutorTestingKnobs{
-					WaitForGossipUpdate:   true,
 					CheckStmtStringChange: true,
 				},
 			},
