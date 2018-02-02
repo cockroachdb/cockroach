@@ -103,7 +103,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	if n.value == nil {
 		if _, err := ie.ExecuteStatementInTransaction(
 			params.ctx, "reset-setting", params.p.txn,
-			"DELETE FROM system.settings WHERE name = $1", n.name,
+			"DELETE FROM system.public.settings WHERE name = $1", n.name,
 		); err != nil {
 			return err
 		}
@@ -116,7 +116,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		}
 		if _, err := ie.ExecuteStatementInTransaction(
 			params.ctx, "update-setting", params.p.txn,
-			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`,
+			`UPSERT INTO system.public.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`,
 			n.name, encoded, n.setting.Typ(),
 		); err != nil {
 			return err
@@ -167,7 +167,7 @@ func (p *planner) toSettingString(
 	case *settings.StateMachineSetting:
 		if s, ok := d.(*tree.DString); ok {
 			datums, err := ie.QueryRowInTransaction(
-				ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
+				ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.public.settings WHERE name = $1", name,
 			)
 			if err != nil {
 				return "", err

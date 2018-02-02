@@ -150,7 +150,7 @@ func TestGetZoneConfig(t *testing.T) {
 			t.Fatal(err)
 		}
 		objID := keys.RootNamespaceID
-		if _, err = sqlDB.Exec(`UPDATE system.zones SET config = $2 WHERE id = $1`, objID, buf); err != nil {
+		if _, err = sqlDB.Exec(`UPDATE system.public.zones SET config = $2 WHERE id = $1`, objID, buf); err != nil {
 			t.Fatalf("problem writing zone %+v: %s", defaultZoneConfig, err)
 		}
 	}
@@ -173,30 +173,30 @@ func TestGetZoneConfig(t *testing.T) {
 
 	expectedCounter++
 	tb11 := expectedCounter
-	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE db1.public.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
 	expectedCounter++
 	tb12 := expectedCounter
-	if _, err := sqlDB.Exec(`CREATE TABLE db1.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE db1.public.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
 	expectedCounter++
 	tb21 := expectedCounter
-	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE db2.public.tb1 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
 	expectedCounter++
-	if _, err := sqlDB.Exec(`CREATE TABLE db2.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE TABLE db2.public.tb2 (k INT PRIMARY KEY, v INT)`); err != nil {
 		t.Fatal(err)
 	}
 
 	expectedCounter++
 	tb22 := expectedCounter
-	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.tb2`); err != nil {
+	if _, err := sqlDB.Exec(`TRUNCATE TABLE db2.public.tb2`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +278,7 @@ func TestGetZoneConfig(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, objID, buf); err != nil {
+		if _, err = sqlDB.Exec(`INSERT INTO system.public.zones VALUES ($1, $2)`, objID, buf); err != nil {
 			t.Fatalf("problem writing zone %+v: %s", objZone, err)
 		}
 	}

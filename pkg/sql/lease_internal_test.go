@@ -146,7 +146,7 @@ func TestPurgeOldVersions(t *testing.T) {
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -239,20 +239,20 @@ func TestNameCacheIsUpdated(t *testing.T) {
 	if _, err := db.Exec(`
 CREATE DATABASE t;
 CREATE DATABASE t1;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	// Populate the name cache.
-	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
+	if _, err := db.Exec("SELECT * FROM t.public.test;"); err != nil {
 		t.Fatal(err)
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Rename.
-	if _, err := db.Exec("ALTER TABLE t.test RENAME TO t.test2;"); err != nil {
+	if _, err := db.Exec("ALTER TABLE t.public.test RENAME TO t.public.test2;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -273,7 +273,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Rename to a different database.
-	if _, err := db.Exec("ALTER TABLE t.test2 RENAME TO t1.test2;"); err != nil {
+	if _, err := db.Exec("ALTER TABLE t.public.test2 RENAME TO t1.public.test2;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -311,13 +311,13 @@ func TestNameCacheEntryDoesntReturnExpiredLease(t *testing.T) {
 
 	if _, err := db.Exec(fmt.Sprintf(`
 CREATE DATABASE t;
-CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.%s (k CHAR PRIMARY KEY, v CHAR);
 `, tableName)); err != nil {
 		t.Fatal(err)
 	}
 
 	// Populate the name cache.
-	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
+	if _, err := db.Exec("SELECT * FROM t.public.test;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -350,13 +350,13 @@ func TestTableNameCaseSensitive(t *testing.T) {
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	// Populate the name cache.
-	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
+	if _, err := db.Exec("SELECT * FROM t.public.test;"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -390,7 +390,7 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -489,7 +489,7 @@ func TestAcquireFreshestFromStoreRaces(t *testing.T) {
 
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +541,7 @@ func TestParallelLeaseAcquireWithImmediateRelease(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}

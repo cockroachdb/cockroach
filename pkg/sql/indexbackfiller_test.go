@@ -84,39 +84,39 @@ func TestIndexBackfiller(t *testing.T) {
 	// update the tech note as well.
 
 	execOrFail("CREATE DATABASE t")
-	execOrFail("CREATE TABLE t.kv (k int PRIMARY KEY, v char)")
-	execOrFail("INSERT INTO t.kv VALUES (1, 'a'), (3, 'c'), (4, 'e'), (6, 'f'), (7, 'g'), (9, 'h')")
+	execOrFail("CREATE TABLE t.public.kv (k int PRIMARY KEY, v char)")
+	execOrFail("INSERT INTO t.public.kv VALUES (1, 'a'), (3, 'c'), (4, 'e'), (6, 'f'), (7, 'g'), (9, 'h')")
 
 	// Start the schema change.
 	var finishedSchemaChange sync.WaitGroup
 	finishedSchemaChange.Add(1)
 	go func() {
-		execOrFail("CREATE UNIQUE INDEX vidx on t.kv(v)")
+		execOrFail("CREATE UNIQUE INDEX vidx on t.public.kv(v)")
 		finishedSchemaChange.Done()
 	}()
 
 	// Wait until the schema change has moved the cluster into DELETE_ONLY mode.
 	<-moveToTDelete
-	execOrFail("DELETE FROM t.kv WHERE k=9")
-	execOrFail("INSERT INTO t.kv VALUES (9, 'h')")
+	execOrFail("DELETE FROM t.public.kv WHERE k=9")
+	execOrFail("INSERT INTO t.public.kv VALUES (9, 'h')")
 
 	// Move to WRITE_ONLY mode.
 	moveToTWrite <- true
-	execOrFail("INSERT INTO t.kv VALUES (2, 'b')")
+	execOrFail("INSERT INTO t.public.kv VALUES (2, 'b')")
 
 	// Pick our scan timestamp.
 	moveToTScan <- true
-	execOrFail("UPDATE t.kv SET v = 'd' WHERE k = 3")
-	execOrFail("UPDATE t.kv SET k = 5 WHERE v = 'e'")
-	execOrFail("DELETE FROM t.kv WHERE k = 6")
+	execOrFail("UPDATE t.public.kv SET v = 'd' WHERE k = 3")
+	execOrFail("UPDATE t.public.kv SET k = 5 WHERE v = 'e'")
+	execOrFail("DELETE FROM t.public.kv WHERE k = 6")
 
 	// Begin the backfill.
 	moveToBackfill <- true
 
 	finishedSchemaChange.Wait()
 
-	pairsPrimary := queryPairs(t, sqlDB, "SELECT k, v FROM t.kv ORDER BY k ASC")
-	pairsIndex := queryPairs(t, sqlDB, "SELECT k, v FROM t.kv@vidx ORDER BY k ASC")
+	pairsPrimary := queryPairs(t, sqlDB, "SELECT k, v FROM t.public.kv ORDER BY k ASC")
+	pairsIndex := queryPairs(t, sqlDB, "SELECT k, v FROM t.public.kv@vidx ORDER BY k ASC")
 
 	if len(pairsPrimary) != len(pairsIndex) {
 		t.Fatalf("Mismatched entries in table and index: %+v %+v", pairsPrimary, pairsIndex)

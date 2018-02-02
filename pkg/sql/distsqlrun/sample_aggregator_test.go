@@ -150,7 +150,7 @@ func TestSampleAggregator(t *testing.T) {
 					 "distinctCount",
 					 "nullCount",
 					 histogram
-	  FROM system.table_statistics
+	  FROM system.public.table_statistics
   `)
 	defer rows.Close()
 

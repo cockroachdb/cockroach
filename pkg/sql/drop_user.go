@@ -160,7 +160,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			params.ctx,
 			"drop-user",
 			params.p.txn,
-			`DELETE FROM system.users WHERE username=$1 AND "isRole" = $2`,
+			`DELETE FROM system.public.users WHERE username=$1 AND "isRole" = $2`,
 			normalizedUsername,
 			n.isRole,
 		)
@@ -178,7 +178,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
-			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
+			`DELETE FROM system.public.role_members WHERE "role" = $1 OR "member" = $1`,
 			normalizedUsername,
 		)
 		if err != nil {

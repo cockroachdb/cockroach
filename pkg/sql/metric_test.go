@@ -56,21 +56,21 @@ func TestQueryCounts(t *testing.T) {
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
 		{query: "CREATE DATABASE mt", ddlCount: 1},
-		{query: "CREATE TABLE mt.n (num INTEGER)", ddlCount: 1},
-		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1},
-		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
-		{query: "DELETE FROM mt.n", deleteCount: 1},
-		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1},
-		{query: "EXPLAIN SELECT * FROM mt.n", miscCount: 1},
+		{query: "CREATE TABLE mt.public.n (num INTEGER)", ddlCount: 1},
+		{query: "INSERT INTO mt.public.n VALUES (3)", insertCount: 1},
+		{query: "UPDATE mt.public.n SET num = num + 1", updateCount: 1},
+		{query: "DELETE FROM mt.public.n", deleteCount: 1},
+		{query: "ALTER TABLE mt.public.n ADD COLUMN num2 INTEGER", ddlCount: 1},
+		{query: "EXPLAIN SELECT * FROM mt.public.n", miscCount: 1},
 		{
-			query:         "BEGIN; UPDATE mt.n SET num = num + 1; END",
+			query:         "BEGIN; UPDATE mt.public.n SET num = num + 1; END",
 			txnBeginCount: 1, updateCount: 1, txnCommitCount: 1,
 		},
-		{query: "SELECT * FROM mt.n; SELECT * FROM mt.n; SELECT * FROM mt.n", selectCount: 3},
+		{query: "SELECT * FROM mt.public.n; SELECT * FROM mt.public.n; SELECT * FROM mt.public.n", selectCount: 3},
 		{query: "SET DISTSQL = 'on'", miscCount: 1},
-		{query: "SELECT * FROM mt.n", selectCount: 1, distSQLSelectCount: 1},
+		{query: "SELECT * FROM mt.public.n", selectCount: 1, distSQLSelectCount: 1},
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
-		{query: "DROP TABLE mt.n", ddlCount: 1},
+		{query: "DROP TABLE mt.public.n", ddlCount: 1},
 		{query: "SET database = system", miscCount: 1},
 	}
 
@@ -134,7 +134,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec("CREATE TABLE db.t (k TEXT PRIMARY KEY, v TEXT)"); err != nil {
+	if _, err := sqlDB.Exec("CREATE TABLE db.public.t (k TEXT PRIMARY KEY, v TEXT)"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -163,7 +163,7 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
+	_, err = txn.Exec("INSERT INTO db.public.t VALUES ('key', 'marker')")
 	if !testutils.IsError(err, "aborted") {
 		t.Fatalf("expected aborted error, got: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := txn.Query("SELECT * FROM i_do.not_exist"); err == nil {
+	if _, err := txn.Query("SELECT * FROM i_do.public.not_exist"); err == nil {
 		t.Fatal("Expected an error but didn't get one")
 	}
 

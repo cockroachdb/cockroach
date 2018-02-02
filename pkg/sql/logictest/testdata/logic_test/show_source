@@ -82,7 +82,7 @@ system
 test
 
 query TTTT colnames
-SELECT * FROM [SHOW GRANTS ON system.descriptor]
+SELECT * FROM [SHOW GRANTS ON system.public.descriptor]
 ----
 Database  Table       User   Privileges
 system    descriptor  admin  GRANT
@@ -91,19 +91,19 @@ system    descriptor  root   GRANT
 system    descriptor  root   SELECT
 
 query TTBITTBB colnames
-SELECT * FROM [SHOW INDEX FROM system.descriptor]
+SELECT * FROM [SHOW INDEX FROM system.public.descriptor]
 ----
 Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
 descriptor  primary  true    1    id      ASC        false    false
 
 query TTTTT colnames
-SELECT * FROM [SHOW CONSTRAINT FROM system.descriptor]
+SELECT * FROM [SHOW CONSTRAINT FROM system.public.descriptor]
 ----
 Table       Name     Type         Column(s)  Details
 descriptor  primary  PRIMARY KEY  id         NULL
 
 query TTBITTBB colnames
-SELECT * FROM [SHOW KEYS FROM system.descriptor]
+SELECT * FROM [SHOW KEYS FROM system.public.descriptor]
 ----
 Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
 descriptor  primary  true    1    id      ASC        false    false
@@ -182,10 +182,10 @@ NoTxn
 
 
 query TT colnames
-SELECT * FROM [SHOW CREATE TABLE system.descriptor]
+SELECT * FROM [SHOW CREATE TABLE system.public.descriptor]
 ----
 Table              CreateTable
-system.descriptor  CREATE TABLE descriptor (
+system.public.descriptor  CREATE TABLE descriptor (
   id INT NOT NULL,
   descriptor BYTES NULL,
   CONSTRAINT "primary" PRIMARY KEY (id ASC),
@@ -195,10 +195,10 @@ system.descriptor  CREATE TABLE descriptor (
 
 
 query TT colnames
-CREATE VIEW v AS SELECT id FROM system.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
+CREATE VIEW v AS SELECT id FROM system.public.descriptor; SELECT * FROM [SHOW CREATE VIEW v]
 ----
 View  CreateView
-v     CREATE VIEW v (id) AS SELECT id FROM system.descriptor
+v     CREATE VIEW v (id) AS SELECT id FROM system.public.descriptor
 
 
 query T colnames
@@ -210,7 +210,7 @@ testuser
 
 
 query TTITI colnames
-SELECT * FROM [SHOW TESTING_RANGES FROM TABLE system.descriptor]
+SELECT * FROM [SHOW TESTING_RANGES FROM TABLE system.public.descriptor]
 ----
 Start Key  End Key  Range ID  Replicas  Lease Holder
 NULL       NULL     1         {1}       1

@@ -53,7 +53,7 @@ func (th *testClusterWithHelpers) getVersionFromShow(i int) string {
 
 func (th *testClusterWithHelpers) getVersionFromSelect(i int) string {
 	var version string
-	if err := th.ServerConn(i).QueryRow("SELECT value FROM system.settings WHERE name = 'version'").Scan(&version); err != nil {
+	if err := th.ServerConn(i).QueryRow("SELECT value FROM system.public.settings WHERE name = 'version'").Scan(&version); err != nil {
 		if err == gosql.ErrNoRows {
 			return ""
 		}

@@ -130,7 +130,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		defer db.Close()
 
 		var count int
-		if err := db.QueryRow("SELECT COUNT(*) FROM system.settings WHERE name = 'version';").Scan(&count); err != nil {
+		if err := db.QueryRow("SELECT COUNT(*) FROM system.public.settings WHERE name = 'version';").Scan(&count); err != nil {
 			t.Fatal(err)
 		}
 

@@ -20,7 +20,7 @@ statement error pq: user or role "test-user" does not exist
 GRANT ALL ON DATABASE a TO readwrite, "test-user"
 
 statement ok
-INSERT INTO system.users VALUES('test-user','');
+INSERT INTO system.public.users VALUES('test-user','');
 
 statement ok
 GRANT ALL ON DATABASE a TO readwrite, "test-user"

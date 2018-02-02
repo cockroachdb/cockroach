@@ -78,7 +78,7 @@ func (p *planner) ShowClusterSetting(
 			case *settings.StateMachineSetting:
 				// Show consistent values for statemachine settings. This isn't necessary
 				// for correctness, but helpful for testability.
-				datums, err := p.QueryRow(ctx, "SELECT value FROM system.settings WHERE name = $1", name)
+				datums, err := p.QueryRow(ctx, "SELECT value FROM system.public.settings WHERE name = $1", name)
 				if err != nil {
 					return nil, err
 				}

@@ -349,7 +349,7 @@ func (sc *TableStatisticsCache) getTableStatsFromDB(
 ) ([]*TableStatistic, error) {
 	const getTableStatisticsStmt = `
 SELECT "tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "distinctCount", "nullCount", histogram IS NOT NULL
-FROM system.table_statistics
+FROM system.public.table_statistics
 WHERE "tableID" = $1
 `
 	var rows []tree.Datums
@@ -383,7 +383,7 @@ func (sc *TableStatisticsCache) getHistogramFromDB(
 ) (*HistogramData, error) {
 	const getHistogramStmt = `
 SELECT histogram
-FROM system.table_statistics
+FROM system.public.table_statistics
 WHERE "tableID" = $1 AND "statisticID" = $2
 `
 	var row tree.Datums

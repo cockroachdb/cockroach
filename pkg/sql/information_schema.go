@@ -1073,7 +1073,7 @@ func forEachColumnInIndex(
 func forEachRole(
 	ctx context.Context, origPlanner *planner, fn func(username string, isRole bool) error,
 ) error {
-	query := `SELECT username, "isRole" FROM system.users`
+	query := `SELECT username, "isRole" FROM system.public.users`
 	p, cleanup := newInternalPlanner(
 		"for-each-role", origPlanner.txn, security.RootUser,
 		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),

@@ -1137,7 +1137,7 @@ SELECT strpos(version(), 'CockroachDB')
 
 # Don't panic during incorrect use of * (#7727)
 query error pq: cos\(\): cannot use "\*" in this context
-SELECT COS(*) FROM system.namespace
+SELECT COS(*) FROM system.public.namespace
 
 # Don't panic with invalid names (#8045)
 query error cannot use "nonexistent.\*" without a FROM clause

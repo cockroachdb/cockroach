@@ -154,7 +154,7 @@ func (p *planner) MemberOfWithAdminOption(
 
 	toVisit := []string{member}
 
-	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
+	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.public.role_members WHERE "member" = $1`
 
 	internalExecutor := InternalExecutor{ExecCfg: p.ExecCfg()}
 

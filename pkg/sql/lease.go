@@ -177,7 +177,7 @@ func (s LeaseStore) acquire(
 		p, cleanup := newInternalPlanner(
 			"lease-insert", txn, security.RootUser, s.memMetrics, s.execCfg)
 		defer cleanup()
-		const insertLease = `INSERT INTO system.lease ("descID", version, "nodeID", expiration) ` +
+		const insertLease = `INSERT INTO system.public.lease ("descID", version, "nodeID", expiration) ` +
 			`VALUES ($1, $2, $3, $4)`
 		leaseExpiration := table.leaseExpiration()
 		count, err := p.exec(
@@ -213,7 +213,7 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 			p, cleanup := newInternalPlanner(
 				"lease-release", txn, security.RootUser, s.memMetrics, s.execCfg)
 			defer cleanup()
-			const deleteLease = `DELETE FROM system.lease ` +
+			const deleteLease = `DELETE FROM system.public.lease ` +
 				`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
 			leaseExpiration := table.leaseExpiration()
 			count, err := p.exec(
@@ -400,7 +400,7 @@ func (s LeaseStore) countLeases(
 		p, cleanup := newInternalPlanner(
 			"leases-count", txn, security.RootUser, s.memMetrics, s.execCfg)
 		defer cleanup()
-		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
+		const countLeases = `SELECT COUNT(version) FROM system.public.lease ` +
 			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
 		values, err := p.QueryRow(ctx, countLeases, descID, int(version), expiration)
 		if err != nil {

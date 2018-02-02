@@ -82,7 +82,7 @@ func (t *leaseTest) cleanup() {
 
 func (t *leaseTest) getLeases(descID sqlbase.ID) string {
 	sql := `
-SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version, "nodeID"
+SELECT version, "nodeID" FROM system.public.lease WHERE "descID" = $1 ORDER BY version, "nodeID"
 `
 	rows, err := t.db.Query(sql, descID)
 	if err != nil {
@@ -532,7 +532,7 @@ func TestCantLeaseDeletedTable(testingT *testing.T) {
 
 	sql := `
 CREATE DATABASE test;
-CREATE TABLE test.t(a INT PRIMARY KEY);
+CREATE TABLE test.public.t(a INT PRIMARY KEY);
 `
 	_, err := t.db.Exec(sql)
 	if err != nil {
@@ -546,7 +546,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Unlock()
 
 	// DROP the table
-	_, err = t.db.Exec(`DROP TABLE test.t`)
+	_, err = t.db.Exec(`DROP TABLE test.public.t`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -623,7 +623,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 
 	stmt := `
 CREATE DATABASE test;
-CREATE TABLE test.t(a INT PRIMARY KEY);
+CREATE TABLE test.public.t(a INT PRIMARY KEY);
 `
 	_, err := db.Exec(stmt)
 	if err != nil {
@@ -651,7 +651,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	mu.Unlock()
 
 	// DROP the table
-	_, err = db.Exec(`DROP TABLE test.t`)
+	_, err = db.Exec(`DROP TABLE test.public.t`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -719,7 +719,7 @@ func TestSubqueryLeases(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.foo (v INT);
+CREATE TABLE t.public.foo (v INT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -729,7 +729,7 @@ CREATE TABLE t.foo (v INT);
 	}
 
 	if _, err := sqlDB.Exec(`
-SELECT EXISTS(SELECT * FROM t.foo);
+SELECT EXISTS(SELECT * FROM t.public.foo);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -759,9 +759,9 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('a', 'b');
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.timestamp (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.public.kv VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -783,17 +783,17 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	// Insert an entry so that the transaction is guaranteed to be
 	// assigned a timestamp.
 	if _, err := tx.Exec(`
-INSERT INTO t.timestamp VALUES ('a', 'b');
+INSERT INTO t.public.timestamp VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
 
 	// Modify the table descriptor.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.kv ADD m CHAR DEFAULT 'z';`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.kv ADD m CHAR DEFAULT 'z';`); err != nil {
 		t.Fatal(err)
 	}
 
-	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	rows, err := tx.Query(`SELECT * FROM t.public.kv`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -817,7 +817,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 
 	// This INSERT will cause the transaction to be pushed past its deadline,
 	// which will be detected when we attempt to Commit() below.
-	if _, err := tx.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+	if _, err := tx.Exec(`INSERT INTO t.public.kv VALUES ('c', 'd');`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -853,9 +853,9 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 BEGIN;
 CREATE DATABASE t;
-CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
-INSERT INTO t.kv VALUES ('a', 'b');
+CREATE TABLE t.public.kv (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.timestamp (k CHAR PRIMARY KEY, v CHAR);
+INSERT INTO t.public.kv VALUES ('a', 'b');
 COMMIT;
 `); err != nil {
 		t.Fatal(err)
@@ -871,7 +871,7 @@ COMMIT;
 	// Insert an entry so that the transaction is guaranteed to be
 	// assigned a timestamp.
 	if _, err := tx.Exec(`
-INSERT INTO t.timestamp VALUES ('a', 'b');
+INSERT INTO t.public.timestamp VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -890,7 +890,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 	// acquire a lease on version 2 and note that the table descriptor is
 	// invalid for the transaction, so it will read the previous version
 	// and use it.
-	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	rows, err := tx.Query(`SELECT * FROM t.public.kv`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -918,7 +918,7 @@ func BenchmarkLeaseAcquireByNameCached(b *testing.B) {
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -996,7 +996,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR);
 `); err != nil {
 		t.Fatal(err)
 	}

@@ -120,7 +120,7 @@ func (ev EventLogger) InsertEventRecord(
 	})
 
 	const insertEventTableStmt = `
-INSERT INTO system.eventlog (
+INSERT INTO system.public.eventlog (
   timestamp, "eventType", "targetID", "reportingID", info
 )
 VALUES(

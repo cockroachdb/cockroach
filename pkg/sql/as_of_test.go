@@ -45,7 +45,7 @@ func TestAsOfTime(t *testing.T) {
 
 	const val1 = 1
 	const val2 = 2
-	const query = "SELECT a FROM d.t AS OF SYSTEM TIME %s WHERE a > $1"
+	const query = "SELECT a FROM d.public.t AS OF SYSTEM TIME %s WHERE a > $1"
 
 	var i, j int
 
@@ -64,13 +64,13 @@ func TestAsOfTime(t *testing.T) {
 	if err := db.QueryRow("CREATE DATABASE d; SELECT cluster_logical_timestamp()").Scan(&tsDBExists); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
+	if _, err := db.Query(fmt.Sprintf(query, tsDBExists), 0); !testutils.IsError(err, `pq: relation "d.public.t" does not exist`) {
 		t.Fatal(err)
 	}
 
 	if _, err := db.Exec(`
-		CREATE TABLE d.t (a INT, b INT);
-		CREATE TABLE d.j (c INT);
+		CREATE TABLE d.public.t (a INT, b INT);
+		CREATE TABLE d.public.j (c INT);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -82,25 +82,25 @@ func TestAsOfTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec("INSERT INTO d.t (a) VALUES ($1)", val1); err != nil {
+	if _, err := db.Exec("INSERT INTO d.public.t (a) VALUES ($1)", val1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("INSERT INTO d.j (c) VALUES ($1)", val2); err != nil {
+	if _, err := db.Exec("INSERT INTO d.public.j (c) VALUES ($1)", val2); err != nil {
 		t.Fatal(err)
 	}
 	var tsVal1 string
-	if err := db.QueryRow("SELECT a, cluster_logical_timestamp() FROM d.t").Scan(&i, &tsVal1); err != nil {
+	if err := db.QueryRow("SELECT a, cluster_logical_timestamp() FROM d.public.t").Scan(&i, &tsVal1); err != nil {
 		t.Fatal(err)
 	} else if i != val1 {
 		t.Fatalf("expected %v, got %v", val1, i)
 	}
-	if _, err := db.Exec("UPDATE d.t SET a = $1", val2); err != nil {
+	if _, err := db.Exec("UPDATE d.public.t SET a = $1", val2); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("UPDATE d.j SET c = $1", val1); err != nil {
+	if _, err := db.Exec("UPDATE d.public.j SET c = $1", val1); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow("SELECT a FROM d.t").Scan(&i); err != nil {
+	if err := db.QueryRow("SELECT a FROM d.public.t").Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != val2 {
 		t.Fatalf("expected %v, got %v", val2, i)
@@ -115,7 +115,7 @@ func TestAsOfTime(t *testing.T) {
 			openParens = "(("
 			closeParens = "))"
 		}
-		query := fmt.Sprintf("%sSELECT a, c FROM d.t, d.j AS OF SYSTEM TIME %s%s", openParens, tsVal1, closeParens)
+		query := fmt.Sprintf("%sSELECT a, c FROM d.public.t, d.public.j AS OF SYSTEM TIME %s%s", openParens, tsVal1, closeParens)
 		if err := db.QueryRow(query).Scan(&i, &j); err != nil {
 			t.Fatal(err)
 		} else if i != val1 {
@@ -126,54 +126,54 @@ func TestAsOfTime(t *testing.T) {
 	})
 
 	// Future queries shouldn't work.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
+	if err := db.QueryRow("SELECT a FROM d.public.t AS OF SYSTEM TIME '2200-01-01'").Scan(&i); !testutils.IsError(err, "pq: AS OF SYSTEM TIME: cannot specify timestamp in the future") {
 		t.Fatal(err)
 	}
 
 	// Verify queries with positive scale work properly.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e1"); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME 1e1"); !testutils.IsError(err, `pq: database "d" does not exist`) {
 		t.Fatal(err)
 	}
 
 	// Verify queries with large exponents error properly.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "value out of range") {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME 1e40"); !testutils.IsError(err, "value out of range") {
 		t.Fatal(err)
 	}
 
 	// Verify logical parts parse with < 10 digits.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.123456789"); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME 1.123456789"); !testutils.IsError(err, `pq: database "d" does not exist`) {
 		t.Fatal(err)
 	}
 
 	// Verify logical parts parse with == 10 digits.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.1234567890"); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME 1.1234567890"); !testutils.IsError(err, `pq: database "d" does not exist`) {
 		t.Fatal(err)
 	}
 
 	// Too much logical precision is an error.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.12345678901"); !testutils.IsError(err, "logical part has too many digits") {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME 1.12345678901"); !testutils.IsError(err, "logical part has too many digits") {
 		t.Fatal(err)
 	}
 
 	// Ditto, as string.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME '1.12345678901'"); !testutils.IsError(err, "logical part has too many digits") {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME '1.12345678901'"); !testutils.IsError(err, "logical part has too many digits") {
 		t.Fatal(err)
 	}
 
 	// String values that are neither timestamps nor decimals are an error.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 'xxx'"); !testutils.IsError(err, "value is neither timestamp nor decimal") {
+	if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME 'xxx'"); !testutils.IsError(err, "value is neither timestamp nor decimal") {
 		t.Fatal(err)
 	}
 
 	// Zero is not a valid value.
 	for _, zero := range []string{"0", "'0'", "0.0000000000", "'0.0000000000'"} {
-		if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME " + zero); !testutils.IsError(err, "zero timestamp is invalid") {
+		if _, err := db.Query("SELECT a FROM d.public.t AS OF SYSTEM TIME " + zero); !testutils.IsError(err, "zero timestamp is invalid") {
 			t.Fatal(err)
 		}
 	}
 
 	// Old queries shouldn't work.
-	if err := db.QueryRow("SELECT a FROM d.t AS OF SYSTEM TIME '1969-12-31'").Scan(&i); err == nil {
+	if err := db.QueryRow("SELECT a FROM d.public.t AS OF SYSTEM TIME '1969-12-31'").Scan(&i); err == nil {
 		t.Fatal("expected error")
 	} else if !testutils.IsError(err, "pq: batch timestamp -86400.000000000,0 must be after GC threshold 0.000000000,0") {
 		t.Fatal(err)
@@ -181,24 +181,24 @@ func TestAsOfTime(t *testing.T) {
 
 	// Subqueries shouldn't work.
 	_, err := db.Query(
-		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s)", tsVal1))
+		fmt.Sprintf("SELECT (SELECT a FROM d.public.t AS OF SYSTEM TIME %s)", tsVal1))
 	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top-level statement") {
 		t.Fatalf("expected not supported, got: %v", err)
 	}
 
 	// Subqueries do work of the timestamps are consistent.
 	_, err = db.Query(
-		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME '1980-01-01'", tsVal1))
+		fmt.Sprintf("SELECT (SELECT a FROM d.public.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME '1980-01-01'", tsVal1))
 	if !testutils.IsError(err, "pq: cannot specify AS OF SYSTEM TIME with different timestamps") {
 		t.Fatalf("expected inconsistent statements, got: %v", err)
 	}
 	if err := db.QueryRow(
-		fmt.Sprintf("SELECT (SELECT 1 FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME %s", tsVal1, tsVal1)).Scan(&i); err != nil {
+		fmt.Sprintf("SELECT (SELECT 1 FROM d.public.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME %s", tsVal1, tsVal1)).Scan(&i); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that we can read columns in the past that are dropped in the future.
-	if _, err := db.Exec("ALTER TABLE d.t DROP COLUMN a"); err != nil {
+	if _, err := db.Exec("ALTER TABLE d.public.t DROP COLUMN a"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow(fmt.Sprintf(query, tsVal1), 0).Scan(&i); err != nil {
@@ -209,7 +209,7 @@ func TestAsOfTime(t *testing.T) {
 
 	// Can't use in a transaction.
 	_, err = db.Query(
-		fmt.Sprintf("BEGIN; SELECT a FROM d.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
+		fmt.Sprintf("BEGIN; SELECT a FROM d.public.t AS OF SYSTEM TIME %s; COMMIT;", tsVal1))
 	if !testutils.IsError(err, "pq: AS OF SYSTEM TIME must be provided on a top-level statement") {
 		t.Fatalf("expected not supported, got: %v", err)
 	}
@@ -231,20 +231,20 @@ func TestAsOfRetry(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 			CREATE DATABASE d;
-			CREATE TABLE d.t (s STRING PRIMARY KEY, a INT);
+			CREATE TABLE d.public.t (s STRING PRIMARY KEY, a INT);
 		`); err != nil {
 		t.Fatal(err)
 	}
 	var tsStart string
 	if err := sqlDB.QueryRow(`
-			INSERT INTO d.t (s, a) VALUES ($1, $2)
+			INSERT INTO d.public.t (s, a) VALUES ($1, $2)
 			RETURNING cluster_logical_timestamp();
 		`, name, val1).Scan(&tsStart); err != nil {
 		t.Fatal(err)
 	}
 
 	var tsVal2 string
-	if err := sqlDB.QueryRow("UPDATE d.t SET a = $1 RETURNING cluster_logical_timestamp()", val2).Scan(&tsVal2); err != nil {
+	if err := sqlDB.QueryRow("UPDATE d.public.t SET a = $1 RETURNING cluster_logical_timestamp()", val2).Scan(&tsVal2); err != nil {
 		t.Fatal(err)
 	}
 	walltime := new(apd.Decimal)
@@ -296,7 +296,7 @@ func TestAsOfRetry(t *testing.T) {
 	// one nanosecond before tsVal2, any proto timestamp bumping will return val2
 	// and error.
 	// Must specify the WHERE here to trigger the injection errors.
-	if err := sqlDB.QueryRow(fmt.Sprintf("SELECT a FROM d.t AS OF SYSTEM TIME %s WHERE s = '%s'", tsVal1, name)).Scan(&i); err != nil {
+	if err := sqlDB.QueryRow(fmt.Sprintf("SELECT a FROM d.public.t AS OF SYSTEM TIME %s WHERE s = '%s'", tsVal1, name)).Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != val1 {
 		t.Fatalf("unexpected val: %v", i)
@@ -307,7 +307,7 @@ func TestAsOfRetry(t *testing.T) {
 	checkRestarts(t, magicVals)
 
 	// Query with tsVal2 to ensure val2 is indeed present.
-	if err := sqlDB.QueryRow(fmt.Sprintf("SELECT a FROM d.t AS OF SYSTEM TIME %s", tsVal2)).Scan(&i); err != nil {
+	if err := sqlDB.QueryRow(fmt.Sprintf("SELECT a FROM d.public.t AS OF SYSTEM TIME %s", tsVal2)).Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != val2 {
 		t.Fatalf("unexpected val: %v", i)
@@ -328,24 +328,24 @@ func TestShowTraceAsOfTime(t *testing.T) {
 
 	if _, err := db.Exec(`
 		CREATE DATABASE test;
-		CREATE TABLE test.t (x INT);
+		CREATE TABLE test.public.t (x INT);
 	`); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := db.Exec("INSERT INTO test.t (x) VALUES ($1)", val1); err != nil {
+	if _, err := db.Exec("INSERT INTO test.public.t (x) VALUES ($1)", val1); err != nil {
 		t.Fatal(err)
 	}
 	var tsVal1 string
 	var i int
-	err := db.QueryRow("SELECT x, cluster_logical_timestamp() FROM test.t").Scan(
+	err := db.QueryRow("SELECT x, cluster_logical_timestamp() FROM test.public.t").Scan(
 		&i, &tsVal1)
 	if err != nil {
 		t.Fatal(err)
 	} else if i != val1 {
 		t.Fatalf("expected %d, got %v", val1, i)
 	}
-	if _, err := db.Exec("UPDATE test.t SET x = $1", val2); err != nil {
+	if _, err := db.Exec("UPDATE test.public.t SET x = $1", val2); err != nil {
 		t.Fatal(err)
 	}
 
@@ -357,7 +357,7 @@ func TestShowTraceAsOfTime(t *testing.T) {
 	// OF SYSTEM TIME ... ) WHERE ...  is not supported because of AS OF SYSTEM
 	// TIME limitations. So, we cheat and we use a subsequent SHOW TRACE FOR
 	// SESSION, which will present the results recorded by the first query.
-	query := fmt.Sprintf("SHOW KV TRACE FOR SELECT x FROM test.t AS OF SYSTEM TIME %s", tsVal1)
+	query := fmt.Sprintf("SHOW KV TRACE FOR SELECT x FROM test.public.t AS OF SYSTEM TIME %s", tsVal1)
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}

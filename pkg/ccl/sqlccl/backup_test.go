@@ -600,7 +600,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		}
 		var payloadBytes []byte
 		if err := ip.QueryRow(
-			`SELECT payload FROM system.jobs WHERE id = $1`, jobID,
+			`SELECT payload FROM system.public.jobs WHERE id = $1`, jobID,
 		).Scan(&payloadBytes); err != nil {
 			return err
 		}
@@ -638,7 +638,7 @@ func waitForJob(db *gosql.DB, jobID int64) error {
 		var status string
 		var payloadBytes []byte
 		if err := db.QueryRow(
-			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+			`SELECT status, payload FROM system.public.jobs WHERE id = $1`, jobID,
 		).Scan(&status, &payloadBytes); err != nil {
 			return err
 		}
@@ -676,7 +676,7 @@ func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.
 	}
 	var jobID int64
 	if err := db.QueryRow(
-		`INSERT INTO system.jobs (created, status, payload) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO system.public.jobs (created, status, payload) VALUES ($1, $2, $3) RETURNING id`,
 		timeutil.FromUnixMicros(now), jobs.StatusRunning, payload,
 	).Scan(&jobID); err != nil {
 		return err
@@ -866,7 +866,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			return 0, errors.Wrapf(err, "query returned before expected: %s", query)
 		}
 		var jobID int64
-		sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+		sqlDB.QueryRow(t, `SELECT id FROM system.public.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 		sqlDB.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
 		close(allowResponse)
 		return jobID, <-errCh

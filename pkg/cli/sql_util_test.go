@@ -116,7 +116,7 @@ SET
 	b.Reset()
 
 	// Use system database for sample query/output as they are fairly fixed.
-	cols, rows, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.namespace`), false)
+	cols, rows, err := runQuery(conn, makeQuery(`SHOW COLUMNS FROM system.public.namespace`), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ SET
 	}
 
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SHOW COLUMNS FROM system.namespace`)); err != nil {
+		makeQuery(`SHOW COLUMNS FROM system.public.namespace`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,7 +158,7 @@ SET
 
 	// Test placeholders.
 	if err := runQueryAndFormatResults(conn, &b,
-		makeQuery(`SELECT * FROM system.namespace WHERE name=$1`, "descriptor")); err != nil {
+		makeQuery(`SELECT * FROM system.public.namespace WHERE name=$1`, "descriptor")); err != nil {
 		t.Fatal(err)
 	}
 

@@ -435,11 +435,11 @@ func Example_zone() {
 	c.Run("zone ls")
 	c.Run("zone get .liveness")
 	c.Run("zone get .meta")
-	c.Run("zone get system.nonexistent")
-	c.Run("zone get system.descriptor")
-	c.Run("zone set system.descriptor --file=./testdata/zone_attrs.yaml")
-	c.Run("zone set system.namespace --file=./testdata/zone_attrs.yaml")
-	c.Run("zone set system.nonexistent --file=./testdata/zone_attrs.yaml")
+	c.Run("zone get system.public.nonexistent")
+	c.Run("zone get system.public.descriptor")
+	c.Run("zone set system.public.descriptor --file=./testdata/zone_attrs.yaml")
+	c.Run("zone set system.public.namespace --file=./testdata/zone_attrs.yaml")
+	c.Run("zone set system.public.nonexistent --file=./testdata/zone_attrs.yaml")
 	c.Run("zone set system --file=./testdata/zone_range_max_bytes.yaml")
 	c.Run("zone get system")
 	c.Run("zone rm system")
@@ -465,14 +465,14 @@ func Example_zone() {
 	c.Run("zone rm .meta")
 	c.Run("zone rm .system")
 	c.Run("zone rm .timeseries")
-	c.Run("zone set system.jobs@primary --file=./testdata/zone_attrs.yaml")
+	c.Run("zone set system.public.jobs@primary --file=./testdata/zone_attrs.yaml")
 
 	// Output:
 	// zone ls
 	// .default
 	// .liveness
 	// .meta
-	// system.jobs
+	// system.public.jobs
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -485,7 +485,7 @@ func Example_zone() {
 	// .liveness
 	// .meta
 	// system
-	// system.jobs
+	// system.public.jobs
 	// zone get .liveness
 	// .liveness
 	// range_min_bytes: 1048576
@@ -502,9 +502,9 @@ func Example_zone() {
 	//   ttlseconds: 3600
 	// num_replicas: 1
 	// constraints: []
-	// zone get system.nonexistent
-	// pq: relation "system.nonexistent" does not exist
-	// zone get system.descriptor
+	// zone get system.public.nonexistent
+	// pq: relation "system.public.nonexistent" does not exist
+	// zone get system.public.descriptor
 	// system
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
@@ -512,12 +512,12 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [us-east-1a, ssd]
-	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
+	// zone set system.public.descriptor --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
-	// zone set system.namespace --file=./testdata/zone_attrs.yaml
+	// zone set system.public.namespace --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
-	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
-	// pq: relation "system.nonexistent" does not exist
+	// zone set system.public.nonexistent --file=./testdata/zone_attrs.yaml
+	// pq: relation "system.public.nonexistent" does not exist
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -539,7 +539,7 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
-	// system.jobs
+	// system.public.jobs
 	// zone rm .default
 	// pq: cannot remove default zone
 	// zone set .liveness --file=./testdata/zone_range_max_bytes.yaml
@@ -584,7 +584,7 @@ func Example_zone() {
 	// .meta
 	// .system
 	// .timeseries
-	// system.jobs
+	// system.public.jobs
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -624,12 +624,12 @@ func Example_zone() {
 	// zone ls
 	// .default
 	// .timeseries
-	// system.jobs
+	// system.public.jobs
 	// zone rm .timeseries
 	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
-	// system.jobs
+	// system.public.jobs
 	// zone rm .liveness
 	// CONFIGURE ZONE 0
 	// zone rm .meta
@@ -638,7 +638,7 @@ func Example_zone() {
 	// CONFIGURE ZONE 0
 	// zone rm .timeseries
 	// CONFIGURE ZONE 0
-	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
+	// zone set system.public.jobs@primary --file=./testdata/zone_attrs.yaml
 	// pq: setting zone configs on indexes or partitions requires a CCL binary
 }
 

@@ -67,7 +67,7 @@ func GetScrubResultRows(rows *gosql.Rows) (results []ScrubResult, err error) {
 
 // RunScrub will run execute an exhaustive scrub check for a table.
 func RunScrub(sqlDB *gosql.DB, database string, table string) error {
-	rows, err := sqlDB.Query(fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE %s.%s`,
+	rows, err := sqlDB.Query(fmt.Sprintf(`EXPERIMENTAL SCRUB TABLE %s.public.%s`,
 		database, table))
 	if err != nil {
 		return err

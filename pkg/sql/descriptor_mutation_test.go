@@ -172,8 +172,8 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 	// Add an index so that we test adding a column when a table has an index.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
-CREATE INDEX allidx ON t.test (k, v);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR, i CHAR DEFAULT 'i', FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE INDEX allidx ON t.public.test (k, v);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -183,22 +183,22 @@ CREATE INDEX allidx ON t.test (k, v);
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
-	starQuery := `SELECT * FROM t.test`
+	starQuery := `SELECT * FROM t.public.test`
 	for _, useUpsert := range []bool{true, false} {
 		// Run the tests for both states.
 		for _, state := range []sqlbase.DescriptorMutation_State{sqlbase.DescriptorMutation_DELETE_ONLY,
 			sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY} {
 			// Init table to start state.
-			mTest.Exec(t, `TRUNCATE TABLE t.test`)
+			mTest.Exec(t, `TRUNCATE TABLE t.public.test`)
 			// read table descriptor
 			mTest.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 			initRows := [][]string{{"a", "z", "q"}}
 			for _, row := range initRows {
 				if useUpsert {
-					mTest.Exec(t, `UPSERT INTO t.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
+					mTest.Exec(t, `UPSERT INTO t.public.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
 				} else {
-					mTest.Exec(t, `INSERT INTO t.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
+					mTest.Exec(t, `INSERT INTO t.public.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
 				}
 			}
 			// Check that the table only contains the initRows.
@@ -207,7 +207,7 @@ CREATE INDEX allidx ON t.test (k, v);
 			// Add column "i" as a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 			// A direct read of column "i" fails.
-			if _, err := sqlDB.Query(`SELECT i FROM t.test`); err == nil {
+			if _, err := sqlDB.Query(`SELECT i FROM t.public.test`); err == nil {
 				t.Fatalf("Read succeeded despite column being in %v state", sqlbase.DescriptorMutation{State: state})
 			}
 			// The table only contains columns "k" and "v".
@@ -220,9 +220,9 @@ CREATE INDEX allidx ON t.test (k, v);
 			var err error
 			// Inserting a row into the table while specifying column "i" results in an error.
 			if useUpsert {
-				_, err = sqlDB.Exec(`UPSERT INTO t.test (k, v, i) VALUES ('b', 'y', 'i')`)
+				_, err = sqlDB.Exec(`UPSERT INTO t.public.test (k, v, i) VALUES ('b', 'y', 'i')`)
 			} else {
-				_, err = sqlDB.Exec(`INSERT INTO t.test (k, v, i) VALUES ('b', 'y', 'i')`)
+				_, err = sqlDB.Exec(`INSERT INTO t.public.test (k, v, i) VALUES ('b', 'y', 'i')`)
 			}
 			if !testutils.IsError(err, `column "i" does not exist`) {
 				t.Fatal(err)
@@ -230,9 +230,9 @@ CREATE INDEX allidx ON t.test (k, v);
 
 			// Repeating the same without specifying the columns results in a different error.
 			if useUpsert {
-				_, err = sqlDB.Exec(`UPSERT INTO t.test VALUES ('b', 'y', 'i')`)
+				_, err = sqlDB.Exec(`UPSERT INTO t.public.test VALUES ('b', 'y', 'i')`)
 			} else {
-				_, err = sqlDB.Exec(`INSERT INTO t.test VALUES ('b', 'y', 'i')`)
+				_, err = sqlDB.Exec(`INSERT INTO t.public.test VALUES ('b', 'y', 'i')`)
 			}
 			if !testutils.IsError(err, "INSERT has more expressions than target columns, 3 expressions for 2 targets") {
 				t.Fatal(err)
@@ -276,9 +276,9 @@ CREATE INDEX allidx ON t.test (k, v);
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 			// Insert a row into the table.
 			if useUpsert {
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'x')`)
+				mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('c', 'x')`)
 			} else {
-				mTest.Exec(t, `INSERT INTO t.test VALUES ('c', 'x')`)
+				mTest.Exec(t, `INSERT INTO t.public.test VALUES ('c', 'x')`)
 			}
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
@@ -294,12 +294,12 @@ CREATE INDEX allidx ON t.test (k, v);
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 			// Updating column "i" for a row fails.
 			if useUpsert {
-				_, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`)
+				_, err := sqlDB.Exec(`UPSERT INTO t.public.test VALUES ('a', 'u', 'u')`)
 				if !testutils.IsError(err, `INSERT has more expressions than target columns, 3 expressions for 2 targets`) {
 					t.Fatal(err)
 				}
 			} else {
-				_, err := sqlDB.Exec(`UPDATE t.test SET (v, i) = ('u', 'u') WHERE k = 'a'`)
+				_, err := sqlDB.Exec(`UPDATE t.public.test SET (v, i) = ('u', 'u') WHERE k = 'a'`)
 				if !testutils.IsError(err, `column "i" does not exist`) {
 					t.Fatal(err)
 				}
@@ -313,9 +313,9 @@ CREATE INDEX allidx ON t.test (k, v);
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 			// Update a row without specifying  mutation column "i".
 			if useUpsert {
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'u')`)
+				mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('a', 'u')`)
 			} else {
-				mTest.Exec(t, `UPDATE t.test SET v = 'u' WHERE k = 'a'`)
+				mTest.Exec(t, `UPDATE t.public.test SET v = 'u' WHERE k = 'a'`)
 			}
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
@@ -325,7 +325,7 @@ CREATE INDEX allidx ON t.test (k, v);
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 			// Update primary key of row "c" to be "d"
-			mTest.Exec(t, `UPDATE t.test SET k = 'd' WHERE v = 'x'`)
+			mTest.Exec(t, `UPDATE t.public.test SET k = 'd' WHERE v = 'x'`)
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
 			mTest.CheckQueryResults(t, starQuery, afterPKUpdate)
@@ -333,7 +333,7 @@ CREATE INDEX allidx ON t.test (k, v);
 			// Make column "i" a mutation.
 			mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 			// Delete row "a".
-			mTest.Exec(t, `DELETE FROM t.test WHERE k = 'a'`)
+			mTest.Exec(t, `DELETE FROM t.public.test WHERE k = 'a'`)
 			// Make column "i" live so that it is read.
 			mTest.makeMutationsActive()
 			// Row "a" is deleted.
@@ -401,7 +401,7 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -411,14 +411,14 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
-	starQuery := `SELECT * FROM t.test`
-	indexQuery := `SELECT v FROM t.test@foo`
+	starQuery := `SELECT * FROM t.public.test`
+	indexQuery := `SELECT v FROM t.public.test@foo`
 	for _, useUpsert := range []bool{true, false} {
 		// See the effect of the operations depending on the state.
 		for _, state := range []sqlbase.DescriptorMutation_State{sqlbase.DescriptorMutation_DELETE_ONLY,
 			sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY} {
 			// Init table with some entries.
-			if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
+			if _, err := sqlDB.Exec(`TRUNCATE TABLE t.public.test`); err != nil {
 				t.Fatal(err)
 			}
 			// read table descriptor
@@ -427,9 +427,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			initRows := [][]string{{"a", "z"}, {"b", "y"}}
 			for _, row := range initRows {
 				if useUpsert {
-					mTest.Exec(t, `UPSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
+					mTest.Exec(t, `UPSERT INTO t.public.test VALUES ($1, $2)`, row[0], row[1])
 				} else {
-					mTest.Exec(t, `INSERT INTO t.test VALUES ($1, $2)`, row[0], row[1])
+					mTest.Exec(t, `INSERT INTO t.public.test VALUES ($1, $2)`, row[0], row[1])
 				}
 			}
 			mTest.CheckQueryResults(t, starQuery, initRows)
@@ -444,9 +444,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 
 			// Insert a new entry.
 			if useUpsert {
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'x')`)
+				mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('c', 'x')`)
 			} else {
-				mTest.Exec(t, `INSERT INTO t.test VALUES ('c', 'x')`)
+				mTest.Exec(t, `INSERT INTO t.public.test VALUES ('c', 'x')`)
 			}
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "x"}})
 
@@ -464,13 +464,13 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 			// Update.
 			if useUpsert {
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'w')`)
+				mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('c', 'w')`)
 				// Update "v" to its current value "z" in row "a".
-				mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'z')`)
+				mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('a', 'z')`)
 			} else {
-				mTest.Exec(t, `UPDATE t.test SET v = 'w' WHERE k = 'c'`)
+				mTest.Exec(t, `UPDATE t.public.test SET v = 'w' WHERE k = 'c'`)
 				// Update "v" to its current value "z" in row "a".
-				mTest.Exec(t, `UPDATE t.test SET v = 'z' WHERE k = 'a'`)
+				mTest.Exec(t, `UPDATE t.public.test SET v = 'z' WHERE k = 'a'`)
 			}
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"a", "z"}, {"b", "y"}, {"c", "w"}})
 
@@ -489,7 +489,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			// Make "foo" a mutation.
 			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 			// Update the primary key of row "a".
-			mTest.Exec(t, `UPDATE t.test SET k = 'd' WHERE v = 'z'`)
+			mTest.Exec(t, `UPDATE t.public.test SET k = 'd' WHERE v = 'z'`)
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"b", "y"}, {"c", "w"}, {"d", "z"}})
 
 			// Make index "foo" live so that we can read it.
@@ -506,7 +506,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			// Make "foo" a mutation.
 			mTest.writeIndexMutation("foo", sqlbase.DescriptorMutation{State: state})
 			// Delete row "b".
-			mTest.Exec(t, `DELETE FROM t.test WHERE k = 'b'`)
+			mTest.Exec(t, `DELETE FROM t.public.test WHERE k = 'b'`)
 			mTest.CheckQueryResults(t, starQuery, [][]string{{"c", "w"}, {"d", "z"}})
 
 			// Make index "foo" live so that we can read it.
@@ -550,8 +550,8 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// Add an index so that we test adding a column when a table has an index.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
-CREATE INDEX allidx ON t.test (k, v);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR, i CHAR, INDEX foo (i, v), FAMILY (k), FAMILY (v), FAMILY (i));
+CREATE INDEX allidx ON t.public.test (k, v);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -561,8 +561,8 @@ CREATE INDEX allidx ON t.test (k, v);
 
 	mTest := makeMutationTest(t, kvDB, sqlDB, tableDesc)
 
-	starQuery := `SELECT * FROM t.test`
-	indexQuery := `SELECT i FROM t.test@foo`
+	starQuery := `SELECT * FROM t.public.test`
+	indexQuery := `SELECT i FROM t.public.test@foo`
 	for _, useUpsert := range []bool{true, false} {
 		// Run the tests for both states for a column and an index.
 		for _, state := range []sqlbase.DescriptorMutation_State{
@@ -580,7 +580,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					continue
 				}
 				// Init table to start state.
-				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.test`); err != nil {
+				if _, err := sqlDB.Exec(`TRUNCATE TABLE t.public.test`); err != nil {
 					t.Fatal(err)
 				}
 
@@ -590,9 +590,9 @@ CREATE INDEX allidx ON t.test (k, v);
 				initRows := [][]string{{"a", "z", "q"}, {"b", "y", "r"}}
 				for _, row := range initRows {
 					if useUpsert {
-						mTest.Exec(t, `UPSERT INTO t.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
+						mTest.Exec(t, `UPSERT INTO t.public.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
 					} else {
-						mTest.Exec(t, `INSERT INTO t.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
+						mTest.Exec(t, `INSERT INTO t.public.test VALUES ($1, $2, $3)`, row[0], row[1], row[2])
 					}
 				}
 				// Check that the table only contains the initRows.
@@ -605,9 +605,9 @@ CREATE INDEX allidx ON t.test (k, v);
 
 				// Insert a row into the table.
 				if useUpsert {
-					mTest.Exec(t, `UPSERT INTO t.test VALUES ('c', 'x')`)
+					mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('c', 'x')`)
 				} else {
-					mTest.Exec(t, `INSERT INTO t.test VALUES ('c', 'x')`)
+					mTest.Exec(t, `INSERT INTO t.public.test VALUES ('c', 'x')`)
 				}
 
 				// Make column "i" and index "foo" live.
@@ -629,38 +629,38 @@ CREATE INDEX allidx ON t.test (k, v);
 
 				// Updating column "i" for a row fails.
 				if useUpsert {
-					_, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`)
+					_, err := sqlDB.Exec(`UPSERT INTO t.public.test VALUES ('a', 'u', 'u')`)
 					if !testutils.IsError(err, `INSERT has more expressions than target columns, 3 expressions for 2 targets`) {
 						t.Error(err)
 					}
 				} else {
-					_, err := sqlDB.Exec(`UPDATE t.test SET (v, i) = ('u', 'u') WHERE k = 'a'`)
+					_, err := sqlDB.Exec(`UPDATE t.public.test SET (v, i) = ('u', 'u') WHERE k = 'a'`)
 					if !testutils.IsError(err, `column "i" does not exist`) {
 						t.Error(err)
 					}
 				}
 
 				// Using the mutation column as an index expression is disallowed.
-				_, err := sqlDB.Exec(`UPDATE t.test SET v = 'u' WHERE i < 'a'`)
+				_, err := sqlDB.Exec(`UPDATE t.public.test SET v = 'u' WHERE i < 'a'`)
 				if !testutils.IsError(err, `column "i" is being backfilled`) {
 					t.Error(err)
 				}
 				// TODO(vivek): Fix this error to return the same is being
 				// backfilled error.
-				_, err = sqlDB.Exec(`UPDATE t.test SET i = 'u' WHERE k = 'a'`)
+				_, err = sqlDB.Exec(`UPDATE t.public.test SET i = 'u' WHERE k = 'a'`)
 				if !testutils.IsError(err, `column "i" does not exist`) {
 					t.Error(err)
 				}
-				_, err = sqlDB.Exec(`DELETE FROM t.test WHERE i < 'a'`)
+				_, err = sqlDB.Exec(`DELETE FROM t.public.test WHERE i < 'a'`)
 				if !testutils.IsError(err, `column "i" is being backfilled`) {
 					t.Error(err)
 				}
 
 				// Update a row without specifying  mutation column "i".
 				if useUpsert {
-					mTest.Exec(t, `UPSERT INTO t.test VALUES ('a', 'u')`)
+					mTest.Exec(t, `UPSERT INTO t.public.test VALUES ('a', 'u')`)
 				} else {
-					mTest.Exec(t, `UPDATE t.test SET v = 'u' WHERE k = 'a'`)
+					mTest.Exec(t, `UPDATE t.public.test SET v = 'u' WHERE k = 'a'`)
 				}
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
@@ -681,7 +681,7 @@ CREATE INDEX allidx ON t.test (k, v);
 				mTest.writeColumnMutation("i", sqlbase.DescriptorMutation{State: state})
 
 				// Delete row "b".
-				mTest.Exec(t, `DELETE FROM t.test WHERE k = 'b'`)
+				mTest.Exec(t, `DELETE FROM t.public.test WHERE k = 'b'`)
 				// Make column "i" and index "foo" live.
 				mTest.makeMutationsActive()
 				// Row "b" is deleted.
@@ -731,7 +731,7 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
+CREATE TABLE t.public.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -745,7 +745,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Add index DROP mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err, `index "foo" being dropped, try again later`) {
+	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.public.test (c)`); !testutils.IsError(err, `index "foo" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
@@ -753,7 +753,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// "foo" is being added.
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.test (c)`); !testutils.IsError(err,
+	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.public.test (c)`); !testutils.IsError(err,
 		`duplicate: index "foo" in the middle of being added, not yet public`) {
 		t.Fatal(err)
 	}
@@ -761,7 +761,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.makeMutationsActive()
 	// Add column DROP mutation "b"
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`CREATE INDEX bar ON t.test (b)`); !testutils.IsError(err, `index "bar" contains unknown column "b"`) {
+	if _, err := sqlDB.Exec(`CREATE INDEX bar ON t.public.test (b)`); !testutils.IsError(err, `index "bar" contains unknown column "b"`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
@@ -770,7 +770,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
 	// An index referencing a column mutation that is being added
 	// is allowed to be added.
-	mt.Exec(t, `CREATE INDEX bar ON t.test (b)`)
+	mt.Exec(t, `CREATE INDEX bar ON t.public.test (b)`)
 	// Make "b" live.
 	mt.makeMutationsActive()
 
@@ -779,12 +779,12 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Add index DROP mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
 	// Noop.
-	mt.Exec(t, `DROP INDEX t.test@foo`)
+	mt.Exec(t, `DROP INDEX t.public.test@foo`)
 	// Make "foo" live.
 	mt.makeMutationsActive()
 	// "foo" is being added.
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
+	if _, err := sqlDB.Exec(`DROP INDEX t.public.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
@@ -793,20 +793,20 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Add column DROP mutation "b"
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err, `column "b" being dropped, try again later`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD b CHAR`); !testutils.IsError(err, `column "b" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 	// Noop.
-	mt.Exec(t, `ALTER TABLE t.test DROP b`)
+	mt.Exec(t, `ALTER TABLE t.public.test DROP b`)
 	// Make "b" live.
 	mt.makeMutationsActive()
 	// "b" is being added.
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD b CHAR`); !testutils.IsError(err,
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD b CHAR`); !testutils.IsError(err,
 		`duplicate: column "b" in the middle of being added, not yet public`) {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP b`); !testutils.IsError(err, `column "b" in the middle of being added, try again later`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test DROP b`); !testutils.IsError(err, `column "b" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
@@ -816,14 +816,14 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Add index DROP mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err, `index "foo" being dropped, try again later`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err, `index "foo" being dropped, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
 	mt.makeMutationsActive()
 	// "foo" is being added.
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err,
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD CONSTRAINT foo UNIQUE (c)`); !testutils.IsError(err,
 		`duplicate: index "foo" in the middle of being added, not yet public`) {
 		t.Fatal(err)
 	}
@@ -831,7 +831,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.makeMutationsActive()
 	// Add column mutation "b"
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`); !testutils.IsError(err, `index "bar" contains unknown column "b"`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ADD CONSTRAINT bar UNIQUE (b)`); !testutils.IsError(err, `index "bar" contains unknown column "b"`) {
 		t.Fatal(err)
 	}
 	// Make "b" live.
@@ -839,7 +839,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// "b" is being added.
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
 	// Noop.
-	mt.Exec(t, `ALTER TABLE t.test ADD CONSTRAINT bar UNIQUE (b)`)
+	mt.Exec(t, `ALTER TABLE t.public.test ADD CONSTRAINT bar UNIQUE (b)`)
 	// Make "b" live.
 	mt.makeMutationsActive()
 
@@ -848,12 +848,12 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	// Add index mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
 	// Noop.
-	mt.Exec(t, `DROP INDEX t.test@foo`)
+	mt.Exec(t, `DROP INDEX t.public.test@foo`)
 	// Make "foo" live.
 	mt.makeMutationsActive()
 	// "foo" is being added.
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`DROP INDEX t.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
+	if _, err := sqlDB.Exec(`DROP INDEX t.public.test@foo`); !testutils.IsError(err, `index "foo" in the middle of being added, try again later`) {
 		t.Fatal(err)
 	}
 	// Make "foo" live.
@@ -863,8 +863,8 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Add index mutation "foo""
 	mt.writeIndexMutation("foo", sqlbase.DescriptorMutation{})
-	mt.Exec(t, `ALTER INDEX t.test@foo RENAME to ufo`)
-	mt.Exec(t, `ALTER TABLE t.test RENAME COLUMN c TO d`)
+	mt.Exec(t, `ALTER INDEX t.public.test@foo RENAME to ufo`)
+	mt.Exec(t, `ALTER TABLE t.public.test RENAME COLUMN c TO d`)
 	// The mutation in the table descriptor has changed and we would like
 	// to update our copy to make it live.
 	mt.tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
@@ -873,7 +873,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.makeMutationsActive()
 	// The index has been renamed to ufo, and the column to d.
 	mt.CheckQueryResults(t,
-		"SHOW INDEXES FROM t.test",
+		"SHOW INDEXES FROM t.public.test",
 		[][]string{
 			{"test", "primary", "true", "1", "a", "ASC", "false", "false"},
 			{"test", "ufo", "false", "1", "d", "ASC", "false", "false"},
@@ -885,7 +885,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Add column mutation "b".
 	mt.writeColumnMutation("b", sqlbase.DescriptorMutation{})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test RENAME COLUMN b TO e`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test RENAME COLUMN b TO e`); err != nil {
 		mt.Fatal(err)
 	}
 
@@ -897,7 +897,7 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 	mt.makeMutationsActive()
 	// Column b changed to d.
 	mt.CheckQueryResults(t,
-		"SHOW COLUMNS FROM t.test",
+		"SHOW COLUMNS FROM t.public.test",
 		[][]string{
 			{"a", "STRING", "false", "NULL", "{\"primary\",\"ufo\"}"},
 			{"d", "STRING", "true", "NULL", "{\"ufo\"}"},
@@ -907,12 +907,12 @@ CREATE TABLE t.test (a CHAR PRIMARY KEY, b CHAR, c CHAR, INDEX foo (c));
 
 	// Try to change column defaults while column is under mutation.
 	mt.writeColumnMutation("e", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_ADD})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ALTER COLUMN e SET DEFAULT 'a'`); err != nil {
 		t.Fatal(err)
 	}
 	mt.makeMutationsActive()
 	mt.writeColumnMutation("e", sqlbase.DescriptorMutation{Direction: sqlbase.DescriptorMutation_DROP})
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test ALTER COLUMN e SET DEFAULT 'a'`); !testutils.IsError(
 		err, `column "e" in the middle of being dropped`) {
 		t.Fatal(err)
 	}
@@ -943,7 +943,7 @@ func TestTableMutationQueue(t *testing.T) {
 	// Create a table with column i and an index on v and i.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
+CREATE TABLE t.public.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -953,25 +953,25 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR UNIQUE);
 	// This single command creates three columns and two indexes sharing the
 	// same mutation ID.
 	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT`,
+		`ALTER TABLE t.public.test ADD d INT UNIQUE, ADD e INT UNIQUE, ADD f INT`,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// This command creates two mutations sharing the same mutation ID.
 	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test ADD g INT, ADD CONSTRAINT idx_f UNIQUE (f)`,
+		`ALTER TABLE t.public.test ADD g INT, ADD CONSTRAINT idx_f UNIQUE (f)`,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	// This command creates a single mutation.
-	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_g ON t.test (g)`); err != nil {
+	if _, err := sqlDB.Exec(`CREATE UNIQUE INDEX idx_g ON t.public.test (g)`); err != nil {
 		t.Fatal(err)
 	}
 
 	// This command created a drop mutation.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test DROP v`); err != nil {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.public.test DROP v`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1037,9 +1037,9 @@ func TestAddingFKs(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE t;
-		CREATE TABLE t.products (id INT PRIMARY KEY);
-		INSERT INTO t.products VALUES (1), (2);
-		CREATE TABLE t.orders (id INT PRIMARY KEY, product INT REFERENCES t.products, INDEX (product));
+		CREATE TABLE t.public.products (id INT PRIMARY KEY);
+		INSERT INTO t.public.products VALUES (1), (2);
+		CREATE TABLE t.public.orders (id INT PRIMARY KEY, product INT REFERENCES t.public.products, INDEX (product));
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -1059,13 +1059,13 @@ func TestAddingFKs(t *testing.T) {
 	// Generally a referenced table needs to lookup referencing tables to check
 	// FKs during delete operations, but referencing tables in the ADD state are
 	// given special treatment.
-	if _, err := sqlDB.Exec(`DELETE FROM t.products`); err != nil {
+	if _, err := sqlDB.Exec(`DELETE FROM t.public.products`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Client should not see the orders table.
 	if _, err := sqlDB.Exec(
-		`SELECT * FROM t.orders`,
+		`SELECT * FROM t.public.orders`,
 	); !testutils.IsError(err, "table is being added") {
 		t.Fatal(err)
 	}

@@ -834,12 +834,12 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 
 	// Secondary indexes with DESC direction in the last column.
 	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.public.parent1 (pid1 DESC)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.public.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.public.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.public.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.public.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
 	// Index with implicit primary columns (pid1, cid2).
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.public.child1 (v, cid1)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.public.child1 (v, cid1)`, sqlutils.TestDB))
 
 	// The interleaved hierarchy is as follows:
 	//    parent		(pid1)
@@ -1044,12 +1044,12 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 	// Secondary indexes with DESC direction in the last column.
 	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.parent1 (pid1 DESC)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX pid1_desc ON %s.public.parent1 (pid1 DESC)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_desc ON %s.public.child1 (pid1, cid1, cid2 DESC) INTERLEAVE IN PARENT %s.public.parent1 (pid1)`, sqlutils.TestDB, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX grandchild_desc ON %s.public.grandchild1 (pid1, cid1, cid2, gcid1 DESC) INTERLEAVE IN PARENT %s.public.child1(pid1, cid1, cid2)`, sqlutils.TestDB, sqlutils.TestDB))
 	// Index with implicit primary columns (pid1, cid2).
-	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
-	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.child1 (v, cid1)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE INDEX child_non_unique ON %s.public.child1 (v, cid1)`, sqlutils.TestDB))
+	r.Exec(t, fmt.Sprintf(`CREATE UNIQUE INDEX child_unique ON %s.public.child1 (v, cid1)`, sqlutils.TestDB))
 
 	// The interleaved hierarchy is as follows:
 	//    parent		(pid1)

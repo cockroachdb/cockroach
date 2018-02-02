@@ -46,7 +46,7 @@ func insertTableStat(
 	histogram *HistogramData,
 ) error {
 	insertStatStmt := `
-INSERT INTO system.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
+INSERT INTO system.public.table_statistics ("tableID", "statisticID", name, "columnIDs", "createdAt",
 	"rowCount", "distinctCount", "nullCount", histogram)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `

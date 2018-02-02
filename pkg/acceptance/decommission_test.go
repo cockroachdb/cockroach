@@ -455,7 +455,7 @@ func testDecommissionInner(
 		}()
 
 		rows, err = db.Query(`
-		SELECT "eventType", "targetID" FROM system.eventlog
+		SELECT "eventType", "targetID" FROM system.public.eventlog
 		WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 			sql.EventLogNodeDecommissioned, sql.EventLogNodeRecommissioned,
 		)

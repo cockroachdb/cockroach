@@ -7,7 +7,7 @@ query error could not parse "foo" as type int
 PAUSE JOB 'foo'
 
 query error NULL is not a valid job ID
-PAUSE JOB (SELECT id FROM system.jobs LIMIT 0)
+PAUSE JOB (SELECT id FROM system.public.jobs LIMIT 0)
 
 query error job with ID 1 does not exist
 RESUME JOB 1
@@ -16,7 +16,7 @@ query error could not parse "foo" as type int
 RESUME JOB 'foo'
 
 query error NULL is not a valid job ID
-RESUME JOB (SELECT id FROM system.jobs LIMIT 0)
+RESUME JOB (SELECT id FROM system.public.jobs LIMIT 0)
 
 query error job with ID 1 does not exist
 CANCEL JOB 1
@@ -25,7 +25,7 @@ query error could not parse "foo" as type int
 CANCEL JOB 'foo'
 
 query error NULL is not a valid job ID
-CANCEL JOB (SELECT id FROM system.jobs LIMIT 0)
+CANCEL JOB (SELECT id FROM system.public.jobs LIMIT 0)
 
 query error argument of CANCEL QUERY must be type string, not type int
 CANCEL QUERY 1

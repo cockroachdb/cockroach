@@ -62,7 +62,7 @@ func TestConn(t *testing.T) {
 	// server that the client will connect to; we just use it on the side to
 	// execute some metadata queries that pgx sends whenever it opens a
 	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "test"})
 	defer s.Stopper().Stop(context.TODO())
 
 	// Start a pgwire "server".
@@ -95,7 +95,7 @@ func TestConn(t *testing.T) {
 		return conn.serve(ctx, func() bool { return false } /* draining */)
 	})
 
-	if err := processPgxStartup(ctx, s, conn); err != nil {
+	if err := processPgxStartup(t, ctx, s, conn); err != nil {
 		t.Fatal(err)
 	}
 
@@ -157,7 +157,9 @@ func TestConn(t *testing.T) {
 
 // processPgxStartup processes the first few queries that the pgx driver
 // automatically sends on a new connection that has been established.
-func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c *conn) error {
+func processPgxStartup(
+	t *testing.T, ctx context.Context, s serverutils.TestServerInterface, c *conn,
+) error {
 	rd := sql.MakeStmtBufReader(c.stmtBuf)
 
 	for {

@@ -127,12 +127,12 @@ func TestBufferedWriterError(t *testing.T) {
 func TestBufferedWriterIncrementAffected(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	withExecutor(func(e *Executor, s *Session, evalCtx *tree.EvalContext) {
-		res, err := e.ExecuteStatementsBuffered(s, "CREATE DATABASE test; CREATE TABLE test.t (i INT)", nil, 2)
+		res, err := e.ExecuteStatementsBuffered(s, "CREATE DATABASE test; CREATE TABLE test.public.t (i INT)", nil, 2)
 		if err != nil {
 			t.Fatal("expected no error got", err)
 		}
 		res.Close(s.Ctx())
-		query := "INSERT INTO test.t VALUES (1), (2), (3)"
+		query := "INSERT INTO test.public.t VALUES (1), (2), (3)"
 		res, err = e.ExecuteStatementsBuffered(s, query, nil, 1)
 		if err != nil {
 			t.Fatal("expected no error got", err)

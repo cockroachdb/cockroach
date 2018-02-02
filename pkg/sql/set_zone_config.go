@@ -184,7 +184,7 @@ func writeZoneConfig(
 
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
 		return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,
-			"DELETE FROM system.zones WHERE id = $1", targetID)
+			"DELETE FROM system.public.zones WHERE id = $1", targetID)
 	}
 
 	buf, err := protoutil.Marshal(&zone)
@@ -192,7 +192,7 @@ func writeZoneConfig(
 		return 0, fmt.Errorf("could not marshal zone config: %s", err)
 	}
 	return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,
-		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)
+		"UPSERT INTO system.public.zones (id, config) VALUES ($1, $2)", targetID, buf)
 }
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike

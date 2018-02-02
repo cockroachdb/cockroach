@@ -3,17 +3,17 @@ CREATE DATABASE t
 ----
 
 exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+CREATE TABLE t.public.a (x INT PRIMARY KEY, y FLOAT)
 ----
 
 build
-SELECT * FROM t.a
+SELECT * FROM t.public.a
 ----
 scan [out=(0,1)]
  └── columns: a.x:int:0 a.y:float,null:1
 
 build
-SELECT * FROM t.b
+SELECT * FROM t.public.b
 ----
 error: table missing
 
@@ -28,7 +28,7 @@ SELECT * FROM u.a
 error: database missing
 
 build
-SELECT * FROM t.a WHERE x > 10
+SELECT * FROM t.public.a WHERE x > 10
 ----
 select [out=(0,1)]
  ├── columns: a.x:int:0 a.y:float,null:1
@@ -41,7 +41,7 @@ select [out=(0,1)]
            └── columns: a.x:int:0 a.y:float,null:1
 
 build
-SELECT * FROM t.a WHERE (x > 10 AND (x < 20 AND x != 13))
+SELECT * FROM t.public.a WHERE (x > 10 AND (x < 20 AND x != 13))
 ----
 select [out=(0,1)]
  ├── columns: a.x:int:0 a.y:float,null:1
@@ -60,7 +60,7 @@ select [out=(0,1)]
            └── columns: a.x:int:0 a.y:float,null:1
 
 build
-SELECT * FROM t.a WHERE x IN (1, 2, 3)
+SELECT * FROM t.public.a WHERE x IN (1, 2, 3)
 ----
 select [out=(0,1)]
  ├── columns: a.x:int:0 a.y:float,null:1

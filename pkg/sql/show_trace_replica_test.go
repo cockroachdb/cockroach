@@ -56,12 +56,12 @@ func TestShowTraceReplica(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t1 (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE TABLE d.t2 (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE TABLE d.t3 (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `ALTER TABLE d.t1 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n1]'`)
-	sqlDB.Exec(t, `ALTER TABLE d.t2 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n2]'`)
-	sqlDB.Exec(t, `ALTER TABLE d.t3 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n3]'`)
+	sqlDB.Exec(t, `CREATE TABLE d.public.t1 (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.public.t2 (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.public.t3 (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `ALTER TABLE d.public.t1 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n1]'`)
+	sqlDB.Exec(t, `ALTER TABLE d.public.t2 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n2]'`)
+	sqlDB.Exec(t, `ALTER TABLE d.public.t3 EXPERIMENTAL CONFIGURE ZONE 'constraints: [+n3]'`)
 
 	tests := []struct {
 		query    string
@@ -69,22 +69,22 @@ func TestShowTraceReplica(t *testing.T) {
 	}{
 		{
 			// Read-only
-			query:    `SELECT * FROM d.t1`,
+			query:    `SELECT * FROM d.public.t1`,
 			expected: [][]string{{`1`, `1`}},
 		},
 		{
 			// Write-only
-			query:    `UPSERT INTO d.t2 VALUES (1)`,
+			query:    `UPSERT INTO d.public.t2 VALUES (1)`,
 			expected: [][]string{{`2`, `2`}},
 		},
 		{
 			// First a read to compute the deletions then a write to delete them.
-			query:    `DELETE FROM d.t2`,
+			query:    `DELETE FROM d.public.t2`,
 			expected: [][]string{{`2`, `2`}, {`2`, `2`}},
 		},
 		{
 			// Admin command
-			query:    `ALTER TABLE d.t3 SCATTER`,
+			query:    `ALTER TABLE d.public.t3 SCATTER`,
 			expected: [][]string{{`3`, `3`}},
 		},
 	}

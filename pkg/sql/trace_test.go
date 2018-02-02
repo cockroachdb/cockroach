@@ -62,7 +62,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				// Run some query
-				rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
+				rows, err := sqlDB.Query(`SELECT * FROM test.public.foo`)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -97,7 +97,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				// Run some query
-				rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
+				rows, err := sqlDB.Query(`SELECT * FROM test.public.foo`)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -134,7 +134,7 @@ func TestTrace(t *testing.T) {
 					t.Fatal(err)
 				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.public.foo] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -155,7 +155,7 @@ func TestTrace(t *testing.T) {
 				// and will split the underlying BatchRequest/BatchResponse. Tracing
 				// in the presence of multi-part batches is what we want to test here.
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
+					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR DELETE FROM test.public.bar] " +
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
@@ -176,11 +176,11 @@ func TestTrace(t *testing.T) {
 		CREATE DATABASE test;
 
 		--- test.foo is a single range table.
-		CREATE TABLE test.foo (id INT PRIMARY KEY);
+		CREATE TABLE test.public.foo (id INT PRIMARY KEY);
 
 		--- test.bar is a multi-range table.
-		CREATE TABLE test.bar (id INT PRIMARY KEY);
-		ALTER TABLE  test.bar SPLIT AT VALUES (5);
+		CREATE TABLE test.public.bar (id INT PRIMARY KEY);
+		ALTER TABLE  test.public.bar SPLIT AT VALUES (5);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestTrace(t *testing.T) {
 							// Run a non-traced read to acquire a lease on the table, so that the
 							// traced read below doesn't need to take a lease. Tracing a lease
 							// acquisition incurs some spans that are too fragile to test here.
-							if _, err := sqlDB.Exec(`SELECT * FROM test.foo LIMIT 1`); err != nil {
+							if _, err := sqlDB.Exec(`SELECT * FROM test.public.foo LIMIT 1`); err != nil {
 								t.Fatal(err)
 							}
 
@@ -423,9 +423,9 @@ func TestKVTraceWithCountStar(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "CREATE DATABASE test")
-	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
-	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
-	r.Exec(t, "SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
+	r.Exec(t, "CREATE TABLE test.public.a (a INT PRIMARY KEY, b INT)")
+	r.Exec(t, "INSERT INTO test.public.a VALUES (1,1), (2,2)")
+	r.Exec(t, "SHOW KV TRACE FOR SELECT COUNT(*) FROM test.public.a")
 }
 
 // Test that spans are collected from RPC that returned (structured) errors, in
@@ -451,7 +451,7 @@ func TestTraceFromErrorReplica(t *testing.T) {
 
 	if _, err := clusterDB.Exec(`
 		CREATE DATABASE test;
-		CREATE TABLE test.foo (id INT PRIMARY KEY);
+		CREATE TABLE test.public.foo (id INT PRIMARY KEY);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -463,7 +463,7 @@ func TestTraceFromErrorReplica(t *testing.T) {
 
 	// Replicate foo on n1,n2,n3 with the lease on n2.
 	if _, err := clusterDB.Exec(`
-		ALTER TABLE test.foo TESTING_RELOCATE VALUES (ARRAY[2,1,3], 1);
+		ALTER TABLE test.public.foo TESTING_RELOCATE VALUES (ARRAY[2,1,3], 1);
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -471,7 +471,7 @@ func TestTraceFromErrorReplica(t *testing.T) {
 	// Query through n4 and look for a redirect log message from n1.
 	rows, err := n4.Query(
 		`SELECT tag, message
-			 FROM [SHOW TRACE FOR SELECT * FROM test.foo]
+			 FROM [SHOW TRACE FOR SELECT * FROM test.public.foo]
 				WHERE tag LIKE '%n1%' AND
 						 message LIKE '%NotLeaseHolderError%'
 		`)

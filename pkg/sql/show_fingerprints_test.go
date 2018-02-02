@@ -38,17 +38,17 @@ func TestShowFingerprintsAsOfSystemTime(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
-	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2)`)
+	sqlDB.Exec(t, `CREATE TABLE d.public.t (a INT PRIMARY KEY, b INT, INDEX b_idx (b))`)
+	sqlDB.Exec(t, `INSERT INTO d.public.t VALUES (1, 2)`)
 
-	const fprintQuery = `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`
+	const fprintQuery = `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.public.t`
 	fprint1 := sqlDB.QueryStr(t, fprintQuery)
 
 	var ts string
 	sqlDB.QueryRow(t, `SELECT now()`).Scan(&ts)
 
-	sqlDB.Exec(t, `INSERT INTO d.t VALUES (3, 4)`)
-	sqlDB.Exec(t, `DROP INDEX d.t@b_idx`)
+	sqlDB.Exec(t, `INSERT INTO d.public.t VALUES (3, 4)`)
+	sqlDB.Exec(t, `DROP INDEX d.public.t@b_idx`)
 
 	fprint2 := sqlDB.QueryStr(t, fprintQuery)
 	if reflect.DeepEqual(fprint1, fprint2) {
@@ -68,7 +68,7 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE d.t (
+	sqlDB.Exec(t, `CREATE TABLE d.public.t (
 		lowercase INT PRIMARY KEY,
 		"cApiTaLInT" INT,
 		"cApiTaLByTEs" BYTES,
@@ -76,12 +76,12 @@ func TestShowFingerprintsColumnNames(t *testing.T) {
 		INDEX capital_bytes_idx ("cApiTaLByTEs")
 	)`)
 
-	sqlDB.Exec(t, `INSERT INTO d.t VALUES (1, 2, 'a')`)
-	fprint1 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+	sqlDB.Exec(t, `INSERT INTO d.public.t VALUES (1, 2, 'a')`)
+	fprint1 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.public.t`)
 
-	sqlDB.Exec(t, `TRUNCATE TABLE d.t`)
-	sqlDB.Exec(t, `INSERT INTO d.t VALUES (3, 4, 'b')`)
-	fprint2 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`)
+	sqlDB.Exec(t, `TRUNCATE TABLE d.public.t`)
+	sqlDB.Exec(t, `INSERT INTO d.public.t VALUES (3, 4, 'b')`)
+	fprint2 := sqlDB.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.public.t`)
 
 	if reflect.DeepEqual(fprint1, fprint2) {
 		t.Errorf("expected different fingerprints: %v vs %v", fprint1, fprint2)

@@ -68,7 +68,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					      "distinctCount",
 					      "nullCount",
 					      histogram IS NOT NULL
-				 FROM system.table_statistics
+				 FROM system.public.table_statistics
 				 WHERE "tableID" = $1
 				 ORDER BY "createdAt"`,
 				desc.ID,

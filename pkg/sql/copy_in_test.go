@@ -136,7 +136,8 @@ func TestCopyRandom(t *testing.T) {
 
 	if _, err := db.Exec(`
 		CREATE DATABASE d;
-		CREATE TABLE IF NOT EXISTS d.t (
+    SET DATABASE = d;
+		CREATE TABLE IF NOT EXISTS t (
 			id INT PRIMARY KEY,
 			n INTERVAL,
 			o BOOL,
@@ -160,7 +161,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stmt, err := txn.Prepare(pq.CopyInSchema("d", "t", "id", "n", "o", "i", "f", "e", "t", "ts", "s", "b", "u", "ip", "tz"))
+	stmt, err := txn.Prepare(pq.CopyIn("t", "id", "n", "o", "i", "f", "e", "t", "ts", "s", "b", "u", "ip", "tz"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +214,7 @@ func TestCopyRandom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows, err := db.Query("SELECT * FROM d.t ORDER BY id")
+	rows, err := db.Query("SELECT * FROM d.public.t ORDER BY id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +415,7 @@ func TestCopyTransaction(t *testing.T) {
 	}
 
 	var i int
-	if err := txn.QueryRow("SELECT i FROM d.t").Scan(&i); err != nil {
+	if err := txn.QueryRow("SELECT i FROM d.public.t").Scan(&i); err != nil {
 		t.Fatal(err)
 	} else if i != val {
 		t.Fatalf("expected 1, got %d", i)

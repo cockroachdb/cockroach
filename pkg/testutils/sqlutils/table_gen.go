@@ -67,16 +67,16 @@ func CreateTableInterleaved(
 	fn GenRowFn,
 ) {
 	if interleaveSchema != "" {
-		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s.%s`, TestDB, interleaveSchema)
+		interleaveSchema = fmt.Sprintf(`INTERLEAVE IN PARENT %s.public.%s`, TestDB, interleaveSchema)
 	}
 
 	r := MakeSQLRunner(sqlDB)
 	stmt := fmt.Sprintf(`CREATE DATABASE IF NOT EXISTS %s;`, TestDB)
-	stmt += fmt.Sprintf(`CREATE TABLE %s.%s (%s) %s;`, TestDB, tableName, schema, interleaveSchema)
+	stmt += fmt.Sprintf(`CREATE TABLE %s.public.%s (%s) %s;`, TestDB, tableName, schema, interleaveSchema)
 	r.Exec(tb, stmt)
 	for i := 1; i <= numRows; {
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, `INSERT INTO %s.%s VALUES `, TestDB, tableName)
+		fmt.Fprintf(&buf, `INSERT INTO %s.public.%s VALUES `, TestDB, tableName)
 		batchEnd := i + rowsPerInsert
 		if batchEnd > numRows {
 			batchEnd = numRows

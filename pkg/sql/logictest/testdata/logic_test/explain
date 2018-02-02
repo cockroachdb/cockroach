@@ -1,21 +1,21 @@
 # LogicTest: default distsql
 
 query TTT colnames
-EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
+EXPLAIN (PLAN) SELECT 1 FROM system.public.jobs WHERE FALSE
 ----
 Tree         Field  Description
 render       ·      ·
  └── norows  ·      ·
 
 query TTT colnames
-EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
+EXPLAIN (PLAN) SELECT 1 FROM system.public.jobs WHERE NULL
 ----
 Tree         Field  Description
 render       ·      ·
  └── norows  ·      ·
 
 query TTT colnames
-EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
+EXPLAIN (PLAN) SELECT 1 FROM system.public.jobs WHERE TRUE
 ----
 Tree       Field  Description
 render     ·      ·

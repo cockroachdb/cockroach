@@ -61,5 +61,5 @@ SELECT * from kv; ROLLBACK
 statement ok
 ROLLBACK
 
-statement error pq: relation "system.t" does not exist
-BEGIN TRANSACTION; SELECT * FROM system.t; INSERT INTO t(a) VALUES (1)
+statement error pq: relation "system.public.t" does not exist
+BEGIN TRANSACTION; SELECT * FROM system.public.t; INSERT INTO t(a) VALUES (1)
