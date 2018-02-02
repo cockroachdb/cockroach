@@ -880,27 +880,6 @@ func runTestTxn(
 func TestTxnUserRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	aborter := NewTxnAborter()
-	defer aborter.Close(t)
-	params, cmdFilters := tests.CreateTestServerParams()
-	params.Knobs.SQLExecutor = aborter.executorKnobs()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	{
-		pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnUserRestart", url.User(security.RootUser))
-		defer cleanup()
-		if err := aborter.Init(pgURL); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
-`); err != nil {
-		t.Fatal(err)
-	}
-
 	// Set up error injection that causes retries.
 	testCases := []struct {
 		magicVals   *filterVals
@@ -923,61 +902,83 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	for _, tc := range testCases {
 		for _, rs := range []rollbackStrategy{rollbackToSavepoint, declareSavepoint} {
 			for _, parallel := range []bool{false, true} {
-				cleanupFilter := cmdFilters.AppendFilter(
-					func(args storagebase.FilterArgs) *roachpb.Error {
-						if err := injectErrors(args.Req, args.Hdr, tc.magicVals, true /* verifyTxn */); err != nil {
-							return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+				t.Run(fmt.Sprintf("err=%s,stgy=%d,parallel=%t", tc.expectedErr, rs, parallel), func(t *testing.T) {
+					aborter := NewTxnAborter()
+					defer aborter.Close(t)
+					params, cmdFilters := tests.CreateTestServerParams()
+					params.Knobs.SQLExecutor = aborter.executorKnobs()
+					s, sqlDB, _ := serverutils.StartServer(t, params)
+					defer s.Stopper().Stop(context.TODO())
+					{
+						pgURL, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), "TestTxnUserRestart", url.User(security.RootUser))
+						defer cleanup()
+						if err := aborter.Init(pgURL); err != nil {
+							t.Fatal(err)
 						}
-						return nil
-					}, false)
+					}
 
-				// Also inject an error at RELEASE time, besides the error injected by magicVals.
-				sentinelInsert := "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
-				if parallel {
-					sentinelInsert += " RETURNING NOTHING"
-				}
-				if err := aborter.QueueStmtForAbortion(
-					sentinelInsert, 1 /* abortCount */, true, /* willBeRetriedIbid */
-				); err != nil {
-					t.Fatal(err)
-				}
+					if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
+`); err != nil {
+						t.Fatal(err)
+					}
+					cleanupFilter := cmdFilters.AppendFilter(
+						func(args storagebase.FilterArgs) *roachpb.Error {
+							if err := injectErrors(args.Req, args.Hdr, tc.magicVals, true /* verifyTxn */); err != nil {
+								return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
+							}
+							return nil
+						}, false)
 
-				commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
-				// This is the magic. Run the txn closure until all the retries are exhausted.
-				retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
-					return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
-				})
-				checkRestarts(t, tc.magicVals)
+					// Also inject an error at RELEASE time, besides the error injected by magicVals.
+					sentinelInsert := "INSERT INTO t.test(k, v) VALUES (0, 'sentinel')"
+					if parallel {
+						sentinelInsert += " RETURNING NOTHING"
+					}
+					if err := aborter.QueueStmtForAbortion(
+						sentinelInsert, 1 /* abortCount */, true, /* willBeRetriedIbid */
+					); err != nil {
+						t.Fatal(err)
+					}
 
-				// Check that we only wrote the sentinel row.
-				rows, err := sqlDB.Query("SELECT * FROM t.test")
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer rows.Close()
-				for rows.Next() {
-					var k int
-					var v string
-					err = rows.Scan(&k, &v)
+					commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
+					// This is the magic. Run the txn closure until all the retries are exhausted.
+					retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
+						return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
+					})
+					checkRestarts(t, tc.magicVals)
+
+					// Check that we only wrote the sentinel row.
+					rows, err := sqlDB.Query("SELECT * FROM t.test")
 					if err != nil {
 						t.Fatal(err)
 					}
-					if k != 0 || v != "sentinel" {
-						t.Fatalf("didn't find expected row: %d %s", k, v)
+					defer rows.Close()
+					for rows.Next() {
+						var k int
+						var v string
+						err = rows.Scan(&k, &v)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if k != 0 || v != "sentinel" {
+							t.Fatalf("didn't find expected row: %d %s", k, v)
+						}
 					}
-				}
-				// Check that the commit counter was incremented. It could have been
-				// incremented by more than 1 because of the transactions we use to force
-				// aborts, plus who knows what else the server is doing in the background.
-				if err := checkCounterGE(s, sql.MetaTxnCommit, commitCount+1); err != nil {
-					t.Error(err)
-				}
-				// Clean up the table for the next test iteration.
-				_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
-				if err != nil {
-					t.Fatal(err)
-				}
-				cleanupFilter()
+					// Check that the commit counter was incremented. It could have been
+					// incremented by more than 1 because of the transactions we use to force
+					// aborts, plus who knows what else the server is doing in the background.
+					if err := checkCounterGE(s, sql.MetaTxnCommit, commitCount+1); err != nil {
+						t.Error(err)
+					}
+					// Clean up the table for the next test iteration.
+					_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
+					if err != nil {
+						t.Fatal(err)
+					}
+					cleanupFilter()
+				})
 			}
 		}
 	}
