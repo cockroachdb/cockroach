@@ -16,4 +16,5 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl/workloadccl/roachmartccl"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
 	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/kv"
+	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/tpcc"
 )
