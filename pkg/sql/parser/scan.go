@@ -342,11 +342,11 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			return
 		case '|': // ?|
 			s.pos++
-			lval.id = SOME_EXISTENCE
+			lval.id = JSON_SOME_EXISTS
 			return
-		case '&': // ?|
+		case '&': // ?&
 			s.pos++
-			lval.id = ALL_EXISTENCE
+			lval.id = JSON_ALL_EXISTS
 			return
 		}
 		return

@@ -304,9 +304,9 @@ const (
 	IsNotDistinctFrom
 	Contains
 	ContainedBy
-	Existence
-	SomeExistence
-	AllExistence
+	JSONExists
+	JSONSomeExists
+	JSONAllExists
 
 	// The following operators will always be used with an associated SubOperator.
 	// If Go had algebraic data types they would be defined in a self-contained
@@ -349,9 +349,9 @@ var comparisonOpName = [...]string{
 	IsNotDistinctFrom: "IS NOT DISTINCT FROM",
 	Contains:          "@>",
 	ContainedBy:       "<@",
-	Existence:         "?",
-	SomeExistence:     "?|",
-	AllExistence:      "?&",
+	JSONExists:        "?",
+	JSONSomeExists:    "?|",
+	JSONAllExists:     "?&",
 	Any:               "ANY",
 	Some:              "SOME",
 	All:               "ALL",
@@ -867,36 +867,34 @@ const (
 	Concat
 	LShift
 	RShift
-	FetchVal
-	FetchText
-	FetchValPath
-	FetchTextPath
-	RemovePath
+	JSONFetchVal
+	JSONFetchText
+	JSONFetchValPath
+	JSONFetchTextPath
 )
 
 var binaryOpName = [...]string{
-	Bitand:        "&",
-	Bitor:         "|",
-	Bitxor:        "#",
-	Plus:          "+",
-	Minus:         "-",
-	Mult:          "*",
-	Div:           "/",
-	FloorDiv:      "//",
-	Mod:           "%",
-	Pow:           "^",
-	Concat:        "||",
-	LShift:        "<<",
-	RShift:        ">>",
-	FetchVal:      "->",
-	FetchText:     "->>",
-	FetchValPath:  "#>",
-	FetchTextPath: "#>>",
-	RemovePath:    "#-",
+	Bitand:            "&",
+	Bitor:             "|",
+	Bitxor:            "#",
+	Plus:              "+",
+	Minus:             "-",
+	Mult:              "*",
+	Div:               "/",
+	FloorDiv:          "//",
+	Mod:               "%",
+	Pow:               "^",
+	Concat:            "||",
+	LShift:            "<<",
+	RShift:            ">>",
+	JSONFetchVal:      "->",
+	JSONFetchText:     "->>",
+	JSONFetchValPath:  "#>",
+	JSONFetchTextPath: "#>>",
 }
 
 func (i BinaryOperator) isPadded() bool {
-	return !(i == FetchVal || i == FetchText || i == FetchValPath || i == FetchTextPath)
+	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
 }
 
 func (i BinaryOperator) String() string {
