@@ -419,7 +419,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					continue
 				}
 
-			case expr.Operator == EQ && left.Operator == FetchVal && v.isConst(left.Right) &&
+			case expr.Operator == EQ && left.Operator == JSONFetchVal && v.isConst(left.Right) &&
 				v.isConst(expr.Right):
 				// This is a JSONB inverted index normalization, changing things of the form
 				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
