@@ -42,61 +42,29 @@ var typingFuncMap [opt.NumOperators]typingFunc
 
 func init() {
 	typingFuncMap = [opt.NumOperators]typingFunc{
-		opt.VariableOp:        typeVariable,
-		opt.ConstOp:           typeAsTypedExpr,
-		opt.TrueOp:            typeAsBool,
-		opt.FalseOp:           typeAsBool,
-		opt.PlaceholderOp:     typeAsTypedExpr,
-		opt.TupleOp:           typeAsTuple,
-		opt.ProjectionsOp:     typeAsTuple,
-		opt.FiltersOp:         typeAsBool,
-		opt.ExistsOp:          typeAsBool,
-		opt.AndOp:             typeAsBool,
-		opt.OrOp:              typeAsBool,
-		opt.NotOp:             typeAsBool,
-		opt.EqOp:              typeAsBool,
-		opt.LtOp:              typeAsBool,
-		opt.GtOp:              typeAsBool,
-		opt.LeOp:              typeAsBool,
-		opt.GeOp:              typeAsBool,
-		opt.NeOp:              typeAsBool,
-		opt.InOp:              typeAsBool,
-		opt.NotInOp:           typeAsBool,
-		opt.LikeOp:            typeAsBool,
-		opt.NotLikeOp:         typeAsBool,
-		opt.ILikeOp:           typeAsBool,
-		opt.NotILikeOp:        typeAsBool,
-		opt.SimilarToOp:       typeAsBool,
-		opt.NotSimilarToOp:    typeAsBool,
-		opt.RegMatchOp:        typeAsBool,
-		opt.NotRegMatchOp:     typeAsBool,
-		opt.RegIMatchOp:       typeAsBool,
-		opt.NotRegIMatchOp:    typeAsBool,
-		opt.IsOp:              typeAsBool,
-		opt.IsNotOp:           typeAsBool,
-		opt.AnyOp:             typeAsBool,
-		opt.SomeOp:            typeAsBool,
-		opt.AllOp:             typeAsBool,
-		opt.BitandOp:          typeAsBinary,
-		opt.BitorOp:           typeAsBinary,
-		opt.BitxorOp:          typeAsBinary,
-		opt.PlusOp:            typeAsBinary,
-		opt.MinusOp:           typeAsBinary,
-		opt.MultOp:            typeAsBinary,
-		opt.DivOp:             typeAsBinary,
-		opt.FloorDivOp:        typeAsBinary,
-		opt.ModOp:             typeAsBinary,
-		opt.PowOp:             typeAsBinary,
-		opt.ConcatOp:          typeAsBinary,
-		opt.LShiftOp:          typeAsBinary,
-		opt.RShiftOp:          typeAsBinary,
-		opt.FetchValOp:        typeAsBinary,
-		opt.FetchTextOp:       typeAsBinary,
-		opt.FetchValPathOp:    typeAsBinary,
-		opt.FetchTextPathOp:   typeAsBinary,
-		opt.UnaryPlusOp:       typeAsUnary,
-		opt.UnaryMinusOp:      typeAsUnary,
-		opt.UnaryComplementOp: typeAsUnary,
+		opt.VariableOp:    typeVariable,
+		opt.ConstOp:       typeAsTypedExpr,
+		opt.PlaceholderOp: typeAsTypedExpr,
+		opt.TupleOp:       typeAsTuple,
+		opt.ProjectionsOp: typeAsTuple,
+		opt.FiltersOp:     typeAsBool,
+		opt.ExistsOp:      typeAsBool,
+	}
+
+	for _, op := range opt.BooleanOperators {
+		typingFuncMap[op] = typeAsBool
+	}
+
+	for _, op := range opt.ComparisonOperators {
+		typingFuncMap[op] = typeAsBool
+	}
+
+	for _, op := range opt.BinaryOperators {
+		typingFuncMap[op] = typeAsBinary
+	}
+
+	for _, op := range opt.UnaryOperators {
+		typingFuncMap[op] = typeAsUnary
 	}
 }
 

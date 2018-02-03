@@ -2013,6 +2013,350 @@ var isScalarLookup = [...]bool{
 	false, // PresentOp
 }
 
+var isBooleanLookup = [...]bool{
+	false, // UnknownOp
+
+	false, // SubqueryOp
+	false, // VariableOp
+	false, // ConstOp
+	true,  // TrueOp
+	true,  // FalseOp
+	false, // PlaceholderOp
+	false, // TupleOp
+	false, // ProjectionsOp
+	false, // FiltersOp
+	false, // ExistsOp
+	true,  // AndOp
+	true,  // OrOp
+	true,  // NotOp
+	false, // EqOp
+	false, // LtOp
+	false, // GtOp
+	false, // LeOp
+	false, // GeOp
+	false, // NeOp
+	false, // InOp
+	false, // NotInOp
+	false, // LikeOp
+	false, // NotLikeOp
+	false, // ILikeOp
+	false, // NotILikeOp
+	false, // SimilarToOp
+	false, // NotSimilarToOp
+	false, // RegMatchOp
+	false, // NotRegMatchOp
+	false, // RegIMatchOp
+	false, // NotRegIMatchOp
+	false, // IsOp
+	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
+	false, // AnyOp
+	false, // SomeOp
+	false, // AllOp
+	false, // BitandOp
+	false, // BitorOp
+	false, // BitxorOp
+	false, // PlusOp
+	false, // MinusOp
+	false, // MultOp
+	false, // DivOp
+	false, // FloorDivOp
+	false, // ModOp
+	false, // PowOp
+	false, // ConcatOp
+	false, // LShiftOp
+	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
+	false, // UnaryPlusOp
+	false, // UnaryMinusOp
+	false, // UnaryComplementOp
+	false, // FunctionOp
+	false, // ScanOp
+	false, // ValuesOp
+	false, // SelectOp
+	false, // ProjectOp
+	false, // InnerJoinOp
+	false, // LeftJoinOp
+	false, // RightJoinOp
+	false, // FullJoinOp
+	false, // SemiJoinOp
+	false, // AntiJoinOp
+	false, // InnerJoinApplyOp
+	false, // LeftJoinApplyOp
+	false, // RightJoinApplyOp
+	false, // FullJoinApplyOp
+	false, // SemiJoinApplyOp
+	false, // AntiJoinApplyOp
+	false, // GroupByOp
+	false, // UnionOp
+	false, // IntersectOp
+	false, // ExceptOp
+	false, // SortOp
+	false, // PresentOp
+}
+
+var isComparisonLookup = [...]bool{
+	false, // UnknownOp
+
+	false, // SubqueryOp
+	false, // VariableOp
+	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
+	false, // PlaceholderOp
+	false, // TupleOp
+	false, // ProjectionsOp
+	false, // FiltersOp
+	false, // ExistsOp
+	false, // AndOp
+	false, // OrOp
+	false, // NotOp
+	true,  // EqOp
+	true,  // LtOp
+	true,  // GtOp
+	true,  // LeOp
+	true,  // GeOp
+	true,  // NeOp
+	true,  // InOp
+	true,  // NotInOp
+	true,  // LikeOp
+	true,  // NotLikeOp
+	true,  // ILikeOp
+	true,  // NotILikeOp
+	true,  // SimilarToOp
+	true,  // NotSimilarToOp
+	true,  // RegMatchOp
+	true,  // NotRegMatchOp
+	true,  // RegIMatchOp
+	true,  // NotRegIMatchOp
+	true,  // IsOp
+	true,  // IsNotOp
+	true,  // ContainsOp
+	true,  // ContainedByOp
+	true,  // AnyOp
+	true,  // SomeOp
+	true,  // AllOp
+	false, // BitandOp
+	false, // BitorOp
+	false, // BitxorOp
+	false, // PlusOp
+	false, // MinusOp
+	false, // MultOp
+	false, // DivOp
+	false, // FloorDivOp
+	false, // ModOp
+	false, // PowOp
+	false, // ConcatOp
+	false, // LShiftOp
+	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
+	false, // UnaryPlusOp
+	false, // UnaryMinusOp
+	false, // UnaryComplementOp
+	false, // FunctionOp
+	false, // ScanOp
+	false, // ValuesOp
+	false, // SelectOp
+	false, // ProjectOp
+	false, // InnerJoinOp
+	false, // LeftJoinOp
+	false, // RightJoinOp
+	false, // FullJoinOp
+	false, // SemiJoinOp
+	false, // AntiJoinOp
+	false, // InnerJoinApplyOp
+	false, // LeftJoinApplyOp
+	false, // RightJoinApplyOp
+	false, // FullJoinApplyOp
+	false, // SemiJoinApplyOp
+	false, // AntiJoinApplyOp
+	false, // GroupByOp
+	false, // UnionOp
+	false, // IntersectOp
+	false, // ExceptOp
+	false, // SortOp
+	false, // PresentOp
+}
+
+var isBinaryLookup = [...]bool{
+	false, // UnknownOp
+
+	false, // SubqueryOp
+	false, // VariableOp
+	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
+	false, // PlaceholderOp
+	false, // TupleOp
+	false, // ProjectionsOp
+	false, // FiltersOp
+	false, // ExistsOp
+	false, // AndOp
+	false, // OrOp
+	false, // NotOp
+	false, // EqOp
+	false, // LtOp
+	false, // GtOp
+	false, // LeOp
+	false, // GeOp
+	false, // NeOp
+	false, // InOp
+	false, // NotInOp
+	false, // LikeOp
+	false, // NotLikeOp
+	false, // ILikeOp
+	false, // NotILikeOp
+	false, // SimilarToOp
+	false, // NotSimilarToOp
+	false, // RegMatchOp
+	false, // NotRegMatchOp
+	false, // RegIMatchOp
+	false, // NotRegIMatchOp
+	false, // IsOp
+	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
+	false, // AnyOp
+	false, // SomeOp
+	false, // AllOp
+	true,  // BitandOp
+	true,  // BitorOp
+	true,  // BitxorOp
+	true,  // PlusOp
+	true,  // MinusOp
+	true,  // MultOp
+	true,  // DivOp
+	true,  // FloorDivOp
+	true,  // ModOp
+	true,  // PowOp
+	true,  // ConcatOp
+	true,  // LShiftOp
+	true,  // RShiftOp
+	true,  // FetchValOp
+	true,  // FetchTextOp
+	true,  // FetchValPathOp
+	true,  // FetchTextPathOp
+	false, // UnaryPlusOp
+	false, // UnaryMinusOp
+	false, // UnaryComplementOp
+	false, // FunctionOp
+	false, // ScanOp
+	false, // ValuesOp
+	false, // SelectOp
+	false, // ProjectOp
+	false, // InnerJoinOp
+	false, // LeftJoinOp
+	false, // RightJoinOp
+	false, // FullJoinOp
+	false, // SemiJoinOp
+	false, // AntiJoinOp
+	false, // InnerJoinApplyOp
+	false, // LeftJoinApplyOp
+	false, // RightJoinApplyOp
+	false, // FullJoinApplyOp
+	false, // SemiJoinApplyOp
+	false, // AntiJoinApplyOp
+	false, // GroupByOp
+	false, // UnionOp
+	false, // IntersectOp
+	false, // ExceptOp
+	false, // SortOp
+	false, // PresentOp
+}
+
+var isUnaryLookup = [...]bool{
+	false, // UnknownOp
+
+	false, // SubqueryOp
+	false, // VariableOp
+	false, // ConstOp
+	false, // TrueOp
+	false, // FalseOp
+	false, // PlaceholderOp
+	false, // TupleOp
+	false, // ProjectionsOp
+	false, // FiltersOp
+	false, // ExistsOp
+	false, // AndOp
+	false, // OrOp
+	false, // NotOp
+	false, // EqOp
+	false, // LtOp
+	false, // GtOp
+	false, // LeOp
+	false, // GeOp
+	false, // NeOp
+	false, // InOp
+	false, // NotInOp
+	false, // LikeOp
+	false, // NotLikeOp
+	false, // ILikeOp
+	false, // NotILikeOp
+	false, // SimilarToOp
+	false, // NotSimilarToOp
+	false, // RegMatchOp
+	false, // NotRegMatchOp
+	false, // RegIMatchOp
+	false, // NotRegIMatchOp
+	false, // IsOp
+	false, // IsNotOp
+	false, // ContainsOp
+	false, // ContainedByOp
+	false, // AnyOp
+	false, // SomeOp
+	false, // AllOp
+	false, // BitandOp
+	false, // BitorOp
+	false, // BitxorOp
+	false, // PlusOp
+	false, // MinusOp
+	false, // MultOp
+	false, // DivOp
+	false, // FloorDivOp
+	false, // ModOp
+	false, // PowOp
+	false, // ConcatOp
+	false, // LShiftOp
+	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
+	true,  // UnaryPlusOp
+	true,  // UnaryMinusOp
+	true,  // UnaryComplementOp
+	false, // FunctionOp
+	false, // ScanOp
+	false, // ValuesOp
+	false, // SelectOp
+	false, // ProjectOp
+	false, // InnerJoinOp
+	false, // LeftJoinOp
+	false, // RightJoinOp
+	false, // FullJoinOp
+	false, // SemiJoinOp
+	false, // AntiJoinOp
+	false, // InnerJoinApplyOp
+	false, // LeftJoinApplyOp
+	false, // RightJoinApplyOp
+	false, // FullJoinApplyOp
+	false, // SemiJoinApplyOp
+	false, // AntiJoinApplyOp
+	false, // GroupByOp
+	false, // UnionOp
+	false, // IntersectOp
+	false, // ExceptOp
+	false, // SortOp
+	false, // PresentOp
+}
+
 var isRelationalLookup = [...]bool{
 	false, // UnknownOp
 
@@ -2359,6 +2703,22 @@ var isEnforcerLookup = [...]bool{
 
 func (ev *ExprView) IsScalar() bool {
 	return isScalarLookup[ev.op]
+}
+
+func (ev *ExprView) IsBoolean() bool {
+	return isBooleanLookup[ev.op]
+}
+
+func (ev *ExprView) IsComparison() bool {
+	return isComparisonLookup[ev.op]
+}
+
+func (ev *ExprView) IsBinary() bool {
+	return isBinaryLookup[ev.op]
+}
+
+func (ev *ExprView) IsUnary() bool {
+	return isUnaryLookup[ev.op]
 }
 
 func (ev *ExprView) IsRelational() bool {
