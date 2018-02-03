@@ -7,9 +7,11 @@ type Factory interface {
 	// about the columns and tables used in this particular query.
 	Metadata() *Metadata
 
-	// StoreList allocates storage for a list of group IDs in the memo and
-	// returns an ID that can be used for later lookup.
-	StoreList(items []GroupID) ListID
+	// InternList adds the given list of group IDs to memo storage and returns
+	// an ID that can be used for later lookup. If the same list was added
+	// previously, this method is a no-op and returns the ID of the previous
+	// value.
+	InternList(items []GroupID) ListID
 
 	// InternPrivate adds the given private value to the memo and returns an ID
 	// that can be used for later lookup. If the same value was added before,

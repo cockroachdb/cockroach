@@ -34,3 +34,7 @@ type ListID struct {
 	Offset uint32
 	Length uint32
 }
+
+// EmptyList is a list with zero elements. It begins at offset 1 because offset
+// 0 is reserved to indicate an invalid, uninitialized list.
+var EmptyList = ListID{Offset: 1, Length: 0}
