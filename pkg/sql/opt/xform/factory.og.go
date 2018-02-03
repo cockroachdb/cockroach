@@ -1072,17 +1072,17 @@ func init() {
 
 	// TupleOp
 	dynConstructLookup[opt.TupleOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructTuple(f.StoreList(children))
+		return f.ConstructTuple(f.InternList(children))
 	}
 
 	// ProjectionsOp
 	dynConstructLookup[opt.ProjectionsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructProjections(f.StoreList(children), private)
+		return f.ConstructProjections(f.InternList(children), private)
 	}
 
 	// FiltersOp
 	dynConstructLookup[opt.FiltersOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructFilters(f.StoreList(children))
+		return f.ConstructFilters(f.InternList(children))
 	}
 
 	// ExistsOp
@@ -1332,7 +1332,7 @@ func init() {
 
 	// FunctionOp
 	dynConstructLookup[opt.FunctionOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructFunction(f.StoreList(children), private)
+		return f.ConstructFunction(f.InternList(children), private)
 	}
 
 	// ScanOp
@@ -1342,7 +1342,7 @@ func init() {
 
 	// ValuesOp
 	dynConstructLookup[opt.ValuesOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructValues(f.StoreList(children), private)
+		return f.ConstructValues(f.InternList(children), private)
 	}
 
 	// SelectOp

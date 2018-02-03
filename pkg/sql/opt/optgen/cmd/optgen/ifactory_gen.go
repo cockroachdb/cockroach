@@ -44,9 +44,11 @@ func (g *ifactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  // about the columns and tables used in this particular query.\n")
 	fmt.Fprintf(g.w, "  Metadata() *Metadata\n\n")
 
-	fmt.Fprintf(g.w, "  // StoreList allocates storage for a list of group IDs in the memo and\n")
-	fmt.Fprintf(g.w, "  // returns an ID that can be used for later lookup.\n")
-	fmt.Fprintf(g.w, "  StoreList(items []GroupID) ListID\n\n")
+	fmt.Fprintf(g.w, "  // InternList adds the given list of group IDs to memo storage and returns\n")
+	fmt.Fprintf(g.w, "  // an ID that can be used for later lookup. If the same list was added\n")
+	fmt.Fprintf(g.w, "  // previously, this method is a no-op and returns the ID of the previous\n")
+	fmt.Fprintf(g.w, "  // value.\n")
+	fmt.Fprintf(g.w, "  InternList(items []GroupID) ListID\n\n")
 
 	fmt.Fprintf(g.w, "  // InternPrivate adds the given private value to the memo and returns an ID\n")
 	fmt.Fprintf(g.w, "  // that can be used for later lookup. If the same value was added before,\n")
