@@ -359,71 +359,80 @@ func TestLeaseExpiration(t *testing.T) {
 	}
 }
 
-// isolatedMigrationTest assists in testing the effects of one migration in
-// isolation.
-//
-// It boots a test server after removing the migration under test from the list
-// of automatically-run migrations. The migration can be triggered manually by
-// calling the runMigration method; its effects can be verified by inspecting
-// the state before and after via the exposed KV and SQL interfaces.
-type isolatedMigrationTest struct {
+// migrationTest assists in testing the effects of a migration. It provides
+// methods to edit the list of migrations run at server startup, start a test
+// server, and run an individual migration. The test server's KV and SQL
+// interfaces are intended to be accessed directly to verify the effect of the
+// migration. Any mutations to the list of migrations run at server startup are
+// reverted at the end of the test.
+type migrationTest struct {
 	oldMigrations []migrationDescriptor
-	migration     migrationDescriptor
 	server        serverutils.TestServerInterface
 	sqlDB         *sqlutils.SQLRunner
 	kvDB          *client.DB
 	memMetrics    *sql.MemoryMetrics
 }
 
-// makeIsolatedMigrationTest creates an IsolatedMigrationTest to test the
-// migration whose name starts with namePrefix. It fails the test if the number
-// of migrations that match namePrefix is not exactly one.
+// makeMigrationTest creates a new migrationTest.
 //
 // The caller is responsible for calling the test's close method at the end of
 // the test.
-func makeIsolatedMigrationTest(
-	ctx context.Context, t testing.TB, namePrefix string,
-) isolatedMigrationTest {
+func makeMigrationTest(
+	ctx context.Context, t testing.TB,
+) migrationTest {
 	t.Helper()
 
-	var migration migrationDescriptor
 	oldMigrations := append([]migrationDescriptor(nil), backwardCompatibleMigrations...)
-	backwardCompatibleMigrations = []migrationDescriptor{}
-	for _, m := range oldMigrations {
-		if strings.HasPrefix(m.name, namePrefix) {
-			migration = m
-			continue
-		}
-		backwardCompatibleMigrations = append(backwardCompatibleMigrations, m)
-	}
-	if n := len(oldMigrations) - len(backwardCompatibleMigrations); n != 1 {
-		t.Fatalf("expected prefix %q to match exactly one migration, but matched %d", namePrefix, n)
-	}
-
 	memMetrics := sql.MakeMemMetrics("migration-test-internal", time.Minute)
-
-	return isolatedMigrationTest{
-		migration:     migration,
+	return migrationTest{
 		oldMigrations: oldMigrations,
 		memMetrics:    &memMetrics,
 	}
 }
 
+// pop removes the migration whose name starts with namePrefix from the list of
+// migrations run at server startup. It fails the test if the number of
+// migrations that match namePrefix is not exactly one.
+//
+// You must not call pop after calling start.
+func (mt *migrationTest) pop(t testing.TB, namePrefix string) migrationDescriptor {
+	t.Helper()
+
+	if mt.server != nil {
+		t.Fatal("migrationTest.pop must be called before mt.start")
+	}
+
+	var migration migrationDescriptor
+	var newMigrations []migrationDescriptor
+	for _, m := range backwardCompatibleMigrations {
+		if strings.HasPrefix(m.name, namePrefix) {
+			migration = m
+			continue
+		}
+		newMigrations = append(newMigrations, m)
+	}
+	if n := len(backwardCompatibleMigrations) - len(newMigrations); n != 1 {
+		t.Fatalf("expected prefix %q to match exactly one migration, but matched %d", namePrefix, n)
+	}
+	backwardCompatibleMigrations = newMigrations
+	return migration
+}
+
 // start starts a test server with the given serverArgs.
-func (mt *isolatedMigrationTest) start(t testing.TB, serverArgs base.TestServerArgs) {
+func (mt *migrationTest) start(t testing.TB, serverArgs base.TestServerArgs) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, serverArgs)
 	mt.server = server
 	mt.sqlDB = sqlutils.MakeSQLRunner(sqlDB)
 	mt.kvDB = kvDB
 }
 
-// runMigration triggers a manual run of the migration under test. It does not
-// mark the migration as completed, so subsequent calls will cause the migration
-// to be re-executed. This is useful for verifying idempotency.
+// runMigration triggers a manual run of migration. It does not mark migration
+// as completed, so subsequent calls will cause migration to be re-executed.
+// This is useful for verifying idempotency.
 //
 // You must call start before calling runMigration.
-func (mt *isolatedMigrationTest) runMigration(ctx context.Context) error {
-	return mt.migration.workFn(ctx, runner{
+func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor) error {
+	return m.workFn(ctx, runner{
 		db:          mt.kvDB,
 		memMetrics:  mt.memMetrics,
 		sqlExecutor: mt.server.Executor().(*sql.Executor),
@@ -431,7 +440,7 @@ func (mt *isolatedMigrationTest) runMigration(ctx context.Context) error {
 }
 
 // close stops the test server and restores package-global state.
-func (mt *isolatedMigrationTest) close(ctx context.Context) {
+func (mt *migrationTest) close(ctx context.Context) {
 	if mt.server != nil {
 		mt.server.Stopper().Stop(ctx)
 	}
@@ -442,15 +451,16 @@ func TestRemoveClusterSettingKVGCBatchSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	mt := makeIsolatedMigrationTest(ctx, t, "remove cluster setting `kv.gc.batch_size`")
+	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
+	migration := mt.pop(t, "remove cluster setting `kv.gc.batch_size`")
 	mt.start(t, base.TestServerArgs{})
 
 	mt.sqlDB.Exec(t, `INSERT INTO system.settings (name, "lastUpdated", "valueType", value) `+
 		`values('kv.gc.batch_size', NOW(), 'i', '10000')`)
 
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	var n int
@@ -478,7 +488,7 @@ func TestCreateSystemTable(t *testing.T) {
 	settingsDescKey := sqlbase.MakeDescMetadataKey(settingsDesc.GetID())
 	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
 
-	mt := makeIsolatedMigrationTest(ctx, t, "create system.jobs table")
+	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
 	for i, m := range backwardCompatibleMigrations {
@@ -490,6 +500,7 @@ func TestCreateSystemTable(t *testing.T) {
 		}
 	}
 
+	migration := mt.pop(t, "create system.jobs table")
 	mt.start(t, base.TestServerArgs{})
 
 	// Verify that the system.jobs keys were not written, but the system.settings
@@ -516,7 +527,7 @@ func TestCreateSystemTable(t *testing.T) {
 		t.Errorf("expected %v for key %q, got %v", settingsDescVal, settingsDescKey, descriptor)
 	}
 
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 
@@ -533,7 +544,7 @@ func TestCreateSystemTable(t *testing.T) {
 	}
 
 	// Verify the idempotency of the migration.
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -542,9 +553,10 @@ func TestUpdateViewDependenciesMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	mt := makeIsolatedMigrationTest(ctx, t, "establish conservative dependencies for views")
+	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
+	migration := mt.pop(t, "establish conservative dependencies for views")
 	mt.start(t, base.TestServerArgs{})
 
 	t.Log("create test tables")
@@ -644,7 +656,7 @@ CREATE INDEX y ON test.x(x);
 `)
 
 	t.Log("run migration")
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 
@@ -668,32 +680,19 @@ CREATE INDEX y ON test.x(x);
 	// Finally, try running the migration and make sure it still succeeds.
 	// This verifies the idempotency of the migration.
 	t.Log("run migration again")
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func testZoneConfigMigration(
-	t *testing.T, name string, ids ...uint32,
-) (ctx context.Context, mt isolatedMigrationTest, cleanup func()) {
-	ctx = context.Background()
-	mt = makeIsolatedMigrationTest(ctx, t, name)
+func checkNoZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int) {
+	t.Helper()
 
-	mt.start(t, base.TestServerArgs{})
-
-	for _, id := range ids {
-		var s string
-		err := mt.sqlDB.DB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
-		if err != gosql.ErrNoRows {
-			t.Fatalf("expected no rows, but found %v", err)
-		}
+	var s string
+	err := sqlDB.DB.QueryRow(`SELECT config FROM system.zones WHERE id = $1`, id).Scan(&s)
+	if err != gosql.ErrNoRows {
+		t.Fatalf("expected no rows, but found %v", err)
 	}
-
-	// Run the migration and verify its effects.
-	if err := mt.runMigration(ctx); err != nil {
-		t.Fatal(err)
-	}
-	return ctx, mt, func() { mt.close(ctx) }
 }
 
 func checkZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, expected config.ZoneConfig) {
@@ -724,9 +723,20 @@ func setZoneConfig(t *testing.T, sqlDB *sqlutils.SQLRunner, id int, zone config.
 
 func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, mt, cleanup := testZoneConfigMigration(t, "add default .meta and .liveness zone configs", keys.MetaRangesID, keys.LivenessRangesID)
-	defer cleanup()
+	ctx := context.Background()
 
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add default .meta and .liveness zone configs")
+	mt.start(t, base.TestServerArgs{})
+
+	checkNoZoneConfig(t, mt.sqlDB, keys.MetaRangesID)
+	checkNoZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
+
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Fatal(err)
+	}
 	expectedMeta := config.DefaultZoneConfig()
 	expectedMeta.GC.TTLSeconds = 60 * 60
 	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, expectedMeta)
@@ -741,7 +751,7 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	setZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
 	setZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
 	deleteZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
@@ -754,7 +764,7 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	setZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
 	setZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
 	deleteZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
@@ -769,7 +779,7 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	setZoneConfig(t, mt.sqlDB, keys.SystemRangesID, testZone)
 	deleteZoneConfig(t, mt.sqlDB, keys.MetaRangesID)
 	deleteZoneConfig(t, mt.sqlDB, keys.LivenessRangesID)
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	testZone.GC.TTLSeconds = 60 * 60
@@ -782,18 +792,28 @@ func TestAddDefaultMetaZoneConfigMigration(t *testing.T) {
 	testZone.RangeMaxBytes = 863
 	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
 	setZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	testZone.GC.TTLSeconds = 60 * 60
 	checkZoneConfig(t, mt.sqlDB, keys.MetaRangesID, testZone)
 }
 
-func TestAddSystemJobsMigration(t *testing.T) {
+func TestAddDefaultSystemJobsZoneConfigMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ctx, mt, cleanup := testZoneConfigMigration(t, "add default system.jobs zone config", keys.JobsTableID)
-	defer cleanup()
+	ctx := context.Background()
 
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
+
+	migration := mt.pop(t, "add default system.jobs zone config")
+	mt.start(t, base.TestServerArgs{})
+
+	checkNoZoneConfig(t, mt.sqlDB, keys.JobsTableID)
+
+	if err := mt.runMigration(ctx, migration); err != nil {
+		t.Fatal(err)
+	}
 	expected := config.DefaultZoneConfig()
 	expected.GC.TTLSeconds = 10 * 60
 	checkZoneConfig(t, mt.sqlDB, keys.JobsTableID, expected)
@@ -803,7 +823,7 @@ func TestAddSystemJobsMigration(t *testing.T) {
 	testZone.RangeMaxBytes = 264
 	setZoneConfig(t, mt.sqlDB, keys.RootNamespaceID, testZone)
 	deleteZoneConfig(t, mt.sqlDB, keys.JobsTableID)
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	testZone.GC.TTLSeconds = 10 * 60
@@ -814,7 +834,7 @@ func TestAddSystemJobsMigration(t *testing.T) {
 	testZone.RangeMaxBytes = 863
 	testZone.GC.TTLSeconds = config.DefaultZoneConfig().GC.TTLSeconds
 	setZoneConfig(t, mt.sqlDB, keys.JobsTableID, testZone)
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	testZone.GC.TTLSeconds = 10 * 60
@@ -825,9 +845,10 @@ func TestAdminUserExists(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	mt := makeIsolatedMigrationTest(ctx, t, "add system.users isRole column and create admin role")
+	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
+	migration := mt.pop(t, "add system.users isRole column and create admin role")
 	mt.start(t, base.TestServerArgs{})
 
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
@@ -836,7 +857,7 @@ func TestAdminUserExists(t *testing.T) {
 		sqlbase.AdminRole)
 
 	e := `cannot create role "admin", a user with that name exists.`
-	if err := mt.runMigration(ctx); !testutils.IsError(err, e) {
+	if err := mt.runMigration(ctx, migration); !testutils.IsError(err, e) {
 		t.Errorf("expected error %q, got %q", err, e)
 	}
 }
@@ -845,18 +866,14 @@ func TestReplayMigrations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	mt := makeMigrationTest(ctx, t)
+	defer mt.close(ctx)
 
-	r := runner{
-		db:          kvDB,
-		sqlExecutor: s.Executor().(*sql.Executor),
-		memMetrics:  &sql.MemoryMetrics{},
-	}
+	mt.start(t, base.TestServerArgs{})
 
-	// Test all migrations again. StartServer did the first round.
+	// Test all migrations again. Starting the server did the first round.
 	for _, m := range backwardCompatibleMigrations {
-		if err := m.workFn(ctx, r); err != nil {
+		if err := mt.runMigration(ctx, m); err != nil {
 			t.Error(err)
 		}
 	}
@@ -866,9 +883,10 @@ func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	mt := makeIsolatedMigrationTest(ctx, t, "upgrade table descs to interleaved format version")
+	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
+	migration := mt.pop(t, "upgrade table descs to interleaved format version")
 	mt.start(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -907,7 +925,7 @@ func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
 	}
 	// Ensure the migration upgrades the format of all tables, even those that
 	// are dropping.
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < n; i++ {
@@ -918,7 +936,7 @@ func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
 	}
 
 	// Verify idempotency.
-	if err := mt.runMigration(ctx); err != nil {
+	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 }
