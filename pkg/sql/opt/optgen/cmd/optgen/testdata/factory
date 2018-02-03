@@ -71,7 +71,7 @@ func init() {
 
 	// FuncCallOp
 	dynConstructLookup[opt.FuncCallOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructFuncCall(children[0], f.StoreList(children[1:]), private)
+		return f.ConstructFuncCall(children[0], f.InternList(children[1:]), private)
 	}
 
 }
