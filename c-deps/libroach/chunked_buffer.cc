@@ -20,10 +20,20 @@ namespace cockroach {
 
 // Write a key/value pair to this chunkedBuffer.
 void chunkedBuffer::Put(const rocksdb::Slice& key, const rocksdb::Slice& value) {
-  const uint64_t v = uint64_t(key.size()) << 32 | uint64_t(value.size());
-  const uint8_t size_buf[sizeof(v)] = {
-      uint8_t(v >> 56), uint8_t(v >> 48), uint8_t(v >> 40), uint8_t(v >> 32),
-      uint8_t(v >> 24), uint8_t(v >> 16), uint8_t(v >> 8),  uint8_t(v),
+  // The key and size are passed as a single little endian encoded
+  // uint64 value. Little endian to optimize for the common case of
+  // Intel CPUs.
+  const uint32_t key_size = key.size();
+  const uint32_t val_size = value.size();
+  const uint8_t size_buf[sizeof(uint64_t)] = {
+    uint8_t(val_size),
+    uint8_t(val_size >> 8),
+    uint8_t(val_size >> 16),
+    uint8_t(val_size >> 24),
+    uint8_t(key_size),
+    uint8_t(key_size >> 8),
+    uint8_t(key_size >> 16),
+    uint8_t(key_size >> 24),
   };
   put((const char*)size_buf, sizeof(size_buf), key.size() + value.size());
   put(key.data(), key.size(), value.size());
