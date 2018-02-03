@@ -17,6 +17,7 @@ package engine
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -38,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -2550,19 +2550,17 @@ func unlockFile(lock C.DBFileLock) error {
 // RocksDB batch repr format), returning both the key/value and the suffix of
 // data remaining in the batch.
 func mvccScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
-	if len(repr) == 0 {
+	if len(repr) < 8 {
 		return key, nil, repr, errors.Errorf("unexpected batch EOF")
 	}
-	repr, v, err := encoding.DecodeUint64Ascending(repr)
-	if err != nil {
-		return key, nil, nil, err
-	}
+	v := binary.LittleEndian.Uint64(repr)
 	keySize := v >> 32
 	valSize := v & ((1 << 32) - 1)
 	if (keySize + valSize) > uint64(len(repr)) {
 		return key, nil, nil, fmt.Errorf("expected %d bytes, but only %d remaining",
 			keySize+valSize, len(repr))
 	}
+	repr = repr[8:]
 	rawKey := repr[:keySize]
 	value = repr[keySize : keySize+valSize]
 	repr = repr[keySize+valSize:]
