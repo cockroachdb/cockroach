@@ -75,7 +75,9 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 			defer evalCtx.Stop(context.Background())
 			if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 				t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
-			} else if datum, err := decodeOidDatum(oid, pgwirebase.FormatBinary, got[4:]); err != nil {
+			} else if datum, err := pgwirebase.DecodeOidDatum(
+				oid, pgwirebase.FormatBinary, got[4:],
+			); err != nil {
 				t.Fatalf("unable to decode %v: %s", got[4:], err)
 			} else if d.Compare(evalCtx, datum) != 0 {
 				t.Errorf("expected %s, got %s", d, datum)
@@ -174,7 +176,7 @@ func TestBinaryIntArray(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	got, err := decodeOidDatum(oid.T__int8, pgwirebase.FormatBinary, b[4:])
+	got, err := pgwirebase.DecodeOidDatum(oid.T__int8, pgwirebase.FormatBinary, b[4:])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +247,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		evalCtx := tree.NewTestingEvalContext()
 		if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 			t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
-		} else if datum, err := decodeOidDatum(
+		} else if datum, err := pgwirebase.DecodeOidDatum(
 			oid.T_numeric, pgwirebase.FormatBinary, got[4:],
 		); err != nil {
 			t.Errorf("%q: unable to decode %v: %s", test.In, got[4:], err)
