@@ -51,10 +51,10 @@ var BinaryOpReverseMap = [...]tree.BinaryOperator{
 	ConcatOp:        tree.Concat,
 	LShiftOp:        tree.LShift,
 	RShiftOp:        tree.RShift,
-	FetchValOp:      tree.FetchVal,
-	FetchTextOp:     tree.FetchText,
-	FetchValPathOp:  tree.FetchValPath,
-	FetchTextPathOp: tree.FetchTextPath,
+	FetchValOp:      tree.JSONFetchVal,
+	FetchTextOp:     tree.JSONFetchText,
+	FetchValPathOp:  tree.JSONFetchValPath,
+	FetchTextPathOp: tree.JSONFetchTextPath,
 }
 
 // UnaryOpReverseMap maps from an optimizer operator type to a semantic tree
