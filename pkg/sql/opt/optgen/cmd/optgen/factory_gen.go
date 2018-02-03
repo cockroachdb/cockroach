@@ -106,9 +106,9 @@ func (g *factoryGen) genDynamicConstructLookup() {
 
 			if isListType(string(field.Type)) {
 				if i == 0 {
-					g.w.write("f.StoreList(children)")
+					g.w.write("f.InternList(children)")
 				} else {
-					g.w.write("f.StoreList(children[%d:])", i)
+					g.w.write("f.InternList(children[%d:])", i)
 				}
 			} else if isPrivateType(string(field.Type)) {
 				g.w.write("private")

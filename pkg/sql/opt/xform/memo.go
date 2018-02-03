@@ -108,11 +108,10 @@ type memo struct {
 	logPropsFactory logicalPropsFactory
 
 	// Some memoExprs have a variable number of children. The memoExpr stores
-	// the list as a ListID struct, which contains an index into this array,
-	// plus the count of children. The children are stored as a slice of this
-	// array. Note that ListID 0 is invalid in order to indicate an unknown
-	// list.
-	lists []opt.GroupID
+	// the list as a ListID struct, which is a slice of an array maintained by
+	// listStorage. Note that ListID 0 is invalid in order to indicate an
+	// unknown list.
+	listStorage listStorage
 
 	// Intern the set of unique privates used by expressions in the memo, since
 	// there are so many duplicates. Note that PrivateID 0 is invalid in order
@@ -130,11 +129,11 @@ func newMemo(catalog optbase.Catalog) *memo {
 		metadata:    opt.NewMetadata(catalog),
 		exprMap:     make(map[fingerprint]opt.GroupID),
 		groups:      make([]memoGroup, 1),
-		lists:       make([]opt.GroupID, 1),
 		privatesMap: make(map[interface{}]opt.PrivateID),
 		privates:    make([]interface{}, 1),
 	}
 
+	m.listStorage.init()
 	m.logPropsFactory.init(m)
 	return m
 }
@@ -182,19 +181,17 @@ func (m *memo) lookupExpr(loc memoLoc) *memoExpr {
 	return m.groups[loc.group].lookupExpr(loc.expr)
 }
 
-// storeList allocates storage for a list of group IDs in the memo and returns
-// an ID that can be used for later lookup.
-// TODO(andyk): lists should be interned.
-func (m *memo) storeList(items []opt.GroupID) opt.ListID {
-	id := opt.ListID{Offset: uint32(len(m.lists)), Length: uint32(len(items))}
-	m.lists = append(m.lists, items...)
-	return id
+// internList adds the given list of group IDs to memo storage and returns an
+// ID that can be used for later lookup. If the same list was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (m *memo) internList(items []opt.GroupID) opt.ListID {
+	return m.listStorage.intern(items)
 }
 
 // lookupList returns a list of group IDs that was earlier stored in the memo
-// by a call to storeList.
+// by a call to internList.
 func (m *memo) lookupList(id opt.ListID) []opt.GroupID {
-	return m.lists[id.Offset : id.Offset+id.Length]
+	return m.listStorage.lookup(id)
 }
 
 // internPrivate adds the given private value to the memo and returns an ID

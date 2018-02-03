@@ -59,10 +59,11 @@ func (f *factory) Metadata() *opt.Metadata {
 	return f.mem.metadata
 }
 
-// StoreList allocates storage for a list of group IDs in the memo and returns
-// an ID that can be used for later lookup.
-func (f *factory) StoreList(items []opt.GroupID) opt.ListID {
-	return f.mem.storeList(items)
+// InternList adds the given list of group IDs to memo storage and returns an
+// ID that can be used for later lookup. If the same list was added previously,
+// this method is a no-op and returns the ID of the previous value.
+func (f *factory) InternList(items []opt.GroupID) opt.ListID {
+	return f.mem.internList(items)
 }
 
 // InternPrivate adds the given private value to the memo and returns an ID
