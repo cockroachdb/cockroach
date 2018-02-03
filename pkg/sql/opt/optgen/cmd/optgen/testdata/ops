@@ -32,5 +32,17 @@ const (
 const opNames = "unknownltinner-join-applysort"
 
 var opIndexes = [...]uint32{0, 7, 9, 25, 29}
+
+var ScalarOperators = [...]Operator{
+	LtOp,
+}
+
+var RelationalOperators = [...]Operator{
+	InnerJoinApplyOp,
+}
+
+var EnforcerOperators = [...]Operator{
+	SortOp,
+}
 ----
 ----

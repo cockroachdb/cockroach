@@ -35,37 +35,44 @@ func (g *opsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	fmt.Fprintf(g.w, "package opt\n\n")
 
-	fmt.Fprintf(w, "const (\n")
-	fmt.Fprintf(w, "  UnknownOp Operator = iota\n\n")
+	g.genOperatorEnum()
+	g.genOperatorNames()
+	g.genOperatorsByTag()
+}
 
-	g.genOperatorsByTag("Scalar")
-	g.genOperatorsByTag("Relational")
-	g.genOperatorsByTag("Enforcer")
+func (g *opsGen) genOperatorEnum() {
+	fmt.Fprintf(g.w, "const (\n")
+	fmt.Fprintf(g.w, "  UnknownOp Operator = iota\n\n")
 
-	fmt.Fprintf(w, "  // NumOperators tracks the total count of operators.\n")
-	fmt.Fprintf(w, "  NumOperators\n")
-	fmt.Fprintf(w, ")\n\n")
+	g.genOperatorEnumByTag("Scalar")
+	g.genOperatorEnumByTag("Relational")
+	g.genOperatorEnumByTag("Enforcer")
 
-	// Generate op names and indexes.
+	fmt.Fprintf(g.w, "  // NumOperators tracks the total count of operators.\n")
+	fmt.Fprintf(g.w, "  NumOperators\n")
+	fmt.Fprintf(g.w, ")\n\n")
+}
+
+func (g *opsGen) genOperatorNames() {
 	var names bytes.Buffer
 	var indexes bytes.Buffer
 
 	fmt.Fprint(&names, "unknown")
 	fmt.Fprint(&indexes, "0, ")
 
-	for _, define := range compiled.Defines {
+	for _, define := range g.compiled.Defines {
 		fmt.Fprintf(&indexes, "%d, ", names.Len())
 
 		// Trim the Op suffix and convert to "dash case".
 		fmt.Fprint(&names, dashCase(string(define.Name)))
 	}
 
-	fmt.Fprintf(w, "const opNames = \"%s\"\n\n", names.String())
+	fmt.Fprintf(g.w, "const opNames = \"%s\"\n\n", names.String())
 
-	fmt.Fprintf(w, "var opIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
+	fmt.Fprintf(g.w, "var opIndexes = [...]uint32{%s%d}\n\n", indexes.String(), names.Len())
 }
 
-func (g *opsGen) genOperatorsByTag(tag string) {
+func (g *opsGen) genOperatorEnumByTag(tag string) {
 	fmt.Fprintf(g.w, "  // %s Operators\n", tag)
 	for _, define := range g.compiled.Defines {
 		if !define.Tags.Contains(tag) {
@@ -75,6 +82,18 @@ func (g *opsGen) genOperatorsByTag(tag string) {
 		fmt.Fprintf(g.w, "  %sOp\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "\n")
+}
+
+func (g *opsGen) genOperatorsByTag() {
+	for _, tag := range g.compiled.DefineTags {
+		fmt.Fprintf(g.w, "var %sOperators = [...]Operator{\n", tag)
+		for _, define := range g.compiled.Defines {
+			if define.Tags.Contains(tag) {
+				fmt.Fprintf(g.w, "  %sOp,\n", define.Name)
+			}
+		}
+		fmt.Fprintf(g.w, "}\n\n")
+	}
 }
 
 // dashCase converts camel-case identifiers into "dash case", where uppercase

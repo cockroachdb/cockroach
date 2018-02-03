@@ -30,14 +30,14 @@ define Const {
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
 # value. It is a separate operator to make matching and replacement simpler and
 # more efficient, as patterns can contain (True) expressions.
-[Scalar]
+[Scalar, Boolean]
 define True {
 }
 
 # False is the boolean false value that is equivalent to the tree.DBoolFalse
 # datum value. It is a separate operator to make matching and replacement
 # simpler and more efficient, as patterns can contain (False) expressions.
-[Scalar]
+[Scalar, Boolean]
 define False {
 }
 
@@ -71,286 +71,286 @@ define Exists {
     Input Expr
 }
 
-[Scalar]
+[Scalar, Boolean]
 define And {
     Left  Expr
     Right Expr
 }
 
-[Scalar]
+[Scalar, Boolean]
 define Or {
     Left  Expr
     Right Expr
 }
 
-[Scalar]
+[Scalar, Boolean]
 define Not {
     Input Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Eq {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Lt {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Gt {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Le {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Ge {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Ne {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define In {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define NotIn {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Like {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define NotLike {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define ILike {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define NotILike {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define SimilarTo {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define NotSimilarTo {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define RegMatch {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define NotRegMatch {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define RegIMatch {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define NotRegIMatch {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Is {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define IsNot {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Contains {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define ContainedBy {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Any {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define Some {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Comparison]
 define All {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Bitand {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Bitor {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Bitxor {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Plus {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Minus {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Mult {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Div {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define FloorDiv {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Mod {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Pow {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define Concat {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define LShift {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define RShift {
    Left  Expr
    Right Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define FetchVal {
    Json  Expr
    Index Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define FetchText {
    Json  Expr
    Index Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define FetchValPath {
    Json Expr
    Path Expr
 }
 
-[Scalar]
+[Scalar, Binary]
 define FetchTextPath {
    Json Expr
    Path Expr
 }
 
-[Scalar]
+[Scalar, Unary]
 define UnaryPlus {
     Input Expr
 }
 
-[Scalar]
+[Scalar, Unary]
 define UnaryMinus {
     Input Expr
 }
 
-[Scalar]
+[Scalar, Unary]
 define UnaryComplement {
     Input Expr
 }
