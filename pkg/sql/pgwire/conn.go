@@ -314,7 +314,15 @@ func (c *conn) handleParse(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 	}
 
 	startParse := timeutil.Now()
-	stmt, err := parser.ParseOne(query)
+	var stmt tree.Statement
+	stmts, err := parser.Parse(query)
+	if len(stmts) > 1 {
+		err = pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
+	} else if len(stmts) == 1 {
+		stmt = stmts[0]
+	} else {
+		// ignore: nil (empty) statement.
+	}
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}

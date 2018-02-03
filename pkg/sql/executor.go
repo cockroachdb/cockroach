@@ -75,11 +75,6 @@ var ClusterOrganization = settings.RegisterStringSetting(
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
-func errWrongNumberOfPreparedStatements(n int) error {
-	return pgerror.NewErrorf(pgerror.CodeInvalidPreparedStatementDefinitionError,
-		"prepared statement had %d statements, expected 1", n)
-}
-
 const sqlTxnName string = "sql txn"
 const sqlImplicitTxnName string = "sql txn implicit"
 const metricsSampleInterval = 10 * time.Second
