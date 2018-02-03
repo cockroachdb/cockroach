@@ -70,39 +70,39 @@ var _ base.ModuleTestingKnobs = &MigrationManagerTestingKnobs{}
 // as completed, causing a second run.
 var backwardCompatibleMigrations = []migrationDescriptor{
 	{
-		name:   "default UniqueID to uuid_v4 in system.eventlog",
-		workFn: eventlogUniqueIDDefault,
+		name: "default UniqueID to uuid_v4 in system.eventlog",
+		// Baked into v2.0.
 	},
 	{
-		name:             "create system.jobs table",
-		workFn:           createJobsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.JobsTableID},
+		name: "create system.jobs table",
+		// Baked into v2.0.
 	},
 	{
-		name:             "create system.settings table",
-		workFn:           createSettingsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.SettingsTableID},
+		name: "create system.settings table",
+		// Baked into v2.0.
 	},
 	{
 		name:   "enable diagnostics reporting",
 		workFn: optInToDiagnosticsStatReporting,
+		// Permanent migration.
 	},
 	{
-		name:   "establish conservative dependencies for views #17280 #17269 #17306",
-		workFn: repopulateViewDeps,
+		name: "establish conservative dependencies for views #17280 #17269 #17306",
+		// Baked into v2.0.
 	},
 	{
-		name:             "create system.sessions table",
-		workFn:           createWebSessionsTable,
-		newDescriptorIDs: []sqlbase.ID{keys.WebSessionsTableID},
+		name: "create system.sessions table",
+		// Baked into v2.0.
 	},
 	{
 		name:   "populate initial version cluster setting table entry",
 		workFn: populateVersionSetting,
+		// Permanent migration.
 	},
 	{
 		name:   "persist trace.debug.enable = 'false'",
 		workFn: disableNetTrace,
+		// Permanent migration.
 	},
 	{
 		name:             "create system.table_statistics table",
@@ -280,6 +280,10 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	}
 	allMigrationsCompleted := true
 	for _, migration := range backwardCompatibleMigrations {
+		if migration.workFn == nil {
+			// Migration has been baked in. Ignore it.
+			continue
+		}
 		if m.testingKnobs.DisableBackfillMigrations && migration.doesBackfill {
 			log.Infof(ctx, "ignoring migrations after (and including) %s due to testing knob",
 				migration.name)
@@ -369,6 +373,11 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 		memMetrics:  m.memMetrics,
 	}
 	for _, migration := range backwardCompatibleMigrations {
+		if migration.workFn == nil {
+			// Migration has been baked in. Ignore it.
+			continue
+		}
+
 		key := migrationKey(migration)
 		if _, ok := completedMigrations[string(key)]; ok {
 			continue
@@ -416,41 +425,6 @@ func getCompletedMigrations(ctx context.Context, db db) (map[string]struct{}, er
 
 func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
-}
-
-func eventlogUniqueIDDefault(ctx context.Context, r runner) error {
-	const alterStmt = `ALTER TABLE system.eventlog ALTER COLUMN "uniqueID" SET DEFAULT uuid_v4()`
-
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
-	// Retry a limited number of times because returning an error and letting
-	// the node kill itself is better than holding the migration lease for an
-	// arbitrarily long time.
-	var err error
-	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, alterStmt, nil /* pinfo */, 1 /* expectedNumResults */)
-		if err == nil {
-			res.Close(ctx)
-			break
-		}
-		log.Warningf(ctx, "failed attempt to update system.eventlog schema: %s", err)
-	}
-	return err
-}
-
-func createJobsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.JobsTable)
-}
-
-func createSettingsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.SettingsTable)
-}
-
-func createWebSessionsTable(ctx context.Context, r runner) error {
-	return createSystemTable(ctx, r, sqlbase.WebSessionsTable)
 }
 
 func createTableStatisticsTable(ctx context.Context, r runner) error {
@@ -570,15 +544,6 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return err
 	}
 	return nil
-}
-
-// repopulateViewDeps recomputes the dependencies of all views, as
-// they might not have been computed properly previously.
-// (#17269 #17306)
-func repopulateViewDeps(ctx context.Context, r runner) error {
-	return r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		return sql.RecomputeViewDependencies(ctx, txn, r.sqlExecutor)
-	})
 }
 
 func addRootUser(ctx context.Context, r runner) error {
