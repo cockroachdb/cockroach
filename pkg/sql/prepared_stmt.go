@@ -19,6 +19,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -123,7 +124,7 @@ func (ps PreparedStatements) NewFromString(
 	case 0:
 		// ignore: nil (empty) statement.
 	default:
-		return nil, errWrongNumberOfPreparedStatements(len(stmts))
+		return nil, pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
 	}
 
 	return ps.New(e, name, st, query, placeholderHints)

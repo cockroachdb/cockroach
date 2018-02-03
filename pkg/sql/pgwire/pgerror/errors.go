@@ -64,6 +64,13 @@ func NewDangerousStatementErrorf(format string, args ...interface{}) *Error {
 	return NewErrorWithDepthf(1, CodeWarningError, "%s", buf.String())
 }
 
+// NewWrongNumberOfPreparedStatements creates new an Error for trying to prepare
+// a query string containing more than one statement.
+func NewWrongNumberOfPreparedStatements(n int) *Error {
+	return NewErrorWithDepthf(1, CodeInvalidPreparedStatementDefinitionError,
+		"prepared statement had %d statements, expected 1", n)
+}
+
 // SetHintf annotates an Error object with a hint.
 func (pg *Error) SetHintf(f string, args ...interface{}) *Error {
 	pg.Hint = fmt.Sprintf(f, args...)
