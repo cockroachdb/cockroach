@@ -791,7 +791,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 		if err != nil {
 			return err
 		}
-		d, err := decodeOidDatum(t, qArgFormatCodes[i], b)
+		d, err := pgwirebase.DecodeOidDatum(t, qArgFormatCodes[i], b)
 		if err != nil {
 			return c.sendError(errors.Wrapf(err, "error in argument for $%d", i+1))
 		}
