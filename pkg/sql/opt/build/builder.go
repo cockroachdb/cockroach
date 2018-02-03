@@ -322,7 +322,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID
 		for i := range t.D {
 			list[i] = b.buildScalar(t.D[i], inScope)
 		}
-		return b.factory.ConstructTuple(b.factory.StoreList(list))
+		return b.factory.ConstructTuple(b.factory.InternList(list))
 
 	case *tree.IndexedVar:
 		colProps := b.synthesizeColumn(inScope, fmt.Sprintf("@%d", t.Idx+1), t.ResolvedType())
@@ -348,7 +348,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) opt.GroupID
 		for i := range t.Exprs {
 			list[i] = b.buildScalar(t.Exprs[i].(tree.TypedExpr), inScope)
 		}
-		return b.factory.ConstructTuple(b.factory.StoreList(list))
+		return b.factory.ConstructTuple(b.factory.InternList(list))
 
 	case *tree.UnaryExpr:
 		return unaryOpMap[t.Operator](b.factory, b.buildScalar(t.TypedInnerExpr(), inScope))
@@ -450,8 +450,8 @@ func (b *Builder) buildFrom(
 	if left == 0 {
 		// TODO(peter): This should be a table with 1 row and 0 columns to match
 		// current cockroach behavior.
-		rows := []opt.GroupID{b.factory.ConstructTuple(b.factory.StoreList(nil))}
-		out = b.factory.ConstructValues(b.factory.StoreList(rows), b.factory.InternPrivate(&opt.ColSet{}))
+		rows := []opt.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
+		out = b.factory.ConstructValues(b.factory.InternList(rows), b.factory.InternPrivate(&opt.ColSet{}))
 		outScope = inScope
 	} else {
 		out = left
@@ -627,7 +627,7 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 }
 
 func (b *Builder) constructProjectionList(items []opt.GroupID, cols []columnProps) opt.GroupID {
-	return b.factory.ConstructProjections(b.factory.StoreList(items), b.factory.InternPrivate(makeColSet(cols)))
+	return b.factory.ConstructProjections(b.factory.InternList(items), b.factory.InternPrivate(makeColSet(cols)))
 }
 
 // Builder implements the IndexedVarContainer interface so it can be
