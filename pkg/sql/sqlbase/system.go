@@ -183,6 +183,20 @@ CREATE TABLE system.role_members (
   INDEX ("role"),
   INDEX ("member")
 );`
+
+	// prepared_xacts is used to associate a prepared transaction with a global prepared
+	// transaction identifier. These are for use with distributed transaction managers.
+	PreparedXactsTableSchema = `
+CREATE TABLE system.prepared_xacts (
+  gid           STRING     PRIMARY KEY,
+  tid           BYTES      NOT NULL,
+  transaction   BYTES      NOT NULL,
+  "preparedAt"  TIMESTAMP  NOT NULL,
+  owner         STRING     NOT NULL,
+  database      STRING     NOT NULL,
+  status        STRING     NOT NULL,
+  FAMILY (gid, tid, transaction, "preparedAt", owner, database, status)
+);`
 )
 
 func pk(name string) IndexDescriptor {
@@ -239,6 +253,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 	keys.TableStatisticsTableID: {privilege.ReadWriteData},
 	keys.LocationsTableID:       {privilege.ReadWriteData},
 	keys.RoleMembersTableID:     {privilege.ReadWriteData},
+	keys.PreparedXactsTableID:   {privilege.ReadWriteData},
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -810,6 +825,38 @@ var (
 		},
 		NextIndexID:    4,
 		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemDesiredPrivileges(keys.RoleMembersTableID)),
+		FormatVersion:  InterleavedFormatVersion,
+		NextMutationID: 1,
+	}
+
+	// PreparedXactsTable is the descriptor for the prepared_xacts table.
+	PreparedXactsTable = TableDescriptor{
+		Name:     "prepared_xacts",
+		ID:       keys.PreparedXactsTableID,
+		ParentID: keys.SystemDatabaseID,
+		Version:  1,
+		Columns: []ColumnDescriptor{
+			{Name: "gid", ID: 1, Type: colTypeString},
+			{Name: "tid", ID: 2, Type: colTypeBytes},
+			{Name: "transaction", ID: 3, Type: colTypeBytes},
+			{Name: "preparedAt", ID: 4, Type: colTypeTimestamp},
+			{Name: "owner", ID: 5, Type: colTypeString},
+			{Name: "database", ID: 6, Type: colTypeString},
+			{Name: "status", ID: 7, Type: colTypeString},
+		},
+		NextColumnID: 8,
+		Families: []ColumnFamilyDescriptor{
+			{
+				Name:        "fam_0_gid_tid_transaction_preparedAt_owner_database_status",
+				ID:          0,
+				ColumnNames: []string{"gid", "tid", "transaction", "preparedAt", "owner", "database", "status"},
+				ColumnIDs:   []ColumnID{1, 2, 3, 4, 5, 6, 7},
+			},
+		},
+		NextFamilyID:   1,
+		PrimaryIndex:   pk("gid"),
+		NextIndexID:    2,
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.PreparedXactsTableID)),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}

@@ -497,7 +497,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
-%token <str>   PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
+%token <str>   PLANS POSITION PRECEDING PRECISION PREPARE PREPARED PRIMARY PRIORITY
 
 %token <str>   QUERIES QUERY
 
@@ -655,6 +655,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.Select> select_stmt
 %type <tree.Statement> abort_stmt
 %type <tree.Statement> rollback_stmt
+%type <tree.Statement> prepare_transaction_stmt
+%type <tree.Statement> commit_prepared_stmt
+%type <tree.Statement> rollback_prepared_stmt
 %type <tree.Statement> savepoint_stmt
 
 %type <tree.Statement> set_stmt
@@ -3915,10 +3918,13 @@ savepoint_stmt:
 
 // BEGIN / START / COMMIT / END / ROLLBACK / ...
 transaction_stmt:
-  begin_stmt    // EXTEND WITH HELP: BEGIN
-| commit_stmt   // EXTEND WITH HELP: COMMIT
-| rollback_stmt // EXTEND WITH HELP: ROLLBACK
-| abort_stmt    /* SKIP DOC */
+  begin_stmt               // EXTEND WITH HELP: BEGIN
+| commit_stmt              // EXTEND WITH HELP: COMMIT
+| rollback_stmt            // EXTEND WITH HELP: ROLLBACK
+| abort_stmt
+| prepare_transaction_stmt // EXTEND WITH HELP: PREPARE TRANSACTION
+| commit_prepared_stmt     // EXTEND WITH HELP: COMMIT PREPARED
+| rollback_prepared_stmt   // EXTEND WITH HELP: ROLLBACK PREPARED
 
 // %Help: BEGIN - start a transaction
 // %Category: Txn
@@ -3971,6 +3977,36 @@ opt_abort_mod:
   TRANSACTION {}
 | WORK        {}
 | /* EMPTY */ {}
+
+// %Help: PREPARE TRANSACTION - prepare current transaction for two-phase commit
+// %Category: Txn
+// %Text: PREPARE TRANSACTION <transaction-id>
+// %SeeAlso: COMMIT PREPARED, ROLLBACK PREPARED
+prepare_transaction_stmt:
+  PREPARE TRANSACTION SCONST
+  {
+    $$.val = &tree.PrepareTransaction{Transaction: $3}
+  }
+
+// %Help: COMMIT PREPARED - commit named transaction as part of two-phase commit
+// %Category: Txn
+// %Text: COMMIT PREPARED <transaction-id>
+// %SeeAlso: PREPARE TRANSACTION, ROLLBACK PREPARED
+commit_prepared_stmt:
+  COMMIT PREPARED SCONST
+  {
+    $$.val = &tree.CommitPrepared{Transaction: $3}
+  }
+
+// %Help: ROLLBACK PREPARED - rollback named transaction as part of two-phase commit
+// %Category: Txn
+// %Text: ROLLBACK PREPARED <transaction-id>
+// %SeeAlso: PREPARE TRANSACTION, COMMIT PREPARED
+rollback_prepared_stmt:
+  ROLLBACK PREPARED SCONST
+  {
+    $$.val = &tree.RollbackPrepared{Transaction: $3}
+  }
 
 // %Help: ROLLBACK - abort the current transaction
 // %Category: Txn
@@ -7429,6 +7465,7 @@ unreserved_keyword:
 | PLANS
 | PRECEDING
 | PREPARE
+| PREPARED
 | PRIORITY
 | QUERIES
 | QUERY

@@ -621,6 +621,12 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			orig:      gcExpiration + 1,
 			newStatus: roachpb.PENDING,
 		},
+		// Too young & prepared, should not touch.
+		"a-prep": {
+			status:    roachpb.PREPARED,
+			orig:      gcExpiration + 1,
+			newStatus: roachpb.PREPARED,
+		},
 		// Old and pending, but still heartbeat (so no Push attempted; it
 		// would succeed).
 		"b": {

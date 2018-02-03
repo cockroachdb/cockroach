@@ -74,6 +74,8 @@ func TestContextualHelp(t *testing.T) {
 		{`CANCEL JOB ??`, `CANCEL JOB`},
 		{`CANCEL QUERY ??`, `CANCEL QUERY`},
 
+		{`COMMIT PREPARED 'foo' ??`, `COMMIT PREPARED`},
+
 		{`CREATE UNIQUE ??`, `CREATE`},
 		{`CREATE UNIQUE INDEX ??`, `CREATE INDEX`},
 		{`CREATE INDEX IF NOT ??`, `CREATE INDEX`},
@@ -161,6 +163,8 @@ func TestContextualHelp(t *testing.T) {
 		{`PREPARE foo AS DELETE FROM xx ??`, `DELETE`},
 		{`PREPARE foo AS UPDATE xx SET x = y ??`, `UPDATE`},
 
+		{`PREPARE TRANSACTION 'foo' ??`, `PREPARE TRANSACTION`},
+
 		{`EXECUTE foo ??`, `EXECUTE`},
 		{`EXECUTE foo (??`, `EXECUTE`},
 
@@ -199,6 +203,8 @@ func TestContextualHelp(t *testing.T) {
 		{`REVOKE ALL ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM ??`, `REVOKE`},
 		{`REVOKE ALL ON foo FROM bar ??`, `REVOKE`},
+
+		{`ROLLBACK PREPARED 'foo' ??`, `ROLLBACK PREPARED`},
 
 		{`SELECT * FROM ??`, `<SOURCE>`},
 		{`SELECT * FROM (??`, `<SOURCE>`}, // not <selectclause>! joins are allowed.

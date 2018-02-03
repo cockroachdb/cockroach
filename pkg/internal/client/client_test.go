@@ -955,3 +955,51 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClientPrepareTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+	db := createTestClient(t, s)
+
+	ctx := context.Background()
+	key := []byte("a")
+	value := []byte("value")
+	for _, readOnly := range []bool{false, true} {
+		t.Run(fmt.Sprintf("read-only=%t", readOnly), func(t *testing.T) {
+			txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+			if readOnly {
+				if _, err := txn.Get(ctx, key); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := txn.Put(ctx, key, value); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := txn.Prepare(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if status := txn.Proto().Status; status != roachpb.PREPARED {
+				t.Errorf("expected status PREPARED; got %s", status)
+			}
+
+			// Verify the prepared txn can be rolled back in both cases.
+			if err := txn.Rollback(ctx); err != nil {
+				t.Fatal(err)
+			}
+			if status := txn.Proto().Status; status != roachpb.ABORTED {
+				t.Errorf("expected status ABORTED; got %s", status)
+			}
+
+			// Verify no value was written in !readOnly case.
+			if !readOnly {
+				if gr, err := db.Get(ctx, key); err != nil {
+					t.Fatal(err)
+				} else if gr.Value != nil {
+					t.Errorf("expected nil value on Get; got %s", gr)
+				}
+			}
+		})
+	}
+}

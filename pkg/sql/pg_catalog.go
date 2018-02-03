@@ -31,11 +31,14 @@ import (
 
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var (
@@ -77,6 +80,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogInheritsTable,
 		pgCatalogNamespaceTable,
 		pgCatalogOperatorTable,
+		pgCatalogPreparedXactsTable,
 		pgCatalogProcTable,
 		pgCatalogRangeTable,
 		pgCatalogRewriteTable,
@@ -1123,6 +1127,53 @@ func newSingletonStringArray(s string) tree.Datum {
 	return &tree.DArray{ParamTyp: types.String, Array: tree.Datums{tree.NewDString(s)}}
 }
 
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-prepared-xacts.html.
+var pgCatalogPreparedXactsTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_prepared_xacts (
+	transaction OID,
+	gid TEXT,
+	prepared TIMESTAMPTZ,
+	owner NAME,
+	database NAME
+);
+`,
+	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+
+		query := `SELECT gid, transaction, "preparedAt", owner, database FROM system.prepared_xacts`
+		internalP, cleanup := newInternalPlanner(
+			"for-each-prepared-xact", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics, p.ExecCfg(),
+		)
+		defer cleanup()
+		rows, _ /* cols */, err := internalP.queryRows(ctx, query)
+		if err != nil {
+			return err
+		}
+
+		for _, row := range rows {
+			gid := tree.MustBeDString(row[0])
+			var txn roachpb.Transaction
+			if err := protoutil.Unmarshal(([]byte)(tree.MustBeDBytes(row[1])), &txn); err != nil {
+				return err
+			}
+			preparedAt := tree.DTimestampTZ(tree.MustBeDTimestamp(row[2]))
+			owner := tree.MustBeDString(row[3])
+			database := tree.MustBeDString(row[4])
+			if err := addRow(
+				h.TransactionOid(txn.ID), // transaction
+				&gid,
+				&preparedAt,                         // prepared
+				tree.NewDNameFromDString(&owner),    // owner
+				tree.NewDNameFromDString(&database), // database
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
 var (
 	proArgModeInOut    = newSingletonStringArray("b")
 	proArgModeIn       = newSingletonStringArray("i")
@@ -1931,6 +1982,7 @@ const (
 	functionTypeTag
 	userTypeTag
 	collationTypeTag
+	transactionTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -2080,6 +2132,14 @@ func (h oidHasher) UserOid(username string) *tree.DOid {
 func (h oidHasher) CollationOid(collation string) *tree.DOid {
 	h.writeTypeTag(collationTypeTag)
 	h.writeStr(collation)
+	return h.getOid()
+}
+
+func (h oidHasher) TransactionOid(id uuid.UUID) *tree.DOid {
+	h.writeTypeTag(transactionTypeTag)
+	if _, err := h.h.Write(id.GetBytes()); err != nil {
+		panic(err)
+	}
 	return h.getOid()
 }
 

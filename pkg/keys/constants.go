@@ -325,4 +325,5 @@ const (
 	LocationsTableID       = 21
 	LivenessRangesID       = 22
 	RoleMembersTableID     = 23
+	PreparedXactsTableID   = 24
 )

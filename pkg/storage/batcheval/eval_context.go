@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -45,6 +46,7 @@ type EvalContext interface {
 	DB() *client.DB
 	AbortSpan() *abortspan.AbortSpan
 	GetTxnWaitQueue() *txnwait.Queue
+	SQLExecutor() sqlutil.InternalExecutor
 
 	NodeID() roachpb.NodeID
 	StoreID() roachpb.StoreID

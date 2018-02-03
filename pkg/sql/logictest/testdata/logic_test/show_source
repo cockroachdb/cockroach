@@ -118,6 +118,7 @@ jobs
 lease
 locations
 namespace
+prepared_xacts
 rangelog
 role_members
 settings

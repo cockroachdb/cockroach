@@ -165,7 +165,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   5 columns, 93 rows
+·                      size   5 columns, 95 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -222,11 +222,11 @@ sort                                       ·         ·
                      ├── render            ·         ·
                      │    └── filter       ·         ·
                      │         └── values  ·         ·
-                     │                     size      16 columns, 782 rows
+                     │                     size      16 columns, 794 rows
                      └── render            ·         ·
                           └── filter       ·         ·
                                └── values  ·         ·
-·                                          size      13 columns, 37 rows
+·                                          size      13 columns, 38 rows
 
 query TTT
 EXPLAIN SHOW GRANTS ON foo
@@ -236,7 +236,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 130 rows
+·                      size   8 columns, 140 rows
 
 
 query TTT
@@ -245,7 +245,7 @@ EXPLAIN SHOW INDEX FROM foo
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  13 columns, 37 rows
+·                 size  13 columns, 38 rows
 
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo

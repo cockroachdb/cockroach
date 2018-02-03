@@ -1883,6 +1883,9 @@ func (s *Store) IsDraining() bool {
 	return s.draining.Load().(bool)
 }
 
+// SQLExecutor accessor.
+func (s *Store) SQLExecutor() sqlutil.InternalExecutor { return s.cfg.SQLExecutor }
+
 // NewRangeDescriptor creates a new descriptor based on start and end
 // keys and the supplied roachpb.Replicas slice. It allocates a new
 // range ID and returns a RangeDescriptor whose Replicas are a copy

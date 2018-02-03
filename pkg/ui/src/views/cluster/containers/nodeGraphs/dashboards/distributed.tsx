@@ -38,6 +38,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.txn.commits1PC" title="Fast-path Committed" nonNegativeRate />
         <Metric name="cr.node.txn.aborts" title="Aborted" nonNegativeRate />
         <Metric name="cr.node.txn.abandons" title="Abandoned" nonNegativeRate />
+        <Metric name="cr.node.txn.prepares" title="Prepared" nonNegativeRate />
       </Axis>
     </LineGraph>,
 

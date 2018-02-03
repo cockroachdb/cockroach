@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -1332,7 +1333,7 @@ func runObserverStatement(session *Session, res StatementResult, stmt Statement)
 
 // execStmtInAbortedTxn executes a statement in a txn that's in state
 // Aborted or RestartWait. All statements cause errors except:
-// - COMMIT / ROLLBACK: aborts the current transaction.
+// - COMMIT / PREPARE TRANSACTION / ROLLBACK: aborts the current transaction.
 // - ROLLBACK TO SAVEPOINT / SAVEPOINT: reopens the current transaction,
 //   allowing it to be retried.
 func (e *Executor) execStmtInAbortedTxn(
@@ -1344,7 +1345,7 @@ func (e *Executor) execStmtInAbortedTxn(
 	}
 	// TODO(andrei/cuongdo): Figure out what statements to count here.
 	switch s := stmt.AST.(type) {
-	case *tree.CommitTransaction, *tree.RollbackTransaction:
+	case *tree.CommitTransaction, *tree.PrepareTransaction, *tree.RollbackTransaction:
 		if txnState.State() == RestartWait {
 			transition := rollbackSQLTransaction(txnState, res)
 			if transition.transitionDependentOnErrType {
@@ -1586,6 +1587,13 @@ func (e *Executor) execStmtInOpenTxn(
 		explicitStateTransition = true
 		return nil
 
+	case *tree.PrepareTransaction:
+		// PrepareTransaction is executed fully here; there's no planNode for it
+		// and a planner is not involved at all.
+		transition = e.prepareXATransaction(session, txnState, s.Transaction, res)
+		explicitStateTransition = true
+		return nil
+
 	case *tree.ReleaseSavepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
 			return err
@@ -1787,6 +1795,7 @@ func (e *Executor) execStmtInOpenTxn(
 func stmtAllowedInImplicitTxn(stmt Statement) bool {
 	switch stmt.AST.(type) {
 	case *tree.CommitTransaction:
+	case *tree.PrepareTransaction:
 	case *tree.ReleaseSavepoint:
 	case *tree.RollbackTransaction:
 	case *tree.SetTransaction:
@@ -1899,6 +1908,67 @@ func commitSQLTransaction(
 			//
 			// TODO(andrei): Introduce a dedicated state to represent broken sessions
 			// that should not accept any statement anymore.
+			targetState: Aborted,
+		}
+	}
+	return transition
+}
+
+// prepareXATransaction executes a PREPARE TRANSACTION statement. The
+// transaction is prepared for a subsequent COMMIT PREPARED or ROLLBACK
+// PREPARED statement. Note that from the session's point of view, the
+// transaction has been finalized and is no longer open.
+func (e *Executor) prepareXATransaction(
+	session *Session, txnState *txnState, txnName string, res StatementResult,
+) stateTransition {
+	if !txnState.TxnIsOpen() {
+		panic(fmt.Sprintf("prepareXATransaction called on non-open txn: %+v", txnState.mu.txn))
+	}
+	if err := func() error {
+		// Prepare the transaction.
+		if err := txnState.mu.txn.Prepare(txnState.Ctx); err != nil {
+			return err
+		}
+		// Create a separate transaction to insert the prepared_xact entry.
+		internalExecutor := InternalExecutor{ExecCfg: &e.cfg}
+		xactTxn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
+		// Marshal the bytes from the current transaction's proto.
+		proto := txnState.mu.txn.Proto()
+		txnBytes, err := protoutil.Marshal(proto)
+		if err != nil {
+			return err
+		}
+		if _, err = internalExecutor.ExecuteStatementInTransaction(
+			txnState.Ctx,
+			"insert-prepared-xact",
+			xactTxn,
+			`INSERT INTO system.prepared_xacts VALUES ($1, $2, $3, NOW(), $4, $5, '')`,
+			txnName,
+			proto.ID.GetBytes(),
+			txnBytes,
+			session.data.User,
+			session.data.Database,
+		); err != nil {
+			return err
+		}
+		return xactTxn.Commit(txnState.Ctx)
+	}(); err != nil {
+		// Rollback the possibly-prepared transaction to avoid dangling state.
+		if rbErr := txnState.mu.txn.Rollback(txnState.Ctx); rbErr != nil {
+			log.Warningf(txnState.Ctx, "unable to rollback prepared transaction: %s", rbErr)
+		}
+		return stateTransition{
+			err:         errors.Wrapf(err, "unable to prepare transaction as %q", txnName),
+			targetState: Aborted,
+		}
+	}
+
+	// We're done with this txn.
+	transition := stateTransition{targetState: NoTxn}
+	res.BeginResult((*tree.PrepareTransaction)(nil))
+	if err := res.CloseResult(); err != nil {
+		transition = stateTransition{
+			err:         err,
 			targetState: Aborted,
 		}
 	}

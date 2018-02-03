@@ -307,9 +307,6 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	manual := hlc.NewManualClock(123)
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	txn := newTransaction("txn", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, clock)
-	// Move the clock forward so that when the PushTxn is sent, the txn appears
-	// expired.
-	manual.Set(txnwait.TxnExpiration(txn).WallTime)
 
 	tc := testContext{}
 	tsc := TestStoreConfig(clock)
@@ -323,6 +320,10 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.StartWithStoreConfig(t, stopper, tsc)
+
+	// Move the clock forward so that when the PushTxn is sent, the txn appears
+	// expired.
+	manual.Set(txnwait.TxnExpiration(txn, tc.store.ClusterSettings()).WallTime)
 
 	pusher1 := newTransaction("pusher1", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 	pusher2 := newTransaction("pusher2", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())

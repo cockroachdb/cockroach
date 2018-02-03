@@ -190,7 +190,7 @@ func (ir *intentResolver) maybePushTransactions(
 	}
 	pushTxns := map[uuid.UUID]enginepb.TxnMeta{}
 	for _, intent := range intents {
-		if intent.Status != roachpb.PENDING {
+		if intent.Status != roachpb.PENDING && intent.Status != roachpb.PREPARED {
 			// The current intent does not need conflict resolution
 			// because the transaction is already finalized.
 			// This shouldn't happen as all intents created are in
@@ -419,8 +419,9 @@ func (ir *intentResolver) lockInFlightTxnCleanup(
 // cleanupTxnIntentsOnGCAsync cleans up extant intents owned by a
 // single transaction, asynchronously (but returning an error if the
 // intentResolver's semaphore is maxed out). If the transaction is
-// PENDING, but expired, it is pushed first to abort it. This method
-// updates the metrics for intents resolved on GC on success.
+// PENDING or PREPARED, but expired, it is pushed first to abort
+// it. This method updates the metrics for intents resolved on GC on
+// success.
 func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent, now hlc.Timestamp,
 ) error {
@@ -447,9 +448,9 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 
 			// If the transaction is still pending, but expired, push it
 			// before resolving the intents.
-			if txn.Status == roachpb.PENDING {
-				if !txnwait.IsExpired(now, txn) {
-					log.ErrEventf(ctx, "cannot push a PENDING transaction which is not expired: %s", txn)
+			if txn.Status == roachpb.PENDING || txn.Status == roachpb.PREPARED {
+				if !txnwait.IsExpired(now, txn, ir.store.ClusterSettings()) {
+					log.ErrEventf(ctx, "cannot push a %s transaction which is not expired: %s", txn.Status, txn)
 					return
 				}
 				b := &client.Batch{}
@@ -464,7 +465,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 				})
 				ir.store.metrics.GCPushTxn.Inc(1)
 				if err := ir.store.DB().Run(ctx, b); err != nil {
-					log.ErrEventf(ctx, "failed to push PENDING, expired txn (%s): %s", txn, err)
+					log.ErrEventf(ctx, "failed to push %s, expired txn (%s): %s", txn.Status, txn, err)
 					return
 				}
 				// Get the pushed txn and update the intents slice.

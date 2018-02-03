@@ -257,6 +257,10 @@ func evalEndTransaction(
 	if args.Require1PC {
 		return result.Result{}, roachpb.NewTransactionStatusError("could not commit in one phase as requested")
 	}
+	// If the transaction is to be prepared, commit must be set to true.
+	if args.Prepare && !args.Commit {
+		log.Fatalf(ctx, "cannot prepare transaction with commit=false")
+	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
 
@@ -331,6 +335,12 @@ func evalEndTransaction(
 			)
 		}
 
+	case roachpb.PREPARED:
+		// It is an error to prepare the same transaction twice.
+		if args.Prepare {
+			return result.Result{}, roachpb.NewTransactionStatusError("already prepared")
+		}
+
 	default:
 		return result.Result{}, roachpb.NewTransactionStatusError(
 			fmt.Sprintf("bad txn status: %s", reply.Txn),
@@ -362,25 +372,47 @@ func evalEndTransaction(
 			return result.Result{}, roachpb.NewTransactionStatusError(
 				"transaction deadline exceeded")
 		}
-
-		reply.Txn.Status = roachpb.COMMITTED
+		if args.Prepare {
+			reply.Txn.Status = roachpb.PREPARED
+		} else {
+			reply.Txn.Status = roachpb.COMMITTED
+		}
 	} else {
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
-	desc := cArgs.EvalCtx.Desc()
-	externalIntents := resolveLocalIntents(ctx, desc,
-		batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
-	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
-		return result.Result{}, err
-	}
-
-	// Run triggers if successfully committed.
+	// If preparing, persist all intent spans for second phase commit or rollback.
 	var pd result.Result
-	if reply.Txn.Status == roachpb.COMMITTED {
-		var err error
-		if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, reply.Txn); err != nil {
-			return result.Result{}, NewReplicaCorruptionError(err)
+	if args.Prepare {
+		key := keys.TransactionKey(reply.Txn.Key, reply.Txn.ID)
+		reply.Txn.Intents = args.IntentSpans
+		if err := engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, reply.Txn); err != nil {
+			return result.Result{}, err
+		}
+		// Clear the intents for return to client (we do not want them being resolved!).
+		reply.Txn.Intents = nil
+	} else {
+		// Otherwise, cleanup local intents and persist remaining external intents.
+		// However, we skip cleanup of local intents if finalizing a prepared txn
+		// because the intents were not specified in the EndTransactionRequest and
+		// so were not declared - they must instead be processed asynchronously.
+		var externalIntents []roachpb.Span
+		if h.Txn.Status == roachpb.PREPARED {
+			externalIntents = reply.Txn.Intents
+		} else {
+			desc := cArgs.EvalCtx.Desc()
+			externalIntents = resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
+		}
+		if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
+			return result.Result{}, err
+		}
+
+		// Run triggers if successfully committed.
+		if reply.Txn.Status == roachpb.COMMITTED {
+			var err error
+			if pd, err = runCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch), ms, *args, reply.Txn); err != nil {
+				return result.Result{}, NewReplicaCorruptionError(err)
+			}
 		}
 	}
 

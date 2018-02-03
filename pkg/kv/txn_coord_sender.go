@@ -148,6 +148,7 @@ type TxnMetrics struct {
 	Commits1PC  *metric.CounterWithRates // Commits which finished in a single phase
 	AutoRetries *metric.CounterWithRates // Auto retries which avoid client-side restarts
 	Abandons    *metric.CounterWithRates
+	Prepares    *metric.CounterWithRates
 	Durations   *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
@@ -176,6 +177,9 @@ var (
 	metaAbandonsRates = metric.Metadata{
 		Name: "txn.abandons",
 		Help: "Number of abandoned KV transactions"}
+	metaPreparesRates = metric.Metadata{
+		Name: "txn.prepares",
+		Help: "Number of prepared KV transactions"}
 	metaDurationsHistograms = metric.Metadata{
 		Name: "txn.durations",
 		Help: "KV transaction durations"}
@@ -205,6 +209,7 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		Commits1PC:             metric.NewCounterWithRates(metaCommits1PCRates),
 		AutoRetries:            metric.NewCounterWithRates(metaAutoRetriesRates),
 		Abandons:               metric.NewCounterWithRates(metaAbandonsRates),
+		Prepares:               metric.NewCounterWithRates(metaPreparesRates),
 		Durations:              metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:               metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:    metric.NewCounter(metaRestartsWriteTooOld),
@@ -452,7 +457,7 @@ func (tc *TxnCoordSender) Send(
 			var distinct bool
 			et.IntentSpans, distinct = roachpb.MergeSpans(et.IntentSpans)
 			ba.Header.DistinctSpans = distinct && distinctSpans
-			if len(et.IntentSpans) == 0 {
+			if tc.mu.meta.Txn.Status == roachpb.PENDING && len(et.IntentSpans) == 0 {
 				// If there aren't any intents, then there's factually no
 				// transaction to end. Read-only txns have all of their state
 				// in the client.
@@ -1376,5 +1381,7 @@ func (tc *TxnCoordSender) updateStats(
 		if onePC {
 			tc.metrics.Commits1PC.Inc(1)
 		}
+	case roachpb.PREPARED:
+		tc.metrics.Prepares.Inc(1)
 	}
 }

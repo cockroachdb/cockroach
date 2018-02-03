@@ -198,6 +198,7 @@ var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &CreateUserNode{}
 var _ planNode = &DropUserNode{}
+var _ planNode = &commitPreparedNode{}
 
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
 var _ planNodeFastPath = &createTableNode{}
@@ -205,6 +206,7 @@ var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
+var _ planNodeFastPath = &commitPreparedNode{}
 
 // planTop is the struct that collects the properties
 // of an entire plan.
@@ -551,6 +553,8 @@ func (p *planner) newPlan(
 		return p.CancelJob(ctx, n)
 	case *tree.Scrub:
 		return p.Scrub(ctx, n)
+	case *tree.CommitPrepared:
+		return p.CommitPrepared(ctx, n)
 	case *tree.CreateDatabase:
 		return p.CreateDatabase(ctx, n)
 	case *tree.CreateIndex:
@@ -609,6 +613,8 @@ func (p *planner) newPlan(
 		return p.ResumeJob(ctx, n)
 	case *tree.Revoke:
 		return p.Revoke(ctx, n)
+	case *tree.RollbackPrepared:
+		return p.RollbackPrepared(ctx, n)
 	case *tree.Scatter:
 		return p.Scatter(ctx, n)
 	case *tree.Select:
@@ -730,6 +736,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.CancelJob(ctx, n)
 	case *tree.CreateUser:
 		return p.CreateUser(ctx, n)
+	case *tree.CommitPrepared:
+		return p.CommitPrepared(ctx, n)
 	case *tree.Delete:
 		return p.Delete(ctx, n, nil)
 	case *tree.DropUser:
@@ -742,6 +750,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.PauseJob(ctx, n)
 	case *tree.ResumeJob:
 		return p.ResumeJob(ctx, n)
+	case *tree.RollbackPrepared:
+		return p.RollbackPrepared(ctx, n)
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:

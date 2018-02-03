@@ -18,6 +18,7 @@ jobs
 lease
 locations
 namespace
+prepared_xacts
 rangelog
 role_members
 settings
@@ -47,6 +48,8 @@ fetched: /namespace/primary/1/'locations'/id -> 21
 output row: [1 'locations' 21]
 fetched: /namespace/primary/1/'namespace'/id -> 2
 output row: [1 'namespace' 2]
+fetched: /namespace/primary/1/'prepared_xacts'/id -> 24
+output row: [1 'prepared_xacts' 24]
 fetched: /namespace/primary/1/'rangelog'/id -> 13
 output row: [1 'rangelog' 13]
 fetched: /namespace/primary/1/'role_members'/id -> 23
@@ -75,6 +78,7 @@ SELECT * FROM system.namespace
 1  lease             11
 1  locations         21
 1  namespace         2
+1  prepared_xacts    24
 1  rangelog          13
 1  role_members      23
 1  settings          6
@@ -102,6 +106,7 @@ SELECT id FROM system.descriptor
 20
 21
 23
+24
 50
 
 # Verify we can read "protobuf" columns.
@@ -196,6 +201,16 @@ role     STRING  false  NULL  {"primary","role_members_role_idx","role_members_m
 member   STRING  false  NULL  {"primary","role_members_role_idx","role_members_member_idx"}
 isAdmin  BOOL    false  NULL  {}
 
+query TTBTT
+SHOW COLUMNS FROM system.prepared_xacts
+----
+gid          STRING     false  NULL  {"primary"}
+tid          BYTES      false  NULL  {}
+transaction  BYTES      false  NULL  {}
+preparedAt   TIMESTAMP  false  NULL  {}
+owner        STRING     false  NULL  {}
+database     STRING     false  NULL  {}
+status       STRING     false  NULL  {}
 
 # Verify default privileges on system tables.
 query TTT
@@ -257,6 +272,16 @@ system  namespace         admin  GRANT
 system  namespace         admin  SELECT
 system  namespace         root   GRANT
 system  namespace         root   SELECT
+system  prepared_xacts    admin  DELETE
+system  prepared_xacts    admin  GRANT
+system  prepared_xacts    admin  INSERT
+system  prepared_xacts    admin  SELECT
+system  prepared_xacts    admin  UPDATE
+system  prepared_xacts    root   DELETE
+system  prepared_xacts    root   GRANT
+system  prepared_xacts    root   INSERT
+system  prepared_xacts    root   SELECT
+system  prepared_xacts    root   UPDATE
 system  rangelog          admin  DELETE
 system  rangelog          admin  GRANT
 system  rangelog          admin  INSERT

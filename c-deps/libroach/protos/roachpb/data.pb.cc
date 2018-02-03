@@ -272,6 +272,7 @@ bool TransactionStatus_IsValid(int value) {
     case 0:
     case 1:
     case 2:
+    case 3:
       return true;
     default:
       return false;

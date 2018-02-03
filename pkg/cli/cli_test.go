@@ -2125,6 +2125,7 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18
   debug/nodes/1/ranges/19
   debug/nodes/1/ranges/20
+  debug/nodes/1/ranges/21
   debug/schema/system@details
   debug/schema/system/descriptor
   debug/schema/system/eventlog
@@ -2132,6 +2133,7 @@ writing ` + os.DevNull + `
   debug/schema/system/lease
   debug/schema/system/locations
   debug/schema/system/namespace
+  debug/schema/system/prepared_xacts
   debug/schema/system/rangelog
   debug/schema/system/role_members
   debug/schema/system/settings
