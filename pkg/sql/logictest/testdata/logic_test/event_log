@@ -67,7 +67,6 @@ SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 4  1
-12 1
 
 statement ok
 ALTER TABLE test.a ADD val INT
@@ -77,7 +76,6 @@ SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 4  1
-12 1
 51 1
 
 query II rowsort
@@ -117,7 +115,6 @@ SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 4  1
-12 1
 51 1
 51 1
 

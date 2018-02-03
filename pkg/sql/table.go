@@ -993,23 +993,3 @@ func (p *planner) getTableAndIndex(
 	}
 	return tableDesc, &index, nil
 }
-
-// resolveTableNameFromID computes a table name suitable for logging
-// from the table ID and the ID-to-desc mappings.
-func resolveTableNameFromID(
-	ctx context.Context,
-	tableID sqlbase.ID,
-	tables map[sqlbase.ID]*sqlbase.TableDescriptor,
-	databases map[sqlbase.ID]*sqlbase.DatabaseDescriptor,
-) string {
-	table := tables[tableID]
-	tn := tree.NewTableName("", tree.Name(table.Name))
-	if parentDB, ok := databases[table.ParentID]; ok {
-		tn.SchemaName = tree.Name(parentDB.Name)
-	} else {
-		tn.SchemaName = tree.Name(fmt.Sprintf("[%d]", table.ParentID))
-		log.Errorf(ctx, "relation [%d] (%q) has no parent database (corrupted schema?)",
-			tableID, tree.ErrString(tn))
-	}
-	return tree.ErrString(tn)
-}

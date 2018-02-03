@@ -53,36 +53,34 @@ trap finish EXIT
 export PGHOST=localhost
 export PGPORT=""
 export COCKROACH_SKIP_UPDATE_CHECK=1
-export COCKROACH_CERTS_DIR=/certs/
 
 bin=/opt/%s/cockroach
-echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
-$bin start --background --logtostderr &> oldout
+$bin start --background --logtostderr --insecure --certs-dir=/certs &> oldout
 
 echo "Use the reference binary to write a couple rows, then render its output to a file and shut down."
-$bin sql -e "CREATE DATABASE old"
-$bin sql -d old -e "CREATE TABLE testing_old (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
-$bin sql -d old -e "INSERT INTO testing_old values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
-$bin sql -d old -e "INSERT INTO testing_old values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
-$bin quit && wait # wait will block until all background jobs finish.
+$bin sql --insecure -e "CREATE DATABASE old"
+$bin sql --insecure -d old -e "CREATE TABLE testing_old (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
+$bin sql --insecure -d old -e "INSERT INTO testing_old values (1, true, 'hello', decimal '3.14159', 3.14159, NOW(), interval '1h')"
+$bin sql --insecure -d old -e "INSERT INTO testing_old values (2, false, 'world', decimal '0.14159', 0.14159, NOW(), interval '234h45m2s234ms')"
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
+$bin quit --insecure && wait # wait will block until all background jobs finish.
 
 bin=/cockroach/cockroach
-$bin start --certs-dir=/certs/ --background --logtostderr &> newout
+$bin start --background --logtostderr --insecure --certs-dir=/certs &> newout
 echo "Read data written by reference version using new binary"
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff -u new.everything old.everything
 
-$bin node status
+$bin node status --insecure
 
 echo "Add a row with the new binary and render the updated data before shutting down."
-$bin sql -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
-$bin sql -d old -e "CREATE TABLE testing_new (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
-$bin sql -d old -e "INSERT INTO testing_new values (4, false, '!!', decimal '1.14159', 1.14159, NOW(), interval '4h')"
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> new.everything
-$bin quit
+$bin sql --insecure -d old -e "INSERT INTO testing_old values (3, false, '!', decimal '2.14159', 2.14159, NOW(), interval '3h')"
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > new.everything
+$bin sql --insecure -d old -e "CREATE TABLE testing_new (i int primary key, b bool, s string unique, d decimal, f float, t timestamp, v interval, index sb (s, b))"
+$bin sql --insecure -d old -e "INSERT INTO testing_new values (4, false, '!!', decimal '1.14159', 1.14159, NOW(), interval '4h')"
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> new.everything
+$bin quit --insecure
 # Let it close its listening sockets.
 sleep 1
 
@@ -109,14 +107,12 @@ function finish() {
 }
 trap finish EXIT
 
-export COCKROACH_CERTS_DIR=/certs/
-echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
-$bin start --background --logtostderr &> out
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
+$bin start --background --logtostderr --insecure --certs-dir=/certs &> out
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff -u new.everything old.everything
-$bin quit && wait
+$bin quit --insecure && wait
 `
 	runReadWriteReferenceTest(ctx, t, `bidirectional-reference-version`, backwardReferenceTest)
 }
@@ -141,14 +137,12 @@ function finish() {
 }
 trap finish EXIT
 
-export COCKROACH_CERTS_DIR=/certs/
-echo "TODO(marc): specify --certs-dir=/certs/ once the binary is upgraded"
-$bin start --background --logtostderr &> out
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
-$bin sql -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
+$bin start --background --logtostderr --insecure --certs-dir=/certs &> out
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_old" > old.everything
+$bin sql --insecure -d old --format=records -e "SELECT i, b, s, d, f, extract(epoch from (timestamp '1970-01-01 00:00:00' + v)) as v, extract(epoch FROM t) as e FROM testing_new" >> old.everything
 # diff returns non-zero if different. With set -e above, that would exit here.
 diff -u new.everything old.everything
-$bin quit && wait
+$bin quit --insecure && wait
 `
 	runReadWriteReferenceTest(ctx, t, `forward-reference-version`, backwardReferenceTest)
 }
