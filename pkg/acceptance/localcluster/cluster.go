@@ -333,7 +333,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 		// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
 		// to determine whether a cluster has up-replicated. This is relevant for the
 		// version upgrade acceptance test. Just skip the replication check for this case.
-		if testutils.IsError(err, "table \"crdb_internal.ranges\" does not exist") {
+		if testutils.IsError(err, "relation \"crdb_internal.ranges\" does not exist") {
 			return true, ""
 		}
 		log.Fatal(context.Background(), err)

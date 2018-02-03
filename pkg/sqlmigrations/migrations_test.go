@@ -377,9 +377,7 @@ type migrationTest struct {
 //
 // The caller is responsible for calling the test's close method at the end of
 // the test.
-func makeMigrationTest(
-	ctx context.Context, t testing.TB,
-) migrationTest {
+func makeMigrationTest(ctx context.Context, t testing.TB) migrationTest {
 	t.Helper()
 
 	oldMigrations := append([]migrationDescriptor(nil), backwardCompatibleMigrations...)
@@ -432,6 +430,10 @@ func (mt *migrationTest) start(t testing.TB, serverArgs base.TestServerArgs) {
 //
 // You must call start before calling runMigration.
 func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor) error {
+	if m.workFn == nil {
+		// Migration has been baked in. Ignore it.
+		return nil
+	}
 	return m.workFn(ctx, runner{
 		db:          mt.kvDB,
 		memMetrics:  mt.memMetrics,
@@ -527,142 +529,6 @@ func TestCreateSystemTable(t *testing.T) {
 	}
 
 	// Verify the idempotency of the migration.
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestUpdateViewDependenciesMigration(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-
-	mt := makeMigrationTest(ctx, t)
-	defer mt.close(ctx)
-
-	migration := mt.pop(t, "establish conservative dependencies for views")
-	mt.start(t, base.TestServerArgs{})
-
-	t.Log("create test tables")
-	mt.sqlDB.Exec(t, `
-CREATE DATABASE test;
-CREATE DATABASE test2;
-SET DATABASE=test;
-
-CREATE TABLE t(x INT, y INT);
-CREATE VIEW v1 AS SELECT x FROM t WHERE false;
-CREATE VIEW v2 AS SELECT x FROM v1;
-
-CREATE TABLE u(x INT, y INT);
-CREATE VIEW v3 AS SELECT x FROM (SELECT x, y FROM u);
-
-CREATE VIEW v4 AS SELECT id from system.descriptor;
-
-CREATE TABLE w(x INT);
-CREATE VIEW test2.v5 AS SELECT x FROM w;
-
-CREATE TABLE x(x INT);
-CREATE INDEX y ON x(x);
-CREATE VIEW v6 AS SELECT x FROM x@y;
-`)
-
-	testDesc := []struct {
-		dbName string
-		tname  string
-		desc   *sqlbase.TableDescriptor
-	}{
-		{"test", "t", nil},
-		{"test", "v1", nil},
-		{"test", "u", nil},
-		{"test", "w", nil},
-		{"test", "x", nil},
-		{"system", "descriptor", nil},
-	}
-
-	t.Log("fetch descriptors")
-	for i, td := range testDesc {
-		testDesc[i].desc = sqlbase.GetTableDescriptor(mt.kvDB, td.dbName, td.tname)
-	}
-
-	// Now, corrupt the descriptors by breaking their dependency information.
-	t.Log("break descriptors")
-	if err := mt.kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-		for _, t := range testDesc {
-			t.desc.UpVersion = true
-			t.desc.DependedOnBy = nil
-			t.desc.DependedOnBy = nil
-
-			descKey := sqlbase.MakeDescMetadataKey(t.desc.GetID())
-			descVal := sqlbase.WrapDescriptor(t.desc)
-			if err := txn.Put(ctx, descKey, descVal); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Break further by deleting the referenced tables. This has become possible
-	// because the dependency links have been broken above.
-	t.Log("delete tables")
-	mt.sqlDB.Exec(t, `
-DROP TABLE test.t;
-DROP VIEW test.v1;
-DROP TABLE test.u;
-DROP TABLE test.w;
-DROP INDEX test.x@y;`)
-
-	// Check the views are effectively broken.
-	t.Log("check views are broken")
-
-	for _, vname := range []string{"test.v2", "test.v3", "test2.v5", "test.v6"} {
-		_, err := mt.sqlDB.DB.Exec(fmt.Sprintf(`TABLE %s`, vname))
-		if !testutils.IsError(err,
-			`relation ".*" does not exist|index ".*" not found|table is being dropped`) {
-			t.Fatalf("%s: unexpected error: %v", vname, err)
-		}
-	}
-
-	// Restore missing dependencies for the rest of the test.
-	t.Log("restore dependencies")
-
-	mt.sqlDB.Exec(t, `
-CREATE TABLE test.t(x INT, y INT);
-CREATE TABLE test.u(x INT, y INT);
-CREATE TABLE test.w(x INT);
-CREATE VIEW test.v1 AS SELECT x FROM test.t WHERE false;
-CREATE INDEX y ON test.x(x);
-`)
-
-	t.Log("run migration")
-	if err := mt.runMigration(ctx, migration); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check that the views are fixed now.
-	t.Log("check views working")
-
-	// Check the views can be queried.
-	for _, vname := range []string{"test.v1", "test.v2", "test.v3", "test.v4", "test2.v5", "test.v6"} {
-		mt.sqlDB.Exec(t, fmt.Sprintf("TABLE %s", vname))
-	}
-
-	// Check that the tables cannot be dropped any more.
-	for _, tn := range []string{"TABLE test.t", "TABLE test.u", "TABLE test.w", "INDEX test.x@y"} {
-		_, err := mt.sqlDB.DB.Exec(fmt.Sprintf(`DROP %s`, tn))
-		if !testutils.IsError(err,
-			`cannot drop (relation|index) .* because view .* depends on it`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	}
-
-	// Finally, try running the migration and make sure it still succeeds.
-	// This verifies the idempotency of the migration.
-	t.Log("run migration again")
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}

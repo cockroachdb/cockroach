@@ -854,14 +854,17 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	target.AddDescriptor(keys.SystemDatabaseID, &EventLogTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &RangeEventTable)
 	target.AddDescriptor(keys.SystemDatabaseID, &UITable)
+	target.AddDescriptor(keys.SystemDatabaseID, &JobsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &SettingsTable)
+	target.AddDescriptor(keys.SystemDatabaseID, &WebSessionsTable)
 
-	// NOTE(benesch): Installation of the jobs table is intentionally omitted
-	// here; it's added via a migration in both fresh clusters and existing
-	// clusters. After an upgrade window of a yet-to-be-decided length has passed,
-	// we'll remove the migration and add the code to install the jobs table here
-	// in the same release. This ensures there's only ever one code path
-	// responsible for creating the table. Please follow a similar scheme for any
-	// new system tables you create.
+	// Adding a new system table? Don't add it to the metadata schema yet!
+	//
+	// The first release to contain the system table must add the system table
+	// via a migration in both fresh clusters and existing clusters. Only in the
+	// next release should you "bake in" the migration by adding the table to
+	// the metadata schema here. This ensures there's only ever one code path
+	// responsible for creating the table.
 
 	target.otherKV = append(target.otherKV, createDefaultZoneConfig())
 }
