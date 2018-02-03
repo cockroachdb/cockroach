@@ -10,7 +10,7 @@ function init() {
 }
 
 if [ "${1-}" = "pull" ]; then
-  docker pull "${image}"
+  docker pull "${image}:${version}"
   exit 0
 fi
 
