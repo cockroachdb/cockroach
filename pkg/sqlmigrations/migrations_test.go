@@ -477,68 +477,51 @@ func TestCreateSystemTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	jobsDesc := sqlbase.JobsTable
-	jobsNameKey := sqlbase.MakeNameMetadataKey(jobsDesc.GetParentID(), jobsDesc.GetName())
-	jobsDescKey := sqlbase.MakeDescMetadataKey(jobsDesc.GetID())
-	jobsDescVal := sqlbase.WrapDescriptor(&jobsDesc)
-	settingsDesc := sqlbase.SettingsTable
-	settingsNameKey := sqlbase.MakeNameMetadataKey(settingsDesc.GetParentID(), settingsDesc.GetName())
-	settingsDescKey := sqlbase.MakeDescMetadataKey(settingsDesc.GetID())
-	settingsDescVal := sqlbase.WrapDescriptor(&settingsDesc)
+	table := sqlbase.NamespaceTable
+	table.ID = keys.MaxReservedDescID
+	table.Name = "dummy"
+	nameKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
+	descKey := sqlbase.MakeDescMetadataKey(table.ID)
+	descVal := sqlbase.WrapDescriptor(&table)
 
 	mt := makeMigrationTest(ctx, t)
 	defer mt.close(ctx)
 
-	for i, m := range backwardCompatibleMigrations {
-		if m.doesBackfill {
-			// Disable all migrations after (and including) a backfill, the backfill
-			// needs the jobs table and following migrations may depend on these.
-			backwardCompatibleMigrations = backwardCompatibleMigrations[:i]
-			break
-		}
-	}
-
-	migration := mt.pop(t, "create system.jobs table")
 	mt.start(t, base.TestServerArgs{})
 
-	// Verify that the system.jobs keys were not written, but the system.settings
-	// keys were. This verifies that the migration system table migrations work.
-	if kv, err := mt.kvDB.Get(ctx, jobsNameKey); err != nil {
+	// Verify that the keys were not written.
+	if kv, err := mt.kvDB.Get(ctx, nameKey); err != nil {
 		t.Error(err)
 	} else if kv.Exists() {
-		t.Errorf("expected %q not to exist, got %v", jobsNameKey, kv)
+		t.Errorf("expected %q not to exist, got %v", nameKey, kv)
 	}
-	if kv, err := mt.kvDB.Get(ctx, jobsDescKey); err != nil {
+	if kv, err := mt.kvDB.Get(ctx, descKey); err != nil {
 		t.Error(err)
 	} else if kv.Exists() {
-		t.Errorf("expected %q not to exist, got %v", jobsDescKey, kv)
-	}
-	if kv, err := mt.kvDB.Get(ctx, settingsNameKey); err != nil {
-		t.Error(err)
-	} else if !kv.Exists() {
-		t.Errorf("expected %q to exist, got that it doesn't exist", settingsNameKey)
-	}
-	var descriptor sqlbase.Descriptor
-	if err := mt.kvDB.GetProto(ctx, settingsDescKey, &descriptor); err != nil {
-		t.Error(err)
-	} else if !proto.Equal(settingsDescVal, &descriptor) {
-		t.Errorf("expected %v for key %q, got %v", settingsDescVal, settingsDescKey, descriptor)
+		t.Errorf("expected %q not to exist, got %v", descKey, kv)
 	}
 
+	migration := migrationDescriptor{
+		name: "add system.dummy table",
+		workFn: func(ctx context.Context, r runner) error {
+			return createSystemTable(ctx, r, table)
+		},
+	}
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify that the appropriate keys were written.
-	if kv, err := mt.kvDB.Get(ctx, jobsNameKey); err != nil {
+	if kv, err := mt.kvDB.Get(ctx, nameKey); err != nil {
 		t.Error(err)
 	} else if !kv.Exists() {
-		t.Errorf("expected %q to exist, got that it doesn't exist", jobsNameKey)
+		t.Errorf("expected %q to exist, got that it doesn't exist", nameKey)
 	}
-	if err := mt.kvDB.GetProto(ctx, jobsDescKey, &descriptor); err != nil {
+	var descriptor sqlbase.Descriptor
+	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
 		t.Error(err)
-	} else if !proto.Equal(jobsDescVal, &descriptor) {
-		t.Errorf("expected %v for key %q, got %v", jobsDescVal, jobsDescKey, descriptor)
+	} else if !proto.Equal(descVal, &descriptor) {
+		t.Errorf("expected %v for key %q, got %v", descVal, descKey, descriptor)
 	}
 
 	// Verify the idempotency of the migration.
