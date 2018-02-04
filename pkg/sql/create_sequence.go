@@ -30,12 +30,15 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
-	name, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
+	name, err := n.Name.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Schema())
+	var dbDesc *DatabaseDescriptor
+	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+		dbDesc, err = ResolveTargetObject(ctx, p, name)
+	})
 	if err != nil {
 		return nil, err
 	}

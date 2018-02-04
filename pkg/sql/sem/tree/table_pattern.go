@@ -16,8 +16,6 @@ package tree
 
 import (
 	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // Table patterns are used by e.g. GRANT statements, to designate
@@ -38,50 +36,20 @@ type TablePattern interface {
 	fmt.Stringer
 	NodeFormatter
 
+	// NormalizeTablePattern() guarantees to return a pattern that is
+	// not an UnresolvedName. This converts the UnresolvedName to an
+	// AllTablesSelector or TableName as necessary.
 	NormalizeTablePattern() (TablePattern, error)
-}
-
-// DatabaseQualifiable identifiers can be qualifed with a database name.
-type DatabaseQualifiable interface {
-	QualifyWithDatabase(database string) error
 }
 
 var _ TablePattern = &UnresolvedName{}
 var _ TablePattern = &TableName{}
 var _ TablePattern = &AllTablesSelector{}
-var _ DatabaseQualifiable = &AllTablesSelector{}
-var _ DatabaseQualifiable = &TableName{}
 
 // NormalizeTablePattern resolves an UnresolvedName to either a
 // TableName or AllTablesSelector.
 func (n *UnresolvedName) NormalizeTablePattern() (TablePattern, error) {
-	if n.NumParts > 2 {
-		// db/cat.schema.table: We don't support those just yet.
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-			"invalid table name: %q", ErrString(n))
-	}
-	firstCheck := 0
-	if n.Star {
-		firstCheck = 1
-	}
-	for i := firstCheck; i < n.NumParts; i++ {
-		if len(n.Parts[i]) == 0 {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-				"invalid table name: %q", ErrString(n))
-		}
-	}
-
-	if n.Star {
-		return &AllTablesSelector{
-			Schema:         Name(n.Parts[1]),
-			ExplicitSchema: n.NumParts >= 2,
-		}, nil
-	}
-	return &TableName{tblName{
-		SchemaName:     Name(n.Parts[1]),
-		TableName:      Name(n.Parts[0]),
-		ExplicitSchema: n.NumParts >= 2,
-	}}, nil
+	return classifyTablePattern(n)
 }
 
 // NormalizeTablePattern implements the TablePattern interface.
@@ -90,36 +58,18 @@ func (t *TableName) NormalizeTablePattern() (TablePattern, error) { return t, ni
 // AllTablesSelector corresponds to a selection of all
 // tables in a database, e.g. when used with GRANT.
 type AllTablesSelector struct {
-	Schema         Name
-	ExplicitSchema bool
+	TableNamePrefix
 }
 
 // Format implements the NodeFormatter interface.
 func (at *AllTablesSelector) Format(ctx *FmtCtx) {
-	if at.ExplicitSchema {
-		ctx.FormatNode(&at.Schema)
-		ctx.WriteByte('.')
-	}
+	at.TableNamePrefix.Format(ctx)
 	ctx.WriteByte('*')
 }
 func (at *AllTablesSelector) String() string { return AsString(at) }
 
 // NormalizeTablePattern implements the TablePattern interface.
 func (at *AllTablesSelector) NormalizeTablePattern() (TablePattern, error) { return at, nil }
-
-// QualifyWithDatabase adds an indirection for the database, if it's missing.
-// It transforms:  * -> database.*
-func (at *AllTablesSelector) QualifyWithDatabase(database string) error {
-	if at.ExplicitSchema {
-		// Database already qualified, nothing to do.
-		return nil
-	}
-	if database == "" {
-		return pgerror.NewErrorf(pgerror.CodeInvalidDatabaseDefinitionError, "no database specified: %q", at)
-	}
-	at.Schema = Name(database)
-	return nil
-}
 
 // TablePatterns implement a comma-separated list of table patterns.
 // Used by e.g. the GRANT statement.

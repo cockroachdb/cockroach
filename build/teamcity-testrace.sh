@@ -30,7 +30,7 @@ run build/builder.sh make -Otarget gotestdashi GOFLAGS=-race
 tc_end_block "Compile"
 
 tc_start_block "Run Go tests under race detector"
-run build/builder.sh env COCKROACH_LOGIC_TESTS_SKIP=true make testrace PKG="$pkgspec" TESTFLAGS='-v' 2>&1 \
+run build/builder.sh env COCKROACH_LOGIC_TESTS_SKIP=true make testrace PKG="$pkgspec" TESTTIMEOUT=45m TESTFLAGS='-v' 2>&1 \
 	| tee artifacts/testrace.log \
 	| go-test-teamcity
 tc_end_block "Run Go tests under race detector"

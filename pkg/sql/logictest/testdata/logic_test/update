@@ -66,7 +66,7 @@ SELECT * FROM kview
 5 11
 7 15
 
-statement error cannot run UPDATE on view "kview" - views are not updateable
+statement error "kview" is not a table
 UPDATE kview SET v = 99 WHERE k IN (1, 3)
 
 query II rowsort

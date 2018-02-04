@@ -303,8 +303,7 @@ func TestZoneSpecifiers(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				sessionDB := "" // the zone CLI never sets a session DB
-				id, err := config.ResolveZoneSpecifier(&zs, sessionDB, resolveName)
+				id, err := config.ResolveZoneSpecifier(&zs, resolveName)
 				if err != nil {
 					return err
 				}

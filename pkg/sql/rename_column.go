@@ -33,21 +33,21 @@ var errEmptyColumnName = errors.New("empty column name")
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	// Check if table exists.
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
-	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	var tableDesc *TableDescriptor
+	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		tableDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireTableDesc)
+	})
 	if err != nil {
 		return nil, err
 	}
 	if tableDesc == nil {
-		if n.IfExists {
-			// Noop.
-			return &zeroNode{}, nil
-		}
-		// Key does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("table %q does not exist", tn.Table())
+		return &zeroNode{}, nil
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
@@ -150,6 +150,13 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	if err := p.txn.Put(ctx, descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
 		return nil, err
 	}
+	// TODO(vivek): the code above really should really be replaced by a call
+	// to writeTableDesc(). However if we do that then a couple of logic tests
+	// start failing. How can that be?
+	//
+	// if err := p.writeTableDesc(ctx, tableDesc); err != nil {
+	//	return nil, err
+	// }
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 	return &zeroNode{}, nil
 }

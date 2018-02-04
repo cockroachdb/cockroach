@@ -520,7 +520,7 @@ NoTxn
 statement ok
 BEGIN
 
-query error pq: database "t" does not exist
+query error pq: relation "t\.b" does not exist
 SELECT a FROM t.b
 
 query T

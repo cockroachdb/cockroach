@@ -103,20 +103,22 @@ ALTER TABLE test.t DROP COLUMN xx;
 	}
 
 	for i, d := range testData {
-		sql := `SELECT "Columns" FROM [EXPLAIN(METADATA) SELECT * FROM ` + d.tableExpr + "]"
-		var columns string
-		if err := db.QueryRow(sql).Scan(&columns); err != nil {
-			if d.expectedError != "" {
-				if err.Error() != d.expectedError {
-					t.Fatalf("%d: %s: expected error: %s, got: %v", i, d.tableExpr, d.expectedError, err)
+		t.Run(d.tableExpr, func(t *testing.T) {
+			sql := `SELECT "Columns" FROM [EXPLAIN(METADATA) SELECT * FROM ` + d.tableExpr + "]"
+			var columns string
+			if err := db.QueryRow(sql).Scan(&columns); err != nil {
+				if d.expectedError != "" {
+					if err.Error() != d.expectedError {
+						t.Fatalf("%d: %s: expected error: %s, got: %v", i, d.tableExpr, d.expectedError, err)
+					}
+				} else {
+					t.Fatalf("%d: %s: query failed: %v", i, d.tableExpr, err)
 				}
-			} else {
-				t.Fatalf("%d: %s: query failed: %v", i, d.tableExpr, err)
 			}
-		}
 
-		if columns != d.expectedColumns {
-			t.Fatalf("%d: %s: expected: %s, got: %s", i, d.tableExpr, d.expectedColumns, columns)
-		}
+			if columns != d.expectedColumns {
+				t.Fatalf("%d: %s: expected: %s, got: %s", i, d.tableExpr, d.expectedColumns, columns)
+			}
+		})
 	}
 }

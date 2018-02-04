@@ -246,7 +246,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 		},
 		{
 			"ALTER TABLE foo EXPERIMENTAL CONFIGURE ZONE ''",
-			`no database specified: "foo"`,
+			`relation "foo" does not exist`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE foo",
@@ -258,7 +258,7 @@ func TestInvalidSetShowZones(t *testing.T) {
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE foo",
-			`no database specified: "foo"`,
+			`relation "foo" does not exist`,
 		},
 		{
 			"EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE system.foo",

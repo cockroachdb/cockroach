@@ -78,7 +78,7 @@ func (c *CheckHelper) Init(
 		typedExpr, err := analyzeExpr(
 			ctx,
 			raw,
-			MultiSourceInfo{c.sourceInfo},
+			MakeMultiSourceInfo(c.sourceInfo),
 			ivarHelper,
 			types.Bool,
 			false, /* requireType */

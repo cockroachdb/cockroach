@@ -85,7 +85,7 @@ func (node *DropIndex) Format(ctx *FmtCtx) {
 
 // DropTable represents a DROP TABLE statement.
 type DropTable struct {
-	Names        TableNameReferences
+	Names        NormalizableTableNames
 	IfExists     bool
 	DropBehavior DropBehavior
 }
@@ -105,7 +105,7 @@ func (node *DropTable) Format(ctx *FmtCtx) {
 
 // DropView represents a DROP VIEW statement.
 type DropView struct {
-	Names        TableNameReferences
+	Names        NormalizableTableNames
 	IfExists     bool
 	DropBehavior DropBehavior
 }
@@ -125,7 +125,7 @@ func (node *DropView) Format(ctx *FmtCtx) {
 
 // DropSequence represents a DROP SEQUENCE statement.
 type DropSequence struct {
-	Names        TableNameReferences
+	Names        NormalizableTableNames
 	IfExists     bool
 	DropBehavior DropBehavior
 }

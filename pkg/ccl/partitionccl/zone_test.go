@@ -228,11 +228,11 @@ func TestInvalidIndexPartitionSetShowZones(t *testing.T) {
 		},
 		{
 			"USE system; ALTER INDEX foo EXPERIMENTAL CONFIGURE ZONE ''",
-			`index "foo" not in any of the tables`,
+			`index "foo" does not exist`,
 		},
 		{
 			"USE system; EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX foo",
-			`index "foo" not in any of the tables`,
+			`index "foo" does not exist`,
 		},
 		{
 			"ALTER PARTITION p0 OF TABLE system.jobs EXPERIMENTAL CONFIGURE ZONE 'foo'",

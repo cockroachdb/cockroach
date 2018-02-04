@@ -29,20 +29,22 @@ type alterSequenceNode struct {
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
-	tn, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Name.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	seqDesc, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	var seqDesc *TableDescriptor
+	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		seqDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireSequenceDesc)
+	})
 	if err != nil {
 		return nil, err
 	}
 	if seqDesc == nil {
-		if n.IfExists {
-			return &zeroNode{}, nil
-		}
-		return nil, sqlbase.NewUndefinedRelationError(tn)
+		return &zeroNode{}, nil
 	}
 
 	if err := p.CheckPrivilege(ctx, seqDesc, privilege.CREATE); err != nil {

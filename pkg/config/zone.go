@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -121,12 +122,22 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 	// We've handled the special cases for named zones, databases and partitions;
 	// have TableNameReference.Normalize tell us whether what remains is a valid
 	// table or index name.
-	if _, err = parsed.Table.Normalize(); err != nil {
+	tn, err := parsed.Table.Normalize()
+	if err != nil {
 		return tree.ZoneSpecifier{}, err
 	}
 	if parsed.Index != "" && partition != "" {
 		return tree.ZoneSpecifier{}, fmt.Errorf(
 			"index and partition cannot be specified simultaneously: %q", s)
+	}
+	// Table prefixes in CLI zone specifiers always have the form
+	// "table" or "db.table" and do not know about schemas. They never
+	// refer to virtual schemas. So migrate the db part to the catalog
+	// position.
+	if tn.ExplicitSchema {
+		tn.ExplicitCatalog = true
+		tn.CatalogName = tn.SchemaName
+		tn.SchemaName = tree.PublicSchemaName
 	}
 	return tree.ZoneSpecifier{
 		TableOrIndex: parsed,
@@ -144,15 +155,15 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 		return zs.Database.String()
 	}
 	ti := zs.TableOrIndex
-	if zs.Partition != "" {
-		tn := ti.Table.TableName()
-		ti.Table = tree.NormalizableTableName{
-			TableNameReference: &tree.UnresolvedName{
-				NumParts: 3,
-				Parts:    tree.NameParts{string(zs.Partition), string(tn.TableName), string(tn.SchemaName)},
-			},
-		}
+
+	// The table name may have a schema specifier. CLI zone specifiers
+	// do not support this, so strip it.
+	tn := ti.Table.TableName()
+	if zs.Partition == "" {
+		ti.Table.TableNameReference = tree.NewUnresolvedName(tn.Catalog(), tn.Table())
+	} else {
 		// The index is redundant when the partition is specified, so omit it.
+		ti.Table.TableNameReference = tree.NewUnresolvedName(tn.Catalog(), tn.Table(), string(zs.Partition))
 		ti.Index = ""
 	}
 	return tree.AsStringWithFlags(&ti, tree.FmtAlwaysQualifyTableNames)
@@ -161,10 +172,12 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs *tree.ZoneSpecifier,
-	sessionDB string,
-	resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *tree.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
+	// A zone specifier has one of 3 possible structures:
+	// - a predefined named zone;
+	// - a database name;
+	// - a table or index name.
 	if zs.NamedZone != "" {
 		if zs.NamedZone == DefaultZoneName {
 			return keys.RootNamespaceID, nil
@@ -179,11 +192,17 @@ func ResolveZoneSpecifier(
 		return resolveName(keys.RootNamespaceID, string(zs.Database))
 	}
 
-	tn, err := zs.TableOrIndex.Table.NormalizeWithDatabaseName(sessionDB)
+	// Third case: a table or index name. We look up the table part here.
+
+	tn, err := zs.TableOrIndex.Table.Normalize()
 	if err != nil {
 		return 0, err
 	}
-	databaseID, err := resolveName(keys.RootNamespaceID, tn.Schema())
+	if tn.SchemaName != tree.PublicSchemaName {
+		return 0, pgerror.NewErrorf(pgerror.CodeReservedNameError,
+			"only schema \"public\" is supported: %q", tree.ErrString(tn))
+	}
+	databaseID, err := resolveName(keys.RootNamespaceID, tn.Catalog())
 	if err != nil {
 		return 0, err
 	}

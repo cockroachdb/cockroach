@@ -41,28 +41,18 @@ type dropTableNode struct {
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.Normalize()
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
-			return nil, err
-		}
-
-		droppedDesc, err := p.dropTableOrViewPrepare(ctx, tn)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireTableDesc)
 		if err != nil {
 			return nil, err
 		}
 		if droppedDesc == nil {
-			if n.IfExists {
-				continue
-			}
-			// Table does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedRelationError(tn)
+			continue
 		}
-		if !droppedDesc.IsTable() {
-			return nil, sqlbase.NewWrongObjectTypeError(tn, "table")
-		}
+
 		td = append(td, droppedDesc)
 	}
 
@@ -139,7 +129,7 @@ func (*dropTableNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropTableNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropTableNode) Close(context.Context)        {}
 
-// dropTableOrViewPrepare/dropTableImpl is used to drop a single table by
+// prepareDrop/dropTableImpl is used to drop a single table by
 // name, which can result from a DROP TABLE, DROP VIEW, DROP SEQUENCE,
 // or DROP DATABASE statement. This method returns the dropped table
 // descriptor, to be used for the purpose of logging the event.  The table
@@ -151,10 +141,14 @@ func (*dropTableNode) Close(context.Context)        {}
 // the deleted bit set, meaning the lease manager will not hand out
 // new leases for it and existing leases are released).
 // If the table does not exist, this function returns a nil descriptor.
-func (p *planner) dropTableOrViewPrepare(
-	ctx context.Context, name *tree.TableName,
-) (*sqlbase.TableDescriptor, error) {
-	tableDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), name)
+func (p *planner) prepareDrop(
+	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
+) (tableDesc *sqlbase.TableDescriptor, err error) {
+	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		tableDesc, err = ResolveExistingObject(ctx, p, name, required, requiredType)
+	})
 	if err != nil {
 		return nil, err
 	}

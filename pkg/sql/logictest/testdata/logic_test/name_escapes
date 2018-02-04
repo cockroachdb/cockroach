@@ -48,7 +48,7 @@ CREATE VIEW ";--alsoconcerning" AS SELECT @1, @2, @3 FROM ";--notbetter"
 query TT
 SHOW CREATE VIEW ";--alsoconcerning"
 ----
-";--alsoconcerning"  CREATE VIEW ";--alsoconcerning" ("@1", "@2", "@3") AS SELECT @1, @2, @3 FROM test.";--notbetter"
+";--alsoconcerning"  CREATE VIEW ";--alsoconcerning" ("@1", "@2", "@3") AS SELECT @1, @2, @3 FROM test.public.";--notbetter"
 
 # Check that "create table as" handles strange things properly.
 statement ok

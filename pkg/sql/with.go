@@ -99,44 +99,40 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 // getCTEDataSource looks up the table name in the planner's CTE name
 // environment, returning the planDataSource corresponding to the CTE if it was
 // found. The second return parameter returns true if a CTE was found.
-func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSource, bool, error) {
+func (p *planner) getCTEDataSource(tn *tree.TableName) (planDataSource, bool, error) {
 	if p.curPlan.cteNameEnvironment == nil {
 		return planDataSource{}, false, nil
 	}
-	tn, err := t.Normalize()
-	if err != nil {
-		return planDataSource{}, false, err
+	if tn.ExplicitSchema {
+		// If the name was prefixed, it cannot be a CTE.
+		return planDataSource{}, false, nil
 	}
 	// Iterate backward through the environment, most recent frame first.
 	for i := range p.curPlan.cteNameEnvironment {
 		frame := p.curPlan.cteNameEnvironment[len(p.curPlan.cteNameEnvironment)-1-i]
-		if tn.SchemaName == "" && tn.CatalogName == "" {
-			if cteSource, ok := frame[tn.TableName]; ok {
-				if cteSource.used {
-					// TODO(jordan): figure out how to lift this restriction.
-					// CTE expressions that are used more than once will need to be
-					// pre-evaluated like subqueries, I think.
-					return planDataSource{}, false, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
-						"CTE clauses can currently only be used once per statement")
-				}
-				cteSource.used = true
-				frame[tn.TableName] = cteSource
-				plan := cteSource.plan
-				cols := planColumns(plan)
-				if len(cols) == 0 {
-					return planDataSource{}, false, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
-						"WITH clause \"%v\" does not have a RETURNING clause", tree.ErrString(t))
-				}
-				dataSource := planDataSource{
-					info: sqlbase.NewSourceInfoForSingleTable(*tn, cols),
-					plan: plan,
-				}
-				dataSource, err = renameSource(dataSource, cteSource.alias, false)
-				if err != nil {
-					return planDataSource{}, false, err
-				}
-				return dataSource, true, nil
+		if cteSource, ok := frame[tn.TableName]; ok {
+			if cteSource.used {
+				// TODO(jordan): figure out how to lift this restriction.
+				// CTE expressions that are used more than once will need to be
+				// pre-evaluated like subqueries, I think.
+				return planDataSource{}, false, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+					"unsupported multiple use of CTE clause %q", tree.ErrString(tn))
 			}
+			cteSource.used = true
+			frame[tn.TableName] = cteSource
+			plan := cteSource.plan
+			cols := planColumns(plan)
+			if len(cols) == 0 {
+				return planDataSource{}, false, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+					"WITH clause %q does not have a RETURNING clause", tree.ErrString(tn))
+			}
+			dataSource := planDataSource{
+				info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(plan)),
+				plan: plan,
+			}
+			var err error
+			dataSource, err = renameSource(dataSource, cteSource.alias, false)
+			return dataSource, err == nil, err
 		}
 	}
 	return planDataSource{}, false, nil

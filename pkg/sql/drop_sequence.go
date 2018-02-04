@@ -30,28 +30,19 @@ type dropSequenceNode struct {
 func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
 	for _, name := range n.Names {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.Normalize()
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
-			return nil, err
-		}
-
-		droppedDesc, err := p.dropTableOrViewPrepare(ctx, tn)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}
 		if droppedDesc == nil {
-			if n.IfExists {
-				continue
-			}
-			// Sequence does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedRelationError(tn)
+			// IfExists specified and descriptor does not exist.
+			continue
 		}
-		if !droppedDesc.IsSequence() {
-			return nil, sqlbase.NewWrongObjectTypeError(tn, "sequence")
-		}
+
 		if depErr := p.sequenceDependencyError(ctx, droppedDesc); depErr != nil {
 			return nil, depErr
 		}
@@ -72,9 +63,6 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
 	for _, droppedDesc := range n.td {
-		if droppedDesc == nil {
-			continue
-		}
 		err := params.p.dropSequenceImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err

@@ -219,5 +219,5 @@ var _ optbase.Catalog = &execEngine{}
 // FindTable is part of the optbase.Catalog interface.
 func (ee *execEngine) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
 	p := ee.planner
-	return p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), name)
+	return ResolveExistingObject(ctx, p, name, true /*required*/, requireTableDesc)
 }

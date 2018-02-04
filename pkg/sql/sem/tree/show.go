@@ -165,6 +165,7 @@ func (node *ShowSessions) Format(ctx *FmtCtx) {
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
 	Database Name
+	Schema   Name
 }
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
@@ -187,6 +188,8 @@ func (node *ShowTables) Format(ctx *FmtCtx) {
 	if node.Database != "" {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.Database)
+		ctx.WriteByte('.')
+		ctx.FormatNode(&node.Schema)
 	}
 }
 

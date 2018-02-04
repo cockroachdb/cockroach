@@ -28,7 +28,7 @@ SELECT * FROM kview
 5 6
 7 8
 
-statement error cannot run TRUNCATE on view "kview" - views are not updateable
+statement error "kview" is not a table
 TRUNCATE TABLE kview
 
 query II rowsort

@@ -44,16 +44,16 @@ SHOW TABLES
 new_kv
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTTT
+query TTTTT
 SHOW GRANTS ON TABLE new_kv
 ----
-test  new_kv  admin  ALL
-test  new_kv  root   ALL
+test  public new_kv  admin  ALL
+test  public new_kv  root   ALL
 
-statement error empty table name
+statement error invalid table name: ""
 ALTER TABLE "" RENAME TO foo
 
-statement error empty table name
+statement error invalid table name: ""
 ALTER TABLE new_kv RENAME TO ""
 
 statement ok
@@ -98,7 +98,7 @@ statement ok
 ALTER TABLE test.t RENAME TO t2
 
 query T
-SHOW TABLES FROM test
+SHOW TABLES
 ----
 new_kv
 t2
@@ -125,7 +125,7 @@ statement ok
 ALTER TABLE test.t2 RENAME TO test2.t2
 
 query T
-SHOW TABLES FROM test
+SHOW TABLES
 ----
 
 query T
@@ -151,13 +151,13 @@ SELECT * FROM test2.t2
 statement ok
 CREATE VIEW test2.v1 AS SELECT c1,c2 FROM test2.t2
 
-statement error pgcode 42809 "test2.v1" is not a table
+statement ok
 ALTER TABLE test2.v1 RENAME TO test2.v2
 
-statement error pgcode 42809 "test2.v1" is not a table
-ALTER TABLE test2.v1 RENAME TO test2.v1
+statement ok
+ALTER TABLE test2.v2 RENAME TO test2.v1
 
-statement error cannot rename relation "test2.t2" because view "v1" depends on it
+statement error cannot rename relation "test2.public.t2" because view "v1" depends on it
 ALTER TABLE test2.t2 RENAME TO test2.t3
 
 # Tests that uncommitted database or table names can be used by statements
@@ -216,7 +216,13 @@ statement ok
 BEGIN
 
 statement ok
-ALTER DATABASE d RENAME TO dnew; CREATE DATABASE d; CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR)
+ALTER DATABASE d RENAME TO dnew
+
+statement ok
+CREATE DATABASE d
+
+statement ok
+CREATE TABLE d.kv (k CHAR PRIMARY KEY, v CHAR)
 
 statement ok
 INSERT INTO d.kv (k,v) VALUES ('a', 'b')
@@ -237,7 +243,7 @@ INSERT INTO dd.kv (k,v) VALUES ('a', 'b')
 statement ok
 ROLLBACK
 
-statement error database \"dd\" does not exist
+statement error relation "dd\.kv" does not exist
 INSERT INTO dd.kv (k,v) VALUES ('c', 'd')
 
 # Check that on a rollback a table name cannot be used.

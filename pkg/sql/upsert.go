@@ -263,10 +263,7 @@ func upsertExprsAndIndex(
 				continue
 			}
 			n := tree.Name(c.Name)
-			expr := &tree.ColumnItem{
-				TableName:  upsertExcludedTable,
-				ColumnName: n,
-			}
+			expr := tree.NewColumnItem(&upsertExcludedTable, n)
 			updateExprs = append(updateExprs, &tree.UpdateExpr{Names: tree.NameList{n}, Expr: expr})
 		}
 		return updateExprs, conflictIndex, nil

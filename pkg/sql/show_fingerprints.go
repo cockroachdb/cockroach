@@ -54,13 +54,21 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	tableDesc, err := MustGetTableDesc(
-		ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	var tableDesc *TableDescriptor
+	// We avoid the cache so that we can observe the fingerprints without
+	// taking a lease, like other SHOW commands. We also use
+	// allowAdding=true so we can look at the fingerprints of a table
+	// added in the same transaction.
+	//
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+	})
 	if err != nil {
 		return nil, err
 	}

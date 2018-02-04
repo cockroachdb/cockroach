@@ -37,7 +37,8 @@ type InternalExecutor struct {
 var _ sqlutil.InternalExecutor = &InternalExecutor{}
 
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
-// the supplied transaction. Statements are currently executed as the root user.
+// the supplied transaction. Statements are currently executed as the root user
+// with the system database as current database.
 func (ie *InternalExecutor) ExecuteStatementInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
@@ -107,10 +108,17 @@ func (ie *InternalExecutor) GetTableSpan(
 	ie.initSession(p)
 
 	tn := tree.MakeTableName(tree.Name(dbName), tree.Name(tableName))
-	tableID, err := getTableID(ctx, p, &tn)
+	var desc *TableDescriptor
+	var err error
+	// We avoid the cache because we want to be able to inspect spans
+	// without blocking on a lease.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		desc, err = ResolveExistingObject(ctx, p, &tn, true /*required*/, anyDescType)
+	})
 	if err != nil {
 		return roachpb.Span{}, err
 	}
+	tableID := desc.ID
 
 	// Determine table data span.
 	tablePrefix := keys.MakeTablePrefix(uint32(tableID))
@@ -122,39 +130,4 @@ func (ie *InternalExecutor) GetTableSpan(
 func (ie *InternalExecutor) initSession(p *planner) {
 	p.extendedEvalCtx.NodeID = ie.ExecCfg.LeaseManager.LeaseStore.execCfg.NodeID.Get()
 	p.extendedEvalCtx.Tables.leaseMgr = ie.ExecCfg.LeaseManager
-}
-
-// getTableID retrieves the table ID for the specified table.
-func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID, error) {
-	if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
-		return 0, err
-	}
-
-	virtual, err := p.getVirtualTabler().getVirtualTableDesc(tn)
-	if err != nil {
-		return 0, err
-	}
-	if virtual != nil {
-		return virtual.GetID(), nil
-	}
-
-	txnRunner := func(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error {
-		return retryable(ctx, p.txn)
-	}
-
-	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Schema())
-	if err != nil {
-		return 0, err
-	}
-
-	nameKey := tableKey{dbID, tn.Table()}
-	key := nameKey.Key()
-	gr, err := p.txn.Get(ctx, key)
-	if err != nil {
-		return 0, err
-	}
-	if !gr.Exists() {
-		return 0, sqlbase.NewUndefinedRelationError(tn)
-	}
-	return sqlbase.ID(gr.ValueInt()), nil
 }

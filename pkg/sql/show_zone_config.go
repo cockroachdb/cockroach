@@ -74,20 +74,29 @@ type showZoneConfigRun struct {
 }
 
 func (n *showZoneConfigNode) startExec(params runParams) error {
-	if n.zoneSpecifier.TargetsIndex() {
-		_, err := params.p.expandIndexName(params.ctx, &n.zoneSpecifier.TableOrIndex, true /* requireTable */)
-		if err != nil {
-			return err
-		}
-	}
-
-	targetID, err := resolveZone(
-		params.ctx, params.p.txn, &n.zoneSpecifier, params.SessionData().Database)
+	var tblDesc *TableDescriptor
+	var err error
+	// We avoid the cache so that we can observe the zone configuration
+	// without taking a lease, like other SHOW commands.  We also use
+	// allowAdding=true so we can look at the configuration of a table
+	// added in the same transaction.
+	//
+	// TODO(vivek): check if the cache can be used.
+	params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		tblDesc, err = params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
+	})
 	if err != nil {
 		return err
 	}
 
-	_, index, partition, err := resolveSubzone(params.ctx, params.p.txn, &n.zoneSpecifier, targetID)
+	targetID, err := resolveZone(
+		params.ctx, params.p.txn, &n.zoneSpecifier)
+	if err != nil {
+		return err
+	}
+
+	index, partition, err := resolveSubzone(
+		params.ctx, params.p.txn, &n.zoneSpecifier, targetID, tblDesc)
 	if err != nil {
 		return err
 	}
@@ -163,7 +172,7 @@ func ascendZoneSpecifier(
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
-		zs.Database = zs.TableOrIndex.Table.TableName().SchemaName
+		zs.Database = zs.TableOrIndex.Table.TableName().CatalogName
 	} else if actualSubzone == nil {
 		// We didn't find a subzone, so no index or partition zone config exists.
 		zs.TableOrIndex.Index = ""

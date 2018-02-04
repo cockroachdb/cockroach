@@ -56,7 +56,7 @@ func TestAsOfTime(t *testing.T) {
 	if err := db.QueryRow("SELECT cluster_logical_timestamp()").Scan(&tsEmpty); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Query(fmt.Sprintf(query, tsEmpty), 0); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query(fmt.Sprintf(query, tsEmpty), 0); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
 		t.Fatal(err)
 	}
 
@@ -131,7 +131,7 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Verify queries with positive scale work properly.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e1"); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1e1"); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
 		t.Fatal(err)
 	}
 
@@ -141,12 +141,12 @@ func TestAsOfTime(t *testing.T) {
 	}
 
 	// Verify logical parts parse with < 10 digits.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.123456789"); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.123456789"); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
 		t.Fatal(err)
 	}
 
 	// Verify logical parts parse with == 10 digits.
-	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.1234567890"); !testutils.IsError(err, `pq: database "d" does not exist`) {
+	if _, err := db.Query("SELECT a FROM d.t AS OF SYSTEM TIME 1.1234567890"); !testutils.IsError(err, `pq: relation "d.t" does not exist`) {
 		t.Fatal(err)
 	}
 

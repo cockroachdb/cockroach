@@ -2220,10 +2220,11 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.String),
 			Category:   categorySystemInfo,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				if len(ctx.SessionData.Database) == 0 {
+				hasFirst, first := ctx.SessionData.SearchPath.FirstSpecified()
+				if !hasFirst {
 					return tree.DNull, nil
 				}
-				return tree.NewDString(ctx.SessionData.Database), nil
+				return tree.NewDString(first), nil
 			},
 			Info: "Returns the current schema. This function is provided for " +
 				"compatibility with PostgreSQL. For a new CockroachDB application, " +
@@ -2242,11 +2243,6 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				includePgCatalog := *(args[0].(*tree.DBool))
 				schemas := tree.NewDArray(types.String)
-				if len(ctx.SessionData.Database) != 0 {
-					if err := schemas.Append(tree.NewDString(ctx.SessionData.Database)); err != nil {
-						return nil, err
-					}
-				}
 				var iter func() (string, bool)
 				if includePgCatalog {
 					iter = ctx.SessionData.SearchPath.Iter()
@@ -2254,9 +2250,6 @@ CockroachDB supports the following flags:
 					iter = ctx.SessionData.SearchPath.IterWithoutImplicitPGCatalog()
 				}
 				for p, ok := iter(); ok; p, ok = iter() {
-					if p == ctx.SessionData.Database {
-						continue
-					}
 					if err := schemas.Append(tree.NewDString(p)); err != nil {
 						return nil, err
 					}

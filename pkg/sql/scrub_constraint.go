@@ -156,7 +156,7 @@ func (o *sqlCheckConstraintCheckOperation) Next(params runParams) (tree.Datums, 
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		tree.DNull, /* job_uuid */
 		tree.NewDString(scrub.CheckConstraintViolation),
-		tree.NewDString(o.tableName.Schema()),
+		tree.NewDString(o.tableName.Catalog()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
 		timestamp,

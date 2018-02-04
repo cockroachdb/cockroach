@@ -798,11 +798,7 @@ func (c *cascader) updateRows(
 									}
 									return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError,
 										"cannot cascade a null value into %q as it violates a NOT NULL constraint",
-										tree.ErrString(&tree.ColumnItem{
-											TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(referencingTable.Name)),
-											ColumnName: tree.Name(column.Name),
-										}),
-									)
+										tree.ErrString(tree.NewUnresolvedName(database.Name, tree.PublicSchema, referencingTable.Name, column.Name)))
 								}
 							}
 							continue

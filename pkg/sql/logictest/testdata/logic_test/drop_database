@@ -6,10 +6,7 @@ CREATE DATABASE "foo-bar"
 query T
 SHOW DATABASES
 ----
-crdb_internal
 foo-bar
-information_schema
-pg_catalog
 system
 test
 
@@ -30,9 +27,6 @@ t  [51]  DROP
 query T
 SHOW DATABASES
 ----
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 
@@ -42,10 +36,7 @@ CREATE DATABASE "foo bar"
 query T
 SHOW DATABASES
 ----
-crdb_internal
 foo bar
-information_schema
-pg_catalog
 system
 test
 
@@ -55,9 +46,6 @@ DROP DATABASE "foo bar" CASCADE
 query T
 SHOW DATABASES
 ----
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 
@@ -140,11 +128,8 @@ SELECT * FROM d2.v4
 query T
 SHOW DATABASES
 ----
-crdb_internal
 d1
 d2
-information_schema
-pg_catalog
 system
 test
 
@@ -154,14 +139,11 @@ DROP DATABASE d1 CASCADE
 query T
 SHOW DATABASES
 ----
-crdb_internal
 d2
-information_schema
-pg_catalog
 system
 test
 
-query error database "d1" does not exist
+query error relation "d1.v2" does not exist
 SELECT * FROM d1.v2
 
 query error relation "d2.v2" does not exist
@@ -183,13 +165,10 @@ DROP DATABASE d2 CASCADE
 query T
 SHOW DATABASES
 ----
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 
-query error database "d2" does not exist
+query error relation "d2.v1" does not exist
 SELECT * FROM d2.v1
 
 ## drop a database containing tables with foreign key constraints, e.g. #8497
@@ -217,13 +196,10 @@ DROP DATABASE constraint_db CASCADE
 query T
 SHOW DATABASES
 ----
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 
-query error database "constraint_db" does not exist
+query error relation "constraint_db.t1" does not exist
 SELECT * FROM constraint_db.t1
 
 # Check that the default option is CASCADE, but that safe_updates blocks it

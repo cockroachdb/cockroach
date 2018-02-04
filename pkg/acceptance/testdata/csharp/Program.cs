@@ -16,10 +16,9 @@ namespace CockroachDrivers
             connStringBuilder.Username = Environment.GetEnvironmentVariable("PGUSER");
             connStringBuilder.SslMode = SslMode.Require;
             connStringBuilder.TrustServerCertificate = true;
+            connStringBuilder.Database = "";
             Simple(connStringBuilder.ConnectionString);
             TxnSample(connStringBuilder.ConnectionString);
-
-            connStringBuilder.Database = "test";
             UnitTest(connStringBuilder.ConnectionString);
         }
 

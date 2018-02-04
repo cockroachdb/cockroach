@@ -218,7 +218,7 @@ func (o *indexCheckOperation) Next(params runParams) (tree.Datums, error) {
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		tree.DNull, /* job_uuid */
 		errorType,
-		tree.NewDString(o.tableName.Schema()),
+		tree.NewDString(o.tableName.Catalog()),
 		tree.NewDString(o.tableName.Table()),
 		primaryKey,
 		timestamp,

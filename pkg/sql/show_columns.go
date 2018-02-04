@@ -27,25 +27,25 @@ import (
 func (p *planner) ShowColumns(ctx context.Context, n *tree.ShowColumns) (planNode, error) {
 	const getColumnsQuery = `
 				SELECT
-					COLUMN_NAME AS "Field",
-					DATA_TYPE AS "Type",
-					(IS_NULLABLE != 'NO') AS "Null",
-					COLUMN_DEFAULT AS "Default",
+					column_name AS "Field",
+					data_type AS "Type",
+					(is_nullable != 'NO') AS "Null",
+					column_default AS "Default",
 					IF(inames[1] IS NULL, ARRAY[]:::STRING[], inames) AS "Indices"
 				FROM
-					(SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION,
-									ARRAY_AGG(INDEX_NAME) AS inames
+					(SELECT column_name, data_type, is_nullable, column_default, ordinal_position,
+									array_agg(index_name) AS inames
 						 FROM
-								 (SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
-										FROM "".information_schema.columns
-									 WHERE TABLE_SCHEMA=%[1]s AND TABLE_NAME=%[2]s)
+								 (SELECT column_name, data_type, is_nullable, column_default, ordinal_position
+										FROM %[4]s.information_schema.columns
+									 WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
 								 LEFT OUTER JOIN
-								 (SELECT COLUMN_NAME, INDEX_NAME
-										FROM "".information_schema.statistics
-									 WHERE TABLE_SCHEMA=%[1]s AND TABLE_NAME=%[2]s)
-								 USING(COLUMN_NAME)
-						GROUP BY COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, ORDINAL_POSITION
+								 (SELECT column_name, index_name
+										FROM %[4]s.information_schema.statistics
+									 WHERE (length(%[1]s)=0 OR table_catalog=%[1]s) AND table_schema=%[5]s AND table_name=%[2]s)
+								 USING(column_name)
+						GROUP BY column_name, data_type, is_nullable, column_default, ordinal_position
 					 )
-				ORDER BY ORDINAL_POSITION`
+				ORDER BY ordinal_position`
 	return p.showTableDetails(ctx, "SHOW COLUMNS", n.Table, getColumnsQuery)
 }

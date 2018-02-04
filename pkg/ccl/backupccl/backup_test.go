@@ -419,7 +419,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`BACKUP data.bank TO '%s' INCREMENTAL FROM '%s'`,
+			`BACKUP bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir, sanitizedFullDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
@@ -434,7 +434,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobs.TypeRestore, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`RESTORE data.bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
+			`RESTORE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
 			sanitizedFullDir, sanitizedIncDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
@@ -1442,18 +1442,18 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// customers is aware of the view that depends on it.
 		if _, err := db.DB.Exec(`DROP TABLE store.customers`); !testutils.IsError(err,
-			`cannot drop relation "customers" because view "storestats.ordercounts" depends on it`,
+			`cannot drop relation "customers" because view "storestats.public.ordercounts" depends on it`,
 		) {
 			t.Fatal(err)
 		}
 		if _, err := db.DB.Exec(`ALTER TABLE store.customers DROP COLUMN email`); !testutils.IsError(
-			err, `cannot drop column "email" because view "storestats.ordercounts" depends on it`) {
+			err, `cannot drop column "email" because view "storestats.public.ordercounts" depends on it`) {
 			t.Fatal(err)
 		}
 
 		// orders is aware of the view that depends on it.
 		if _, err := db.DB.Exec(`DROP TABLE store.orders`); !testutils.IsError(err,
-			`cannot drop relation "orders" because view "storestats.ordercounts" depends on it`,
+			`cannot drop relation "orders" because view "storestats.public.ordercounts" depends on it`,
 		) {
 			t.Fatal(err)
 		}
@@ -2122,7 +2122,7 @@ func TestTimestampMismatch(t *testing.T) {
 		// Missing data for one table in the most recent backup.
 		_, err = sqlDB.DB.Exec(`RESTORE data.bank, data.t2 FROM $1, $2`,
 			fullBackup, incrementalT3FromT1OneTable)
-		if !testutils.IsError(err, "table \"t2\" does not exist") {
+		if !testutils.IsError(err, "table \"data.t2\" does not exist") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 	})
