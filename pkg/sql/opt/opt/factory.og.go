@@ -222,7 +222,7 @@ type Factory interface {
 	ConstructUnaryComplement(input GroupID) GroupID
 
 	// ConstructFunction constructs an expression for the Function operator.
-	ConstructFunction(args ListID, def PrivateID) GroupID
+	ConstructFunction(name GroupID, args ListID) GroupID
 
 	// ------------------------------------------------------------
 	// Relational Operators

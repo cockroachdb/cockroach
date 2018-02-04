@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 //go:generate optgen -out operator.og.go ops ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
@@ -90,4 +91,85 @@ var UnaryOpReverseMap = [...]tree.UnaryOperator{
 	UnaryPlusOp:       tree.UnaryPlus,
 	UnaryMinusOp:      tree.UnaryMinus,
 	UnaryComplementOp: tree.UnaryComplement,
+}
+
+// DisambiguateFunction takes a function's name and return type and returns a
+// name that is guaranteed to be "non-ambiguous". A non-ambiguous name means
+// that the name plus the argument types is enough to infer the return type.
+// This is important for simplifying the type inference rules in typing.go, and
+// making it easy to match and construct Function operators in transformation
+// patterns.
+func DisambiguateFunction(name string, returnType types.T) (disambiguatedName string) {
+	_, ok := ambiguousFunctions[name]
+	if !ok {
+		return name
+	}
+	return fmt.Sprintf("%s:::%s", name, returnType.String())
+}
+
+// RecoverAmbiguousFunction returns the function's original ambiguous name and
+// return type, given a disambiguated name returned by a previous call to
+// DisambiguateFunction.
+func RecoverAmbiguousFunction(disambiguatedName string) (name string, returnType types.T) {
+	existing, ok := disambiguatedFunctions[disambiguatedName]
+	if !ok {
+		panic(fmt.Sprintf("%s is not an ambiguous function name", disambiguatedName))
+	}
+	return existing.name, existing.returnType
+}
+
+var ambiguousFunctions = map[string]bool{
+	"now":                   true,
+	"clock_timestamp":       true,
+	"transaction_timestamp": true,
+	"current_timestamp":     true,
+	"statement_timestamp":   true,
+}
+
+type disambiguatedInfo struct {
+	name       string
+	returnType types.T
+}
+
+var disambiguatedFunctions = map[string]disambiguatedInfo{
+	"now:::timestamp": {
+		name:       "now",
+		returnType: types.Timestamp,
+	},
+	"now:::timestamptz": {
+		name:       "now",
+		returnType: types.TimestampTZ,
+	},
+	"clock_timestamp:::timestamp": {
+		name:       "clock_timestamp",
+		returnType: types.Timestamp,
+	},
+	"clock_timestamp:::timestamptz": {
+		name:       "clock_timestamptz",
+		returnType: types.TimestampTZ,
+	},
+	"transaction_timestamp:::timestamp": {
+		name:       "transaction_timestamp",
+		returnType: types.Timestamp,
+	},
+	"transaction_timestamp:::timestamptz": {
+		name:       "transaction_timestamp",
+		returnType: types.TimestampTZ,
+	},
+	"current_timestamp:::timestamp": {
+		name:       "current_timestamp",
+		returnType: types.Timestamp,
+	},
+	"current_timestamp:::timestamptz": {
+		name:       "current_timestamp",
+		returnType: types.TimestampTZ,
+	},
+	"statement_timestamp:::timestamp": {
+		name:       "statement_timestamp",
+		returnType: types.Timestamp,
+	},
+	"statement_timestamp:::timestamptz": {
+		name:       "statement_timestamp",
+		returnType: types.TimestampTZ,
+	},
 }

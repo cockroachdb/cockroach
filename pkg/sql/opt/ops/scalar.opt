@@ -353,6 +353,6 @@ define UnaryComplement {
 
 [Scalar]
 define Function {
+    Name Expr
     Args ExprList
-    Def  FuncDef
 }

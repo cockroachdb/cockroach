@@ -101,7 +101,8 @@ group-by
  │    └── aggregations
  ├── groupings
  └── aggregations
-      └── function: count_rows [type=NULL]
+      └── function [type=int]
+           └── const: 'count_rows' [type=string]
 
 build
 SELECT DISTINCT x FROM t.xyz WHERE x > 0
@@ -157,7 +158,8 @@ group-by
  │    │    ├── groupings
  │    │    │    └── variable: xyz.x [type=int]
  │    │    └── aggregations
- │    │         └── function: max [type=NULL]
+ │    │         └── function [type=int]
+ │    │              ├── const: 'max' [type=string]
  │    │              └── variable: xyz.x [type=int]
  │    └── projections
  │         └── variable: column4 [type=int]
@@ -229,7 +231,8 @@ group-by
  │    │    │    │    ├── variable: xyz.x [type=int]
  │    │    │    │    └── variable: xyz.y [type=int]
  │    │    │    └── aggregations
- │    │    │         └── function: max [type=NULL]
+ │    │    │         └── function [type=float]
+ │    │    │              ├── const: 'max' [type=string]
  │    │    │              └── variable: xyz.z [type=float]
  │    │    └── gt [type=bool]
  │    │         ├── variable: xyz.y [type=int]
