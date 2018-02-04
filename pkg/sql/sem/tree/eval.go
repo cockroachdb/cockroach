@@ -2062,11 +2062,15 @@ func (e *MultipleResultsError) Error() string {
 // and is to be used from EvalContext.
 type EvalDatabase interface {
 	// ParseQualifiedTableName parses a SQL string of the form
-	// `[ database_name . ] table_name [ @ index_name ]`.
+	// `[ database_name . ] [ schema_name . ] table_name`.
+	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
+
+	// ResolveTableName expands the given table name and
+	// makes it point to a valid object.
 	// If the database name is not given, it uses the search path to find it, and
 	// sets it on the returned TableName.
 	// It returns an error if the table doesn't exist.
-	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
+	ResolveTableName(ctx context.Context, tn *TableName) error
 }
 
 // EvalPlanner is a limited planner that can be used from EvalContext.
@@ -3024,10 +3028,14 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				if err != nil {
 					return nil, err
 				}
+				if err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
+					return nil, err
+				}
 				// Determining the table's OID requires joining against the databases
 				// table because we only have the database name, not its OID, which is
 				// what is stored in pg_class. This extra join means we can't use
 				// queryOid like everyone else.
+				// FIXME XXX - jordan, we probably need to join on the db table too.
 				return queryOidWithJoin(ctx, typ, NewDString(tn.Table()),
 					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
 					fmt.Sprintf("AND nspname = '%s'", tn.Schema()))

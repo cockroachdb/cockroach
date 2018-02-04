@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -40,25 +39,21 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	// don't exist and continue execution.
 	idxNames := make([]fullIndexName, 0, len(n.IndexList))
 	for _, index := range n.IndexList {
-		tn, err := p.expandIndexName(ctx, index, false /* requireTable */)
+		var tn *tree.TableName
+		var tableDesc *TableDescriptor
+		var err error
+		// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+		// TODO(vivek): check if the cache can be used.
+		p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+			tn, tableDesc, err = expandIndexName(ctx, p, index, !n.IfExists /* requireTable */)
+		})
 		if err != nil {
+			// Error or table did not exist.
 			return nil, err
-		} else if tn == nil {
-			// Only index names of the form "idx" throw an error here if they
-			// don't exist.
-			if n.IfExists {
-				// Skip this index and don't return an error.
-				continue
-			}
-			// Index does not exist, but we want it to error out.
-			return nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedObjectError, "index %q does not exist", index.Index,
-			)
 		}
-
-		tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
-		if err != nil {
-			return nil, err
+		if tableDesc == nil {
+			// IfExists specified and table did not exist.
+			continue
 		}
 
 		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
@@ -77,12 +72,17 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := getTableDesc(ctx, params.p.txn, params.p.getVirtualTabler(), index.tn)
-		if err != nil || tableDesc == nil {
-			// newPlan() and Start() ultimately run within the same
-			// transaction. If we got a descriptor during newPlan(), we
-			// must have it here too.
-			panic(fmt.Sprintf("table descriptor for %s became unavailable within same txn", index.tn))
+		var tableDesc *TableDescriptor
+		var err error
+		params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+			tableDesc, err = ResolveExistingObject(
+				ctx, params.p, index.tn, true /*required*/, requireTableDesc)
+		})
+		if err != nil {
+			// Somehow the descriptor we had during newPlan() is not there
+			// any more.
+			return errors.Wrapf(err, "table descriptor for %q became unavailable within same txn",
+				tree.ErrString(index.tn))
 		}
 
 		if err := params.p.dropIndexByName(

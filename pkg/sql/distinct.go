@@ -176,12 +176,12 @@ func (p *planner) distinct(
 		}
 		postRender := &renderNode{
 			source:     src,
-			sourceInfo: sqlbase.MultiSourceInfo{src.info},
+			sourceInfo: sqlbase.MakeMultiSourceInfo(src.info),
 		}
 		postRender.ivarHelper = tree.MakeIndexedVarHelper(postRender, len(src.info.SourceColumns))
 		if err := p.initTargets(ctx, postRender, tree.SelectExprs{
 			tree.SelectExpr{
-				Expr: &tree.AllColumnsSelector{},
+				Expr: tree.StarExpr(),
 			},
 		}, nil /* desiredTypes */); err != nil {
 			return nil, nil, err

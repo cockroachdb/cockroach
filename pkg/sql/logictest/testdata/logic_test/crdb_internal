@@ -1,12 +1,12 @@
 # LogicTest: default distsql
 
-query error user root does not have DROP privilege on database crdb_internal
+query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
 
-statement error user root does not have CREATE privilege on database crdb_internal
+statement error unsupported schema specification
 CREATE TABLE crdb_internal.t (x INT)
 
-query error user root does not have DROP privilege on database crdb_internal
+query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
 statement ok
@@ -128,10 +128,10 @@ SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
 ----
 function  signature  category  details
 
-query ITITTTT colnames
+query ITTITTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE database_name = ''
 ----
-database_id  database_name  descriptor_id  descriptor_type  descriptor_name  create_statement  state
+database_id  database_name  schema_name descriptor_id  descriptor_type  descriptor_name  create_statement  state
 
 query ITITTBTB colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name = ''

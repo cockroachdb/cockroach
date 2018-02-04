@@ -767,7 +767,8 @@ func (b *Builder) expandStarAndResolveType(
 	// NB: The case statements are sorted lexicographically.
 	switch t := expr.(type) {
 	case *tree.AllColumnsSelector:
-		tableName := optbase.TableName(t.TableName.Table())
+		// TODO(whomever): this improperly omits the catalog/schema prefix.
+		tableName := optbase.TableName(t.TableName.Parts[0])
 		for i := range inScope.cols {
 			col := inScope.cols[i]
 			if col.table == tableName && !col.hidden {

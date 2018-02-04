@@ -17,7 +17,7 @@ RESET SEARCH_PATH
 query T
 SHOW SEARCH_PATH
 ----
-·
+public
 
 statement error variable "server_version" cannot be reset
 RESET SERVER_VERSION
@@ -41,7 +41,7 @@ RESET search_path
 query T
 SHOW search_path
 ----
-·
+public
 
 statement ok
 RESET client_encoding; RESET NAMES

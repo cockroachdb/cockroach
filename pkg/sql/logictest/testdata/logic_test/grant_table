@@ -9,228 +9,303 @@ CREATE USER readwrite
 statement ok
 GRANT ALL ON DATABASE a TO readwrite
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON DATABASE a
 ----
-Database  User       Privileges
-a         admin      ALL
-a         readwrite  ALL
-a         root       ALL
+Database  Schema              User       Privileges
+a         crdb_internal       admin      ALL
+a         crdb_internal       readwrite  ALL
+a         crdb_internal       root       ALL
+a         information_schema  admin      ALL
+a         information_schema  readwrite  ALL
+a         information_schema  root       ALL
+a         pg_catalog          admin      ALL
+a         pg_catalog          readwrite  ALL
+a         pg_catalog          root       ALL
+a         public              admin      ALL
+a         public              readwrite  ALL
+a         public              root       ALL
 
-query TTTT colnames
+# Show that by default GRANT is retricted to the current database
+query TTTTT colnames
 SHOW GRANTS
 ----
-Database  Table             User       Privileges
-a         NULL              admin      ALL
-a         NULL              readwrite  ALL
-a         NULL              root       ALL
-system    NULL              admin      GRANT
-system    NULL              admin      SELECT
-system    NULL              root       GRANT
-system    NULL              root       SELECT
-system    descriptor        admin      GRANT
-system    descriptor        admin      SELECT
-system    descriptor        root       GRANT
-system    descriptor        root       SELECT
-system    eventlog          admin      DELETE
-system    eventlog          admin      GRANT
-system    eventlog          admin      INSERT
-system    eventlog          admin      SELECT
-system    eventlog          admin      UPDATE
-system    eventlog          root       DELETE
-system    eventlog          root       GRANT
-system    eventlog          root       INSERT
-system    eventlog          root       SELECT
-system    eventlog          root       UPDATE
-system    jobs              admin      DELETE
-system    jobs              admin      GRANT
-system    jobs              admin      INSERT
-system    jobs              admin      SELECT
-system    jobs              admin      UPDATE
-system    jobs              root       DELETE
-system    jobs              root       GRANT
-system    jobs              root       INSERT
-system    jobs              root       SELECT
-system    jobs              root       UPDATE
-system    lease             admin      DELETE
-system    lease             admin      GRANT
-system    lease             admin      INSERT
-system    lease             admin      SELECT
-system    lease             admin      UPDATE
-system    lease             root       DELETE
-system    lease             root       GRANT
-system    lease             root       INSERT
-system    lease             root       SELECT
-system    lease             root       UPDATE
-system    locations         admin      DELETE
-system    locations         admin      GRANT
-system    locations         admin      INSERT
-system    locations         admin      SELECT
-system    locations         admin      UPDATE
-system    locations         root       DELETE
-system    locations         root       GRANT
-system    locations         root       INSERT
-system    locations         root       SELECT
-system    locations         root       UPDATE
-system    namespace         admin      GRANT
-system    namespace         admin      SELECT
-system    namespace         root       GRANT
-system    namespace         root       SELECT
-system    rangelog          admin      DELETE
-system    rangelog          admin      GRANT
-system    rangelog          admin      INSERT
-system    rangelog          admin      SELECT
-system    rangelog          admin      UPDATE
-system    rangelog          root       DELETE
-system    rangelog          root       GRANT
-system    rangelog          root       INSERT
-system    rangelog          root       SELECT
-system    rangelog          root       UPDATE
-system    role_members      admin      DELETE
-system    role_members      admin      GRANT
-system    role_members      admin      INSERT
-system    role_members      admin      SELECT
-system    role_members      admin      UPDATE
-system    role_members      root       DELETE
-system    role_members      root       GRANT
-system    role_members      root       INSERT
-system    role_members      root       SELECT
-system    role_members      root       UPDATE
-system    settings          admin      DELETE
-system    settings          admin      GRANT
-system    settings          admin      INSERT
-system    settings          admin      SELECT
-system    settings          admin      UPDATE
-system    settings          root       DELETE
-system    settings          root       GRANT
-system    settings          root       INSERT
-system    settings          root       SELECT
-system    settings          root       UPDATE
-system    table_statistics  admin      DELETE
-system    table_statistics  admin      GRANT
-system    table_statistics  admin      INSERT
-system    table_statistics  admin      SELECT
-system    table_statistics  admin      UPDATE
-system    table_statistics  root       DELETE
-system    table_statistics  root       GRANT
-system    table_statistics  root       INSERT
-system    table_statistics  root       SELECT
-system    table_statistics  root       UPDATE
-system    ui                admin      DELETE
-system    ui                admin      GRANT
-system    ui                admin      INSERT
-system    ui                admin      SELECT
-system    ui                admin      UPDATE
-system    ui                root       DELETE
-system    ui                root       GRANT
-system    ui                root       INSERT
-system    ui                root       SELECT
-system    ui                root       UPDATE
-system    users             admin      DELETE
-system    users             admin      GRANT
-system    users             admin      INSERT
-system    users             admin      SELECT
-system    users             admin      UPDATE
-system    users             root       DELETE
-system    users             root       GRANT
-system    users             root       INSERT
-system    users             root       SELECT
-system    users             root       UPDATE
-system    web_sessions      admin      DELETE
-system    web_sessions      admin      GRANT
-system    web_sessions      admin      INSERT
-system    web_sessions      admin      SELECT
-system    web_sessions      admin      UPDATE
-system    web_sessions      root       DELETE
-system    web_sessions      root       GRANT
-system    web_sessions      root       INSERT
-system    web_sessions      root       SELECT
-system    web_sessions      root       UPDATE
-system    zones             admin      DELETE
-system    zones             admin      GRANT
-system    zones             admin      INSERT
-system    zones             admin      SELECT
-system    zones             admin      UPDATE
-system    zones             root       DELETE
-system    zones             root       GRANT
-system    zones             root       INSERT
-system    zones             root       SELECT
-system    zones             root       UPDATE
-test      NULL              admin      ALL
-test      NULL              root       ALL
+Database  Schema              Table  User   Privileges
+test      crdb_internal       NULL   admin  ALL
+test      crdb_internal       NULL   root   ALL
+test      information_schema  NULL   admin  ALL
+test      information_schema  NULL   root   ALL
+test      pg_catalog          NULL   admin  ALL
+test      pg_catalog          NULL   root   ALL
+test      public              NULL   admin  ALL
+test      public              NULL   root   ALL
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS FOR root
 ----
-Database  Table             User       Privileges
-a         NULL              root       ALL
-system    NULL              root       GRANT
-system    NULL              root       SELECT
-system    descriptor        root       GRANT
-system    descriptor        root       SELECT
-system    eventlog          root       DELETE
-system    eventlog          root       GRANT
-system    eventlog          root       INSERT
-system    eventlog          root       SELECT
-system    eventlog          root       UPDATE
-system    jobs              root       DELETE
-system    jobs              root       GRANT
-system    jobs              root       INSERT
-system    jobs              root       SELECT
-system    jobs              root       UPDATE
-system    lease             root       DELETE
-system    lease             root       GRANT
-system    lease             root       INSERT
-system    lease             root       SELECT
-system    lease             root       UPDATE
-system    locations         root       DELETE
-system    locations         root       GRANT
-system    locations         root       INSERT
-system    locations         root       SELECT
-system    locations         root       UPDATE
-system    namespace         root       GRANT
-system    namespace         root       SELECT
-system    rangelog          root       DELETE
-system    rangelog          root       GRANT
-system    rangelog          root       INSERT
-system    rangelog          root       SELECT
-system    rangelog          root       UPDATE
-system    role_members      root       DELETE
-system    role_members      root       GRANT
-system    role_members      root       INSERT
-system    role_members      root       SELECT
-system    role_members      root       UPDATE
-system    settings          root       DELETE
-system    settings          root       GRANT
-system    settings          root       INSERT
-system    settings          root       SELECT
-system    settings          root       UPDATE
-system    table_statistics  root       DELETE
-system    table_statistics  root       GRANT
-system    table_statistics  root       INSERT
-system    table_statistics  root       SELECT
-system    table_statistics  root       UPDATE
-system    ui                root       DELETE
-system    ui                root       GRANT
-system    ui                root       INSERT
-system    ui                root       SELECT
-system    ui                root       UPDATE
-system    users             root       DELETE
-system    users             root       GRANT
-system    users             root       INSERT
-system    users             root       SELECT
-system    users             root       UPDATE
-system    web_sessions      root       DELETE
-system    web_sessions      root       GRANT
-system    web_sessions      root       INSERT
-system    web_sessions      root       SELECT
-system    web_sessions      root       UPDATE
-system    zones             root       DELETE
-system    zones             root       GRANT
-system    zones             root       INSERT
-system    zones             root       SELECT
-system    zones             root       UPDATE
-test      NULL              root       ALL
+Database  Schema              Table  User  Privileges
+test      crdb_internal       NULL   root  ALL
+test      information_schema  NULL   root  ALL
+test      pg_catalog          NULL   root  ALL
+test      public              NULL   root  ALL
+
+# With no database set, we show the grants everywhere
+statement ok
+SET DATABASE = ''
+
+query TTTTT colnames
+SHOW GRANTS
+----
+Database  Schema              Table             User       Privileges
+a         crdb_internal       NULL              admin      ALL
+a         crdb_internal       NULL              readwrite  ALL
+a         crdb_internal       NULL              root       ALL
+a         information_schema  NULL              admin      ALL
+a         information_schema  NULL              readwrite  ALL
+a         information_schema  NULL              root       ALL
+a         pg_catalog          NULL              admin      ALL
+a         pg_catalog          NULL              readwrite  ALL
+a         pg_catalog          NULL              root       ALL
+a         public              NULL              admin      ALL
+a         public              NULL              readwrite  ALL
+a         public              NULL              root       ALL
+system    crdb_internal       NULL              admin      SELECT
+system    crdb_internal       NULL              admin      GRANT
+system    crdb_internal       NULL              root       GRANT
+system    crdb_internal       NULL              root       SELECT
+system    information_schema  NULL              admin      GRANT
+system    information_schema  NULL              admin      SELECT
+system    information_schema  NULL              root       GRANT
+system    information_schema  NULL              root       SELECT
+system    pg_catalog          NULL              admin      GRANT
+system    pg_catalog          NULL              admin      SELECT
+system    pg_catalog          NULL              root       GRANT
+system    pg_catalog          NULL              root       SELECT
+system    public              NULL              admin      GRANT
+system    public              NULL              admin      SELECT
+system    public              NULL              root       GRANT
+system    public              NULL              root       SELECT
+system    public              descriptor        admin      GRANT
+system    public              descriptor        admin      SELECT
+system    public              descriptor        root       SELECT
+system    public              descriptor        root       GRANT
+system    public              eventlog          admin      INSERT
+system    public              eventlog          admin      DELETE
+system    public              eventlog          admin      SELECT
+system    public              eventlog          admin      GRANT
+system    public              eventlog          admin      UPDATE
+system    public              eventlog          root       SELECT
+system    public              eventlog          root       UPDATE
+system    public              eventlog          root       INSERT
+system    public              eventlog          root       DELETE
+system    public              eventlog          root       GRANT
+system    public              jobs              admin      DELETE
+system    public              jobs              admin      SELECT
+system    public              jobs              admin      GRANT
+system    public              jobs              admin      UPDATE
+system    public              jobs              admin      INSERT
+system    public              jobs              root       UPDATE
+system    public              jobs              root       SELECT
+system    public              jobs              root       DELETE
+system    public              jobs              root       INSERT
+system    public              jobs              root       GRANT
+system    public              lease             admin      DELETE
+system    public              lease             admin      UPDATE
+system    public              lease             admin      SELECT
+system    public              lease             admin      GRANT
+system    public              lease             admin      INSERT
+system    public              lease             root       DELETE
+system    public              lease             root       GRANT
+system    public              lease             root       INSERT
+system    public              lease             root       SELECT
+system    public              lease             root       UPDATE
+system    public              locations         admin      UPDATE
+system    public              locations         admin      DELETE
+system    public              locations         admin      INSERT
+system    public              locations         admin      SELECT
+system    public              locations         admin      GRANT
+system    public              locations         root       DELETE
+system    public              locations         root       GRANT
+system    public              locations         root       SELECT
+system    public              locations         root       UPDATE
+system    public              locations         root       INSERT
+system    public              namespace         admin      SELECT
+system    public              namespace         admin      GRANT
+system    public              namespace         root       SELECT
+system    public              namespace         root       GRANT
+system    public              rangelog          admin      INSERT
+system    public              rangelog          admin      SELECT
+system    public              rangelog          admin      GRANT
+system    public              rangelog          admin      DELETE
+system    public              rangelog          admin      UPDATE
+system    public              rangelog          root       GRANT
+system    public              rangelog          root       INSERT
+system    public              rangelog          root       DELETE
+system    public              rangelog          root       UPDATE
+system    public              rangelog          root       SELECT
+system    public              role_members      admin      SELECT
+system    public              role_members      admin      INSERT
+system    public              role_members      admin      DELETE
+system    public              role_members      admin      GRANT
+system    public              role_members      admin      UPDATE
+system    public              role_members      root       DELETE
+system    public              role_members      root       SELECT
+system    public              role_members      root       INSERT
+system    public              role_members      root       UPDATE
+system    public              role_members      root       GRANT
+system    public              settings          admin      UPDATE
+system    public              settings          admin      INSERT
+system    public              settings          admin      GRANT
+system    public              settings          admin      DELETE
+system    public              settings          admin      SELECT
+system    public              settings          root       DELETE
+system    public              settings          root       SELECT
+system    public              settings          root       INSERT
+system    public              settings          root       UPDATE
+system    public              settings          root       GRANT
+system    public              table_statistics  admin      UPDATE
+system    public              table_statistics  admin      INSERT
+system    public              table_statistics  admin      GRANT
+system    public              table_statistics  admin      DELETE
+system    public              table_statistics  admin      SELECT
+system    public              table_statistics  root       GRANT
+system    public              table_statistics  root       DELETE
+system    public              table_statistics  root       UPDATE
+system    public              table_statistics  root       SELECT
+system    public              table_statistics  root       INSERT
+system    public              ui                admin      INSERT
+system    public              ui                admin      SELECT
+system    public              ui                admin      GRANT
+system    public              ui                admin      UPDATE
+system    public              ui                admin      DELETE
+system    public              ui                root       DELETE
+system    public              ui                root       GRANT
+system    public              ui                root       INSERT
+system    public              ui                root       SELECT
+system    public              ui                root       UPDATE
+system    public              users             admin      DELETE
+system    public              users             admin      GRANT
+system    public              users             admin      INSERT
+system    public              users             admin      UPDATE
+system    public              users             admin      SELECT
+system    public              users             root       SELECT
+system    public              users             root       UPDATE
+system    public              users             root       INSERT
+system    public              users             root       DELETE
+system    public              users             root       GRANT
+system    public              web_sessions      admin      GRANT
+system    public              web_sessions      admin      UPDATE
+system    public              web_sessions      admin      SELECT
+system    public              web_sessions      admin      DELETE
+system    public              web_sessions      admin      INSERT
+system    public              web_sessions      root       INSERT
+system    public              web_sessions      root       GRANT
+system    public              web_sessions      root       SELECT
+system    public              web_sessions      root       UPDATE
+system    public              web_sessions      root       DELETE
+system    public              zones             admin      SELECT
+system    public              zones             admin      GRANT
+system    public              zones             admin      INSERT
+system    public              zones             admin      UPDATE
+system    public              zones             admin      DELETE
+system    public              zones             root       DELETE
+system    public              zones             root       GRANT
+system    public              zones             root       INSERT
+system    public              zones             root       SELECT
+system    public              zones             root       UPDATE
+test      crdb_internal       NULL              admin      ALL
+test      crdb_internal       NULL              root       ALL
+test      information_schema  NULL              admin      ALL
+test      information_schema  NULL              root       ALL
+test      pg_catalog          NULL              admin      ALL
+test      pg_catalog          NULL              root       ALL
+test      public              NULL              admin      ALL
+test      public              NULL              root       ALL
+
+query TTTTT colnames
+SHOW GRANTS FOR root
+----
+Database  Schema              Table             User  Privileges
+a         crdb_internal       NULL              root  ALL
+a         information_schema  NULL              root  ALL
+a         pg_catalog          NULL              root  ALL
+a         public              NULL              root  ALL
+system    crdb_internal       NULL              root  GRANT
+system    crdb_internal       NULL              root  SELECT
+system    information_schema  NULL              root  GRANT
+system    information_schema  NULL              root  SELECT
+system    pg_catalog          NULL              root  GRANT
+system    pg_catalog          NULL              root  SELECT
+system    public              NULL              root  GRANT
+system    public              NULL              root  SELECT
+system    public              descriptor        root  SELECT
+system    public              descriptor        root  GRANT
+system    public              eventlog          root  SELECT
+system    public              eventlog          root  INSERT
+system    public              eventlog          root  UPDATE
+system    public              eventlog          root  DELETE
+system    public              eventlog          root  GRANT
+system    public              jobs              root  SELECT
+system    public              jobs              root  GRANT
+system    public              jobs              root  DELETE
+system    public              jobs              root  INSERT
+system    public              jobs              root  UPDATE
+system    public              lease             root  UPDATE
+system    public              lease             root  SELECT
+system    public              lease             root  INSERT
+system    public              lease             root  DELETE
+system    public              lease             root  GRANT
+system    public              locations         root  SELECT
+system    public              locations         root  UPDATE
+system    public              locations         root  DELETE
+system    public              locations         root  INSERT
+system    public              locations         root  GRANT
+system    public              namespace         root  SELECT
+system    public              namespace         root  GRANT
+system    public              rangelog          root  UPDATE
+system    public              rangelog          root  SELECT
+system    public              rangelog          root  INSERT
+system    public              rangelog          root  DELETE
+system    public              rangelog          root  GRANT
+system    public              role_members      root  GRANT
+system    public              role_members      root  UPDATE
+system    public              role_members      root  SELECT
+system    public              role_members      root  INSERT
+system    public              role_members      root  DELETE
+system    public              settings          root  INSERT
+system    public              settings          root  DELETE
+system    public              settings          root  GRANT
+system    public              settings          root  UPDATE
+system    public              settings          root  SELECT
+system    public              table_statistics  root  GRANT
+system    public              table_statistics  root  INSERT
+system    public              table_statistics  root  SELECT
+system    public              table_statistics  root  UPDATE
+system    public              table_statistics  root  DELETE
+system    public              ui                root  INSERT
+system    public              ui                root  DELETE
+system    public              ui                root  GRANT
+system    public              ui                root  SELECT
+system    public              ui                root  UPDATE
+system    public              users             root  INSERT
+system    public              users             root  SELECT
+system    public              users             root  DELETE
+system    public              users             root  GRANT
+system    public              users             root  UPDATE
+system    public              web_sessions      root  UPDATE
+system    public              web_sessions      root  SELECT
+system    public              web_sessions      root  DELETE
+system    public              web_sessions      root  GRANT
+system    public              web_sessions      root  INSERT
+system    public              zones             root  INSERT
+system    public              zones             root  SELECT
+system    public              zones             root  UPDATE
+system    public              zones             root  GRANT
+system    public              zones             root  DELETE
+test      crdb_internal       NULL              root  ALL
+test      information_schema  NULL              root  ALL
+test      pg_catalog          NULL              root  ALL
+test      public              NULL              root  ALL
 
 statement error relation "a.t" does not exist
 SHOW GRANTS ON a.t
@@ -250,21 +325,21 @@ GRANT ALL ON a.t TO readwrite
 statement ok
 CREATE TABLE t (id INT PRIMARY KEY)
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON t
 ----
-Database  Table  User       Privileges
-a         t      admin      ALL
-a         t      readwrite  ALL
-a         t      root       ALL
+Database  Schema  Table  User       Privileges
+a         public  t      admin      ALL
+a         public  t      readwrite  ALL
+a         public  t      root       ALL
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON a.t
 ----
-Database  Table  User       Privileges
-a         t      admin      ALL
-a         t      readwrite  ALL
-a         t      root       ALL
+Database  Schema  Table  User       Privileges
+a         public  t      admin      ALL
+a         public  t      readwrite  ALL
+a         public  t      root       ALL
 
 statement ok
 INSERT INTO system.users VALUES('test-user','');
@@ -272,94 +347,94 @@ INSERT INTO system.users VALUES('test-user','');
 statement ok
 GRANT ALL ON t TO readwrite, "test-user"
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t
 ----
-a  t  admin      ALL
-a  t  readwrite  ALL
-a  t  root       ALL
-a  t  test-user  ALL
+a  public  t  admin      ALL
+a  public  t  readwrite  ALL
+a  public  t  root       ALL
+a  public  t  test-user  ALL
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  t  readwrite  ALL
-a  t  test-user  ALL
+a  public  t  readwrite  ALL
+a  public  t  test-user  ALL
 
 statement ok
 REVOKE INSERT,DELETE ON t FROM "test-user",readwrite
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t
 ----
-a  t  admin      ALL
-a  t  readwrite  CREATE
-a  t  readwrite  DROP
-a  t  readwrite  GRANT
-a  t  readwrite  SELECT
-a  t  readwrite  UPDATE
-a  t  root       ALL
-a  t  test-user  CREATE
-a  t  test-user  DROP
-a  t  test-user  GRANT
-a  t  test-user  SELECT
-a  t  test-user  UPDATE
+a  public  t  admin      ALL
+a  public  t  readwrite  CREATE
+a  public  t  readwrite  DROP
+a  public  t  readwrite  GRANT
+a  public  t  readwrite  SELECT
+a  public  t  readwrite  UPDATE
+a  public  t  root       ALL
+a  public  t  test-user  CREATE
+a  public  t  test-user  DROP
+a  public  t  test-user  GRANT
+a  public  t  test-user  SELECT
+a  public  t  test-user  UPDATE
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  t  readwrite  CREATE
-a  t  readwrite  DROP
-a  t  readwrite  GRANT
-a  t  readwrite  SELECT
-a  t  readwrite  UPDATE
-a  t  test-user  CREATE
-a  t  test-user  DROP
-a  t  test-user  GRANT
-a  t  test-user  SELECT
-a  t  test-user  UPDATE
+a  public  t  readwrite  CREATE
+a  public  t  readwrite  DROP
+a  public  t  readwrite  GRANT
+a  public  t  readwrite  SELECT
+a  public  t  readwrite  UPDATE
+a  public  t  test-user  CREATE
+a  public  t  test-user  DROP
+a  public  t  test-user  GRANT
+a  public  t  test-user  SELECT
+a  public  t  test-user  UPDATE
 
 statement ok
 REVOKE SELECT ON t FROM "test-user"
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t
 ----
-a  t  admin      ALL
-a  t  readwrite  CREATE
-a  t  readwrite  DROP
-a  t  readwrite  GRANT
-a  t  readwrite  SELECT
-a  t  readwrite  UPDATE
-a  t  root       ALL
-a  t  test-user  CREATE
-a  t  test-user  DROP
-a  t  test-user  GRANT
-a  t  test-user  UPDATE
+a  public  t  admin      ALL
+a  public  t  readwrite  CREATE
+a  public  t  readwrite  DROP
+a  public  t  readwrite  GRANT
+a  public  t  readwrite  SELECT
+a  public  t  readwrite  UPDATE
+a  public  t  root       ALL
+a  public  t  test-user  CREATE
+a  public  t  test-user  DROP
+a  public  t  test-user  GRANT
+a  public  t  test-user  UPDATE
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
-a  t  readwrite  CREATE
-a  t  readwrite  DROP
-a  t  readwrite  GRANT
-a  t  readwrite  SELECT
-a  t  readwrite  UPDATE
-a  t  test-user  CREATE
-a  t  test-user  DROP
-a  t  test-user  GRANT
-a  t  test-user  UPDATE
+a  public  t  readwrite  CREATE
+a  public  t  readwrite  DROP
+a  public  t  readwrite  GRANT
+a  public  t  readwrite  SELECT
+a  public  t  readwrite  UPDATE
+a  public  t  test-user  CREATE
+a  public  t  test-user  DROP
+a  public  t  test-user  GRANT
+a  public  t  test-user  UPDATE
 
 statement ok
 REVOKE ALL ON t FROM readwrite,"test-user"
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t
 ----
-a  t  admin  ALL
-a  t  root   ALL
+a  public  t  admin  ALL
+a  public  t  root   ALL
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON t FOR readwrite, "test-user"
 ----
 
@@ -368,143 +443,158 @@ SHOW GRANTS ON t FOR readwrite, "test-user"
 statement ok
 CREATE VIEW v as SELECT id FROM t
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON v
 ----
-Database  Table  User       Privileges
-a         v      admin      ALL
-a         v      readwrite  ALL
-a         v      root       ALL
+Database  Schema  Table  User       Privileges
+a         public  v      admin      ALL
+a         public  v      readwrite  ALL
+a         public  v      root       ALL
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON a.v
 ----
-Database  Table  User       Privileges
-a         v      admin      ALL
-a         v      readwrite  ALL
-a         v      root       ALL
+Database  Schema  Table  User       Privileges
+a         public  v      admin      ALL
+a         public  v      readwrite  ALL
+a         public  v      root       ALL
 
 statement ok
 GRANT ALL ON v TO readwrite, "test-user"
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v
 ----
-a  v  admin      ALL
-a  v  readwrite  ALL
-a  v  root       ALL
-a  v  test-user  ALL
+a  public  v  admin      ALL
+a  public  v  readwrite  ALL
+a  public  v  root       ALL
+a  public  v  test-user  ALL
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  v  readwrite  ALL
-a  v  test-user  ALL
+a  public  v  readwrite  ALL
+a  public  v  test-user  ALL
 
 statement ok
 REVOKE INSERT,DELETE ON v FROM "test-user",readwrite
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v
 ----
-a  v  admin      ALL
-a  v  readwrite  CREATE
-a  v  readwrite  DROP
-a  v  readwrite  GRANT
-a  v  readwrite  SELECT
-a  v  readwrite  UPDATE
-a  v  root       ALL
-a  v  test-user  CREATE
-a  v  test-user  DROP
-a  v  test-user  GRANT
-a  v  test-user  SELECT
-a  v  test-user  UPDATE
+a  public  v  admin      ALL
+a  public  v  readwrite  CREATE
+a  public  v  readwrite  DROP
+a  public  v  readwrite  GRANT
+a  public  v  readwrite  SELECT
+a  public  v  readwrite  UPDATE
+a  public  v  root       ALL
+a  public  v  test-user  CREATE
+a  public  v  test-user  DROP
+a  public  v  test-user  GRANT
+a  public  v  test-user  SELECT
+a  public  v  test-user  UPDATE
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  v  readwrite  CREATE
-a  v  readwrite  DROP
-a  v  readwrite  GRANT
-a  v  readwrite  SELECT
-a  v  readwrite  UPDATE
-a  v  test-user  CREATE
-a  v  test-user  DROP
-a  v  test-user  GRANT
-a  v  test-user  SELECT
-a  v  test-user  UPDATE
+a  public  v  readwrite  CREATE
+a  public  v  readwrite  DROP
+a  public  v  readwrite  GRANT
+a  public  v  readwrite  SELECT
+a  public  v  readwrite  UPDATE
+a  public  v  test-user  CREATE
+a  public  v  test-user  DROP
+a  public  v  test-user  GRANT
+a  public  v  test-user  SELECT
+a  public  v  test-user  UPDATE
 
 statement ok
 REVOKE SELECT ON v FROM "test-user"
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v
 ----
-a  v  admin      ALL
-a  v  readwrite  CREATE
-a  v  readwrite  DROP
-a  v  readwrite  GRANT
-a  v  readwrite  SELECT
-a  v  readwrite  UPDATE
-a  v  root       ALL
-a  v  test-user  CREATE
-a  v  test-user  DROP
-a  v  test-user  GRANT
-a  v  test-user  UPDATE
+a  public  v  admin      ALL
+a  public  v  readwrite  CREATE
+a  public  v  readwrite  DROP
+a  public  v  readwrite  GRANT
+a  public  v  readwrite  SELECT
+a  public  v  readwrite  UPDATE
+a  public  v  root       ALL
+a  public  v  test-user  CREATE
+a  public  v  test-user  DROP
+a  public  v  test-user  GRANT
+a  public  v  test-user  UPDATE
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
-a  v  readwrite  CREATE
-a  v  readwrite  DROP
-a  v  readwrite  GRANT
-a  v  readwrite  SELECT
-a  v  readwrite  UPDATE
-a  v  test-user  CREATE
-a  v  test-user  DROP
-a  v  test-user  GRANT
-a  v  test-user  UPDATE
+a  public  v  readwrite  CREATE
+a  public  v  readwrite  DROP
+a  public  v  readwrite  GRANT
+a  public  v  readwrite  SELECT
+a  public  v  readwrite  UPDATE
+a  public  v  test-user  CREATE
+a  public  v  test-user  DROP
+a  public  v  test-user  GRANT
+a  public  v  test-user  UPDATE
 
-query TTTT
+query TTTTT
 SHOW GRANTS FOR readwrite, "test-user"
 ----
-a  NULL  readwrite  ALL
-a  v     readwrite  CREATE
-a  v     readwrite  DROP
-a  v     readwrite  GRANT
-a  v     readwrite  SELECT
-a  v     readwrite  UPDATE
-a  v     test-user  CREATE
-a  v     test-user  DROP
-a  v     test-user  GRANT
-a  v     test-user  UPDATE
+a  crdb_internal       NULL  readwrite  ALL
+a  information_schema  NULL  readwrite  ALL
+a  pg_catalog          NULL  readwrite  ALL
+a  public              NULL  readwrite  ALL
+a  public              v     readwrite  CREATE
+a  public              v     readwrite  UPDATE
+a  public              v     readwrite  SELECT
+a  public              v     readwrite  GRANT
+a  public              v     readwrite  DROP
+a  public              v     test-user  UPDATE
+a  public              v     test-user  GRANT
+a  public              v     test-user  CREATE
+a  public              v     test-user  DROP
 
 statement ok
 REVOKE ALL ON v FROM readwrite,"test-user"
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v
 ----
-a  v  admin  ALL
-a  v  root   ALL
+a  public  v  admin  ALL
+a  public  v  root   ALL
 
-query TTTT
+query TTTTT
 SHOW GRANTS ON v FOR readwrite, "test-user"
 ----
 
-query TTTT
+query TTTTT
 SHOW GRANTS FOR readwrite, "test-user"
 ----
-a  NULL  readwrite  ALL
+a  crdb_internal       NULL  readwrite  ALL
+a  information_schema  NULL  readwrite  ALL
+a  pg_catalog          NULL  readwrite  ALL
+a  public              NULL  readwrite  ALL
 
 # Verify that the DB privileges have not changed.
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON DATABASE a
 ----
-Database  User       Privileges
-a         admin      ALL
-a         readwrite  ALL
-a         root       ALL
+Database  Schema              User       Privileges
+a         crdb_internal       admin      ALL
+a         crdb_internal       readwrite  ALL
+a         crdb_internal       root       ALL
+a         information_schema  admin      ALL
+a         information_schema  readwrite  ALL
+a         information_schema  root       ALL
+a         pg_catalog          admin      ALL
+a         pg_catalog          readwrite  ALL
+a         pg_catalog          root       ALL
+a         public              admin      ALL
+a         public              readwrite  ALL
+a         public              root       ALL
 
 
 # Errors due to invalid targets.
@@ -514,7 +604,7 @@ SET DATABASE = ""
 statement error pq: syntax error at or near "@"
 GRANT ALL ON a.t@xyz TO readwrite
 
-statement error pq: no database specified: *
+statement error pq: pattern "\*" did not match any valid database or schema
 GRANT ALL ON * TO readwrite
 
 statement error relation "a.tt" does not exist
@@ -552,16 +642,16 @@ CREATE USER Vanilli
 statement ok
 GRANT ALL ON * TO Vanilli
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON *
 ----
-Database  Table  User     Privileges
-b         t      admin    ALL
-b         t      root     ALL
-b         t      vanilli  ALL
-b         t2     admin    ALL
-b         t2     root     ALL
-b         t2     vanilli  ALL
+Database  Schema  Table  User     Privileges
+b         public  t      admin    ALL
+b         public  t      root     ALL
+b         public  t      vanilli  ALL
+b         public  t2     admin    ALL
+b         public  t2     root     ALL
+b         public  t2     vanilli  ALL
 
 
 # Multiple targets.
@@ -571,69 +661,69 @@ CREATE USER Millie
 statement ok
 GRANT ALL ON c.*, b.t TO Millie
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON b.*
 ----
-Database  Table  User     Privileges
-b         t      admin    ALL
-b         t      millie   ALL
-b         t      root     ALL
-b         t      vanilli  ALL
-b         t2     admin    ALL
-b         t2     root     ALL
-b         t2     vanilli  ALL
+Database  Schema  Table  User     Privileges
+b         public  t      admin    ALL
+b         public  t      millie   ALL
+b         public  t      root     ALL
+b         public  t      vanilli  ALL
+b         public  t2     admin    ALL
+b         public  t2     root     ALL
+b         public  t2     vanilli  ALL
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON a.*, b.*
 ----
-Database  Table  User     Privileges
-a         t      admin    ALL
-a         t      root     ALL
-a         v      admin    ALL
-a         v      root     ALL
-b         t      admin    ALL
-b         t      millie   ALL
-b         t      root     ALL
-b         t      vanilli  ALL
-b         t2     admin    ALL
-b         t2     root     ALL
-b         t2     vanilli  ALL
+Database  Schema  Table  User     Privileges
+a         public  t      admin    ALL
+a         public  t      root     ALL
+a         public  v      admin    ALL
+a         public  v      root     ALL
+b         public  t      admin    ALL
+b         public  t      millie   ALL
+b         public  t      root     ALL
+b         public  t      vanilli  ALL
+b         public  t2     admin    ALL
+b         public  t2     root     ALL
+b         public  t2     vanilli  ALL
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON c.t
 ----
-Database  Table  User    Privileges
-c         t      admin   ALL
-c         t      millie  ALL
-c         t      root    ALL
+Database  Schema  Table  User    Privileges
+c         public  t      admin   ALL
+c         public  t      millie  ALL
+c         public  t      root    ALL
 
 statement ok
 REVOKE ALL ON *, c.* FROM Vanilli
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON b.*
 ----
-Database  Table  User    Privileges
-b         t      admin   ALL
-b         t      millie  ALL
-b         t      root    ALL
-b         t2     admin   ALL
-b         t2     root    ALL
+Database  Schema  Table  User    Privileges
+b         public  t      admin   ALL
+b         public  t      millie  ALL
+b         public  t      root    ALL
+b         public  t2     admin   ALL
+b         public  t2     root    ALL
 
 statement ok
 CREATE DATABASE empty
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON empty.*
 ----
-Database  Table  User  Privileges
+Database  Schema  Table  User  Privileges
 
-query TTTT colnames
+query TTTTT colnames
 SHOW GRANTS ON empty.*, b.*
 ----
-Database  Table  User    Privileges
-b         t      admin   ALL
-b         t      millie  ALL
-b         t      root    ALL
-b         t2     admin   ALL
-b         t2     root    ALL
+Database  Schema  Table  User    Privileges
+b         public  t      admin   ALL
+b         public  t      millie  ALL
+b         public  t      root    ALL
+b         public  t2     admin   ALL
+b         public  t2     root    ALL

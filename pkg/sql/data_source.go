@@ -15,9 +15,7 @@
 package sql
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 
@@ -74,56 +72,29 @@ func (p *planner) getSources(
 // given name.
 func (p *planner) getVirtualDataSource(
 	ctx context.Context, tn *tree.TableName,
-) (planDataSource, bool, error) {
+) (planDataSource, error) {
 	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
-		return planDataSource{}, false, err
+		return planDataSource{}, err
 	}
-	if virtual.desc != nil {
-		columns, constructor := virtual.getPlanInfo(ctx)
 
-		// The virtual table constructor takes the target database
-		// as "prefix" argument. This is either the prefix in the
-		// virtual table name given in the SQL query explicitly,
-		// or, if no prefix is given,
-		// the current database if one is set,
-		// or the empty prefix if the user is root (to show everything),
-		// or "system" otherwise (to only show virtual tables to non-root users).
-		//
-		// It is particularly important to not use the empty prefix for
-		// non-root users, because client libraries that mistakenly do not
-		// set a current database tend to be badly, badly behaved if they
-		// see tables from multiple databases (as in, "drop tables from
-		// the wrong db" mis-behaved). Lack of data in the vtable in the
-		// case where there is no current database is thus safer.
-		//
-		// Meanwhile the root user probably would be inconvenienced by
-		// this.
-		catalog := string(tn.CatalogName)
-		if !tn.ExplicitCatalog {
-			catalog = p.SessionData().Database
-			if catalog == "" && p.RequireSuperUser(ctx, "access virtual tables across all databases") != nil {
-				catalog = sqlbase.SystemDB.Name
-			}
-		}
+	columns, constructor := virtual.getPlanInfo(ctx)
 
-		// Define the name of the source visible in EXPLAIN(NOEXPAND).
-		sourceName := tree.MakeTableNameWithCatalog(
-			tree.Name(catalog), tn.SchemaName, tree.Name(virtual.desc.Name))
+	// Define the name of the source visible in EXPLAIN(NOEXPAND).
+	sourceName := tree.MakeTableNameWithSchema(
+		tn.CatalogName, tn.SchemaName, tn.TableName)
 
-		// The resulting node.
-		return planDataSource{
-			info: sqlbase.NewSourceInfoForSingleTable(sourceName, columns),
-			plan: &delayedNode{
-				name:    sourceName.String(),
-				columns: columns,
-				constructor: func(ctx context.Context, p *planner) (planNode, error) {
-					return constructor(ctx, p, catalog)
-				},
+	// The resulting node.
+	return planDataSource{
+		info: sqlbase.NewSourceInfoForSingleTable(sourceName, columns),
+		plan: &delayedNode{
+			name:    sourceName.String(),
+			columns: columns,
+			constructor: func(ctx context.Context, p *planner) (planNode, error) {
+				return constructor(ctx, p, tn.Catalog())
 			},
-		}, true, nil
-	}
-	return planDataSource{}, false, nil
+		},
+	}, nil
 }
 
 // getDataSourceAsOneColumn builds a planDataSource from a data source
@@ -169,29 +140,26 @@ func (p *planner) getDataSource(
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *tree.NormalizableTableName:
-		// If there's a CTE with this name, it takes priority over the normal flow.
-		ds, foundCTE, err := p.getCTEDataSource(t)
-		if err != nil {
-			return planDataSource{}, err
-		}
-		if foundCTE {
-			return ds, nil
-		}
-		// Usual case: a table.
-		tn, err := p.QualifyWithDatabase(ctx, t)
+		tn, err := t.Normalize()
 		if err != nil {
 			return planDataSource{}, err
 		}
 
-		// Check if this is a virtual table.
-		ds, foundVirtual, err := p.getVirtualDataSource(ctx, tn)
+		// If there's a CTE with this name, it takes priority over the normal flow.
+		ds, foundCTE, err := p.getCTEDataSource(tn)
+		if foundCTE || err != nil {
+			return ds, err
+		}
+
+		desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
 		if err != nil {
 			return planDataSource{}, err
 		}
-		if foundVirtual {
-			return ds, nil
+		if desc.IsVirtualTable() {
+			return p.getVirtualDataSource(ctx, tn)
 		}
-		return p.getTableScanOrSequenceOrViewPlan(ctx, tn, hints, scanVisibility)
+
+		return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil /*wantedColumns*/)
 
 	case *tree.FuncExpr:
 		return p.getGeneratorPlan(ctx, t)
@@ -259,6 +227,8 @@ func (p *planner) getDataSource(
 	}
 }
 
+// QualifyWithDatabase asserts that the table with the given name
+// exists, and expands its table name with the details about its path.
 func (p *planner) QualifyWithDatabase(
 	ctx context.Context, t *tree.NormalizableTableName,
 ) (*tree.TableName, error) {
@@ -266,10 +236,8 @@ func (p *planner) QualifyWithDatabase(
 	if err != nil {
 		return nil, err
 	}
-	if tn.SchemaName == "" {
-		if err := p.searchAndQualifyDatabase(ctx, tn); err != nil {
-			return nil, err
-		}
+	if _, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType); err != nil {
+		return nil, err
 	}
 	return tn, nil
 }
@@ -277,6 +245,7 @@ func (p *planner) QualifyWithDatabase(
 func (p *planner) getTableDescByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
+	// TODO(knz): replace this by an API on SchemaAccessor/SchemaResolver.
 	descFunc := p.Tables().getTableVersionByID
 	if p.avoidCachedDescriptors {
 		descFunc = sqlbase.GetTableDescFromID
@@ -289,7 +258,7 @@ func (p *planner) getTableScanByRef(
 ) (planDataSource, error) {
 	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
 	if err != nil {
-		return planDataSource{}, errors.Errorf("%s: %v", tree.ErrString(tref), err)
+		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))
 	}
 
 	// Ideally, we'd like to populate DatabaseName here, however that
@@ -347,13 +316,7 @@ func renameSource(
 		// The column aliases can only refer to explicit columns.
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(src.info.SourceColumns) {
-				var srcName string
-				if tableAlias.SchemaName != "" {
-					srcName = tree.ErrString(&tableAlias)
-				} else {
-					srcName = tree.ErrString(&tableAlias.TableName)
-				}
-
+				srcName := tree.ErrString(&tableAlias)
 				return planDataSource{}, errors.Errorf(
 					"source %q has %d columns available but %d columns specified",
 					srcName, aliasIdx, len(colAlias))
@@ -366,36 +329,6 @@ func renameSource(
 		}
 	}
 	return src, nil
-}
-
-// getTableScanOrSequenceOrViewPlan builds a planDataSource from a single data source
-// clause (either a table or a view) in a SelectClause, expanding views out
-// into subqueries.
-func (p *planner) getTableScanOrSequenceOrViewPlan(
-	ctx context.Context, tn *tree.TableName, hints *tree.IndexHints, scanVisibility scanVisibility,
-) (planDataSource, error) {
-	if tn.ExplicitCatalog {
-		// Prefixes are currently only supported for virtual tables.
-		return planDataSource{}, tree.NewInvalidNameErrorf(
-			"invalid table name: %q", tree.ErrString(tn))
-	}
-
-	desc, err := p.getTableDesc(ctx, tn)
-	if err != nil {
-		return planDataSource{}, err
-	}
-
-	return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil)
-}
-
-func (p *planner) getTableDesc(
-	ctx context.Context, tn *tree.TableName,
-) (*sqlbase.TableDescriptor, error) {
-	if p.avoidCachedDescriptors {
-		return MustGetTableOrViewDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
-	}
-	return p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 }
 
 func (p *planner) getPlanForDesc(
@@ -537,246 +470,80 @@ func (p *planner) getSequenceSource(
 // expandStar returns the array of column metadata and name
 // expressions that correspond to the expansion of a star.
 func expandStar(
-	src *sqlbase.DataSourceInfo, v tree.VarName, ivarHelper tree.IndexedVarHelper,
+	ctx context.Context, src sqlbase.MultiSourceInfo, v tree.VarName, ivarHelper tree.IndexedVarHelper,
 ) (columns sqlbase.ResultColumns, exprs []tree.TypedExpr, err error) {
-	if len(src.SourceColumns) == 0 {
+	if len(src) == 0 || len(src[0].SourceColumns) == 0 {
 		return nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
 			"cannot use %q without a FROM clause", tree.ErrString(v))
 	}
 
-	colSel := func(idx int) {
+	colSel := func(src *sqlbase.DataSourceInfo, idx int) {
 		col := src.SourceColumns[idx]
 		if !col.Hidden {
-			ivar := ivarHelper.IndexedVar(idx)
+			ivar := ivarHelper.IndexedVar(idx + src.ColOffset)
 			columns = append(columns, sqlbase.ResultColumn{Name: col.Name, Typ: ivar.ResolvedType()})
 			exprs = append(exprs, ivar)
 		}
 	}
 
-	tableName := sqlbase.AnonymousTable
-	if a, ok := v.(*tree.AllColumnsSelector); ok {
-		tableName = a.TableName
-	}
-	if tableName.Table() == "" {
-		for i := 0; i < len(src.SourceColumns); i++ {
-			colSel(i)
+	switch sel := v.(type) {
+	case tree.UnqualifiedStar:
+		// Simple case: a straight '*'. Take all columns.
+		for _, ds := range src {
+			for i := 0; i < len(ds.SourceColumns); i++ {
+				colSel(ds, i)
+			}
 		}
-	} else {
-		qualifiedTn, err := checkDatabaseName(src, tableName)
+	case *tree.AllColumnsSelector:
+		tn, err := tree.NormalizeTableName(&sel.TableName)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		colSet, ok := src.SourceAliases.ColumnSet(qualifiedTn)
-		if !ok {
-			return nil, nil, sqlbase.NewUndefinedRelationError(&tableName)
+		resolver := sqlbase.ColumnResolver{Sources: src}
+		numRes, _, _, err := resolver.FindSourceMatchingName(ctx, tn)
+		if err != nil {
+			return nil, nil, err
 		}
+		if numRes == tree.NoResults {
+			return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"no data source named %q", tree.ErrString(&tn))
+		}
+		ds := src[resolver.ResolverState.SrcIdx]
+		colSet := ds.SourceAliases[resolver.ResolverState.ColSetIdx].ColumnSet
 		for i, ok := colSet.Next(0); ok; i, ok = colSet.Next(i + 1) {
-			colSel(i)
+			colSel(ds, i)
 		}
 	}
 
 	return columns, exprs, nil
 }
 
-func newUnknownSourceError(tn *tree.TableName) error {
-	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
-		"source name %q not found in FROM clause", tree.ErrString(tn))
-}
-
-func newAmbiguousSourceError(t *tree.Name, dbContext *tree.Name) error {
-	if *dbContext == "" {
-		return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
-			"ambiguous source name: %q", tree.ErrString(t))
+// getAliasedTableName returns the underlying table name for a TableExpr that
+// could be either an alias or a normal table name. It also returns the original
+// table name, which will be equal to the alias name if the input is an alias,
+// or identical to the table name if the input is a normal table name.
+//
+// This is not meant to perform name resolution, but rather simply to
+// extract the name indicated after FROM in
+// DELETE/INSERT/UPDATE/UPSERT.
+func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName, error) {
+	var alias *tree.TableName
+	if ate, ok := n.(*tree.AliasedTableExpr); ok {
+		n = ate.Expr
+		// It's okay to ignore the As columns here, as they're not permitted in
+		// DML aliases where this function is used.
+		alias = tree.NewUnqualifiedTableName(ate.As.Alias)
 	}
-	return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
-		"ambiguous source name: %q (within database %q)",
-		tree.ErrString(t), tree.ErrString(dbContext))
-}
-
-// checkDatabaseNameMulti checks whether the given TableName is unambiguous
-// for the set of sources and if it is, qualifies the missing database name.
-func checkDatabaseNameMulti(
-	sources sqlbase.MultiSourceInfo, tn tree.TableName,
-) (tree.TableName, error) {
-	if tn.SchemaName == "" {
-		// No database name yet. Try to find one.
-		found := false
-		for _, src := range sources {
-			for _, alias := range src.SourceAliases {
-				if alias.Name.TableName == tn.TableName {
-					if found {
-						return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tree.NoName)
-					}
-					tn.SchemaName = alias.Name.SchemaName
-					found = true
-				}
-			}
-		}
-		if !found {
-			return tree.TableName{}, newUnknownSourceError(&tn)
-		}
-		return tn, nil
+	table, ok := n.(*tree.NormalizableTableName)
+	if !ok {
+		return nil, nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
 	}
-
-	// Database given. Check that the name is unambiguous.
-	found := false
-	for _, src := range sources {
-		if _, ok := src.SourceAliases.SrcIdx(tn); ok {
-			if found {
-				return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tn.SchemaName)
-			}
-			found = true
-		}
+	tn, err := table.Normalize()
+	if err != nil {
+		return nil, nil, err
 	}
-	if !found {
-		return tree.TableName{}, newUnknownSourceError(&tn)
+	if alias == nil {
+		alias = tn
 	}
-	return tn, nil
-}
-
-// checkDatabaseName checks whether the given TableName is unambiguous
-// within this source and if it is, qualifies the missing database name.
-func checkDatabaseName(src *sqlbase.DataSourceInfo, tn tree.TableName) (tree.TableName, error) {
-	if tn.SchemaName == "" {
-		// No database name yet. Try to find one.
-		found := false
-		for _, alias := range src.SourceAliases {
-			if alias.Name.TableName == tn.TableName {
-				if found {
-					return tree.TableName{}, newAmbiguousSourceError(&tn.TableName, &tree.NoName)
-				}
-				found = true
-				tn.SchemaName = alias.Name.SchemaName
-			}
-		}
-		if !found {
-			return tree.TableName{}, newUnknownSourceError(&tn)
-		}
-		return tn, nil
-	}
-
-	// Database given.
-	if _, found := src.SourceAliases.SrcIdx(tn); !found {
-		return tree.TableName{}, newUnknownSourceError(&tn)
-	}
-	return tn, nil
-}
-
-// invalidSrcIdx is the srcIdx value returned by findColumn() when there is no match.
-const invalidSrcIdx = -1
-
-// invalidColIdx is the colIdx value returned by findColumn() when there is no match.
-const invalidColIdx = -1
-
-func findColHelper(
-	sources sqlbase.MultiSourceInfo,
-	src *sqlbase.DataSourceInfo,
-	c *tree.ColumnItem,
-	colName string,
-	iSrc, srcIdx, colIdx, idx int,
-) (int, int, error) {
-	col := src.SourceColumns[idx]
-	if col.Name == colName {
-		// Do not return a match if:
-		// 1. The column is being backfilled and therefore should not be
-		// used to resolve a column expression, and,
-		// 2. The column expression being resolved is not from a selector
-		// column expression from an UPDATE/DELETE.
-		if backfillThreshold := len(src.SourceColumns) - src.NumBackfillColumns; idx >= backfillThreshold && !c.ForUpdateOrDelete {
-			return invalidSrcIdx, invalidColIdx,
-				pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
-					"column %q is being backfilled", tree.ErrString(c))
-		}
-		if colIdx != invalidColIdx {
-			colString := tree.ErrString(c)
-			var msgBuf bytes.Buffer
-			sep := ""
-			fmtCandidate := func(alias *sqlbase.SourceAlias) {
-				name := tree.ErrString(&alias.Name.TableName)
-				if len(name) == 0 {
-					name = "<anonymous>"
-				}
-				fmt.Fprintf(&msgBuf, "%s%s.%s", sep, name, colString)
-			}
-			for i := range src.SourceAliases {
-				fmtCandidate(&src.SourceAliases[i])
-				sep = ", "
-			}
-			if iSrc != srcIdx {
-				for i := range sources[srcIdx].SourceAliases {
-					fmtCandidate(&sources[srcIdx].SourceAliases[i])
-					sep = ", "
-				}
-			}
-			return invalidSrcIdx,
-				invalidColIdx,
-				pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
-					"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String(),
-				)
-		}
-		srcIdx = iSrc
-		colIdx = idx
-	}
-	return srcIdx, colIdx, nil
-}
-
-// findColumn looks up the column specified by a ColumnItem. The
-// function returns the index of the source in the MultiSourceInfo
-// array and the column index for the column array of that
-// source. Returns invalid indices and an error if the source is not
-// found or the name is ambiguous.
-func findColumn(
-	sources sqlbase.MultiSourceInfo, c *tree.ColumnItem,
-) (srcIdx int, colIdx int, err error) {
-	colName := string(c.ColumnName)
-	var tableName tree.TableName
-	if c.TableName.Table() != "" {
-		tn, err := checkDatabaseNameMulti(sources, c.TableName)
-		if err != nil {
-			return invalidSrcIdx, invalidColIdx, err
-		}
-		tableName = tn
-
-		// Propagate the discovered database name back to the original VarName.
-		// (to clarify the output of e.g. EXPLAIN)
-		c.TableName.SchemaName = tableName.SchemaName
-	}
-
-	colIdx = invalidColIdx
-	for iSrc, src := range sources {
-		colSet, ok := src.SourceAliases.ColumnSet(tableName)
-		if !ok {
-			// The data source "src" has no column for table tableName.
-			// Try again with the next one.
-			continue
-		}
-		for idx, ok := colSet.Next(0); ok; idx, ok = colSet.Next(idx + 1) {
-			srcIdx, colIdx, err = findColHelper(sources, src, c, colName, iSrc, srcIdx, colIdx, idx)
-			if err != nil {
-				return srcIdx, colIdx, err
-			}
-		}
-	}
-
-	if colIdx == invalidColIdx && tableName.Table() == "" {
-		// Try harder: unqualified column names can look at all
-		// columns, not just columns of the anonymous table.
-		for iSrc, src := range sources {
-			for idx := 0; idx < len(src.SourceColumns); idx++ {
-				srcIdx, colIdx, err = findColHelper(sources, src, c, colName, iSrc, srcIdx, colIdx, idx)
-				if err != nil {
-					return srcIdx, colIdx, err
-				}
-			}
-		}
-	}
-
-	if colIdx == invalidColIdx {
-		return invalidSrcIdx, invalidColIdx,
-			pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-				"column name %q not found", tree.ErrString(c))
-	}
-
-	return srcIdx, colIdx, nil
+	return tn, alias, nil
 }

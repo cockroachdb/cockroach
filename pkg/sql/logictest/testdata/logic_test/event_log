@@ -36,7 +36,7 @@ query II
 SELECT "targetID", "reportingID"
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
-  AND info LIKE '%CREATE TABLE test.a%'
+  AND info LIKE '%CREATE TABLE test.public.a%'
 ----
 51 1
 
@@ -44,7 +44,7 @@ query II
 SELECT "targetID", "reportingID"
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
-  AND info LIKE '%CREATE TABLE IF NOT EXISTS test.b%'
+  AND info LIKE '%CREATE TABLE IF NOT EXISTS test.public.b%'
 ----
 52 1
 
@@ -98,7 +98,7 @@ WHERE "eventType" = 'reverse_schema_change'
 query II
 SELECT "targetID", "reportingID" FROM system.eventlog
 WHERE "eventType" = 'alter_table'
-  AND info LIKE '%ALTER TABLE test.a%'
+  AND info LIKE '%ALTER TABLE test.public.a%'
 ----
 51 1
 
