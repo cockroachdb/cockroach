@@ -102,7 +102,9 @@ func (f SenderFunc) Send(
 }
 
 // TxnSenderFunc is an adapter to allow the use of ordinary functions
-// as TxnSenders with GetMeta or AugmentMeta panicing with unimplemented.
+// as TxnSenders with AugmentMeta panicing with unimplemented. GetMeta doesn't
+// panic for testing reasons, but generally shouldn't be used since it's a
+// dummy.
 // This is a helper mechanism to facilitate testing.
 type TxnSenderFunc func(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 
@@ -114,7 +116,11 @@ func (f TxnSenderFunc) Send(
 }
 
 // GetMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta {
+	// We'd like better to panic here, but sql/TestTransitions exercises a code
+	// path that calls GetMeta(). This is good enough for it.
+	return roachpb.TxnCoordMeta{}
+}
 
 // AugmentMeta is part of the TxnSender interface.
 func (f TxnSenderFunc) AugmentMeta(_ roachpb.TxnCoordMeta) { panic("unimplemented") }
