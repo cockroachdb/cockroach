@@ -119,12 +119,15 @@ func loadSQLDescsFromBackupsAtTime(
 }
 
 func selectTargets(
-	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList, asOf hlc.Timestamp,
+	ctx context.Context,
+	p sql.PlanHookState,
+	backupDescs []BackupDescriptor,
+	targets tree.TargetList,
+	asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
-	sessionDatabase := p.SessionData().Database
 	allDescs, lastBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, asOf)
-
-	matched, err := descriptorsMatchingTargets(sessionDatabase, allDescs, targets)
+	matched, err := descriptorsMatchingTargets(ctx,
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1187,11 +1190,6 @@ func doRestorePlan(
 	opts map[string]string,
 	resultsCh chan<- tree.Datums,
 ) error {
-	if err := restoreStmt.Targets.NormalizeTablesWithDatabase(
-		p.SessionData().Database,
-	); err != nil {
-		return err
-	}
 	backupDescs, err := loadBackupDescs(ctx, from, p.ExecCfg().Settings)
 	if err != nil {
 		return err
@@ -1206,7 +1204,7 @@ func doRestorePlan(
 		}
 	}
 
-	sqlDescs, restoreDBs, err := selectTargets(p, backupDescs, restoreStmt.Targets, endTime)
+	sqlDescs, restoreDBs, err := selectTargets(ctx, p, backupDescs, restoreStmt.Targets, endTime)
 	if err != nil {
 		return err
 	}

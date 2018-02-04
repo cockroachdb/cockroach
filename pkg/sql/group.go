@@ -270,7 +270,7 @@ func (p *planner) groupBy(
 		)
 
 		havingNode.filter, err = p.analyzeExpr(
-			ctx, havingExpr, nil /* no source info */, havingNode.ivarHelper,
+			ctx, havingExpr, sqlbase.MultiSourceInfo{}, havingNode.ivarHelper,
 			types.Bool, true /* require type */, "HAVING",
 		)
 		if err != nil {
@@ -308,7 +308,7 @@ func (p *planner) groupBy(
 	postRender.source.info = sqlbase.NewSourceInfoForSingleTable(
 		sqlbase.AnonymousTable, group.columns,
 	)
-	postRender.sourceInfo = sqlbase.MultiSourceInfo{postRender.source.info}
+	postRender.sourceInfo = sqlbase.MakeMultiSourceInfo(postRender.source.info)
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
 	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0

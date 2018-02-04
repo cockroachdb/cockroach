@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // limitNode represents a node that limits the number of rows
@@ -62,7 +63,8 @@ func (p *planner) Limit(ctx context.Context, n *tree.Limit) (*limitNode, error) 
 				return nil, err
 			}
 
-			normalized, err := p.analyzeExpr(ctx, datum.src, nil, tree.IndexedVarHelper{}, types.Int, true, datum.name)
+			normalized, err := p.analyzeExpr(ctx,
+				datum.src, sqlbase.MultiSourceInfo{}, tree.IndexedVarHelper{}, types.Int, true, datum.name)
 			if err != nil {
 				return nil, err
 			}

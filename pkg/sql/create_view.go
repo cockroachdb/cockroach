@@ -43,12 +43,12 @@ type createViewNode struct {
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
 func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
-	name, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
+	name, err := n.Name.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), name.Schema())
+	dbDesc, err := ResolveTargetObject(ctx, p, name)
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +76,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 				}
 				// Persist the database prefix expansion.
 				tn.ExplicitSchema = true
+				tn.ExplicitCatalog = true
 			},
 		)
 		f.FormatNode(n.AsSource)

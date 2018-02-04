@@ -32,14 +32,18 @@ func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) 
 	// SQL, so as to avoid a double lookup (a first one to check if the
 	// descriptor is of the right type, another to populate the
 	// create_statements vtable).
+	// The condition "database_name IS NULL" ensures that virtual tables are included.
 	const showCreateTableQuery = `
      SELECT %[3]s AS "Table",
             IFNULL(create_statement,
                    crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                             %[1]s || '.' || %[2]s || ' is not a table')::string
+                                             %[3]s || ' is not a table')::string
             ) AS "CreateTable"
        FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-              WHERE database_name = %[1]s AND descriptor_name = %[2]s AND descriptor_type = 'table'
+              WHERE (database_name IS NULL OR database_name = %[1]s)
+                AND schema_name = %[5]s
+                AND descriptor_name = %[2]s
+                AND descriptor_type = 'table'
               UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
   `
 	return p.showTableDetails(ctx, "SHOW CREATE TABLE", n.Table, showCreateTableQuery)
@@ -56,10 +60,10 @@ func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (p
      SELECT %[3]s AS "View",
             IFNULL(create_statement,
                    crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                             %[1]s || '.' || %[2]s || ' is not a view')::string
+                                             %[3]s || ' is not a view')::string
             ) AS "CreateView"
        FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-              WHERE database_name = %[1]s AND descriptor_name = %[2]s AND descriptor_type = 'view'
+              WHERE database_name = %[1]s AND schema_name = %[5]s AND descriptor_name = %[2]s AND descriptor_type = 'view'
               UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
   `
 	return p.showTableDetails(ctx, "SHOW CREATE VIEW", n.View, showCreateViewQuery)
@@ -76,10 +80,10 @@ func (p *planner) ShowCreateSequence(
 			SELECT %[3]s AS "Sequence",
 							IFNULL(create_statement,
 										 crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                              %[1]s || '.' || %[2]s || ' is not a sequence')::string
+                                              %[3]s || ' is not a sequence')::string
 							) AS "CreateSequence"
 				 FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-								WHERE database_name = %[1]s AND descriptor_name = %[2]s
+								WHERE database_name = %[1]s AND schema_name = %[5]s AND descriptor_name = %[2]s
 								AND descriptor_type = 'sequence'
 								UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
 	`
@@ -107,17 +111,21 @@ func (p *planner) showCreateView(
 }
 
 func (p *planner) printForeignKeyConstraint(
-	ctx context.Context, buf *bytes.Buffer, dbPrefix string, idx *sqlbase.IndexDescriptor,
+	ctx context.Context,
+	buf *bytes.Buffer,
+	dbPrefix string,
+	idx *sqlbase.IndexDescriptor,
+	lCtx *internalLookupCtx,
 ) error {
 	fk := &idx.ForeignKey
 	if !fk.IsSet() {
 		return nil
 	}
-	fkTable, err := p.Tables().getTableVersionByID(ctx, p.txn, fk.Table)
+	fkTable, err := lCtx.getTableByID(fk.Table)
 	if err != nil {
 		return err
 	}
-	fkDb, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, fkTable.ParentID)
+	fkDb, err := lCtx.getDatabaseByID(fkTable.ParentID)
 	if err != nil {
 		return err
 	}
@@ -172,7 +180,11 @@ func (p *planner) showCreateSequence(
 // the prefix when the given table references other tables in the
 // current database.
 func (p *planner) showCreateTable(
-	ctx context.Context, tn *tree.Name, dbPrefix string, desc *sqlbase.TableDescriptor,
+	ctx context.Context,
+	tn *tree.Name,
+	dbPrefix string,
+	desc *sqlbase.TableDescriptor,
+	lCtx *internalLookupCtx,
 ) (string, error) {
 	a := &sqlbase.DatumAlloc{}
 
@@ -206,7 +218,7 @@ func (p *planner) showCreateTable(
 			f.WriteString(",\n\tCONSTRAINT ")
 			f.FormatNameP(&fk.Name)
 			f.WriteString(" ")
-			if err := p.printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx); err != nil {
+			if err := p.printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx, lCtx); err != nil {
 				return "", err
 			}
 		}
@@ -216,7 +228,7 @@ func (p *planner) showCreateTable(
 			f.WriteString(idx.SQLString(""))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
-			if err := p.showCreateInterleave(ctx, idx, f.Buffer, dbPrefix); err != nil {
+			if err := p.showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
@@ -255,7 +267,7 @@ func (p *planner) showCreateTable(
 
 	f.WriteString("\n)")
 
-	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix); err != nil {
+	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
@@ -285,17 +297,21 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
 func (p *planner) showCreateInterleave(
-	ctx context.Context, idx *sqlbase.IndexDescriptor, buf *bytes.Buffer, dbPrefix string,
+	ctx context.Context,
+	idx *sqlbase.IndexDescriptor,
+	buf *bytes.Buffer,
+	dbPrefix string,
+	lCtx *internalLookupCtx,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
 	intl := idx.Interleave
-	parentTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, intl.Ancestors[len(intl.Ancestors)-1].TableID)
+	parentTable, err := lCtx.getTableByID(intl.Ancestors[len(intl.Ancestors)-1].TableID)
 	if err != nil {
 		return err
 	}
-	parentDbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, p.txn, parentTable.ParentID)
+	parentDbDesc, err := lCtx.getDatabaseByID(parentTable.ParentID)
 	if err != nil {
 		return err
 	}

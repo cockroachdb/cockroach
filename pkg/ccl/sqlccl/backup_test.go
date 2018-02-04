@@ -417,7 +417,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
-			`BACKUP data.bank TO '%s' INCREMENTAL FROM '%s'`,
+			`BACKUP bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir, sanitizedFullDir,
 		),
 		DescriptorIDs: sqlbase.IDs{
@@ -1206,7 +1206,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// receipts is has a self-referential FK.
 		origDB.Exec(t, `CREATE TABLE store.receipts (
 			id INT PRIMARY KEY,
-			reissue INT REFERENCES store.receipts(id),
+			reissue INT REFERENCES receipts(id),
 			dest STRING REFERENCES store.customers(email),
 			orderid INT REFERENCES store.orders
 		)`)
@@ -2039,7 +2039,7 @@ func TestTimestampMismatch(t *testing.T) {
 		// Missing data for one table in the most recent backup.
 		_, err = sqlDB.DB.Exec(`RESTORE data.bank, data.t2 FROM $1, $2`,
 			fullBackup, incrementalT3FromT1OneTable)
-		if !testutils.IsError(err, "table \"t2\" does not exist") {
+		if !testutils.IsError(err, "table \"data.t2\" does not exist") {
 			t.Errorf("expected 'no backup covers time' error got: %+v", err)
 		}
 	})

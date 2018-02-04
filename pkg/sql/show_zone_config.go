@@ -74,20 +74,19 @@ type showZoneConfigRun struct {
 }
 
 func (n *showZoneConfigNode) startExec(params runParams) error {
-	if n.zoneSpecifier.TargetsIndex() {
-		_, err := params.p.expandIndexName(params.ctx, &n.zoneSpecifier.TableOrIndex, true /* requireTable */)
-		if err != nil {
-			return err
-		}
-	}
-
-	targetID, err := resolveZone(
-		params.ctx, params.p.txn, &n.zoneSpecifier, params.SessionData().Database)
+	tblDesc, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
 
-	_, index, partition, err := resolveSubzone(params.ctx, params.p.txn, &n.zoneSpecifier, targetID)
+	targetID, err := resolveZone(
+		params.ctx, params.p.txn, &n.zoneSpecifier)
+	if err != nil {
+		return err
+	}
+
+	index, partition, err := resolveSubzone(
+		params.ctx, params.p.txn, &n.zoneSpecifier, targetID, tblDesc)
 	if err != nil {
 		return err
 	}
@@ -163,7 +162,7 @@ func ascendZoneSpecifier(
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
-		zs.Database = zs.TableOrIndex.Table.TableName().SchemaName
+		zs.Database = zs.TableOrIndex.Table.TableName().CatalogName
 	} else if actualSubzone == nil {
 		// We didn't find a subzone, so no index or partition zone config exists.
 		zs.TableOrIndex.Index = ""

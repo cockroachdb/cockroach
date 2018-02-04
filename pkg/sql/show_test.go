@@ -196,7 +196,7 @@ func TestShowCreateTable(t *testing.T) {
 )`,
 			expect: `CREATE TABLE %s (
 	x INT NULL,
-	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x),
+	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo (x),
 	INDEX t8_auto_index_fk_ref (x ASC),
 	FAMILY "primary" (x, rowid)
 )`,
@@ -226,7 +226,7 @@ func TestShowCreateTable(t *testing.T) {
 	x INT NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (x ASC),
 	FAMILY "primary" (x)
-) INTERLEAVE IN PARENT o.foo (x)`,
+) INTERLEAVE IN PARENT o.public.foo (x)`,
 		},
 	}
 	for i, test := range tests {
@@ -295,35 +295,35 @@ func TestShowCreateView(t *testing.T) {
 	}{
 		{
 			`CREATE VIEW %s AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM d.t`,
+			`CREATE VIEW %s (i, s, v, t) AS SELECT i, s, v, t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT i, s, t FROM t`,
-			`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM d.t`,
+			`CREATE VIEW %s (i, s, t) AS SELECT i, s, t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM t`,
-			`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.t`,
+			`CREATE VIEW %s (i, s, t) AS SELECT t.i, t.s, t.t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
-			`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.t AS foo WHERE foo.i > 3`,
+			`CREATE VIEW %s (i, s, t) AS SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT count(*) FROM t`,
-			`CREATE VIEW %s (count) AS SELECT count(*) FROM d.t`,
+			`CREATE VIEW %s (count) AS SELECT count(*) FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT`,
-			`CREATE VIEW %s (s, count) AS SELECT s, count(*) FROM d.t GROUP BY s HAVING count(*) > 3:::INT`,
+			`CREATE VIEW %s (s, count) AS SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT`,
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
-			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.t`,
+			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM d.public.t`,
 		},
 		{
 			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
-			`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.t`,
+			`CREATE VIEW %s (a, b) AS SELECT i, v FROM d.public.t`,
 		},
 	}
 	for i, test := range tests {
@@ -475,56 +475,15 @@ func TestShowQueries(t *testing.T) {
 	var conn1 *gosql.DB
 	var conn2 *gosql.DB
 
+	execKnobs := &sql.ExecutorTestingKnobs{}
+
 	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
-					SQLExecutor: &sql.ExecutorTestingKnobs{
-						StatementFilter: func(ctx context.Context, stmt string, resultWriter sql.ResultsWriter, err error) error {
-							if stmt == selectStmt {
-								const showQuery = "SELECT node_id, query FROM [SHOW CLUSTER QUERIES]"
-
-								rows, err := conn1.Query(showQuery)
-								if err != nil {
-									t.Fatal(err)
-								}
-								defer rows.Close()
-
-								count := 0
-								for rows.Next() {
-									count++
-
-									var nodeID int
-									var sql string
-									if err := rows.Scan(&nodeID, &sql); err != nil {
-										t.Fatal(err)
-									}
-									switch sql {
-									case showQuery, expectedSelectStmt:
-									default:
-										t.Fatalf(
-											"unexpected query in SHOW QUERIES: %+q, expected: %+q",
-											sql,
-											expectedSelectStmt,
-										)
-									}
-									if nodeID < 1 || nodeID > 2 {
-										t.Fatalf("invalid node ID: %d", nodeID)
-									}
-								}
-								if err := rows.Err(); err != nil {
-									t.Fatal(err)
-								}
-
-								if expectedCount := 2; count != expectedCount {
-									t.Fatalf("unexpected number of running queries: %d, expected %d", count, expectedCount)
-								}
-							}
-							return nil
-						},
-					},
+					SQLExecutor: execKnobs,
 				},
 			},
 		})
@@ -534,10 +493,58 @@ func TestShowQueries(t *testing.T) {
 	conn2 = tc.ServerConn(1)
 	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
 
+	found := false
+	execKnobs.StatementFilter = func(ctx context.Context, stmt string, resultWriter sql.ResultsWriter, err error) error {
+		if stmt == selectStmt {
+			found = true
+			const showQuery = "SELECT node_id, query FROM [SHOW CLUSTER QUERIES]"
+
+			rows, err := conn1.Query(showQuery)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer rows.Close()
+
+			count := 0
+			for rows.Next() {
+				count++
+
+				var nodeID int
+				var sql string
+				if err := rows.Scan(&nodeID, &sql); err != nil {
+					t.Fatal(err)
+				}
+				switch sql {
+				case showQuery, expectedSelectStmt:
+				default:
+					t.Fatalf(
+						"unexpected query in SHOW QUERIES: %+q, expected: %+q",
+						sql,
+						expectedSelectStmt,
+					)
+				}
+				if nodeID < 1 || nodeID > 2 {
+					t.Fatalf("invalid node ID: %d", nodeID)
+				}
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+
+			if expectedCount := 2; count != expectedCount {
+				t.Fatalf("unexpected number of running queries: %d, expected %d", count, expectedCount)
+			}
+		}
+		return nil
+	}
+
 	if _, err := conn2.Exec(selectStmt); err != nil {
 		t.Fatal(err)
 	}
 
+	if !found {
+		t.Fatalf("knob did not activate in test")
+	}
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the

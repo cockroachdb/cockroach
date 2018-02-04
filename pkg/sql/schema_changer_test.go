@@ -1727,7 +1727,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
 
-		// Verify that t.test has the expected data. Read the table data while
+		// Verify that t.public.test has the expected data. Read the table data while
 		// ensuring that the correct table lease is in use.
 		var err error
 		rows, err = sqlDB.Query(`SELECT * from t.test`)
@@ -2597,9 +2597,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 
 	// Check that SQL thinks the table is empty.
 	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 

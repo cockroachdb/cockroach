@@ -9,7 +9,10 @@
 package sqlccl
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -43,41 +46,146 @@ func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
 	return nil
 }
 
+// descriptorResolver is the helper struct that enables reuse of the
+// standard name resolution algorithm.
+type descriptorResolver struct {
+	descByID map[sqlbase.ID]sqlbase.Descriptor
+	// Map: db name -> dbID
+	dbsByName map[string]sqlbase.ID
+	// Map: dbID -> obj name -> obj ID
+	objsByName map[sqlbase.ID]map[string]sqlbase.ID
+}
+
+// LookupSchema implements the tree.TableNameTargetResolver interface.
+func (r *descriptorResolver) LookupSchema(
+	_ context.Context, dbName, scName string,
+) (bool, interface{}, error) {
+	if scName != tree.PublicSchema {
+		return false, nil, nil
+	}
+	if dbId, ok := r.dbsByName[dbName]; ok {
+		return true, r.descByID[dbId], nil
+	}
+	return false, nil, nil
+}
+
+// LookupObject implements the tree.TableNameExistingResolver interface.
+func (r *descriptorResolver) LookupObject(
+	_ context.Context, dbName, scName, obName string,
+) (bool, interface{}, error) {
+	if scName != tree.PublicSchema {
+		return false, nil, nil
+	}
+	dbID, ok := r.dbsByName[dbName]
+	if !ok {
+		return false, nil, nil
+	}
+	if objMap, ok := r.objsByName[dbID]; ok {
+		if objId, ok := objMap[obName]; ok {
+			return true, r.descByID[objId], nil
+		}
+	}
+	return false, nil, nil
+}
+
+// newDescriptorResolver prepares a descriptorResolver for the given
+// known set of descriptors.
+func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, error) {
+	r := &descriptorResolver{
+		descByID:   make(map[sqlbase.ID]sqlbase.Descriptor),
+		dbsByName:  make(map[string]sqlbase.ID),
+		objsByName: make(map[sqlbase.ID]map[string]sqlbase.ID),
+	}
+
+	for _, desc := range descs {
+		if dbDesc := desc.GetDatabase(); dbDesc != nil {
+			if _, ok := r.dbsByName[dbDesc.Name]; ok {
+				return nil, errors.Errorf("duplicate database name: %q used for ID %d and %d",
+					dbDesc.Name, r.dbsByName[dbDesc.Name], dbDesc.ID)
+			}
+			r.dbsByName[dbDesc.Name] = dbDesc.ID
+		}
+
+		if tbDesc := desc.GetTable(); tbDesc != nil {
+			if tbDesc.Dropped() {
+				continue
+			}
+			parentDesc, ok := r.descByID[tbDesc.ParentID]
+			if !ok {
+				return nil, errors.Errorf("table %q has unknown ParentID %d", tbDesc.Name, tbDesc.ParentID)
+			}
+			if _, ok := r.dbsByName[parentDesc.GetName()]; !ok {
+				return nil, errors.Errorf("table %q's ParentID %d (%q) is not a database",
+					tbDesc.Name, tbDesc.ParentID, parentDesc.GetName())
+			}
+			objMap := r.objsByName[parentDesc.GetID()]
+			if objMap == nil {
+				objMap = make(map[string]sqlbase.ID)
+			}
+			if _, ok := objMap[tbDesc.Name]; ok {
+				return nil, errors.Errorf("duplicate table name: %q.%q used for ID %d and %d",
+					parentDesc.GetName(), tbDesc.Name, tbDesc.ID, objMap[tbDesc.Name])
+			}
+			objMap[tbDesc.Name] = tbDesc.ID
+			r.objsByName[parentDesc.GetID()] = objMap
+		}
+
+		if prevDesc, ok := r.descByID[desc.GetID()]; ok {
+			return nil, errors.Errorf("duplicate descriptor ID: %d used by %q and %q",
+				desc.GetID(), prevDesc.GetName(), desc.GetName())
+		}
+		r.descByID[desc.GetID()] = desc
+	}
+
+	return r, nil
+}
+
 // descriptorsMatchingTargets returns the descriptors that match the targets. A
 // database descriptor is included in this set if it matches the targets (or the
 // session database) or if one of its tables matches the targets. All expanded
 // DBs, via either `foo.*` or `DATABASE foo` are noted, as are those explicitly
 // named as DBs (e.g. with `DATABASE foo`, not `foo.*`). These distinctions are
 // used e.g. by RESTORE.
+//
+// This is guaranteed to not return duplicates.
 func descriptorsMatchingTargets(
-	sessionDatabase string, descriptors []sqlbase.Descriptor, targets tree.TargetList,
+	ctx context.Context,
+	currentDatabase string,
+	searchPath sessiondata.SearchPath,
+	descriptors []sqlbase.Descriptor,
+	targets tree.TargetList,
 ) (descriptorsMatched, error) {
-	// TODO(dan): If the session search path starts including more than virtual
-	// tables (as of 2017-01-12 it's only pg_catalog), then this method will
-	// need to support it.
+	// TODO(dan): once CockroachDB supports schemas in addition to
+	// catalogs, then this method will need to support it.
 
 	ret := descriptorsMatched{}
 
-	type validity int
-	const (
-		maybeValid validity = iota
-		valid
-	)
+	resolver, err := newDescriptorResolver(descriptors)
+	if err != nil {
+		return ret, err
+	}
 
-	explicitlyNamedDBs := map[string]struct{}{}
-
-	starByDatabase := make(map[string]validity, len(targets.Databases))
+	alreadyRequestedDBs := make(map[sqlbase.ID]struct{})
+	alreadyExpandedDBs := make(map[sqlbase.ID]struct{})
+	// Process all the DATABASE requests.
 	for _, d := range targets.Databases {
-		explicitlyNamedDBs[string(d)] = struct{}{}
-		starByDatabase[string(d)] = maybeValid
+		dbID, ok := resolver.dbsByName[string(d)]
+		if !ok {
+			return ret, errors.Errorf("unknown database %q", d)
+		}
+		if _, ok := alreadyRequestedDBs[dbID]; !ok {
+			desc := resolver.descByID[dbID]
+			ret.descs = append(ret.descs, desc)
+			ret.requestedDBs = append(ret.requestedDBs, desc.GetDatabase())
+			ret.expandedDB = append(ret.expandedDB, dbID)
+			alreadyRequestedDBs[dbID] = struct{}{}
+			alreadyExpandedDBs[dbID] = struct{}{}
+		}
 	}
 
-	type table struct {
-		name     string
-		validity validity
-	}
-
-	tablesByDatabase := make(map[string][]table, len(targets.Tables))
+	// Process all the TABLE requests.
+	// Pulling in a table needs to pull in the underlying database too.
+	alreadyRequestedTables := make(map[sqlbase.ID]struct{})
 	for _, pattern := range targets.Tables {
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
@@ -87,86 +195,61 @@ func descriptorsMatchingTargets(
 
 		switch p := pattern.(type) {
 		case *tree.TableName:
-			if sessionDatabase != "" {
-				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
-					return ret, err
-				}
+			found, descI, err := p.ResolveExisting(ctx, resolver, currentDatabase, searchPath)
+			if err != nil {
+				return ret, err
 			}
-			db := string(p.SchemaName)
-			tablesByDatabase[db] = append(tablesByDatabase[db], table{
-				name:     string(p.TableName),
-				validity: maybeValid,
-			})
+			if !found {
+				return ret, errors.Errorf(`table %q does not exist`, tree.ErrString(p))
+			}
+			desc := descI.(sqlbase.Descriptor)
+
+			// If the parent database is not requested already, request it now
+			parentID := desc.GetTable().GetParentID()
+			if _, ok := alreadyRequestedDBs[parentID]; !ok {
+				parentDesc := resolver.descByID[parentID]
+				ret.descs = append(ret.descs, parentDesc)
+				alreadyRequestedDBs[parentID] = struct{}{}
+			}
+			// Then request the table itself.
+			if _, ok := alreadyRequestedTables[desc.GetID()]; !ok {
+				alreadyRequestedTables[desc.GetID()] = struct{}{}
+				ret.descs = append(ret.descs, desc)
+			}
+
 		case *tree.AllTablesSelector:
-			if sessionDatabase != "" {
-				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
-					return ret, err
-				}
+			found, descI, err := p.TableNamePrefix.Resolve(ctx, resolver, currentDatabase, searchPath)
+			if err != nil {
+				return ret, err
 			}
-			starByDatabase[string(p.Schema)] = maybeValid
+			if !found {
+				return ret, sqlbase.NewInvalidWildcardError(tree.ErrString(p))
+			}
+			desc := descI.(sqlbase.Descriptor)
+
+			// If the database is not requested already, request it now.
+			dbID := desc.GetID()
+			if _, ok := alreadyRequestedDBs[dbID]; !ok {
+				ret.descs = append(ret.descs, desc)
+				alreadyRequestedDBs[dbID] = struct{}{}
+			}
+
+			// Then request the expansion.
+			if _, ok := alreadyExpandedDBs[desc.GetID()]; !ok {
+				ret.expandedDB = append(ret.expandedDB, desc.GetID())
+				alreadyExpandedDBs[desc.GetID()] = struct{}{}
+			}
+
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}
 	}
 
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor, len(descriptors))
-
-	for _, desc := range descriptors {
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			databasesByID[dbDesc.ID] = dbDesc
-			normalizedDBName := dbDesc.Name
-			if _, ok := explicitlyNamedDBs[normalizedDBName]; ok {
-				ret.requestedDBs = append(ret.requestedDBs, dbDesc)
-			}
-			if _, ok := starByDatabase[normalizedDBName]; ok {
-				starByDatabase[normalizedDBName] = valid
-				ret.expandedDB = append(ret.expandedDB, dbDesc.ID)
-				ret.descs = append(ret.descs, desc)
-			} else if _, ok := tablesByDatabase[normalizedDBName]; ok {
-				ret.descs = append(ret.descs, desc)
-			}
-		}
-	}
-
-	for _, desc := range descriptors {
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			if tableDesc.Dropped() {
-				continue
-			}
-			dbDesc, ok := databasesByID[tableDesc.ParentID]
-			if !ok {
-				return ret, errors.Errorf("unknown ParentID: %d", tableDesc.ParentID)
-			}
-			normalizedDBName := dbDesc.Name
-			if tables, ok := tablesByDatabase[normalizedDBName]; ok {
-				for i := range tables {
-					if tables[i].name == tableDesc.Name {
-						tables[i].validity = valid
-						ret.descs = append(ret.descs, desc)
-						break
-					}
-				}
-			} else if _, ok := starByDatabase[normalizedDBName]; ok {
-				ret.descs = append(ret.descs, desc)
-			}
-		}
-	}
-
-	for dbName, validity := range starByDatabase {
-		if validity != valid {
-			if dbName == "" {
-				return ret, errors.Errorf("no database specified for wildcard")
-			}
-			return ret, errors.Errorf(`database "%s" does not exist`, dbName)
-		}
-	}
-
-	// explicitlyNamedDBs is a subset of starByDatabase, so no need to verify it.
-
-	for _, tables := range tablesByDatabase {
-		for _, table := range tables {
-			if table.validity != valid {
-				return ret, errors.Errorf(`table "%s" does not exist`, table.name)
+	// Then process the database expansions.
+	for dbID, _ := range alreadyExpandedDBs {
+		for _, tblID := range resolver.objsByName[dbID] {
+			if _, ok := alreadyRequestedTables[tblID]; !ok {
+				ret.descs = append(ret.descs, resolver.descByID[tblID])
 			}
 		}
 	}

@@ -35,7 +35,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -87,7 +87,7 @@ func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +110,7 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return err
 	}
@@ -244,6 +244,7 @@ func assignSequenceOptions(
 // e.g. `DEFAULT nextval('my_sequence')`.
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
 func maybeAddSequenceDependencies(
+	sc SchemaResolver,
 	tableDesc *sqlbase.TableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
@@ -260,7 +261,7 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
-		seqDesc, err := getSequenceDesc(ctx, evalCtx.Txn, NilVirtualTabler, parsedSeqName)
+		seqDesc, err := ResolveExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
 		if err != nil {
 			return nil, err
 		}

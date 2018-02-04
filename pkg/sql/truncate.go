@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -44,26 +43,14 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
 	for _, name := range n.Tables {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.Normalize()
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
-			return nil, err
-		}
-
-		tableDesc, err := MustGetTableOrViewDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, true, /* allowAdding */
-		)
+		defer p.useNewDescriptors()()
+		tableDesc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 		if err != nil {
 			return nil, err
-		}
-		// We don't support truncation on views, only real tables.
-		if !tableDesc.IsTable() {
-			return nil, pgerror.NewErrorf(
-				pgerror.CodeWrongObjectTypeError,
-				"cannot run TRUNCATE on %s %q - %ss are not updateable",
-				tableDesc.Kind(), tn, tableDesc.Kind())
 		}
 
 		if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {

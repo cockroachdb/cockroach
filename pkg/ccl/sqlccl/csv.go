@@ -348,7 +348,7 @@ func makeSimpleTableDescriptor(
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
-		sql.NilVirtualTabler,
+		nil, /* vt */
 		st,
 		create,
 		parentID,
@@ -356,7 +356,6 @@ func makeSimpleTableDescriptor(
 		hlc.Timestamp{WallTime: walltime},
 		sqlbase.NewDefaultPrivilegeDescriptor(),
 		nil, /* affected */
-		"",  /* sessionDB */
 		&semaCtx,
 		&evalCtx,
 	)
@@ -963,35 +962,28 @@ func importPlanHook(
 			return err
 		}
 
+		// Normalize must be called regardles of whether there is a
+		// transform because it prepares a TableName with the right
+		// structure and stores it back into the statement AST, which we
+		// need later when computing the job title.
+		name, err := importStmt.Table.Normalize()
+		if err != nil {
+			return errors.Wrap(err, "normalize create table")
+		}
 		parentID := defaultCSVParentID
 		transform := opts[importOptionTransform]
 		if transform == "" {
-			name, err := importStmt.Table.NormalizeTableName()
+			found, descI, err := name.ResolveTarget(ctx,
+				p, p.SessionData().Database, p.SessionData().SearchPath)
 			if err != nil {
-				return errors.Wrap(err, "normalize create table")
+				return errors.Wrap(err, "resolving target import name")
 			}
-			if err := name.QualifyWithDatabase(p.SessionData().Database); err != nil {
-				return err
+			if !found {
+				// Check if database exists right now. It might not after the import is done,
+				// but it's better to fail fast than wait until restore.
+				return errors.Errorf("database does not exist: %q", name)
 			}
-			// Replace or set the database name in the original statement so it is
-			// displayed in the job desc.
-			importStmt.Table.TableNameReference = name
-
-			// Check if database exists right now. It might not after the import is done,
-			// but it's better to fail fast than wait until restore.
-			if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				id, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(0, name.Schema()))
-				if err != nil {
-					return err
-				}
-				if id.Value == nil {
-					return errors.Errorf("database does not exist: %s", name.Schema())
-				}
-				parentID = sqlbase.ID(id.ValueInt())
-				return nil
-			}); err != nil {
-				return err
-			}
+			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
 		}
 
 		var comma rune
@@ -1040,9 +1032,9 @@ func importPlanHook(
 				return err
 			}
 
-			if named, err := importStmt.Table.NormalizeTableName(); err != nil {
+			if named, err := importStmt.Table.Normalize(); err != nil {
 				return errors.Wrap(err, "normalize import table")
-			} else if parsed, err := create.Table.NormalizeTableName(); err != nil {
+			} else if parsed, err := create.Table.Normalize(); err != nil {
 				return errors.Wrap(err, "normalize create table")
 			} else if named.TableName != parsed.TableName {
 				return errors.Errorf("importing table %s, but file specifies a schema for table %s", named.TableName, parsed.TableName)

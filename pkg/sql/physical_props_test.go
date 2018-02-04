@@ -374,7 +374,7 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 	// This test verifies the guarantee of trim: before and after are equal
 	// in:
 	//   before := ord.computeMatch(desired)
-	//   ord.trim(desired)
+	//   ord.public.trim(desired)
 	//   after := ord.computeMatch(desired)
 
 	genDir := func(rng *rand.Rand) encoding.Direction {

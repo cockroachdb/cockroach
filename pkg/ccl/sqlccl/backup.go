@@ -529,23 +529,11 @@ func resolveTargetsToDescriptors(
 	if err != nil {
 		return nil, nil, err
 	}
-	sessionDatabase := p.SessionData().Database
 
 	var matched descriptorsMatched
-	if matched, err = descriptorsMatchingTargets(sessionDatabase, allDescs, targets); err != nil {
+	if matched, err = descriptorsMatchingTargets(ctx,
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets); err != nil {
 		return nil, nil, err
-	}
-
-	// Dedupe. Duplicate descriptors will cause restore to fail.
-	{
-		descsByID := make(map[sqlbase.ID]sqlbase.Descriptor, len(matched.descs))
-		for _, sqlDesc := range matched.descs {
-			descsByID[sqlDesc.GetID()] = sqlDesc
-		}
-		matched.descs = matched.descs[:0]
-		for _, sqlDesc := range descsByID {
-			matched.descs = append(matched.descs, sqlDesc)
-		}
 	}
 
 	// Ensure interleaved tables appear after their parent. Since parents must be
@@ -836,12 +824,6 @@ func backupPlanHook(
 				"running BACKUP on a 2.x node requires cluster version >= %s (",
 				cluster.VersionByKey(cluster.VersionClearRange).String(),
 			)
-		}
-
-		if err := backupStmt.Targets.NormalizeTablesWithDatabase(
-			p.SessionData().Database,
-		); err != nil {
-			return err
 		}
 
 		to, err := toFn()

@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -34,17 +33,17 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 	if name == "" {
 		return nil, errNoDatabase
 	}
-	initialCheck := func(ctx context.Context) error {
-		return checkDBExists(ctx, p, name)
+	if _, err := ResolveDatabase(ctx, p, name); err != nil {
+		return nil, err
 	}
 
 	const getTablesQuery = `
-				SELECT TABLE_NAME AS "Table"
-				FROM "".information_schema.tables
-				WHERE tables.TABLE_SCHEMA=%[1]s
-				ORDER BY tables.TABLE_NAME`
+				SELECT table_name AS "Table"
+				FROM %[1]s.information_schema.tables
+				WHERE table_schema = 'public'
+				ORDER BY table_name`
 
 	return p.delegateQuery(ctx, "SHOW TABLES",
-		fmt.Sprintf(getTablesQuery, lex.EscapeSQLString(name)),
-		initialCheck, nil)
+		fmt.Sprintf(getTablesQuery, (*tree.Name)(&name)),
+		func(_ context.Context) error { return nil }, nil)
 }
