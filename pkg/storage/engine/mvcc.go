@@ -1700,7 +1700,7 @@ func buildScanIntents(data []byte) ([]roachpb.Intent, error) {
 	return intents, nil
 }
 
-func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, error) {
+func buildScanResumeKey(kvData [][]byte, numKvs int64, max int64) ([]byte, error) {
 	if len(kvData) == 0 {
 		return nil, nil
 	}
@@ -1722,7 +1722,7 @@ func buildScanResumeKey(kvData []byte, numKvs int64, max int64) ([]byte, error) 
 }
 
 func buildScanResults(
-	kvData []byte, numKvs int64, intentData []byte, max int64, consistent bool,
+	kvData [][]byte, numKvs int64, intentData []byte, max int64, consistent bool,
 ) ([]roachpb.KeyValue, roachpb.Key, []roachpb.Intent, error) {
 	intents, err := buildScanIntents(intentData)
 	if err != nil {

@@ -269,9 +269,10 @@ typedef struct {
 } DBScanResults;
 
 DBScanResults MVCCGet(DBIterator* iter, DBSlice key, DBTimestamp timestamp, DBTxn txn,
-                      bool consistent);
+                      bool consistent, uintptr_t chunks_ref);
 DBScanResults MVCCScan(DBIterator* iter, DBSlice start, DBSlice end, DBTimestamp timestamp,
-                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse);
+                       int64_t max_keys, DBTxn txn, bool consistent, bool reverse,
+                       uintptr_t chunks_ref);
 
 // DBStatsResult contains various runtime stats for RocksDB.
 typedef struct {

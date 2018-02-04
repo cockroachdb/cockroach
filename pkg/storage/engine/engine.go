@@ -111,7 +111,7 @@ type Iterator interface {
 	// of varint-prefixed slices, alternating from key to value, numKvs pairs.
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, reverse bool,
-	) (kvs []byte, numKvs int64, intents []byte, err error)
+	) (kvs [][]byte, numKvs int64, intents []byte, err error)
 }
 
 // Reader is the read interface to an engine's data.
