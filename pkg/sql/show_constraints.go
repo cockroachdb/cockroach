@@ -29,12 +29,21 @@ import (
 //   Notes: postgres does not have a SHOW CONSTRAINTS statement.
 //          mysql requires some privilege for any column.
 func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	var desc *TableDescriptor
+	// We avoid the cache so that we can observe the constraints without
+	// taking a lease, like other SHOW commands. We also use
+	// allowAdding=true so we can look at the constraints of a table
+	// added in the same transaction.
+	//
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+	})
 	if err != nil {
 		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}

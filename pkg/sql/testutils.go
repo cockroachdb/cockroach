@@ -49,7 +49,6 @@ func CreateTestTableDescriptor(
 		hlc.Timestamp{}, /* creationTime */
 		privileges,
 		nil, /* affected */
-		"",  /* sessionDB */
 		&semaCtx,
 		&evalCtx,
 	)

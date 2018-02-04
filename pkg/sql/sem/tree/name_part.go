@@ -118,14 +118,6 @@ func (l *NameList) Format(ctx *FmtCtx) {
 	}
 }
 
-// UnqualifiedStar corresponds to a standalone '*' in an expression or
-// a '*' as name part of an UnresolvedName.
-type UnqualifiedStar struct{}
-
-// Format implements the NodeFormatter interface.
-func (UnqualifiedStar) Format(ctx *FmtCtx) { ctx.WriteByte('*') }
-func (u UnqualifiedStar) String() string   { return AsString(u) }
-
 // ArraySubscript corresponds to the syntax `<name>[ ... ]`.
 type ArraySubscript struct {
 	Begin Expr
@@ -164,7 +156,7 @@ type UnresolvedName struct {
 	// Note: NameParts has a fixed size so that we avoid a heap
 	// allocation for the slice every time we construct an
 	// UnresolvedName. It does imply however that Parts does not have
-	// a meaningful "length"; its actually length (the number of parts
+	// a meaningful "length"; its actual length (the number of parts
 	// specified) is populated in NumParts above.
 	Parts NameParts
 }
@@ -198,3 +190,12 @@ func (u *UnresolvedName) Format(ctx *FmtCtx) {
 	}
 }
 func (u *UnresolvedName) String() string { return AsString(u) }
+
+// NewUnresolvedName constructs an UnresolvedName from some strings.
+func NewUnresolvedName(args ...string) *UnresolvedName {
+	n := &UnresolvedName{NumParts: len(args)}
+	for i := 0; i < len(args); i++ {
+		n.Parts[i] = args[len(args)-1-i]
+	}
+	return n
+}

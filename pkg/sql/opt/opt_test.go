@@ -106,7 +106,14 @@ type testCatalog struct {
 
 // FindTable implements the sqlbase.Catalog interface.
 func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	return sqlbase.GetTableDescriptor(c.kvDB, string(name.SchemaName), string(name.TableName)), nil
+	// This is a very simplified form of the main name resolution
+	// algorithms that misses out on most of the rules supported by
+	// pg/cockroachdb, but it might just do the trick for testing.
+	if !name.ExplicitCatalog {
+		name.CatalogName = name.SchemaName
+		name.SchemaName = tree.PublicSchemaName
+	}
+	return sqlbase.GetTableDescriptor(c.kvDB, name.Catalog(), name.Table()), nil
 }
 
 func TestOpt(t *testing.T) {

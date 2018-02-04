@@ -14,7 +14,7 @@ DISCARD ALL
 query T
 SHOW SEARCH_PATH
 ----
-·
+public
 
 query T
 SET timezone = 'Europe/Amsterdam'; SHOW TIMEZONE

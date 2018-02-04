@@ -16,7 +16,7 @@ UPDATE a AS alias SET b = 1 RETURNING alias.a, alias.b
 1 1
 
 # Can't mix aliases and non-aliases.
-query error source name "a" not found in FROM clause
+query error no data source matches prefix: a
 UPDATE a AS alias SET b = 1 RETURNING alias.a, a.b
 
 query II

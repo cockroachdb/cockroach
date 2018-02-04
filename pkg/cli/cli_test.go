@@ -497,7 +497,7 @@ func Example_zone() {
 	// num_replicas: 1
 	// constraints: []
 	// zone get system.nonexistent
-	// pq: relation "system.nonexistent" does not exist
+	// pq: relation "system.public.nonexistent" does not exist
 	// zone get system.descriptor
 	// system
 	// range_min_bytes: 1048576
@@ -511,7 +511,7 @@ func Example_zone() {
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
-	// pq: relation "system.nonexistent" does not exist
+	// pq: relation "system.public.nonexistent" does not exist
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -683,9 +683,6 @@ func Example_sql() {
 	// 42	69
 	// sql --execute=show databases
 	// Database
-	// crdb_internal
-	// information_schema
-	// pg_catalog
 	// system
 	// t
 	// sql -e select 1; select 2

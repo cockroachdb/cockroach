@@ -88,6 +88,7 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
+
 	isUpsertReturning := false
 	if n.OnConflict != nil {
 		if !n.OnConflict.DoNothing {

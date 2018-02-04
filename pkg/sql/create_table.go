@@ -48,12 +48,12 @@ type createTableNode struct {
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), tn.Schema())
+	dbDesc, err := ResolveTargetObject(ctx, p, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,11 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	for _, def := range n.Defs {
 		switch t := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
-			if _, err := t.Table.NormalizeWithDatabaseName(p.SessionData().Database); err != nil {
+			// Just check the target name has the right structure. We'll do
+			// name resolution later, after the descriptor has been
+			// allocated.
+			_, err := t.Table.Normalize()
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -330,6 +334,10 @@ func matchesIndex(
 	return true
 }
 
+// resolveFK on the planner calls resolveFK() on the current txn.
+//
+// The caller must make sure the planner is configured to look up
+// descriptors without caching. See the comment on resolveFK().
 func (p *planner) resolveFK(
 	ctx context.Context,
 	tbl *sqlbase.TableDescriptor,
@@ -337,7 +345,7 @@ func (p *planner) resolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
-	return resolveFK(ctx, p.txn, p.getVirtualTabler(), tbl, d, backrefs, mode)
+	return resolveFK(ctx, p.txn, p, tbl, d, backrefs, mode)
 }
 
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
@@ -348,29 +356,35 @@ func (p *planner) resolveFK(
 // "unvalidated", but when table is empty (e.g. during creation), no existing
 // data imples no existing violations, and thus the constraint can be created
 // without the unvalidated flag.
+//
+// The caller should pass an instance of fkSelfResolver as
+// SchemaResolver, so that FK references can find the newly created
+// table for self-references.
+//
+// The caller must also ensure that the SchemaResolver is configured to
+// bypass caching and enable visibility of just-added descriptors.
+// If there are any FKs, the descriptor of the depended-on table must
+// be looked up uncached, and we'll allow FK dependencies on tables
+// that were just added.
 func resolveFK(
 	ctx context.Context,
 	txn *client.Txn,
-	vt VirtualTabler,
+	sc SchemaResolver,
 	tbl *sqlbase.TableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
 	targetTable := d.Table.TableName()
-	target, err := getTableDesc(ctx, txn, vt, targetTable)
+
+	target, err := ResolveExistingObject(ctx, sc, targetTable, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
-	// Special-case: self-referencing FKs (i.e. referencing another col in the
-	// same table) will reference a table name that doesn't exist yet (since we
-	// are creating it).
-	if target == nil {
-		if targetTable.Table() == tbl.Name {
-			target = tbl
-		} else {
-			return fmt.Errorf("referenced table %q not found", targetTable.String())
-		}
+	if target.ID == tbl.ID {
+		// When adding a self-ref FK to an _existing_ table, we want to make sure
+		// we edit the same copy.
+		target = tbl
 	} else {
 		// Since this FK is referencing another table, this table must be created in
 		// a non-public "ADD" state and made public only after all leases on the
@@ -382,18 +396,12 @@ func resolveFK(
 			}
 		}
 
-		// When adding a self-ref FK to an _existing_ table, we want to make sure
-		// we edit the same copy.
-		if target.ID == tbl.ID {
-			target = tbl
+		// If we resolve the same table more than once, we only want to edit a
+		// single instance of it, so replace target with previously resolved table.
+		if prev, ok := backrefs[target.ID]; ok {
+			target = prev
 		} else {
-			// If we resolve the same table more than once, we only want to edit a
-			// single instance of it, so replace target with previously resolved table.
-			if prev, ok := backrefs[target.ID]; ok {
-				target = prev
-			} else {
-				backrefs[target.ID] = target
-			}
+			backrefs[target.ID] = target
 		}
 	}
 
@@ -467,17 +475,15 @@ func resolveFK(
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
+				// TODO(whomever): this ought to use a database cache.
 				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
 				if err != nil {
 					return err
 				}
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint",
-					tree.ErrString(&tree.ColumnItem{
-						TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(tbl.Name)),
-						ColumnName: tree.Name(sourceColumn.Name),
-					}),
-				)
+					tree.ErrString(tree.NewUnresolvedName(
+						database.Name, tree.PublicSchema, tbl.Name, sourceColumn.Name)))
 			}
 		}
 	}
@@ -487,17 +493,15 @@ func resolveFK(
 	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
 		for _, sourceColumn := range srcCols {
 			if sourceColumn.DefaultExpr == nil {
+				// TODO(whomever): this ought to use a database cache.
 				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
 				if err != nil {
 					return err
 				}
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression",
-					tree.ErrString(&tree.ColumnItem{
-						TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(tbl.Name)),
-						ColumnName: tree.Name(sourceColumn.Name),
-					}),
-				)
+					tree.ErrString(tree.NewUnresolvedName(
+						database.Name, tree.PublicSchema, tbl.Name, sourceColumn.Name)))
 			}
 		}
 	}
@@ -630,9 +634,7 @@ func (p *planner) addInterleave(
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
-	return addInterleave(
-		ctx, p.txn, p.getVirtualTabler(), desc, index,
-		interleave, p.SessionData().Database)
+	return addInterleave(ctx, p.txn, p, desc, index, interleave)
 }
 
 // addInterleave marks an index as one that is interleaved in some parent data
@@ -640,23 +642,22 @@ func (p *planner) addInterleave(
 func addInterleave(
 	ctx context.Context,
 	txn *client.Txn,
-	vt VirtualTabler,
+	vt SchemaResolver,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
-	sessionDB string,
 ) error {
 	if interleave.DropBehavior != tree.DropDefault {
 		return pgerror.UnimplementedWithIssueErrorf(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	tn, err := interleave.Parent.NormalizeWithDatabaseName(sessionDB)
+	tn, err := interleave.Parent.Normalize()
 	if err != nil {
 		return err
 	}
 
-	parentTable, err := MustGetTableDesc(ctx, txn, vt, tn, true /*allowAdding*/)
+	parentTable, err := ResolveExistingObject(ctx, vt, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -872,17 +873,21 @@ func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.N
 //
 // semaCtx can be nil if the table to be created has no default expression on
 // any of the columns and no check constraints.
+//
+// The caller must also ensure that the SchemaResolver is configured
+// to bypass caching and enable visibility of just-added descriptors.
+// This is used to resolve sequence and FK dependencies. Also see the
+// comment at the start of the global scope resolveFK().
 func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
-	vt VirtualTabler,
+	vt SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
-	sessionDB string,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
@@ -908,7 +913,7 @@ func MakeTableDesc(
 			}
 
 			if d.HasDefaultExpr() {
-				changedSeqDescs, err := maybeAddSequenceDependencies(&desc, col, expr, evalCtx)
+				changedSeqDescs, err := maybeAddSequenceDependencies(vt, &desc, col, expr, evalCtx)
 				if err != nil {
 					return desc, err
 				}
@@ -1029,7 +1034,7 @@ func MakeTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave, sessionDB); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
 			return desc, err
 		}
 	}
@@ -1049,6 +1054,16 @@ func MakeTableDesc(
 	// been allocated since the FKs will reference those IDs. Resolution also
 	// accumulates updates to other tables (adding backreferences) in the passed
 	// map -- anything in that map should be saved when the table is created.
+	//
+
+	// We use a fkSelfResolver so that name resolution can find the newly created
+	// table.
+	fkResolver := &fkSelfResolver{
+		SchemaResolver: vt,
+		newTableDesc:   &desc,
+		newTableName:   n.Table.TableName(),
+	}
+
 	generatedNames := map[string]struct{}{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
@@ -1071,7 +1086,7 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
-			if err := resolveFK(ctx, txn, vt, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
+			if err := resolveFK(ctx, txn, fkResolver, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
 				return desc, err
 			}
 		default:
@@ -1114,22 +1129,28 @@ func (p *planner) makeTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
-) (sqlbase.TableDescriptor, error) {
-	return MakeTableDesc(
-		ctx,
-		p.txn,
-		p.getVirtualTabler(),
-		p.ExecCfg().Settings,
-		n,
-		parentID,
-		id,
-		creationTime,
-		privileges,
-		affected,
-		p.SessionData().Database,
-		&p.semaCtx,
-		p.EvalContext(),
-	)
+) (ret sqlbase.TableDescriptor, err error) {
+	// We need to run MakeTableDesc with caching disabled, because
+	// it needs to pull in descriptors from FK depended-on tables
+	// and interleaved parents using their current state in KV.
+	// See the comment at the start of MakeTableDesc() and resolveFK().
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		ret, err = MakeTableDesc(
+			ctx,
+			p.txn,
+			p,
+			p.ExecCfg().Settings,
+			n,
+			parentID,
+			id,
+			creationTime,
+			privileges,
+			affected,
+			&p.semaCtx,
+			p.EvalContext(),
+		)
+	})
+	return ret, err
 }
 
 // dummyColumnItem is used in makeCheckConstraint to construct an expression

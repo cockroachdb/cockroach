@@ -1163,12 +1163,12 @@ SELECT foo.* IS NOT TRUE FROM (VALUES (1)) AS foo(x)
 query T
 SELECT CURRENT_SCHEMAS(true)
 ----
-{"test","pg_catalog"}
+{"public","pg_catalog"}
 
 query T
 SELECT CURRENT_SCHEMAS(false)
 ----
-{"test"}
+{"public"}
 
 statement ok
 SET SEARCH_PATH=test,pg_catalog
@@ -1195,7 +1195,7 @@ SELECT CURRENT_SCHEMAS(NULL::bool)
 NULL
 
 query B
-SELECT 'test' = ANY (CURRENT_SCHEMAS(true))
+SELECT 'public' = ANY (CURRENT_SCHEMAS(true))
 ----
 true
 
@@ -1204,21 +1204,14 @@ SELECT 'not test' = ANY (CURRENT_SCHEMAS(true))
 ----
 false
 
-statement ok
-SET DATABASE = ''
+# Until #22725 is fixed.
+# statement ok
+# SET SEARCH_PATH = ???
 
-query T
-SELECT current_schema()
-----
-NULL
-
-statement ok
-SET DATABASE = 'test'
-
-query T
-SELECT current_schema()
-----
-test
+# query T
+# SELECT current_schema()
+# ----
+# NULL
 
 statement ok
 CREATE TABLE foo (a int)
@@ -1229,7 +1222,7 @@ SELECT pg_catalog.pg_table_is_visible('foo'::regclass)
 true
 
 statement ok
-SET DATABASE = ''
+SET search_path = pg_catalog
 
 query B
 SELECT pg_catalog.pg_table_is_visible((SELECT oid FROM pg_class WHERE relname='foo'))
@@ -1237,17 +1230,20 @@ SELECT pg_catalog.pg_table_is_visible((SELECT oid FROM pg_class WHERE relname='f
 false
 
 statement ok
-SET SEARCH_PATH = 'test'
+SET SEARCH_PATH = public, pg_catalog
 
 query B
 SELECT pg_catalog.pg_table_is_visible((SELECT oid FROM pg_class WHERE relname='foo'))
 ----
 true
 
+statement ok
+RESET search_path
+
 query T
 SELECT current_schema()
 ----
-NULL
+public
 
 query I
 SELECT array_length(ARRAY['a', 'b'], 1)
@@ -1530,7 +1526,7 @@ CREATE TABLE test.pg_indexdef_test (a INT, UNIQUE INDEX pg_indexdef_idx (a ASC),
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.pg_indexdef_test (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test (a ASC)
 
 query error pq: unknown signature: pg_get_indexdef\(int, int, bool\)
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -1549,7 +1545,7 @@ CREATE VIEW test.pg_viewdef_view AS SELECT a, b FROM test.pg_viewdef_test
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid)
 ----
-SELECT a, b FROM test.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test
 
 query T
 SELECT pg_catalog.pg_get_viewdef(0, true)
@@ -1564,12 +1560,12 @@ NULL
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, true)
 ----
-SELECT a, b FROM test.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test
 
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, false)
 ----
-SELECT a, b FROM test.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test
 
 statement ok
 CREATE TABLE test.pg_constraintdef_test (

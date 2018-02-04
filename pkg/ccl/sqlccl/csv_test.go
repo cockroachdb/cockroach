@@ -682,7 +682,7 @@ func TestImportStmt(t *testing.T) {
 			schema,
 			files,
 			``,
-			`database does not exist: nonexistent`,
+			`database does not exist: "nonexistent.t"`,
 		},
 		{
 			"into-db-fails",
@@ -723,7 +723,9 @@ func TestImportStmt(t *testing.T) {
 
 			jobPrefix := `IMPORT TABLE `
 			if !hasTransform {
-				jobPrefix += intodb + "."
+				jobPrefix += intodb + ".public."
+			} else {
+				jobPrefix += `""."".`
 			}
 			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
 

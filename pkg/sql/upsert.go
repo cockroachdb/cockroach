@@ -258,10 +258,7 @@ func upsertExprsAndIndex(
 		for _, c := range insertCols {
 			if _, ok := indexColSet[c.ID]; !ok {
 				n := tree.Name(c.Name)
-				expr := &tree.ColumnItem{
-					TableName:  upsertExcludedTable,
-					ColumnName: n,
-				}
+				expr := tree.NewColumnItem(&upsertExcludedTable, n)
 				updateExprs = append(updateExprs, &tree.UpdateExpr{Names: tree.NameList{n}, Expr: expr})
 			}
 		}

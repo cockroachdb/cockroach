@@ -312,12 +312,14 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 	// Fetch column types.
 	rows, err := conn.Query(fmt.Sprintf(`
 		SELECT COLUMN_NAME, DATA_TYPE
-		FROM "".information_schema.columns
+		FROM %s.information_schema.columns
 		AS OF SYSTEM TIME %s
-		WHERE TABLE_SCHEMA = $1
-			AND TABLE_NAME = $2
+		WHERE TABLE_CATALOG = $1
+			AND TABLE_SCHEMA = $2
+			AND TABLE_NAME = $3
 			AND GENERATION_EXPRESSION = ''
-		`, lex.EscapeSQLString(ts)), []driver.Value{md.name.Schema(), md.name.Table()})
+		`, &md.name.CatalogName, lex.EscapeSQLString(ts)),
+		[]driver.Value{md.name.Catalog(), md.name.Schema(), md.name.Table()})
 	if err != nil {
 		return tableMetadata{}, err
 	}

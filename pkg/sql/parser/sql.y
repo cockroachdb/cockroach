@@ -138,8 +138,8 @@ func (u *sqlSymUnion) functionReference() tree.FunctionReference {
 func (u *sqlSymUnion) tablePatterns() tree.TablePatterns {
     return u.val.(tree.TablePatterns)
 }
-func (u *sqlSymUnion) tableNameReferences() tree.TableNameReferences {
-    return u.val.(tree.TableNameReferences)
+func (u *sqlSymUnion) normalizableTableNames() tree.NormalizableTableNames {
+    return u.val.(tree.NormalizableTableNames)
 }
 func (u *sqlSymUnion) indexHints() *tree.IndexHints {
     return u.val.(*tree.IndexHints)
@@ -777,7 +777,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list
 %type <tree.TablePatterns> table_pattern_list
-%type <tree.TableNameReferences> table_name_list
+%type <tree.NormalizableTableNames> table_name_list
 %type <tree.Exprs> expr_list opt_expr_list
 %type <tree.NameList> attrs
 %type <tree.SelectExprs> target_list
@@ -786,7 +786,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ArraySubscripts> array_subscripts
 %type <tree.GroupBy> group_clause
 %type <*tree.Limit> select_limit
-%type <tree.TableNameReferences> relation_expr_list
+%type <tree.NormalizableTableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
@@ -1794,11 +1794,11 @@ drop_ddl_stmt:
 drop_view_stmt:
   DROP VIEW table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropView{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.DropView{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropView{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &tree.DropView{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP VIEW error // SHOW HELP: DROP VIEW
 
@@ -1809,11 +1809,11 @@ drop_view_stmt:
 drop_sequence_stmt:
   DROP SEQUENCE table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropSequence{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.DropSequence{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropSequence{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &tree.DropSequence{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP SEQUENCE error // SHOW HELP: DROP VIEW
 
@@ -1824,11 +1824,11 @@ drop_sequence_stmt:
 drop_table_stmt:
   DROP TABLE table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropTable{Names: $3.tableNameReferences(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.DropTable{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP TABLE IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropTable{Names: $5.tableNameReferences(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &tree.DropTable{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP TABLE error // SHOW HELP: DROP TABLE
 
@@ -1911,11 +1911,11 @@ drop_role_stmt:
 table_name_list:
   table_name
   {
-    $$.val = tree.TableNameReferences{$1.unresolvedName()}
+    $$.val = tree.NormalizableTableNames{$1.normalizableTableNameFromUnresolvedName()}
   }
 | table_name_list ',' table_name
   {
-    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
+    $$.val = append($1.normalizableTableNames(), $3.normalizableTableNameFromUnresolvedName())
   }
 
 // %Help: EXPLAIN - show the logical plan of a query
@@ -2825,16 +2825,20 @@ show_sessions_stmt:
 
 // %Help: SHOW TABLES - list tables
 // %Category: DDL
-// %Text: SHOW TABLES [FROM <databasename>]
+// %Text: SHOW TABLES [FROM <databasename> [ . <schemaname> ] ]
 // %SeeAlso: WEBDOCS/show-tables.html
 show_tables_stmt:
-  SHOW TABLES FROM name
+  SHOW TABLES FROM name '.' name
   {
-    $$.val = &tree.ShowTables{Database: tree.Name($4)}
+    $$.val = &tree.ShowTables{Database: tree.Name($4), Schema: tree.Name($6)}
+  }
+| SHOW TABLES FROM name
+  {
+    $$.val = &tree.ShowTables{Database: tree.Name($4), Schema: tree.PublicSchemaName}
   }
 | SHOW TABLES
   {
-    $$.val = &tree.ShowTables{}
+    $$.val = &tree.ShowTables{Schema: tree.PublicSchemaName}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
 
@@ -3625,7 +3629,7 @@ sequence_option_elem:
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$.val = &tree.Truncate{Tables: $3.tableNameReferences(), DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.Truncate{Tables: $3.normalizableTableNames(), DropBehavior: $4.dropBehavior()}
   }
 | TRUNCATE error // SHOW HELP: TRUNCATE
 
@@ -5188,11 +5192,11 @@ relation_expr:
 relation_expr_list:
   relation_expr
   {
-    $$.val = tree.TableNameReferences{$1.unresolvedName()}
+    $$.val = tree.NormalizableTableNames{$1.normalizableTableNameFromUnresolvedName()}
   }
 | relation_expr_list ',' relation_expr
   {
-    $$.val = append($1.tableNameReferences(), $3.unresolvedName())
+    $$.val = append($1.normalizableTableNames(), $3.normalizableTableNameFromUnresolvedName())
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
