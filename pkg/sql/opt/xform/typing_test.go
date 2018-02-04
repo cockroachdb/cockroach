@@ -16,12 +16,14 @@ package xform
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -97,6 +99,82 @@ func TestTypingJson(t *testing.T) {
 	fetchTextPathGroup := f.ConstructFetchTextPath(jsonGroup, arrGroup)
 	ev = o.Optimize(fetchTextPathGroup, &opt.PhysicalProps{})
 	testTyping(t, ev, types.String)
+}
+
+func TestTypingFunction(t *testing.T) {
+	o := NewOptimizer(createTypingCatalog(), 0 /* maxSteps */)
+	f := o.Factory()
+
+	// Function with fixed return type.
+	// (Function (Const "length") (Const "text"))
+	nameGroup := f.ConstructConst(f.InternPrivate(tree.NewDString("length")))
+	arg1Group := f.ConstructConst(f.InternPrivate(tree.NewDString("text")))
+	argsList := f.InternList([]opt.GroupID{arg1Group})
+	funcGroup := f.ConstructFunction(nameGroup, argsList)
+	ev := o.Optimize(funcGroup, &opt.PhysicalProps{})
+	testTyping(t, ev, types.Int)
+
+	// Function with return type dependent on arg types.
+	// (Function (Const "div") (Const 1.0) (Const 2.0))
+	nameGroup = f.ConstructConst(f.InternPrivate(tree.NewDString("div")))
+	arg1Group = f.ConstructConst(f.InternPrivate(tree.NewDFloat(1.0)))
+	arg2Group := f.ConstructConst(f.InternPrivate(tree.NewDFloat(2.0)))
+	argsList = f.InternList([]opt.GroupID{arg1Group, arg2Group})
+	funcGroup = f.ConstructFunction(nameGroup, argsList)
+	ev = o.Optimize(funcGroup, &opt.PhysicalProps{})
+	testTyping(t, ev, types.Float)
+
+	// Function with same arguments in multiple overloads.
+	// (Function (Const "now::timestamp"))
+	nameGroup = f.ConstructConst(f.InternPrivate(tree.NewDString("now::timestamp")))
+	funcGroup = f.ConstructFunction(nameGroup, opt.EmptyList)
+	ev = o.Optimize(funcGroup, &opt.PhysicalProps{})
+	testTyping(t, ev, types.Timestamp)
+
+	// Function with same arguments in multiple overloads (different overload).
+	// (Function (Const "now::timestamptz"))
+	nameGroup = f.ConstructConst(f.InternPrivate(tree.NewDString("now::timestamptz")))
+	funcGroup = f.ConstructFunction(nameGroup, opt.EmptyList)
+	ev = o.Optimize(funcGroup, &opt.PhysicalProps{})
+	testTyping(t, ev, types.TimestampTZ)
+
+	// Variadic function.
+	// (Function (Const "greatest") (Const 1) (Const 2))
+	nameGroup = f.ConstructConst(f.InternPrivate(tree.NewDString("greatest")))
+	arg1Group = f.ConstructConst(f.InternPrivate(tree.NewDInt(1)))
+	arg2Group = f.ConstructConst(f.InternPrivate(tree.NewDInt(2)))
+	argsList = f.InternList([]opt.GroupID{arg1Group, arg2Group})
+	funcGroup = f.ConstructFunction(nameGroup, argsList)
+	ev = o.Optimize(funcGroup, &opt.PhysicalProps{})
+	testTyping(t, ev, types.Int)
+}
+
+// This "test" is special, in that it is verifying that we don't add functions
+// in the future that break assumptions in the optimizer's typing code.
+func TestTypingAssumptions(t *testing.T) {
+	// Assumption: It is possible to infer the return type from the types of
+	//             function arguments for all but a small set of well-known
+	//             functions.
+	for name, builtin := range builtins.Builtins {
+		seen := make([]tree.TypeList, 0)
+
+		// Skip past known ambiguous functions.
+		if opt.DisambiguateFunction(name, types.Any) != name {
+			continue
+		}
+		if opt.DisambiguateFunction(strings.ToLower(name), types.Any) != name {
+			continue
+		}
+
+		for _, overload := range builtin {
+			for _, sig := range seen {
+				if sig.Match(overload.Types.Types()) {
+					t.Errorf("%s function has ambiguous arguments", name)
+				}
+			}
+			seen = append(seen, overload.Types)
+		}
+	}
 }
 
 func createTypingCatalog() *testutils.TestCatalog {

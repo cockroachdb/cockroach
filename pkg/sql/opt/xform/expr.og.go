@@ -298,7 +298,7 @@ var childCountLookup = [...]childCountLookupFunc{
 	// FunctionOp
 	func(ev ExprView) int {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(functionExpr.args().Length)
+		return 1 + int(functionExpr.args().Length)
 	},
 
 	// ScanOp
@@ -1123,9 +1123,11 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
+		case 0:
+			return functionExpr.name()
 		default:
 			list := ev.mem.lookupList(functionExpr.args())
-			return list[n-0]
+			return list[n-1]
 		}
 	},
 
@@ -1733,8 +1735,7 @@ var privateLookup = [...]privateLookupFunc{
 
 	// FunctionOp
 	func(ev ExprView) opt.PrivateID {
-		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
-		return functionExpr.def()
+		return 0
 	},
 
 	// ScanOp
@@ -4067,16 +4068,16 @@ func (m *memoExpr) asUnaryComplement() *unaryComplementExpr {
 
 type functionExpr memoExpr
 
-func makeFunctionExpr(args opt.ListID, def opt.PrivateID) functionExpr {
-	return functionExpr{op: opt.FunctionOp, state: exprState{args.Offset, args.Length, uint32(def)}}
+func makeFunctionExpr(name opt.GroupID, args opt.ListID) functionExpr {
+	return functionExpr{op: opt.FunctionOp, state: exprState{uint32(name), args.Offset, args.Length}}
+}
+
+func (e *functionExpr) name() opt.GroupID {
+	return opt.GroupID(e.state[0])
 }
 
 func (e *functionExpr) args() opt.ListID {
-	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
-}
-
-func (e *functionExpr) def() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
+	return opt.ListID{Offset: e.state[1], Length: e.state[2]}
 }
 
 func (e *functionExpr) fingerprint() fingerprint {

@@ -86,12 +86,12 @@ var Generators = map[string][]tree.Builtin{
 	"unnest": {
 		makeGeneratorBuiltinWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
-			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+			func(argTypes []types.T) types.T {
+				if len(argTypes) == 0 {
 					return tree.UnknownReturnType
 				}
 				return types.TTable{
-					Cols:   types.TTuple{args[0].ResolvedType().(types.TArray).Typ},
+					Cols:   types.TTuple{argTypes[0].(types.TArray).Typ},
 					Labels: arrayValueGeneratorLabels,
 				}
 			},

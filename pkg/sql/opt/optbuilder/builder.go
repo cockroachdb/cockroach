@@ -461,7 +461,7 @@ func (b *Builder) buildFunction(
 		argList = append(argList, arg)
 	}
 
-	out = b.factory.ConstructFunction(b.factory.InternList(argList), b.factory.InternPrivate(def))
+	out = b.factory.ConstructFunction(b.constructString(def.Name), b.factory.InternList(argList))
 
 	if isAgg {
 		refScope := inScope.endAggFunc()
@@ -1125,6 +1125,12 @@ func (b *Builder) constructList(
 	}
 
 	panic(fmt.Sprintf("unexpected operator: %s", op))
+}
+
+// constructString invokes the factory to create a string-valued Const
+// operator.
+func (b *Builder) constructString(s string) opt.GroupID {
+	return b.factory.ConstructConst(b.factory.InternPrivate(tree.NewDString(s)))
 }
 
 func (b *Builder) buildDistinct(

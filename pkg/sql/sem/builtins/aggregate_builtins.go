@@ -83,13 +83,13 @@ var Aggregates = map[string][]tree.Builtin{
 	"array_agg": arrayBuiltin(func(t types.T) tree.Builtin {
 		return makeAggBuiltinWithReturnType(
 			[]types.T{t},
-			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+			func(argTypes []types.T) types.T {
+				if len(argTypes) == 0 {
 					return types.TArray{Typ: t}
 				}
 				// Whenever possible, use the expression's type, so we can properly
 				// handle aliased types that don't explicitly have overloads.
-				return types.TArray{Typ: args[0].ResolvedType()}
+				return types.TArray{Typ: argTypes[0]}
 			},
 			newArrayAggregate,
 			"Aggregates the selected values into an array.",
