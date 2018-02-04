@@ -343,17 +343,6 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	}
 }
 
-func TestAdminAPIDatabaseVirtual(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	const errPattern = `\\"information_schema\\" is a virtual schema`
-	if err := getAdminJSONProto(s, "databases/information_schema", nil); !testutils.IsError(err, errPattern) {
-		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
-	}
-}
-
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})

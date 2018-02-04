@@ -34,17 +34,17 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 	if name == "" {
 		return nil, errNoDatabase
 	}
-	initialCheck := func(ctx context.Context) error {
-		return checkDBExists(ctx, p, name)
+	if _, err := ResolveDatabase(ctx, p, name); err != nil {
+		return nil, err
 	}
 
 	const getTablesQuery = `
-				SELECT TABLE_NAME AS "Table"
+				SELECT table_name AS "Table"
 				FROM "".information_schema.tables
-				WHERE tables.TABLE_SCHEMA=%[1]s
-				ORDER BY tables.TABLE_NAME`
+				WHERE table_catalog = %[1]s
+				ORDER BY table_name`
 
 	return p.delegateQuery(ctx, "SHOW TABLES",
 		fmt.Sprintf(getTablesQuery, lex.EscapeSQLString(name)),
-		initialCheck, nil)
+		func(_ context.Context) error { return nil }, nil)
 }

@@ -123,12 +123,12 @@ func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.administrable_role_authorizations (
-	GRANTEE STRING NOT NULL,
-	ROLE_NAME STRING NOT NULL,
+	GRANTEE      STRING NOT NULL,
+	ROLE_NAME    STRING NOT NULL,
 	IS_GRANTABLE STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -160,12 +160,12 @@ CREATE TABLE information_schema.administrable_role_authorizations (
 var informationSchemaApplicableRoles = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.applicable_roles (
-	GRANTEE STRING NOT NULL,
-	ROLE_NAME STRING NOT NULL,
+	GRANTEE      STRING NOT NULL,
+	ROLE_NAME    STRING NOT NULL,
 	IS_GRANTABLE STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -193,18 +193,20 @@ CREATE TABLE information_schema.applicable_roles (
 var informationSchemaColumnPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.column_privileges (
-	GRANTOR STRING,
-	GRANTEE STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	COLUMN_NAME STRING NOT NULL,
+	GRANTOR        STRING,
+	GRANTEE        STRING NOT NULL,
+	TABLE_CATALOG  STRING NOT NULL,
+	TABLE_SCHEMA   STRING NOT NULL,
+	TABLE_NAME     STRING NOT NULL,
+	COLUMN_NAME    STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING
+	IS_GRANTABLE   STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
 			columndata := privilege.List{privilege.SELECT, privilege.INSERT, privilege.UPDATE} // privileges for column level granularity
 			for _, u := range table.Privileges.Users {
 				for _, priv := range columndata {
@@ -213,8 +215,8 @@ CREATE TABLE information_schema.column_privileges (
 							if err := addRow(
 								tree.DNull,                     // grantor
 								tree.NewDString(u.User),        // grantee
-								defString,                      // table_catalog
-								tree.NewDString(db.Name),       // table_schema
+								dbNameStr,                      // table_catalog
+								scNameStr,                      // table_schema
 								tree.NewDString(table.Name),    // table_name
 								tree.NewDString(cd.Name),       // column_name
 								tree.NewDString(priv.String()), // privilege_type
@@ -236,34 +238,36 @@ CREATE TABLE information_schema.column_privileges (
 var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.columns (
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	COLUMN_NAME STRING NOT NULL,
-	ORDINAL_POSITION INT NOT NULL,
-	COLUMN_DEFAULT STRING,
-	IS_NULLABLE STRING NOT NULL,
-	DATA_TYPE STRING NOT NULL,
+	TABLE_CATALOG            STRING NOT NULL,
+	TABLE_SCHEMA             STRING NOT NULL,
+	TABLE_NAME               STRING NOT NULL,
+	COLUMN_NAME              STRING NOT NULL,
+	ORDINAL_POSITION         INT NOT NULL,
+	COLUMN_DEFAULT           STRING,
+	IS_NULLABLE              STRING NOT NULL,
+	DATA_TYPE                STRING NOT NULL,
 	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH INT,
-	NUMERIC_PRECISION INT,
-	NUMERIC_SCALE INT,
-	DATETIME_PRECISION INT,
-	CHARACTER_SET_CATALOG STRING,
-	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING,
-	GENERATION_EXPRESSION STRING
+	CHARACTER_OCTET_LENGTH   INT,
+	NUMERIC_PRECISION        INT,
+	NUMERIC_SCALE            INT,
+	DATETIME_PRECISION       INT,
+	CHARACTER_SET_CATALOG    STRING,
+	CHARACTER_SET_SCHEMA     STRING,
+	CHARACTER_SET_NAME       STRING,
+	GENERATION_EXPRESSION    STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
 			// Table descriptors already holds columns in-order.
 			visible := 0
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				visible++
 				return addRow(
-					defString,                                // table_catalog
-					tree.NewDString(db.Name),                 // table_schema
+					dbNameStr,                                // table_catalog
+					scNameStr,                                // table_schema
 					tree.NewDString(table.Name),              // table_name
 					tree.NewDString(column.Name),             // column_name
 					tree.NewDInt(tree.DInt(visible)),         // ordinal_position, 1-indexed
@@ -293,7 +297,7 @@ CREATE TABLE information_schema.enabled_roles (
 	ROLE_NAME STRING NOT NULL
 );
 `,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
 		if err != nil {
@@ -346,26 +350,29 @@ var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.key_column_usage (
 	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA STRING NOT NULL,
-	CONSTRAINT_NAME STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	COLUMN_NAME STRING NOT NULL,
-	ORDINAL_POSITION INT NOT NULL,
+	CONSTRAINT_SCHEMA  STRING NOT NULL,
+	CONSTRAINT_NAME    STRING NOT NULL,
+	TABLE_CATALOG      STRING NOT NULL,
+	TABLE_SCHEMA       STRING NOT NULL,
+	TABLE_NAME         STRING NOT NULL,
+	COLUMN_NAME        STRING NOT NULL,
+	ORDINAL_POSITION   INT NOT NULL,
 	POSITION_IN_UNIQUE_CONSTRAINT INT
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
+			scName string,
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			info, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
-
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
+			tbNameStr := tree.NewDString(table.Name)
 			for name, c := range info {
 				// Only Primary Key, Foreign Key, and Unique constraints are included.
 				switch c.Kind {
@@ -376,6 +383,8 @@ CREATE TABLE information_schema.key_column_usage (
 					continue
 				}
 
+				cstNameStr := tree.NewDString(name)
+
 				for pos, column := range c.Columns {
 					ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
 					uniquePos := tree.DNull
@@ -383,15 +392,15 @@ CREATE TABLE information_schema.key_column_usage (
 						uniquePos = ordinalPos
 					}
 					if err := addRow(
-						defString,                   // constraint_catalog
-						tree.NewDString(db.Name),    // constraint_schema
-						tree.NewDString(name),       // constraint_name
-						defString,                   // table_catalog
-						tree.NewDString(db.Name),    // table_schema
-						tree.NewDString(table.Name), // table_name
-						tree.NewDString(column),     // column_name
-						ordinalPos,                  // ordinal_position, 1-indexed
-						uniquePos,                   // position_in_unique_constraint
+						dbNameStr,               // constraint_catalog
+						scNameStr,               // constraint_schema
+						cstNameStr,              // constraint_name
+						dbNameStr,               // table_catalog
+						scNameStr,               // table_schema
+						tbNameStr,               // table_name
+						tree.NewDString(column), // column_name
+						ordinalPos,              // ordinal_position, 1-indexed
+						uniquePos,               // position_in_unique_constraint
 					); err != nil {
 						return err
 					}
@@ -439,31 +448,35 @@ func dStringForFKAction(action sqlbase.ForeignKeyReference_Action) tree.Datum {
 var informationSchemaReferentialConstraintsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.referential_constraints (
-	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA STRING NOT NULL,
-	CONSTRAINT_NAME STRING NOT NULL,
+	CONSTRAINT_CATALOG        STRING NOT NULL,
+	CONSTRAINT_SCHEMA         STRING NOT NULL,
+	CONSTRAINT_NAME           STRING NOT NULL,
 	UNIQUE_CONSTRAINT_CATALOG STRING NOT NULL,
-	UNIQUE_CONSTRAINT_SCHEMA STRING NOT NULL,
-	UNIQUE_CONSTRAINT_NAME STRING,
-	MATCH_OPTION STRING NOT NULL,
-	UPDATE_RULE STRING NOT NULL,
-	DELETE_RULE STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	REFERENCED_TABLE_NAME STRING NOT NULL
+	UNIQUE_CONSTRAINT_SCHEMA  STRING NOT NULL,
+	UNIQUE_CONSTRAINT_NAME    STRING,
+	MATCH_OPTION              STRING NOT NULL,
+	UPDATE_RULE               STRING NOT NULL,
+	DELETE_RULE               STRING NOT NULL,
+	TABLE_NAME                STRING NOT NULL,
+	REFERENCED_TABLE_NAME     STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
+			scName string,
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
+			tbNameStr := tree.NewDString(table.Name)
 			return forEachIndexInTable(table, func(index *sqlbase.IndexDescriptor) error {
 				fk := index.ForeignKey
 				if !fk.IsSet() {
 					return nil
 				}
 
-				refTable, err := tableLookup.tableOrErr(fk.Table)
+				refTable, err := tableLookup.getTableByID(fk.Table)
 				if err != nil {
 					return err
 				}
@@ -473,16 +486,16 @@ CREATE TABLE information_schema.referential_constraints (
 				}
 
 				return addRow(
-					defString,                       // constraint_catalog
-					tree.NewDString(db.Name),        // constraint_schema
+					dbNameStr,                       // constraint_catalog
+					scNameStr,                       // constraint_schema
 					tree.NewDString(fk.Name),        // constraint_name
-					defString,                       // unique_constraint_catalog
-					tree.NewDString(db.Name),        // unique_constraint_schema
+					dbNameStr,                       // unique_constraint_catalog
+					scNameStr,                       // unique_constraint_schema
 					tree.NewDString(refIndex.Name),  // unique_constraint_name
 					matchOptionFull,                 // match_option
 					dStringForFKAction(fk.OnUpdate), // update_rule
 					dStringForFKAction(fk.OnDelete), // delete_rule
-					tree.NewDString(table.Name),     // table_name
+					tbNameStr,                       // table_name
 					tree.NewDString(refTable.Name),  // referenced_table_name
 				)
 			})
@@ -495,13 +508,13 @@ CREATE TABLE information_schema.referential_constraints (
 var informationSchemaRoleTableGrants = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.role_table_grants (
-	GRANTOR STRING,
-	GRANTEE STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
+	GRANTOR        STRING,
+	GRANTEE        STRING NOT NULL,
+	TABLE_CATALOG  STRING NOT NULL,
+	TABLE_SCHEMA   STRING NOT NULL,
+	TABLE_NAME     STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING,
+	IS_GRANTABLE   STRING,
 	WITH_HIERARCHY STRING
 );
 `,
@@ -516,19 +529,21 @@ CREATE TABLE information_schema.role_table_grants (
 var informationSchemaSchemataTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schemata (
-	CATALOG_NAME STRING NOT NULL,
-	SCHEMA_NAME STRING NOT NULL,
+	CATALOG_NAME               STRING NOT NULL,
+	SCHEMA_NAME                STRING NOT NULL,
 	DEFAULT_CHARACTER_SET_NAME STRING,
-	SQL_PATH STRING
+	SQL_PATH                   STRING
 );`,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
-			return addRow(
-				defString,                // catalog_name
-				tree.NewDString(db.Name), // schema_name
-				tree.DNull,               // default_character_set_name
-				tree.DNull,               // sql_path
-			)
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor) error {
+			return forEachSchemaName(ctx, p, db, func(db *sqlbase.DatabaseDescriptor, sc string) error {
+				return addRow(
+					tree.NewDString(db.Name), // catalog_name
+					tree.NewDString(sc),      // schema_name
+					tree.DNull,               // default_character_set_name
+					tree.DNull,               // sql_path
+				)
+			})
 		})
 	},
 }
@@ -538,29 +553,32 @@ CREATE TABLE information_schema.schemata (
 var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.schema_privileges (
-	GRANTEE STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING
+	GRANTEE         STRING NOT NULL,
+	TABLE_CATALOG   STRING NOT NULL,
+	TABLE_SCHEMA    STRING NOT NULL,
+	PRIVILEGE_TYPE  STRING NOT NULL,
+	IS_GRANTABLE    STRING
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
-			for _, u := range db.Privileges.Show() {
-				for _, priv := range u.Privileges {
-					if err := addRow(
-						tree.NewDString(u.User),  // grantee
-						defString,                // table_catalog
-						tree.NewDString(db.Name), // table_schema
-						tree.NewDString(priv),    // privilege_type
-						tree.DNull,               // is_grantable
-					); err != nil {
-						return err
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachDatabaseDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor) error {
+			privs := db.Privileges.Show()
+			return forEachSchemaName(ctx, p, db, func(db *sqlbase.DatabaseDescriptor, scName string) error {
+				for _, u := range privs {
+					for _, priv := range u.Privileges {
+						if err := addRow(
+							tree.NewDString(u.User),  // grantee
+							tree.NewDString(db.Name), // table_catalog
+							tree.NewDString(scName),  // table_schema
+							tree.NewDString(priv),    // privilege_type
+							tree.DNull,               // is_grantable
+						); err != nil {
+							return err
+						}
 					}
 				}
-			}
-			return nil
+				return nil
+			})
 		})
 	},
 }
@@ -586,39 +604,40 @@ func dStringForIndexDirection(dir sqlbase.IndexDescriptor_Direction) tree.Datum 
 var informationSchemaSequences = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.sequences (
-    SEQUENCE_CATALOG STRING NOT NULL,
-    SEQUENCE_SCHEMA STRING NOT NULL,
-    SEQUENCE_NAME STRING NOT NULL,
-    DATA_TYPE STRING NOT NULL,
-    NUMERIC_PRECISION INT NOT NULL,
-    NUMERIC_PRECISION_RADIX INT NOT NULL,
-    NUMERIC_SCALE INT NOT NULL,
-    START_VALUE STRING NOT NULL,
-    MINIMUM_VALUE STRING NOT NULL,
-    MAXIMUM_VALUE STRING NOT NULL,
-    INCREMENT STRING NOT NULL,
-    CYCLE_OPTION STRING NOT NULL
+    SEQUENCE_CATALOG         STRING NOT NULL,
+    SEQUENCE_SCHEMA          STRING NOT NULL,
+    SEQUENCE_NAME            STRING NOT NULL,
+    DATA_TYPE                STRING NOT NULL,
+    NUMERIC_PRECISION        INT NOT NULL,
+    NUMERIC_PRECISION_RADIX  INT NOT NULL,
+    NUMERIC_SCALE            INT NOT NULL,
+    START_VALUE              STRING NOT NULL,
+    MINIMUM_VALUE            STRING NOT NULL,
+    MAXIMUM_VALUE            STRING NOT NULL,
+    INCREMENT                STRING NOT NULL,
+    CYCLE_OPTION             STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			if !table.IsSequence() {
-				return nil
-			}
-			return addRow(
-				defString,                        // catalog
-				tree.NewDString(db.GetName()),    // schema
-				tree.NewDString(table.GetName()), // name
-				tree.NewDString("INT"),           // type
-				tree.NewDInt(64),                 // numeric precision
-				tree.NewDInt(2),                  // numeric precision radix
-				tree.NewDInt(0),                  // numeric scale
-				tree.NewDString(strconv.FormatInt(table.SequenceOpts.Start, 10)),     // start value
-				tree.NewDString(strconv.FormatInt(table.SequenceOpts.MinValue, 10)),  // min value
-				tree.NewDString(strconv.FormatInt(table.SequenceOpts.MaxValue, 10)),  // max value
-				tree.NewDString(strconv.FormatInt(table.SequenceOpts.Increment, 10)), // increment
-				noString, // cycle
-			)
-		})
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix,
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				if !table.IsSequence() {
+					return nil
+				}
+				return addRow(
+					tree.NewDString(db.GetName()),    // catalog
+					tree.NewDString(scName),          // schema
+					tree.NewDString(table.GetName()), // name
+					tree.NewDString("INT"),           // type
+					tree.NewDInt(64),                 // numeric precision
+					tree.NewDInt(2),                  // numeric precision radix
+					tree.NewDInt(0),                  // numeric scale
+					tree.NewDString(strconv.FormatInt(table.SequenceOpts.Start, 10)),     // start value
+					tree.NewDString(strconv.FormatInt(table.SequenceOpts.MinValue, 10)),  // min value
+					tree.NewDString(strconv.FormatInt(table.SequenceOpts.MaxValue, 10)),  // max value
+					tree.NewDString(strconv.FormatInt(table.SequenceOpts.Increment, 10)), // increment
+					noString, // cycle
+				)
+			})
 	},
 }
 
@@ -628,30 +647,34 @@ var informationSchemaStatisticsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.statistics (
 	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	NON_UNIQUE STRING NOT NULL,
-	INDEX_SCHEMA STRING NOT NULL,
-	INDEX_NAME STRING NOT NULL,
-	SEQ_IN_INDEX INT NOT NULL,
-	COLUMN_NAME STRING NOT NULL,
-	"COLLATION" STRING,
-	CARDINALITY INT,
-	DIRECTION STRING NOT NULL,
-	STORING STRING NOT NULL,
-	IMPLICIT STRING NOT NULL
+	TABLE_SCHEMA  STRING NOT NULL,
+	TABLE_NAME    STRING NOT NULL,
+	NON_UNIQUE    STRING NOT NULL,
+	INDEX_SCHEMA  STRING NOT NULL,
+	INDEX_NAME    STRING NOT NULL,
+	SEQ_IN_INDEX  INT NOT NULL,
+	COLUMN_NAME   STRING NOT NULL,
+	"COLLATION"   STRING,
+	CARDINALITY   INT,
+	DIRECTION     STRING NOT NULL,
+	STORING       STRING NOT NULL,
+	IMPLICIT      STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			dbNameStr := tree.NewDString(db.GetName())
+			scNameStr := tree.NewDString(scName)
+			tbNameStr := tree.NewDString(table.GetName())
+
 			appendRow := func(index *sqlbase.IndexDescriptor, colName string, sequence int,
 				direction tree.Datum, isStored, isImplicit bool,
 			) error {
 				return addRow(
-					defString,                         // table_catalog
-					tree.NewDString(db.GetName()),     // table_schema
-					tree.NewDString(table.GetName()),  // table_name
+					dbNameStr,                         // table_catalog
+					scNameStr,                         // table_schema
+					tbNameStr,                         // table_name
 					yesOrNoDatum(!index.Unique),       // non_unique
-					tree.NewDString(db.GetName()),     // index_schema
+					scNameStr,                         // index_schema
 					tree.NewDString(index.Name),       // index_name
 					tree.NewDInt(tree.DInt(sequence)), // seq_in_index
 					tree.NewDString(colName),          // column_name
@@ -722,34 +745,39 @@ var informationSchemaTableConstraintTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_constraints (
 	CONSTRAINT_CATALOG STRING NOT NULL,
-	CONSTRAINT_SCHEMA STRING NOT NULL,
-	CONSTRAINT_NAME STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	CONSTRAINT_TYPE STRING NOT NULL,
-	IS_DEFERRABLE STRING NOT NULL,
+	CONSTRAINT_SCHEMA  STRING NOT NULL,
+	CONSTRAINT_NAME    STRING NOT NULL,
+	TABLE_CATALOG      STRING NOT NULL,
+	TABLE_SCHEMA       STRING NOT NULL,
+	TABLE_NAME         STRING NOT NULL,
+	CONSTRAINT_TYPE    STRING NOT NULL,
+	IS_DEFERRABLE      STRING NOT NULL,
 	INITIALLY_DEFERRED STRING NOT NULL
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 			db *sqlbase.DatabaseDescriptor,
+			scName string,
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			info, err := table.GetConstraintInfoWithLookup(tableLookup.getTableByID)
 			if err != nil {
 				return err
 			}
 
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
+			tbNameStr := tree.NewDString(table.Name)
+
 			for name, c := range info {
 				if err := addRow(
-					defString,                       // constraint_catalog
-					tree.NewDString(db.Name),        // constraint_schema
+					dbNameStr,                       // constraint_catalog
+					scNameStr,                       // constraint_schema
 					tree.NewDString(name),           // constraint_name
-					defString,                       // table_catalog
-					tree.NewDString(db.Name),        // table_schema
-					tree.NewDString(table.Name),     // table_name
+					dbNameStr,                       // table_catalog
+					scNameStr,                       // table_schema
+					tbNameStr,                       // table_name
 					tree.NewDString(string(c.Kind)), // constraint_type
 					yesOrNoDatum(false),             // is_deferrable
 					yesOrNoDatum(false),             // initially_deferred
@@ -767,22 +795,34 @@ CREATE TABLE information_schema.table_constraints (
 var informationSchemaUserPrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.user_privileges (
-	GRANTEE STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
+	GRANTEE        STRING NOT NULL,
+	TABLE_CATALOG  STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING
+	IS_GRANTABLE   STRING
 );`,
-	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
-		for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
-			grantee := tree.NewDString(u)
-			for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
-				if err := addRow(
-					grantee,            // grantee
-					defString,          // table_catalog
-					tree.NewDString(p), // privilege_type
-					tree.DNull,         // is_grantable
-				); err != nil {
-					return err
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
+		if err != nil {
+			return err
+		}
+		for _, desc := range descs {
+			dbDesc, ok := desc.(*DatabaseDescriptor)
+			if !ok || (prefix != nil && dbDesc.ID != prefix.ID) || !userCanSeeDatabase(ctx, p, dbDesc) {
+				continue
+			}
+
+			dbNameStr := tree.NewDString(dbDesc.Name)
+			for _, u := range []string{security.RootUser, sqlbase.AdminRole} {
+				grantee := tree.NewDString(u)
+				for _, p := range privilege.List(privilege.ByValue[:]).SortedNames() {
+					if err := addRow(
+						grantee,            // grantee
+						dbNameStr,          // table_catalog
+						tree.NewDString(p), // privilege_type
+						tree.DNull,         // is_grantable
+					); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -795,13 +835,13 @@ CREATE TABLE information_schema.user_privileges (
 var informationSchemaTablePrivileges = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.table_privileges (
-	GRANTOR STRING,
-	GRANTEE STRING NOT NULL,
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
+	GRANTOR        STRING,
+	GRANTEE        STRING NOT NULL,
+	TABLE_CATALOG  STRING NOT NULL,
+	TABLE_SCHEMA   STRING NOT NULL,
+	TABLE_NAME     STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE STRING,
+	IS_GRANTABLE   STRING,
 	WITH_HIERARCHY STRING
 );
 `,
@@ -810,27 +850,31 @@ CREATE TABLE information_schema.table_privileges (
 
 // populateTablePrivileges is used to populate both table_privileges and role_table_grants.
 func populateTablePrivileges(
-	ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error,
+	ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error,
 ) error {
-	return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-		for _, u := range table.Privileges.Show() {
-			for _, priv := range u.Privileges {
-				if err := addRow(
-					tree.DNull,                  // grantor
-					tree.NewDString(u.User),     // grantee
-					defString,                   // table_catalog
-					tree.NewDString(db.Name),    // table_schema
-					tree.NewDString(table.Name), // table_name
-					tree.NewDString(priv),       // privilege_type
-					tree.DNull,                  // is_grantable
-					tree.DNull,                  // with_hierarchy
-				); err != nil {
-					return err
+	return forEachTableDesc(ctx, p, prefix,
+		func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			dbNameStr := tree.NewDString(db.Name)
+			scNameStr := tree.NewDString(scName)
+			tbNameStr := tree.NewDString(table.Name)
+			for _, u := range table.Privileges.Show() {
+				for _, priv := range u.Privileges {
+					if err := addRow(
+						tree.DNull,              // grantor
+						tree.NewDString(u.User), // grantee
+						dbNameStr,               // table_catalog
+						scNameStr,               // table_schema
+						tbNameStr,               // table_name
+						tree.NewDString(priv),   // privilege_type
+						tree.DNull,              // is_grantable
+						tree.DNull,              // with_hierarchy
+					); err != nil {
+						return err
+					}
 				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 }
 
 var (
@@ -845,30 +889,34 @@ var informationSchemaTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.tables (
 	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA STRING NOT NULL,
-	TABLE_NAME STRING NOT NULL,
-	TABLE_TYPE STRING NOT NULL,
-	VERSION INT
+	TABLE_SCHEMA  STRING NOT NULL,
+	TABLE_NAME    STRING NOT NULL,
+	TABLE_TYPE    STRING NOT NULL,
+	VERSION       INT
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			if table.IsSequence() {
-				return nil
-			}
-			tableType := tableTypeBaseTable
-			if isVirtualDescriptor(table) {
-				tableType = tableTypeSystemView
-			} else if table.IsView() {
-				tableType = tableTypeView
-			}
-			return addRow(
-				defString,                   // table_catalog
-				tree.NewDString(db.Name),    // table_schema
-				tree.NewDString(table.Name), // table_name
-				tableType,                   // table_type
-				tree.NewDInt(tree.DInt(table.Version)), // version
-			)
-		})
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix,
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				if table.IsSequence() {
+					return nil
+				}
+				tableType := tableTypeBaseTable
+				if isVirtualDescriptor(table) {
+					tableType = tableTypeSystemView
+				} else if table.IsView() {
+					tableType = tableTypeView
+				}
+				dbNameStr := tree.NewDString(db.Name)
+				scNameStr := tree.NewDString(scName)
+				tbNameStr := tree.NewDString(table.Name)
+				return addRow(
+					dbNameStr, // table_catalog
+					scNameStr, // table_schema
+					tbNameStr, // table_name
+					tableType, // table_type
+					tree.NewDInt(tree.DInt(table.Version)), // version
+				)
+			})
 	},
 }
 
@@ -877,43 +925,44 @@ CREATE TABLE information_schema.tables (
 var informationSchemaViewsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.views (
-    TABLE_CATALOG STRING NOT NULL,
-    TABLE_SCHEMA STRING NOT NULL,
-    TABLE_NAME STRING NOT NULL,
-    VIEW_DEFINITION STRING NOT NULL,
-    CHECK_OPTION STRING,
-    IS_UPDATABLE STRING,
-    IS_INSERTABLE_INTO STRING,
-    IS_TRIGGER_UPDATABLE STRING,
-    IS_TRIGGER_DELETABLE STRING,
+    TABLE_CATALOG              STRING NOT NULL,
+    TABLE_SCHEMA               STRING NOT NULL,
+    TABLE_NAME                 STRING NOT NULL,
+    VIEW_DEFINITION            STRING NOT NULL,
+    CHECK_OPTION               STRING,
+    IS_UPDATABLE               STRING,
+    IS_INSERTABLE_INTO         STRING,
+    IS_TRIGGER_UPDATABLE       STRING,
+    IS_TRIGGER_DELETABLE       STRING,
     IS_TRIGGER_INSERTABLE_INTO STRING
 );`,
-	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
-		return forEachTableDesc(ctx, p, prefix, func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			if !table.IsView() {
-				return nil
-			}
-			// Note that the view query printed will not include any column aliases
-			// specified outside the initial view query into the definition returned,
-			// unlike Postgres. For example, for the view created via
-			//  `CREATE VIEW (a) AS SELECT b FROM foo`
-			// we'll only print `SELECT b FROM foo` as the view definition here,
-			// while Postgres would more accurately print `SELECT b AS a FROM foo`.
-			// TODO(a-robinson): Insert column aliases into view query once we
-			// have a semantic query representation to work with (#10083).
-			return addRow(
-				defString,                        // table_catalog
-				tree.NewDString(db.Name),         // table_schema
-				tree.NewDString(table.Name),      // table_name
-				tree.NewDString(table.ViewQuery), // view_definition
-				tree.DNull,                       // check_option
-				tree.DNull,                       // is_updatable
-				tree.DNull,                       // is_insertable_into
-				tree.DNull,                       // is_trigger_updatable
-				tree.DNull,                       // is_trigger_deletable
-				tree.DNull,                       // is_trigger_insertable_into
-			)
-		})
+	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		return forEachTableDesc(ctx, p, prefix,
+			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+				if !table.IsView() {
+					return nil
+				}
+				// Note that the view query printed will not include any column aliases
+				// specified outside the initial view query into the definition returned,
+				// unlike Postgres. For example, for the view created via
+				//  `CREATE VIEW (a) AS SELECT b FROM foo`
+				// we'll only print `SELECT b FROM foo` as the view definition here,
+				// while Postgres would more accurately print `SELECT b AS a FROM foo`.
+				// TODO(a-robinson): Insert column aliases into view query once we
+				// have a semantic query representation to work with (#10083).
+				return addRow(
+					tree.NewDString(db.Name),         // table_catalog
+					tree.NewDString(scName),          // table_schema
+					tree.NewDString(table.Name),      // table_name
+					tree.NewDString(table.ViewQuery), // view_definition
+					tree.DNull,                       // check_option
+					tree.DNull,                       // is_updatable
+					tree.DNull,                       // is_insertable_into
+					tree.DNull,                       // is_trigger_updatable
+					tree.DNull,                       // is_trigger_deletable
+					tree.DNull,                       // is_trigger_insertable_into
+				)
+			})
 	},
 }
 
@@ -925,13 +974,33 @@ func (dbs sortedDBDescs) Len() int           { return len(dbs) }
 func (dbs sortedDBDescs) Swap(i, j int)      { dbs[i], dbs[j] = dbs[j], dbs[i] }
 func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name }
 
+// forEachSchemaName iterates over the physical and virtual schemas.
+func forEachSchemaName(
+	ctx context.Context,
+	p *planner,
+	db *sqlbase.DatabaseDescriptor,
+	fn func(*sqlbase.DatabaseDescriptor, string) error,
+) error {
+	scNames := []string{string(tree.PublicSchemaName)}
+	// Handle virtual schemas.
+	for _, schema := range p.getVirtualTabler().getEntries() {
+		scNames = append(scNames, schema.desc.Name)
+	}
+	sort.Strings(scNames)
+	for _, sc := range scNames {
+		if err := fn(db, sc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // forEachTableDesc retrieves all database descriptors and iterates through them in
 // lexicographical order with respect to their name. For each database, the function
 // will call fn with its descriptor.
 func forEachDatabaseDesc(
-	ctx context.Context, p *planner, fn func(*sqlbase.DatabaseDescriptor) error,
+	ctx context.Context, p *planner, prefix *DatabaseDescriptor, fn func(*sqlbase.DatabaseDescriptor) error,
 ) error {
-	// Handle real schemas.
 	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
@@ -940,22 +1009,17 @@ func forEachDatabaseDesc(
 	// Ignore table descriptors.
 	var dbDescs []*sqlbase.DatabaseDescriptor
 	for _, desc := range descs {
-		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
+		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok &&
+			(prefix == nil || prefix.ID != dbDesc.ID) &&
+			userCanSeeDatabase(ctx, p, dbDesc) {
 			dbDescs = append(dbDescs, dbDesc)
 		}
 	}
 
-	// Handle virtual schemas.
-	for _, schema := range p.getVirtualTabler().getEntries() {
-		dbDescs = append(dbDescs, schema.desc)
-	}
-
 	sort.Sort(sortedDBDescs(dbDescs))
 	for _, db := range dbDescs {
-		if userCanSeeDatabase(ctx, p, db) {
-			if err := fn(db); err != nil {
-				return err
-			}
+		if err := fn(db); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -974,15 +1038,16 @@ func forEachDatabaseDesc(
 func forEachTableDesc(
 	ctx context.Context,
 	p *planner,
-	prefix string,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
+	prefix *DatabaseDescriptor,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
 ) error {
 	return forEachTableDescWithTableLookup(ctx, p, prefix, func(
 		db *sqlbase.DatabaseDescriptor,
+		scName string,
 		table *sqlbase.TableDescriptor,
 		_ tableLookupFn,
 	) error {
-		return fn(db, table)
+		return fn(db, scName, table)
 	})
 }
 
@@ -991,42 +1056,22 @@ func forEachTableDesc(
 func forEachTableDescAll(
 	ctx context.Context,
 	p *planner,
-	prefix string,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) error,
+	db *DatabaseDescriptor,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor) error,
 ) error {
-	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, true /* allowAdding */, func(
+	return forEachTableDescWithTableLookupInternal(ctx, p, db, true /* allowAdding */, func(
 		db *sqlbase.DatabaseDescriptor,
+		scName string,
 		table *sqlbase.TableDescriptor,
 		_ tableLookupFn,
 	) error {
-		return fn(db, table)
+		return fn(db, scName, table)
 	})
 }
 
 // tableLookupFn can be used to retrieve a table descriptor and its corresponding
-// database descriptor using the table's ID. Both descriptors will be nil if a
-// table with the provided ID was not found.
-type tableLookupFn func(tableID sqlbase.ID) (*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor)
-
-func (fn tableLookupFn) tableOrErr(id sqlbase.ID) (*sqlbase.TableDescriptor, error) {
-	if _, t := fn(id); t != nil {
-		return t, nil
-	}
-	return nil, errors.Errorf("could not find referenced table with ID %v", id)
-}
-
-// isSystemDatabaseName returns true if the input name is not a user db name.
-func isSystemDatabaseName(name string) bool {
-	switch name {
-	case informationSchemaName:
-	case pgCatalogName:
-	case sqlbase.SystemDB.Name:
-	case crdbInternalName:
-	default:
-		return false
-	}
-	return true
-}
+// database descriptor using the table's ID.
+type tableLookupFn = *internalLookupCtx
 
 // forEachTableDescWithTableLookup acts like forEachTableDesc, except it also provides a
 // tableLookupFn when calling fn to allow callers to lookup fetched table descriptors
@@ -1040,10 +1085,49 @@ func isSystemDatabaseName(name string) bool {
 func forEachTableDescWithTableLookup(
 	ctx context.Context,
 	p *planner,
-	prefix string,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
+	prefix *DatabaseDescriptor,
+	fn func(*sqlbase.DatabaseDescriptor, string, *sqlbase.TableDescriptor, tableLookupFn) error,
 ) error {
 	return forEachTableDescWithTableLookupInternal(ctx, p, prefix, false /* allowAdding */, fn)
+}
+
+type dbDescTables struct {
+	desc        *DatabaseDescriptor
+	schemaNames []string
+	schemas     map[string]dbSchema
+}
+
+type dbSchema struct {
+	tableNames []string
+	tables     map[string]*sqlbase.TableDescriptor
+}
+
+func makeDbSchema() dbSchema {
+	return dbSchema{
+		tables: make(map[string]*sqlbase.TableDescriptor),
+	}
+}
+
+func makeDbDescTables(ctx context.Context, p *planner, db *DatabaseDescriptor) dbDescTables {
+	d := dbDescTables{
+		desc:        db,
+		schemaNames: []string{tree.PublicSchema},
+		schemas:     map[string]dbSchema{tree.PublicSchema: makeDbSchema()},
+	}
+
+	// Populate the virtual schemas.
+	vt := p.getVirtualTabler()
+	for virtSchemaName, sEntry := range vt.getEntries() {
+		s := makeDbSchema()
+		for virtTableName, tEntry := range sEntry.tables {
+			s.tableNames = append(s.tableNames, virtTableName)
+			s.tables[virtTableName] = tEntry.desc
+		}
+		d.schemas[virtSchemaName] = s
+		d.schemaNames = append(d.schemaNames, virtSchemaName)
+	}
+	sort.Strings(d.schemaNames)
+	return d
 }
 
 // forEachTableDescWithTableLookupInternal is the logic that supports
@@ -1054,104 +1138,42 @@ func forEachTableDescWithTableLookup(
 func forEachTableDescWithTableLookupInternal(
 	ctx context.Context,
 	p *planner,
-	prefix string,
+	prefix *DatabaseDescriptor,
 	allowAdding bool,
-	fn func(*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor, tableLookupFn) error,
+	fn func(*DatabaseDescriptor, string, *TableDescriptor, tableLookupFn) error,
 ) error {
-	type dbDescTables struct {
-		desc       *sqlbase.DatabaseDescriptor
-		tables     map[string]*sqlbase.TableDescriptor
-		tablesByID map[sqlbase.ID]*sqlbase.TableDescriptor
-	}
-	databases := make(map[string]dbDescTables)
-
-	// Handle real schemas.
 	descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 	if err != nil {
 		return err
 	}
-	dbIDsToName := make(map[sqlbase.ID]string)
-	// First, iterate through all database descriptors, constructing dbDescTables
-	// objects and populating a mapping from sqlbase.ID to database name.
-	for _, desc := range descs {
-		if db, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
-			dbIDsToName[db.GetID()] = db.GetName()
-			databases[db.GetName()] = dbDescTables{
-				desc:       db,
-				tables:     make(map[string]*sqlbase.TableDescriptor),
-				tablesByID: make(map[sqlbase.ID]*sqlbase.TableDescriptor),
-			}
-		}
-	}
-	// Next, iterate through all table descriptors, using the mapping from sqlbase.ID
-	// to database name to add descriptors to a dbDescTables' tables map.
-	for _, desc := range descs {
-		if table, ok := desc.(*sqlbase.TableDescriptor); ok && !table.Dropped() {
-			dbName, ok := dbIDsToName[table.GetParentID()]
-			if !ok {
-				// Contrary to `crdb_internal.tables`, which for debugging
-				// purposes also displays dropped tables which miss a parent
-				// database (because the parent descriptor has already been
-				// deleted), information_schema.tables is specified to only
-				// report usable tables, so we exclude dropped tables and the
-				// parent database must always exist.
-				return errors.Errorf("no database with ID %d found", table.GetParentID())
-			}
-			dbTables := databases[dbName]
-			dbTables.tables[table.Name] = table
-			dbTables.tablesByID[table.ID] = table
-		}
-	}
+	lCtx := newInternalLookupCtx(descs, prefix)
 
-	// Handle virtual schemas.
-	for dbName, schema := range p.getVirtualTabler().getEntries() {
-		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
-		for tableName, entry := range schema.tables {
-			dbTables[tableName] = entry.desc
-		}
-		databases[dbName] = dbDescTables{
-			desc:   schema.desc,
-			tables: dbTables,
-		}
-	}
-
-	// Create table lookup function, which some callers of this function, like those
-	// dealing with foreign keys, will need.
-	tableLookup := func(id sqlbase.ID) (*sqlbase.DatabaseDescriptor, *sqlbase.TableDescriptor) {
-		for _, db := range databases {
-			table, ok := db.tablesByID[id]
-			if ok {
-				return db.desc, table
-			}
-		}
-		return nil, nil
-	}
-
-	// Below we use the same trick twice of sorting a slice of strings lexicographically
-	// and iterating through these strings to index into a map. Effectively, this allows
-	// us to iterate through a map in sorted order.
-	dbNames := make([]string, 0, len(databases))
-	for dbName := range databases {
-		dbNames = append(dbNames, dbName)
-	}
-	sort.Strings(dbNames)
-	for _, dbName := range dbNames {
-		if !isDatabaseVisible(dbName, prefix, p.SessionData().User) {
-			continue
-		}
-		db := databases[dbName]
-		dbTableNames := make([]string, 0, len(db.tables))
-		for tableName := range db.tables {
-			dbTableNames = append(dbTableNames, tableName)
-		}
-		sort.Strings(dbTableNames)
-		for _, tableName := range dbTableNames {
-			tableDesc := db.tables[tableName]
-			if userCanSeeTable(ctx, p, tableDesc, allowAdding) {
-				if err := fn(db.desc, tableDesc, tableLookup); err != nil {
+	// Virtual descriptors first.
+	vt := p.getVirtualTabler()
+	vEntries := vt.getEntries()
+	vSchemaNames := vt.getSchemaNames()
+	for _, dbID := range lCtx.dbIDs {
+		dbDesc := lCtx.dbDescs[dbID]
+		for _, virtSchemaName := range vSchemaNames {
+			e := vEntries[virtSchemaName]
+			for _, tName := range e.orderedTableNames {
+				te := e.tables[tName]
+				if err := fn(dbDesc, virtSchemaName, te.desc, lCtx); err != nil {
 					return err
 				}
 			}
+		}
+	}
+
+	// Physical descriptors next.
+	for _, tbID := range lCtx.tbIDs {
+		table := lCtx.tbDescs[tbID]
+		dbDesc, parentExists := lCtx.dbDescs[table.GetParentID()]
+		if table.Dropped() || !userCanSeeTable(ctx, p, table, allowAdding) || !parentExists {
+			continue
+		}
+		if err := fn(dbDesc, tree.PublicSchema, table, lCtx); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1267,9 +1289,10 @@ func userCanSeeDatabase(ctx context.Context, p *planner, db *sqlbase.DatabaseDes
 func userCanSeeTable(
 	ctx context.Context, p *planner, table *sqlbase.TableDescriptor, allowAdding bool,
 ) bool {
-	if !(table.State == sqlbase.TableDescriptor_PUBLIC ||
-		(allowAdding && table.State == sqlbase.TableDescriptor_ADD)) {
-		return false
-	}
-	return p.CheckAnyPrivilege(ctx, table) == nil
+	return tableIsVisible(table, allowAdding) && p.CheckAnyPrivilege(ctx, table) == nil
+}
+
+func tableIsVisible(table *TableDescriptor, allowAdding bool) bool {
+	return table.State == sqlbase.TableDescriptor_PUBLIC ||
+		(allowAdding && table.State == sqlbase.TableDescriptor_ADD)
 }

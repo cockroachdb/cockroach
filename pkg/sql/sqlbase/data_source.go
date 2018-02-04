@@ -63,7 +63,7 @@ import (
 // is implemented as follows:
 //
 // - DataSourceInfo provides column metadata for exactly one data source;
-// - MultiSourceInfo is an array of one or more DataSourceInfo
+// - MultiSourceInfo contains an array of one or more DataSourceInfo
 // - the index in IndexedVars points to one of the columns in the
 //   logical concatenation of all items in the MultiSourceInfo;
 // - IndexedVarResolver (select_name_resolution.go) is tasked with
@@ -226,8 +226,14 @@ func NewSourceInfoForSingleTable(tn tree.TableName, columns ResultColumns) *Data
 	}
 }
 
-// MultiSourceInfo is an array of one or more DataSourceInfo.
+// MultiSourceInfo is a list of *DataSourceInfo.
 type MultiSourceInfo []*DataSourceInfo
+
+// MakeMultiSourceInfo constructs a MultiSourceInfo for the
+// given DataSourceInfos.
+func MakeMultiSourceInfo(args ...*DataSourceInfo) MultiSourceInfo {
+	return MultiSourceInfo(args)
+}
 
 // findTableAlias returns the first table alias providing the column
 // index given as argument. The index must be valid.
@@ -248,12 +254,7 @@ type varFormatter struct {
 // Format implements the NodeFormatter interface.
 func (c *varFormatter) Format(ctx *tree.FmtCtx) {
 	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.TableName != "" {
-		if c.TableName.SchemaName != "" {
-			ctx.FormatNode(&c.TableName.SchemaName)
-			ctx.WriteByte('.')
-		}
-
-		ctx.FormatNode(&c.TableName.TableName)
+		ctx.FormatNode(&c.TableName)
 		ctx.WriteByte('.')
 	}
 	ctx.FormatNode(&c.ColumnName)

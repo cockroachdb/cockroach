@@ -723,7 +723,7 @@ func TestImportStmt(t *testing.T) {
 
 			jobPrefix := `IMPORT TABLE `
 			if !hasTransform {
-				jobPrefix += intodb + "."
+				jobPrefix += intodb + ".public."
 			}
 			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
 

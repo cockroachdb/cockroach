@@ -47,7 +47,8 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), userTableName)
+	tDesc, _, err := getTableDesc(p.PhysicalSchemaAccessor(), userTableName,
+		p.objectLookupFlagsExplicit(ctx, true /*required*/, false /*allowAdding*/))
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	defer f.Close()
 
-	if err := forEachDatabaseDesc(params.ctx, params.p,
+	if err := forEachDatabaseDesc(params.ctx, params.p, nil, /*prefix*/
 		func(db *sqlbase.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
@@ -107,27 +108,37 @@ func (n *DropUserNode) startExec(params runParams) error {
 						f.WriteString(", ")
 					}
 					f.FormatNameP(&db.Name)
+					break
 				}
 			}
 			return nil
 		}); err != nil {
 		return err
 	}
-	if err := forEachTableDescAll(params.ctx, params.p, "",
-		func(db *sqlbase.DatabaseDescriptor, table *sqlbase.TableDescriptor) error {
-			for _, u := range table.GetPrivileges().Users {
-				if _, ok := userNames[u.User]; ok {
-					if f.Len() > 0 {
-						f.WriteString(", ")
-					}
-					tn := tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name))
-					f.FormatNode(&tn)
-				}
-			}
-			return nil
-		}); err != nil {
+
+	descs, err := params.p.Tables().getAllDescriptors(params.ctx, params.p.txn)
+	if err != nil {
 		return err
 	}
+	lCtx := newInternalLookupCtx(descs, nil /*prefix - we want all descriptors */)
+	for _, tbID := range lCtx.tbIDs {
+		table := lCtx.tbDescs[tbID]
+		if !tableIsVisible(table, true /*allowAdding*/) {
+			continue
+		}
+		for _, u := range table.GetPrivileges().Users {
+			if _, ok := userNames[u.User]; ok {
+				if f.Len() > 0 {
+					f.WriteString(", ")
+				}
+				parentName := lCtx.getParentName(table)
+				tn := tree.MakeTableName(tree.Name(parentName), tree.Name(table.Name))
+				f.FormatNode(&tn)
+				break
+			}
+		}
+	}
+
 	if f.Len() > 0 {
 		fnl := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 		defer fnl.Close()

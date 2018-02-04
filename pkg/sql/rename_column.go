@@ -33,21 +33,16 @@ var errEmptyColumnName = errors.New("empty column name")
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planNode, error) {
 	// Check if table exists.
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
-	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := ResolveExistingObject(ctx, p, tn, !n.IfExists, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
 	if tableDesc == nil {
-		if n.IfExists {
-			// Noop.
-			return &zeroNode{}, nil
-		}
-		// Key does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("table %q does not exist", tn.Table())
+		return &zeroNode{}, nil
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {

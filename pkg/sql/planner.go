@@ -42,9 +42,6 @@ type extendedEvalContext struct {
 
 	SessionMutator sessionDataMutator
 
-	// VirtualSchemas can be used to access virtual tables.
-	VirtualSchemas VirtualTabler
-
 	// Tracing provides access to the session's tracing interface. Changes to the
 	// tracing state should be done through the sessionDataMutator.
 	Tracing *SessionTracing
@@ -56,16 +53,36 @@ type extendedEvalContext struct {
 	// contribute.
 	MemMetrics *MemoryMetrics
 
-	// Tables points to the Session's table collection.
-	Tables *TableCollection
-
 	ExecCfg *ExecutorConfig
 
 	DistSQLPlanner *DistSQLPlanner
 
 	TxnModesSetter txnModesSetter
 
+	// VirtualSchemas can be used to access virtual tables.
+	VirtualSchemas VirtualTabler
+
+	// Tables points to the Session's table collection (& cache).
+	Tables *TableCollection
+
 	SchemaChangers *schemaChangerCollection
+
+	schemaAccessors *schemaInterface
+}
+
+// schemaInterface provides access to the database and table descriptors.
+// See schema_accessors.go.
+type schemaInterface struct {
+	physical struct {
+		DatabaseLister
+		DatabaseAccessor
+		ObjectAccessor
+	}
+	logical struct {
+		DatabaseAccessor
+		DatabaseLister
+		ObjectAccessor
+	}
 }
 
 // planner is the centerpiece of SQL statement execution combining session
@@ -118,6 +135,11 @@ type planner struct {
 	// the txn isolation level is SERIALIZABLE, and reject any update
 	// if it is SNAPSHOT.
 	avoidCachedDescriptors bool
+
+	// revealNewDescriptors, when true, instructs the name resolution
+	// code to also use descriptors in state ADD.
+	// Used by e.g. multiple DDL inside transactions.
+	revealNewDescriptors bool
 
 	// If set, the planner should skip checking for the SELECT privilege when
 	// initializing plans to read from a table. This should be used with care.
@@ -187,8 +209,11 @@ func newInternalPlanner(
 	// looks in the session for the current database.
 	ctx := log.WithLogTagStr(context.Background(), opName, "")
 
+	curDb := "" // FIXME XXX: change this to system later
+
 	s := &Session{
 		data: sessiondata.SessionData{
+			Database: curDb,
 			Location: time.UTC,
 			User:     user,
 		},
@@ -202,7 +227,7 @@ func newInternalPlanner(
 		data: &s.data,
 		defaults: sessionDefaults{
 			applicationName: "crdb-internal",
-			database:        "",
+			database:        "system",
 		},
 		settings:       nil,
 		curTxnReadOnly: &s.TxnState.readOnly,
@@ -248,8 +273,24 @@ func newInternalPlanner(
 	}
 }
 
+func (p *planner) PhysicalSchemaAccessor() SchemaAccessor {
+	return &p.extendedEvalCtx.schemaAccessors.physical
+}
+
+func (p *planner) LogicalSchemaAccessor() SchemaAccessor {
+	return &p.extendedEvalCtx.schemaAccessors.logical
+}
+
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 	return &p.extendedEvalCtx
+}
+
+func (p *planner) CurrentDatabase() string {
+	return p.SessionData().Database
+}
+
+func (p *planner) CurrentSearchPath() sessiondata.SearchPath {
+	return p.SessionData().SearchPath
 }
 
 // EvalContext() provides convenient access to the planner's EvalContext().
@@ -319,11 +360,7 @@ func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
 func (p *planner) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
-	tn, err := parser.ParseTableName(sql)
-	if err != nil {
-		return nil, err
-	}
-	return p.QualifyWithDatabase(ctx, tn)
+	return parser.ParseTableName(sql)
 }
 
 // QueryRow implements the parser.EvalPlanner interface.
@@ -348,6 +385,7 @@ func (p *planner) QueryRow(
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
+	log.VEventf(ctx, 2, "internal query: %s", sql)
 	// makeInternalPlan() clobbers p.curplan and the placeholder info
 	// map, so we have to save/restore them here.
 	defer func(psave planTop, pisave tree.PlaceholderInfo) {
@@ -385,6 +423,7 @@ func (p *planner) queryRows(
 // exec executes a SQL query string and returns the number of rows
 // affected.
 func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
+	log.VEventf(ctx, 2, "internal exec: %s", sql)
 	// makeInternalPlan() clobbers p.curplan and the placeholder info
 	// map, so we have to save/restore them here.
 	defer func(psave planTop, pisave tree.PlaceholderInfo) {
@@ -419,22 +458,6 @@ func (p *planner) lookupFKTable(
 		return sqlbase.TableLookup{}, err
 	}
 	return sqlbase.TableLookup{Table: table}, nil
-}
-
-// isDatabaseVisible returns true if the given database is visible
-// given the provided prefix.
-// An empty prefix makes all databases visible.
-// System databases are always visible.
-// Otherwise only the database with the same name as the prefix is available.
-func isDatabaseVisible(dbName, prefix, user string) bool {
-	if isSystemDatabaseName(dbName) {
-		return true
-	} else if dbName == prefix {
-		return true
-	} else if prefix == "" {
-		return true
-	}
-	return false
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

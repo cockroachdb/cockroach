@@ -362,7 +362,7 @@ func (p *planner) initFrom(
 		return err
 	}
 	r.source = src
-	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
+	r.sourceInfo = sqlbase.MakeMultiSourceInfo(r.source.info)
 	return nil
 }
 
@@ -423,7 +423,7 @@ func (p *planner) insertRender(
 	}
 	render := &renderNode{
 		source:     src,
-		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+		sourceInfo: sqlbase.MakeMultiSourceInfo(src.info),
 	}
 	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.SourceColumns))
 	if err := p.initTargets(ctx, render,
@@ -444,7 +444,7 @@ func (p *planner) makeTupleRender(
 	// source.
 	r := &renderNode{
 		source:     src,
-		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+		sourceInfo: sqlbase.MakeMultiSourceInfo(src.info),
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 
@@ -587,7 +587,7 @@ func (p *planner) rewriteSRFs(
 	}
 
 	r.source = src
-	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
+	r.sourceInfo = sqlbase.MakeMultiSourceInfo(r.source.info)
 
 	return tree.SelectExpr{Expr: expr}, nil
 }
@@ -771,7 +771,7 @@ func (r *renderNode) colIdxByRenderAlias(
 			return 0, err
 		}
 
-		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Table() == "" {
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Parts[0] == "" {
 			// Look for an output column that matches the name. This
 			// handles cases like:
 			//
