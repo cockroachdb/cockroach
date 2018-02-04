@@ -509,7 +509,7 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 			PortalName:            portalName,
 			Args:                  qargs,
 			ArgFormatCodes:        qArgFormatCodes,
-			ProtocolMeta:          preparedPortalMeta{outFormats: columnFormatCodes},
+			OutFormats:            columnFormatCodes,
 		})
 }
 

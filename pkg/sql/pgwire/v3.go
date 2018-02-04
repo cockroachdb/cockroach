@@ -53,18 +53,6 @@ const (
 // buffer into memory prior to flushing to the client.
 const connResultsBufferSizeBytes = 16 << 10
 
-// preparedStatementMeta is pgwire-specific metadata which is attached to each
-// sql.PreparedStatement on a v3Conn's sql.Session.
-type preparedStatementMeta struct {
-	inTypes []oid.Oid
-}
-
-// preparedPortalMeta is pgwire-specific metadata which is attached to each
-// sql.PreparedPortal on a v3Conn's sql.Session.
-type preparedPortalMeta struct {
-	outFormats []pgwirebase.FormatCode
-}
-
 // readTimeoutConn overloads net.Conn.Read by periodically calling
 // checkExitConds() and aborting the read if an error is returned.
 type readTimeoutConn struct {
@@ -631,7 +619,7 @@ func (c *v3Conn) handleParse(buf *pgwirebase.ReadBuffer) error {
 		}
 	}
 	// Attach pgwire-specific metadata to the PreparedStatement.
-	stmt.ProtocolMeta = preparedStatementMeta{inTypes: inTypes}
+	stmt.InTypes = inTypes
 	c.writeBuf.initMsg(pgwirebase.ServerMsgParseComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
@@ -658,10 +646,9 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer)
 			return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError, "unknown prepared statement %q", name))
 		}
 
-		stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
 		c.writeBuf.initMsg(pgwirebase.ServerMsgParameterDescription)
-		c.writeBuf.putInt16(int16(len(stmtMeta.inTypes)))
-		for _, t := range stmtMeta.inTypes {
+		c.writeBuf.putInt16(int16(len(stmt.InTypes)))
+		for _, t := range stmt.InTypes {
 			c.writeBuf.putInt32(int32(t))
 		}
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
@@ -678,12 +665,10 @@ func (c *v3Conn) handleDescribe(ctx context.Context, buf *pgwirebase.ReadBuffer)
 			return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidCursorNameError, "unknown portal %q", name))
 		}
 
-		portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
-
 		if stmtHasNoData(portal.Stmt.Statement) {
 			return c.sendNoData(c.wr)
 		}
-		return c.sendRowDescription(ctx, portal.Stmt.Columns, portalMeta.outFormats, c.wr)
+		return c.sendRowDescription(ctx, portal.Stmt.Columns, portal.OutFormats, c.wr)
 	default:
 		return errors.Errorf("unknown describe type: %s", typ)
 	}
@@ -730,8 +715,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeInvalidSQLStatementNameError, "unknown prepared statement %q", statementName))
 	}
 
-	stmtMeta := stmt.ProtocolMeta.(preparedStatementMeta)
-	numQArgs := uint16(len(stmtMeta.inTypes))
+	numQArgs := uint16(len(stmt.InTypes))
 	qArgFormatCodes := make([]pgwirebase.FormatCode, numQArgs)
 	// From the docs on number of argument format codes to bind:
 	// This can be zero to indicate that there are no arguments or that the
@@ -776,7 +760,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError, "expected %d arguments, got %d", numQArgs, numValues))
 	}
 	qargs := tree.QueryArguments{}
-	for i, t := range stmtMeta.inTypes {
+	for i, t := range stmt.InTypes {
 		plen, err := buf.GetUint32()
 		if err != nil {
 			return err
@@ -846,8 +830,7 @@ func (c *v3Conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) err
 		log.Infof(ctx, "portal: %q for %q, args %q, formats %q", portalName, stmt.Statement, qargs, columnFormatCodes)
 	}
 
-	// Attach pgwire-specific metadata to the PreparedPortal.
-	portal.ProtocolMeta = preparedPortalMeta{outFormats: columnFormatCodes}
+	portal.OutFormats = columnFormatCodes
 	c.writeBuf.initMsg(pgwirebase.ServerMsgBindComplete)
 	return c.writeBuf.finishMsg(c.wr)
 }
@@ -868,7 +851,6 @@ func (c *v3Conn) handleExecute(buf *pgwirebase.ReadBuffer) error {
 	}
 
 	stmt := portal.Stmt
-	portalMeta := portal.ProtocolMeta.(preparedPortalMeta)
 	pinfo := &tree.PlaceholderInfo{
 		TypeHints: stmt.TypeHints,
 		Types:     stmt.Types,
@@ -876,7 +858,7 @@ func (c *v3Conn) handleExecute(buf *pgwirebase.ReadBuffer) error {
 	}
 
 	tracing.AnnotateTrace()
-	c.streamingState.reset(portalMeta.outFormats, false /* sendDescription */, int(limit))
+	c.streamingState.reset(portal.OutFormats, false /* sendDescription */, int(limit))
 	c.session.ResultsWriter = c
 	err = c.executor.ExecutePreparedStatement(c.session, stmt, pinfo)
 	if err != nil {
