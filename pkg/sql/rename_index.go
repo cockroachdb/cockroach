@@ -31,12 +31,8 @@ var errEmptyIndexName = errors.New("empty index name")
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
-	tn, err := p.expandIndexName(ctx, n.Index, true /* requireTable */)
-	if err != nil {
-		return nil, err
-	}
-
-	tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	defer p.useNewDescriptors()()
+	_, tableDesc, err := expandIndexName(ctx, p, n.Index, true /* requireTable */)
 	if err != nil {
 		return nil, err
 	}

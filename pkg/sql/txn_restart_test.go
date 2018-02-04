@@ -198,7 +198,7 @@ func checkRestarts(t *testing.T, magicVals *filterVals) {
 // Note that transaction cannot be aborted using an injected error, since we
 // want the pusher to clean up the intents of the pushee.
 //
-// The aborter only works with INSERT statements operating on the table t.test
+// The aborter only works with INSERT statements operating on the table t.public.test
 // defined as:
 //	`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT)`
 // The TxnAborter runs transactions deleting the row for the `k` that the

@@ -1727,7 +1727,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
 
-		// Verify that t.test has the expected data. Read the table data while
+		// Verify that t.public.test has the expected data. Read the table data while
 		// ensuring that the correct table lease is in use.
 		var err error
 		rows, err = sqlDB.Query(`SELECT * from t.test`)

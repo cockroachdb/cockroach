@@ -98,7 +98,7 @@ func newCopyMachine(
 		retErr = cleanup(ctx, retErr)
 	}()
 
-	tn, err := n.Table.NormalizeWithDatabaseName(c.p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}

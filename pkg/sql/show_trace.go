@@ -296,7 +296,7 @@ func (n *showTraceNode) Close(ctx context.Context) {
 	}
 }
 
-var sessionTraceTableName = tree.MakeTableName("crdb_internal", "session_trace")
+var sessionTraceTableName = tree.MakeTableNameWithSchema("", "crdb_internal", "session_trace")
 
 var errTracingAlreadyEnabled = errors.New(
 	"cannot run SHOW TRACE FOR on statement while session tracing is enabled" +

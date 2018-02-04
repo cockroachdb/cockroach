@@ -37,12 +37,13 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+	defer p.useNewDescriptors()()
+	desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

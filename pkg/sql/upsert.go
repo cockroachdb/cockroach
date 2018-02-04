@@ -132,7 +132,7 @@ func (p *planner) makeUpsertHelper(
 
 	var evalExprs []tree.TypedExpr
 	ivarHelper := tree.MakeIndexedVarHelper(helper, len(sourceInfo.SourceColumns)+len(excludedSourceInfo.SourceColumns))
-	sources := sqlbase.MultiSourceInfo{sourceInfo, excludedSourceInfo}
+	sources := sqlbase.MakeMultiSourceInfo(sourceInfo, excludedSourceInfo)
 	for i, expr := range untupledExprs {
 		typ := updateCols[i].Type.ToDatumType()
 		normExpr, err := p.analyzeExpr(ctx, expr, sources, ivarHelper, typ, true, "ON CONFLICT")
@@ -258,10 +258,7 @@ func upsertExprsAndIndex(
 		for _, c := range insertCols {
 			if _, ok := indexColSet[c.ID]; !ok {
 				n := tree.Name(c.Name)
-				expr := &tree.ColumnItem{
-					TableName:  upsertExcludedTable,
-					ColumnName: n,
-				}
+				expr := tree.NewColumnItem(&upsertExcludedTable, n)
 				updateExprs = append(updateExprs, &tree.UpdateExpr{Names: tree.NameList{n}, Expr: expr})
 			}
 		}

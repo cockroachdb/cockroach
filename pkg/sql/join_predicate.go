@@ -376,3 +376,5 @@ func pickUsingColumn(
 	}
 	return idx, cols[idx].Typ, nil
 }
+
+const invalidColIdx = -1

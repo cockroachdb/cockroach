@@ -32,52 +32,35 @@ import (
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
-	oldTn, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
+	oldTn, err := n.Name.Normalize()
 	if err != nil {
 		return nil, err
 	}
-	newTn, err := n.NewName.NormalizeWithDatabaseName(p.SessionData().Database)
-	if err != nil {
-		return nil, err
-	}
-
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), oldTn.Schema())
+	newTn, err := n.NewName.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if source table, view or sequence exists.
-	// Note that Postgres's behavior here is a little lenient - it'll let you
-	// modify views by running ALTER TABLE, but won't let you modify tables
-	// by running ALTER VIEW. Our behavior is strict for now, but can be
-	// made more lenient down the road if needed.
-	var tableDesc *sqlbase.TableDescriptor
+	toRequire := requireTableOrViewDesc
 	if n.IsView {
-		tableDesc, err = getViewDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
-		if err != nil {
-			return nil, err
-		}
+		toRequire = requireViewDesc
 	} else if n.IsSequence {
-		tableDesc, err = getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
-		if err != nil {
-			return nil, err
-		}
+		toRequire = requireSequenceDesc
 	}
 
-	if tableDesc == nil {
-		if n.IfExists {
-			// Noop.
-			return &zeroNode{}, nil
-		}
-		// Key does not exist, but we want it to: error out.
-		return nil, sqlbase.NewUndefinedRelationError(oldTn)
+	defer p.useNewDescriptors()()
+	tableDesc, err := ResolveExistingObject(ctx, p, oldTn, !n.IfExists, toRequire)
+	if err != nil {
+		return nil, err
 	}
+	if tableDesc == nil {
+		// Noop.
+		return &zeroNode{}, nil
+	}
+
 	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
+		// TODO(vivek): if we don't want non-public tables, we can also
+		// remove p.useNewDescriptors()() above.
 		return nil, sqlbase.NewUndefinedRelationError(oldTn)
 	}
 
@@ -95,7 +78,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// Check if target database exists.
-	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), newTn.Schema())
+	targetDbDesc, err := ResolveTargetObject(ctx, p, newTn)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +88,9 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// oldTn and newTn are already normalized, so we can compare directly here.
-	if oldTn.Schema() == newTn.Schema() && oldTn.Table() == newTn.Table() {
+	if oldTn.Catalog() == newTn.Catalog() &&
+		oldTn.Schema() == newTn.Schema() &&
+		oldTn.Table() == newTn.Table() {
 		// Noop.
 		return &zeroNode{}, nil
 	}
@@ -127,7 +112,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return nil, err
 	}
 	renameDetails := sqlbase.TableDescriptor_NameInfo{
-		ParentID: dbDesc.ID,
+		ParentID: tableDesc.ParentID,
 		Name:     oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeTableDesc(ctx, tableDesc); err != nil {

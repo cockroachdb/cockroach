@@ -529,10 +529,10 @@ func resolveTargetsToDescriptors(
 	if err != nil {
 		return nil, nil, err
 	}
-	sessionDatabase := p.SessionData().Database
 
 	var matched descriptorsMatched
-	if matched, err = descriptorsMatchingTargets(sessionDatabase, allDescs, targets); err != nil {
+	if matched, err = descriptorsMatchingTargets(ctx,
+		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets); err != nil {
 		return nil, nil, err
 	}
 
@@ -836,12 +836,6 @@ func backupPlanHook(
 				"running BACKUP on a 2.x node requires cluster version >= %s (",
 				cluster.VersionByKey(cluster.VersionClearRange).String(),
 			)
-		}
-
-		if err := backupStmt.Targets.NormalizeTablesWithDatabase(
-			p.SessionData().Database,
-		); err != nil {
-			return err
 		}
 
 		to, err := toFn()
