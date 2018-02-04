@@ -53,7 +53,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		}
 
 		tableDesc, err := MustGetTableOrViewDesc(
-			ctx, p.txn, p.getVirtualTabler(), tn, true, /* allowAdding */
+			ctx, p.txn, tn, true, /* allowAdding */
 		)
 		if err != nil {
 			return nil, err

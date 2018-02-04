@@ -77,8 +77,10 @@ func selectTargets(
 	p sql.PlanHookState, backupDescs []BackupDescriptor, targets tree.TargetList,
 ) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
 	sessionDatabase := p.SessionData().Database
+	sessionSearchPath := p.SessionData().SearchPath
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
-	matched, err := descriptorsMatchingTargets(sessionDatabase, lastBackupDesc.Descriptors, targets)
+	matched, err := descriptorsMatchingTargets(
+		sessionDatabase, sessionSearchPath, lastBackupDesc.Descriptors, targets)
 	if err != nil {
 		return nil, nil, err
 	}

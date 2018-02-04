@@ -15,6 +15,7 @@
 package opt
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -49,6 +50,59 @@ func (s *scope) resolve(expr tree.Expr, desired types.T) tree.TypedExpr {
 	return texpr
 }
 
+// FindSourceMatchingName implements the tree.ColumnItemResolver interface.
+func (s *scope) FindSourceProvidingColumn(
+	_ context.Context, colName tree.Name,
+) (prefix *tree.TableName, srcMeta interface{}, colHint int, err error) {
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			if col.hasColumn("", columnName(colName)) {
+				// TODO(peter): source names in a FROM clause also have a catalog/schema prefix and it matters.
+				return tree.NewUnqualifiedTableName(tree.Name(col.table)), col, col.index, nil
+			}
+		}
+	}
+	return nil, nil, -1, fmt.Errorf("unknown column %s", colName)
+}
+
+// FindSourceMatchingName implements the tree.ColumnItemResolver interface.
+func (s *scope) FindSourceMatchingName(
+	_ context.Context, tn tree.TableName,
+) (res tree.NumResolutionResults, prefix *tree.TableName, srcMeta interface{}, err error) {
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			// TODO(whomever): this improperly disregards the catalog/schema prefix.
+			if col.table == tableName(tn.Table()) {
+				// TODO(whomever): this improperly fails to recognize when a source table
+				// is ambiguous, e.g. SELECT kv.k FROM db1.kv, db2.kv
+				return tree.ExactlyOne, tree.NewUnqualifiedTableName(tree.Name(col.table)), s, nil
+			}
+		}
+	}
+	return tree.NoResults, nil, nil, nil
+}
+
+// Resolve implements the tree.ColumnItemResolver interface.
+func (s *scope) Resolve(
+	_ context.Context, prefix *tree.TableName, srcMeta interface{}, colHint int, colName tree.Name,
+) (interface{}, error) {
+	if colHint >= 0 {
+		// Column was found by FindSourceProvidingColumn above.
+		return srcMeta.(*columnProps), nil
+	}
+	// Otherwise, a table is known but not the column yet.
+	inScope := srcMeta.(*scope)
+	for i := range inScope.cols {
+		col := &s.cols[i]
+		if col.hasColumn(tableName(prefix.Table()), columnName(colName)) {
+			return col, nil
+		}
+	}
+	return nil, fmt.Errorf("unknown column %s", colName)
+}
+
 // VisitPre is part of the tree.Visitor interface.
 // NB: This code is adapted from sql/select_name_resolution.go and
 // sql/subquery.go.
@@ -62,23 +116,11 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		tblName := tableName(t.TableName.Table())
-		colName := columnName(t.ColumnName)
-
-		for ; s != nil; s = s.parent {
-			for i := range s.cols {
-				col := &s.cols[i]
-				if col.hasColumn(tblName, colName) {
-					// TODO(peter): what is this doing?
-					if tblName == "" && col.table != "" {
-						t.TableName.TableName = tree.Name(col.table)
-						t.TableName.ExplicitSchema = false
-					}
-					return false, col
-				}
-			}
+		colI, err := t.Resolve(context.TODO(), s)
+		if err != nil {
+			panic(err)
 		}
-		panic(fmt.Sprintf("unknown column %s", t))
+		return false, colI.(*columnProps)
 
 		// TODO(rytaft): Implement function expressions and subquery replacement.
 	}

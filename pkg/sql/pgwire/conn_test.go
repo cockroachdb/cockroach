@@ -173,6 +173,7 @@ func processPgxStartup(
 			return nil
 		}
 		query := exec.Stmt.String()
+		t.Logf("received query: %s", query)
 		if !strings.HasPrefix(query, "SELECT t.oid") {
 			return nil
 		}

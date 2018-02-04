@@ -37,7 +37,8 @@ type InternalExecutor struct {
 var _ sqlutil.InternalExecutor = &InternalExecutor{}
 
 // ExecuteStatementInTransaction executes the supplied SQL statement as part of
-// the supplied transaction. Statements are currently executed as the root user.
+// the supplied transaction. Statements are currently executed as the root user
+// with the system database as current database.
 func (ie *InternalExecutor) ExecuteStatementInTransaction(
 	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 ) (int, error) {
@@ -138,11 +139,15 @@ func getTableID(ctx context.Context, p *planner, tn *tree.TableName) (sqlbase.ID
 		return virtual.GetID(), nil
 	}
 
+	if tn.SchemaName != tree.PublicSchemaName {
+		return 0, newInvalidSchemaError(tn)
+	}
+
 	txnRunner := func(ctx context.Context, retryable func(ctx context.Context, txn *client.Txn) error) error {
 		return retryable(ctx, p.txn)
 	}
 
-	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Schema())
+	dbID, err := p.Tables().databaseCache.getDatabaseID(ctx, txnRunner, p.getVirtualTabler(), tn.Catalog())
 	if err != nil {
 		return 0, err
 	}

@@ -37,7 +37,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -55,12 +55,12 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	// are currently just stored as strings, they explicitly specify the database
 	// name. Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
+	tbNames, err := getTableNames(ctx, p.txn, dbDesc, true /*explicitSchema*/)
 	if err != nil {
 		return nil, err
 	}
 	for i := range tbNames {
-		tbDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), &tbNames[i])
+		tbDesc, err := getTableOrViewDesc(ctx, p.txn, &tbNames[i])
 		if err != nil {
 			return nil, err
 		}

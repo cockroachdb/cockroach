@@ -37,12 +37,18 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	if err != nil {
 		return nil, err
 	}
+	if oldTn.SchemaName != tree.PublicSchemaName {
+		return nil, newInvalidSchemaError(oldTn)
+	}
 	newTn, err := n.NewName.NormalizeWithDatabaseName(p.SessionData().Database)
 	if err != nil {
 		return nil, err
 	}
+	if newTn.SchemaName != tree.PublicSchemaName {
+		return nil, newInvalidSchemaError(newTn)
+	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), oldTn.Schema())
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, oldTn.Catalog())
 	if err != nil {
 		return nil, err
 	}
@@ -54,17 +60,17 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	// made more lenient down the road if needed.
 	var tableDesc *sqlbase.TableDescriptor
 	if n.IsView {
-		tableDesc, err = getViewDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		tableDesc, err = getViewDesc(ctx, p.txn, oldTn)
 		if err != nil {
 			return nil, err
 		}
 	} else if n.IsSequence {
-		tableDesc, err = getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		tableDesc, err = getSequenceDesc(ctx, p.txn, oldTn)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		tableDesc, err = getTableDesc(ctx, p.txn, p.getVirtualTabler(), oldTn)
+		tableDesc, err = getTableDesc(ctx, p.txn, oldTn)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +102,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// Check if target database exists.
-	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), newTn.Schema())
+	targetDbDesc, err := MustGetDatabaseDesc(ctx, p.txn, newTn.Catalog())
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +112,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	// oldTn and newTn are already normalized, so we can compare directly here.
-	if oldTn.Schema() == newTn.Schema() && oldTn.Table() == newTn.Table() {
+	if oldTn.Catalog() == newTn.Catalog() && oldTn.Table() == newTn.Table() {
 		// Noop.
 		return &zeroNode{}, nil
 	}

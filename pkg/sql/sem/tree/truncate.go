@@ -25,18 +25,18 @@ package tree
 
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
-	Tables       TableNameReferences
+	Tables       NormalizableTableNames
 	DropBehavior DropBehavior
 }
 
 // Format implements the NodeFormatter interface.
 func (node *Truncate) Format(ctx *FmtCtx) {
 	ctx.WriteString("TRUNCATE TABLE ")
-	for i, n := range node.Tables {
-		if i > 0 {
-			ctx.WriteString(", ")
-		}
-		ctx.FormatNode(n)
+	sep := ""
+	for i := range node.Tables {
+		ctx.WriteString(sep)
+		ctx.FormatNode(&node.Tables[i])
+		sep = ", "
 	}
 	if node.DropBehavior != DropDefault {
 		ctx.WriteByte(' ')

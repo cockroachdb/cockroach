@@ -9,7 +9,9 @@
 package sqlccl
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -43,6 +45,21 @@ func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
 	return nil
 }
 
+func newInvalidSchemaError(tn tree.NodeFormatter) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		"unsupported schema specification: %q", tn)
+}
+
+type descriptorResolver struct{}
+
+// LookupSchema implements the tree.TableNameTargetResolver interface.
+func (descriptorResolver) LookupSchema(dbName string, scName string) (bool, interface{}, err) {
+	if p.SchemaName != tree.PublicSchemaName {
+		return false, nil, nil
+	}
+	return true, nil, nil
+}
+
 // descriptorsMatchingTargets returns the descriptors that match the targets. A
 // database descriptor is included in this set if it matches the targets (or the
 // session database) or if one of its tables matches the targets. All expanded
@@ -50,11 +67,13 @@ func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
 // named as DBs (e.g. with `DATABASE foo`, not `foo.*`). These distinctions are
 // used e.g. by RESTORE.
 func descriptorsMatchingTargets(
-	sessionDatabase string, descriptors []sqlbase.Descriptor, targets tree.TargetList,
+	sessionDatabase string,
+	sessionSearchPath sessiondata.SearchPath,
+	descriptors []sqlbase.Descriptor,
+	targets tree.TargetList,
 ) (descriptorsMatched, error) {
-	// TODO(dan): If the session search path starts including more than virtual
-	// tables (as of 2017-01-12 it's only pg_catalog), then this method will
-	// need to support it.
+	// TODO(dan): once CockroachDB supports schemas in addition to
+	// catalogs, then this method will need to support it.
 
 	ret := descriptorsMatched{}
 
@@ -87,23 +106,29 @@ func descriptorsMatchingTargets(
 
 		switch p := pattern.(type) {
 		case *tree.TableName:
-			if sessionDatabase != "" {
-				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
-					return ret, err
-				}
+			found, _, err := p.ResolveTarget(descriptorResolver{}, sessionDatabase, sessionSearchPath)
+			if err != nil {
+				return ret, err
 			}
-			db := string(p.SchemaName)
+			if !found {
+				// Probably using a non-public schema.
+				return ret, newInvalidSchemaError(p)
+			}
+			db := string(p.CatalogName)
 			tablesByDatabase[db] = append(tablesByDatabase[db], table{
 				name:     string(p.TableName),
 				validity: maybeValid,
 			})
 		case *tree.AllTablesSelector:
-			if sessionDatabase != "" {
-				if err := p.QualifyWithDatabase(sessionDatabase); err != nil {
-					return ret, err
-				}
+			found, _, err := p.TableNamePrefix.Resolve(
+				descriptorResolver{}, sessionDatabase, sessionSearchPath)
+			if err != nil {
+				return ret, err
 			}
-			starByDatabase[string(p.Schema)] = maybeValid
+			if !found {
+				return ret, newInvalidSchemaError(p)
+			}
+			starByDatabase[string(p.CatalogName)] = maybeValid
 		default:
 			return ret, errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
 		}

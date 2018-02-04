@@ -37,13 +37,13 @@ func (p *planner) showTableDetails(
 	if err != nil {
 		return nil, err
 	}
-	db := tn.Schema()
+	db := tn.Catalog()
 
 	initialCheck := func(ctx context.Context) error {
 		if err := checkDBExists(ctx, p, db); err != nil {
 			return err
 		}
-		desc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+		desc, err := MustGetTableOrViewDesc(ctx, p.txn, tn, true /* allowAdding */)
 		if err != nil {
 			return err
 		}
@@ -55,13 +55,13 @@ func (p *planner) showTableDetails(
 			lex.EscapeSQLString(db),
 			lex.EscapeSQLString(tn.Table()),
 			lex.EscapeSQLString(tn.String()),
-			tn.SchemaName.String()),
+			tn.CatalogName.String()),
 		initialCheck, nil)
 }
 
 // checkDBExists checks if the database exists by using the security.RootUser.
 func checkDBExists(ctx context.Context, p *planner, db string) error {
-	if _, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), db); err != nil {
+	if _, err := MustGetDatabaseDesc(ctx, p.txn, db); err != nil {
 		return sqlbase.NewUndefinedDatabaseError(db)
 	}
 	return nil

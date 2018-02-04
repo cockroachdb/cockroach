@@ -448,7 +448,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 		t.Fatal("zone config for index no longer exists")
 	}
 	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
-	// TODO(benesch): Run scrub here. It can't currently handle the way t.kv
+	// TODO(benesch): Run scrub here. It can't currently handle the way t.public.kv
 	// declares column families.
 
 	// Manually remove the zone config. (Again, doing this through the normal

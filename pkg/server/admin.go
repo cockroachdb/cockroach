@@ -183,9 +183,7 @@ func (s *adminServer) Databases(
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
 		dbName := string(dbDatum)
-		if !s.server.sqlExecutor.IsVirtualDatabase(dbName) {
-			resp.Databases = append(resp.Databases, dbName)
-		}
+		resp.Databases = append(resp.Databases, dbName)
 	}
 
 	return &resp, nil
@@ -201,10 +199,6 @@ func (s *adminServer) DatabaseDetails(
 	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := tree.NameStringP(&req.Database)
-	if err := s.assertNotVirtualSchema(escDBName); err != nil {
-		return nil, err
-	}
-
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
 	//
@@ -300,10 +294,6 @@ func (s *adminServer) TableDetails(
 	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := tree.NameStringP(&req.Database)
-	if err := s.assertNotVirtualSchema(escDBName); err != nil {
-		return nil, err
-	}
-
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
 	escTableName := tree.NameStringP(&req.Table)
@@ -508,10 +498,6 @@ func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
 	escDBName := tree.NameStringP(&req.Database)
-	if err := s.assertNotVirtualSchema(escDBName); err != nil {
-		return nil, err
-	}
-
 	// Get table span.
 	var tableSpan roachpb.Span
 	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1632,13 +1618,4 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
-}
-
-// assertNotVirtualSchema checks if the provided database name corresponds to a
-// virtual schema, and if so, returns an error.
-func (s *adminServer) assertNotVirtualSchema(dbName string) error {
-	if s.server.sqlExecutor.IsVirtualDatabase(dbName) {
-		return status.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
-	}
-	return nil
 }

@@ -109,7 +109,7 @@ func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSourc
 	// Iterate backward through the environment, most recent frame first.
 	for i := range p.curPlan.cteNameEnvironment {
 		frame := p.curPlan.cteNameEnvironment[len(p.curPlan.cteNameEnvironment)-1-i]
-		if tn.SchemaName == "" && tn.CatalogName == "" {
+		if !tn.ExplicitSchema {
 			if cteSource, ok := frame[tn.TableName]; ok {
 				if cteSource.used {
 					// TODO(jordan): figure out how to lift this restriction.

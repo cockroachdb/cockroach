@@ -37,28 +37,18 @@ type dropViewNode struct {
 //          mysql requires the DROP privilege on the view.
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
+	defer p.useNewDescriptors()()
 	for _, name := range n.Names {
-		tn, err := name.NormalizeTableName()
+		tn, err := name.Normalize()
 		if err != nil {
 			return nil, err
 		}
-		if err := tn.QualifyWithDatabase(p.SessionData().Database); err != nil {
-			return nil, err
-		}
-
-		droppedDesc, err := p.dropTableOrViewPrepare(ctx, tn)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireViewDesc)
 		if err != nil {
 			return nil, err
 		}
 		if droppedDesc == nil {
-			if n.IfExists {
-				continue
-			}
-			// View does not exist, but we want it to: error out.
-			return nil, sqlbase.NewUndefinedRelationError(tn)
-		}
-		if !droppedDesc.IsView() {
-			return nil, sqlbase.NewWrongObjectTypeError(tn, "view")
+			continue
 		}
 
 		td = append(td, droppedDesc)

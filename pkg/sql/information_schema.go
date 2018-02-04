@@ -392,12 +392,14 @@ CREATE TABLE information_schema.schemata (
 );`,
 	populate: func(ctx context.Context, p *planner, _ string, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, func(db *sqlbase.DatabaseDescriptor) error {
-			return addRow(
-				defString,                // catalog_name
-				tree.NewDString(db.Name), // schema_name
-				tree.DNull,               // default_character_set_name
-				tree.DNull,               // sql_path
-			)
+			return forEachSchemaName(ctx, p, db, func(db *sqlbase.DatabaseDescriptor, sc string) error {
+				return addRow(
+					tree.NewDString(db.Name), // catalog_name
+					tree.NewDString(sc),      // schema_name
+					tree.DNull,               // default_character_set_name
+					tree.DNull,               // sql_path
+				)
+			})
 		})
 	},
 }
@@ -419,11 +421,11 @@ CREATE TABLE information_schema.schema_privileges (
 			for _, u := range db.Privileges.Show() {
 				for _, priv := range u.Privileges {
 					if err := addRow(
-						tree.NewDString(u.User),  // grantee
-						defString,                // table_catalog
-						tree.NewDString(db.Name), // table_schema
-						tree.NewDString(priv),    // privilege_type
-						tree.DNull,               // is_grantable
+						tree.NewDString(u.User),                        // grantee
+						tree.NewDString(db.Name),                       // table_catalog
+						tree.NewDString(string(tree.PublicSchemaName)), // table_schema
+						tree.NewDString(priv),                          // privilege_type
+						tree.DNull,                                     // is_grantable
 					); err != nil {
 						return err
 					}
@@ -789,6 +791,27 @@ func (dbs sortedDBDescs) Len() int           { return len(dbs) }
 func (dbs sortedDBDescs) Swap(i, j int)      { dbs[i], dbs[j] = dbs[j], dbs[i] }
 func (dbs sortedDBDescs) Less(i, j int) bool { return dbs[i].Name < dbs[j].Name }
 
+// forEachSchemaName iterates over the physical and virtual schemas.
+func forEachSchemaName(
+	ctx context.Context,
+	p *planner,
+	db *sqlbase.DatabaseDescriptor,
+	fn func(*sqlbase.DatabaseDescriptor, string) error,
+) error {
+	scNames := []string{string(tree.PublicSchemaName)}
+	// Handle virtual schemas.
+	for _, schema := range p.getVirtualTabler().getEntries() {
+		scNames = append(scNames, schema.desc.Name)
+	}
+	sort.Strings(scNames)
+	for _, sc := range scNames {
+		if err := fn(db, sc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // forEachTableDesc retrieves all database descriptors and iterates through them in
 // lexicographical order with respect to their name. For each database, the function
 // will call fn with its descriptor.
@@ -807,11 +830,6 @@ func forEachDatabaseDesc(
 		if dbDesc, ok := desc.(*sqlbase.DatabaseDescriptor); ok {
 			dbDescs = append(dbDescs, dbDesc)
 		}
-	}
-
-	// Handle virtual schemas.
-	for _, schema := range p.getVirtualTabler().getEntries() {
-		dbDescs = append(dbDescs, schema.desc)
 	}
 
 	sort.Sort(sortedDBDescs(dbDescs))
@@ -947,6 +965,7 @@ func forEachTableDescWithTableLookupInternal(
 			}
 		}
 	}
+
 	// Next, iterate through all table descriptors, using the mapping from sqlbase.ID
 	// to database name to add descriptors to a dbDescTables' tables map.
 	for _, desc := range descs {
@@ -967,17 +986,20 @@ func forEachTableDescWithTableLookupInternal(
 		}
 	}
 
-	// Handle virtual schemas.
-	for dbName, schema := range p.getVirtualTabler().getEntries() {
-		dbTables := make(map[string]*sqlbase.TableDescriptor, len(schema.tables))
-		for tableName, entry := range schema.tables {
-			dbTables[tableName] = entry.desc
+	// Exclude all non-visible databases.
+	//
+	// Below we use the same trick twice of sorting a slice of strings
+	// lexicographically and iterating through these strings to index
+	// into a map. Effectively, this allows us to iterate through a map
+	// in sorted order.
+	dbNames := make([]string, 0, len(databases))
+	for dbName := range databases {
+		if !isDatabaseVisible(dbName, prefix, p.SessionData().User) {
+			continue
 		}
-		databases[dbName] = dbDescTables{
-			desc:   schema.desc,
-			tables: dbTables,
-		}
+		dbNames = append(dbNames, dbName)
 	}
+	sort.Strings(dbNames)
 
 	// Create table lookup function, which some callers of this function, like those
 	// dealing with foreign keys, will need.
@@ -991,18 +1013,7 @@ func forEachTableDescWithTableLookupInternal(
 		return nil, nil
 	}
 
-	// Below we use the same trick twice of sorting a slice of strings lexicographically
-	// and iterating through these strings to index into a map. Effectively, this allows
-	// us to iterate through a map in sorted order.
-	dbNames := make([]string, 0, len(databases))
-	for dbName := range databases {
-		dbNames = append(dbNames, dbName)
-	}
-	sort.Strings(dbNames)
 	for _, dbName := range dbNames {
-		if !isDatabaseVisible(dbName, prefix, p.SessionData().User) {
-			continue
-		}
 		db := databases[dbName]
 		dbTableNames := make([]string, 0, len(db.tables))
 		for tableName := range db.tables {

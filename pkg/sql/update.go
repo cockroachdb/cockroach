@@ -379,17 +379,9 @@ type editNodeBase struct {
 func (p *planner) makeEditNode(
 	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
 ) (editNodeBase, error) {
-	tableDesc, err := p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
+	tableDesc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return editNodeBase{}, err
-	}
-	// We don't support update on views or sequences, only real tables.
-	if !tableDesc.IsTable() {
-		return editNodeBase{},
-			pgerror.NewErrorf(
-				pgerror.CodeWrongObjectTypeError,
-				"cannot run %s on %s %q - %ss are not updateable",
-				priv, tableDesc.Kind(), tn, tableDesc.Kind())
 	}
 
 	// TODO(justin): temporary to split up computed columns PR.

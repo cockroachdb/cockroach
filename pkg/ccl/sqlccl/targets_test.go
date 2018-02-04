@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,7 +57,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"data", "TABLE foo", nil, nil, `table "foo" does not exist`},
 
 		{"", "TABLE *", nil, nil, `no database specified for wildcard`},
-		{"", "TABLE *, system.foo", nil, nil, `no database specified for wildcard`},
+		{"", "TABLE *, system.public.foo", nil, nil, `no database specified for wildcard`},
 		{"noexist", "TABLE *", nil, nil, `database "noexist" does not exist`},
 		{"system", "TABLE *", []string{"system", "foo", "bar"}, nil, ``},
 		{"data", "TABLE *", []string{"data", "baz"}, nil, ``},
@@ -66,28 +67,29 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"system", "TABLE foo, baz", nil, nil, `table "baz" does not exist`},
 		{"data", "TABLE foo, baz", nil, nil, `table "foo" does not exist`},
 
-		{"", "TABLE system.foo", []string{"system", "foo"}, nil, ``},
-		{"", "TABLE system.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
+		{"", "TABLE system.public.foo", []string{"system", "foo"}, nil, ``},
+		{"", "TABLE system.public.foo, foo", []string{"system", "foo"}, nil, `table "foo" does not exist`},
 
-		{"", "TABLE system.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
-		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
+		{"", "TABLE system.public.foo, bar", []string{"system", "foo"}, nil, `table "bar" does not exist`},
+		{"system", "TABLE system.public.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
 
 		{"", "TABLE noexist.*", nil, nil, `database "noexist" does not exist`},
 		{"", "TABLE empty.*", []string{"empty"}, nil, ``},
-		{"", "TABLE system.*", []string{"system", "foo", "bar"}, nil, ``},
-		{"", "TABLE system.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
-		{"system", "TABLE system.*, foo, baz", nil, nil, `table "baz" does not exist`},
-		{"data", "TABLE system.*, baz", []string{"system", "foo", "bar", "data", "baz"}, nil, ``},
-		{"data", "TABLE system.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
+		{"", "TABLE system.public.*", []string{"system", "foo", "bar"}, nil, ``},
+		{"", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
+		{"system", "TABLE system.public.*, foo, baz", nil, nil, `table "baz" does not exist`},
+		{"data", "TABLE system.public.*, baz", []string{"system", "foo", "bar", "data", "baz"}, nil, ``},
+		{"data", "TABLE system.public.*, foo, baz", nil, nil, `table "(foo|baz)" does not exist`},
 
-		{"", "TABLE SyStEm.FoO", []string{"system", "foo"}, nil, ``},
+		{"", "TABLE system.public.FoO", []string{"system", "foo"}, nil, ``},
 
-		{"", `TABLE system."foo"`, []string{"system", "foo"}, nil, ``},
+		{"", `TABLE system.public."foo"`, []string{"system", "foo"}, nil, ``},
 		{"system", `TABLE "foo"`, []string{"system", "foo"}, nil, ``},
 		// TODO(dan): Enable these tests once #8862 is fixed.
 		// {"", `TABLE system."FOO"`, []string{"system"}},
 		// {"system", `TABLE "FOO"`, []string{"system"}},
 	}
+	searchPath := sessiondata.MakeSearchPath([]string{"public", "pg_catalog"})
 	for _, test := range tests {
 		t.Run("", func(t *testing.T) {
 			sql := fmt.Sprintf(`GRANT ALL ON %s TO ignored`, test.pattern)
@@ -97,7 +99,8 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 			}
 			targets := stmt.(*tree.Grant).Targets
 
-			matched, err := descriptorsMatchingTargets(test.sessionDatabase, descriptors, targets)
+			matched, err := descriptorsMatchingTargets(
+				test.sessionDatabase, searchPath, descriptors, targets)
 			if test.err != "" {
 				if !testutils.IsError(err, test.err) {
 					t.Fatalf("expected error matching '%v', but got '%v'", test.err, err)

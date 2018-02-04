@@ -243,36 +243,14 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchema
 	return e, ok
 }
 
-// getVirtualDatabaseDesc checks if the provided name matches a virtual database,
-// and if so, returns that database's descriptor.
-func (vs *VirtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	if e, ok := vs.getVirtualSchemaEntry(name); ok {
-		return e.desc
-	}
-	return nil
-}
-
-// isVirtualDatabase checks if the provided name corresponds to a virtual database.
-// isVirtualDatabase is part of the VirtualTabler interface.
-func (vs *VirtualSchemaHolder) isVirtualDatabase(name string) bool {
-	_, ok := vs.getVirtualSchemaEntry(name)
-	return ok
-}
-
-// IsVirtualDatabase checks if the provided name corresponds to a virtual database,
-// exposing this information on the Executor object itself.
-func (e *Executor) IsVirtualDatabase(name string) bool {
-	return e.cfg.VirtualSchemas.isVirtualDatabase(name)
-}
-
 // getVirtualTableEntry checks if the provided name matches a virtual database/table
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
-	if db, ok := vs.getVirtualSchemaEntry(string(tn.SchemaName)); ok {
-		if t, ok := db.tables[string(tn.TableName)]; ok {
+	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
+		if t, ok := db.tables[tn.Table()]; ok {
 			return t, nil
 		}
 		return virtualTableEntry{}, sqlbase.NewUndefinedRelationError(tn)
@@ -283,10 +261,8 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
-	getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error)
-	isVirtualDatabase(name string) bool
 	getEntries() map[string]virtualSchemaEntry
 }
 
@@ -320,20 +296,12 @@ func (nilVirtualTabler) getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableD
 	return nil, nil
 }
 
-func (nilVirtualTabler) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	return nil
-}
-
 func (nilVirtualTabler) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
 	return virtualSchemaEntry{}, false
 }
 
 func (nilVirtualTabler) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
 	return virtualTableEntry{}, nil
-}
-
-func (nilVirtualTabler) isVirtualDatabase(name string) bool {
-	return false
 }
 
 func (nilVirtualTabler) getEntries() map[string]virtualSchemaEntry {
