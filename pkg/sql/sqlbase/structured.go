@@ -350,20 +350,6 @@ func (desc *TableDescriptor) TypeName() string {
 	return "relation"
 }
 
-// Kind returns what kind of database object this descriptor describes.
-func (desc *TableDescriptor) Kind() string {
-	switch {
-	case desc.IsTable():
-		return "table"
-	case desc.IsView():
-		return "view"
-	case desc.IsSequence():
-		return "sequence"
-	default:
-		panic("unknown descriptor type")
-	}
-}
-
 // SetName implements the DescriptorProto interface.
 func (desc *TableDescriptor) SetName(name string) {
 	desc.Name = name

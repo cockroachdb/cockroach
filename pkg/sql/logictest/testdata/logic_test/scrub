@@ -111,13 +111,13 @@ EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
 
 # Test AS OF SYSTEM TIME
 
-statement error database "test" does not exist
+statement error relation "xz" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
 
-statement error database "test" does not exist
+statement error relation "xz" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
 
-statement error database "test" does not exist
+statement error relation "xz" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS CONSTRAINT ALL
 
 # Test scrubbing sequences.
@@ -134,5 +134,5 @@ CREATE TABLE seq_db.my_tbl (id INT PRIMARY KEY DEFAULT nextval('seq_db.my_seq'))
 statement ok
 EXPERIMENTAL SCRUB DATABASE seq_db
 
-statement error pq: "seq_db.my_seq" is not a table
+statement error pq: "seq_db.public.my_seq" is not a table
 EXPERIMENTAL SCRUB TABLE seq_db.my_seq

@@ -15,7 +15,7 @@ system "$argv start --insecure --pid-file=server_pid --background -s=path=logs/d
 # verify that the command will succeed after blocking instead of
 # erroring out.
 spawn $argv sql
-send "show databases;\r"
+send "show tables from system.pg_catalog;\r"
 
 # Now initialize the one-node cluster. This will unblock the pending
 # SQL connection. This also verifies that the blocked connection using
@@ -26,7 +26,7 @@ system $argv init
 # The command should now succeed, without logging any errors or
 # warnings.
 expect {
-    "information_schema" {}
+    "pg_class" {}
     # Hopefully this broad regex will match any errors we log
     # (Currently, everything I've seen begins with "Error:")
     -re "(?i)err|warn" {
@@ -37,7 +37,7 @@ expect {
         report "ERROR LOGGED:\n$prefix$expect_out(buffer)"
         exit 1
     }
-    timeout { handle_timeout "information_schema" }
+    timeout { handle_timeout "pg_class" }
 }
 
 stop_server $argv

@@ -103,6 +103,13 @@ func NewInvalidSchemaDefinitionError(err error) error {
 	return pgerror.NewError(pgerror.CodeInvalidSchemaDefinitionError, err.Error())
 }
 
+// NewUnsupportedSchemaUsageError creates an error for an invalid
+// schema use, e.g. mydb.someschema.tbl.
+func NewUnsupportedSchemaUsageError(name string) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		"unsupported schema specification: %q", name)
+}
+
 // NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
 // binary.
 func NewCCLRequiredError(err error) error {
@@ -134,20 +141,18 @@ func NewUndefinedDatabaseError(name string) error {
 		pgerror.CodeInvalidCatalogNameError, "database %q does not exist", name)
 }
 
-// IsUndefinedDatabaseError returns true if the error is for an undefined database.
-func IsUndefinedDatabaseError(err error) bool {
-	return errHasCode(err, pgerror.CodeInvalidCatalogNameError)
+// NewInvalidWildcardError creates an error that represents the result of expanding
+// a table wildcard over an invalid database or schema prefix.
+func NewInvalidWildcardError(name string) error {
+	return pgerror.NewErrorf(
+		pgerror.CodeInvalidCatalogNameError,
+		"pattern %q did not match any valid database or schema", name)
 }
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
 func NewUndefinedRelationError(name tree.NodeFormatter) error {
 	return pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
 		"relation %q does not exist", tree.ErrString(name))
-}
-
-// IsUndefinedRelationError returns true if the error is for an undefined table.
-func IsUndefinedRelationError(err error) bool {
-	return errHasCode(err, pgerror.CodeUndefinedTableError)
 }
 
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.

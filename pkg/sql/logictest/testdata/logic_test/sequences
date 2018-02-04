@@ -103,11 +103,11 @@ CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
 statement ok
 CREATE SEQUENCE show_create_test
 
-query ITITTTT colnames
+query ITTITTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
-database_id database_name descriptor_id descriptor_type descriptor_name  create_statement                                                                             state
-50          test          59            sequence        show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1 PUBLIC
+database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state
+50           test           public       59             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
@@ -115,21 +115,21 @@ SHOW CREATE SEQUENCE show_create_test
 Sequence         CreateSequence
 show_create_test CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1
 
-statement error pq: test.show_create_test is not a table
+statement error pq: show_create_test is not a table
 SHOW CREATE TABLE show_create_test
 
 # DML ERRORS
 
-statement error pgcode 42809 cannot run INSERT on sequence "foo" - sequences are not updateable
+statement error pgcode 42809 "foo" is not a table
 INSERT INTO foo VALUES (1, 2, 3)
 
-statement error pgcode 42809 cannot run UPDATE on sequence "foo" - sequences are not updateable
+statement error pgcode 42809 "foo" is not a table
 UPDATE foo SET value = 5
 
-statement error pgcode 42809 cannot run DELETE on sequence "foo" - sequences are not updateable
+statement error pgcode 42809 "foo" is not a table
 DELETE FROM foo
 
-statement error pgcode 42809 cannot run TRUNCATE on sequence "foo" - sequences are not updateable
+statement error pgcode 42809 "foo" is not a table
 TRUNCATE foo
 
 # Drop table on sequences doesn't work; you have to use DROP SEQUENCE.
@@ -307,11 +307,8 @@ CREATE SEQUENCE foo.x
 statement ok
 SET DATABASE = bar
 
-statement ok
-SET SEARCH_PATH = foo
-
 query I
-SELECT nextval('x')
+SELECT nextval('foo.x')
 ----
 1
 

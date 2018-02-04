@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // showTableDetails extracts information about the given table using
@@ -30,39 +29,49 @@ import (
 // %[2]s the unqualified table name as SQL string literal.
 // %[3]s the given table name as SQL string literal.
 // %[4]s the database name as SQL identifier.
+// %[5]s the schema name as SQL string literal.
 func (p *planner) showTableDetails(
 	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
 ) (planNode, error) {
-	tn, err := t.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := t.Normalize()
 	if err != nil {
 		return nil, err
 	}
-	db := tn.Schema()
 
-	initialCheck := func(ctx context.Context) error {
-		if err := checkDBExists(ctx, p, db); err != nil {
-			return err
-		}
-		desc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
-		if err != nil {
-			return err
-		}
-		return p.CheckAnyPrivilege(ctx, desc)
+	var desc *TableDescriptor
+	// We avoid the cache so that we can observe the details without
+	// taking a lease, like other SHOW commands. We also use
+	// allowAdding=true so we can look at the details of a table
+	// added in the same transaction.
+	//
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := p.CheckAnyPrivilege(ctx, desc); err != nil {
+		return nil, err
 	}
 
-	return p.delegateQuery(ctx, showType,
-		fmt.Sprintf(query,
-			lex.EscapeSQLString(db),
-			lex.EscapeSQLString(tn.Table()),
-			lex.EscapeSQLString(tn.String()),
-			tn.SchemaName.String()),
-		initialCheck, nil)
+	fullQuery := fmt.Sprintf(query,
+		lex.EscapeSQLString(tn.Catalog()),
+		lex.EscapeSQLString(tn.Table()),
+		lex.EscapeSQLString(tn.String()),
+		tn.CatalogName.String(), // note: CatalogName.String() != Catalog()
+		lex.EscapeSQLString(tn.Schema()),
+	)
+
+	// log.VEventf(ctx, 2, "using table detail query: %s", fullQuery)
+
+	return p.delegateQuery(ctx, showType, fullQuery,
+		func(_ context.Context) error { return nil }, nil)
 }
 
 // checkDBExists checks if the database exists by using the security.RootUser.
 func checkDBExists(ctx context.Context, p *planner, db string) error {
-	if _, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), db); err != nil {
-		return sqlbase.NewUndefinedDatabaseError(db)
-	}
-	return nil
+	_, err := p.PhysicalSchemaAccessor().GetDatabaseDesc(db,
+		p.CommonLookupFlags(ctx, true /*required*/))
+	return err
 }

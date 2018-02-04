@@ -139,7 +139,7 @@ SELECT kv.* FROM kv
 ----
 a NULL
 
-query error source name "foo" not found in FROM clause
+query error no data source named "foo"
 SELECT foo.* FROM kv
 
 query error cannot use "\*" without a FROM clause
@@ -156,7 +156,7 @@ SELECT 1, * FROM nocols
 query error "kv.*" cannot be aliased
 SELECT kv.* AS foo FROM kv
 
-query error source name "bar.kv" not found in FROM clause
+query error no data source named "bar.kv"
 SELECT bar.kv.* FROM kv
 
 # Don't panic with invalid names (#8024)
