@@ -1167,10 +1167,10 @@ func (_f *factory) ConstructUnaryComplement(
 
 // ConstructFunction constructs an expression for the Function operator.
 func (_f *factory) ConstructFunction(
+	name opt.GroupID,
 	args opt.ListID,
-	def opt.PrivateID,
 ) opt.GroupID {
-	_functionExpr := makeFunctionExpr(args, def)
+	_functionExpr := makeFunctionExpr(name, args)
 	_group := _f.mem.lookupGroupByFingerprint(_functionExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1866,7 +1866,7 @@ func init() {
 
 	// FunctionOp
 	dynConstructLookup[opt.FunctionOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructFunction(f.InternList(children), private)
+		return f.ConstructFunction(children[0], f.InternList(children[1:]))
 	}
 
 	// ScanOp
