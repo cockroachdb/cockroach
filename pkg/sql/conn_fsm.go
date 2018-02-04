@@ -31,6 +31,7 @@ import (
 	// implementations using that library are weird beasts intimately inter-twined
 	// with that package; therefor this file should stay as small as possible.
 	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 /// States.
@@ -327,6 +328,27 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateCommitWait{},
 			Action: func(args Args) error {
 				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, flush, noRewind, txnCommit)
+				return nil
+			},
+		},
+		// ROLLBACK TO SAVEPOINT
+		eventTxnRestart{}: {
+			Description: "ROLLBACK TO SAVEPOINT cockroach_restart",
+			Next:        stateOpen{ImplicitTxn: False, RetryIntent: True},
+			Action: func(args Args) error {
+				state := args.Extended.(*txnState2)
+				// If commands have already been sent through the transaction, restart
+				// the client txn's proto to increment the epoch.
+				if state.mu.txn.GetTxnCoordMeta().CommandCount > 0 {
+					// NOTE: We don't bump the txn timestamp on this restart. If this
+					// we generally supported savepoints and one would issue a rollback to
+					// a regular savepoint, clearly we couldn't bump the timestamp. But in
+					// the special case of the cockroach_restart savepoint, it's not clear
+					// to me what a user's expectation might be.
+					state.mu.txn.Proto().Restart(
+						0 /* userPriority */, 0 /* upgradePriority */, hlc.Timestamp{})
+				}
+				args.Extended.(*txnState2).setAdvanceInfo(advanceOne, flush, noRewind, txnRestart)
 				return nil
 			},
 		},

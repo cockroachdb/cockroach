@@ -114,7 +114,11 @@ func (f TxnSenderFunc) Send(
 }
 
 // GetMeta is part of the TxnSender interface.
-func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+func (f TxnSenderFunc) GetMeta() roachpb.TxnCoordMeta {
+	// We'd like better to panic here, but sql/TestTransitions exercises a code
+	// path that calls GetMeta(). This is good enough for it.
+	return roachpb.TxnCoordMeta{}
+}
 
 // AugmentMeta is part of the TxnSender interface.
 func (f TxnSenderFunc) AugmentMeta(_ roachpb.TxnCoordMeta) { panic("unimplemented") }
