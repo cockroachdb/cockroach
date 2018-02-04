@@ -360,9 +360,7 @@ $(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/returncheck | $(SUBMODULES_TARGE
 		./vendor/golang.org/x/perf/cmd/benchstat \
 		./vendor/golang.org/x/tools/cmd/goimports \
 		./vendor/golang.org/x/tools/cmd/goyacc \
-		./vendor/golang.org/x/tools/cmd/stringer \
-		./pkg/sql/opt/optgen/cmd/langgen \
-		./pkg/sql/opt/optgen/cmd/optgen
+		./vendor/golang.org/x/tools/cmd/stringer
 	touch $@
 
 $(SUBMODULES_TARGET):
@@ -839,6 +837,9 @@ dupl: $(BOOTSTRAP_TARGET)
 .PHONY: generate
 generate: ## Regenerate generated code.
 generate: protobuf $(DOCGEN_TARGETS)
+	@$(GO_INSTALL) -v \
+		./pkg/sql/opt/optgen/cmd/langgen \
+		./pkg/sql/opt/optgen/cmd/optgen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
