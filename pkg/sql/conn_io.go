@@ -180,7 +180,8 @@ var _ Command = DeletePreparedStmt{}
 type BindStmt struct {
 	PreparedStatementName string
 	PortalName            string
-	ProtocolMeta          interface{}
+	// OutFormats contains the requested formats for the output columns.
+	OutFormats []pgwirebase.FormatCode
 	// Args are the arguments for the prepared statement.
 	// They are passed in without decoding because decoding requires type
 	// inference to have been performed.

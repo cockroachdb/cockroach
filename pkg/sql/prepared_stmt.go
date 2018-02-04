@@ -20,9 +20,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/lib/pq/oid"
 )
 
 // PreparedStatement is a SQL statement that has been parsed and the types
@@ -50,7 +52,9 @@ type PreparedStatement struct {
 	Columns     sqlbase.ResultColumns
 	portalNames map[string]struct{}
 
-	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
+	// InTypes represents the inferred types for placeholder, using protocol
+	// identifiers.
+	InTypes []oid.Oid
 
 	memAcc mon.BoundAccount
 }
@@ -209,7 +213,8 @@ type PreparedPortal struct {
 	Stmt  *PreparedStatement
 	Qargs tree.QueryArguments
 
-	ProtocolMeta interface{} // a field for protocol implementations to hang metadata off of.
+	// OutFormats contains the requested formats for the output columns.
+	OutFormats []pgwirebase.FormatCode
 
 	memAcc mon.BoundAccount
 }
