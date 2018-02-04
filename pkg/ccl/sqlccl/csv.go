@@ -345,7 +345,7 @@ func makeSimpleTableDescriptor(
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
-		sql.NilVirtualTabler,
+		nil, /* vt */
 		st,
 		create,
 		parentID,

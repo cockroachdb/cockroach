@@ -47,7 +47,8 @@ func (p *planner) DropUser(ctx context.Context, n *tree.DropUser) (planNode, err
 func (p *planner) DropUserNode(
 	ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 ) (*DropUserNode, error) {
-	tDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), userTableName)
+	tDesc, _, err := getTableDesc(p.PhysicalSchemaAccessor(), userTableName,
+		p.objectLookupFlagsExplicit(ctx, false /*allowAdding*/))
 	if err != nil {
 		return nil, err
 	}

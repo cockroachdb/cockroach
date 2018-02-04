@@ -143,9 +143,7 @@ var varGen = map[string]sessionVar{
 
 			if len(dbName) != 0 {
 				// Verify database descriptor exists.
-				if _, err := MustGetDatabaseDesc(
-					ctx, evalCtx.Txn, evalCtx.VirtualSchemas, dbName,
-				); err != nil {
+				if _, err := MustGetDatabaseDesc(ctx, evalCtx.Txn, dbName); err != nil {
 					return err
 				}
 			}

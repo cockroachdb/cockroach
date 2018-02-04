@@ -48,12 +48,12 @@ type createTableNode struct {
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), tn.Schema())
+	dbDesc, err := ResolveTargetObject(ctx, p, tn)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,11 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	for _, def := range n.Defs {
 		switch t := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
-			if _, err := t.Table.NormalizeWithDatabaseName(p.SessionData().Database); err != nil {
+			targetName, err := t.Table.Normalize()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := ResolveTargetObject(ctx, p, targetName); err != nil {
 				return nil, err
 			}
 		}
@@ -343,7 +347,7 @@ func (p *planner) resolveFK(
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
-	return resolveFK(ctx, p.txn, p.getVirtualTabler(), tbl, d, backrefs, mode)
+	return resolveFK(ctx, p.txn, p, tbl, d, backrefs, mode)
 }
 
 // resolveFK looks up the tables and columns mentioned in a `REFERENCES`
@@ -357,14 +361,15 @@ func (p *planner) resolveFK(
 func resolveFK(
 	ctx context.Context,
 	txn *client.Txn,
-	vt VirtualTabler,
+	sc SchemaResolver,
 	tbl *sqlbase.TableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
 	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
 	targetTable := d.Table.TableName()
-	target, err := getTableDesc(ctx, txn, vt, targetTable)
+
+	target, err := ResolveExistingObject(ctx, sc, targetTable, false /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -372,7 +377,7 @@ func resolveFK(
 	// same table) will reference a table name that doesn't exist yet (since we
 	// are creating it).
 	if target == nil {
-		if targetTable.Table() == tbl.Name {
+		if targetTable.Table() == tbl.Name && !targetTable.ExplicitSchema {
 			target = tbl
 		} else {
 			return fmt.Errorf("referenced table %q not found", targetTable.String())
@@ -509,17 +514,15 @@ func resolveFK(
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
+				// TODO(whomever): this ought to use a database cache.
 				database, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tbl.ParentID)
 				if err != nil {
 					return err
 				}
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint",
-					tree.ErrString(&tree.ColumnItem{
-						TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(tbl.Name)),
-						ColumnName: tree.Name(sourceColumn.Name),
-					}),
-				)
+					tree.ErrString(tree.NewUnresolvedName(
+						database.Name, tree.PublicSchema, tbl.Name, sourceColumn.Name)))
 			}
 		}
 	}
@@ -535,11 +538,8 @@ func resolveFK(
 				}
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression",
-					tree.ErrString(&tree.ColumnItem{
-						TableName:  tree.MakeTableName(tree.Name(database.Name), tree.Name(tbl.Name)),
-						ColumnName: tree.Name(sourceColumn.Name),
-					}),
-				)
+					tree.ErrString(tree.NewUnresolvedName(
+						database.Name, tree.PublicSchema, tbl.Name, sourceColumn.Name)))
 			}
 		}
 	}
@@ -672,9 +672,7 @@ func (p *planner) addInterleave(
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
-	return addInterleave(
-		ctx, p.txn, p.getVirtualTabler(), desc, index,
-		interleave, p.SessionData().Database)
+	return addInterleave(ctx, p.txn, p, desc, index, interleave)
 }
 
 // addInterleave marks an index as one that is interleaved in some parent data
@@ -682,23 +680,22 @@ func (p *planner) addInterleave(
 func addInterleave(
 	ctx context.Context,
 	txn *client.Txn,
-	vt VirtualTabler,
+	vt SchemaResolver,
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
-	sessionDB string,
 ) error {
 	if interleave.DropBehavior != tree.DropDefault {
 		return pgerror.UnimplementedWithIssueErrorf(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	tn, err := interleave.Parent.NormalizeWithDatabaseName(sessionDB)
+	tn, err := interleave.Parent.Normalize()
 	if err != nil {
 		return err
 	}
 
-	parentTable, err := MustGetTableDesc(ctx, txn, vt, tn, true /*allowAdding*/)
+	parentTable, err := ResolveExistingObject(ctx, vt, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -917,14 +914,13 @@ func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.N
 func MakeTableDesc(
 	ctx context.Context,
 	txn *client.Txn,
-	vt VirtualTabler,
+	vt SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
-	sessionDB string,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
@@ -1071,7 +1067,7 @@ func MakeTableDesc(
 	}
 
 	if n.Interleave != nil {
-		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave, sessionDB); err != nil {
+		if err := addInterleave(ctx, txn, vt, &desc, &desc.PrimaryIndex, n.Interleave); err != nil {
 			return desc, err
 		}
 	}
@@ -1160,7 +1156,7 @@ func (p *planner) makeTableDesc(
 	return MakeTableDesc(
 		ctx,
 		p.txn,
-		p.getVirtualTabler(),
+		p,
 		p.ExecCfg().Settings,
 		n,
 		parentID,
@@ -1168,7 +1164,6 @@ func (p *planner) makeTableDesc(
 		creationTime,
 		privileges,
 		affected,
-		p.SessionData().Database,
 		&p.semaCtx,
 		p.EvalContext(),
 	)

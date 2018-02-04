@@ -39,8 +39,9 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 	// options are provided, we will simply not include any indexes that
 	// don't exist and continue execution.
 	idxNames := make([]fullIndexName, 0, len(n.IndexList))
+	defer p.useNewDescriptors()()
 	for _, index := range n.IndexList {
-		tn, err := p.expandIndexName(ctx, index, false /* requireTable */)
+		tn, tableDesc, err := expandIndexName(ctx, p, index, false /* requireTable */)
 		if err != nil {
 			return nil, err
 		} else if tn == nil {
@@ -56,9 +57,11 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 			)
 		}
 
-		tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
-		if err != nil {
-			return nil, err
+		if tableDesc == nil {
+			tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*require*/, requireTableDesc)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
@@ -72,12 +75,14 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 
 func (n *dropIndexNode) startExec(params runParams) error {
 	ctx := params.ctx
+	defer params.p.useNewDescriptors()()
 	for _, index := range n.idxNames {
 		// Need to retrieve the descriptor again for each index name in
 		// the list: when two or more index names refer to the same table,
 		// the mutation list and new version number created by the first
 		// drop need to be visible to the second drop.
-		tableDesc, err := getTableDesc(ctx, params.p.txn, params.p.getVirtualTabler(), index.tn)
+		tableDesc, err := ResolveExistingObject(
+			ctx, params.p, index.tn, true /*required*/, requireTableDesc)
 		if err != nil || tableDesc == nil {
 			// newPlan() and Start() ultimately run within the same
 			// transaction. If we got a descriptor during newPlan(), we

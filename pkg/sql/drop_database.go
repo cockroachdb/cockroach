@@ -48,7 +48,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := getDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
+	dbDesc, err := ResolveDatabase(ctx, p, string(n.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
+	tbNames, err := GetObjectNames(ctx, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 
 	td := make([]*sqlbase.TableDescriptor, len(tbNames))
 	for i := range tbNames {
-		tbDesc, err := p.dropTableOrViewPrepare(ctx, &tbNames[i])
+		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], true /*required*/, anyDescType)
 		if err != nil {
 			return nil, err
 		}

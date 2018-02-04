@@ -35,7 +35,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := getSequenceDesc(ctx, p.txn, seqName)
 	if err != nil {
 		return 0, err
 	}
@@ -87,7 +87,7 @@ func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := getSequenceDesc(ctx, p.txn, seqName)
 	if err != nil {
 		return 0, err
 	}
@@ -110,7 +110,7 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	descriptor, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), seqName)
+	descriptor, err := getSequenceDesc(ctx, p.txn, seqName)
 	if err != nil {
 		return err
 	}
@@ -260,7 +260,8 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
-		seqDesc, err := getSequenceDesc(ctx, evalCtx.Txn, NilVirtualTabler, parsedSeqName)
+		// FIXME XXX: uses nil resolver
+		seqDesc, err := getSequenceDesc(ctx, evalCtx.Txn, parsedSeqName)
 		if err != nil {
 			return nil, err
 		}

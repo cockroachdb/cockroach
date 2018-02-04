@@ -640,6 +640,8 @@ func (s *Session) extendedEvalCtx(
 		clusterTs = txn.OrigTimestamp()
 	}
 
+	scInterface := newSchemaInterface(&s.tables, s.execCfg.VirtualSchemas)
+
 	return extendedEvalContext{
 		EvalContext: tree.EvalContext{
 			Txn:              txn,
@@ -656,17 +658,45 @@ func (s *Session) extendedEvalCtx(
 			TxnTimestamp:     txnTimestamp,
 			ClusterTimestamp: clusterTs,
 		},
-		SessionMutator: s.dataMutator,
-		VirtualSchemas: s.execCfg.VirtualSchemas,
-		Tracing:        &s.Tracing,
-		StatusServer:   statusServer,
-		MemMetrics:     s.memMetrics,
-		Tables:         &s.tables,
-		ExecCfg:        s.execCfg,
-		DistSQLPlanner: s.distSQLPlanner,
-		TxnModesSetter: &s.TxnState,
-		SchemaChangers: &s.TxnState.schemaChangers,
+		SessionMutator:  s.dataMutator,
+		VirtualSchemas:  s.execCfg.VirtualSchemas,
+		Tracing:         &s.Tracing,
+		StatusServer:    statusServer,
+		MemMetrics:      s.memMetrics,
+		Tables:          &s.tables,
+		ExecCfg:         s.execCfg,
+		DistSQLPlanner:  s.distSQLPlanner,
+		TxnModesSetter:  &s.TxnState,
+		SchemaChangers:  &s.TxnState.schemaChangers,
+		schemaAccessors: scInterface,
 	}
+}
+
+func newSchemaInterface(tables *TableCollection, vt VirtualTabler) *schemaInterface {
+	sc := &schemaInterface{}
+	// The physical layer of schema accessors.
+	sc.physical.DatabaseLister = PhysicalDBAccessor{}
+	sc.physical.DBAccessorWithCache = DBAccessorWithCache{
+		DatabaseAccessor: PhysicalDBAccessor{},
+		dc:               tables.databaseCache,
+	}
+	sc.physical.ObjectAccessorWithCache = ObjectAccessorWithCache{
+		ObjectAccessor: PhysicalObjectAccessor{
+			DatabaseAccessor: &sc.physical.DBAccessorWithCache,
+		},
+		tc: tables,
+	}
+	// The logical layer of schema accessors.
+	sc.logical.DatabaseAccessor = &sc.physical.DBAccessorWithCache
+	sc.logical.LogicalDatabaseLister = LogicalDatabaseLister{
+		DatabaseLister: PhysicalDBAccessor{},
+		vt:             vt,
+	}
+	sc.logical.LogicalObjectAccessor = LogicalObjectAccessor{
+		ObjectAccessor: &sc.physical.ObjectAccessorWithCache,
+		vt:             vt,
+	}
+	return sc
 }
 
 // resetForBatch prepares the Session for executing a new batch of statements.

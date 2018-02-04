@@ -27,7 +27,8 @@ import (
 
 // checkTableExists checks if the table exists by using the security.RootUser.
 func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error {
-	if _, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
+	// FIXME XXX exclude vtables here.
+	if _, err := MustGetTableOrViewDesc(ctx, p.txn, tn, true /*allowAdding*/); err != nil {
 		return sqlbase.NewUndefinedRelationError(tn)
 	}
 	return nil
@@ -38,6 +39,7 @@ func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
 func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode, error) {
+	// FIXME XXX poop.
 	var params []string
 	var initCheck func(context.Context) error
 
@@ -110,7 +112,7 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 
 			for i := range allTables {
 				params = append(params, fmt.Sprintf("(%s,%s)",
-					lex.EscapeSQLString(allTables[i].Schema()),
+					lex.EscapeSQLString(allTables[i].Catalog()),
 					lex.EscapeSQLString(allTables[i].Table())))
 			}
 

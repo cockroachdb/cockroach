@@ -29,20 +29,18 @@ type alterSequenceNode struct {
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
 func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (planNode, error) {
-	tn, err := n.Name.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Name.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	seqDesc, err := getSequenceDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	defer p.useNewDescriptors()()
+	seqDesc, err := ResolveExistingObject(ctx, p, tn, !n.IfExists, requireSequenceDesc)
 	if err != nil {
 		return nil, err
 	}
 	if seqDesc == nil {
-		if n.IfExists {
-			return &zeroNode{}, nil
-		}
-		return nil, sqlbase.NewUndefinedRelationError(tn)
+		return &zeroNode{}, nil
 	}
 
 	if err := p.CheckPrivilege(ctx, seqDesc, privilege.CREATE); err != nil {

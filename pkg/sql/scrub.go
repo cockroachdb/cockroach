@@ -174,21 +174,18 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), database)
+	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, database)
 	if err != nil {
 		return err
 	}
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
+	tbNames, err := getTableNames(ctx, p.txn, dbDesc, true /*explicitSchema*/)
 	if err != nil {
 		return err
 	}
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		if err := tableName.QualifyWithDatabase(database); err != nil {
-			return err
-		}
-		tableDesc, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tableName,
+		tableDesc, err := MustGetTableOrViewDesc(ctx, p.txn, tableName,
 			false /* allowAdding */)
 		if err != nil {
 			return err

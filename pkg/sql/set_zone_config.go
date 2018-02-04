@@ -73,15 +73,13 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	if n.zoneSpecifier.TargetsIndex() {
-		_, err := params.p.expandIndexName(params.ctx, &n.zoneSpecifier.TableOrIndex, true /* requireTable */)
-		if err != nil {
-			return err
-		}
+	table, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
+	if err != nil {
+		return err
 	}
 
 	targetID, err := resolveZone(
-		params.ctx, params.p.txn, &n.zoneSpecifier, params.SessionData().Database)
+		params.ctx, params.p.txn, &n.zoneSpecifier)
 	if err != nil {
 		return err
 	}
@@ -94,8 +92,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			"cannot remove default zone")
 	}
 
-	table, index, partition, err := resolveSubzone(params.ctx, params.p.txn,
-		&n.zoneSpecifier, targetID)
+	index, partition, err := resolveSubzone(params.ctx, params.p.txn,
+		&n.zoneSpecifier, targetID, table)
 	if err != nil {
 		return err
 	}

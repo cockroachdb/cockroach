@@ -530,9 +530,11 @@ func resolveTargetsToDescriptors(
 		return nil, nil, err
 	}
 	sessionDatabase := p.SessionData().Database
+	sessionSearchPath := p.SessionData().SearchPath
 
 	var matched descriptorsMatched
-	if matched, err = descriptorsMatchingTargets(sessionDatabase, allDescs, targets); err != nil {
+	if matched, err = descriptorsMatchingTargets(
+		sessionDatabase, sessionSearchPath, allDescs, targets); err != nil {
 		return nil, nil, err
 	}
 

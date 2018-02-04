@@ -543,7 +543,8 @@ func (b *Builder) buildProjection(
 	// NB: The case statements are sorted lexicographically.
 	switch t := projection.(type) {
 	case *tree.AllColumnsSelector:
-		tableName := optbase.TableName(t.TableName.Table())
+		// TODO(whomever): this improperly omits the catalog/schema prefix.
+		tableName := optbase.TableName(t.TableName.Parts[0])
 		for _, col := range inScope.cols {
 			if col.table == tableName && !col.hidden {
 				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
