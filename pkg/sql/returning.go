@@ -83,7 +83,7 @@ func (p *planner) newReturningHelper(
 	ivarHelper := tree.MakeIndexedVarHelper(rh, len(tablecols))
 	for _, target := range rExprs {
 		cols, typedExprs, _, err := p.computeRenderAllowingStars(
-			ctx, target, types.Any, sqlbase.MultiSourceInfo{rh.source}, ivarHelper,
+			ctx, target, types.Any, sqlbase.MakeMultiSourceInfo(rh.source), ivarHelper,
 			autoGenerateRenderOutputName)
 		if err != nil {
 			return nil, err

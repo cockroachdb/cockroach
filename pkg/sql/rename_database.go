@@ -37,7 +37,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	dbDesc, err := MustGetDatabaseDesc(ctx, p.txn, p.getVirtualTabler(), string(n.Name))
+	dbDesc, err := ResolveDatabase(ctx, p, string(n.Name), true /*required*/)
 	if err != nil {
 		return nil, err
 	}
@@ -55,12 +55,22 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	// are currently just stored as strings, they explicitly specify the database
 	// name. Rather than trying to rewrite them with the changed DB name, we
 	// simply disallow such renames for now.
-	tbNames, err := getTableNames(ctx, p.txn, p.getVirtualTabler(), dbDesc, true /*explicitSchema*/)
+	phyAccessor := p.PhysicalSchemaAccessor()
+	lookupFlags := p.CommonLookupFlags(ctx, true /*required*/)
+	// DDL statements bypass the cache.
+	lookupFlags.avoidCached = true
+	tbNames, err := phyAccessor.GetObjectNames(
+		dbDesc, tree.PublicSchema, DatabaseListFlags{
+			CommonLookupFlags: lookupFlags,
+			explicitPrefix:    true,
+		})
 	if err != nil {
 		return nil, err
 	}
+	lookupFlags.required = false
 	for i := range tbNames {
-		tbDesc, err := getTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), &tbNames[i])
+		tbDesc, _, err := phyAccessor.GetObjectDesc(&tbNames[i],
+			ObjectLookupFlags{CommonLookupFlags: lookupFlags, allowAdding: true})
 		if err != nil {
 			return nil, err
 		}

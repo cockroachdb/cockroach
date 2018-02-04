@@ -31,12 +31,13 @@ var errEmptyIndexName = errors.New("empty index name")
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNode, error) {
-	tn, err := p.expandIndexName(ctx, n.Index, true /* requireTable */)
-	if err != nil {
-		return nil, err
-	}
-
-	tableDesc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/)
+	var tableDesc *TableDescriptor
+	var err error
+	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		_, tableDesc, err = expandIndexName(ctx, p, n.Index, true /* requireTable */)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -78,14 +79,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 
 	tableDesc.RenameIndexDescriptor(idx, string(n.NewName))
 
-	if err := tableDesc.SetUpVersion(); err != nil {
-		return nil, err
-	}
-	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
-		return nil, err
-	}
-	if err := p.txn.Put(ctx, descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
+	if err := p.writeTableDesc(ctx, tableDesc); err != nil {
 		return nil, err
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)

@@ -266,9 +266,12 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 				ctx.WriteByte('_')
 				return
 			}
-			// Virtual table: we want to keep the name.
+			// Virtual table: we want to keep the name; however
+			// we need to scrub the database name prefix.
+			newTn := *tn
+			newTn.CatalogName = "_"
 			keepNameCtx := ctx.CopyWithFlags(tree.FmtParsable)
-			keepNameCtx.FormatNode(tn)
+			keepNameCtx.FormatNode(&newTn)
 		})
 	f.FormatNode(stmt)
 	return f.CloseAndGetString(), true

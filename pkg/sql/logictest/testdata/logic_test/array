@@ -276,7 +276,7 @@ c
 query T
 SELECT current_schemas(true)[1]
 ----
-test
+public
 
 # From a CASE sub-expression.
 query I

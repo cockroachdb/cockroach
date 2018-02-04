@@ -37,12 +37,21 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	desc, err := MustGetTableDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /* allowAdding */)
+	var desc *TableDescriptor
+	// We avoid the cache so that we can observe the stats without
+	// taking a lease, like other SHOW commands. We also use
+	// allowAdding=true so we can look at the stats of a table
+	// added in the same transaction.
+	//
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+	})
 	if err != nil {
 		return nil, err
 	}

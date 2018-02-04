@@ -130,7 +130,7 @@ func shouldLogSchemaChangeError(err error) bool {
 // AcquireLease acquires a schema change lease on the table if
 // an unexpired lease doesn't exist. It returns the lease.
 func (sc *SchemaChanger) AcquireLease(
-	ctx context.Context,
+	ctx context.Context, tables *TableCollection,
 ) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -157,6 +157,13 @@ func (sc *SchemaChanger) AcquireLease(
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
+		if tables != nil {
+			// tables is nil when running schema changes from the background schema change task.
+			// When running schema changes at the end of a SQL txn, tables is the
+			// table collection used as descriptor cache by queries. That must
+			// remain consistent with the KV state, so we must update it here.
+			tables.addUncommittedTable(*tableDesc)
+		}
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
 	return lease, err
@@ -181,7 +188,7 @@ func (sc *SchemaChanger) findTableWithLease(
 // ReleaseLease releases the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(
-	ctx context.Context, lease sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, lease sqlbase.TableDescriptor_SchemaChangeLease, tables *TableCollection,
 ) error {
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(ctx, txn, lease)
@@ -191,6 +198,13 @@ func (sc *SchemaChanger) ReleaseLease(
 		tableDesc.Lease = nil
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
+		}
+		if tables != nil {
+			// tables is nil when running schema changes from the background schema change task.
+			// When running schema changes at the end of a SQL txn, tables is the
+			// table collection used as descriptor cache by queries. That must
+			// remain consistent with the KV state, so we must update it here.
+			tables.addUncommittedTable(*tableDesc)
 		}
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
@@ -367,7 +381,7 @@ func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
 	// Acquire lease.
-	lease, err := sc.AcquireLease(ctx)
+	lease, err := sc.AcquireLease(ctx, evalCtx.Tables)
 	if err != nil {
 		return err
 	}
@@ -379,7 +393,7 @@ func (sc *SchemaChanger) exec(
 		if !needRelease {
 			return
 		}
-		if err := sc.ReleaseLease(ctx, lease); err != nil {
+		if err := sc.ReleaseLease(ctx, lease, evalCtx.Tables); err != nil {
 			log.Warning(ctx, err)
 		}
 	}()

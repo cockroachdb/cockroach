@@ -183,9 +183,7 @@ func (s *adminServer) Databases(
 			return nil, s.serverErrorf("type assertion failed on db name: %T", row[0])
 		}
 		dbName := string(dbDatum)
-		if !s.server.sqlExecutor.IsVirtualDatabase(dbName) {
-			resp.Databases = append(resp.Databases, dbName)
-		}
+		resp.Databases = append(resp.Databases, dbName)
 	}
 
 	return &resp, nil
@@ -201,10 +199,6 @@ func (s *adminServer) DatabaseDetails(
 	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := tree.NameStringP(&req.Database)
-	if err := s.assertNotVirtualSchema(escDBName); err != nil {
-		return nil, err
-	}
-
 	// Placeholders don't work with SHOW statements, so we need to manually
 	// escape the database name.
 	//
@@ -223,6 +217,7 @@ func (s *adminServer) DatabaseDetails(
 	var resp serverpb.DatabaseDetailsResponse
 	{
 		const (
+			schemaCol     = "Schema"
 			userCol       = "User"
 			privilegesCol = "Privileges"
 		)
@@ -230,6 +225,16 @@ func (s *adminServer) DatabaseDetails(
 		scanner := makeResultScanner(r.ResultList[0].Columns)
 		for i, nRows := 0, r.ResultList[0].Rows.Len(); i < nRows; i++ {
 			row := r.ResultList[0].Rows.At(i)
+
+			var schemaName string
+			if err := scanner.Scan(row, schemaCol, &schemaName); err != nil {
+				return nil, err
+			}
+			if schemaName != tree.PublicSchema {
+				// We only want to list real tables.
+				continue
+			}
+
 			// Marshal grant, splitting comma-separated privileges into a proper slice.
 			var grant serverpb.DatabaseDetailsResponse_Grant
 			var privileges string
@@ -300,10 +305,6 @@ func (s *adminServer) TableDetails(
 	defer session.Finish(s.server.sqlExecutor)
 
 	escDBName := tree.NameStringP(&req.Database)
-	if err := s.assertNotVirtualSchema(escDBName); err != nil {
-		return nil, err
-	}
-
 	// TODO(cdo): Use real placeholders for the table and database names when we've extended our SQL
 	// grammar to allow that.
 	escTableName := tree.NameStringP(&req.Table)
@@ -507,11 +508,6 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
-	escDBName := tree.NameStringP(&req.Database)
-	if err := s.assertNotVirtualSchema(escDBName); err != nil {
-		return nil, err
-	}
-
 	// Get table span.
 	var tableSpan roachpb.Span
 	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1651,13 +1647,4 @@ func (s *adminServer) queryDescriptorIDPath(
 		path = append(path, id)
 	}
 	return path, nil
-}
-
-// assertNotVirtualSchema checks if the provided database name corresponds to a
-// virtual schema, and if so, returns an error.
-func (s *adminServer) assertNotVirtualSchema(dbName string) error {
-	if s.server.sqlExecutor.IsVirtualDatabase(dbName) {
-		return status.Errorf(codes.InvalidArgument, "%q is a virtual schema", dbName)
-	}
-	return nil
 }
