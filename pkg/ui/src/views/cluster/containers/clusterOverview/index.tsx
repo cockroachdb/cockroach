@@ -43,11 +43,10 @@ function renderCapacityUsage(props: CapacityUsageProps) {
 const mapStateToCapacityUsageProps = createSelector(
   nodesSummarySelector,
   function (nodesSummary: NodesSummary) {
-    const { capacityAvailable, capacityUsed } = nodesSummary.nodeSums;
-    const usableCapacity = capacityAvailable + capacityUsed;
+    const { capacityUsed, capacityUsable } = nodesSummary.nodeSums;
     return {
       usedCapacity: capacityUsed,
-      usableCapacity: usableCapacity,
+      usableCapacity: capacityUsable,
     };
   },
 );
