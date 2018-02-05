@@ -379,6 +379,8 @@ Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
 <tr><td><code>json_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
+<tr><td><code>json_remove_path(val: jsonb, path: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Remove the specified path from the JSON object.</p>
+</span></td></tr>
 <tr><td><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
 </span></td></tr>
 <tr><td><code>json_set(val: jsonb, path: <a href="string.html">string</a>[], to: jsonb, create_missing: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. If <code>create_missing</code> is false, new keys will not be inserted to objects and values will not be prepended or appended to arrays.</p>
