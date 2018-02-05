@@ -649,6 +649,14 @@ func TestImportStmt(t *testing.T) {
 			"option \"transform\" requires a value",
 		},
 		{
+			"bad-computed-column",
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS 'hello' STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform = $1`,
+			nil,
+			filesWithOpts,
+			``,
+			"computed columns not supported",
+		},
+		{
 			"primary-key-dup",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH transform = $2`,
 			schema,
