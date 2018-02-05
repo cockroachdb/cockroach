@@ -37,6 +37,13 @@ var isolationLevelNames = [...]string{
 	SerializableIsolation: "SERIALIZABLE",
 }
 
+// IsolationLevelMap is a map from string isolation level name to isolation
+// level, in the lowercase format that set isolation_level supports.
+var IsolationLevelMap = map[string]IsolationLevel{
+	"serializable": SnapshotIsolation,
+	"snapshot":     SnapshotIsolation,
+}
+
 func (i IsolationLevel) String() string {
 	if i < 0 || i > IsolationLevel(len(isolationLevelNames)-1) {
 		return fmt.Sprintf("IsolationLevel(%d)", i)
