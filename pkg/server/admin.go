@@ -1313,6 +1313,75 @@ func (s *adminServer) Decommission(
 	return s.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{NodeIDs: nodeIDs})
 }
 
+func (s *adminServer) ReplicaMatrix(
+	ctx context.Context, req *serverpb.ReplicaMatrixRequest,
+) (*serverpb.ReplicaMatrixResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	// Get replica counts.
+
+	replicasQuery := `
+SELECT ra.database, ra.table, re.node_id, count(*)
+FROM crdb_internal.replicas re
+JOIN crdb_internal.ranges ra
+ON re.range_id = ra.range_id
+WHERE ra.table != ''
+GROUP BY ra.database, ra.table, re.node_id
+ORDER BY ra.database, ra.table;
+`
+	r1, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, replicasQuery, nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r1.Close(ctx)
+
+	rows1 := r1.ResultList[0].Rows
+	cells := make([]serverpb.ReplicaMatrixCell, rows1.Len())
+	for idx := 0; idx < rows1.Len(); idx++ {
+		row := rows1.At(idx)
+		cells[idx] = serverpb.ReplicaMatrixCell{
+			DatabaseName: string(tree.MustBeDString(row[0])),
+			TableName:    string(tree.MustBeDString(row[1])),
+			NodeId:       int32(tree.MustBeDInt(row[2])),
+			Count:        int64(tree.MustBeDInt(row[3])),
+		}
+	}
+
+	// Get zone configs.
+
+	zoneConfigsQuery := `EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`
+	r2, err := s.server.sqlExecutor.ExecuteStatementsBuffered(session, zoneConfigsQuery, nil, 1)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+	defer r2.Close(ctx)
+
+	rows2 := r2.ResultList[0].Rows
+	zoneConfigs := make([]serverpb.ReplicaMatrixResponse_ZoneConfig, rows2.Len())
+	for idx := 0; idx < rows2.Len(); idx++ {
+		row := rows2.At(idx)
+		zcYaml := tree.MustBeDBytes(row[2])
+		zcBytes := tree.MustBeDBytes(row[3])
+		var zoneConfig config.ZoneConfig
+		if err := protoutil.Unmarshal([]byte(zcBytes), &zoneConfig); err != nil {
+			return nil, err
+		}
+		zoneConfigs[idx] = serverpb.ReplicaMatrixResponse_ZoneConfig{
+			Id:           int64(tree.MustBeDInt(row[0])),
+			CliSpecifier: string(tree.MustBeDString(row[1])),
+			Config:       zoneConfig,
+			ConfigYaml:   string(zcYaml),
+		}
+	}
+
+	return &serverpb.ReplicaMatrixResponse{
+		Cells:       cells,
+		ZoneConfigs: zoneConfigs,
+	}, nil
+}
+
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
 // temporary placeholder $.

@@ -80,6 +80,9 @@ export type RangeLogResponseMessage =
 export type CommandQueueRequestMessage = protos.cockroach.server.serverpb.CommandQueueRequest;
 export type CommandQueueResponseMessage = protos.cockroach.server.serverpb.CommandQueueResponse;
 
+export type ReplicaMatrixRequestMessage = protos.cockroach.server.serverpb.ReplicaMatrixRequest;
+export type ReplicaMatrixResponseMessage = protos.cockroach.server.serverpb.ReplicaMatrixResponse;
+
 // API constants
 
 export const API_PREFIX = "_admin/v1";
@@ -291,4 +294,8 @@ export function getRangeLog(
 // getCommandQueue returns a representation of the command queue for a given range id
 export function getCommandQueue(req: CommandQueueRequestMessage, timeout?: moment.Duration): Promise<CommandQueueResponseMessage> {
   return timeoutFetch(serverpb.CommandQueueResponse, `${STATUS_PREFIX}/range/${req.range_id}/cmdqueue`, null, timeout);
+}
+
+export function getReplicaMatrix(timeout?: moment.Duration): Promise<ReplicaMatrixResponseMessage> {
+  return timeoutFetch(serverpb.ReplicaMatrixResponse, `${API_PREFIX}/replica_matrix`, null, timeout);
 }
