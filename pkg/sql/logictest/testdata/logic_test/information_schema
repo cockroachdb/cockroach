@@ -107,10 +107,14 @@ test
 query T
 SHOW TABLES FROM information_schema
 ----
+administrable_role_authorizations
+applicable_roles
 column_privileges
 columns
+enabled_roles
 key_column_usage
 referential_constraints
+role_table_grants
 schema_privileges
 schemata
 sequences
@@ -235,10 +239,14 @@ crdb_internal       table_columns
 crdb_internal       table_indexes
 crdb_internal       tables
 crdb_internal       zones
+information_schema  administrable_role_authorizations
+information_schema  applicable_roles
 information_schema  column_privileges
 information_schema  columns
+information_schema  enabled_roles
 information_schema  key_column_usage
 information_schema  referential_constraints
+information_schema  role_table_grants
 information_schema  schema_privileges
 information_schema  schemata
 information_schema  sequences
@@ -383,97 +391,101 @@ table_columns
 query TTTTI colnames
 SELECT * FROM information_schema.tables
 ----
-table_catalog  table_schema        table_name                 table_type   version
-def            crdb_internal       backward_dependencies      SYSTEM VIEW  1
-def            crdb_internal       builtin_functions          SYSTEM VIEW  1
-def            crdb_internal       cluster_queries            SYSTEM VIEW  1
-def            crdb_internal       cluster_sessions           SYSTEM VIEW  1
-def            crdb_internal       cluster_settings           SYSTEM VIEW  1
-def            crdb_internal       create_statements          SYSTEM VIEW  1
-def            crdb_internal       forward_dependencies       SYSTEM VIEW  1
-def            crdb_internal       gossip_liveness            SYSTEM VIEW  1
-def            crdb_internal       gossip_nodes               SYSTEM VIEW  1
-def            crdb_internal       index_columns              SYSTEM VIEW  1
-def            crdb_internal       jobs                       SYSTEM VIEW  1
-def            crdb_internal       kv_node_status             SYSTEM VIEW  1
-def            crdb_internal       kv_store_status            SYSTEM VIEW  1
-def            crdb_internal       leases                     SYSTEM VIEW  1
-def            crdb_internal       node_build_info            SYSTEM VIEW  1
-def            crdb_internal       node_queries               SYSTEM VIEW  1
-def            crdb_internal       node_runtime_info          SYSTEM VIEW  1
-def            crdb_internal       node_sessions              SYSTEM VIEW  1
-def            crdb_internal       node_statement_statistics  SYSTEM VIEW  1
-def            crdb_internal       partitions                 SYSTEM VIEW  1
-def            crdb_internal       ranges                     SYSTEM VIEW  1
-def            crdb_internal       schema_changes             SYSTEM VIEW  1
-def            crdb_internal       session_trace              SYSTEM VIEW  1
-def            crdb_internal       session_variables          SYSTEM VIEW  1
-def            crdb_internal       table_columns              SYSTEM VIEW  1
-def            crdb_internal       table_indexes              SYSTEM VIEW  1
-def            crdb_internal       tables                     SYSTEM VIEW  1
-def            crdb_internal       zones                      SYSTEM VIEW  1
-def            information_schema  column_privileges          SYSTEM VIEW  1
-def            information_schema  columns                    SYSTEM VIEW  1
-def            information_schema  key_column_usage           SYSTEM VIEW  1
-def            information_schema  referential_constraints    SYSTEM VIEW  1
-def            information_schema  schema_privileges          SYSTEM VIEW  1
-def            information_schema  schemata                   SYSTEM VIEW  1
-def            information_schema  sequences                  SYSTEM VIEW  1
-def            information_schema  statistics                 SYSTEM VIEW  1
-def            information_schema  table_constraints          SYSTEM VIEW  1
-def            information_schema  table_privileges           SYSTEM VIEW  1
-def            information_schema  tables                     SYSTEM VIEW  1
-def            information_schema  user_privileges            SYSTEM VIEW  1
-def            information_schema  views                      SYSTEM VIEW  1
-def            other_db            abc                        VIEW         1
-def            other_db            xyz                        BASE TABLE   3
-def            pg_catalog          pg_am                      SYSTEM VIEW  1
-def            pg_catalog          pg_attrdef                 SYSTEM VIEW  1
-def            pg_catalog          pg_attribute               SYSTEM VIEW  1
-def            pg_catalog          pg_auth_members            SYSTEM VIEW  1
-def            pg_catalog          pg_class                   SYSTEM VIEW  1
-def            pg_catalog          pg_collation               SYSTEM VIEW  1
-def            pg_catalog          pg_constraint              SYSTEM VIEW  1
-def            pg_catalog          pg_database                SYSTEM VIEW  1
-def            pg_catalog          pg_depend                  SYSTEM VIEW  1
-def            pg_catalog          pg_description             SYSTEM VIEW  1
-def            pg_catalog          pg_enum                    SYSTEM VIEW  1
-def            pg_catalog          pg_extension               SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_data_wrapper    SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_server          SYSTEM VIEW  1
-def            pg_catalog          pg_foreign_table           SYSTEM VIEW  1
-def            pg_catalog          pg_index                   SYSTEM VIEW  1
-def            pg_catalog          pg_indexes                 SYSTEM VIEW  1
-def            pg_catalog          pg_inherits                SYSTEM VIEW  1
-def            pg_catalog          pg_namespace               SYSTEM VIEW  1
-def            pg_catalog          pg_operator                SYSTEM VIEW  1
-def            pg_catalog          pg_proc                    SYSTEM VIEW  1
-def            pg_catalog          pg_range                   SYSTEM VIEW  1
-def            pg_catalog          pg_rewrite                 SYSTEM VIEW  1
-def            pg_catalog          pg_roles                   SYSTEM VIEW  1
-def            pg_catalog          pg_sequence                SYSTEM VIEW  1
-def            pg_catalog          pg_settings                SYSTEM VIEW  1
-def            pg_catalog          pg_tables                  SYSTEM VIEW  1
-def            pg_catalog          pg_tablespace              SYSTEM VIEW  1
-def            pg_catalog          pg_trigger                 SYSTEM VIEW  1
-def            pg_catalog          pg_type                    SYSTEM VIEW  1
-def            pg_catalog          pg_user                    SYSTEM VIEW  1
-def            pg_catalog          pg_user_mapping            SYSTEM VIEW  1
-def            pg_catalog          pg_views                   SYSTEM VIEW  1
-def            system              descriptor                 BASE TABLE   1
-def            system              eventlog                   BASE TABLE   2
-def            system              jobs                       BASE TABLE   1
-def            system              lease                      BASE TABLE   1
-def            system              locations                  BASE TABLE   1
-def            system              namespace                  BASE TABLE   1
-def            system              rangelog                   BASE TABLE   1
-def            system              role_members               BASE TABLE   1
-def            system              settings                   BASE TABLE   1
-def            system              table_statistics           BASE TABLE   1
-def            system              ui                         BASE TABLE   1
-def            system              users                      BASE TABLE   4
-def            system              web_sessions               BASE TABLE   1
-def            system              zones                      BASE TABLE   1
+table_catalog  table_schema        table_name                         table_type   version
+def            crdb_internal       backward_dependencies              SYSTEM VIEW  1
+def            crdb_internal       builtin_functions                  SYSTEM VIEW  1
+def            crdb_internal       cluster_queries                    SYSTEM VIEW  1
+def            crdb_internal       cluster_sessions                   SYSTEM VIEW  1
+def            crdb_internal       cluster_settings                   SYSTEM VIEW  1
+def            crdb_internal       create_statements                  SYSTEM VIEW  1
+def            crdb_internal       forward_dependencies               SYSTEM VIEW  1
+def            crdb_internal       gossip_liveness                    SYSTEM VIEW  1
+def            crdb_internal       gossip_nodes                       SYSTEM VIEW  1
+def            crdb_internal       index_columns                      SYSTEM VIEW  1
+def            crdb_internal       jobs                               SYSTEM VIEW  1
+def            crdb_internal       kv_node_status                     SYSTEM VIEW  1
+def            crdb_internal       kv_store_status                    SYSTEM VIEW  1
+def            crdb_internal       leases                             SYSTEM VIEW  1
+def            crdb_internal       node_build_info                    SYSTEM VIEW  1
+def            crdb_internal       node_queries                       SYSTEM VIEW  1
+def            crdb_internal       node_runtime_info                  SYSTEM VIEW  1
+def            crdb_internal       node_sessions                      SYSTEM VIEW  1
+def            crdb_internal       node_statement_statistics          SYSTEM VIEW  1
+def            crdb_internal       partitions                         SYSTEM VIEW  1
+def            crdb_internal       ranges                             SYSTEM VIEW  1
+def            crdb_internal       schema_changes                     SYSTEM VIEW  1
+def            crdb_internal       session_trace                      SYSTEM VIEW  1
+def            crdb_internal       session_variables                  SYSTEM VIEW  1
+def            crdb_internal       table_columns                      SYSTEM VIEW  1
+def            crdb_internal       table_indexes                      SYSTEM VIEW  1
+def            crdb_internal       tables                             SYSTEM VIEW  1
+def            crdb_internal       zones                              SYSTEM VIEW  1
+def            information_schema  administrable_role_authorizations  SYSTEM VIEW  1
+def            information_schema  applicable_roles                   SYSTEM VIEW  1
+def            information_schema  column_privileges                  SYSTEM VIEW  1
+def            information_schema  columns                            SYSTEM VIEW  1
+def            information_schema  enabled_roles                      SYSTEM VIEW  1
+def            information_schema  key_column_usage                   SYSTEM VIEW  1
+def            information_schema  referential_constraints            SYSTEM VIEW  1
+def            information_schema  role_table_grants                  SYSTEM VIEW  1
+def            information_schema  schema_privileges                  SYSTEM VIEW  1
+def            information_schema  schemata                           SYSTEM VIEW  1
+def            information_schema  sequences                          SYSTEM VIEW  1
+def            information_schema  statistics                         SYSTEM VIEW  1
+def            information_schema  table_constraints                  SYSTEM VIEW  1
+def            information_schema  table_privileges                   SYSTEM VIEW  1
+def            information_schema  tables                             SYSTEM VIEW  1
+def            information_schema  user_privileges                    SYSTEM VIEW  1
+def            information_schema  views                              SYSTEM VIEW  1
+def            other_db            abc                                VIEW         1
+def            other_db            xyz                                BASE TABLE   3
+def            pg_catalog          pg_am                              SYSTEM VIEW  1
+def            pg_catalog          pg_attrdef                         SYSTEM VIEW  1
+def            pg_catalog          pg_attribute                       SYSTEM VIEW  1
+def            pg_catalog          pg_auth_members                    SYSTEM VIEW  1
+def            pg_catalog          pg_class                           SYSTEM VIEW  1
+def            pg_catalog          pg_collation                       SYSTEM VIEW  1
+def            pg_catalog          pg_constraint                      SYSTEM VIEW  1
+def            pg_catalog          pg_database                        SYSTEM VIEW  1
+def            pg_catalog          pg_depend                          SYSTEM VIEW  1
+def            pg_catalog          pg_description                     SYSTEM VIEW  1
+def            pg_catalog          pg_enum                            SYSTEM VIEW  1
+def            pg_catalog          pg_extension                       SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_data_wrapper            SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_server                  SYSTEM VIEW  1
+def            pg_catalog          pg_foreign_table                   SYSTEM VIEW  1
+def            pg_catalog          pg_index                           SYSTEM VIEW  1
+def            pg_catalog          pg_indexes                         SYSTEM VIEW  1
+def            pg_catalog          pg_inherits                        SYSTEM VIEW  1
+def            pg_catalog          pg_namespace                       SYSTEM VIEW  1
+def            pg_catalog          pg_operator                        SYSTEM VIEW  1
+def            pg_catalog          pg_proc                            SYSTEM VIEW  1
+def            pg_catalog          pg_range                           SYSTEM VIEW  1
+def            pg_catalog          pg_rewrite                         SYSTEM VIEW  1
+def            pg_catalog          pg_roles                           SYSTEM VIEW  1
+def            pg_catalog          pg_sequence                        SYSTEM VIEW  1
+def            pg_catalog          pg_settings                        SYSTEM VIEW  1
+def            pg_catalog          pg_tables                          SYSTEM VIEW  1
+def            pg_catalog          pg_tablespace                      SYSTEM VIEW  1
+def            pg_catalog          pg_trigger                         SYSTEM VIEW  1
+def            pg_catalog          pg_type                            SYSTEM VIEW  1
+def            pg_catalog          pg_user                            SYSTEM VIEW  1
+def            pg_catalog          pg_user_mapping                    SYSTEM VIEW  1
+def            pg_catalog          pg_views                           SYSTEM VIEW  1
+def            system              descriptor                         BASE TABLE   1
+def            system              eventlog                           BASE TABLE   2
+def            system              jobs                               BASE TABLE   1
+def            system              lease                              BASE TABLE   1
+def            system              locations                          BASE TABLE   1
+def            system              namespace                          BASE TABLE   1
+def            system              rangelog                           BASE TABLE   1
+def            system              role_members                       BASE TABLE   1
+def            system              settings                           BASE TABLE   1
+def            system              table_statistics                   BASE TABLE   1
+def            system              ui                                 BASE TABLE   1
+def            system              users                              BASE TABLE   4
+def            system              web_sessions                       BASE TABLE   1
+def            system              zones                              BASE TABLE   1
 
 statement ok
 ALTER TABLE other_db.xyz ADD COLUMN j INT
@@ -835,11 +847,144 @@ root      def            system        SELECT          NULL
 admin     def            test          ALL             NULL
 root      def            test          ALL             NULL
 
-## information_schema.table_privileges
+## information_schema.table_privileges and information_schema.role_table_grants
 
 # root can see everything
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges
+----
+grantor  grantee  table_catalog  table_schema  table_name        privilege_type  is_grantable  with_hierarchy
+NULL     admin    def            system        descriptor        GRANT           NULL          NULL
+NULL     admin    def            system        descriptor        SELECT          NULL          NULL
+NULL     root     def            system        descriptor        GRANT           NULL          NULL
+NULL     root     def            system        descriptor        SELECT          NULL          NULL
+NULL     admin    def            system        eventlog          DELETE          NULL          NULL
+NULL     admin    def            system        eventlog          GRANT           NULL          NULL
+NULL     admin    def            system        eventlog          INSERT          NULL          NULL
+NULL     admin    def            system        eventlog          SELECT          NULL          NULL
+NULL     admin    def            system        eventlog          UPDATE          NULL          NULL
+NULL     root     def            system        eventlog          DELETE          NULL          NULL
+NULL     root     def            system        eventlog          GRANT           NULL          NULL
+NULL     root     def            system        eventlog          INSERT          NULL          NULL
+NULL     root     def            system        eventlog          SELECT          NULL          NULL
+NULL     root     def            system        eventlog          UPDATE          NULL          NULL
+NULL     admin    def            system        jobs              DELETE          NULL          NULL
+NULL     admin    def            system        jobs              GRANT           NULL          NULL
+NULL     admin    def            system        jobs              INSERT          NULL          NULL
+NULL     admin    def            system        jobs              SELECT          NULL          NULL
+NULL     admin    def            system        jobs              UPDATE          NULL          NULL
+NULL     root     def            system        jobs              DELETE          NULL          NULL
+NULL     root     def            system        jobs              GRANT           NULL          NULL
+NULL     root     def            system        jobs              INSERT          NULL          NULL
+NULL     root     def            system        jobs              SELECT          NULL          NULL
+NULL     root     def            system        jobs              UPDATE          NULL          NULL
+NULL     admin    def            system        lease             DELETE          NULL          NULL
+NULL     admin    def            system        lease             GRANT           NULL          NULL
+NULL     admin    def            system        lease             INSERT          NULL          NULL
+NULL     admin    def            system        lease             SELECT          NULL          NULL
+NULL     admin    def            system        lease             UPDATE          NULL          NULL
+NULL     root     def            system        lease             DELETE          NULL          NULL
+NULL     root     def            system        lease             GRANT           NULL          NULL
+NULL     root     def            system        lease             INSERT          NULL          NULL
+NULL     root     def            system        lease             SELECT          NULL          NULL
+NULL     root     def            system        lease             UPDATE          NULL          NULL
+NULL     admin    def            system        locations         DELETE          NULL          NULL
+NULL     admin    def            system        locations         GRANT           NULL          NULL
+NULL     admin    def            system        locations         INSERT          NULL          NULL
+NULL     admin    def            system        locations         SELECT          NULL          NULL
+NULL     admin    def            system        locations         UPDATE          NULL          NULL
+NULL     root     def            system        locations         DELETE          NULL          NULL
+NULL     root     def            system        locations         GRANT           NULL          NULL
+NULL     root     def            system        locations         INSERT          NULL          NULL
+NULL     root     def            system        locations         SELECT          NULL          NULL
+NULL     root     def            system        locations         UPDATE          NULL          NULL
+NULL     admin    def            system        namespace         GRANT           NULL          NULL
+NULL     admin    def            system        namespace         SELECT          NULL          NULL
+NULL     root     def            system        namespace         GRANT           NULL          NULL
+NULL     root     def            system        namespace         SELECT          NULL          NULL
+NULL     admin    def            system        rangelog          DELETE          NULL          NULL
+NULL     admin    def            system        rangelog          GRANT           NULL          NULL
+NULL     admin    def            system        rangelog          INSERT          NULL          NULL
+NULL     admin    def            system        rangelog          SELECT          NULL          NULL
+NULL     admin    def            system        rangelog          UPDATE          NULL          NULL
+NULL     root     def            system        rangelog          DELETE          NULL          NULL
+NULL     root     def            system        rangelog          GRANT           NULL          NULL
+NULL     root     def            system        rangelog          INSERT          NULL          NULL
+NULL     root     def            system        rangelog          SELECT          NULL          NULL
+NULL     root     def            system        rangelog          UPDATE          NULL          NULL
+NULL     admin    def            system        role_members      DELETE          NULL          NULL
+NULL     admin    def            system        role_members      GRANT           NULL          NULL
+NULL     admin    def            system        role_members      INSERT          NULL          NULL
+NULL     admin    def            system        role_members      SELECT          NULL          NULL
+NULL     admin    def            system        role_members      UPDATE          NULL          NULL
+NULL     root     def            system        role_members      DELETE          NULL          NULL
+NULL     root     def            system        role_members      GRANT           NULL          NULL
+NULL     root     def            system        role_members      INSERT          NULL          NULL
+NULL     root     def            system        role_members      SELECT          NULL          NULL
+NULL     root     def            system        role_members      UPDATE          NULL          NULL
+NULL     admin    def            system        settings          DELETE          NULL          NULL
+NULL     admin    def            system        settings          GRANT           NULL          NULL
+NULL     admin    def            system        settings          INSERT          NULL          NULL
+NULL     admin    def            system        settings          SELECT          NULL          NULL
+NULL     admin    def            system        settings          UPDATE          NULL          NULL
+NULL     root     def            system        settings          DELETE          NULL          NULL
+NULL     root     def            system        settings          GRANT           NULL          NULL
+NULL     root     def            system        settings          INSERT          NULL          NULL
+NULL     root     def            system        settings          SELECT          NULL          NULL
+NULL     root     def            system        settings          UPDATE          NULL          NULL
+NULL     admin    def            system        table_statistics  DELETE          NULL          NULL
+NULL     admin    def            system        table_statistics  GRANT           NULL          NULL
+NULL     admin    def            system        table_statistics  INSERT          NULL          NULL
+NULL     admin    def            system        table_statistics  SELECT          NULL          NULL
+NULL     admin    def            system        table_statistics  UPDATE          NULL          NULL
+NULL     root     def            system        table_statistics  DELETE          NULL          NULL
+NULL     root     def            system        table_statistics  GRANT           NULL          NULL
+NULL     root     def            system        table_statistics  INSERT          NULL          NULL
+NULL     root     def            system        table_statistics  SELECT          NULL          NULL
+NULL     root     def            system        table_statistics  UPDATE          NULL          NULL
+NULL     admin    def            system        ui                DELETE          NULL          NULL
+NULL     admin    def            system        ui                GRANT           NULL          NULL
+NULL     admin    def            system        ui                INSERT          NULL          NULL
+NULL     admin    def            system        ui                SELECT          NULL          NULL
+NULL     admin    def            system        ui                UPDATE          NULL          NULL
+NULL     root     def            system        ui                DELETE          NULL          NULL
+NULL     root     def            system        ui                GRANT           NULL          NULL
+NULL     root     def            system        ui                INSERT          NULL          NULL
+NULL     root     def            system        ui                SELECT          NULL          NULL
+NULL     root     def            system        ui                UPDATE          NULL          NULL
+NULL     admin    def            system        users             DELETE          NULL          NULL
+NULL     admin    def            system        users             GRANT           NULL          NULL
+NULL     admin    def            system        users             INSERT          NULL          NULL
+NULL     admin    def            system        users             SELECT          NULL          NULL
+NULL     admin    def            system        users             UPDATE          NULL          NULL
+NULL     root     def            system        users             DELETE          NULL          NULL
+NULL     root     def            system        users             GRANT           NULL          NULL
+NULL     root     def            system        users             INSERT          NULL          NULL
+NULL     root     def            system        users             SELECT          NULL          NULL
+NULL     root     def            system        users             UPDATE          NULL          NULL
+NULL     admin    def            system        web_sessions      DELETE          NULL          NULL
+NULL     admin    def            system        web_sessions      GRANT           NULL          NULL
+NULL     admin    def            system        web_sessions      INSERT          NULL          NULL
+NULL     admin    def            system        web_sessions      SELECT          NULL          NULL
+NULL     admin    def            system        web_sessions      UPDATE          NULL          NULL
+NULL     root     def            system        web_sessions      DELETE          NULL          NULL
+NULL     root     def            system        web_sessions      GRANT           NULL          NULL
+NULL     root     def            system        web_sessions      INSERT          NULL          NULL
+NULL     root     def            system        web_sessions      SELECT          NULL          NULL
+NULL     root     def            system        web_sessions      UPDATE          NULL          NULL
+NULL     admin    def            system        zones             DELETE          NULL          NULL
+NULL     admin    def            system        zones             GRANT           NULL          NULL
+NULL     admin    def            system        zones             INSERT          NULL          NULL
+NULL     admin    def            system        zones             SELECT          NULL          NULL
+NULL     admin    def            system        zones             UPDATE          NULL          NULL
+NULL     root     def            system        zones             DELETE          NULL          NULL
+NULL     root     def            system        zones             GRANT           NULL          NULL
+NULL     root     def            system        zones             INSERT          NULL          NULL
+NULL     root     def            system        zones             SELECT          NULL          NULL
+NULL     root     def            system        zones             UPDATE          NULL          NULL
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.role_table_grants
 ----
 grantor  grantee  table_catalog  table_schema  table_name        privilege_type  is_grantable  with_hierarchy
 NULL     admin    def            system        descriptor        GRANT           NULL          NULL
@@ -988,11 +1133,34 @@ NULL     admin     def            other_db      xyz         ALL             NULL
 NULL     root      def            other_db      xyz         ALL             NULL          NULL
 NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
 
+query TTTTTTTT colnames
+SELECT * FROM information_schema.role_table_grants WHERE TABLE_SCHEMA = 'other_db'
+----
+grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
+NULL     admin     def            other_db      abc         ALL             NULL          NULL
+NULL     root      def            other_db      abc         ALL             NULL          NULL
+NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     admin     def            other_db      xyz         ALL             NULL          NULL
+NULL     root      def            other_db      xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
+
 statement ok
 GRANT UPDATE ON other_db.xyz TO testuser
 
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
+----
+grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
+NULL     admin     def            other_db      abc         ALL             NULL          NULL
+NULL     root      def            other_db      abc         ALL             NULL          NULL
+NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     admin     def            other_db      xyz         ALL             NULL          NULL
+NULL     root      def            other_db      xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
+NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.role_table_grants WHERE TABLE_SCHEMA = 'other_db'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
 NULL     admin     def            other_db      abc         ALL             NULL          NULL
@@ -1011,6 +1179,18 @@ SET DATABASE = other_db
 
 query TTTTTTTT colnames
 SELECT * FROM information_schema.table_privileges WHERE TABLE_SCHEMA = 'other_db'
+----
+grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
+NULL     admin     def            other_db      abc         ALL             NULL          NULL
+NULL     root      def            other_db      abc         ALL             NULL          NULL
+NULL     testuser  def            other_db      abc         SELECT          NULL          NULL
+NULL     admin     def            other_db      xyz         ALL             NULL          NULL
+NULL     root      def            other_db      xyz         ALL             NULL          NULL
+NULL     testuser  def            other_db      xyz         SELECT          NULL          NULL
+NULL     testuser  def            other_db      xyz         UPDATE          NULL          NULL
+
+query TTTTTTTT colnames
+SELECT * FROM information_schema.role_table_grants WHERE TABLE_SCHEMA = 'other_db'
 ----
 grantor  grantee   table_catalog  table_schema  table_name  privilege_type  is_grantable  with_hierarchy
 NULL     admin     def            other_db      abc         ALL             NULL          NULL
@@ -1123,7 +1303,7 @@ SELECT * FROM information_schema.sequences
 statement ok
 DROP DATABASE other_db CASCADE
 
-# test infomration_schema.colunm_privileges
+# test information_schema.column_privileges
 query TTBTT colnames
 SHOW COLUMNS FROM information_schema.column_privileges
 ----
@@ -1178,3 +1358,56 @@ NULL     root     def            system        eventlog    targetID     UPDATE  
 NULL     root     def            system        eventlog    reportingID  UPDATE          NULL
 NULL     root     def            system        eventlog    info         UPDATE          NULL
 NULL     root     def            system        eventlog    uniqueID     UPDATE          NULL
+
+# information_schema.administrable_role_authorizations
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+root     admin      YES
+
+user testuser
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.administrable_role_authorizations
+----
+grantee  role_name  is_grantable
+
+user root
+
+# information_schema.applicable_roles
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+root     admin      YES
+
+user testuser
+
+query TTT colnames,rowsort
+SELECT * FROM information_schema.applicable_roles
+----
+grantee  role_name  is_grantable
+
+user root
+
+# information_schema.enabled_roles
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+admin
+root
+
+user testuser
+
+query T colnames,rowsort
+SELECT * FROM information_schema.enabled_roles
+----
+role_name
+testuser
+
+user root
