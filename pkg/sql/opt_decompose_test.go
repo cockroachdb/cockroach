@@ -65,7 +65,7 @@ func makeSelectNode(t *testing.T, p *planner) *renderNode {
 	if err := desc.AllocateIDs(); err != nil {
 		t.Fatal(err)
 	}
-	numColumns := len(sel.sourceInfo[0].sourceColumns)
+	numColumns := len(sel.sourceInfo[0].SourceColumns)
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
 	p.extendedEvalCtx.IVarHelper = &sel.ivarHelper
 	sel.run.curSourceRow = make(tree.Datums, numColumns)

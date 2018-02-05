@@ -34,8 +34,8 @@ type upsertHelper struct {
 	p                  *planner
 	evalExprs          []tree.TypedExpr
 	whereExpr          tree.TypedExpr
-	sourceInfo         *dataSourceInfo
-	excludedSourceInfo *dataSourceInfo
+	sourceInfo         *sqlbase.DataSourceInfo
+	excludedSourceInfo *sqlbase.DataSourceInfo
 	curSourceRow       tree.Datums
 	curExcludedRow     tree.Datums
 
@@ -57,7 +57,7 @@ var _ tableUpsertEvaler = (*upsertHelper)(nil)
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
 func (uh *upsertHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	numSourceColumns := len(uh.sourceInfo.sourceColumns)
+	numSourceColumns := len(uh.sourceInfo.SourceColumns)
 	if idx >= numSourceColumns {
 		return uh.curExcludedRow[idx-numSourceColumns].Eval(ctx)
 	}
@@ -66,16 +66,16 @@ func (uh *upsertHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Dat
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (uh *upsertHelper) IndexedVarResolvedType(idx int) types.T {
-	numSourceColumns := len(uh.sourceInfo.sourceColumns)
+	numSourceColumns := len(uh.sourceInfo.SourceColumns)
 	if idx >= numSourceColumns {
-		return uh.excludedSourceInfo.sourceColumns[idx-numSourceColumns].Typ
+		return uh.excludedSourceInfo.SourceColumns[idx-numSourceColumns].Typ
 	}
-	return uh.sourceInfo.sourceColumns[idx].Typ
+	return uh.sourceInfo.SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
 func (uh *upsertHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	numSourceColumns := len(uh.sourceInfo.sourceColumns)
+	numSourceColumns := len(uh.sourceInfo.SourceColumns)
 	if idx >= numSourceColumns {
 		return uh.excludedSourceInfo.NodeFormatter(idx - numSourceColumns)
 	}
@@ -117,10 +117,10 @@ func (p *planner) makeUpsertHelper(
 		}
 	}
 
-	sourceInfo := newSourceInfoForSingleTable(
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
 	)
-	excludedSourceInfo := newSourceInfoForSingleTable(
+	excludedSourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		upsertExcludedTable, sqlbase.ResultColumnsFromColDescs(insertCols),
 	)
 
@@ -131,8 +131,8 @@ func (p *planner) makeUpsertHelper(
 	}
 
 	var evalExprs []tree.TypedExpr
-	ivarHelper := tree.MakeIndexedVarHelper(helper, len(sourceInfo.sourceColumns)+len(excludedSourceInfo.sourceColumns))
-	sources := multiSourceInfo{sourceInfo, excludedSourceInfo}
+	ivarHelper := tree.MakeIndexedVarHelper(helper, len(sourceInfo.SourceColumns)+len(excludedSourceInfo.SourceColumns))
+	sources := sqlbase.MultiSourceInfo{sourceInfo, excludedSourceInfo}
 	for i, expr := range untupledExprs {
 		typ := updateCols[i].Type.ToDatumType()
 		normExpr, err := p.analyzeExpr(ctx, expr, sources, ivarHelper, typ, true, "ON CONFLICT")
@@ -154,7 +154,7 @@ func (p *planner) makeUpsertHelper(
 		cols:    tableDesc.Columns,
 		mapping: mapping,
 	}
-	ccIvarHelper := tree.MakeIndexedVarHelper(helper.ccIvarContainer, len(sourceInfo.sourceColumns))
+	ccIvarHelper := tree.MakeIndexedVarHelper(helper.ccIvarContainer, len(sourceInfo.SourceColumns))
 	helper.ccIvarHelper = &ccIvarHelper
 	helper.computeExprs = computeExprs
 
