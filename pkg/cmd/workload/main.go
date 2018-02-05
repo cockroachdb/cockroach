@@ -18,7 +18,7 @@ package main
 import (
 	"github.com/spf13/cobra"
 
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl/workloadccl/allccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/allccl"
 )
 
 var rootCmd = &cobra.Command{

@@ -155,7 +155,7 @@ func TestLint(t *testing.T) {
 					":!ccl/acceptanceccl/backup_test.go",
 					":!ccl/sqlccl/backup_cloud_test.go",
 					":!ccl/storageccl/export_storage_test.go",
-					":!ccl/testutilsccl/workloadccl/fixture_test.go",
+					":!ccl/workloadccl/fixture_test.go",
 					":!cmd",
 					":!testutils/lint",
 					":!util/envutil/env.go",
