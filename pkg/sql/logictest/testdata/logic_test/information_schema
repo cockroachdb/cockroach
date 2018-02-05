@@ -1383,15 +1383,13 @@ SELECT * FROM information_schema.applicable_roles
 ----
 grantee  role_name  is_grantable
 root     admin      YES
-root     root       NO
 
 user testuser
 
 query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
-grantee   role_name  is_grantable
-testuser  testuser   NO
+grantee  role_name  is_grantable
 
 user root
 

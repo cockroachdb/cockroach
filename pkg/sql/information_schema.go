@@ -174,15 +174,6 @@ CREATE TABLE information_schema.applicable_roles (
 
 		grantee := tree.NewDString(currentUser)
 
-		// The current user is always listed.
-		if err := addRow(
-			grantee,  // grantee: the current user
-			grantee,  // role_name: the current user
-			noString, // is_grantable: users do not have an ADMIN OPTION
-		); err != nil {
-			return err
-		}
-
 		for roleName, isAdmin := range memberMap {
 			if err := addRow(
 				grantee,                   // grantee: always the current user

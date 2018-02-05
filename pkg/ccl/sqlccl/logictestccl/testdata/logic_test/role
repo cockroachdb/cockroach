@@ -129,7 +129,6 @@ query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee  role_name  is_grantable
-root     root       NO
 root     admin      YES
 
 query T colnames,rowsort
@@ -207,7 +206,6 @@ SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
 testuser  testrole   YES
-testuser  testuser   NO
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -366,11 +364,10 @@ query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  rolea      YES
-testuser  roleb      NO
-testuser  rolec      NO
 testuser  roled      NO
-testuser  testuser   NO
+testuser  rolec      NO
+testuser  roleb      NO
+testuser  rolea      YES
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -404,11 +401,10 @@ query TTT colnames,rowsort
 SELECT * FROM information_schema.applicable_roles
 ----
 grantee   role_name  is_grantable
-testuser  rolea      YES
-testuser  roleb      NO
 testuser  rolec      NO
+testuser  roleb      NO
+testuser  rolea      YES
 testuser  roled      NO
-testuser  testuser   NO
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -524,7 +520,6 @@ grantee  role_name  is_grantable
 root     admin      YES
 root     rolea      YES
 root     roleb      YES
-root     root       NO
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
@@ -550,7 +545,6 @@ SELECT * FROM information_schema.applicable_roles
 grantee   role_name  is_grantable
 testuser  rolea      YES
 testuser  roleb      YES
-testuser  testuser   NO
 
 query T colnames,rowsort
 SELECT * FROM information_schema.enabled_roles
