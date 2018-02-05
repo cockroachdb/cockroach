@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -427,6 +428,24 @@ var varGen = map[string]sessionVar{
 	`transaction_isolation`: {
 		Get: func(evalCtx *extendedEvalContext) string {
 			return evalCtx.Txn.Isolation().ToLowerCaseString()
+		},
+		Set: func(
+			_ context.Context, _ sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getStringVal(&evalCtx.EvalContext, `transaction_isolation`, values)
+			if err != nil {
+				return err
+			}
+			isolationLevel, ok := tree.IsolationLevelMap[s]
+			if !ok {
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"unsupported isolation level \"%s\"", s)
+			}
+			return evalCtx.TxnModesSetter.setTransactionModes(
+				tree.TransactionModes{
+					Isolation: isolationLevel,
+				})
 		},
 	},
 
