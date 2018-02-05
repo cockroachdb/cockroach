@@ -1,8 +1,8 @@
 import { assert } from "chai";
 
-import { LocalityTier } from "src/redux/localities";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
-import { findMostSpecificLocation } from "./locations";
+import { findMostSpecificLocation, findOrCalculateLocation } from "./locations";
 
 const nycLocality: LocalityTier[] = [
   { key: "region", value: "us-east-1" },
@@ -58,5 +58,127 @@ describe("findMostSpecificLocation", function() {
     const location = findMostSpecificLocation(locations, nycLocality);
 
     assert.deepEqual(location, locations.city.nyc);
+  });
+});
+
+describe("findOrCalculateLocation", function() {
+  describe("when locality has location", function() {
+    it("returns the locality's location", function() {
+      const locations = {
+        city: {
+          "nyc": {
+            locality_key: "region",
+            locality_value: "us-east-1",
+            latitude: 12.3,
+            longitude: 45.6,
+          },
+        },
+      };
+
+      const locality: LocalityTree = {
+        localities: {},
+        nodes: [],
+        tiers: nycLocality,
+      };
+
+      const location = findOrCalculateLocation(locations, locality);
+
+      assert.deepEqual(location, locations.city.nyc);
+    });
+  });
+
+  describe("when locality doesn't have location", function() {
+    describe("when locality has nodes", function() {
+      it("returns null", function() {
+        const locations = {
+          region: {
+            "us-east-1": {
+              locality_key: "region",
+              locality_value: "us-east-1",
+              latitude: 12.3,
+              longitude: 45.6,
+            },
+          },
+        };
+
+        const locality: LocalityTree = {
+          localities: {},
+          nodes: [
+            {
+              desc: {
+                node_id: 1,
+                locality: {
+                  tiers: nycLocality,
+                },
+              },
+            },
+          ],
+          tiers: nycLocality,
+        };
+
+        const location = findOrCalculateLocation(locations, locality);
+
+        assert.equal(location, null);
+      });
+    });
+
+    describe("when locality has children without locations", function() {
+      it("returns null", function() {
+        const locations = {};
+
+        const locality: LocalityTree = {
+          localities: {
+            city: {
+              nyc: {
+                localities: {},
+                nodes: [],
+                tiers: nycLocality,
+              },
+            },
+          },
+          nodes: [],
+          tiers: [nycLocality[0]],
+        };
+
+        const location = findOrCalculateLocation(locations, locality);
+
+        assert.equal(location, null);
+      });
+    });
+
+    describe("when locality has children with locations", function() {
+      // TODO(couchand): actually test the centroid
+      it("returns their centroid", function() {
+        const locations = {
+          city: {
+            "nyc": {
+              locality_key: "region",
+              locality_value: "us-east-1",
+              latitude: 12.3,
+              longitude: 45.6,
+            },
+          },
+        };
+
+        const locality: LocalityTree = {
+          localities: {
+            city: {
+              nyc: {
+                localities: {},
+                nodes: [],
+                tiers: nycLocality,
+              },
+            },
+          },
+          nodes: [],
+          tiers: [nycLocality[0]],
+        };
+
+        const location = findOrCalculateLocation(locations, locality);
+
+        assert.equal(location.latitude, locations.city.nyc.latitude);
+        assert.equal(location.longitude, locations.city.nyc.longitude);
+      });
+    });
   });
 });

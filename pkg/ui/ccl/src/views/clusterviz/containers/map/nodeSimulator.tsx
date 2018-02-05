@@ -6,7 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
 import * as d3 from "d3";
@@ -15,13 +14,16 @@ import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { selectLocationsRequestStatus, selectLocationTree, Location, LocationTree } from "src/redux/locations";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
+import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
+import { nodesSummarySelector, NodesSummary, selectNodeRequestStatus } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
-import { findMostSpecificLocation } from "src/util/locations";
+import Loading from "src/views/shared/components/loading";
 
 import { ZoomTransformer } from "./zoom";
 import { ModalLocalitiesView } from "./modalLocalities";
+
+import spinner from "assets/spinner.gif";
 
 type NodeStatus = protos.cockroach.server.status.NodeStatus$Properties;
 
@@ -49,12 +51,10 @@ export class SimulatedNodeStatus {
   clientActivityRate: number;
   private statusHistory: NodeStatus[];
   private maxHistory = 2;
-  private location: Location;
 
-  constructor(initialStatus: NodeStatus, location: Location) {
+  constructor(initialStatus: NodeStatus) {
     this.statusHistory = [initialStatus];
     this.computeClientActivityRate();
-    this.location = location;
   }
 
   update(nextStatus: NodeStatus) {
@@ -76,18 +76,6 @@ export class SimulatedNodeStatus {
     return this.statusHistory[0];
   }
 
-  longLat() {
-    if (_.isNil(this.location)) {
-      throw new Error("Node does not have location assigned!");
-    }
-
-    return ([this.location.longitude, this.location.latitude] as [number, number]);
-  }
-
-  tiers() {
-    return this.statusHistory[0].desc.locality.tiers;
-  }
-
   private computeClientActivityRate() {
     this.clientActivityRate = 0;
     if (this.statusHistory.length > 1) {
@@ -104,7 +92,8 @@ export class SimulatedNodeStatus {
 
 interface NodeSimulatorProps {
   nodesSummary: NodesSummary;
-  statusesValid: boolean;
+  localityTree: LocalityTree;
+  localityStatus: CachedDataReducerState<any>;
   locationTree: LocationTree;
   locationStatus: CachedDataReducerState<any>;
   refreshNodes: typeof refreshNodes;
@@ -114,6 +103,7 @@ interface NodeSimulatorProps {
 
 interface NodeSimulatorOwnProps {
   projection: d3.geo.Projection;
+  tiers: LocalityTier[];
   zoom: ZoomTransformer;
 }
 
@@ -134,18 +124,14 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   // accumulateHistory parses incoming nodeStatus properties and accumulates
   // a history for each node.
   accumulateHistory(props = this.props) {
-    if (!props.nodesSummary.nodeStatuses || !props.locationStatus.valid) {
+    if (!props.localityStatus.valid || !props.locationStatus.valid ) {
       return;
     }
 
     props.nodesSummary.nodeStatuses.map((status) => {
       const id = status.desc.node_id;
       if (!this.nodeHistories.hasOwnProperty(id)) {
-        // Yet another problem caused by the Protobuf.js-generated types.
-        const tiers = status.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
-
-        const loc = findMostSpecificLocation(props.locationTree, tiers);
-        this.nodeHistories[id] = new SimulatedNodeStatus(status, loc);
+        this.nodeHistories[id] = new SimulatedNodeStatus(status);
       } else {
         this.nodeHistories[id].update(status);
       }
@@ -168,11 +154,20 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
 
   render() {
     return (
-      <ModalLocalitiesView
-        nodeHistories={_.values(this.nodeHistories)}
-        projection={this.props.projection}
-        zoom={this.props.zoom}
-      />
+      <Loading
+        loading={ !this.props.localityStatus.valid || !this.props.locationStatus.valid }
+        className="loading-image loading-image__spinner-left"
+        image={ spinner }
+      >
+        <ModalLocalitiesView
+          nodeHistories={this.nodeHistories}
+          localityTree={this.props.localityTree}
+          locationTree={this.props.locationTree}
+          tiers={this.props.tiers}
+          projection={this.props.projection}
+          zoom={this.props.zoom}
+        />
+      </Loading>
     );
   }
 }
@@ -180,7 +175,8 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
 export default connect(
   (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
-    statusesValid: state.cachedData.nodes.valid && state.cachedData.liveness.valid,
+    localityTree: selectLocalityTree(state),
+    localityStatus: selectNodeRequestStatus(state),
     locationTree: selectLocationTree(state),
     locationStatus: selectLocationsRequestStatus(state),
   }),

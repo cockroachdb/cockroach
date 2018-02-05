@@ -1,7 +1,8 @@
 import _ from "lodash";
 
-import { LocalityTier } from "src/redux/localities";
-import { LocationTree } from "src/redux/locations";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { Location, LocationTree } from "src/redux/locations";
+import * as vector from "src/util/vector";
 
 /*
  * getLocation retrieves the location for a given locality tier from the
@@ -43,4 +44,48 @@ export function findMostSpecificLocation(locations: LocationTree, tiers: Localit
   }
 
   return null;
+}
+
+/*
+ * findOrCalculateLocation tries to place a locality on the map.  If there is
+ * no location assigned to the locality itself, calculate the centroid of the
+ * children.
+ */
+export function findOrCalculateLocation(locations: LocationTree, locality: LocalityTree) {
+  // If a location is assigned to this locality, return it.
+  const thisTier = locality.tiers[locality.tiers.length - 1];
+  const thisLocation = getLocation(locations, thisTier);
+  if (!_.isNil(thisLocation)) {
+    return thisLocation;
+  }
+
+  // If this locality has nodes directly, we can't calculate a location; bail.
+  if (!_.isEmpty(locality.nodes)) {
+    return null;
+  }
+
+  // If this locality has no child localities, we can't calculate a location.
+  // Note, this shouldn't ever actually happen.
+  if (_.isEmpty(locality.localities)) {
+    return null;
+  }
+
+  // Find (or calculate) the location of each child locality.
+  const childLocations: Location[] = [];
+  _.values(locality.localities).forEach((tier) => {
+    _.values(tier).forEach((child) => {
+      childLocations.push(findOrCalculateLocation(locations, child));
+    });
+  });
+
+  // If any child location is missing, bail.
+  if (_.some(childLocations, _.isNil)) {
+    return null;
+  }
+
+  // Calculate the centroid of the child locations.
+  let centroid: [number, number] = [0, 0];
+  childLocations.forEach((loc) => centroid = vector.add(centroid, [loc.longitude, loc.latitude]));
+  centroid = vector.mult(centroid, 1 / childLocations.length);
+  return { longitude: centroid[0], latitude: centroid[1] };
 }
