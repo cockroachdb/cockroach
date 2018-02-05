@@ -86,14 +86,18 @@ export class StatsView extends React.Component<StatsViewProps, any> {
     //     </g>
     //   </g>
     // );
+
+    // const usedX = Math.cos(PathMath.angleFromPct(capacityUsedPct));
+    // const usedY = Math.sin(PathMath.angleFromPct(capacityUsedPct));
+
     return (
       <g>
         <path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002 23.374 14.606 32.406 43.48 22.86 68.276" opacity=".35"/>
         <path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002"/>
 
         {/* text inside arc */}
-        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="34" fontWeight="bold" transform="translate(15 8)">
-          <tspan x="41.129" y="105">{capacityUsedPct}%</tspan>
+        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="34" fontWeight="bold" transform="translate(83 8)" textAnchor="end">
+          <tspan x="41.129" y="105">{Math.round(capacityUsedPct)}%</tspan>
         </text>
         <text fill="#152849" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="bold" letterSpacing="1.333" transform="translate(15 8)">
           <tspan x="41.088" y="124">CAPACITY</tspan>
@@ -102,10 +106,10 @@ export class StatsView extends React.Component<StatsViewProps, any> {
         {/* labels at ends of arc */}
         <g fill="#3A7DE1">
           <text transform="translate(21 144)">
-            <tspan x=".194" y="12">320 GB</tspan>
+            <tspan x=".194" y="12">{Bytes(usedCapacity)}</tspan>
           </text>
           <text opacity=".65" transform="translate(21 144)">
-            <tspan x="97.194" y="13">500 GB</tspan>
+            <tspan x="97.194" y="13">{Bytes(capacity)}</tspan>
           </text>
         </g>
       </g>
