@@ -99,6 +99,29 @@ func (m FastIntMap) MaxKey() (_ int, ok bool) {
 	return max, ok
 }
 
+// MaxValue returns the maximum value that is in the map. If the map
+// is empty, returns ok=false.
+func (m FastIntMap) MaxValue() (_ int, ok bool) {
+	max, ok := 0, false
+	if m.large == nil {
+		// TODO(radu): we could skip words that are 0
+		// and use bits.LeadingZeros64.
+		for i := 0; i < numVals; i++ {
+			val := int(m.getSmallVal(uint32(i)))
+			if val != -1 && (!ok || max < val) {
+				max, ok = val, true
+			}
+		}
+		return max, ok
+	}
+	for _, v := range m.large {
+		if !ok || max < v {
+			max, ok = v, true
+		}
+	}
+	return max, ok
+}
+
 // ForEach calls the given function for each key/value pair in the map (in
 // arbitrary order).
 func (m FastIntMap) ForEach(fn func(key, val int)) {
