@@ -12,6 +12,8 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -803,6 +805,57 @@ func TestImportStmt(t *testing.T) {
 
 		// Expect it to succeed with correct columns.
 		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
+	})
+
+	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
+	t.Run("allow-default", func(t *testing.T) {
+		var data string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(data))
+			}
+		}))
+		defer srv.Close()
+
+		sqlDB.Exec(t, `CREATE DATABASE d`)
+		sqlDB.Exec(t, `SET DATABASE = d`)
+
+		const (
+			query = `IMPORT TABLE t (
+			a SERIAL,
+			b INT DEFAULT unique_rowid(),
+			c STRING DEFAULT 's',
+			d SERIAL,
+			e INT DEFAULT unique_rowid(),
+			f STRING DEFAULT 's',
+			PRIMARY KEY (a, b, c)
+		) CSV DATA ($1)`
+			nullif = ` WITH nullif=''`
+		)
+
+		data = ",5,e,,,"
+		if _, err := conn.Exec(query, srv.URL); !testutils.IsError(err, `parse "a" as INT: could not parse ""`) {
+			t.Fatalf("unexpected: %v", err)
+		}
+		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"a" violates not-null constraint`) {
+			t.Fatalf("unexpected: %v", err)
+		}
+		data = "2,,e,,,"
+		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"b" violates not-null constraint`) {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		data = "2,5,,,,"
+		if _, err := conn.Exec(query+nullif, srv.URL); !testutils.IsError(err, `"c" violates not-null constraint`) {
+			t.Fatalf("unexpected: %v", err)
+		}
+
+		data = "2,5,e,,,"
+		sqlDB.Exec(t, query+nullif, srv.URL)
+		sqlDB.CheckQueryResults(t,
+			`SELECT * FROM t`,
+			sqlDB.QueryStr(t, `SELECT 2, 5, 'e', NULL, NULL, NULL`),
+		)
 	})
 }
 
