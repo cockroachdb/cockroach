@@ -1008,46 +1008,37 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 }
 
 // TestStoreRangeSystemSplits verifies that splits are based on the contents of
-// the SystemConfig span.
+// the system.descriptor table.
 func TestStoreRangeSystemSplits(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store, _ := createTestStore(t, stopper)
 
+	userTableMax := keys.MaxReservedDescID + 5
 	schema := sqlbase.MakeMetadataSchema()
-	initialSystemValues := schema.GetInitialValues()
-	var userTableMax int
-	// Write the initial sql values to the system DB as well
-	// as the equivalent of table descriptors for X user tables.
-	// This does two things:
-	// - descriptor IDs are used to determine split keys
-	// - the write triggers a SystemConfig update and gossip.
+	// Write table descriptors for the tables in the metadata schema as well as
+	// five dummy user tables. This does two things:
+	//   - descriptor IDs are used to determine split keys
+	//   - the write triggers a SystemConfig update and gossip
 	// We should end up with splits at each user table prefix.
 	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		prefix := keys.MakeTablePrefix(keys.DescriptorTableID)
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		for i, kv := range initialSystemValues {
-			if !bytes.HasPrefix(kv.Key, prefix) {
+		descTablePrefix := keys.MakeTablePrefix(keys.DescriptorTableID)
+		for _, kv := range schema.GetInitialValues() {
+			if !bytes.HasPrefix(kv.Key, descTablePrefix) {
 				continue
 			}
-			bytes, err := kv.Value.GetBytes()
-			if err != nil {
-				log.Info(ctx, err)
-				continue
-			}
-			if err := txn.Put(ctx, kv.Key, bytes); err != nil {
+			if err := txn.Put(ctx, kv.Key, &kv.Value); err != nil {
 				return err
 			}
-
-			descID := keys.MaxReservedDescID + i + 1
-			userTableMax = i + 1
-
-			// We don't care about the values, just the keys.
-			k := sqlbase.MakeDescMetadataKey(sqlbase.ID(descID))
-			if err := txn.Put(ctx, k, bytes); err != nil {
+		}
+		for i := keys.MaxReservedDescID + 1; i <= userTableMax; i++ {
+			// We don't care about the value, just the key.
+			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
+			if err := txn.Put(ctx, key, &sqlbase.TableDescriptor{}); err != nil {
 				return err
 			}
 		}
@@ -1056,7 +1047,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	verifySplitsAtTablePrefixes := func(maxTableID int) {
+	verifySplitsAtTablePrefixes := func() {
 		t.Helper()
 		// We expect splits at each of the user tables and at a few fixed system
 		// range boundaries, but not at system table boundaries.
@@ -1075,9 +1066,9 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 					keys.MakeTablePrefix(keys.MaxSystemConfigDescID+uint32(i))),
 			)
 		}
-		for i := 1; i <= maxTableID; i++ {
+		for i := keys.MaxReservedDescID + 1; i <= userTableMax; i++ {
 			expKeys = append(expKeys,
-				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(keys.MaxReservedDescID+uint32(i))),
+				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(uint32(i))),
 			)
 		}
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
@@ -1098,24 +1089,23 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		})
 	}
 
-	verifySplitsAtTablePrefixes(userTableMax)
+	verifySplitsAtTablePrefixes()
 
 	// Write another, disjoint (+3) descriptor for a user table.
-	numTotalValues := userTableMax + 3
+	userTableMax += 3
 	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		// This time, only write the last table descriptor. Splits
-		// still occur for every intervening ID.
-		// We don't care about the values, just the keys.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MaxReservedDescID + numTotalValues))
+		// This time, only write the last table descriptor. Splits still occur for
+		// every intervening ID. We don't care about the value, just the key.
+		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
 		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	verifySplitsAtTablePrefixes(numTotalValues)
+	verifySplitsAtTablePrefixes()
 }
 
 // runSetupSplitSnapshotRace engineers a situation in which a range has
