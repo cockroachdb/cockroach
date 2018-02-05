@@ -112,17 +112,11 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
   }
 
   renderChildNodes(tree: LocalityTree) {
-    const children: React.ReactNode[] = [];
-
-    tree.nodes.forEach((node) => {
+    return tree.nodes.map((node) => {
       const nodeHistory = this.props.nodeHistories[node.desc.node_id];
 
-      children.push(
-        <NodeBox node={node} nodeHistory={nodeHistory} />,
-      );
+      return <NodeBox node={node} nodeHistory={nodeHistory} />;
     });
-
-    return children;
   }
 
   render() {
