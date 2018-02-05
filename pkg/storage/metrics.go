@@ -141,6 +141,16 @@ var (
 	metaLastUpdateNanos = metric.Metadata{
 		Name: "lastupdatenanos",
 		Help: "Time at which ages were last updated"}
+
+	// Disk usage diagram (CR=Cockroach):
+	//                            ---------------------------------
+	// Entire hard drive:         | non-CR data | CR data | empty |
+	//                            ---------------------------------
+	// Metrics:
+	//                "capacity": |===============================|
+	//                    "used":               |=========|
+	//               "available":                         |=======|
+	// "usable" (computed in UI):               |=================|
 	metaCapacity = metric.Metadata{
 		Name: "capacity",
 		Help: "Total storage capacity"}
@@ -150,6 +160,7 @@ var (
 	metaUsed = metric.Metadata{
 		Name: "capacity.used",
 		Help: "Used storage capacity"}
+
 	metaReserved = metric.Metadata{
 		Name: "capacity.reserved",
 		Help: "Capacity reserved for snapshots"}
