@@ -177,6 +177,9 @@ func StartServer(
 	pgURL, cleanupGoDB := sqlutils.PGUrl(
 		t, server.ServingAddr(), "StartServer", url.User(security.RootUser))
 	pgURL.Path = params.UseDatabase
+	if params.Insecure {
+		pgURL.RawQuery = "sslmode=disable"
+	}
 	goDB, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
