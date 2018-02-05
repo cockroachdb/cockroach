@@ -49,7 +49,7 @@ func (p *planner) makeGenerator(ctx context.Context, t *tree.FuncExpr) (planNode
 
 	lastKnownSubqueryIndex := len(p.curPlan.subqueryPlans)
 	normalized, err := p.analyzeExpr(
-		ctx, t, multiSourceInfo{}, tree.IndexedVarHelper{}, types.Any, false, "FROM",
+		ctx, t, sqlbase.MultiSourceInfo{}, tree.IndexedVarHelper{}, types.Any, false, "FROM",
 	)
 	if err != nil {
 		return nil, err

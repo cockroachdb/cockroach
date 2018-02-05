@@ -92,7 +92,7 @@ func ProcessComputedColumns(
 	iv := &descContainer{tableDesc.Columns}
 	ivarHelper := tree.MakeIndexedVarHelper(iv, len(tableDesc.Columns))
 
-	sourceInfo := newSourceInfoForSingleTable(
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
@@ -101,7 +101,7 @@ func ProcessComputedColumns(
 
 	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	for i, col := range computedCols {
-		expr, _, _, err := resolveNames(exprs[i], multiSourceInfo{sourceInfo}, ivarHelper, evalCtx.SessionData.SearchPath)
+		expr, _, _, err := resolveNames(exprs[i], sqlbase.MultiSourceInfo{sourceInfo}, ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
 			return nil, nil, nil, err
 		}

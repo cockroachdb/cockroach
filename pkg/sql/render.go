@@ -37,11 +37,11 @@ type renderNode struct {
 	// potentially modified by index selection.
 	source planDataSource
 
-	// sourceInfo contains the reference to the dataSourceInfo in the
+	// sourceInfo contains the reference to the DataSourceInfo in the
 	// source planDataSource that is needed for name resolution.
 	// We keep one instance of multiSourceInfo cached here so as to avoid
 	// re-creating it every time analyzeExpr() is called in computeRender().
-	sourceInfo multiSourceInfo
+	sourceInfo sqlbase.MultiSourceInfo
 
 	// Helper for indexed vars. This holds the actual instances of
 	// IndexedVars replaced in Exprs. The indexed vars contain indices
@@ -70,7 +70,7 @@ type renderNode struct {
 	// targets for grouping, filtering or ordering. The original columns
 	// are columns[:numOriginalCols], the internally added ones are
 	// columns[numOriginalCols:].
-	// populated by initTargets(), which thus must be obviously vcalled before initWhere()
+	// populated by initTargets(), which thus must be obviously called before initWhere()
 	// and the other initializations that may add render columns.
 	numOriginalCols int
 
@@ -198,7 +198,7 @@ func (p *planner) SelectClause(
 		}
 	}
 
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.sourceInfo[0].sourceColumns))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.sourceInfo[0].SourceColumns))
 
 	if err := p.initTargets(ctx, r, parsed.Exprs, desiredTypes); err != nil {
 		return nil, err
@@ -315,7 +315,7 @@ func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum,
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
-	return r.sourceInfo[0].sourceColumns[idx].Typ
+	return r.sourceInfo[0].SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
@@ -362,7 +362,7 @@ func (p *planner) initFrom(
 		return err
 	}
 	r.source = src
-	r.sourceInfo = multiSourceInfo{r.source.info}
+	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
 	return nil
 }
 
@@ -417,12 +417,15 @@ func (p *planner) initTargets(
 func (p *planner) insertRender(
 	ctx context.Context, plan planNode, tn *tree.TableName,
 ) (*renderNode, error) {
-	src := planDataSource{info: newSourceInfoForSingleTable(*tn, planColumns(plan)), plan: plan}
+	src := planDataSource{
+		info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(plan)),
+		plan: plan,
+	}
 	render := &renderNode{
 		source:     src,
-		sourceInfo: multiSourceInfo{src.info},
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
 	}
-	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.sourceColumns))
+	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.SourceColumns))
 	if err := p.initTargets(ctx, render,
 		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}},
 		nil /*desiredTypes*/); err != nil {
@@ -441,14 +444,14 @@ func (p *planner) makeTupleRender(
 	// source.
 	r := &renderNode{
 		source:     src,
-		sourceInfo: multiSourceInfo{src.info},
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
 	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.sourceColumns))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 
 	tExpr := &tree.Tuple{
-		Exprs: make(tree.Exprs, len(src.info.sourceColumns)),
+		Exprs: make(tree.Exprs, len(src.info.SourceColumns)),
 	}
-	for i := range src.info.sourceColumns {
+	for i := range src.info.SourceColumns {
 		tExpr.Exprs[i] = r.ivarHelper.IndexedVar(i)
 	}
 	if err := p.initTargets(ctx, r,
@@ -584,7 +587,7 @@ func (p *planner) rewriteSRFs(
 	}
 
 	r.source = src
-	r.sourceInfo = multiSourceInfo{r.source.info}
+	r.sourceInfo = sqlbase.MultiSourceInfo{r.source.info}
 
 	return tree.SelectExpr{Expr: expr}, nil
 }
@@ -593,14 +596,14 @@ func (p *planner) rewriteSRFs(
 // a pseudo-table with zero columns and exactly one row.
 func isUnarySource(src planDataSource) bool {
 	_, ok := src.plan.(*unaryNode)
-	return ok && len(src.info.sourceColumns) == 0
+	return ok && len(src.info.SourceColumns) == 0
 }
 
 func (p *planner) initWhere(
 	ctx context.Context, r *renderNode, whereExpr tree.Expr,
 ) (*filterNode, error) {
 	f := &filterNode{source: r.source}
-	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(r.sourceInfo[0].sourceColumns))
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(r.sourceInfo[0].SourceColumns))
 
 	if whereExpr != nil {
 		var err error

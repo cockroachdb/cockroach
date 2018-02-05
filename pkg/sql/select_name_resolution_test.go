@@ -33,8 +33,8 @@ func testInitDummySelectNode(p *planner, desc *sqlbase.TableDescriptor) *renderN
 	sel.source.plan = scan
 	testName := tree.MakeTableName("test", tree.Name(desc.Name))
 	cols := planColumns(scan)
-	sel.source.info = newSourceInfoForSingleTable(testName, cols)
-	sel.sourceInfo = multiSourceInfo{sel.source.info}
+	sel.source.info = sqlbase.NewSourceInfoForSingleTable(testName, cols)
+	sel.sourceInfo = sqlbase.MultiSourceInfo{sel.source.info}
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, len(cols))
 
 	return sel
@@ -63,7 +63,7 @@ func TestRetryResolveNames(t *testing.T) {
 			t.Fatal(err)
 		}
 		count := 0
-		for iv := 0; iv < len(s.sourceInfo[0].sourceColumns); iv++ {
+		for iv := 0; iv < len(s.sourceInfo[0].SourceColumns); iv++ {
 			if s.ivarHelper.IndexedVarUsed(iv) {
 				count++
 			}
