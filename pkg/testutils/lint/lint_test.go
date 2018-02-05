@@ -157,6 +157,7 @@ func TestLint(t *testing.T) {
 					":!ccl/storageccl/export_storage_test.go",
 					":!ccl/testutilsccl/workloadccl/fixture_test.go",
 					":!cmd",
+					":!nightly",
 					":!testutils/lint",
 					":!util/envutil/env.go",
 					":!util/log/clog.go",
