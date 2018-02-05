@@ -137,7 +137,7 @@ SELECT to_json('10.1.0.0/16'::INET)
 query T
 SELECT to_json(ARRAY[[1, 2], [3, 4]])
 ----
-[[1,2],[3,4]]
+[[1, 2], [3, 4]]
 
 query T
 SELECT to_json('2014-05-28 12:22:35.614298'::TIMESTAMP)
@@ -167,7 +167,7 @@ SELECT to_json('2h45m2s234ms'::INTERVAL)
 query T
 SELECT to_json((1, 2, 'hello', NULL, NULL))
 ----
-{"f1":1,"f2":2,"f3":"hello","f4":null,"f5":null}
+{"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
 
 query T
 SELECT to_jsonb(123::INT)
@@ -232,7 +232,7 @@ SELECT to_jsonb('10.1.0.0/16'::INET)
 query T
 SELECT to_jsonb(ARRAY[[1, 2], [3, 4]])
 ----
-[[1,2],[3,4]]
+[[1, 2], [3, 4]]
 
 query T
 SELECT to_jsonb('2014-05-28 12:22:35.614298'::TIMESTAMP)
@@ -262,7 +262,7 @@ SELECT to_jsonb('2h45m2s234ms'::INTERVAL)
 query T
 SELECT to_jsonb((1, 2, 'hello', NULL, NULL))
 ----
-{"f1":1,"f2":2,"f3":"hello","f4":null,"f5":null}
+{"f1": 1, "f2": 2, "f3": "hello", "f4": null, "f5": null}
 
 ## json_array_elements and jsonb_array_elements
 
@@ -288,8 +288,8 @@ true
 null
 "text"
 -1.234
-{"2":3,"4":"5"}
-[1,2,3]
+{"2": 3, "4": "5"}
+[1, 2, 3]
 
 query T
 SELECT json_array_elements('[]'::JSON)
@@ -327,8 +327,8 @@ true
 NULL
 text
 -1.234
-{"2":3,"4":"5"}
-[1,2,3]
+{"2": 3, "4": "5"}
+[1, 2, 3]
 
 query T
 SELECT json_array_elements('[]'::JSON)
@@ -388,17 +388,17 @@ SELECT json_build_object()
 query T
 SELECT json_build_object('a', 2, 'b', 4)
 ----
-{"a":2,"b":4}
+{"a": 2, "b": 4}
 
 query T
 SELECT jsonb_build_object(true,'val',1, 0, 1.3, 2, date '2019-02-03' - date '2019-01-01', 4)
 ----
-{"1":0,"1.3":2,"33":4,"true":"val"}
+{"1": 0, "1.3": 2, "33": 4, "true": "val"}
 
 query T
 SELECT json_build_object('a',1,'b',1.2,'c',true,'d',null,'e','{"x": 3, "y": [1,2,3]}'::JSON)
 ----
-{"a":1,"b":1.2,"c":true,"d":null,"e":{"x":3,"y":[1,2,3]}}
+{"a": 1, "b": 1.2, "c": true, "d": null, "e": {"x": 3, "y": [1, 2, 3]}}
 
 query T
 SELECT json_build_object(
@@ -406,28 +406,28 @@ SELECT json_build_object(
        'd', json_build_object('e',ARRAY[9,8,7]::int[])
 )
 ----
-{"a":{"b":false,"c":99},"d":{"e":[9,8,7]}}
+{"a": {"b": false, "c": 99}, "d": {"e": [9, 8, 7]}}
 
 query T
 SELECT json_build_object(a,3) FROM (SELECT 1 AS a, 2 AS b) r
 ----
-{"1":3}
+{"1": 3}
 
 query T
 SELECT json_build_object('\a'::TEXT COLLATE "fr_FR", 1)
 ----
-{"\\a":1}
+{"\\a": 1}
 
 query T
 SELECT json_build_object('\a', 1)
 ----
-{"\\a":1}
+{"\\a": 1}
 
 query T
 SELECT json_build_object(json_object_keys('{"x":3, "y":4}'::JSON), 2)
 ----
-{"x":2}
-{"y":2}
+{"x": 2}
+{"y": 2}
 
 # even number of arguments
 query error pq: json_build_object\(\): argument list must have even number of elements
@@ -454,12 +454,12 @@ SELECT json_extract_path('{"a": 1}', 'a')
 query T
 SELECT json_extract_path('{"a": 1}')
 ----
-{"a":1}
+{"a": 1}
 
 query T
 SELECT json_extract_path('{"a": {"b": 2}}', 'a')
 ----
-{"b":2}
+{"b": 2}
 
 query T
 SELECT json_extract_path('{"a": {"b": 2}}', 'a', 'b')
@@ -486,12 +486,12 @@ SELECT jsonb_pretty('{"a": 1}')
 query T
 SELECT '[1,2,3]'::JSON || '[4,5,6]'::JSON
 ----
-[1,2,3,4,5,6]
+[1, 2, 3, 4, 5, 6]
 
 query T
 SELECT '{"a": 1, "b": 2}'::JSON || '{"b": 3, "c": 4}'
 ----
-{"a":1,"b":3,"c":4}
+{"a": 1, "b": 3, "c": 4}
 
 query error pgcode 22023 invalid concatenation of jsonb objects
 SELECT '{"a": 1, "b": 2}'::JSON || '"c"'
@@ -509,7 +509,7 @@ SELECT json_build_array('\x0001'::BYTEA)
 query T
 SELECT json_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
 ----
-[1,1,1.2,null,["x","y"]]
+[1, 1, 1.2, null, ["x", "y"]]
 
 query T
 SELECT jsonb_build_array()
@@ -524,7 +524,7 @@ SELECT jsonb_build_array('\x0001'::BYTEA)
 query T
 SELECT jsonb_build_array(1, '1'::JSON, 1.2, NULL, ARRAY['x', 'y'])
 ----
-[1,1,1.2,null,["x","y"]]
+[1, 1, 1.2, null, ["x", "y"]]
 
 query error pq: json_object\(\): array must have even number of elements
 SELECT json_object('{a,b,c}'::TEXT[])
@@ -557,27 +557,27 @@ SELECT json_object('{}'::TEXT[], '{}'::TEXT[])
 query T
 SELECT json_object('{b, 3, a, 1, b, 4, a, 2}'::TEXT[])
 ----
-{"a":"2","b":"4"}
+{"a": "2", "b": "4"}
 
 query T
 SELECT json_object('{b, b, a, a}'::TEXT[], '{1, 2, 3, 4}'::TEXT[])
 ----
-{"a":"4","b":"2"}
+{"a": "4", "b": "2"}
 
 query T
 SELECT json_object('{a,1,b,2,3,NULL,"d e f","a b c"}'::TEXT[])
 ----
-{"3":null,"a":"1","b":"2","d e f":"a b c"}
+{"3": null, "a": "1", "b": "2", "d e f": "a b c"}
 
 query T
 SELECT json_object('{a,b,"","d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 ----
-{"":"3","a":"1","b":"2","d e f":"a b c"}
+{"": "3", "a": "1", "b": "2", "d e f": "a b c"}
 
 query T
 SELECT json_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 ----
-{"a":"1","b":"2","c":"3","d e f":"a b c"}
+{"a": "1", "b": "2", "c": "3", "d e f": "a b c"}
 
 query error pq: jsonb_object\(\): array must have even number of elements
 SELECT jsonb_object('{a,b,c}'::TEXT[])
@@ -610,27 +610,27 @@ SELECT jsonb_object('{}'::TEXT[], '{}'::TEXT[])
 query T
 SELECT jsonb_object('{b, 3, a, 1, b, 4, a, 2}'::TEXT[])
 ----
-{"a":"2","b":"4"}
+{"a": "2", "b": "4"}
 
 query T
 SELECT jsonb_object('{b, b, a, a}'::TEXT[], '{1, 2, 3, 4}'::TEXT[])
 ----
-{"a":"4","b":"2"}
+{"a": "4", "b": "2"}
 
 query T
 SELECT jsonb_object('{a,1,b,2,3,NULL,"d e f","a b c"}'::TEXT[])
 ----
-{"3":null,"a":"1","b":"2","d e f":"a b c"}
+{"3": null, "a": "1", "b": "2", "d e f": "a b c"}
 
 query T
 SELECT jsonb_object('{a,b,"","d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 ----
-{"":"3","a":"1","b":"2","d e f":"a b c"}
+{"": "3", "a": "1", "b": "2", "d e f": "a b c"}
 
 query T
 SELECT jsonb_object('{a,b,c,"d e f"}'::TEXT[],'{1,2,3,"a b c"}'::TEXT[])
 ----
-{"a":"1","b":"2","c":"3","d e f":"a b c"}
+{"a": "1", "b": "2", "c": "3", "d e f": "a b c"}
 
 query error pq: json_each\(\): cannot deconstruct an array as an object
 SELECT json_each('[1]'::JSON)
@@ -645,12 +645,12 @@ SELECT * from json_each('{}') q
 query TT colnames
 SELECT * from json_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key value
-f1  [1,2,3]
-f2  {"f3":1}
-f4  null
-f5  99
-f6  "stringy"
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   null
+f5   99
+f6   "stringy"
 
 query error pq: jsonb_each\(\): cannot deconstruct an array as an object
 SELECT jsonb_each('[1]'::JSON)
@@ -665,12 +665,12 @@ SELECT * from jsonb_each('{}') q
 query TT colnames
 SELECT * from jsonb_each('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key value
-f1  [1,2,3]
-f2  {"f3":1}
-f4  null
-f5  99
-f6  "stringy"
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   null
+f5   99
+f6   "stringy"
 
 query error pq: jsonb_each_text\(\): cannot deconstruct an array as an object
 SELECT jsonb_each_text('[1]'::JSON)
@@ -689,12 +689,12 @@ SELECT * from jsonb_each_text('{}') q
 query TT colnames
 SELECT * from jsonb_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key value
-f1  [1,2,3]
-f2  {"f3":1}
-f4  NULL
-f5  99
-f6  stringy
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   NULL
+f5   99
+f6   stringy
 
 query error pq: json_each_text\(\): cannot deconstruct an array as an object
 SELECT json_each_text('[1]'::JSON)
@@ -713,42 +713,42 @@ SELECT * from json_each_text('{}') q
 query TT colnames
 SELECT * from json_each_text('{"f1":[1,2,3],"f2":{"f3":1},"f4":null,"f5":99,"f6":"stringy"}') q
 ----
-key value
-f1  [1,2,3]
-f2  {"f3":1}
-f4  NULL
-f5  99
-f6  stringy
+key  value
+f1   [1, 2, 3]
+f2   {"f3": 1}
+f4   NULL
+f5   99
+f6   stringy
 
 query T
 SELECT json_set('{"a":1}', '{a}'::STRING[], '2')
 ----
-{"a":2}
+{"a": 2}
 
 query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2')
 ----
-{"a":1,"b":2}
+{"a": 1, "b": 2}
 
 query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', true)
 ----
-{"a":1,"b":2}
+{"a": 1, "b": 2}
 
 query T
 SELECT jsonb_set('{"a":1}', '{b}'::STRING[], '2', false)
 ----
-{"a":1}
+{"a": 1}
 
 query T
 SELECT jsonb_set('[{"f1":1,"f2":null},2,null,3]', '{0,f1}'::STRING[], '[2,3,4]', false)
 ----
-[{"f1":[2,3,4],"f2":null},2,null,3]
+[{"f1": [2, 3, 4], "f2": null}, 2, null, 3]
 
 query T
 SELECT jsonb_set('[{"f1":1,"f2":null},2]', '{0,f3}'::STRING[], '[2,3,4]')
 ----
-[{"f1":1,"f2":null,"f3":[2,3,4]},2]
+[{"f1": 1, "f2": null, "f3": [2, 3, 4]}, 2]
 
 query T
 SELECT jsonb_strip_nulls(NULL)
@@ -773,22 +773,22 @@ null
 query T
 SELECT json_strip_nulls('[1,2,null,3,4]')
 ----
-[1,2,null,3,4]
+[1, 2, null, 3, 4]
 
 query T
 SELECT json_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}')
 ----
-{"a":1,"c":[2,null,3],"d":{"e":4}}
+{"a": 1, "c": [2, null, 3], "d": {"e": 4}}
 
 query T
 SELECT json_strip_nulls('[1,{"a":1,"b":null,"c":2},3]')
 ----
-[1,{"a":1,"c":2},3]
+[1, {"a": 1, "c": 2}, 3]
 
 query T
 SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
 ----
-{"a":{},"d":{}}
+{"a": {}, "d": {}}
 
 query T
 SELECT jsonb_strip_nulls(NULL)
@@ -813,22 +813,22 @@ null
 query T
 SELECT jsonb_strip_nulls('[1,2,null,3,4]')
 ----
-[1,2,null,3,4]
+[1, 2, null, 3, 4]
 
 query T
 SELECT jsonb_strip_nulls('{"a":1,"b":null,"c":[2,null,3],"d":{"e":4,"f":null}}')
 ----
-{"a":1,"c":[2,null,3],"d":{"e":4}}
+{"a": 1, "c": [2, null, 3], "d": {"e": 4}}
 
 query T
 SELECT jsonb_strip_nulls('[1,{"a":1,"b":null,"c":2},3]')
 ----
-[1,{"a":1,"c":2},3]
+[1, {"a": 1, "c": 2}, 3]
 
 query T
 SELECT jsonb_strip_nulls('{"a": {"b": null, "c": null}, "d": {}}')
 ----
-{"a":{},"d":{}}
+{"a": {}, "d": {}}
 
 query error pq: json_array_length\(\): cannot get array length of a non-array
 SELECT json_array_length('{"f1":1,"f2":[5,6]}')

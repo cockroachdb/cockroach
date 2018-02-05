@@ -79,12 +79,12 @@ NULL
 query T
 SELECT test_json ->> 6 FROM test_jsonb WHERE json_type = 'array'
 ----
-[1,2,3]
+[1, 2, 3]
 
 query T
 SELECT test_json ->> 7 FROM test_jsonb WHERE json_type = 'array'
 ----
-{"f1":9}
+{"f1": 9}
 
 query T
 SELECT test_json ->> 'field4' FROM test_jsonb WHERE json_type = 'object'
@@ -94,12 +94,12 @@ SELECT test_json ->> 'field4' FROM test_jsonb WHERE json_type = 'object'
 query T
 SELECT test_json ->> 'field5' FROM test_jsonb WHERE json_type = 'object'
 ----
-[1,2,3]
+[1, 2, 3]
 
 query T
 SELECT test_json ->> 'field6' FROM test_jsonb WHERE json_type = 'object'
 ----
-{"f1":9}
+{"f1": 9}
 
 query T
 SELECT test_json ->> 2 FROM test_jsonb WHERE json_type = 'scalar'
@@ -172,7 +172,7 @@ NULL
 query T
 SELECT '[{"b": "c"}, {"b": "cc"}]'::jsonb -> 1;
 ----
-{"b":"cc"}
+{"b": "cc"}
 
 query T
 SELECT '[{"b": "c"}, {"b": "cc"}]'::jsonb -> 3;
@@ -227,7 +227,7 @@ NULL
 query T
 SELECT '[{"b": "c"}, {"b": "cc"}]'::jsonb ->> 1;
 ----
-{"b":"cc"}
+{"b": "cc"}
 
 query T
 SELECT '[{"b": "c"}, {"b": "cc"}]'::jsonb ->> 3;

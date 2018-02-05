@@ -579,7 +579,7 @@ func (j jsonArray) Format(buf *bytes.Buffer) {
 	buf.WriteByte('[')
 	for i := range j {
 		if i != 0 {
-			buf.WriteByte(',')
+			buf.WriteString(", ")
 		}
 		j[i].Format(buf)
 	}
@@ -590,10 +590,10 @@ func (j jsonObject) Format(buf *bytes.Buffer) {
 	buf.WriteByte('{')
 	for i := range j {
 		if i != 0 {
-			buf.WriteByte(',')
+			buf.WriteString(", ")
 		}
 		encodeJSONString(buf, string(j[i].k))
-		buf.WriteByte(':')
+		buf.WriteString(": ")
 		j[i].v.Format(buf)
 	}
 	buf.WriteByte('}')
