@@ -490,3 +490,61 @@ func TestCreateStatementType(t *testing.T) {
 		t.Fatal("expected 10 rows affected, got", result.RowsAffected)
 	}
 }
+
+// Test that the user's password cannot be set in insecure mode.
+func TestSetUserPasswordInsecure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop(context.TODO())
+
+	errFail := "cluster in insecure mode; user cannot use password authentication"
+
+	testCases := []struct {
+		sql       string
+		errString string
+	}{
+		{"CREATE USER user1", ""},
+		{"CREATE USER user2 WITH PASSWORD ''", "empty passwords are not permitted"},
+		{"CREATE USER user2 WITH PASSWORD 'cockroach'", errFail},
+		{"ALTER USER user1 WITH PASSWORD 'somepass'", errFail},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.sql, func(t *testing.T) {
+			_, err := sqlDB.Exec(testCase.sql)
+			if testCase.errString != "" {
+				if !testutils.IsError(err, testCase.errString) {
+					t.Fatal(err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+
+	testCases = []struct {
+		sql       string
+		errString string
+	}{
+		{"CREATE USER $1 WITH PASSWORD $2", errFail},
+		{"ALTER USER $1 WITH PASSWORD $2", errFail},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.sql, func(t *testing.T) {
+			stmt, err := sqlDB.Prepare(testCase.sql)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = stmt.Exec("user3", "cockroach")
+			if testCase.errString != "" {
+				if !testutils.IsError(err, testCase.errString) {
+					t.Fatal(err)
+				}
+			} else if err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
