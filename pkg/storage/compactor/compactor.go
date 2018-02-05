@@ -61,6 +61,14 @@ const (
 	// defaultThresholdBytes threshold.
 	defaultThresholdBytesFraction = 0.10 // more than 10% of space will trigger
 
+	// defaultThresholdBytesAvailableFraction is the fraction of remaining
+	// available space on a disk, which, if exceeded by the size of a suggested
+	// compaction, should trigger the processing of said compaction. This
+	// threshold is meant to make compaction more aggressive when a store is
+	// nearly full, since reclaiming space is much more important in such
+	// scenarios.
+	defaultThresholdBytesAvailableFraction = 0.10
+
 	// defaultMaxSuggestedCompactionRecordAge is the maximum age of a
 	// suggested compaction record. If not processed within this time
 	// interval since the compaction was suggested, it will be deleted.
@@ -73,6 +81,7 @@ type compactorOptions struct {
 	CompactionMinInterval           time.Duration
 	ThresholdBytes                  int64
 	ThresholdBytesFraction          float64
+	ThresholdBytesAvailableFraction float64
 	MaxSuggestedCompactionRecordAge time.Duration
 }
 
@@ -81,27 +90,34 @@ func defaultCompactorOptions() compactorOptions {
 		CompactionMinInterval:           defaultCompactionMinInterval,
 		ThresholdBytes:                  defaultThresholdBytes,
 		ThresholdBytesFraction:          defaultThresholdBytesFraction,
+		ThresholdBytesAvailableFraction: defaultThresholdBytesAvailableFraction,
 		MaxSuggestedCompactionRecordAge: defaultMaxSuggestedCompactionRecordAge,
 	}
 }
 
 type storeCapacityFunc func() (roachpb.StoreCapacity, error)
 
+type doneCompactingFunc func(ctx context.Context)
+
 // A Compactor records suggested compactions and periodically
 // makes requests to the engine to reclaim storage space.
 type Compactor struct {
 	eng     engine.WithSSTables
 	capFn   storeCapacityFunc
+	doneFn  doneCompactingFunc
 	ch      chan struct{}
 	opts    compactorOptions
 	Metrics Metrics
 }
 
 // NewCompactor returns a compactor for the specified storage engine.
-func NewCompactor(eng engine.WithSSTables, capFn storeCapacityFunc) *Compactor {
+func NewCompactor(
+	eng engine.WithSSTables, capFn storeCapacityFunc, doneFn doneCompactingFunc,
+) *Compactor {
 	return &Compactor{
 		eng:     eng,
 		capFn:   capFn,
+		doneFn:  doneFn,
 		ch:      make(chan struct{}, 1),
 		opts:    defaultCompactorOptions(),
 		Metrics: makeMetrics(),
@@ -301,7 +317,8 @@ func (c *Compactor) processCompaction(
 	delBatch engine.Batch,
 ) (int64, error) {
 	shouldProcess := aggr.Bytes >= c.opts.ThresholdBytes ||
-		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.opts.ThresholdBytesFraction)
+		aggr.Bytes >= int64(float64(capacity.LogicalBytes)*c.opts.ThresholdBytesFraction) ||
+		aggr.Bytes >= int64(float64(capacity.Available)*c.opts.ThresholdBytesAvailableFraction)
 
 	if shouldProcess {
 		startTime := timeutil.Now()
@@ -314,6 +331,9 @@ func (c *Compactor) processCompaction(
 		c.Metrics.CompactionSuccesses.Inc(1)
 		duration := timeutil.Since(startTime)
 		c.Metrics.CompactingNanos.Inc(int64(duration))
+		if c.doneFn != nil {
+			c.doneFn(ctx)
+		}
 		log.Infof(ctx, "processed compaction %s in %s", aggr, duration)
 	} else {
 		log.VEventf(ctx, 2, "skipping compaction(s) %s", aggr)
