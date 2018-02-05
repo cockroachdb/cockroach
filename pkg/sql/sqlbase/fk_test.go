@@ -179,7 +179,15 @@ func TestTablesNeededForFKs(t *testing.T) {
 	}
 
 	test := func(t *testing.T, usage FKCheck, expectedIDs []ID) {
-		tableLookups, err := TablesNeededForFKs(context.TODO(), *xDesc, usage, lookup, NoCheckPrivilege)
+		tableLookups, err := TablesNeededForFKs(
+			context.TODO(),
+			*xDesc,
+			usage,
+			lookup,
+			NoCheckPrivilege,
+			nil, /* AnalyzeExprFunction */
+			nil, /* ParseExprsFunction */
+		)
 		if err != nil {
 			t.Fatal(err)
 		}

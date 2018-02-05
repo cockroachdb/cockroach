@@ -52,7 +52,7 @@ type insertNode struct {
 	defaultExprs []tree.TypedExpr
 	computeExprs []tree.TypedExpr
 	n            *tree.Insert
-	checkHelper  sqlbase.CheckHelper
+	checkHelper  *sqlbase.CheckHelper
 
 	insertCols   []sqlbase.ColumnDescriptor
 	computedCols []sqlbase.ColumnDescriptor
@@ -198,8 +198,20 @@ func (p *planner) Insert(
 		}
 	}
 
+	var fkCheckType sqlbase.FKCheck
+	if n.OnConflict == nil || n.OnConflict.DoNothing {
+		fkCheckType = sqlbase.CheckInserts
+	} else {
+		fkCheckType = sqlbase.CheckUpdates
+	}
 	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx, *en.tableDesc, sqlbase.CheckInserts, p.lookupFKTable, p.CheckPrivilege,
+		ctx,
+		*en.tableDesc,
+		fkCheckType,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
+		parser.ParseExprs,
 	)
 	if err != nil {
 		return nil, err
@@ -266,13 +278,6 @@ func (p *planner) Insert(
 				return nil, err
 			}
 
-			fkTables, err := sqlbase.TablesNeededForFKs(
-				ctx, *en.tableDesc, sqlbase.CheckUpdates, p.lookupFKTable, p.CheckPrivilege,
-			)
-			if err != nil {
-				return nil, err
-			}
-
 			tu := tableUpserterPool.Get().(*tableUpserter)
 			*tu = tableUpserter{
 				ri:            ri,
@@ -302,12 +307,7 @@ func (p *planner) Insert(
 			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
 			isUpsertReturning:     isUpsertReturning,
 		},
-	}
-
-	if err := in.checkHelper.Init(
-		ctx, p.analyzeExpr, parser.ParseExprs, tn, en.tableDesc,
-	); err != nil {
-		return nil, err
+		checkHelper: fkTables[en.tableDesc.ID].CheckHelper,
 	}
 
 	if err := in.run.initEditNode(

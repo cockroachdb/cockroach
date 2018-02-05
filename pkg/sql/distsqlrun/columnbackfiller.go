@@ -153,7 +153,13 @@ func (cb *columnBackfiller) runChunk(
 		}
 
 		fkTables, _ := sqlbase.TablesNeededForFKs(
-			ctx, tableDesc, sqlbase.CheckUpdates, sqlbase.NoLookup, sqlbase.NoCheckPrivilege,
+			ctx,
+			tableDesc,
+			sqlbase.CheckUpdates,
+			sqlbase.NoLookup,
+			sqlbase.NoCheckPrivilege,
+			nil, /* AnalyzeExprFunction */
+			nil, /* ParseExprsFunction */
 		)
 		for _, fkTableDesc := range cb.spec.OtherTables {
 			found, ok := fkTables[fkTableDesc.ID]

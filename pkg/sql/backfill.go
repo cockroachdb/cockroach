@@ -521,7 +521,13 @@ func (sc *SchemaChanger) distBackfill(
 			var otherTableDescs []sqlbase.TableDescriptor
 			if backfillType == columnBackfill {
 				fkTables, _ := sqlbase.TablesNeededForFKs(
-					ctx, *tableDesc, sqlbase.CheckUpdates, sqlbase.NoLookup, sqlbase.NoCheckPrivilege,
+					ctx,
+					*tableDesc,
+					sqlbase.CheckUpdates,
+					sqlbase.NoLookup,
+					sqlbase.NoCheckPrivilege,
+					nil, /* AnalyzeExprFunction */
+					nil, /* ParseExprsFunction */
 				)
 				for k := range fkTables {
 					table, err := tc.getTableVersionByID(ctx, txn, k)

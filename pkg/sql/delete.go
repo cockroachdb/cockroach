@@ -18,6 +18,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,7 +83,13 @@ func (p *planner) Delete(
 	}
 
 	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx, *en.tableDesc, sqlbase.CheckDeletes, p.lookupFKTable, p.CheckPrivilege,
+		ctx,
+		*en.tableDesc,
+		sqlbase.CheckDeletes,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
+		parser.ParseExprs,
 	)
 	if err != nil {
 		return nil, err

@@ -35,9 +35,11 @@ type TableLookupsByID map[ID]TableLookup
 // TableLookup is the value type of TableLookupsByID: An optional table
 // descriptor, populated when the table is public/leasable, and an IsAdding
 // flag.
+// This also includes an optional CheckHelper for the table.
 type TableLookup struct {
-	Table    *TableDescriptor
-	IsAdding bool
+	Table       *TableDescriptor
+	IsAdding    bool
+	CheckHelper *CheckHelper
 }
 
 // TableLookupFunction is the function type used by TablesNeededForFKs that will
@@ -83,6 +85,19 @@ type tableLookupQueue struct {
 	tableLookups   TableLookupsByID
 	lookup         TableLookupFunction
 	checkPrivilege CheckPrivilegeFunction
+	analyzeExpr    AnalyzeExprFunction
+	parseExprs     ParseExprsFunction
+}
+
+func (tl *TableLookup) addCheckHelper(
+	ctx context.Context, analyzeExpr AnalyzeExprFunction, parseExprs ParseExprsFunction,
+) error {
+	if analyzeExpr == nil || parseExprs == nil {
+		return nil
+	}
+	tableName := tree.MakeUnqualifiedTableName(tree.Name(tl.Table.Name))
+	tl.CheckHelper = &CheckHelper{}
+	return tl.CheckHelper.Init(ctx, analyzeExpr, parseExprs, &tableName, tl.Table)
 }
 
 func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLookup, error) {
@@ -95,6 +110,9 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLooku
 	}
 	if !tableLookup.IsAdding && tableLookup.Table != nil {
 		if err := q.checkPrivilege(ctx, tableLookup.Table, privilege.SELECT); err != nil {
+			return TableLookup{}, err
+		}
+		if err := tableLookup.addCheckHelper(ctx, q.analyzeExpr, q.parseExprs); err != nil {
 			return TableLookup{}, err
 		}
 	}
@@ -153,22 +171,33 @@ func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
 // TablesNeededForFKs populates a map of TableLookupsByID for all the
 // TableDescriptors that might be needed when performing FK checking for delete
 // and/or insert operations. It uses the passed in lookup function to perform
-// the actual lookup.
+// the actual lookup. The AnalyzeExpr and ParseExprs functions, if provided,
+// are used to initialize the CheckHelper, and this requires that the
+// TableLookupFunction and CheckPrivilegeFunction are provided and not just
+// placeholder functions as well.
 func TablesNeededForFKs(
 	ctx context.Context,
 	table TableDescriptor,
 	usage FKCheck,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
+	analyzeExpr AnalyzeExprFunction,
+	parseExprs ParseExprsFunction,
 ) (TableLookupsByID, error) {
 	queue := tableLookupQueue{
 		tableLookups:   make(TableLookupsByID),
 		alreadyChecked: make(map[ID]map[FKCheck]struct{}),
 		lookup:         lookup,
 		checkPrivilege: checkPrivilege,
+		analyzeExpr:    analyzeExpr,
+		parseExprs:     parseExprs,
 	}
 	// Add the passed in table descriptor to the table lookup.
-	queue.tableLookups[table.ID] = TableLookup{Table: &table}
+	baseTableLookup := TableLookup{Table: &table}
+	if err := baseTableLookup.addCheckHelper(ctx, analyzeExpr, parseExprs); err != nil {
+		return nil, err
+	}
+	queue.tableLookups[table.ID] = baseTableLookup
 	if err := queue.enqueue(ctx, table.ID, usage); err != nil {
 		return nil, err
 	}
