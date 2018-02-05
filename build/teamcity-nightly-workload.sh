@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -ex
+set -e
 
 ./build/builder.sh env \
     GOOGLE_EPHEMERAL_CREDENTIALS="$GOOGLE_EPHEMERAL_CREDENTIALS" \
