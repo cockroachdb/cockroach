@@ -2569,7 +2569,9 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DOid:
 			res = &v.DInt
 		}
-		return res, nil
+		if res != nil {
+			return res, nil
+		}
 
 	case *coltypes.TFloat:
 		switch v := d.(type) {
