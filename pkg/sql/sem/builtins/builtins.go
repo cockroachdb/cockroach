@@ -1628,8 +1628,19 @@ CockroachDB supports the following flags:
 	},
 
 	"json_remove_path": {
-	// TODO(justin): added here so #- can be desugared into it, still needs to be
-	// implemented.
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"val", types.JSON}, {"path", types.TArray{Typ: types.String}}},
+			ReturnType: tree.FixedReturnType(types.JSON),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
+				s, err := tree.MustBeDJSON(args[0]).JSON.RemovePath(path)
+				if err != nil {
+					return nil, err
+				}
+				return &tree.DJSON{JSON: s}, nil
+			},
+			Info: "Remove the specified path from the JSON object.",
+		},
 	},
 
 	"json_extract_path": {jsonExtractPathImpl},

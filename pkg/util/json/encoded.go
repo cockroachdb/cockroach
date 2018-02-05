@@ -653,6 +653,22 @@ func (j *jsonEncoded) RemoveKey(key string) (JSON, error) {
 	return decoded.RemoveKey(key)
 }
 
+func (j *jsonEncoded) RemovePath(path []string) (JSON, error) {
+	decoded, err := j.shallowDecode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.RemovePath(path)
+}
+
+func (j *jsonEncoded) doRemovePath(path []string) (JSON, error) {
+	decoded, err := j.shallowDecode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.doRemovePath(path)
+}
+
 // Size implements the JSON interface.
 func (j *jsonEncoded) Size() uintptr {
 	return jsonEncodedSize + uintptr(cap(j.value))

@@ -471,3 +471,8 @@ query B
 SELECT '[1, 2, 3]'::JSONB @> '[1, 2]'::JSONB
 ----
 true
+
+query T
+SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
+----
+{"foo":{}}
