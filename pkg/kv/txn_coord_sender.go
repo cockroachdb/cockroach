@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -462,6 +461,10 @@ func (tc *TxnCoordSender) Send(
 			tc.mu.meta.Intents = et.IntentSpans
 			tc.mu.intentsSizeBytes = intentsSizeBytes
 
+			if tc.mu.meta.Txn.IsSerializable() && tc.mu.meta.RefreshValid &&
+				len(tc.mu.meta.RefreshReads) == 0 && len(tc.mu.meta.RefreshWrites) == 0 {
+				et.NoRefreshSpans = true
+			}
 			return nil
 		}(); pErr != nil {
 			return nil, pErr
@@ -487,7 +490,7 @@ func (tc *TxnCoordSender) Send(
 		// qualified by possible resume spans in the responses, if the txn
 		// has serializable isolation and we haven't yet exceeded the max
 		// read key bytes.
-		if pErr == nil && ba.Txn != nil && ba.Txn.Isolation == enginepb.SERIALIZABLE {
+		if pErr == nil && ba.Txn.IsSerializable() {
 			tc.mu.Lock()
 			if tc.mu.meta.RefreshValid {
 				if !tc.appendRefreshSpansLocked(ctx, ba, br) {
