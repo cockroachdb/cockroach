@@ -47,7 +47,7 @@ func (s storeScores) Less(i, j int) bool {
 }
 func (s storeScores) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-func TestOnlyValid(t *testing.T) {
+func TestOnlyValidAndNotFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
@@ -76,7 +76,7 @@ func TestOnlyValid(t *testing.T) {
 			}
 			sort.Sort(sort.Reverse(byScore(cl)))
 
-			valid := cl.onlyValid()
+			valid := cl.onlyValidAndNotFull()
 			if a, e := len(valid), tc.valid; a != e {
 				t.Errorf("expected %d valid, actual %d", e, a)
 			}

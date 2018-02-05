@@ -97,6 +97,7 @@ const (
 	systemDataGossipInterval = 1 * time.Minute
 
 	// Messages that provide detail about why a preemptive snapshot was rejected.
+	snapshotStoreTooFullMsg = "store almost out of disk space"
 	snapshotApplySemBusyMsg = "store busy applying snapshots and/or removing replicas"
 	storeDrainingMsg        = "store is draining"
 
@@ -1446,9 +1447,11 @@ func (s *Store) GossipStore(ctx context.Context) error {
 	}
 
 	// Set countdown target for re-gossiping capacity earlier than
-	// the usual periodic interval.
+	// the usual periodic interval. Re-gossip more rapidly for RangeCount
+	// changes because allocators with stale information are much more
+	// likely to make bad decisions.
 	rangeCountdown := float64(storeDesc.Capacity.RangeCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
-	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Max(rangeCountdown, 1))))
+	atomic.StoreInt32(&s.gossipRangeCountdown, int32(math.Ceil(math.Min(rangeCountdown, 3))))
 	leaseCountdown := float64(storeDesc.Capacity.LeaseCount) * s.cfg.GossipWhenCapacityDeltaExceedsFraction
 	atomic.StoreInt32(&s.gossipLeaseCountdown, int32(math.Ceil(math.Max(leaseCountdown, 1))))
 	syncutil.StoreFloat64(&s.gossipWritesPerSecondVal, storeDesc.Capacity.WritesPerSecond)
@@ -2814,6 +2817,10 @@ func (s *Store) reserveSnapshot(
 		// RESTORE or manual SPLIT AT, since it prevents these empty snapshots from
 		// getting stuck behind large snapshots managed by the replicate queue.
 	} else if header.CanDecline {
+		storeDesc, ok := s.cfg.StorePool.getStoreDescriptor(s.StoreID())
+		if ok && !maxCapacityCheck(storeDesc) {
+			return nil, snapshotStoreTooFullMsg, nil
+		}
 		select {
 		case s.snapshotApplySem <- struct{}{}:
 		case <-ctx.Done():

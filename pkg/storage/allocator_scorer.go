@@ -38,6 +38,20 @@ const (
 	// https://brooker.co.za/blog/2012/01/17/two-random.html and
 	// https://www.eecs.harvard.edu/~michaelm/postscripts/mythesis.pdf.
 	allocatorRandomCount = 2
+
+	// maxFractionUsedThreshold: if the fraction used of a store descriptor
+	// capacity is greater than this value, it will never be used as a rebalance
+	// or allocate target and we will actively try to move replicas off of it.
+	maxFractionUsedThreshold = 0.95
+
+	// rebalanceToMaxFractionUsedThreshold: if the fraction used of a store
+	// descriptor capacity is greater than this value, it will never be used as a
+	// rebalance target. This is important for providing a buffer between fully
+	// healthy stores and full stores (as determined by
+	// maxFractionUsedThreshold).  Without such a buffer, replicas could
+	// hypothetically ping pong back and forth between two nodes, making one full
+	// and then the other.
+	rebalanceToMaxFractionUsedThreshold = 0.925
 )
 
 // EnableStatsBasedRebalancing controls whether range rebalancing takes
@@ -108,6 +122,7 @@ func (bd balanceDimensions) compactString(options scorerOptions) string {
 type candidate struct {
 	store          roachpb.StoreDescriptor
 	valid          bool
+	fullDisk       bool
 	diversityScore float64
 	preferredScore int
 	convergesScore int
@@ -116,15 +131,16 @@ type candidate struct {
 	details        string
 }
 
-func (c candidate) constraintScore() float64 {
+func (c candidate) localityScore() float64 {
 	return c.diversityScore + float64(c.preferredScore)
 }
 
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, constraint:%.2f, converges:%d, balance:%s, rangeCount:%d, "+
-		"logicalBytes:%s, writesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.constraintScore(), c.convergesScore, c.balanceScore, c.rangeCount,
-		humanizeutil.IBytes(c.store.Capacity.LogicalBytes), c.store.Capacity.WritesPerSecond)
+	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, locality:%.2f, converges:%d, balance:%s, "+
+		"rangeCount:%d, logicalBytes:%s, writesPerSecond:%.2f",
+		c.store.StoreID, c.valid, c.fullDisk, c.localityScore(), c.convergesScore, c.balanceScore,
+		c.rangeCount, humanizeutil.IBytes(c.store.Capacity.LogicalBytes),
+		c.store.Capacity.WritesPerSecond)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
 	}
@@ -136,6 +152,9 @@ func (c candidate) compactString(options scorerOptions) string {
 	fmt.Fprintf(&buf, "s%d", c.store.StoreID)
 	if !c.valid {
 		fmt.Fprintf(&buf, ", valid:%t", c.valid)
+	}
+	if c.fullDisk {
+		fmt.Fprintf(&buf, ", fullDisk:%t", c.fullDisk)
 	}
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
@@ -163,8 +182,14 @@ func (c candidate) less(o candidate) bool {
 	if !c.valid {
 		return true
 	}
-	if c.constraintScore() != o.constraintScore() {
-		return c.constraintScore() < o.constraintScore()
+	if o.fullDisk {
+		return false
+	}
+	if c.fullDisk {
+		return true
+	}
+	if c.localityScore() != o.localityScore() {
+		return c.localityScore() < o.localityScore()
 	}
 	if c.convergesScore != o.convergesScore {
 		return c.convergesScore < o.convergesScore
@@ -184,8 +209,14 @@ func (c candidate) worthRebalancingTo(o candidate, options scorerOptions) bool {
 	if !c.valid {
 		return true
 	}
-	if c.constraintScore() != o.constraintScore() {
-		return c.constraintScore() < o.constraintScore()
+	if o.fullDisk {
+		return false
+	}
+	if c.fullDisk {
+		return true
+	}
+	if c.localityScore() != o.localityScore() {
+		return c.localityScore() < o.localityScore()
 	}
 	if c.convergesScore != o.convergesScore {
 		return c.convergesScore < o.convergesScore
@@ -256,10 +287,11 @@ var _ sort.Interface = byScoreAndID(nil)
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].constraintScore() == c[j].constraintScore() &&
+	if c[i].localityScore() == c[j].localityScore() &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
 		c[i].rangeCount == c[j].rangeCount &&
+		c[i].fullDisk == c[j].fullDisk &&
 		c[i].valid == c[j].valid {
 		return c[i].store.StoreID < c[j].store.StoreID
 	}
@@ -267,11 +299,11 @@ func (c byScoreAndID) Less(i, j int) bool {
 }
 func (c byScoreAndID) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
 
-// onlyValid returns all the elements in a sorted (by score reversed) candidate
-// list that are valid.
-func (cl candidateList) onlyValid() candidateList {
+// onlyValidAndNotFull returns all the elements in a sorted (by score reversed)
+// candidate list that are valid and not nearly full.
+func (cl candidateList) onlyValidAndNotFull() candidateList {
 	for i := len(cl) - 1; i >= 0; i-- {
-		if cl[i].valid {
+		if cl[i].valid && !cl[i].fullDisk {
 			return cl[:i+1]
 		}
 	}
@@ -281,13 +313,13 @@ func (cl candidateList) onlyValid() candidateList {
 // best returns all the elements in a sorted (by score reversed) candidate list
 // that share the highest constraint score and are valid.
 func (cl candidateList) best() candidateList {
-	cl = cl.onlyValid()
+	cl = cl.onlyValidAndNotFull()
 	if len(cl) <= 1 {
 		return cl
 	}
 	for i := 1; i < len(cl); i++ {
-		if cl[i].constraintScore() < cl[0].constraintScore() ||
-			(cl[i].constraintScore() == cl[len(cl)-1].constraintScore() &&
+		if cl[i].localityScore() < cl[0].localityScore() ||
+			(cl[i].localityScore() == cl[len(cl)-1].localityScore() &&
 				cl[i].convergesScore < cl[len(cl)-1].convergesScore) {
 			return cl[:i]
 		}
@@ -309,10 +341,18 @@ func (cl candidateList) worst() candidateList {
 			}
 		}
 	}
+	// Are there candidates with a nearly full disk? If so, pick those.
+	if cl[len(cl)-1].fullDisk {
+		for i := len(cl) - 2; i >= 0; i-- {
+			if !cl[i].fullDisk {
+				return cl[i+1:]
+			}
+		}
+	}
 	// Find the worst constraint values.
 	for i := len(cl) - 2; i >= 0; i-- {
-		if cl[i].constraintScore() > cl[len(cl)-1].constraintScore() ||
-			(cl[i].constraintScore() == cl[len(cl)-1].constraintScore() &&
+		if cl[i].localityScore() > cl[len(cl)-1].localityScore() ||
+			(cl[i].localityScore() == cl[len(cl)-1].localityScore() &&
 				cl[i].convergesScore > cl[len(cl)-1].convergesScore) {
 			return cl[i+1:]
 		}
@@ -449,14 +489,6 @@ func removeCandidates(
 			})
 			continue
 		}
-		if !maxCapacityCheck(s) {
-			candidates = append(candidates, candidate{
-				store:   s,
-				valid:   false,
-				details: "max capacity check fail",
-			})
-			continue
-		}
 		diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 		balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 		var convergesScore int
@@ -471,6 +503,7 @@ func removeCandidates(
 		candidates = append(candidates, candidate{
 			store:          s,
 			valid:          true,
+			fullDisk:       !maxCapacityCheck(s),
 			diversityScore: diversityScore,
 			preferredScore: preferredMatched,
 			convergesScore: convergesScore,
@@ -562,14 +595,6 @@ func rebalanceCandidates(
 				})
 				continue
 			}
-			if !maxCapacityOK {
-				existingCandidates = append(existingCandidates, candidate{
-					store:   s,
-					valid:   false,
-					details: "max capacity check fail",
-				})
-				continue
-			}
 			diversityScore := diversityRemovalScore(s.Node.NodeID, existingNodeLocalities)
 			balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 			var convergesScore int
@@ -583,6 +608,7 @@ func rebalanceCandidates(
 			existingCandidates = append(existingCandidates, candidate{
 				store:          s,
 				valid:          true,
+				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
 				preferredScore: storeInfo.matched,
 				convergesScore: convergesScore,
@@ -590,7 +616,7 @@ func rebalanceCandidates(
 				rangeCount:     int(s.Capacity.RangeCount),
 			})
 		} else {
-			if !storeInfo.ok || !maxCapacityOK {
+			if !storeInfo.ok || !maxCapacityOK || !rebalanceToMaxCapacityCheck(s) {
 				continue
 			}
 			balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
@@ -611,6 +637,7 @@ func rebalanceCandidates(
 			candidates = append(candidates, candidate{
 				store:          s,
 				valid:          true,
+				fullDisk:       !maxCapacityOK,
 				diversityScore: diversityScore,
 				preferredScore: storeInfo.matched,
 				convergesScore: convergesScore,
@@ -1184,4 +1211,11 @@ func divergesFromMean(oldVal, newVal, mean float64) bool {
 // maxCapacityCheck returns true if the store has room for a new replica.
 func maxCapacityCheck(store roachpb.StoreDescriptor) bool {
 	return store.Capacity.FractionUsed() < maxFractionUsedThreshold
+}
+
+// rebalanceToMaxCapacityCheck returns true if the store has enough room to
+// accept a rebalance. The bar for this is stricter than for whether a store
+// has enough room to accept a necessary replica (i.e. via AllocateCandidates).
+func rebalanceToMaxCapacityCheck(store roachpb.StoreDescriptor) bool {
+	return store.Capacity.FractionUsed() < rebalanceToMaxFractionUsedThreshold
 }
