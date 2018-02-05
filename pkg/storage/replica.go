@@ -3749,7 +3749,9 @@ func (r *Replica) tick() (bool, error) {
 	}
 
 	if r.mu.quiescent {
-		// While a replica is quiesced we still advance its logical clock. This is
+		// While a replica is quiesced we still advance its logical clock.
+		//
+		// When CheckQuorum is used (currently when !enablePreVote), this is
 		// necessary to avoid a scenario where the leader quiesces and a follower
 		// does not. The follower calls an election but the election fails because
 		// the leader and other follower believe that no time in the current term
@@ -3767,9 +3769,17 @@ func (r *Replica) tick() (bool, error) {
 		// difficult to completely eliminate them so we want to minimize the
 		// disruption when they do occur.
 		//
-		// For more details, see #9372.
-		// TODO(bdarnell): remove this once we have fully switched to PreVote
-		if !enablePreVote {
+		// Without CheckQuorum, the call to TickQuiesced is less critical,
+		// but still improves our responsiveness to node failures by
+		// priming the replica to start an election immediately upon
+		// unquiescing, instead of waiting for a full election timeout.
+		//
+		// Enabling TickQuiesced slightly increases the rate of contested
+		// elections. Deployments with high inter-node latency and skewed
+		// range access patterns may benefit from disabling it.
+		//
+		// For more details, see #9372 and #16950.
+		if enableTickQuiesced {
 			r.mu.internalRaftGroup.TickQuiesced()
 		}
 		return false, nil
@@ -3805,7 +3815,7 @@ func (r *Replica) maybeTickQuiesced() bool {
 		done = true
 	} else if r.mu.quiescent {
 		done = true
-		if !enablePreVote {
+		if enableTickQuiesced {
 			// NB: It is safe to call TickQuiesced without holding Replica.raftMu
 			// because that method simply increments a counter without performing any
 			// other logic.
