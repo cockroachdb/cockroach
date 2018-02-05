@@ -9,6 +9,10 @@ import React from "react";
 import { Route } from "react-router";
 import ClusterViz from "src/views/clusterviz/containers/map";
 
+const CLUSTERVIZ_SLUG = "clusterviz";
+
+export const CLUSTERVIZ_ROOT = "/" + CLUSTERVIZ_SLUG;
+
 export default function(): JSX.Element {
-  return <Route path="clusterviz(/**)" component={ClusterViz} />;
+  return <Route path={ CLUSTERVIZ_SLUG + "(/**)" } component={ ClusterViz } />;
 }

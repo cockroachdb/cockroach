@@ -14,7 +14,8 @@ import { InjectedRouter, RouterState } from "react-router";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
-import { generateLocalityRoute } from "src/util/localities";
+import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
+import { generateLocalityRoute, getLocality } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 import { NodeStatus$Properties } from "src/util/proto";
 
@@ -33,7 +34,7 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
   context: { router: InjectedRouter & RouterState };
 
   onClick = () => {
-    const destination = "/clusterviz/" + generateLocalityRoute(this.props.locality.tiers);
+    const destination = CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(this.props.locality.tiers);
     this.context.router.push(destination);
   }
 
@@ -99,6 +100,11 @@ interface ModalLocalitiesViewProps {
 }
 
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
+  static contextTypes = {
+    router: PropTypes.object.isRequired,
+  };
+  context: { router: InjectedRouter & RouterState };
+
   renderChildLocalities(tree: LocalityTree) {
     const children: React.ReactNode[] = [];
 
@@ -128,10 +134,10 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
   }
 
   render() {
-    let treeToRender = this.props.localityTree;
-    this.props.tiers.forEach(({ key, value }) => {
-      treeToRender = treeToRender.localities[key][value];
-    });
+    const treeToRender = getLocality(this.props.localityTree, this.props.tiers);
+    if (_.isNil(treeToRender)) {
+      this.context.router.replace(CLUSTERVIZ_ROOT);
+    }
 
     return (
       <g>

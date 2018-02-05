@@ -1,6 +1,6 @@
 import _ from "lodash";
 
-import { LocalityTier } from "src/redux/localities";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { NodeStatus$Properties } from "src/util/proto";
 
 /*
@@ -33,4 +33,27 @@ export function generateLocalityRoute(tiers: LocalityTier[]): string {
  */
 export function getNodeLocalityTiers(node: NodeStatus$Properties): LocalityTier[] {
   return node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
+}
+
+/*
+ * getLocality gets the locality within this tree which corresponds to a set of
+ * locality tiers, or null if the locality is not present.
+ */
+export function getLocality(localityTree: LocalityTree, tiers: LocalityTier[]): LocalityTree {
+  let result = localityTree;
+  for (let i = 0; i < tiers.length; i += 1) {
+    const { key, value } = tiers[i];
+
+    const thisTier = result.localities[key];
+    if (_.isNil(thisTier)) {
+      return null;
+    }
+
+    result = thisTier[value];
+    if (_.isNil(result)) {
+      return null;
+    }
+  }
+
+  return result;
 }

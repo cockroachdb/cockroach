@@ -1,8 +1,8 @@
 import { assert } from "chai";
 
 import * as protos from "src/js/protos";
-import { LocalityTier } from "src/redux/localities";
-import { generateLocalityRoute, parseLocalityRoute, getNodeLocalityTiers } from "./localities";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { generateLocalityRoute, parseLocalityRoute, getNodeLocalityTiers, getLocality } from "./localities";
 
 describe("parseLocalityRoute", function() {
   describe("with an empty route", function() {
@@ -106,5 +106,137 @@ describe("getNodeLocalityTiers", function() {
     const locality = getNodeLocalityTiers(node);
 
     assert.deepEqual(locality, tiers);
+  });
+});
+
+describe("getLocality", function() {
+  const localityTree: LocalityTree = {
+    tiers: [],
+    localities: {
+      region: {
+        "us-east": {
+          tiers: [{ key: "region", value: "us-east" }],
+          localities: {
+            zone: {
+              "us-east-1": {
+                tiers: [
+                  { key: "region", value: "us-east" },
+                  { key: "zone", value: "us-east-1" },
+                ],
+                localities: {},
+                nodes: [
+                  {
+                    desc: {
+                      node_id: 1,
+                      locality: {
+                        tiers: [
+                          { key: "region", value: "us-east" },
+                          { key: "zone", value: "us-east-1" },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+          },
+          nodes: [],
+        },
+      },
+    },
+    nodes: [],
+  };
+
+  describe("with an empty list of tiers", function() {
+    it("returns the original locality tree", function() {
+      const tiers: LocalityTier[] = [];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.deepEqual(tree, localityTree);
+    });
+  });
+
+  describe("with a single tier", function() {
+    it("returns the child locality if the tier exists", function() {
+      const tiers: LocalityTier[] = [{ key: "region", value: "us-east" }];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.deepEqual(tree, localityTree.localities.region["us-east"]);
+    });
+
+    it("returns null if the tier key does not exist", function() {
+      const tiers: LocalityTier[] = [{ key: "country", value: "us-east" }];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.equal(tree, null);
+    });
+
+    it("returns null if the tier value does not exist", function() {
+      const tiers: LocalityTier[] = [{ key: "region", value: "eu-north" }];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.equal(tree, null);
+    });
+  });
+
+  describe("with multiple tiers", function() {
+    it("returns the grandchild locality if the tiers exist", function() {
+      const tiers: LocalityTier[] = [
+        { key: "region", value: "us-east" },
+        { key: "zone", value: "us-east-1" },
+      ];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.deepEqual(tree, localityTree.localities.region["us-east"].localities.zone["us-east-1"]);
+    });
+
+    it("returns null if the first tier key does not exist", function() {
+      const tiers: LocalityTier[] = [
+        { key: "country", value: "us-east" },
+        { key: "zone", value: "us-east-1" },
+      ];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.equal(tree, null);
+    });
+
+    it("returns null if the first tier value does not exist", function() {
+      const tiers: LocalityTier[] = [
+        { key: "region", value: "eu-north" },
+        { key: "zone", value: "us-east-1" },
+      ];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.equal(tree, null);
+    });
+
+    it("returns null if the second tier key does not exist", function() {
+      const tiers: LocalityTier[] = [
+        { key: "region", value: "us-east" },
+        { key: "datacenter", value: "us-east-1" },
+      ];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.equal(tree, null);
+    });
+
+    it("returns null if the second tier value does not exist", function() {
+      const tiers: LocalityTier[] = [
+        { key: "region", value: "us-east" },
+        { key: "zone", value: "us-east-42" },
+      ];
+
+      const tree = getLocality(localityTree, tiers);
+
+      assert.equal(tree, null);
+    });
   });
 });
