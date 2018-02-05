@@ -19,8 +19,8 @@ import (
 
 	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"google.golang.org/api/iterator"

@@ -30,7 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 const (

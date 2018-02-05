@@ -25,9 +25,9 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl/workloadccl"
-	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
+	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 var useast1bFixtures = workloadccl.FixtureStore{

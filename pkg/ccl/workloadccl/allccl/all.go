@@ -13,8 +13,8 @@ package allccl
 
 import (
 	// workloads
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl/workloadccl/roachmartccl"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/bank"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/kv"
-	_ "github.com/cockroachdb/cockroach/pkg/testutils/workload/tpcc"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/roachmartccl"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
