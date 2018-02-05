@@ -444,9 +444,9 @@ SELECT abs(sin(pi())) < 1e-12
 true
 
 query RR
-SELECT acos(-0.5), acos(0.5)
+SELECT acos(-0.5), round(acos(0.5), 15)
 ----
-2.0943951023931957 1.0471975511965976
+2.0943951023931957 1.047197551196598
 
 query RR
 SELECT cot(-0.5), cot(0.5)
@@ -469,7 +469,7 @@ SELECT atan2(-10.0, 5.0), atan2(10.0, 5.0)
 -1.1071487177940904 1.1071487177940904
 
 query RRR
-SELECT cbrt(-1.0::float), cbrt(27.0::float), cbrt(19.3::decimal)
+SELECT cbrt(-1.0::float), round(cbrt(27.0::float), 15), cbrt(19.3::decimal)
 ----
 -1 3 2.6823725926296729544
 
@@ -741,7 +741,7 @@ SELECT round(-1.7976931348623157e-308::float, 1), round(1.7976931348623157e-308:
 -0 0
 
 query RRRR
-SELECT 1.234567890123456789::float,  round(1.234567890123456789::float,15), round(1.234567890123456789::float,16), round(1.234567890123456789::float,17)
+SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), round(1.234567890123456789::float, 16), round(1.234567890123456789::float, 17)
 ----
 1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
 
@@ -802,9 +802,9 @@ query error cannot take square root of a negative number
 SELECT sqrt(-1.0::decimal)
 
 query RRR
-SELECT tan(-5.0), tan(0.0), tan(5.0)
+SELECT round(tan(-5.0), 14), tan(0.0), round(tan(5.0), 14)
 ----
-3.3805150062465854 0 -3.3805150062465854
+3.38051500624659 0 -3.38051500624659
 
 query RRRR
 SELECT trunc(-0.0), trunc(0.0), trunc(1.9), trunc(19.5678::decimal)
@@ -1406,13 +1406,13 @@ cafef00ddeadbeef
 cafef00ddeadbeef
 63616665-6630-3064-6465-616462656566
 
-query error uuid: UUID string too short
+query error uuid: incorrect UUID length
 SELECT TO_UUID('63616665-6630-3064-6465')
 
-query error uuid: UUID string too long
+query error uuid: incorrect UUID length
 SELECT TO_UUID('63616665-6630-3064-6465-616462656566-123')
 
-query error uuid: invalid string format
+query error uuid: incorrect UUID format
 SELECT TO_UUID('6361666512-6630-3064-6465-616462656566')
 
 query error uuid: UUID must be exactly 16 bytes long, got 4 bytes

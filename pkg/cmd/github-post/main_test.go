@@ -150,7 +150,7 @@ Stress build found a failed test: %s`,
 					if length := len(*issue.Body); length > githubIssueBodyMaximumLength {
 						t.Fatalf("issue length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
 					}
-					return &github.Issue{ID: github.Int(issueID)}, nil, nil
+					return &github.Issue{ID: github.Int64(issueID)}, nil, nil
 				}
 				searchIssues := func(_ context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
 					total := 0

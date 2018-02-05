@@ -2146,10 +2146,7 @@ func init() {
 }
 func (this *GetRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*GetRequest)
@@ -2162,10 +2159,7 @@ func (this *GetRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2176,10 +2170,7 @@ func (this *GetRequest) Equal(that interface{}) bool {
 }
 func (this *PutRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*PutRequest)
@@ -2192,10 +2183,7 @@ func (this *PutRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2215,10 +2203,7 @@ func (this *PutRequest) Equal(that interface{}) bool {
 }
 func (this *ConditionalPutRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ConditionalPutRequest)
@@ -2231,10 +2216,7 @@ func (this *ConditionalPutRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2254,10 +2236,7 @@ func (this *ConditionalPutRequest) Equal(that interface{}) bool {
 }
 func (this *InitPutRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*InitPutRequest)
@@ -2270,10 +2249,7 @@ func (this *InitPutRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2293,10 +2269,7 @@ func (this *InitPutRequest) Equal(that interface{}) bool {
 }
 func (this *IncrementRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*IncrementRequest)
@@ -2309,10 +2282,7 @@ func (this *IncrementRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2326,10 +2296,7 @@ func (this *IncrementRequest) Equal(that interface{}) bool {
 }
 func (this *DeleteRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*DeleteRequest)
@@ -2342,10 +2309,7 @@ func (this *DeleteRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2356,10 +2320,7 @@ func (this *DeleteRequest) Equal(that interface{}) bool {
 }
 func (this *DeleteRangeRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*DeleteRangeRequest)
@@ -2372,10 +2333,7 @@ func (this *DeleteRangeRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2392,10 +2350,7 @@ func (this *DeleteRangeRequest) Equal(that interface{}) bool {
 }
 func (this *ClearRangeRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ClearRangeRequest)
@@ -2408,10 +2363,7 @@ func (this *ClearRangeRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2422,10 +2374,7 @@ func (this *ClearRangeRequest) Equal(that interface{}) bool {
 }
 func (this *ScanOptions) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ScanOptions)
@@ -2438,10 +2387,7 @@ func (this *ScanOptions) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2455,10 +2401,7 @@ func (this *ScanOptions) Equal(that interface{}) bool {
 }
 func (this *ScanRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ScanRequest)
@@ -2471,10 +2414,7 @@ func (this *ScanRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2488,10 +2428,7 @@ func (this *ScanRequest) Equal(that interface{}) bool {
 }
 func (this *ReverseScanRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ReverseScanRequest)
@@ -2504,10 +2441,7 @@ func (this *ReverseScanRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2521,10 +2455,7 @@ func (this *ReverseScanRequest) Equal(that interface{}) bool {
 }
 func (this *CheckConsistencyRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*CheckConsistencyRequest)
@@ -2537,10 +2468,7 @@ func (this *CheckConsistencyRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2554,10 +2482,7 @@ func (this *CheckConsistencyRequest) Equal(that interface{}) bool {
 }
 func (this *RecomputeStatsRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RecomputeStatsRequest)
@@ -2570,10 +2495,7 @@ func (this *RecomputeStatsRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2587,10 +2509,7 @@ func (this *RecomputeStatsRequest) Equal(that interface{}) bool {
 }
 func (this *BeginTransactionRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*BeginTransactionRequest)
@@ -2603,10 +2522,7 @@ func (this *BeginTransactionRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2617,10 +2533,7 @@ func (this *BeginTransactionRequest) Equal(that interface{}) bool {
 }
 func (this *EndTransactionRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*EndTransactionRequest)
@@ -2633,10 +2546,7 @@ func (this *EndTransactionRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2670,10 +2580,7 @@ func (this *EndTransactionRequest) Equal(that interface{}) bool {
 }
 func (this *AdminSplitRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AdminSplitRequest)
@@ -2686,10 +2593,7 @@ func (this *AdminSplitRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2703,10 +2607,7 @@ func (this *AdminSplitRequest) Equal(that interface{}) bool {
 }
 func (this *AdminMergeRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AdminMergeRequest)
@@ -2719,10 +2620,7 @@ func (this *AdminMergeRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2733,10 +2631,7 @@ func (this *AdminMergeRequest) Equal(that interface{}) bool {
 }
 func (this *AdminTransferLeaseRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AdminTransferLeaseRequest)
@@ -2749,10 +2644,7 @@ func (this *AdminTransferLeaseRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2766,10 +2658,7 @@ func (this *AdminTransferLeaseRequest) Equal(that interface{}) bool {
 }
 func (this *AdminChangeReplicasRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AdminChangeReplicasRequest)
@@ -2782,10 +2671,7 @@ func (this *AdminChangeReplicasRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2807,10 +2693,7 @@ func (this *AdminChangeReplicasRequest) Equal(that interface{}) bool {
 }
 func (this *RangeLookupRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RangeLookupRequest)
@@ -2823,10 +2706,7 @@ func (this *RangeLookupRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2843,10 +2723,7 @@ func (this *RangeLookupRequest) Equal(that interface{}) bool {
 }
 func (this *HeartbeatTxnRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*HeartbeatTxnRequest)
@@ -2859,10 +2736,7 @@ func (this *HeartbeatTxnRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2876,10 +2750,7 @@ func (this *HeartbeatTxnRequest) Equal(that interface{}) bool {
 }
 func (this *GCRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*GCRequest)
@@ -2892,10 +2763,7 @@ func (this *GCRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2920,10 +2788,7 @@ func (this *GCRequest) Equal(that interface{}) bool {
 }
 func (this *GCRequest_GCKey) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*GCRequest_GCKey)
@@ -2936,10 +2801,7 @@ func (this *GCRequest_GCKey) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -2953,10 +2815,7 @@ func (this *GCRequest_GCKey) Equal(that interface{}) bool {
 }
 func (this *PushTxnRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*PushTxnRequest)
@@ -2969,10 +2828,7 @@ func (this *PushTxnRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3001,10 +2857,7 @@ func (this *PushTxnRequest) Equal(that interface{}) bool {
 }
 func (this *QueryTxnRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*QueryTxnRequest)
@@ -3017,10 +2870,7 @@ func (this *QueryTxnRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3045,10 +2895,7 @@ func (this *QueryTxnRequest) Equal(that interface{}) bool {
 }
 func (this *ResolveIntentRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ResolveIntentRequest)
@@ -3061,10 +2908,7 @@ func (this *ResolveIntentRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3084,10 +2928,7 @@ func (this *ResolveIntentRequest) Equal(that interface{}) bool {
 }
 func (this *ResolveIntentRangeRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ResolveIntentRangeRequest)
@@ -3100,10 +2941,7 @@ func (this *ResolveIntentRangeRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3126,10 +2964,7 @@ func (this *ResolveIntentRangeRequest) Equal(that interface{}) bool {
 }
 func (this *MergeRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*MergeRequest)
@@ -3142,10 +2977,7 @@ func (this *MergeRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3159,10 +2991,7 @@ func (this *MergeRequest) Equal(that interface{}) bool {
 }
 func (this *TruncateLogRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TruncateLogRequest)
@@ -3175,10 +3004,7 @@ func (this *TruncateLogRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3195,10 +3021,7 @@ func (this *TruncateLogRequest) Equal(that interface{}) bool {
 }
 func (this *RequestLeaseRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RequestLeaseRequest)
@@ -3211,10 +3034,7 @@ func (this *RequestLeaseRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3231,10 +3051,7 @@ func (this *RequestLeaseRequest) Equal(that interface{}) bool {
 }
 func (this *TransferLeaseRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TransferLeaseRequest)
@@ -3247,10 +3064,7 @@ func (this *TransferLeaseRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3267,10 +3081,7 @@ func (this *TransferLeaseRequest) Equal(that interface{}) bool {
 }
 func (this *LeaseInfoRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*LeaseInfoRequest)
@@ -3283,10 +3094,7 @@ func (this *LeaseInfoRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3297,10 +3105,7 @@ func (this *LeaseInfoRequest) Equal(that interface{}) bool {
 }
 func (this *ComputeChecksumRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ComputeChecksumRequest)
@@ -3313,10 +3118,7 @@ func (this *ComputeChecksumRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3336,10 +3138,7 @@ func (this *ComputeChecksumRequest) Equal(that interface{}) bool {
 }
 func (this *DeprecatedVerifyChecksumRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*DeprecatedVerifyChecksumRequest)
@@ -3352,10 +3151,7 @@ func (this *DeprecatedVerifyChecksumRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3366,10 +3162,7 @@ func (this *DeprecatedVerifyChecksumRequest) Equal(that interface{}) bool {
 }
 func (this *ExportStorage) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportStorage)
@@ -3382,10 +3175,7 @@ func (this *ExportStorage) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3411,10 +3201,7 @@ func (this *ExportStorage) Equal(that interface{}) bool {
 }
 func (this *ExportStorage_LocalFilePath) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportStorage_LocalFilePath)
@@ -3427,10 +3214,7 @@ func (this *ExportStorage_LocalFilePath) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3441,10 +3225,7 @@ func (this *ExportStorage_LocalFilePath) Equal(that interface{}) bool {
 }
 func (this *ExportStorage_Http) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportStorage_Http)
@@ -3457,10 +3238,7 @@ func (this *ExportStorage_Http) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3471,10 +3249,7 @@ func (this *ExportStorage_Http) Equal(that interface{}) bool {
 }
 func (this *ExportStorage_S3) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportStorage_S3)
@@ -3487,10 +3262,7 @@ func (this *ExportStorage_S3) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3519,10 +3291,7 @@ func (this *ExportStorage_S3) Equal(that interface{}) bool {
 }
 func (this *ExportStorage_GCS) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportStorage_GCS)
@@ -3535,10 +3304,7 @@ func (this *ExportStorage_GCS) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3555,10 +3321,7 @@ func (this *ExportStorage_GCS) Equal(that interface{}) bool {
 }
 func (this *ExportStorage_Azure) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportStorage_Azure)
@@ -3571,10 +3334,7 @@ func (this *ExportStorage_Azure) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3594,10 +3354,7 @@ func (this *ExportStorage_Azure) Equal(that interface{}) bool {
 }
 func (this *WriteBatchRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*WriteBatchRequest)
@@ -3610,10 +3367,7 @@ func (this *WriteBatchRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3630,10 +3384,7 @@ func (this *WriteBatchRequest) Equal(that interface{}) bool {
 }
 func (this *ExportRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ExportRequest)
@@ -3646,10 +3397,7 @@ func (this *ExportRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3672,10 +3420,7 @@ func (this *ExportRequest) Equal(that interface{}) bool {
 }
 func (this *ImportRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ImportRequest)
@@ -3688,10 +3433,7 @@ func (this *ImportRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3724,10 +3466,7 @@ func (this *ImportRequest) Equal(that interface{}) bool {
 }
 func (this *ImportRequest_File) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ImportRequest_File)
@@ -3740,10 +3479,7 @@ func (this *ImportRequest_File) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3760,10 +3496,7 @@ func (this *ImportRequest_File) Equal(that interface{}) bool {
 }
 func (this *ImportRequest_TableRekey) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ImportRequest_TableRekey)
@@ -3776,10 +3509,7 @@ func (this *ImportRequest_TableRekey) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3793,10 +3523,7 @@ func (this *ImportRequest_TableRekey) Equal(that interface{}) bool {
 }
 func (this *AdminScatterRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AdminScatterRequest)
@@ -3809,10 +3536,7 @@ func (this *AdminScatterRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3826,10 +3550,7 @@ func (this *AdminScatterRequest) Equal(that interface{}) bool {
 }
 func (this *AddSSTableRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AddSSTableRequest)
@@ -3842,10 +3563,7 @@ func (this *AddSSTableRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3859,10 +3577,7 @@ func (this *AddSSTableRequest) Equal(that interface{}) bool {
 }
 func (this *RefreshRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RefreshRequest)
@@ -3875,10 +3590,7 @@ func (this *RefreshRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -3892,10 +3604,7 @@ func (this *RefreshRequest) Equal(that interface{}) bool {
 }
 func (this *RefreshRangeRequest) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RefreshRangeRequest)
@@ -3908,10 +3617,7 @@ func (this *RefreshRangeRequest) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}

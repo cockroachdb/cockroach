@@ -12,16 +12,28 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build gc,go1.9
-
 package engine
 
-import "unsafe"
+import (
+	"reflect"
+	"unsafe"
+)
 
-// The go:linkname directives provides backdoor access to private functions in
-// the runtime. Below we're accessing the mallocgc function. Note that this
-// access is necessarily tied to a specific Go release which is why this file
-// is protected by a build tag.
+func nonZeroingMakeByteSlice(len int) []byte {
+	var b []byte
+	*(*reflect.SliceHeader)(unsafe.Pointer(&b)) = reflect.SliceHeader{
+		Data: uintptr(mallocgc(uintptr(len), nil, false)),
+		Len:  len,
+		Cap:  len,
+	}
+	return b
+}
 
-//go:linkname mallocgc runtime.mallocgc
-func mallocgc(size uintptr, typ unsafe.Pointer, needzero bool) unsafe.Pointer
+// Replacement for C.GoBytes which does not zero initialize the returned slice
+// before overwriting it. See https://github.com/golang/go/issues/23634.
+func gobytes(ptr unsafe.Pointer, len int) []byte {
+	x := nonZeroingMakeByteSlice(len)
+	src := (*[maxArrayLen]byte)(ptr)[:len:len]
+	copy(x, src)
+	return x
+}

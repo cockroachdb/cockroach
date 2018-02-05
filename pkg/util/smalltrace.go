@@ -15,13 +15,22 @@
 package util
 
 import (
-	"fmt"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
-// GetSmallTrace produces a ":"-separated single line containing the
-// topmost 5 callers from a given skip level.
+var prefix = func() string {
+	result := "github.com/cockroachdb/cockroach/pkg/"
+	if runtime.Compiler == "gccgo" {
+		result = strings.Replace(result, ".", "_", -1)
+		result = strings.Replace(result, "/", "_", -1)
+	}
+	return result
+}()
+
+// GetSmallTrace returns a comma-separated string containing the top
+// 5 callers from a given skip level.
 func GetSmallTrace(skip int) string {
 	var pcs [5]uintptr
 	nCallers := runtime.Callers(skip, pcs[:])
@@ -30,8 +39,8 @@ func GetSmallTrace(skip int) string {
 
 	for {
 		f, more := frames.Next()
-		function := strings.TrimPrefix(f.Function, "github.com/cockroachdb/cockroach/pkg/")
-		callers = append(callers, fmt.Sprintf("%s:%d", function, f.Line))
+		function := strings.TrimPrefix(f.Function, prefix)
+		callers = append(callers, function+":"+strconv.Itoa(f.Line))
 		if !more {
 			break
 		}

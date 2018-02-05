@@ -202,7 +202,7 @@ func (b *RocksDBBatchBuilder) encodeKey(key MVCCKey, extra int) {
 	b.repr[len(b.repr)-1-extra] = byte(timestampLength)
 }
 
-func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag byte) {
+func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag BatchType) {
 	b.maybeInit()
 	b.count++
 
@@ -211,7 +211,7 @@ func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag byte
 
 	pos := len(b.repr)
 	b.encodeKey(key, extra)
-	b.repr[pos] = tag
+	b.repr[pos] = byte(tag)
 
 	pos = len(b.repr) - extra
 	n := putUvarint32(b.repr[pos:], l)

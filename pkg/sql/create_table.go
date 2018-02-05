@@ -144,8 +144,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.
-	err = desc.ValidateTable()
-	if err != nil {
+	if err := desc.ValidateTable(); err != nil {
 		return err
 	}
 
@@ -881,8 +880,12 @@ func makeTableDescIfAs(
 		}
 		desc.AddColumn(*col)
 	}
-
-	return desc, desc.AllocateIDs()
+	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err = desc.AllocateIDs()
+	return desc, err
 }
 
 func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.Name) error {
@@ -1137,7 +1140,12 @@ func MakeTableDesc(
 		}
 	}
 
-	return desc, desc.AllocateIDs()
+	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err = desc.AllocateIDs()
+	return desc, err
 }
 
 // makeTableDesc creates a table descriptor from a CreateTable statement.

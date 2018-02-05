@@ -105,7 +105,7 @@ const (
 	preparing queryPhase = 0
 
 	// Execution phase.
-	executing = 1
+	executing queryPhase = 1
 )
 
 // queryMeta stores metadata about a query. Stored as reference in
@@ -269,8 +269,6 @@ type Session struct {
 
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
-	//
-	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 }
 

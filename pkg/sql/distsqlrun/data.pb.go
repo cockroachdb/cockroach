@@ -781,10 +781,7 @@ func init() {
 }
 func (this *Ordering) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Ordering)
@@ -797,10 +794,7 @@ func (this *Ordering) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -816,10 +810,7 @@ func (this *Ordering) Equal(that interface{}) bool {
 }
 func (this *Ordering_Column) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Ordering_Column)
@@ -832,10 +823,7 @@ func (this *Ordering_Column) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}

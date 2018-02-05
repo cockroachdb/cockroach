@@ -629,10 +629,7 @@ func init() {
 }
 func (this *NotLeaseHolderError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*NotLeaseHolderError)
@@ -645,10 +642,7 @@ func (this *NotLeaseHolderError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -671,10 +665,7 @@ func (this *NotLeaseHolderError) Equal(that interface{}) bool {
 }
 func (this *NodeUnavailableError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*NodeUnavailableError)
@@ -687,10 +678,7 @@ func (this *NodeUnavailableError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -698,10 +686,7 @@ func (this *NodeUnavailableError) Equal(that interface{}) bool {
 }
 func (this *UnsupportedRequestError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*UnsupportedRequestError)
@@ -714,10 +699,7 @@ func (this *UnsupportedRequestError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -725,10 +707,7 @@ func (this *UnsupportedRequestError) Equal(that interface{}) bool {
 }
 func (this *RangeNotFoundError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RangeNotFoundError)
@@ -741,10 +720,7 @@ func (this *RangeNotFoundError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -755,10 +731,7 @@ func (this *RangeNotFoundError) Equal(that interface{}) bool {
 }
 func (this *RangeKeyMismatchError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RangeKeyMismatchError)
@@ -771,10 +744,7 @@ func (this *RangeKeyMismatchError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -794,10 +764,7 @@ func (this *RangeKeyMismatchError) Equal(that interface{}) bool {
 }
 func (this *ReadWithinUncertaintyIntervalError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ReadWithinUncertaintyIntervalError)
@@ -810,10 +777,7 @@ func (this *ReadWithinUncertaintyIntervalError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -838,10 +802,7 @@ func (this *ReadWithinUncertaintyIntervalError) Equal(that interface{}) bool {
 }
 func (this *TransactionAbortedError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TransactionAbortedError)
@@ -854,10 +815,7 @@ func (this *TransactionAbortedError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -865,10 +823,7 @@ func (this *TransactionAbortedError) Equal(that interface{}) bool {
 }
 func (this *TransactionPushError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TransactionPushError)
@@ -881,10 +836,7 @@ func (this *TransactionPushError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -895,10 +847,7 @@ func (this *TransactionPushError) Equal(that interface{}) bool {
 }
 func (this *TransactionRetryError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TransactionRetryError)
@@ -911,10 +860,7 @@ func (this *TransactionRetryError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -925,10 +871,7 @@ func (this *TransactionRetryError) Equal(that interface{}) bool {
 }
 func (this *TransactionReplayError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TransactionReplayError)
@@ -941,10 +884,7 @@ func (this *TransactionReplayError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -952,10 +892,7 @@ func (this *TransactionReplayError) Equal(that interface{}) bool {
 }
 func (this *TransactionStatusError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TransactionStatusError)
@@ -968,10 +905,7 @@ func (this *TransactionStatusError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -982,10 +916,7 @@ func (this *TransactionStatusError) Equal(that interface{}) bool {
 }
 func (this *WriteIntentError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*WriteIntentError)
@@ -998,10 +929,7 @@ func (this *WriteIntentError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1017,10 +945,7 @@ func (this *WriteIntentError) Equal(that interface{}) bool {
 }
 func (this *WriteTooOldError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*WriteTooOldError)
@@ -1033,10 +958,7 @@ func (this *WriteTooOldError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1050,10 +972,7 @@ func (this *WriteTooOldError) Equal(that interface{}) bool {
 }
 func (this *OpRequiresTxnError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*OpRequiresTxnError)
@@ -1066,10 +985,7 @@ func (this *OpRequiresTxnError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1077,10 +993,7 @@ func (this *OpRequiresTxnError) Equal(that interface{}) bool {
 }
 func (this *ConditionFailedError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ConditionFailedError)
@@ -1093,10 +1006,7 @@ func (this *ConditionFailedError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1107,10 +1017,7 @@ func (this *ConditionFailedError) Equal(that interface{}) bool {
 }
 func (this *LeaseRejectedError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*LeaseRejectedError)
@@ -1123,10 +1030,7 @@ func (this *LeaseRejectedError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1143,10 +1047,7 @@ func (this *LeaseRejectedError) Equal(that interface{}) bool {
 }
 func (this *SendError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*SendError)
@@ -1159,10 +1060,7 @@ func (this *SendError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1173,10 +1071,7 @@ func (this *SendError) Equal(that interface{}) bool {
 }
 func (this *AmbiguousResultError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*AmbiguousResultError)
@@ -1189,10 +1084,7 @@ func (this *AmbiguousResultError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1206,10 +1098,7 @@ func (this *AmbiguousResultError) Equal(that interface{}) bool {
 }
 func (this *RaftGroupDeletedError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*RaftGroupDeletedError)
@@ -1222,10 +1111,7 @@ func (this *RaftGroupDeletedError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1233,10 +1119,7 @@ func (this *RaftGroupDeletedError) Equal(that interface{}) bool {
 }
 func (this *ReplicaCorruptionError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ReplicaCorruptionError)
@@ -1249,10 +1132,7 @@ func (this *ReplicaCorruptionError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1266,10 +1146,7 @@ func (this *ReplicaCorruptionError) Equal(that interface{}) bool {
 }
 func (this *ReplicaTooOldError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ReplicaTooOldError)
@@ -1282,10 +1159,7 @@ func (this *ReplicaTooOldError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1296,10 +1170,7 @@ func (this *ReplicaTooOldError) Equal(that interface{}) bool {
 }
 func (this *StoreNotFoundError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*StoreNotFoundError)
@@ -1312,10 +1183,7 @@ func (this *StoreNotFoundError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1326,10 +1194,7 @@ func (this *StoreNotFoundError) Equal(that interface{}) bool {
 }
 func (this *HandledRetryableTxnError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*HandledRetryableTxnError)
@@ -1342,10 +1207,7 @@ func (this *HandledRetryableTxnError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1362,10 +1224,7 @@ func (this *HandledRetryableTxnError) Equal(that interface{}) bool {
 }
 func (this *TxnPrevAttemptError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*TxnPrevAttemptError)
@@ -1378,10 +1237,7 @@ func (this *TxnPrevAttemptError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1389,10 +1245,7 @@ func (this *TxnPrevAttemptError) Equal(that interface{}) bool {
 }
 func (this *IntegerOverflowError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*IntegerOverflowError)
@@ -1405,10 +1258,7 @@ func (this *IntegerOverflowError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1425,10 +1275,7 @@ func (this *IntegerOverflowError) Equal(that interface{}) bool {
 }
 func (this *MixedSuccessError) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*MixedSuccessError)
@@ -1441,10 +1288,7 @@ func (this *MixedSuccessError) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1455,10 +1299,7 @@ func (this *MixedSuccessError) Equal(that interface{}) bool {
 }
 func (this *ErrorDetail) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ErrorDetail)
@@ -1471,10 +1312,7 @@ func (this *ErrorDetail) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1560,10 +1398,7 @@ func (this *ErrorDetail) Equal(that interface{}) bool {
 }
 func (this *ErrPosition) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ErrPosition)
@@ -1576,10 +1411,7 @@ func (this *ErrPosition) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -1590,10 +1422,7 @@ func (this *ErrPosition) Equal(that interface{}) bool {
 }
 func (this *Error) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Error)
@@ -1606,10 +1435,7 @@ func (this *Error) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}

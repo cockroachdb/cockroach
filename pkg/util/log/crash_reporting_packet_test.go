@@ -17,14 +17,16 @@ package log_test
 import (
 	"context"
 	"regexp"
+	"runtime"
 	"testing"
+
+	raven "github.com/getsentry/raven-go"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	raven "github.com/getsentry/raven-go"
 )
 
 // interceptingTransport is an implementation of raven.Transport that delegates
@@ -90,13 +92,35 @@ func TestCrashReportingPacket(t *testing.T) {
 		panic(log.Safe(panicPost))
 	}()
 
+	const prefix = "crash_reporting_packet_test.go:"
+
 	expectations := []struct {
 		serverID *regexp.Regexp
 		tagCount int
 		message  string
 	}{
-		{regexp.MustCompile(`^$`), 6, "crash_reporting_packet_test.go:82: " + panicPre},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9, "crash_reporting_packet_test.go:90: " + panicPost},
+		{regexp.MustCompile(`^$`), 6, func() string {
+			message := prefix
+			// gccgo stack traces are different in the presence of function literals.
+			if runtime.Compiler == "gccgo" {
+				message += "81"
+			} else {
+				message += "84"
+			}
+			message += ": " + panicPre
+			return message
+		}()},
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9, func() string {
+			message := prefix
+			// gccgo stack traces are different in the presence of function literals.
+			if runtime.Compiler == "gccgo" {
+				message += "87"
+			} else {
+				message += "92"
+			}
+			message += ": " + panicPost
+			return message
+		}()},
 	}
 
 	if e, a := len(expectations), len(packets); e != a {
