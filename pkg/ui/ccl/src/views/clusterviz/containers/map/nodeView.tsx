@@ -34,6 +34,7 @@ export class NodeView extends React.Component<NodeViewProps> {
         usableCapacity={capacityUsable}
         usedCapacity={capacityUsed}
         label={node.desc.address.address_field}
+        subLabel={""} // TODO(vilterp): uptime
       />
     );
   }

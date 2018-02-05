@@ -53,7 +53,7 @@ export const nodesReducerObj = new CachedDataReducer(
   (req: api.NodesRequestMessage, timeout?: moment.Duration) =>
     api.getNodes(req, timeout).then(rollupStoreMetrics),
   "nodes",
-  moment.duration(10, "s"),
+  moment.duration(10, "h"),
 );
 export const refreshNodes = nodesReducerObj.refresh;
 
