@@ -48,17 +48,17 @@ SELECT '[]'::JSON
 query T
 SELECT '[1, 2, 3]'::JSON
 ----
-[1,2,3]
+[1, 2, 3]
 
 query T
 SELECT '[1, "hello", [[[true, false]]]]'::JSON
 ----
-[1,"hello",[[[true,false]]]]
+[1, "hello", [[[true, false]]]]
 
 query T
 SELECT '[1, "hello", {"a": ["foo", {"b": 3}]}]'::JSON
 ----
-[1,"hello",{"a":["foo",{"b":3}]}]
+[1, "hello", {"a": ["foo", {"b": 3}]}]
 
 query T
 SELECT '{}'::JSON
@@ -68,18 +68,18 @@ SELECT '{}'::JSON
 query T
 SELECT '{"a": "b", "c": "d"}'::JSON
 ----
-{"a":"b","c":"d"}
+{"a": "b", "c": "d"}
 
 query T
 SELECT '{"a": 1, "c": {"foo": "bar"}}'::JSON
 ----
-{"a":1,"c":{"foo":"bar"}}
+{"a": 1, "c": {"foo": "bar"}}
 
 # Only the final occurrence of a key in an object is kept.
 query T
 SELECT '{"a": 1, "a": 2}'::JSON
 ----
-{"a":2}
+{"a": 2}
 
 query T
 SELECT NULL::JSON
@@ -111,8 +111,8 @@ INSERT INTO foo VALUES
 query T rowsort
 SELECT bar FROM foo
 ----
-{"a":"b"}
-[1,2,3]
+{"a": "b"}
+[1, 2, 3]
 "hello"
 1.000
 true
@@ -122,17 +122,17 @@ NULL
 query T
 SELECT bar FROM foo WHERE bar->>'a' = 'b'
 ----
-{"a":"b"}
+{"a": "b"}
 
 query T
 SELECT bar FROM foo WHERE bar ? 'a'
 ----
-{"a":"b"}
+{"a": "b"}
 
 query T
 SELECT bar FROM foo WHERE bar ?| ARRAY['a','b']
 ----
-{"a":"b"}
+{"a": "b"}
 
 query T
 SELECT bar FROM foo WHERE bar ?& ARRAY['a','b']
@@ -141,7 +141,7 @@ SELECT bar FROM foo WHERE bar ?& ARRAY['a','b']
 query T
 SELECT bar FROM foo WHERE bar->'a' = '"b"'::JSON
 ----
-{"a":"b"}
+{"a": "b"}
 
 statement error pgcode 0A000 can't order by column type jsonb
 SELECT bar FROM foo ORDER BY bar
@@ -180,12 +180,12 @@ INSERT INTO multiple VALUES ('{"a":"b"}', '[1,2,3,4,"foo"]')
 query T
 SELECT a FROM multiple
 ----
-{"a":"b"}
+{"a": "b"}
 
 query T
 SELECT b FROM multiple
 ----
-[1,2,3,4,"foo"]
+[1, 2, 3, 4, "foo"]
 
 ## Comparisons
 
@@ -438,13 +438,13 @@ SELECT '{"a": 1}'::JSONB - 'a'
 query T
 SELECT '{"a": 1}'::JSONB - 'b'
 ----
-{"a":1}
+{"a": 1}
 
 # `-` is one of the very few cases that PG errors in a JSON type mismatch with operators.
 query T
 SELECT '[1,2,3]'::JSONB - 1
 ----
-[1,3]
+[1, 3]
 
 statement error pgcode 22023 cannot delete from scalar
 SELECT '3'::JSONB - 'b'
@@ -475,4 +475,4 @@ true
 query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
 ----
-{"foo":{}}
+{"foo": {}}

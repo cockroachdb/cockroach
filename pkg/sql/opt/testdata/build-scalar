@@ -223,17 +223,17 @@ eq (type: bool)
 length(@1) = 2
 
 build-scalar,semtree-expr vars=(jsonb)
-@1 @> '{"a":1}'
+@1 @> '{"a": 1}'
 ----
 contains (type: bool)
  ├── variable (@1) (type: jsonb)
- └── const ('{"a":1}') (type: jsonb)
-@1 @> '{"a":1}'
+ └── const ('{"a": 1}') (type: jsonb)
+@1 @> '{"a": 1}'
 
 build-scalar,semtree-expr vars=(jsonb)
-'{"a":1}' <@ @1
+'{"a": 1}' <@ @1
 ----
 contained-by (type: bool)
- ├── const ('{"a":1}') (type: jsonb)
+ ├── const ('{"a": 1}') (type: jsonb)
  └── variable (@1) (type: jsonb)
-'{"a":1}' <@ @1
+'{"a": 1}' <@ @1
