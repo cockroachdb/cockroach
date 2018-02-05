@@ -23,6 +23,8 @@ import { NodeView } from "./nodeView";
 import { ZoomTransformer } from "./zoom";
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
+import { sumNodeStats } from "src/redux/nodes";
+import { pluralize } from "oss/src/util/pluralize";
 
 const MIN_RADIUS = 150;
 const PADDING = 150;
@@ -57,6 +59,7 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
           label={`${thisTier.key}=${thisTier.value}`}
+          subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
         />
       </g>
     );
