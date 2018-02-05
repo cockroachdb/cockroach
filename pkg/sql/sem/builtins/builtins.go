@@ -93,6 +93,8 @@ func categorizeType(t types.T) string {
 
 var digitNames = []string{"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"}
 
+var emptyStr = ""
+
 // Builtins contains the built-in functions indexed by name.
 var Builtins = map[string][]tree.Builtin{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
@@ -1905,6 +1907,48 @@ CockroachDB supports the following flags:
 
 	// Array functions.
 
+	"string_to_array": {
+		tree.Builtin{
+			Types:        tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}},
+			ReturnType:   tree.FixedReturnType(types.TArray{types.String}),
+			Category:     categoryArray,
+			NullableArgs: true,
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				str := string(tree.MustBeDString(args[0]))
+				delimOrNil := stringOrNil(args[1])
+				delimiter := ""
+				if delimOrNil != nil {
+					delimiter = *delimOrNil
+				}
+				return stringToArray(str, delimiter, nil)
+			},
+			Info: "Split a string into components on a delimiter.",
+		},
+		tree.Builtin{
+			Types:        tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}, {"null", types.String}},
+			ReturnType:   tree.FixedReturnType(types.TArray{types.String}),
+			Category:     categoryArray,
+			NullableArgs: true,
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				str := string(tree.MustBeDString(args[0]))
+				delimOrNil := stringOrNil(args[1])
+				delimiter := ""
+				if delimOrNil != nil {
+					delimiter = *delimOrNil
+				}
+				nullStr := stringOrNil(args[2])
+				return stringToArray(str, delimiter, nullStr)
+			},
+			Info: "Split a string into components on a delimiter with a specified string to consider NULL.",
+		},
+	},
+
 	"array_length": {
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"input", types.AnyArray}, {"array_dimension", types.Int}},
@@ -3460,6 +3504,38 @@ func truncateTime(fromTime *tree.DTime, timeSpan string) (*tree.DTime, error) {
 	}
 
 	return tree.MakeDTime(timeofday.New(hour, min, sec, micro)), nil
+}
+
+func stringOrNil(d tree.Datum) *string {
+	if d == tree.DNull {
+		return nil
+	}
+	s := string(tree.MustBeDString(d))
+	return &s
+}
+
+// stringToArray implements the string_to_array builtin - str is split on delim to form an array of strings.
+// If nullStr is set, any elements equal to it will be NULL.
+func stringToArray(str string, delim string, nullStr *string) (tree.Datum, error) {
+	result := tree.NewDArray(types.String)
+	var split []string
+	if str == "" {
+		split = nil
+	} else if delim == "" {
+		split = []string{str}
+	} else {
+		split = strings.Split(str, delim)
+	}
+	for _, s := range split {
+		var next tree.Datum = tree.NewDString(s)
+		if nullStr != nil && s == *nullStr {
+			next = tree.DNull
+		}
+		if err := result.Append(next); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func truncateTimestamp(
