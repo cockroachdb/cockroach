@@ -143,7 +143,7 @@ type HeartbeatCallback func(context.Context)
 // liveness. Nodes periodically "heartbeat" the range holding the node
 // liveness system table to indicate that they're available. The
 // resulting liveness information is used to ignore unresponsive nodes
-// while making range quiescense decisions, as well as for efficient,
+// while making range quiescence decisions, as well as for efficient,
 // node liveness epoch-based range leases.
 type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
