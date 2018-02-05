@@ -222,7 +222,7 @@ statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
 statement error cannot change the isolation level of a running transaction
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
+SET transaction_isolation = 'snapshot'
 
 statement ok
 ROLLBACK
@@ -237,6 +237,11 @@ SHOW TRANSACTION ISOLATION LEVEL
 ----
 serializable
 
+query T
+SHOW transaction_isolation
+----
+serializable
+
 statement ok
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
@@ -245,8 +250,18 @@ SHOW TRANSACTION ISOLATION LEVEL
 ----
 snapshot
 
+query T
+SHOW transaction_isolation
+----
+snapshot
+
 statement ok
 COMMIT
+
+# We can't set isolation level to an unsupported one.
+
+statement error unsupported isolation level "read committed"
+SET transaction_isolation = 'read committed'
 
 # We can explicitly start a transaction in snapshot isolation.
 
