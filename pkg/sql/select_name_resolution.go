@@ -23,19 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// invalidSrcIdx is the srcIdx value returned by findColumn() when there is no match.
-const invalidSrcIdx = -1
-
-// invalidColIdx is the colIdx value returned by findColumn() when there is no match.
-const invalidColIdx = -1
 
 // nameResolutionVisitor is a tree.Visitor implementation used to
 // resolve the column names in an expression.
 type nameResolutionVisitor struct {
 	err        error
-	sources    multiSourceInfo
+	sources    sqlbase.MultiSourceInfo
 	iVarHelper tree.IndexedVarHelper
 	searchPath sessiondata.SearchPath
 
@@ -81,7 +76,7 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
 		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
 		//
-		_, exprs, err := v.sources[0].expandStar(t, v.iVarHelper)
+		_, exprs, err := v.sources[0].ExpandStar(t, v.iVarHelper)
 		if err != nil {
 			v.err = err
 			return false, expr
@@ -116,12 +111,12 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		return v.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		srcIdx, colIdx, err := v.sources.findColumn(t)
+		srcIdx, colIdx, err := v.sources.FindColumn(t)
 		if err != nil {
 			v.err = err
 			return false, expr
 		}
-		ivar := v.iVarHelper.IndexedVar(v.sources[srcIdx].colOffset + colIdx)
+		ivar := v.iVarHelper.IndexedVar(v.sources[srcIdx].ColOffset + colIdx)
 		v.foundDependentVars = true
 		return true, ivar
 
@@ -216,7 +211,7 @@ func (p *planner) resolveNamesForRender(
 // row in a table, the 2nd return value is true.
 // If any star is expanded, the 3rd return value is true.
 func (p *planner) resolveNames(
-	expr tree.Expr, sources multiSourceInfo, ivarHelper tree.IndexedVarHelper,
+	expr tree.Expr, sources sqlbase.MultiSourceInfo, ivarHelper tree.IndexedVarHelper,
 ) (tree.Expr, bool, bool, error) {
 	if expr == nil {
 		return nil, false, false, nil
@@ -234,7 +229,7 @@ func (p *planner) resolveNames(
 
 func resolveNames(
 	expr tree.Expr,
-	sources multiSourceInfo,
+	sources sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	searchPath sessiondata.SearchPath,
 ) (tree.Expr, bool, bool, error) {
@@ -253,8 +248,8 @@ func resolveNamesUsingVisitor(
 ) (tree.Expr, bool, bool, error) {
 	colOffset := 0
 	for _, s := range v.sources {
-		s.colOffset = colOffset
-		colOffset += len(s.sourceColumns)
+		s.ColOffset = colOffset
+		colOffset += len(s.SourceColumns)
 	}
 
 	expr, _ = tree.WalkExpr(v, expr)

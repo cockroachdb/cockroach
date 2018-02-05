@@ -78,13 +78,13 @@ func (ef *execFactory) ConstructFilter(
 ) (opt.ExecNode, error) {
 	en := n.(*execNode)
 	src := planDataSource{
-		info: &dataSourceInfo{sourceColumns: planColumns(en.plan)},
+		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(en.plan)},
 		plan: en.plan,
 	}
 	f := &filterNode{
 		source: src,
 	}
-	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.sourceColumns))
+	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
 	f.filter = filter
 	f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	return &execNode{

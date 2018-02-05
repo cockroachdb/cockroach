@@ -54,10 +54,10 @@ type joinPredicate struct {
 	rightColNames tree.NameList
 
 	// For ON predicates or joins with an added filter expression,
-	// we need an IndexedVarHelper, the dataSourceInfo, a row buffer
+	// we need an IndexedVarHelper, the DataSourceInfo, a row buffer
 	// and the expression itself.
 	iVarHelper tree.IndexedVarHelper
-	info       *dataSourceInfo
+	info       *sqlbase.DataSourceInfo
 	curRow     tree.Datums
 	onCond     tree.TypedExpr
 
@@ -71,14 +71,16 @@ type joinPredicate struct {
 
 // makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
 func makeCrossPredicate(
-	typ joinType, left, right *dataSourceInfo,
-) (*joinPredicate, *dataSourceInfo, error) {
+	typ joinType, left, right *sqlbase.DataSourceInfo,
+) (*joinPredicate, *sqlbase.DataSourceInfo, error) {
 	return makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames */)
 }
 
 // tryAddEqualityFilter attempts to turn the given filter expression into
 // an equality predicate. It returns true iff the transformation succeeds.
-func (p *joinPredicate) tryAddEqualityFilter(filter tree.Expr, left, right *dataSourceInfo) bool {
+func (p *joinPredicate) tryAddEqualityFilter(
+	filter tree.Expr, left, right *sqlbase.DataSourceInfo,
+) bool {
 	c, ok := filter.(*tree.ComparisonExpr)
 	if !ok || c.Operator != tree.EQ {
 		return false
@@ -92,7 +94,7 @@ func (p *joinPredicate) tryAddEqualityFilter(filter tree.Expr, left, right *data
 		return false
 	}
 
-	sourceBoundary := len(left.sourceColumns)
+	sourceBoundary := len(left.SourceColumns)
 	if (lhs.Idx >= sourceBoundary && rhs.Idx >= sourceBoundary) ||
 		(lhs.Idx < sourceBoundary && rhs.Idx < sourceBoundary) {
 		// Both variables are on the same side of the join (e.g. `a JOIN b ON a.x = a.y`).
@@ -111,7 +113,7 @@ func (p *joinPredicate) tryAddEqualityFilter(filter tree.Expr, left, right *data
 	// the full column set of the joinPredicate, including the
 	// merged columns.
 	leftColIdx := lhs.Idx
-	rightColIdx := rhs.Idx - len(left.sourceColumns)
+	rightColIdx := rhs.Idx - len(left.SourceColumns)
 
 	// Also, we will want to avoid redundant equality checks.
 	for i := range p.leftEqualityIndices {
@@ -140,23 +142,31 @@ func (p *joinPredicate) tryAddEqualityFilter(filter tree.Expr, left, right *data
 
 	p.leftEqualityIndices = append(p.leftEqualityIndices, leftColIdx)
 	p.rightEqualityIndices = append(p.rightEqualityIndices, rightColIdx)
-	p.leftColNames = append(p.leftColNames, tree.Name(left.sourceColumns[leftColIdx].Name))
-	p.rightColNames = append(p.rightColNames, tree.Name(right.sourceColumns[rightColIdx].Name))
+	p.leftColNames = append(p.leftColNames, tree.Name(left.SourceColumns[leftColIdx].Name))
+	p.rightColNames = append(p.rightColNames, tree.Name(right.SourceColumns[rightColIdx].Name))
 
 	return true
 }
 
 // makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
 func (p *planner) makeOnPredicate(
-	ctx context.Context, typ joinType, left, right *dataSourceInfo, expr tree.Expr,
-) (*joinPredicate, *dataSourceInfo, error) {
+	ctx context.Context, typ joinType, left, right *sqlbase.DataSourceInfo, expr tree.Expr,
+) (*joinPredicate, *sqlbase.DataSourceInfo, error) {
 	pred, info, err := makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames*/)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Determine the on condition expression.
-	onCond, err := p.analyzeExpr(ctx, expr, multiSourceInfo{info}, pred.iVarHelper, types.Bool, true, "ON")
+	onCond, err := p.analyzeExpr(
+		ctx,
+		expr,
+		sqlbase.MultiSourceInfo{info},
+		pred.iVarHelper,
+		types.Bool,
+		true, /* requireType */
+		"ON",
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -167,8 +177,8 @@ func (p *planner) makeOnPredicate(
 // makeUsingPredicate constructs a joinPredicate object for joins with
 // a USING clause.
 func makeUsingPredicate(
-	typ joinType, left, right *dataSourceInfo, usingCols tree.NameList,
-) (*joinPredicate, *dataSourceInfo, error) {
+	typ joinType, left, right *sqlbase.DataSourceInfo, usingCols tree.NameList,
+) (*joinPredicate, *sqlbase.DataSourceInfo, error) {
 	seenNames := make(map[string]struct{})
 
 	for _, syntaxColName := range usingCols {
@@ -187,8 +197,8 @@ func makeUsingPredicate(
 // condition includes equality between the columns specified by leftColNames and
 // rightColNames.
 func makeEqualityPredicate(
-	typ joinType, left, right *dataSourceInfo, leftColNames, rightColNames tree.NameList,
-) (resPred *joinPredicate, info *dataSourceInfo, err error) {
+	typ joinType, left, right *sqlbase.DataSourceInfo, leftColNames, rightColNames tree.NameList,
+) (resPred *joinPredicate, info *sqlbase.DataSourceInfo, err error) {
 	if len(leftColNames) != len(rightColNames) {
 		panic(fmt.Errorf("left columns' length %q doesn't match right columns' length %q in EqualityPredicate",
 			len(leftColNames), len(rightColNames)))
@@ -205,13 +215,13 @@ func makeEqualityPredicate(
 		rightColName := string(rightColNames[i])
 
 		// Find the column name on the left.
-		leftIdx, leftType, err := pickUsingColumn(left.sourceColumns, leftColName, "left")
+		leftIdx, leftType, err := pickUsingColumn(left.SourceColumns, leftColName, "left")
 		if err != nil {
 			return nil, nil, err
 		}
 
 		// Find the column name on the right.
-		rightIdx, rightType, err := pickUsingColumn(right.sourceColumns, rightColName, "right")
+		rightIdx, rightType, err := pickUsingColumn(right.SourceColumns, rightColName, "right")
 		if err != nil {
 			return nil, nil, err
 		}
@@ -238,43 +248,46 @@ func makeEqualityPredicate(
 	// are hidden so that they are invisible to star expansion, but
 	// not omitted so that they can still be selected separately.
 
-	columns := make(sqlbase.ResultColumns, 0, len(left.sourceColumns)+len(right.sourceColumns))
-	columns = append(columns, left.sourceColumns...)
-	columns = append(columns, right.sourceColumns...)
+	columns := make(sqlbase.ResultColumns, 0, len(left.SourceColumns)+len(right.SourceColumns))
+	columns = append(columns, left.SourceColumns...)
+	columns = append(columns, right.SourceColumns...)
 
 	// Compute the mappings from table aliases to column sets from
 	// both sides into a new alias-columnset mapping for the result
 	// rows. We need to be extra careful about the aliases
 	// for the anonymous table, which needs to be merged.
-	aliases := make(sourceAliases, 0, len(left.sourceAliases)+len(right.sourceAliases))
+	aliases := make(sqlbase.SourceAliases, 0, len(left.SourceAliases)+len(right.SourceAliases))
 
 	var anonymousCols util.FastIntSet
 
-	collectAliases := func(sourceAliases sourceAliases, offset int) {
+	collectAliases := func(sourceAliases sqlbase.SourceAliases, offset int) {
 		for _, alias := range sourceAliases {
-			newSet := alias.columnSet.Shift(offset)
-			if alias.name == anonymousTable {
+			newSet := alias.ColumnSet.Shift(offset)
+			if alias.Name == sqlbase.AnonymousTable {
 				anonymousCols.UnionWith(newSet)
 			} else {
-				aliases = append(aliases, sourceAlias{name: alias.name, columnSet: newSet})
+				aliases = append(aliases, sqlbase.SourceAlias{Name: alias.Name, ColumnSet: newSet})
 			}
 		}
 	}
-	collectAliases(left.sourceAliases, 0)
-	collectAliases(right.sourceAliases, len(left.sourceColumns))
+	collectAliases(left.SourceAliases, 0)
+	collectAliases(right.SourceAliases, len(left.SourceColumns))
 	if !anonymousCols.Empty() {
-		aliases = append(aliases, sourceAlias{name: anonymousTable, columnSet: anonymousCols})
+		aliases = append(aliases, sqlbase.SourceAlias{
+			Name:      sqlbase.AnonymousTable,
+			ColumnSet: anonymousCols,
+		})
 	}
 
-	info = &dataSourceInfo{
-		sourceColumns: columns,
-		sourceAliases: aliases,
+	info = &sqlbase.DataSourceInfo{
+		SourceColumns: columns,
+		SourceAliases: aliases,
 	}
 
 	pred := &joinPredicate{
 		joinType:             typ,
-		numLeftCols:          len(left.sourceColumns),
-		numRightCols:         len(right.sourceColumns),
+		numLeftCols:          len(left.SourceColumns),
+		numRightCols:         len(right.SourceColumns),
 		leftColNames:         leftColNames,
 		rightColNames:        rightColNames,
 		cmpFunctions:         cmpOps,
@@ -296,7 +309,7 @@ func (p *joinPredicate) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Dat
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (p *joinPredicate) IndexedVarResolvedType(idx int) types.T {
-	return p.info.sourceColumns[idx].Typ
+	return p.info.SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
@@ -380,7 +393,7 @@ func (p *joinPredicate) encode(b []byte, row tree.Datums, cols []int) ([]byte, b
 func pickUsingColumn(
 	cols sqlbase.ResultColumns, colName string, context string,
 ) (int, types.T, error) {
-	idx := invalidColIdx
+	idx := sqlbase.InvalidColIdx
 	for j, col := range cols {
 		if col.Hidden {
 			continue
@@ -390,7 +403,7 @@ func pickUsingColumn(
 			break
 		}
 	}
-	if idx == invalidColIdx {
+	if idx == sqlbase.InvalidColIdx {
 		return idx, nil, fmt.Errorf("column \"%s\" specified in USING clause does not exist in %s table", colName, context)
 	}
 	return idx, cols[idx].Typ, nil

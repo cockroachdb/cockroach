@@ -30,7 +30,7 @@ func (p *planner) computeRender(
 	ctx context.Context,
 	target tree.SelectExpr,
 	desiredType types.T,
-	info multiSourceInfo,
+	info sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	outputName string,
 ) (column sqlbase.ResultColumn, expr tree.TypedExpr, err error) {
@@ -59,7 +59,7 @@ func (p *planner) computeRenderAllowingStars(
 	ctx context.Context,
 	target tree.SelectExpr,
 	desiredType types.T,
-	info multiSourceInfo,
+	info sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	outputName string,
 ) (columns sqlbase.ResultColumns, exprs []tree.TypedExpr, hasStar bool, err error) {
@@ -153,7 +153,7 @@ func symbolicExprStr(expr tree.Expr) string {
 // name to one of the tables in the query and then expand the "*" into a list
 // of columns. A sqlbase.ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
-	target tree.SelectExpr, info multiSourceInfo, ivarHelper tree.IndexedVarHelper,
+	target tree.SelectExpr, info sqlbase.MultiSourceInfo, ivarHelper tree.IndexedVarHelper,
 ) (isStar bool, columns sqlbase.ResultColumns, exprs []tree.TypedExpr, err error) {
 	v, ok := target.Expr.(tree.VarName)
 	if !ok {
@@ -166,7 +166,7 @@ func checkRenderStar(
 			return false, nil, nil, errors.Errorf("\"%s\" cannot be aliased", v)
 		}
 
-		columns, exprs, err = info[0].expandStar(v, ivarHelper)
+		columns, exprs, err = info[0].ExpandStar(v, ivarHelper)
 		return true, columns, exprs, err
 	default:
 		return false, nil, nil, nil
