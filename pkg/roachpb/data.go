@@ -544,7 +544,12 @@ func (v Value) GetDecimal() (apd.Decimal, error) {
 // TIMESERIES or if decoding fails.
 func (v Value) GetTimeseries() (InternalTimeSeriesData, error) {
 	ts := InternalTimeSeriesData{}
-	return ts, v.GetProto(&ts)
+	// GetProto mutates its argument. `return ts, v.GetProto(&ts)`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err := v.GetProto(&ts)
+	return ts, err
 }
 
 // GetTuple returns the tuple bytes of the receiver. If the tag is not TUPLE an

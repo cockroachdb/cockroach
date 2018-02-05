@@ -29,7 +29,6 @@ import (
 // for writing PGWire results. The buffer preserves any errors it encounters when writing,
 // and will turn all subsequent write attempts into no-ops until finishMsg is called.
 type writeBuffer struct {
-	//lint:ignore U1000 this marker prevents by-value copies.
 	noCopy util.NoCopy
 
 	wrapped bytes.Buffer

@@ -2091,7 +2091,7 @@ func copyFromSliceVector(bufs *C.DBSlice, len C.int32_t) []byte {
 	for i := range slices {
 		neededBytes += int(slices[i].len)
 	}
-	data := rawbyteslice(neededBytes)[:0]
+	data := nonZeroingMakeByteSlice(neededBytes)[:0]
 	for i := range slices {
 		data = append(data, cSliceToUnsafeGoBytes(slices[i])...)
 	}
@@ -2538,7 +2538,12 @@ func IsValidSplitKey(key roachpb.Key, allowMeta2Splits bool) bool {
 // lockFile sets a lock on the specified file using RocksDB's file locking interface.
 func lockFile(filename string) (C.DBFileLock, error) {
 	var lock C.DBFileLock
-	return lock, statusToError(C.DBLockFile(goToCSlice([]byte(filename)), &lock))
+	// C.DBLockFile mutates its argument. `lock, statusToError(...)`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err := statusToError(C.DBLockFile(goToCSlice([]byte(filename)), &lock))
+	return lock, err
 }
 
 // unlockFile unlocks the file asscoiated with the specified lock and GCs any allocated memory for the lock.

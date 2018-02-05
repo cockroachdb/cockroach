@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// +build !gc
+// +build gccgo
 
-package logictest
+package engine
 
-func (*logicTest) traceStart(_ string) {}
+import (
+	"unsafe"
+)
 
-func (*logicTest) traceStop() {}
+//extern runtime.mallocgc
+func mallocgc(size uintptr, typ unsafe.Pointer, needzero bool) unsafe.Pointer

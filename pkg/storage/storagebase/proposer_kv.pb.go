@@ -286,10 +286,7 @@ func init() {
 }
 func (this *Split) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Split)
@@ -302,10 +299,7 @@ func (this *Split) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -319,10 +313,7 @@ func (this *Split) Equal(that interface{}) bool {
 }
 func (this *Merge) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Merge)
@@ -335,10 +326,7 @@ func (this *Merge) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -349,10 +337,7 @@ func (this *Merge) Equal(that interface{}) bool {
 }
 func (this *ChangeReplicas) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ChangeReplicas)
@@ -365,10 +350,7 @@ func (this *ChangeReplicas) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -379,10 +361,7 @@ func (this *ChangeReplicas) Equal(that interface{}) bool {
 }
 func (this *Compaction) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Compaction)
@@ -395,10 +374,7 @@ func (this *Compaction) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -412,10 +388,7 @@ func (this *Compaction) Equal(that interface{}) bool {
 }
 func (this *SuggestedCompaction) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*SuggestedCompaction)
@@ -428,10 +401,7 @@ func (this *SuggestedCompaction) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -448,10 +418,7 @@ func (this *SuggestedCompaction) Equal(that interface{}) bool {
 }
 func (this *ReplicatedEvalResult) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ReplicatedEvalResult)
@@ -464,10 +431,7 @@ func (this *ReplicatedEvalResult) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -528,10 +492,7 @@ func (this *ReplicatedEvalResult) Equal(that interface{}) bool {
 }
 func (this *ReplicatedEvalResult_AddSSTable) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ReplicatedEvalResult_AddSSTable)
@@ -544,10 +505,7 @@ func (this *ReplicatedEvalResult_AddSSTable) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}

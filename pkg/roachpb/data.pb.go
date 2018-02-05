@@ -600,10 +600,7 @@ func init() {
 }
 func (this *Span) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Span)
@@ -616,10 +613,7 @@ func (this *Span) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -633,10 +627,7 @@ func (this *Span) Equal(that interface{}) bool {
 }
 func (this *Value) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Value)
@@ -649,10 +640,7 @@ func (this *Value) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -666,10 +654,7 @@ func (this *Value) Equal(that interface{}) bool {
 }
 func (this *SplitTrigger) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*SplitTrigger)
@@ -682,10 +667,7 @@ func (this *SplitTrigger) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -699,10 +681,7 @@ func (this *SplitTrigger) Equal(that interface{}) bool {
 }
 func (this *MergeTrigger) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*MergeTrigger)
@@ -715,10 +694,7 @@ func (this *MergeTrigger) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -732,10 +708,7 @@ func (this *MergeTrigger) Equal(that interface{}) bool {
 }
 func (this *ChangeReplicasTrigger) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ChangeReplicasTrigger)
@@ -748,10 +721,7 @@ func (this *ChangeReplicasTrigger) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -776,10 +746,7 @@ func (this *ChangeReplicasTrigger) Equal(that interface{}) bool {
 }
 func (this *ModifiedSpanTrigger) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ModifiedSpanTrigger)
@@ -792,10 +759,7 @@ func (this *ModifiedSpanTrigger) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -809,10 +773,7 @@ func (this *ModifiedSpanTrigger) Equal(that interface{}) bool {
 }
 func (this *InternalCommitTrigger) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*InternalCommitTrigger)
@@ -825,10 +786,7 @@ func (this *InternalCommitTrigger) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -848,10 +806,7 @@ func (this *InternalCommitTrigger) Equal(that interface{}) bool {
 }
 func (this *ObservedTimestamp) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*ObservedTimestamp)
@@ -864,10 +819,7 @@ func (this *ObservedTimestamp) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -881,10 +833,7 @@ func (this *ObservedTimestamp) Equal(that interface{}) bool {
 }
 func (this *Transaction) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Transaction)
@@ -897,10 +846,7 @@ func (this *Transaction) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
@@ -957,10 +903,7 @@ func (this *Transaction) Equal(that interface{}) bool {
 }
 func (this *Intent) Equal(that interface{}) bool {
 	if that == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	}
 
 	that1, ok := that.(*Intent)
@@ -973,10 +916,7 @@ func (this *Intent) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		if this == nil {
-			return true
-		}
-		return false
+		return this == nil
 	} else if this == nil {
 		return false
 	}
