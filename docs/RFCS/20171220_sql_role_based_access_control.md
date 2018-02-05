@@ -229,9 +229,10 @@ SHOW GRANTS ON ROLE myrole
 ```
 
 We will also allow the following variants:
-* lookup all roles: `SHOW GRANTS ON ROLE *`
-* show all memberships for a user: `SHOW GRANT ON ROLE * FOR marc`
-* show user membership in a role: `SHOW GRANT ON ROLE myrole FOR marc`
+* lookup all role memberships: `SHOW GRANTS ON ROLE`
+* show all memberships for a user: `SHOW GRANTS ON ROLE FOR marc`
+* show all members of a role: `SHOW GRANTS ON ROLE myrole`
+* show user membership in a role: `SHOW GRANTS ON ROLE myrole FOR marc`
 
 ### Administrators
 
@@ -393,10 +394,11 @@ SHOW ROLES
 #### SHOW GRANTS ON ROLE
 
 ```
-SHOW GRANTS ON ROLE rolename [ FOR name ]
+SHOW GRANTS ON ROLE [rolename] [ FOR name ]
 ```
 
-Where `rolename` can be one or more role, or `*` and `name` can be one of more user or role.
+Where `rolename` can be one or more role and `name` can be one of more user or role. An unspecified `rolename`
+or `name` returns all roles or members.
 
 * **Behavior**: lists role memberships for matching roles/names.
 * **Permissions**: none required.
