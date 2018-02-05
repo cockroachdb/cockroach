@@ -14,6 +14,12 @@
 
 package util
 
+import (
+	"math/bits"
+
+	"golang.org/x/tools/container/intsets"
+)
+
 // FastIntMap is a replacement for map[int]int which is more efficient when the
 // values are small. It can be passed by value (but Copy must be used for
 // independent modification of copies).
@@ -81,22 +87,66 @@ func (m FastIntMap) Get(key int) (value int, ok bool) {
 // is empty, returns ok=false.
 func (m FastIntMap) MaxKey() (_ int, ok bool) {
 	if m.large == nil {
-		// TODO(radu): we could skip words that are 0
-		// and use bits.LeadingZeros64.
-		for i := numVals - 1; i >= 0; i-- {
-			if m.getSmallVal(uint32(i)) != -1 {
-				return i, true
+		for w := numWords - 1; w >= 0; w-- {
+			if val := m.small[w]; val != 0 {
+				// Example (with numBits = 4)
+				//   pos:   3    2    1    0
+				//   bits:  0000 0000 0010 0000
+				// To get the left-most non-zero group, we calculate how many groups are
+				// covered by the leading zeros.
+				pos := numValsPerWord - 1 - bits.LeadingZeros64(val)/numBits
+				return w*numValsPerWord + pos, true
 			}
 		}
 		return 0, false
 	}
-	max, ok := 0, false
+	if len(m.large) == 0 {
+		return 0, false
+	}
+	max := intsets.MinInt
 	for k := range m.large {
-		if !ok || max < k {
-			max, ok = k, true
+		if max < k {
+			max = k
 		}
 	}
-	return max, ok
+	return max, true
+}
+
+// MaxValue returns the maximum value that is in the map. If the map
+// is empty, returns ok=false.
+func (m FastIntMap) MaxValue() (_ int, ok bool) {
+	if m.large == nil {
+		// In the small case, all values are positive.
+		max := -1
+		for w := 0; w < numWords; w++ {
+			if m.small[w] != 0 {
+				// To optimize for small maps, we stop when the rest of the values are
+				// unset. See the comment in MaxKey.
+				numVals := numValsPerWord - bits.LeadingZeros64(m.small[w])/numBits
+				for i := 0; i < numVals; i++ {
+					val := int(m.getSmallVal(uint32(w*numValsPerWord + i)))
+					// NB: val is -1 here if this key isn't in the map.
+					if max < val {
+						max = val
+					}
+				}
+			}
+		}
+		if max == -1 {
+			return 0, false
+		}
+		return max, true
+	}
+	if len(m.large) == 0 {
+		return 0, false
+	}
+	max := intsets.MinInt
+	for _, v := range m.large {
+		if max < v {
+			max = v
+		}
+	}
+	return max, true
 }
 
 // ForEach calls the given function for each key/value pair in the map (in
