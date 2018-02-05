@@ -335,7 +335,7 @@ func (v *planVisitor) visit(plan planNode) {
 			for i, dexpr := range n.defaultExprs {
 				v.expr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.checkHelper.exprs {
+			for i, cexpr := range n.checkHelper.Exprs {
 				v.expr(name, "check", i, cexpr)
 			}
 			for i, rexpr := range n.rh.exprs {

@@ -21,6 +21,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -51,7 +52,7 @@ type insertNode struct {
 	defaultExprs []tree.TypedExpr
 	computeExprs []tree.TypedExpr
 	n            *tree.Insert
-	checkHelper  checkHelper
+	checkHelper  sqlbase.CheckHelper
 
 	insertCols   []sqlbase.ColumnDescriptor
 	computedCols []sqlbase.ColumnDescriptor
@@ -283,7 +284,9 @@ func (p *planner) Insert(
 		},
 	}
 
-	if err := in.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
+	if err := in.checkHelper.Init(
+		ctx, p.analyzeExpr, parser.ParseExprs, tn, en.tableDesc,
+	); err != nil {
 		return nil, err
 	}
 
@@ -443,10 +446,10 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	if err := n.checkHelper.loadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
+	if err := n.checkHelper.LoadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
-	if err := n.checkHelper.check(params.EvalContext()); err != nil {
+	if err := n.checkHelper.Check(params.EvalContext()); err != nil {
 		return false, err
 	}
 
