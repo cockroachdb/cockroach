@@ -64,11 +64,18 @@ export const livenessByNodeIDSelector = createSelector(
   },
 );
 
+/*
+ * selectLivenessRequestStatus returns the current status of the liveness request.
+ */
+export function selectLivenessRequestStatus(state: AdminUIState) {
+  return state.cachedData.liveness;
+}
+
 /**
  * livenessStatusByNodeIDSelector returns a map from NodeID to the
  * LivenessStatus of that node.
  */
-const livenessStatusByNodeIDSelector = createSelector(
+export const livenessStatusByNodeIDSelector = createSelector(
   livenessesSelector,
   (livenesses) => livenesses ? (livenesses.statuses || {}) : {},
 );
@@ -104,63 +111,70 @@ const nodeStatusByIDSelector = createSelector(
 const nodeSumsSelector = createSelector(
   nodeStatusesSelector,
   livenessStatusByNodeIDSelector,
-  (nodeStatuses, livenessStatusByNodeID) => {
-    const result = {
-      nodeCounts: {
-        total: 0,
-        healthy: 0,
-        suspect: 0,
-        dead: 0,
-        decommissioned: 0,
-      },
-      capacityUsed: 0,
-      capacityAvailable: 0,
-      capacityTotal: 0,
-      usedBytes: 0,
-      usedMem: 0,
-      totalRanges: 0,
-      underReplicatedRanges: 0,
-      unavailableRanges: 0,
-      replicas: 0,
-    };
-    if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
-      nodeStatuses.forEach((n) => {
-        const status = livenessStatusByNodeID[n.desc.node_id];
-        if (status !== LivenessStatus.DECOMMISSIONING) {
-          result.nodeCounts.total += 1;
-        }
-        switch (status) {
-          case LivenessStatus.LIVE:
-            result.nodeCounts.healthy++;
-            break;
-          case LivenessStatus.UNAVAILABLE:
-          case LivenessStatus.DECOMMISSIONING:
-            result.nodeCounts.suspect++;
-            break;
-          case LivenessStatus.DECOMMISSIONED:
-            result.nodeCounts.decommissioned++;
-            break;
-          case LivenessStatus.DEAD:
-          default:
-            result.nodeCounts.dead++;
-            break;
-        }
-        if (status !== LivenessStatus.DEAD) {
-          result.capacityUsed += n.metrics[MetricConstants.usedCapacity];
-          result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
-          result.capacityTotal += n.metrics[MetricConstants.capacity];
-          result.usedBytes += BytesUsed(n);
-          result.usedMem += n.metrics[MetricConstants.rss];
-          result.totalRanges += n.metrics[MetricConstants.ranges];
-          result.underReplicatedRanges += n.metrics[MetricConstants.underReplicatedRanges];
-          result.unavailableRanges += n.metrics[MetricConstants.unavailableRanges];
-          result.replicas += n.metrics[MetricConstants.replicas];
-        }
-      });
-    }
-    return result;
-  },
+  sumNodeStats,
 );
+
+export function sumNodeStats(
+  nodeStatuses: NodeStatus$Properties[],
+  livenessStatusByNodeID: { [id: string]: LivenessStatus },
+) {
+  const result = {
+    nodeCounts: {
+      total: 0,
+      healthy: 0,
+      suspect: 0,
+      dead: 0,
+      decommissioned: 0,
+    },
+    capacityUsed: 0,
+    capacityAvailable: 0,
+    capacityTotal: 0,
+    capacityUsable: 0,
+    usedBytes: 0,
+    usedMem: 0,
+    totalRanges: 0,
+    underReplicatedRanges: 0,
+    unavailableRanges: 0,
+    replicas: 0,
+  };
+  if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
+    nodeStatuses.forEach((n) => {
+      const status = livenessStatusByNodeID[n.desc.node_id];
+      if (status !== LivenessStatus.DECOMMISSIONING) {
+        result.nodeCounts.total += 1;
+      }
+      switch (status) {
+        case LivenessStatus.LIVE:
+          result.nodeCounts.healthy++;
+          break;
+        case LivenessStatus.UNAVAILABLE:
+        case LivenessStatus.DECOMMISSIONING:
+          result.nodeCounts.suspect++;
+          break;
+        case LivenessStatus.DECOMMISSIONED:
+          result.nodeCounts.decommissioned++;
+          break;
+        case LivenessStatus.DEAD:
+        default:
+          result.nodeCounts.dead++;
+          break;
+      }
+      if (status !== LivenessStatus.DEAD) {
+        result.capacityUsed += n.metrics[MetricConstants.usedCapacity];
+        result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
+        result.capacityTotal += n.metrics[MetricConstants.capacity];
+        result.capacityUsable = result.capacityUsed + result.capacityAvailable;
+        result.usedBytes += BytesUsed(n);
+        result.usedMem += n.metrics[MetricConstants.rss];
+        result.totalRanges += n.metrics[MetricConstants.ranges];
+        result.underReplicatedRanges += n.metrics[MetricConstants.underReplicatedRanges];
+        result.unavailableRanges += n.metrics[MetricConstants.unavailableRanges];
+        result.replicas += n.metrics[MetricConstants.replicas];
+      }
+    });
+  }
+  return result;
+}
 
 /**
  * nodesSummarySelector returns a directory object containing a variety of

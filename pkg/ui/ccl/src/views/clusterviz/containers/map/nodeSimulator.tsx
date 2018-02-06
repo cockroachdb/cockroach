@@ -9,14 +9,20 @@
 import React from "react";
 import { connect } from "react-redux";
 import * as d3 from "d3";
-import * as protos from "src/js/protos";
 
 import { NanoToMilli } from "src/util/convert";
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
 import { selectLocationsRequestStatus, selectLocationTree, LocationTree } from "src/redux/locations";
-import { nodesSummarySelector, NodesSummary, selectNodeRequestStatus } from "src/redux/nodes";
+import {
+  nodesSummarySelector,
+  NodesSummary,
+  selectNodeRequestStatus,
+  selectLivenessRequestStatus,
+  livenessStatusByNodeIDSelector,
+  LivenessStatus,
+} from "src/redux/nodes";
+import { NodeStatus$Properties } from "src/util/proto";
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";
 
@@ -24,8 +30,6 @@ import { ZoomTransformer } from "./zoom";
 import { ModalLocalitiesView } from "./modalLocalities";
 
 import spinner from "assets/spinner.gif";
-
-type NodeStatus = protos.cockroach.server.status.NodeStatus$Properties;
 
 // SimulatedNodeStatus augments a node status from the redux state with
 // additional simulated information in order to facilitate testing of the
@@ -49,15 +53,15 @@ export class SimulatedNodeStatus {
   // Currently, it is the to number SQL operations executed per second,
   // computed from the previous two node statuses.
   clientActivityRate: number;
-  private statusHistory: NodeStatus[];
+  private statusHistory: NodeStatus$Properties[];
   private maxHistory = 2;
 
-  constructor(initialStatus: NodeStatus) {
+  constructor(initialStatus: NodeStatus$Properties) {
     this.statusHistory = [initialStatus];
     this.computeClientActivityRate();
   }
 
-  update(nextStatus: NodeStatus) {
+  update(nextStatus: NodeStatus$Properties) {
     if (this.statusHistory[0].updated_at.lessThan(nextStatus.updated_at)) {
       this.statusHistory.unshift(nextStatus);
       if (this.statusHistory.length > this.maxHistory) {
@@ -93,9 +97,9 @@ export class SimulatedNodeStatus {
 interface NodeSimulatorProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
-  localityStatus: CachedDataReducerState<any>;
   locationTree: LocationTree;
-  locationStatus: CachedDataReducerState<any>;
+  liveness: { [id: string]: LivenessStatus };
+  dataIsValid: boolean;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
   refreshLocations: typeof refreshLocations;
@@ -124,7 +128,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   // accumulateHistory parses incoming nodeStatus properties and accumulates
   // a history for each node.
   accumulateHistory(props = this.props) {
-    if (!props.localityStatus.valid || !props.locationStatus.valid ) {
+    if (!props.dataIsValid) {
       return;
     }
 
@@ -155,14 +159,15 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   render() {
     return (
       <Loading
-        loading={ !this.props.localityStatus.valid || !this.props.locationStatus.valid }
+        loading={!this.props.dataIsValid}
         className="loading-image loading-image__spinner-left"
-        image={ spinner }
+        image={spinner}
       >
         <ModalLocalitiesView
           nodeHistories={this.nodeHistories}
           localityTree={this.props.localityTree}
           locationTree={this.props.locationTree}
+          liveness={this.props.liveness}
           tiers={this.props.tiers}
           projection={this.props.projection}
           zoom={this.props.zoom}
@@ -176,9 +181,12 @@ export default connect(
   (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
-    localityStatus: selectNodeRequestStatus(state),
     locationTree: selectLocationTree(state),
-    locationStatus: selectLocationsRequestStatus(state),
+    liveness: livenessStatusByNodeIDSelector(state),
+    dataIsValid:
+      selectNodeRequestStatus(state).valid
+      && selectLocationsRequestStatus(state).valid
+      && selectLivenessRequestStatus(state).valid,
   }),
   {
     refreshNodes,

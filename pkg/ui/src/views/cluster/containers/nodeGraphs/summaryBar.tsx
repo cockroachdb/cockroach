@@ -59,9 +59,8 @@ function formatNanosAsMillis (n: number) {
  */
 export default function(props: ClusterSummaryProps) {
   // Capacity math used in the summary status section.
-  const { capacityAvailable, capacityUsed } = props.nodesSummary.nodeSums;
-  const usableCapacity = capacityAvailable + capacityUsed;
-  const capacityPercent = usableCapacity !== 0 ? (capacityUsed / usableCapacity) : null;
+  const { capacityUsed, capacityUsable } = props.nodesSummary.nodeSums;
+  const capacityPercent = capacityUsable !== 0 ? (capacityUsed / capacityUsable) : null;
 
   return (
     <div>
@@ -69,7 +68,7 @@ export default function(props: ClusterSummaryProps) {
         <SummaryLabel>Summary</SummaryLabel>
         <ClusterNodeTotals {...props}/>
         <SummaryStat title="Capacity Used" value={capacityPercent} format={formatPercentage}>
-          <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(usableCapacity)}
+          <SummaryStatMessage message={`You are using ${Bytes(capacityUsed)} of ${Bytes(capacityUsable)}
                                         usable storage capacity across all nodes.`} />
         </SummaryStat>
         <SummaryStat title="Unavailable ranges" value={props.nodesSummary.nodeSums.unavailableRanges} />
