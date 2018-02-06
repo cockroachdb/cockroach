@@ -36,6 +36,20 @@ export function getNodeLocalityTiers(node: NodeStatus$Properties): LocalityTier[
 }
 
 /*
+ * getChildLocalities returns an array of the locality trees for localities that
+ * are the immediate children of this one.
+ */
+export function getChildLocalities(locality: LocalityTree): LocalityTree[] {
+  const children: LocalityTree[] = [];
+
+  _.values(locality.localities).forEach((tier) => {
+    children.push(..._.values(tier));
+  });
+
+  return children;
+}
+
+/*
  * getLocality gets the locality within this tree which corresponds to a set of
  * locality tiers, or null if the locality is not present.
  */

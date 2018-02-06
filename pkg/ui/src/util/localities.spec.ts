@@ -2,7 +2,13 @@ import { assert } from "chai";
 
 import * as protos from "src/js/protos";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { generateLocalityRoute, parseLocalityRoute, getNodeLocalityTiers, getLocality } from "./localities";
+import {
+  generateLocalityRoute,
+  parseLocalityRoute,
+  getNodeLocalityTiers,
+  getChildLocalities,
+  getLocality,
+} from "./localities";
 
 describe("parseLocalityRoute", function() {
   describe("with an empty route", function() {
@@ -106,6 +112,55 @@ describe("getNodeLocalityTiers", function() {
     const locality = getNodeLocalityTiers(node);
 
     assert.deepEqual(locality, tiers);
+  });
+});
+
+describe("getChildLocalities", function() {
+  describe("with no children", function() {
+    it("returns an empty list", function() {
+      const locality: LocalityTree = {
+        tiers: [],
+        localities: {},
+        nodes: [],
+      };
+
+      const children = getChildLocalities(locality);
+
+      assert.deepEqual(children, []);
+    });
+  });
+
+  describe("with child localities", function() {
+    it("returns a list of the children", function() {
+      const usEast: LocalityTree = {
+        tiers: [{ key: "region", value: "us-east" }],
+        localities: {},
+        nodes: [],
+      };
+
+      const usWest: LocalityTree = {
+        tiers: [{ key: "region", value: "us-west" }],
+        localities: {},
+        nodes: [],
+      };
+
+      const locality: LocalityTree = {
+        tiers: [],
+        localities: {
+          region: {
+            "us-east": usEast,
+            "us-west": usWest,
+          },
+        },
+        nodes: [],
+      };
+
+      const children = getChildLocalities(locality);
+
+      assert.lengthOf(children, 2);
+      assert.deepInclude(children, usEast);
+      assert.deepInclude(children, usWest);
+    });
   });
 });
 
