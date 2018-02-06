@@ -15,12 +15,14 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"testing"
@@ -973,5 +975,54 @@ func TestSSTableInfosByLevel(t *testing.T) {
 				t.Errorf("expected max level %d; got %d", test.expMaxLevel, maxLevel)
 			}
 		})
+	}
+}
+
+func TestRocksDBOptions(t *testing.T) {
+	dir, err := ioutil.TempDir("", "testing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	rocksdb, err := NewRocksDB(
+		RocksDBConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
+			RocksDBOptions: "use_fsync=true;" +
+				"min_write_buffer_number_to_merge=2;" +
+				"block_based_table_factory={block_size=4k}",
+		},
+		RocksDBCache{},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rocksdb.Close()
+
+	paths, err := filepath.Glob(dir + "/OPTIONS-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		data, err := ioutil.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		options := []string{
+			"use_fsync=true",
+			"min_write_buffer_number_to_merge=2",
+			"block_size=4096",
+		}
+		for _, o := range options {
+			fullOption := fmt.Sprintf("  %s\n", o)
+			if !bytes.Contains(data, []byte(fullOption)) {
+				t.Errorf("unable to find %s in %s", o, p)
+			}
+		}
 	}
 }
