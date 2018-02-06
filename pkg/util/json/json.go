@@ -837,23 +837,28 @@ func MakeJSON(d interface{}) (JSON, error) {
 // place to start doing binary search over a linear scan.
 const bsearchCutoff = 20
 
-func (j jsonObject) FetchValKey(key string) (JSON, error) {
+func findPairIndexByKey(j jsonObject, key string) (int, bool) {
 	// For small objects, the overhead of binary search is significant and so
 	// it's faster to just do a linear scan.
+	var i int
 	if len(j) < bsearchCutoff {
-		for i := range j {
-			if string(j[i].k) == key {
-				return j[i].v, nil
-			}
-			if string(j[i].k) > key {
+		for i = range j {
+			if string(j[i].k) >= key {
 				break
 			}
 		}
-		return nil, nil
+	} else {
+		i = sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
 	}
-
-	i := sort.Search(len(j), func(i int) bool { return string(j[i].k) >= key })
 	if i < len(j) && string(j[i].k) == key {
+		return i, true
+	}
+	return -1, false
+}
+
+func (j jsonObject) FetchValKey(key string) (JSON, error) {
+	i, ok := findPairIndexByKey(j, key)
+	if ok {
 		return j[i].v, nil
 	}
 	return nil, nil
@@ -1411,20 +1416,18 @@ func (j jsonArray) doRemovePath(path []string) (JSON, error) {
 		return j.RemoveIndex(idx)
 	}
 
+	if idx < -len(j) || idx >= len(j) {
+		return j, nil
+	}
 	result := make(jsonArray, len(j))
 	if idx < 0 {
 		idx += len(j)
 	}
 	for i := range j {
-		if i == idx {
-			newVal, err := j[i].doRemovePath(path[1:])
-			if err != nil {
-				return nil, err
-			}
-			result[i] = newVal
-		} else {
-			result[i] = j[i]
-		}
+		result[i] = j[i]
+	}
+	if result[idx], err = result[idx].doRemovePath(path[1:]); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
@@ -1436,20 +1439,19 @@ func (j jsonObject) doRemovePath(path []string) (JSON, error) {
 	if len(path) == 1 {
 		return j.RemoveKey(path[0])
 	}
+	idx, ok := findPairIndexByKey(j, path[0])
+	if !ok {
+		return j, nil
+	}
+
 	result := make(jsonObject, len(j))
 	for i := range j {
-		if string(j[i].k) == path[0] {
-			newVal, err := j[i].v.doRemovePath(path[1:])
-			if err != nil {
-				return nil, err
-			}
-			result[i] = jsonKeyValuePair{
-				k: j[i].k,
-				v: newVal,
-			}
-		} else {
-			result[i] = j[i]
-		}
+		result[i] = j[i]
+	}
+
+	var err error
+	if result[idx].v, err = result[idx].v.doRemovePath(path[1:]); err != nil {
+		return nil, err
 	}
 	return result, nil
 }
