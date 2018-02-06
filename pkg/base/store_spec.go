@@ -70,6 +70,9 @@ type StoreSpec struct {
 	// UseSwitchingEnv is true if the "switching env" store version is desired.
 	// This is set by CCL code when encryption-at-rest is in use.
 	UseSwitchingEnv bool
+	// RocksDBOptions contains RocksDB specific options using a semicolon
+	// separated key-value syntax ("key1=value1; key2=value2").
+	RocksDBOptions string
 	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
 	// to C CCL code.
 	ExtraOptions []byte
@@ -225,6 +228,8 @@ func NewStoreSpec(value string) (StoreSpec, error) {
 			} else {
 				return StoreSpec{}, fmt.Errorf("%s is not a valid store type", value)
 			}
+		case "rocksdb":
+			ss.RocksDBOptions = value
 		default:
 			return StoreSpec{}, fmt.Errorf("%s is not a valid store field", field)
 		}

@@ -73,6 +73,7 @@ typedef struct {
   bool use_switching_env;
   bool must_exist;
   bool read_only;
+  DBSlice rocksdb_options;
   DBSlice extra_options;
 } DBOptions;
 
