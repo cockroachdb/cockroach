@@ -16,7 +16,6 @@ package builtins
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -40,18 +39,14 @@ func init() {
 		AllBuiltinNames = append(AllBuiltinNames, name)
 	}
 
-	// We alias the builtins to uppercase to hasten the lookup in the
-	// common case. Also generate missing categories.
+	// Generate missing categories.
 	for _, name := range AllBuiltinNames {
-		uname := strings.ToUpper(name)
 		def := Builtins[name]
 		for i, b := range def {
 			if b.Category == "" {
 				def[i].Category = getCategory(def[i])
 			}
 		}
-		Builtins[uname] = def
-		tree.FunDefs[uname] = tree.FunDefs[name]
 	}
 
 	sort.Strings(AllBuiltinNames)

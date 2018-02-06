@@ -5846,7 +5846,7 @@ a_expr:
   }
 | a_expr REMOVE_PATH a_expr
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("JSON_REMOVE_PATH"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("json_remove_path"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr LESS_EQUALS a_expr
   {
@@ -6395,7 +6395,7 @@ special_function:
 | OVERLAY '(' error { return helpWithFunctionByName(sqllex, $1) }
 | POSITION '(' position_list ')'
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("STRPOS"), Exprs: $3.exprs()}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("strpos"), Exprs: $3.exprs()}
   }
 | SUBSTRING '(' substr_list ')'
   {
@@ -6405,19 +6405,19 @@ special_function:
 | TREAT '(' a_expr AS typename ')' { return unimplemented(sqllex, "treat") }
 | TRIM '(' BOTH trim_list ')'
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("BTRIM"), Exprs: $4.exprs()}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("btrim"), Exprs: $4.exprs()}
   }
 | TRIM '(' LEADING trim_list ')'
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("LTRIM"), Exprs: $4.exprs()}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("ltrim"), Exprs: $4.exprs()}
   }
 | TRIM '(' TRAILING trim_list ')'
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("RTRIM"), Exprs: $4.exprs()}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("rtrim"), Exprs: $4.exprs()}
   }
 | TRIM '(' trim_list ')'
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("BTRIM"), Exprs: $3.exprs()}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("btrim"), Exprs: $3.exprs()}
   }
 | GREATEST '(' expr_list ')'
   {
