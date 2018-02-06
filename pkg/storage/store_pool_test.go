@@ -143,7 +143,7 @@ func TestStorePoolGossipUpdate(t *testing.T) {
 // verifyStoreList ensures that the returned list of stores is correct.
 func verifyStoreList(
 	sp *StorePool,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	rangeID roachpb.RangeID,
 	expected []int,
 	filter storeFilter,
@@ -181,10 +181,12 @@ func TestStorePoolGetStoreList(t *testing.T) {
 		TestTimeUntilStoreDead, false /* deterministic */, NodeLivenessStatus_DEAD)
 	defer stopper.Stop(context.TODO())
 	sg := gossiputil.NewStoreGossiper(g)
-	constraints := config.Constraints{
-		Constraints: []config.Constraint{
-			{Type: config.Constraint_REQUIRED, Value: "ssd"},
-			{Type: config.Constraint_REQUIRED, Value: "dc"},
+	constraints := []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Type: config.Constraint_REQUIRED, Value: "ssd"},
+				{Type: config.Constraint_REQUIRED, Value: "dc"},
+			},
 		},
 	}
 	required := []string{"ssd", "dc"}
@@ -334,12 +336,14 @@ func TestStorePoolGetStoreList(t *testing.T) {
 func TestStoreListFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraints := config.Constraints{
-		Constraints: []config.Constraint{
-			{Type: config.Constraint_REQUIRED, Key: "region", Value: "us-west"},
-			{Type: config.Constraint_REQUIRED, Value: "MustMatch"},
-			{Type: config.Constraint_POSITIVE, Value: "MatchingOptional"},
-			{Type: config.Constraint_PROHIBITED, Value: "MustNotMatch"},
+	constraints := []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Type: config.Constraint_REQUIRED, Key: "region", Value: "us-west"},
+				{Type: config.Constraint_REQUIRED, Value: "MustMatch"},
+				{Type: config.Constraint_DEPRECATED_POSITIVE, Value: "MatchingOptional"},
+				{Type: config.Constraint_PROHIBITED, Value: "MustNotMatch"},
+			},
 		},
 	}
 

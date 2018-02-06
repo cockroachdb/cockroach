@@ -425,82 +425,158 @@ var (
 	}
 )
 
-func TestConstraintCheck(t *testing.T) {
+func getTestStoreDesc(storeID roachpb.StoreID) (roachpb.StoreDescriptor, bool) {
+	desc, ok := testStores[storeID]
+	return desc, ok
+}
+
+func testStoreReplicas(storeIDs []roachpb.StoreID) []roachpb.ReplicaDescriptor {
+	var result []roachpb.ReplicaDescriptor
+	for _, storeID := range storeIDs {
+		result = append(result, roachpb.ReplicaDescriptor{
+			NodeID:  roachpb.NodeID(storeID),
+			StoreID: storeID,
+		})
+	}
+	return result
+}
+
+func TestConstraintsCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
 		name        string
-		constraints []config.Constraint
-		expected    map[roachpb.StoreID]int
+		constraints []config.Constraints
+		expected    map[roachpb.StoreID]bool
 	}{
 		{
 			name: "required constraint",
-			constraints: []config.Constraint{
-				{Value: "b", Type: config.Constraint_REQUIRED},
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+				},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa1: 0,
-				testStoreUSb:  0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
 			},
 		},
 		{
 			name: "required locality constraints",
-			constraints: []config.Constraint{
-				{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
+					},
+				},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreUSa1:      0,
-				testStoreUSb:       0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
 			},
 		},
 		{
 			name: "prohibited constraints",
-			constraints: []config.Constraint{
-				{Value: "b", Type: config.Constraint_PROHIBITED},
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_PROHIBITED},
+					},
+				},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreEurope:    0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreEurope:    true,
 			},
 		},
 		{
 			name: "prohibited locality constraints",
-			constraints: []config.Constraint{
-				{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
+					},
+				},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreEurope: 0,
-			},
-		},
-		{
-			name: "positive constraints",
-			constraints: []config.Constraint{
-				{Value: "a"},
-				{Value: "b"},
-				{Value: "c"},
-			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     1,
-				testStoreUSa15Dupe: 1,
-				testStoreUSa1:      2,
-				testStoreUSb:       3,
-				testStoreEurope:    0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreEurope: true,
 			},
 		},
 		{
-			name: "positive locality constraints",
-			constraints: []config.Constraint{
-				{Key: "datacenter", Value: "eur"},
+			name: "positive constraints are ignored",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_DEPRECATED_POSITIVE},
+						{Value: "b", Type: config.Constraint_DEPRECATED_POSITIVE},
+						{Value: "c", Type: config.Constraint_DEPRECATED_POSITIVE},
+					},
+				},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreUSa1:      0,
-				testStoreUSb:       0,
-				testStoreEurope:    1,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+				testStoreEurope:    true,
+			},
+		},
+		{
+			name: "positive locality constraints are ignored",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Key: "datacenter", Value: "eur", Type: config.Constraint_DEPRECATED_POSITIVE},
+					},
+				},
+			},
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+				testStoreEurope:    true,
+			},
+		},
+		{
+			name: "NumReplicas doesn't affect constraint checking",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Key: "datacenter", Value: "eur", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+			},
+			expected: map[roachpb.StoreID]bool{
+				testStoreEurope: true,
+			},
+		},
+		{
+			name: "multiple per-replica constraints are respected",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Key: "datacenter", Value: "eur", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+			},
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa1:   true,
+				testStoreUSb:    true,
+				testStoreEurope: true,
 			},
 		},
 	}
@@ -508,14 +584,288 @@ func TestConstraintCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid, positive := constraintCheck(s, config.Constraints{Constraints: tc.constraints})
-				expectedPositive, ok := tc.expected[s.StoreID]
+				valid := constraintsCheck(s, tc.constraints)
+				ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
 					continue
 				}
-				if positive != expectedPositive {
-					t.Errorf("expected store %d to have %d positives, but got %d", s.StoreID, expectedPositive, positive)
+			}
+		})
+	}
+}
+
+func TestAllocateConstraintsCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name              string
+		constraints       []config.Constraints
+		existing          []roachpb.StoreID
+		expectedValid     map[roachpb.StoreID]bool
+		expectedNecessary map[roachpb.StoreID]bool
+	}{
+		{
+			name: "prohibited constraint",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_PROHIBITED},
+					},
+				},
+			},
+			existing: nil,
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreEurope:    true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{},
+		},
+		{
+			name: "required constraint",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+				},
+			},
+			existing: nil,
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{},
+		},
+		{
+			name: "required constraint with NumReplicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 3,
+				},
+			},
+			existing: nil,
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
+			},
+		},
+		{
+			name: "multiple required constraints with NumReplicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+			},
+			existing: nil,
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+			},
+		},
+		{
+			name: "multiple required constraints with NumReplicas and existing replicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+			},
+			existing: []roachpb.StoreID{testStoreUSa1},
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{},
+		},
+		{
+			name: "multiple required constraints with NumReplicas and not enough existing replicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 2,
+				},
+			},
+			existing: []roachpb.StoreID{testStoreUSa1},
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			analyzed := analyzeConstraints(
+				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), tc.constraints)
+			for _, s := range testStores {
+				valid, necessary := allocateConstraintsCheck(s, analyzed)
+				if e, a := tc.expectedValid[s.StoreID], valid; e != a {
+					t.Errorf("expected allocateConstraintsCheck(s%d).valid to be %t, but got %t",
+						s.StoreID, e, a)
+				}
+				if e, a := tc.expectedNecessary[s.StoreID], necessary; e != a {
+					t.Errorf("expected allocateConstraintsCheck(s%d).necessary to be %t, but got %t",
+						s.StoreID, e, a)
+				}
+			}
+		})
+	}
+}
+
+func TestRemoveConstraintsCheck(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type expected struct {
+		valid, necessary bool
+	}
+	testCases := []struct {
+		name        string
+		constraints []config.Constraints
+		expected    map[roachpb.StoreID]expected
+	}{
+		{
+			name: "prohibited constraint",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_PROHIBITED},
+					},
+				},
+			},
+			expected: map[roachpb.StoreID]expected{
+				testStoreUSa15:     {true, false},
+				testStoreUSa15Dupe: {true, false},
+				testStoreEurope:    {true, false},
+				testStoreUSa1:      {false, false},
+			},
+		},
+		{
+			name: "required constraint",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+				},
+			},
+			expected: map[roachpb.StoreID]expected{
+				testStoreUSa15:     {false, false},
+				testStoreUSa15Dupe: {false, false},
+				testStoreEurope:    {false, false},
+				testStoreUSa1:      {true, false},
+			},
+		},
+		{
+			name: "required constraint with NumReplicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 2,
+				},
+			},
+			expected: map[roachpb.StoreID]expected{
+				testStoreUSa15:  {false, false},
+				testStoreEurope: {false, false},
+				testStoreUSa1:   {true, true},
+				testStoreUSb:    {true, true},
+			},
+		},
+		{
+			name: "multiple required constraints with NumReplicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+			},
+			expected: map[roachpb.StoreID]expected{
+				testStoreUSa15:  {true, false},
+				testStoreUSa1:   {true, true},
+				testStoreEurope: {false, false},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var existing []roachpb.ReplicaDescriptor
+			for storeID := range tc.expected {
+				existing = append(existing, roachpb.ReplicaDescriptor{
+					NodeID:  roachpb.NodeID(storeID),
+					StoreID: storeID,
+				})
+			}
+			analyzed := analyzeConstraints(
+				context.Background(), getTestStoreDesc, existing, tc.constraints)
+			for storeID, expected := range tc.expected {
+				valid, necessary := removeConstraintsCheck(testStores[storeID], analyzed)
+				if e, a := expected.valid, valid; e != a {
+					t.Errorf("expected removeConstraintsCheck(s%d).valid to be %t, but got %t",
+						storeID, e, a)
+				}
+				if e, a := expected.necessary, necessary; e != a {
+					t.Errorf("expected removeConstraintsCheck(s%d).necessary to be %t, but got %t",
+						storeID, e, a)
 				}
 			}
 		})
@@ -637,24 +987,45 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
+		removeStore := func(sl StoreList, nodeID roachpb.NodeID) StoreList {
+			for i, s := range sl.stores {
+				if s.Node.NodeID == nodeID {
+					return makeStoreList(append(sl.stores[:i], sl.stores[i+1:]...))
+				}
+			}
+			return sl
+		}
+		filteredSL := tc.sl
+		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
+		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
 		rangeInfo := RangeInfo{
 			Desc: &roachpb.RangeDescriptor{},
 		}
-		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
 		for _, nodeID := range tc.existingNodeIDs {
 			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
-				NodeID: nodeID,
+				NodeID:  nodeID,
+				StoreID: roachpb.StoreID(nodeID),
 			})
 			existingNodeLocalities[nodeID] = localityForNodeID(tc.sl, nodeID)
+			// For the sake of testing, remove all other existing stores from the
+			// store list to only test whether we want to remove the replica on tc.s.
+			if nodeID != tc.s.Node.NodeID {
+				filteredSL = removeStore(filteredSL, nodeID)
+			}
 		}
-		actual := shouldRebalance(
+
+		targets := rebalanceCandidates(
 			context.Background(),
-			tc.s,
-			tc.sl,
+			filteredSL,
+			analyzedConstraints{},
 			rangeInfo,
 			existingNodeLocalities,
-			options,
-		)
+			func(nodeID roachpb.NodeID) string {
+				locality := localityForNodeID(tc.sl, nodeID)
+				return locality.String()
+			},
+			options)
+		actual := len(targets) > 0
 		if actual != tc.expected {
 			t.Errorf("%d: shouldRebalance on s%d with replicas on %v got %t, expected %t",
 				i, tc.s.StoreID, tc.existingNodeIDs, actual, tc.expected)
