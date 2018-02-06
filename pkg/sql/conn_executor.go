@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1419,12 +1418,6 @@ func (ex *connExecutor) readWriteModeWithSessionDefault(
 // shouldn't be reused across statements.
 func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContext {
 	txn := ex.state.mu.txn
-	var clusterTimestamp hlc.Timestamp
-	// txn can be nil if we're setting this context up for preparing a statement
-	// and we are outside of a transaction,
-	if txn != nil {
-		clusterTimestamp = ex.state.mu.txn.OrigTimestamp()
-	}
 
 	scInterface := newSchemaInterface(&ex.extraTxnState.tables, ex.server.cfg.VirtualSchemas)
 
@@ -1434,21 +1427,20 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContex
 			Sequence:      p,
 			StmtTimestamp: stmtTS,
 
-			Txn:              txn,
-			SessionData:      &ex.sessionData,
-			ApplicationName:  ex.dataMutator.ApplicationName(),
-			TxnState:         ex.getTransactionState(),
-			TxnReadOnly:      ex.state.readOnly,
-			TxnImplicit:      ex.implicitTxn(),
-			Settings:         ex.server.cfg.Settings,
-			CtxProvider:      ex,
-			Mon:              ex.state.mon,
-			TestingKnobs:     ex.server.cfg.EvalContextTestingKnobs,
-			TxnTimestamp:     ex.state.sqlTimestamp,
-			ClusterTimestamp: clusterTimestamp,
-			ClusterID:        ex.server.cfg.ClusterID(),
-			NodeID:           ex.server.cfg.NodeID.Get(),
-			ReCache:          ex.server.reCache,
+			Txn:             txn,
+			SessionData:     &ex.sessionData,
+			ApplicationName: ex.dataMutator.ApplicationName(),
+			TxnState:        ex.getTransactionState(),
+			TxnReadOnly:     ex.state.readOnly,
+			TxnImplicit:     ex.implicitTxn(),
+			Settings:        ex.server.cfg.Settings,
+			CtxProvider:     ex,
+			Mon:             ex.state.mon,
+			TestingKnobs:    ex.server.cfg.EvalContextTestingKnobs,
+			TxnTimestamp:    ex.state.sqlTimestamp,
+			ClusterID:       ex.server.cfg.ClusterID(),
+			NodeID:          ex.server.cfg.NodeID.Get(),
+			ReCache:         ex.server.reCache,
 		},
 		SessionMutator:  ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
