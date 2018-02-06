@@ -93,6 +93,13 @@ func dNameOrNull(s string) tree.Datum {
 	return tree.NewDName(s)
 }
 
+func dStringPtrOrEmpty(s *string) tree.Datum {
+	if s == nil {
+		return emptyString
+	}
+	return tree.NewDString(*s)
+}
+
 func dStringPtrOrNull(s *string) tree.Datum {
 	if s == nil {
 		return tree.DNull
@@ -251,7 +258,8 @@ CREATE TABLE information_schema.columns (
 	DATETIME_PRECISION INT,
 	CHARACTER_SET_CATALOG STRING,
 	CHARACTER_SET_SCHEMA STRING,
-	CHARACTER_SET_NAME STRING
+	CHARACTER_SET_NAME STRING,
+	GENERATION_EXPRESSION STRING
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
@@ -277,6 +285,7 @@ CREATE TABLE information_schema.columns (
 					tree.DNull,                               // character_set_catalog
 					tree.DNull,                               // character_set_schema
 					tree.DNull,                               // character_set_name
+					dStringPtrOrEmpty(column.ComputeExpr),    // generation_expression
 				)
 			})
 		})
