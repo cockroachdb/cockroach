@@ -522,7 +522,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str>   UPDATE UPSERT USE USER USERS USING UUID
 
-%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
+%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING VIRTUAL
 
 %token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -3336,9 +3336,23 @@ col_qualification_elem:
       Actions: $5.referenceActions(),
     }
  }
-| AS b_expr STORED
+| AS '(' b_expr ')' STORED
  {
-    $$.val = &tree.ColumnComputedDef{Expr: $2.expr()}
+    $$.val = &tree.ColumnComputedDef{Expr: $3.expr()}
+ }
+| AS '(' b_expr ')' VIRTUAL
+ {
+    return unimplemented(sqllex, "virtual computed columns")
+ }
+| AS '(' b_expr ')' error
+ {
+    sqllex.Error("syntax error near computed column - consider adding STORED")
+    return 1
+ }
+| AS error
+ {
+    sqllex.Error("syntax error near computed column - generation expression must be wrapped in parentheses")
+    return 1
  }
 
 index_def:
@@ -7696,6 +7710,7 @@ reserved_keyword:
 | USING
 | VARIADIC
 | VIEW
+| VIRTUAL
 | WHEN
 | WHERE
 | WINDOW

@@ -4,7 +4,7 @@ statement ok
 CREATE TABLE with_no_column_refs (
   a INT,
   b INT,
-  c INT AS 3 STORED
+  c INT AS (3) STORED
 )
 
 query TT
@@ -13,7 +13,7 @@ SHOW CREATE TABLE with_no_column_refs
 with_no_column_refs CREATE TABLE with_no_column_refs (
                       a INT NULL,
                       b INT NULL,
-                      c INT NULL AS 3 STORED,
+                      c INT NULL AS (3) STORED,
                       FAMILY "primary" (a, b, c, rowid)
                     )
 
@@ -32,8 +32,8 @@ statement ok
 CREATE TABLE x (
   a INT DEFAULT 3,
   b INT DEFAULT 7,
-  c INT AS a STORED,
-  d INT AS a + b STORED
+  c INT AS (a) STORED,
+  d INT AS (a + b) STORED
 )
 
 query TT
@@ -42,8 +42,8 @@ SHOW CREATE TABLE x
 x CREATE TABLE x (
     a INT NULL DEFAULT 3:::INT,
     b INT NULL DEFAULT 7:::INT,
-    c INT NULL AS a STORED,
-    d INT NULL AS a + b STORED,
+    c INT NULL AS (a) STORED,
+    d INT NULL AS (a + b) STORED,
     FAMILY "primary" (a, b, c, d, rowid)
   )
 
@@ -95,8 +95,8 @@ statement ok
 CREATE TABLE x (
   a INT PRIMARY KEY,
   b INT,
-  c INT AS b + 1 STORED,
-  d INT AS b - 1 STORED
+  c INT AS (b + 1) STORED,
+  d INT AS (b - 1) STORED
 )
 
 statement ok
@@ -153,7 +153,7 @@ DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  b INT AS a STORED,
+  b INT AS (a) STORED,
   a INT
 )
 
@@ -172,9 +172,24 @@ SELECT b FROM x ORDER BY b
 statement ok
 DROP TABLE x
 
+statement error generation expression must be wrapped in parentheses
+CREATE TABLE y (
+  a INT AS 3 STORED
+)
+
+statement error consider adding STORED
+CREATE TABLE y (
+  a INT AS (3)
+)
+
+statement error unimplemented at or near "virtual"
+CREATE TABLE y (
+  a INT AS (3) VIRTUAL
+)
+
 statement error expected computed column expression to have type int, but .* has type string
 CREATE TABLE y (
-  a INT AS 'not an integer!'::STRING STORED
+  a INT AS ('not an integer!'::STRING) STORED
 )
 
 # We utilize the types from other columns.
@@ -182,38 +197,38 @@ CREATE TABLE y (
 statement error expected computed column expression to have type int, but .* has type string
 CREATE TABLE y (
   a STRING,
-  b INT AS a STORED
+  b INT AS (a) STORED
 )
 
 statement error computed column a contains impure functions: now\(\)
 CREATE TABLE y (
-  a TIMESTAMP AS now() STORED
+  a TIMESTAMP AS (now()) STORED
 )
 
 statement error computed column a contains impure functions: now\(\), uuid_v4\(\)
 CREATE TABLE y (
-  a STRING AS CONCAT(now()::STRING, uuid_v4()::STRING) STORED
+  a STRING AS (CONCAT(now()::STRING, uuid_v4()::STRING)) STORED
 )
 
 statement error computed columns cannot reference other computed columns
 CREATE TABLE y (
-  a INT AS 3 STORED,
-  b INT AS a STORED
+  a INT AS (3) STORED,
+  b INT AS (a) STORED
 )
 
 statement error column "a" not found, referenced in "a"
 CREATE TABLE y (
-  b INT AS a STORED
+  b INT AS (a) STORED
 )
 
 statement error aggregate functions are not allowed in computed column expressions
 CREATE TABLE y (
-  b INT AS COUNT(1) STORED
+  b INT AS (COUNT(1)) STORED
 )
 
 statement error computed columns cannot have default values
 CREATE TABLE y (
-  a INT AS 3 STORED DEFAULT 4
+  a INT AS (3) STORED DEFAULT 4
 )
 
 # TODO(justin,bram): this should be allowed.
@@ -223,29 +238,29 @@ CREATE TABLE x (a INT PRIMARY KEY)
 statement error computed columns cannot reference non-restricted FK columns
 CREATE TABLE y (
   q INT REFERENCES x (a) ON UPDATE CASCADE,
-  r INT AS q STORED
+  r INT AS (q) STORED
 )
 
 statement error computed columns cannot reference non-restricted FK columns
 CREATE TABLE y (
   q INT REFERENCES x (a) ON DELETE CASCADE,
-  r INT AS q STORED
+  r INT AS (q) STORED
 )
 
 statement error computed column expression '\(SELECT 1\)' may not contain variable sub-expressions
 CREATE TABLE y (
-  r INT AS (SELECT 1) STORED
+  r INT AS ((SELECT 1)) STORED
 )
 
 statement error column "a" not found, referenced in "x.a"
 CREATE TABLE y (
-  r INT AS x.a STORED
+  r INT AS (x.a) STORED
 )
 
 statement ok
 CREATE TABLE y (
   q INT,
-  r INT AS y.q STORED
+  r INT AS (y.q) STORED
 )
 
 statement ok
@@ -255,7 +270,7 @@ DROP TABLE y
 statement ok
 CREATE TABLE y (
   q INT REFERENCES x (a) ON UPDATE CASCADE,
-  r INT AS 3 STORED
+  r INT AS (3) STORED
 )
 
 statement ok
@@ -269,7 +284,7 @@ statement ok
 CREATE TABLE x (
   k INT PRIMARY KEY,
   a JSON,
-  b TEXT AS (a->>'q') STORED,
+  b TEXT AS ((a->>'q')) STORED,
   INDEX (b) STORING (k)
 )
 
@@ -301,7 +316,7 @@ DROP TABLE x
 
 statement ok
 CREATE TABLE x (
-  k INT AS ((data->>'id')::INT) STORED PRIMARY KEY,
+  k INT AS (((data->>'id')::INT)) STORED PRIMARY KEY,
   data JSON
 )
 
@@ -344,7 +359,7 @@ CREATE TABLE x (
   a INT,
   b INT,
   c INT,
-  d INT[] AS (ARRAY[a, b, c]) STORED
+  d INT[] AS ((ARRAY[a, b, c])) STORED
 )
 
 statement ok
