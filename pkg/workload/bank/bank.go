@@ -100,12 +100,12 @@ func (b *bank) Flags() *pflag.FlagSet {
 
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
-	rng := rand.New(rand.NewSource(b.seed))
 	table := workload.Table{
 		Name:            `bank`,
 		Schema:          bankSchema,
 		InitialRowCount: b.rows,
 		InitialRowFn: func(rowIdx int) []interface{} {
+			rng := rand.New(rand.NewSource(b.seed + int64(rowIdx)))
 			const initialPrefix = `initial-`
 			bytes := hex.EncodeToString(randutil.RandBytes(rng, b.payloadBytes/2))
 			// Minus 2 for the single quotes
