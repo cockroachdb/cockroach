@@ -91,13 +91,13 @@ func makeSpans(
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.makeIndexConstraintsExperimental(optExpr, p.EvalContext())
+	err = c.makeIndexConstraints(optExpr, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	logicalSpans, ok := c.ic.Spans()
-	spans, err = spansFromLogicalSpansExperimental(desc, index, logicalSpans, ok)
+	spans, err = spansFromLogicalSpans(desc, index, logicalSpans, ok)
 	if err != nil {
 		t.Fatal(err)
 	}
