@@ -12,9 +12,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
-	"encoding/csv"
 	"fmt"
-	"io"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -171,35 +169,15 @@ func (c *groupCSVWriter) groupWriteCSVs(
 		const maxAttempts = 3
 		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 			w := c.gcs.Bucket(c.store.GCSBucket).Object(path).NewWriter(ctx)
-			bytesWrittenW := &bytesWrittenWriter{w: w}
-			csvW := csv.NewWriter(bytesWrittenW)
-			for rowIdx = rowStart; rowIdx < rowEnd; rowIdx++ {
-				if c.chunkSizeBytes > 0 && bytesWrittenW.written > c.chunkSizeBytes {
-					break
-				}
-				row := table.InitialRowFn(rowIdx)
-				rowStrings := make([]string, len(row))
-				for i, datum := range row {
-					if datum == nil {
-						rowStrings[i] = `NULL`
-					} else {
-						rowStrings[i] = fmt.Sprintf(`%v`, datum)
-					}
-				}
-				if err := csvW.Write(rowStrings); err != nil {
-					return err
-				}
-			}
-			csvW.Flush()
-			if err := csvW.Error(); err != nil {
-				return err
-			}
-			if err := w.Close(); err != nil {
+			var err error
+			rowIdx, err = workload.WriteCSVRows(ctx, w, table, rowStart, rowEnd, c.chunkSizeBytes)
+			_ = w.Close()
+			if err != nil {
 				return err
 			}
 
 			pathsCh <- path
-			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, bytesWrittenW.written)
+			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, w.Attrs().Size)
 			d := timeutil.Since(c.start)
 			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
 			log.Infof(ctx, `wrote csv %s [%d,%d] of %d rows (total %s in %s: %.1f MB/s)`,
@@ -380,15 +358,4 @@ func ListFixtures(ctx context.Context, gcs *storage.Client, store FixtureStore) 
 		}
 	}
 	return fixtures, nil
-}
-
-type bytesWrittenWriter struct {
-	w       io.Writer
-	written int64
-}
-
-func (w *bytesWrittenWriter) Write(p []byte) (int, error) {
-	n, err := w.w.Write(p)
-	w.written += int64(n)
-	return n, err
 }
