@@ -24,6 +24,12 @@ for test in "${tests[@]}"; do
         # Generate a proper test name.
         testname=$caps/$nemname
 
+        if [ "$testname" = "Bank-multitable/start-kill-2" ]; then
+            # This test is flaky with mysterious ssh errors.
+            # https://github.com/cockroachdb/cockroach/issues/20493
+            continue
+        fi
+
         if ! $BASH "${COCKROACH_PATH}/build/teamcity-jepsen-run-one.sh" "$testname" "$test" "$nemesis"; then
             exitcode=1
         fi
