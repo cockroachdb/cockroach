@@ -777,8 +777,8 @@ func (p *PhysicalPlan) AddJoinStage(
 	nodes []roachpb.NodeID,
 	core distsqlrun.ProcessorCoreUnion,
 	post distsqlrun.PostProcessSpec,
-	leftTypes, rightTypes []sqlbase.ColumnType,
 	leftEqCols, rightEqCols []uint32,
+	leftTypes, rightTypes []sqlbase.ColumnType,
 	leftMergeOrd, rightMergeOrd distsqlrun.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
