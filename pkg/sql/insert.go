@@ -111,6 +111,20 @@ func (p *planner) Insert(
 			return nil, err
 		}
 	}
+
+	// maxInsertIdx is the highest column index we are allowed to insert into -
+	// in the presence of computed columns, when we don't explicitly specify the
+	// columns we're inserting into, we should allow inserts if and only if they
+	// don't touch a computed column, and we only have the ordinal positions to
+	// go by.
+	maxInsertIdx := len(cols)
+	for i, col := range cols {
+		if col.ComputeExpr != nil {
+			maxInsertIdx = i
+			break
+		}
+	}
+
 	// Number of columns expecting an input. This doesn't include the
 	// columns receiving a default value, or computed columns.
 	numInputColumns := len(cols)
@@ -146,6 +160,9 @@ func (p *planner) Insert(
 				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
 					return nil, err
 				}
+				if numExprs > maxInsertIdx {
+					return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
+				}
 			}
 			src, err = fillDefaults(defaultExprs, cols, values)
 			if err != nil {
@@ -173,6 +190,9 @@ func (p *planner) Insert(
 		// If the insert source was not a VALUES clause, then we have not
 		// already verified the expression length.
 		numExprs := len(planColumns(rows))
+		if numExprs > maxInsertIdx {
+			return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
+		}
 		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
 			return nil, err
 		}
@@ -596,9 +616,6 @@ func (p *planner) processColumns(
 
 		if _, ok := colIDSet[col.ID]; ok {
 			return nil, fmt.Errorf("multiple assignments to the same column %q", &node[i])
-		}
-		if col.ComputeExpr != nil {
-			return nil, fmt.Errorf("cannot write directly to computed column %q", &node[i])
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col
