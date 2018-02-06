@@ -923,6 +923,77 @@ func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
 	}
 }
 
+func TestUpgradeTableDescsToStoreCheckConstraintColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	mt := makeIsolatedMigrationTest(ctx, t, "upgrade table descs to store check constraint columns")
+	defer mt.close(ctx)
+
+	mt.start(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				// Block schema changes to ensure that our migration sees some table
+				// descriptors in the DROP state. The schema changer might otherwise
+				// erase them before our migration runs.
+				AsyncExecNotification: func() error { return errors.New("schema changes disabled") },
+			},
+		},
+	})
+
+	defer func(prev int64) { upgradeTableDescBatchSize = prev }(upgradeTableDescBatchSize)
+	upgradeTableDescBatchSize = 5
+	n := int(upgradeTableDescBatchSize) * 3
+
+	// Create n tables with check constraints
+	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
+	for i := 0; i < n; i++ {
+		check := `(a > b)`
+		if i%2 == 0 {
+			// The order of columns in the check expression should not matter.
+			check = `(b > a)`
+		}
+		mt.sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE db.t%d (a INT, b INT CHECK %s)`, i, check))
+	}
+
+	// Remove the column IDs from every second table's check constraint and
+	// mark every third table as dropping.
+	for i := 0; i < n; i++ {
+		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
+		if len(tableDesc.Checks) != 1 {
+			t.Fatalf("unexpected number of check constraints on descriptor %v", tableDesc)
+		}
+		if i%2 == 0 {
+			for _, check := range tableDesc.Checks {
+				check.ColumnIDs = nil
+			}
+		}
+		if i%3 == 0 {
+			tableDesc.State = sqlbase.TableDescriptor_DROP
+		}
+		tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
+		if err := mt.kvDB.Put(ctx, tableKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Ensure the migration adds the check constraint column IDs to all tables,
+	// even those that are dropping.
+	if err := mt.runMigration(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < n; i++ {
+		tableDesc := sqlbase.GetTableDescriptor(mt.kvDB, "db", fmt.Sprintf("t%d", i))
+		if e, a := []sqlbase.ColumnID{1, 2}, tableDesc.Checks[0].ColumnIDs; !reflect.DeepEqual(e, a) {
+			t.Errorf("t%d: expected check constraint columnID %v, but got %v", i, e, a)
+		}
+	}
+
+	// Verify idempotency.
+	if err := mt.runMigration(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestExpectedInitialRangeCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

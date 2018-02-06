@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -60,6 +61,13 @@ func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID tree.ColumnID
+
+// ColumnIDs is a slice of ColumnDescriptor IDs.
+type ColumnIDs []ColumnID
+
+func (c ColumnIDs) Len() int           { return len(c) }
+func (c ColumnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+func (c ColumnIDs) Less(i, j int) bool { return c[i] < c[j] }
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
@@ -2481,6 +2489,14 @@ func (desc *ColumnDescriptor) SQLString() string {
 		f.WriteString(" STORED")
 	}
 	return f.CloseAndGetString()
+}
+
+// UsesColumnID returns whether the check constraint uses the specified column.
+func (cc *TableDescriptor_CheckConstraint) UsesColumnID(colID ColumnID) bool {
+	i := sort.Search(len(cc.ColumnIDs), func(i int) bool {
+		return cc.ColumnIDs[i] >= colID
+	})
+	return i < len(cc.ColumnIDs) && cc.ColumnIDs[i] == colID
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a

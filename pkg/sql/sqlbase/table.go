@@ -2329,13 +2329,13 @@ func (desc TableDescriptor) collectConstraintInfo(
 			if tableLookup != nil {
 				other, err := tableLookup(index.ForeignKey.Table)
 				if err != nil {
-					return nil, errors.Errorf("error resolving table %d referenced in foreign key",
+					return nil, errors.Wrapf(err, "error resolving table %d referenced in foreign key",
 						index.ForeignKey.Table)
 				}
 				otherIdx, err := other.FindIndexByID(index.ForeignKey.Index)
 				if err != nil {
-					return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
-						index.ForeignKey.Index, other.Name)
+					return nil, errors.Wrapf(err, "error resolving index %d in table %s referenced "+
+						"in foreign key", index.ForeignKey.Index, other.Name)
 				}
 				detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
 				detail.FK = &index.ForeignKey
@@ -2355,6 +2355,13 @@ func (desc TableDescriptor) collectConstraintInfo(
 		if tableLookup != nil {
 			detail.Details = c.Expr
 			detail.CheckConstraint = c
+			for _, colID := range c.ColumnIDs {
+				col, err := desc.FindColumnByID(colID)
+				if err != nil {
+					return nil, errors.Wrapf(err, "error finding column %d in table %s", colID, desc.Name)
+				}
+				detail.Columns = append(detail.Columns, col.Name)
+			}
 		}
 		info[c.Name] = detail
 	}

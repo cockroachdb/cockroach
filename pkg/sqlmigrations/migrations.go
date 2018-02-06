@@ -20,6 +20,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -28,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -158,6 +160,10 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add default system.jobs zone config",
 		workFn: addDefaultSystemJobsZoneConfig,
 	},
+	{
+		name:   "upgrade table descs to store check constraint columns",
+		workFn: storeCheckConstraintColumnsOnTableDescs,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -175,6 +181,18 @@ type migrationDescriptor struct {
 	// migration. This is needed to automate certain tests, which check the number
 	// of ranges/descriptors present on server bootup.
 	newDescriptorIDs sqlbase.IDs
+}
+
+func init() {
+	// Ensure that all migrations have unique names.
+	names := make(map[string]struct{}, len(backwardCompatibleMigrations))
+	for _, migration := range backwardCompatibleMigrations {
+		name := migration.name
+		if _, ok := names[name]; ok {
+			log.Fatalf(context.Background(), "duplicate sql migration %q", name)
+		}
+		names[name] = struct{}{}
+	}
 }
 
 type runner struct {
@@ -858,8 +876,6 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	return err
 }
 
-var upgradeTableDescBatchSize int64 = 50
-
 // upgradeTableDescsToInterleavedFormatVersion ensures that the upgrade to
 // InterleavedFormatVersion is persisted to disk for all table descriptors. It
 // must otherwise be performed on-the-fly whenever a table descriptor is loaded.
@@ -869,6 +885,72 @@ var upgradeTableDescBatchSize int64 = 50
 //
 // TODO(benesch): Remove this migration in v2.1.
 func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
+	return upgradeTableDescsWithFn(ctx, r, func(desc *sqlbase.TableDescriptor) (bool, error) {
+		return desc.MaybeUpgradeFormatVersion(), nil
+	})
+}
+
+func storeCheckConstraintColumnsOnTableDescs(ctx context.Context, r runner) error {
+	return upgradeTableDescsWithFn(ctx, r, func(desc *sqlbase.TableDescriptor) (bool, error) {
+		if len(desc.Checks) == 0 {
+			return false, nil
+		}
+
+		changed := false
+		for _, check := range desc.Checks {
+			if len(check.ColumnIDs) == 0 {
+				parsed, err := parser.ParseExpr(check.Expr)
+				if err != nil {
+					return false, err
+				}
+
+				colIDsUsed := make(map[sqlbase.ColumnID]struct{})
+				visitFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+					if vBase, ok := expr.(tree.VarName); ok {
+						v, err := vBase.NormalizeVarName()
+						if err != nil {
+							return err, false, nil
+						}
+						if c, ok := v.(*tree.ColumnItem); ok {
+							col, err := desc.FindActiveColumnByName(string(c.ColumnName))
+							if err != nil {
+								return fmt.Errorf("column %q not found for constraint %q",
+									c.ColumnName, parsed.String()), false, nil
+							}
+							colIDsUsed[col.ID] = struct{}{}
+						}
+						return nil, false, v
+					}
+					return nil, true, expr
+				}
+				if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
+					return false, err
+				}
+
+				if len(colIDsUsed) > 0 {
+					check.ColumnIDs = make([]sqlbase.ColumnID, 0, len(colIDsUsed))
+					for colID := range colIDsUsed {
+						check.ColumnIDs = append(check.ColumnIDs, colID)
+					}
+					sort.Sort(sqlbase.ColumnIDs(check.ColumnIDs))
+					changed = true
+				}
+			}
+		}
+		return changed, nil
+	})
+}
+
+var upgradeTableDescBatchSize int64 = 50
+
+// upgradeTableDescsWithFn runs the provided upgrade function on each table
+// descriptor, persisting any upgrades if the function indicates that the
+// descriptor was changed.
+func upgradeTableDescsWithFn(
+	ctx context.Context,
+	r runner,
+	upgradeFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
+) error {
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
 
@@ -899,7 +981,9 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 					return err
 				}
 				if table := sqlDesc.GetTable(); table != nil {
-					if upgraded := table.MaybeUpgradeFormatVersion(); upgraded {
+					if upgraded, err := upgradeFn(table); err != nil {
+						return err
+					} else if upgraded {
 						// Though SetUpVersion typically bails out if the table is being
 						// dropped, it's safe to ignore the DROP state here and
 						// unconditionally set UpVersion. For proof, see
