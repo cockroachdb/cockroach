@@ -15,9 +15,10 @@
 package build
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
@@ -25,16 +26,13 @@ import (
 type Builder struct {
 	factory exec.Factory
 	ev      xform.ExprView
-	ivh     tree.IndexedVarHelper
 }
 
 // NewBuilder constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
 func NewBuilder(factory exec.Factory, ev xform.ExprView) *Builder {
-	container := (*metadataContainer)(ev.Metadata())
-	ivh := tree.MakeIndexedVarHelper(container, ev.Metadata().NumColumns())
-	return &Builder{factory: factory, ev: ev, ivh: ivh}
+	return &Builder{factory: factory, ev: ev}
 }
 
 // Build constructs the execution node tree and returns its root node if no
@@ -44,8 +42,13 @@ func (b *Builder) Build() (exec.Node, error) {
 }
 
 func (b *Builder) build(ev xform.ExprView) (exec.Node, error) {
-	if ev.IsRelational() {
-		return b.buildRelational(ev)
+	if !ev.IsRelational() {
+		panic(fmt.Sprintf("building execution for non-relational operator %s", ev.Operator()))
 	}
-	return b.buildScalar(ev), nil
+	plan, err := b.buildRelational(ev)
+	if err != nil {
+		return nil, err
+	}
+	// TODO(radu): plan.outputCols will be used to apply a final projection.
+	return plan.root, err
 }
