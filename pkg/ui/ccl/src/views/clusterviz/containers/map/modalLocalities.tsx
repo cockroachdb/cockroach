@@ -15,13 +15,15 @@ import { InjectedRouter, RouterState } from "react-router";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
-import { generateLocalityRoute, getLocality } from "src/util/localities";
+import { generateLocalityRoute, getChildLocalities, getLocality } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
-import { NodeStatus$Properties } from "src/util/proto";
 
 import { SimulatedNodeStatus } from "./nodeSimulator";
 import { NodeView } from "./nodeView";
-import { Box, ZoomTransformer } from "./zoom";
+import { ZoomTransformer } from "./zoom";
+
+const MIN_RADIUS = 150;
+const PADDING = 150;
 
 interface LocalityViewProps {
   locality: LocalityTree;
@@ -52,44 +54,6 @@ class LocalityView extends React.Component<LocalityViewProps, any> {
   }
 }
 
-interface LocalityBoxProps {
-  projection: d3.geo.Projection;
-  locality: LocalityTree;
-  locationTree: LocationTree;
-}
-
-class LocalityBox extends React.Component<LocalityBoxProps, any> {
-  render() {
-    const location = findOrCalculateLocation(this.props.locationTree, this.props.locality);
-    const center = this.props.projection([location.longitude, location.latitude]);
-    const box = new Box(center[0] - 50, center[1] - 50, 100, 100);
-    return (
-      <g transform={`translate(${box.center()})`}>
-        <LocalityView locality={this.props.locality} />
-      </g>
-    );
-  }
-}
-
-interface NodeBoxProps {
-  node: NodeStatus$Properties;
-  nodeHistory: SimulatedNodeStatus;
-}
-
-class NodeBox extends React.Component<NodeBoxProps, any> {
-  // TODO: layout!
-  render() {
-    return (
-      <g>
-        <NodeView
-          nodeHistory={this.props.nodeHistory}
-          maxClientActivityRate={10000}
-        />
-      </g>
-    );
-  }
-}
-
 interface ModalLocalitiesViewProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
@@ -99,39 +63,78 @@ interface ModalLocalitiesViewProps {
   zoom: ZoomTransformer;
 }
 
+class MapLayout extends React.Component<ModalLocalitiesViewProps, any> {
+  renderChildLocalities() {
+    return getChildLocalities(this.props.localityTree).map((locality) => {
+      const location = findOrCalculateLocation(this.props.locationTree, locality);
+      const center = this.props.projection([location.longitude, location.latitude]);
+
+      return (
+        <g transform={`translate(${center})`}>
+          <LocalityView locality={locality} />
+        </g>
+      );
+    });
+  }
+
+  render() {
+    return (
+      <g>
+        { this.renderChildLocalities() }
+      </g>
+    );
+  }
+}
+
+class CircleLayout extends React.Component<ModalLocalitiesViewProps, any> {
+  coordsFor(index: number, total: number, radius: number) {
+    const angle = 2 * Math.PI * index / total - Math.PI / 2;
+    return [radius * Math.cos(angle), radius * Math.sin(angle)];
+  }
+
+  render() {
+    const { localityTree } = this.props;
+    const childLocalities = getChildLocalities(localityTree);
+
+    const total = localityTree.nodes.length + childLocalities.length;
+
+    const viewport = this.props.zoom.viewportSize();
+    const calculatedRadius = Math.min(...viewport) / 2 - PADDING;
+    const radius = Math.max(MIN_RADIUS, calculatedRadius);
+
+    return (
+      <g transform={`translate(${viewport[0] / 2},${viewport[1] / 2})`}>
+        {
+          childLocalities.map((locality, i) => (
+            <g transform={`translate(${this.coordsFor(i, total, radius)})`}>
+              <LocalityView locality={locality} />
+            </g>
+          ))
+        }
+        {
+          localityTree.nodes.map((node, i) => {
+            const nodeHistory = this.props.nodeHistories[node.desc.node_id];
+
+            return (
+              <g transform={`translate(${this.coordsFor(i + childLocalities.length, total, radius)})`}>
+                <NodeView
+                  nodeHistory={nodeHistory}
+                  maxClientActivityRate={10000}
+                />
+              </g>
+            );
+          })
+        }
+      </g>
+    );
+  }
+}
+
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
   static contextTypes = {
     router: PropTypes.object.isRequired,
   };
   context: { router: InjectedRouter & RouterState };
-
-  renderChildLocalities(tree: LocalityTree) {
-    const children: React.ReactNode[] = [];
-
-    _.values(tree.localities).forEach((tier) => {
-      _.values(tier).forEach((locality) => {
-        children.push(
-          <LocalityBox projection={this.props.projection} locality={locality} locationTree={this.props.locationTree} />,
-        );
-      });
-    });
-
-    return children;
-  }
-
-  renderChildNodes(tree: LocalityTree) {
-    const children: React.ReactNode[] = [];
-
-    tree.nodes.forEach((node) => {
-      const nodeHistory = this.props.nodeHistories[node.desc.node_id];
-
-      children.push(
-        <NodeBox node={node} nodeHistory={nodeHistory} />,
-      );
-    });
-
-    return children;
-  }
 
   render() {
     const treeToRender = getLocality(this.props.localityTree, this.props.tiers);
@@ -139,11 +142,26 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
       this.context.router.replace(CLUSTERVIZ_ROOT);
     }
 
-    return (
-      <g>
-        { this.renderChildLocalities(treeToRender) }
-        { this.renderChildNodes(treeToRender) }
-      </g>
-    );
+    if (renderAsMap(this.props.locationTree, treeToRender)) {
+      return <MapLayout {...this.props} localityTree={treeToRender} />;
+    }
+
+    return <CircleLayout {...this.props} localityTree={treeToRender} />;
   }
+}
+
+// Only exported for test purposes.
+export function renderAsMap(locationTree: LocationTree, localityTree: LocalityTree) {
+  // If there are any nodes directly under this locality, don't show a map.
+  if (!_.isEmpty(localityTree.nodes)) {
+    return false;
+  }
+
+  // Otherwise, show a map as long as we're able to find or calculate a location
+  // for every child locality.
+  const children = getChildLocalities(localityTree);
+  return _.every(
+    children,
+    (child) => !_.isNil(findOrCalculateLocation(locationTree, child)),
+  );
 }
