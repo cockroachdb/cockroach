@@ -479,7 +479,7 @@ DROP TABLE x
 statement ok
 CREATE TABLE x (
   a INT,
-  b INT AS a * 2 STORED
+  b INT AS (a * 2) STORED
 )
 
 query T colnames
