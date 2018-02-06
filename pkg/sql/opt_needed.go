@@ -67,6 +67,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		}
 		setNeededColumns(n.left, needed)
 		setNeededColumns(n.right, needed)
+		markOmitted(n.columns, needed)
 
 	case *joinNode:
 		// Note: getNeededColumns takes into account both the columns
