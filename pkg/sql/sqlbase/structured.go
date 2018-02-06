@@ -2476,9 +2476,9 @@ func (desc *ColumnDescriptor) SQLString() string {
 		f.WriteString(*desc.DefaultExpr)
 	}
 	if desc.ComputeExpr != nil {
-		f.WriteString(" AS ")
+		f.WriteString(" AS (")
 		f.WriteString(*desc.ComputeExpr)
-		f.WriteString(" STORED")
+		f.WriteString(") STORED")
 	}
 	return f.CloseAndGetString()
 }
