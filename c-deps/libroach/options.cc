@@ -162,7 +162,6 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Enable subcompactions which will use multiple threads to speed up
   // a single compaction. The value of num_cpu/2 has not been tuned.
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
-  options.WAL_ttl_seconds = db_opts.wal_ttl_seconds;
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
   options.info_log.reset(new DBLogger(db_opts.logging_enabled));
@@ -288,8 +287,10 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   table_options.format_version = 2;
 
   // Increasing block_size decreases memory usage at the cost of
-  // increased read amplification.
-  table_options.block_size = db_opts.block_size;
+  // increased read amplification. When reading a key-value pair from
+  // a table file, RocksDB loads an entire block into memory. The
+  // RocksDB default is 4KB. This sets it to 32KB.
+  table_options.block_size = 32 << 10;
   // Disable whole_key_filtering which adds a bloom filter entry for
   // the "whole key", doubling the size of our bloom filters. This is
   // used to speed up Get operations which we don't use.
