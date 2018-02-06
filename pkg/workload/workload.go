@@ -35,30 +35,35 @@ import (
 )
 
 // Generator represents one or more sql query loads and associated initial data.
-//
-// A slice of string flags are used to configure this Generator. Any randomness
-// must be deterministic from these options so that table data initialization,
-// query work, etc can be distributed by sending only these flags.
-//
-// TODO(dan): To support persisted test fixtures, we'll need versioning of
-// Generators.
 type Generator interface {
 	// Meta returns meta information about this generator, including a name,
 	// description, and a function to create instances of it.
 	Meta() Meta
 
-	// Flags returns the flags this Generator is configured with.
-	Flags() *pflag.FlagSet
-
 	// Tables returns the set of tables for this generator, including schemas
 	// and initial data.
 	Tables() []Table
+}
 
-	// Ops returns the work functions for this generator. The tables are
-	// required to have been created and initialized before running these.
+// Flagser returns the flags this Generator is configured with. Any randomness
+// in the Generator must be deterministic from these options so that table data
+// initialization, query work, etc can be distributed by sending only these
+// flags.
+type Flagser interface {
+	Generator
+	Flags() *pflag.FlagSet
+}
+
+// Opser returns the work functions for this generator. The tables are required
+// to have been created and initialized before running these.
+type Opser interface {
+	Generator
 	Ops() []Operation
+}
 
-	// Hooks returns any hooks associated with the generator.
+// Hookser returns any hooks associated with the generator.
+type Hookser interface {
+	Generator
 	Hooks() Hooks
 }
 
@@ -184,7 +189,10 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 	var insertStmtBuf bytes.Buffer
 
 	tables := gen.Tables()
-	hooks := gen.Hooks()
+	var hooks Hooks
+	if h, ok := gen.(Hookser); ok {
+		hooks = h.Hooks()
+	}
 
 	var size int64
 	for _, table := range tables {
@@ -320,11 +328,19 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 func StringTuple(datums []interface{}) []string {
 	s := make([]string, len(datums))
 	for i, datum := range datums {
+		if datum == nil {
+			s[i] = `NULL`
+			continue
+		}
 		switch x := datum.(type) {
 		case int:
 			s[i] = strconv.Itoa(x)
 		case string:
 			s[i] = lex.EscapeSQLString(x)
+		case float64:
+			s[i] = fmt.Sprintf(`%f`, x)
+		case []byte:
+			s[i] = fmt.Sprintf(`X'%x'`, x)
 		default:
 			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
 		}

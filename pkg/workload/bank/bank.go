@@ -98,11 +98,6 @@ func (b *bank) Flags() *pflag.FlagSet {
 	return b.flags
 }
 
-// Hooks implements the Generator interface.
-func (b *bank) Hooks() workload.Hooks {
-	return workload.Hooks{}
-}
-
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(b.seed))

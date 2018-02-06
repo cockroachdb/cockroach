@@ -15,6 +15,7 @@ import (
 	// workloads
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/roachmartccl"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
