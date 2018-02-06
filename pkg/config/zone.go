@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
 )
 
 // Several ranges outside of the SQL keyspace are given special names so they
@@ -226,6 +225,9 @@ func (c Constraint) String() string {
 
 // FromString populates the constraint from the constraint shorthand notation.
 func (c *Constraint) FromString(short string) error {
+	if len(short) == 0 {
+		return fmt.Errorf("the empty string is not a valid constraint")
+	}
 	switch short[0] {
 	case '+':
 		c.Type = Constraint_REQUIRED
@@ -234,7 +236,7 @@ func (c *Constraint) FromString(short string) error {
 		c.Type = Constraint_PROHIBITED
 		short = short[1:]
 	default:
-		c.Type = Constraint_POSITIVE
+		c.Type = Constraint_DEPRECATED_POSITIVE
 	}
 	parts := strings.Split(short, "=")
 	if len(parts) == 1 {
@@ -245,34 +247,6 @@ func (c *Constraint) FromString(short string) error {
 	} else {
 		return errors.Errorf("constraint needs to be in the form \"(key=)value\", not %q", short)
 	}
-	return nil
-}
-
-var _ yaml.Marshaler = Constraints{}
-var _ yaml.Unmarshaler = &Constraints{}
-
-// MarshalYAML implements yaml.Marshaler.
-func (c Constraints) MarshalYAML() (interface{}, error) {
-	short := make([]string, len(c.Constraints))
-	for i, c := range c.Constraints {
-		short[i] = c.String()
-	}
-	return short, nil
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler.
-func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var shortConstraints []string
-	if err := unmarshal(&shortConstraints); err != nil {
-		return err
-	}
-	constraints := make([]Constraint, len(shortConstraints))
-	for i, short := range shortConstraints {
-		if err := constraints[i].FromString(short); err != nil {
-			return err
-		}
-	}
-	c.Constraints = constraints
 	return nil
 }
 
@@ -321,8 +295,8 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 	}
 }
 
-// Validate returns an error if the ZoneConfig specifies a known-dangerous
-// configuration.
+// Validate returns an error if the ZoneConfig specifies a known-dangerous or
+// disallowed configuration.
 func (z *ZoneConfig) Validate() error {
 	for _, s := range z.Subzones {
 		if err := s.Config.Validate(); err != nil {
@@ -347,6 +321,43 @@ func (z *ZoneConfig) Validate() error {
 	if z.RangeMinBytes >= z.RangeMaxBytes {
 		return fmt.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
 			z.RangeMinBytes, z.RangeMaxBytes)
+	}
+
+	for _, constraints := range z.Constraints {
+		for _, constraint := range constraints.Constraints {
+			if constraint.Type == Constraint_DEPRECATED_POSITIVE {
+				return fmt.Errorf("constraints must either be required (prefixed with a '+') or " +
+					"prohibited (prefixed with a '-')")
+			}
+		}
+	}
+
+	// We only need to further validate constraints if per-replica constraints
+	// are in use. The old style of constraints that apply to all replicas don't
+	// require validation.
+	if len(z.Constraints) > 1 || (len(z.Constraints) == 1 && z.Constraints[0].NumReplicas != 0) {
+		var numConstrainedRepls int64
+		for _, constraints := range z.Constraints {
+			if constraints.NumReplicas <= 0 {
+				return fmt.Errorf("constraints must apply to at least one replica")
+			}
+			numConstrainedRepls += int64(constraints.NumReplicas)
+			for _, constraint := range constraints.Constraints {
+				if constraint.Type != Constraint_REQUIRED && constraints.NumReplicas != z.NumReplicas {
+					return fmt.Errorf(
+						"only required constraints (prefixed with a '+') can be applied to a subset of replicas")
+				}
+				if strings.Contains(constraint.Key, ":") || strings.Contains(constraint.Value, ":") {
+					return fmt.Errorf("the ':' character is not allowed in constraint keys or values")
+				}
+			}
+		}
+		// TODO(a-robinson): Relax this constraint, as discussed on #22412.
+		if numConstrainedRepls != int64(z.NumReplicas) {
+			return fmt.Errorf(
+				"the number of replicas specified in constraints (%d) does not equal the number of replicas configured for the zone (%d)",
+				numConstrainedRepls, z.NumReplicas)
+		}
 	}
 	return nil
 }
