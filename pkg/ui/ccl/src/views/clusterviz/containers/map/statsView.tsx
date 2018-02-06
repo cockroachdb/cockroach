@@ -24,76 +24,49 @@ interface StatsViewProps {
 }
 
 export class StatsView extends React.Component<StatsViewProps, any> {
-  static radius = 42;
-  static arcWidth = StatsView.radius * 0.11111;
-  static outerRadius = StatsView.radius + StatsView.arcWidth;
+  static innerRadius = 55;
+  static arcWidth = 6;
+  static outerRadius = StatsView.innerRadius + StatsView.arcWidth;
   static maxRadius = StatsView.outerRadius + StatsView.arcWidth;
-
-  renderBackground() {
-    return (
-      <path
-        className="capacity-background"
-        d={PathMath.createArcPath(
-          StatsView.radius, StatsView.outerRadius, PathMath.arcAngleFromPct(0), PathMath.arcAngleFromPct(1),
-        )}
-      />
-    );
-  }
 
   renderCapacityArc() {
     // Compute used percentage.
     const usedCapacity = this.props.usedCapacity;
     const capacity = this.props.usableCapacity;
-    const capacityUsedPct = (capacity) ? usedCapacity / capacity : 0;
-
-    // const usedX = Math.cos(PathMath.angleFromPct(capacityUsedPct));
-    // const usedY = Math.sin(PathMath.angleFromPct(capacityUsedPct));
-    //
-    // return (
-    //   <g>
-    //     <text
-    //       className="capacity-label"
-    //       x={(StatsView.outerRadius + StatsView.arcWidth) * Math.cos(0)}
-    //     >
-    //       {Bytes(capacity)}
-    //     </text>
-    //     <path
-    //       className="capacity-used"
-    //       d={PathMath.createArcPath(
-    //         StatsView.radius,
-    //         StatsView.outerRadius,
-    //         PathMath.arcAngleFromPct(0),
-    //         PathMath.arcAngleFromPct(capacityUsedPct),
-    //       )}
-    //     />
-    //     <text
-    //       className="capacity-used-label"
-    //       transform={`translate(${usedX * StatsView.maxRadius}, ${usedY * StatsView.maxRadius})`}
-    //       textAnchor={capacityUsedPct < 0.75 ? "end" : "start"}
-    //     >
-    //       {Bytes(usedCapacity)}
-    //     </text>
-    //
-    //     <g transform={`translate(${-StatsView.outerRadius}, ${-StatsView.outerRadius})`}>
-    //       <svg width={StatsView.outerRadius * 2} height={StatsView.outerRadius * 2}>
-    //         <text className="capacity-used-pct-label" x="50%" y="40%">
-    //           {Math.round(100 * capacityUsedPct) + "%"}
-    //         </text>
-    //         <text className="capacity-used-text" x="50%" y="60%">
-    //           CAPACITY USED
-    //         </text>
-    //       </svg>
-    //     </g>
-    //   </g>
-    // );
-
-    // const usedX = Math.cos(PathMath.angleFromPct(capacityUsedPct));
-    // const usedY = Math.sin(PathMath.angleFromPct(capacityUsedPct));
+    const capacityUsedPct = capacity ? (usedCapacity / capacity * 100) : 0;
 
     return (
       <g>
-        <path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002 23.374 14.606 32.406 43.48 22.86 68.276" opacity=".35"/>
-        <path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002"/>
+        {/*<path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002 23.374 14.606 32.406 43.48 22.86 68.276" opacity=".35"/>*/}
+        {/*<path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002"/>*/}
+
+        <g transform="translate(90 115)">
+          {/* current value */}
+          <path
+            fill="#3A7DE1"
+            strokeLinecap="round"
+            d={PathMath.createArcPath(
+              StatsView.innerRadius,
+              StatsView.outerRadius,
+              PathMath.arcAngleFromPct(0),
+              PathMath.arcAngleFromPct(capacityUsedPct / 100),
+              StatsView.arcWidth,
+            )}
+          />
+          {/* background */}
+          <path
+            fill="#3A7DE1"
+            strokeLinecap="round"
+            opacity={0.35}
+            d={PathMath.createArcPath(
+              StatsView.innerRadius,
+              StatsView.outerRadius,
+              PathMath.arcAngleFromPct(0),
+              PathMath.arcAngleFromPct(1),
+              StatsView.arcWidth,
+            )}
+          />
+        </g>
 
         {/* text inside arc */}
         <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="34" fontWeight="bold" transform="translate(83 8)" textAnchor="end">
@@ -135,8 +108,8 @@ export class StatsView extends React.Component<StatsViewProps, any> {
         <text fill="#152849" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="bold" transform="translate(15 8)">
           <tspan x="4.718" y="170">CPU</tspan>
         </text>
-        <text fill="#3A7DE1" fontFamily="Lato-Black, Lato" fontSize="12" fontWeight="700" transform="translate(15 8)">
-          <tspan x="123" y="170">85%</tspan>
+        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="700" transform="translate(15 8)">
+          <tspan x="123" y="170">XX%</tspan>
         </text>
         <path fill="#3A7DE1" d="M56 169h69v10H56z" opacity=".35"/>
         <path fill="#3A7DE1" d="M56 172h54a2 2 0 0 1 0 4H56v-4z"/>
@@ -147,11 +120,11 @@ export class StatsView extends React.Component<StatsViewProps, any> {
   renderQPS() {
     return (
       <g>
-        <text fill="#3A7DE1" fontFamily="Lato-Black, Lato" fontSize="12" fontWeight="700" transform="translate(15 8)">
-          <tspan x="123" y="189">1342</tspan>
-        </text>
         <text fill="#152849" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="bold" transform="translate(15 8)">
           <tspan x="5.468" y="189">QPS</tspan>
+        </text>
+        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="700" transform="translate(15 8)">
+          <tspan x="123" y="189">XXXX</tspan>
         </text>
         <g transform="translate(56 188)">
           <mask id="e" fill="#fff">
