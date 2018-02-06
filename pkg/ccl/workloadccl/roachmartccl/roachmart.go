@@ -58,6 +58,12 @@ const (
 
 	defaultUsers  = 10000
 	defaultOrders = 100000
+
+	zoneLocationsStmt = `INSERT INTO system.locations VALUES
+		('zone', 'us-east1-b', 33.0641249, -80.0433347),
+		('zone', 'us-west1-b', 45.6319052, -121.2010282),
+		('zone', 'europe-west2-b', 51.509865, 0)
+	`
 )
 
 type roachmart struct {
@@ -118,6 +124,9 @@ func (m *roachmart) Hooks() workload.Hooks {
 		},
 
 		PreLoad: func(db *gosql.DB) error {
+			if _, err := db.Exec(zoneLocationsStmt); err != nil {
+				return err
+			}
 			if !m.partition {
 				return nil
 			}
