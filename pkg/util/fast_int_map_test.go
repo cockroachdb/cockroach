@@ -39,7 +39,6 @@ func TestFastIntMap(t *testing.T) {
 			m := make(map[int]int)
 			for i := 0; i < 1000; i++ {
 				// Check the entire key range.
-				max, maxOk := 0, false
 				for k := 0; k < tc.keyRange; k++ {
 					v, ok := fm.Get(k)
 					expV, expOk := m[k]
@@ -49,13 +48,25 @@ func TestFastIntMap(t *testing.T) {
 							k, v, ok, expV, expOk,
 						)
 					}
-					if ok {
-						max, maxOk = k, true
+				}
+
+				// Get maximum key and value and check MaxKey and MaxValue.
+				maxKey, maxVal, maxOk := 0, 0, (len(m) > 0)
+				for k, v := range m {
+					if maxKey < k {
+						maxKey = k
+					}
+					if maxVal < v {
+						maxVal = v
 					}
 				}
-				if m, ok := fm.MaxKey(); ok != maxOk || m != max {
-					t.Fatalf("incorrect MaxKey (%d, %t), expected (%d, %t)", m, ok, max, maxOk)
+				if m, ok := fm.MaxKey(); ok != maxOk || m != maxKey {
+					t.Fatalf("incorrect MaxKey (%d, %t), expected (%d, %t)", m, ok, maxKey, maxOk)
 				}
+				if m, ok := fm.MaxValue(); ok != maxOk || m != maxVal {
+					t.Fatalf("incorrect MaxValue (%d, %t), expected (%d, %t)", m, ok, maxVal, maxOk)
+				}
+
 				// Check ForEach
 				num := 0
 				fm.ForEach(func(key, val int) {
