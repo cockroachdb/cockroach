@@ -77,10 +77,10 @@ export default function(props: ClusterSummaryProps) {
           <Metric sources={props.nodeSources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
         </SummaryMetricStat>
         <SummaryMetricStat id="p50" title="P50 latency" format={formatNanosAsMillis} >
-          <Metric sources={props.nodeSources} name="cr.node.exec.latency-p50" aggregateMax downsampleMax />
+          <Metric sources={props.nodeSources} name="cr.node.sql.service.latency-p50" aggregateMax downsampleMax />
         </SummaryMetricStat>
         <SummaryMetricStat id="p99" title="P99 latency" format={formatNanosAsMillis} >
-          <Metric sources={props.nodeSources} name="cr.node.exec.latency-p99" aggregateMax downsampleMax />
+          <Metric sources={props.nodeSources} name="cr.node.sql.service.latency-p99" aggregateMax downsampleMax />
         </SummaryMetricStat>
       </SummaryBar>
       <SummaryBar>
