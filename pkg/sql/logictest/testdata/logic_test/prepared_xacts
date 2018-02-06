@@ -1,0 +1,294 @@
+# LogicTest: default parallel-stmts distsql
+
+# Demonstrates use of prepared transactions
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+GRANT ALL on t TO testuser
+
+# Prepare a read-only transaction.
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t
+----
+
+statement ok
+PREPARE TRANSACTION 'read-only'
+
+# Verify the prepared transaction was added to the system table.
+query T
+SELECT gid FROM system.prepared_xacts
+----
+read-only
+
+# Verify the prepared transaction is visible in the pg_catalog.pg_prepared_xacts table.
+query T
+SELECT gid FROM pg_catalog.pg_prepared_xacts
+----
+read-only
+
+# Commit the read-only prepared transaction.
+statement ok
+COMMIT PREPARED 'read-only'
+
+# Verify the prepared transaction is gone.
+query T
+SELECT gid FROM system.prepared_xacts
+----
+
+# Prepare another read-only transaction for abort.
+statement ok
+BEGIN
+
+query I
+SELECT * FROM t
+----
+
+statement ok
+PREPARE TRANSACTION 'read-only'
+
+# Commit the read-only prepared transaction.
+statement ok
+ROLLBACK PREPARED 'read-only'
+
+# Prepare a mutating transaction.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (1)
+
+statement ok
+PREPARE TRANSACTION 'writing'
+
+# Verify the prepared transaction is visible in system.prepared_xacts.
+query T
+SELECT gid FROM system.prepared_xacts
+----
+writing
+
+# Commit the prepared transaction
+statement ok
+COMMIT PREPARED 'writing'
+
+# Verify prepared insert is visible.
+query I
+SELECT * FROM t
+----
+1
+
+# Prepare a mutating transaction for rollback.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (2)
+
+statement ok
+PREPARE TRANSACTION 'writing'
+
+statement ok
+ROLLBACK PREPARED 'writing'
+
+query I
+SELECT * FROM t
+----
+1
+
+query T
+SELECT gid FROM system.prepared_xacts
+----
+
+# Verify a transaction cannot be prepared with a duplicate gid.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (2)
+
+statement ok
+PREPARE TRANSACTION 'writing'
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (3)
+
+statement error pq: unable to prepare transaction as "writing"
+PREPARE TRANSACTION 'writing'
+
+statement ok
+ROLLBACK
+
+# Commit concurrent prepared transaction.
+statement ok
+COMMIT PREPARED 'writing'
+
+# Verify the intent for a=3 has been rolled back.
+query I
+SELECT * FROM t ORDER BY a
+----
+1
+2
+
+# Set the timeout for prepared transactions low in order to allow
+# a prepared transaction to be aborted via concurrent access.
+statement ok
+SET CLUSTER SETTING storage.prepared_txn.timeout = '1ms'
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (3)
+
+statement ok
+PREPARE TRANSACTION 'writing'
+
+query I
+SELECT * FROM t ORDER BY a
+----
+1
+2
+
+# Reset the timeout.
+statement ok
+SET CLUSTER SETTING storage.prepared_txn.timeout = '1h'
+
+# Verify the prepared_xacts table has an entry for writing with status
+# set to indicate the pushe was expired and so was aborted heuristically.
+query TT
+SELECT gid, status FROM system.prepared_xacts
+----
+writing  aborted: pushee is expired
+
+statement error pq: prepared transaction .* in state "aborted: pushee is expired"
+ROLLBACK PREPARED 'writing'
+
+# After failed rollback, the entry in the prepared_xacts table should be gone.
+query T
+SELECT gid FROM system.prepared_xacts
+----
+writing
+
+# Verify permissions via testuser.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (3)
+
+statement ok
+PREPARE TRANSACTION 'writing2'
+
+query TT
+SELECT gid, owner FROM system.prepared_xacts ORDER BY gid
+----
+writing   root
+writing2  root
+
+user testuser
+
+statement error pq: user testuser is not the owner of prepared transaction writing2 \(root\)
+COMMIT PREPARED 'writing2'
+
+# Prepare a transaction as testuser and verify that root can roll it back.
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t(a) VALUES (4)
+
+statement ok
+PREPARE TRANSACTION 'writing3'
+
+# Before we switch back, verify that non-root/admin users cannot select from prepared_xacts.
+query error pq: user testuser does not have SELECT privilege on relation prepared_xacts
+SELECT gid, owner FROM system.prepared_xacts
+
+user root
+
+query TT
+SELECT gid, owner FROM system.prepared_xacts ORDER BY gid
+----
+writing   root
+writing2  root
+writing3  testuser
+
+statement ok
+ROLLBACK PREPARED 'writing3'
+
+query TT
+SELECT gid, owner FROM system.prepared_xacts ORDER BY gid
+----
+writing   root
+writing2  root
+
+# Verify that with a high priority transaction, we can preempt the prepared transaction.
+statement ok
+BEGIN TRANSACTION PRIORITY HIGH
+
+query I
+SELECT * FROM t ORDER BY a
+----
+1
+2
+
+statement ok
+COMMIT
+
+# Verify the prepared_xacts table has an entry for writing with status
+# set to aborted.
+query TT
+SELECT gid, status FROM system.prepared_xacts ORDER BY gid
+----
+writing   aborted: pushee is expired
+writing2  aborted: pusher has priority
+
+# Create a transaction which will fail on prepare.
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+# Select over entire table to set up a serialization failure.
+query I
+SELECT * from t ORDER BY a
+----
+1
+2
+
+# Switch to testuser
+user testuser
+
+# Insert a non-overlapping value from concurrent txn.
+statement ok
+INSERT INTO t(a) VALUES (4)
+
+# Select at a higher timestamp to ensure txn timestamp is forwarded.
+query I
+SELECT * FROM t ORDER BY a
+----
+1
+2
+4
+
+# Switch back to root.
+user root
+
+statement ok
+INSERT INTO t(a) VALUES (3)
+
+query I
+SELECT * FROM t ORDER BY a
+----
+1
+2
+3
+
+# Verify prepare fails with a restart error.
+statement error pq: unable to prepare transaction.*HandledRetryableTxnError
+PREPARE TRANSACTION 'writing3'

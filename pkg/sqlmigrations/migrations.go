@@ -133,6 +133,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		doesBackfill: true,
 	},
 	{
+		name:             "create system.prepared_xacts table",
+		workFn:           createPreparedXactsTable,
+		newDescriptorIDs: []sqlbase.ID{keys.PreparedXactsTableID},
+	},
+	{
 		// We keep this a separate migration as we don't want to re-run addRoles
 		// if this part fails.
 		name:   "grant superuser privileges on all objects to the admin role",
@@ -463,6 +468,10 @@ func createLocationsTable(ctx context.Context, r runner) error {
 
 func createRoleMembersTable(ctx context.Context, r runner) error {
 	return createSystemTable(ctx, r, sqlbase.RoleMembersTable)
+}
+
+func createPreparedXactsTable(ctx context.Context, r runner) error {
+	return createSystemTable(ctx, r, sqlbase.PreparedXactsTable)
 }
 
 func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {

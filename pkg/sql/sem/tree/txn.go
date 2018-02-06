@@ -226,3 +226,39 @@ func (node *RollbackToSavepoint) Format(ctx *FmtCtx) {
 	ctx.WriteString("ROLLBACK TRANSACTION TO SAVEPOINT ")
 	ctx.WriteString(node.Savepoint)
 }
+
+// PrepareTransaction represents a PREPARE TRANSACTION statement,
+// used for the first phase of a two phase commit.
+type PrepareTransaction struct {
+	Transaction string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *PrepareTransaction) Format(ctx *FmtCtx) {
+	ctx.WriteString("PREPARE TRANSACTION")
+	ctx.WriteString(node.Transaction)
+}
+
+// CommitPrepared represents a COMMIT PREPARED statement, used
+// for the second phase of a two phase commit.
+type CommitPrepared struct {
+	Transaction string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CommitPrepared) Format(ctx *FmtCtx) {
+	ctx.WriteString("COMMIT PREPARED")
+	ctx.WriteString(node.Transaction)
+}
+
+// RollbackPrepared represents a ROLLBACK PREPARED statement, used
+// for the second phase of a two phase rollback.
+type RollbackPrepared struct {
+	Transaction string
+}
+
+// Format implements the NodeFormatter interface.
+func (node *RollbackPrepared) Format(ctx *FmtCtx) {
+	ctx.WriteString("ROLLBACK PREPARED")
+	ctx.WriteString(node.Transaction)
+}

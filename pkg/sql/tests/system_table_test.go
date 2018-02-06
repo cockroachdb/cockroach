@@ -123,6 +123,7 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.TableStatisticsTableID, sqlbase.TableStatisticsTableSchema, sqlbase.TableStatisticsTable, false},
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable, false},
 		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable, true},
+		{keys.PreparedXactsTableID, sqlbase.PreparedXactsTableSchema, sqlbase.PreparedXactsTable, false},
 	} {
 		var privs *sqlbase.PrivilegeDescriptor
 		if test.hasAdmin {

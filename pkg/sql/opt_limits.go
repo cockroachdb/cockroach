@@ -170,6 +170,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *alterUserSetPasswordNode:
 	case *cancelQueryNode:
 	case *scrubNode:
+	case *commitPreparedNode:
 	case *controlJobNode:
 	case *createDatabaseNode:
 	case *createIndexNode:

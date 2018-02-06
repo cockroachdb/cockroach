@@ -239,7 +239,10 @@ func init() {
 }
 func (this *ReplicationTarget) Equal(that interface{}) bool {
 	if that == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	}
 
 	that1, ok := that.(*ReplicationTarget)
@@ -252,7 +255,10 @@ func (this *ReplicationTarget) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	} else if this == nil {
 		return false
 	}
@@ -266,7 +272,10 @@ func (this *ReplicationTarget) Equal(that interface{}) bool {
 }
 func (this *ReplicaDescriptor) Equal(that interface{}) bool {
 	if that == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	}
 
 	that1, ok := that.(*ReplicaDescriptor)
@@ -279,7 +288,10 @@ func (this *ReplicaDescriptor) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	} else if this == nil {
 		return false
 	}
@@ -296,7 +308,10 @@ func (this *ReplicaDescriptor) Equal(that interface{}) bool {
 }
 func (this *RangeDescriptor) Equal(that interface{}) bool {
 	if that == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	}
 
 	that1, ok := that.(*RangeDescriptor)
@@ -309,7 +324,10 @@ func (this *RangeDescriptor) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	} else if this == nil {
 		return false
 	}

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -147,6 +148,11 @@ func (r *Replica) Clock() *hlc.Clock {
 // DB returns the Replica's client DB.
 func (r *Replica) DB() *client.DB {
 	return r.store.DB()
+}
+
+// SQLExecutor returns the Replica's SQL executor.
+func (r *Replica) SQLExecutor() sqlutil.InternalExecutor {
+	return r.store.SQLExecutor()
 }
 
 // Engine returns the Replica's underlying Engine. In most cases the

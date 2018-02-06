@@ -548,6 +548,33 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	return err
 }
 
+// Prepare sends an EndTransactionRequest with Prepare=true, which
+// moves the transaction record into status PREPARED and stores all
+// intent spans with the transaction record, awaiting a subsequent
+// prepared commit or abort.
+func (txn *Txn) Prepare(ctx context.Context) error {
+	if len(txn.commitTriggers) > 0 || txn.systemConfigTrigger {
+		return errors.New("cannot prepare a transaction which has commit triggers")
+	}
+	if ok, pErr := txn.maybeFinishReadonly(true /* commit */, txn.deadline); pErr != nil {
+		return pErr.GoError()
+	} else if ok {
+		// Properly set the status to PREPARED on success.
+		txn.mu.Lock()
+		txn.mu.Proto.Status = roachpb.PREPARED
+		txn.mu.Unlock()
+		return nil
+	}
+	var ba roachpb.BatchRequest
+	ba.Add(&roachpb.EndTransactionRequest{
+		Commit:   true,
+		Prepare:  true,
+		Deadline: txn.deadline,
+	})
+	_, pErr := txn.Send(ctx, ba)
+	return pErr.GoError()
+}
+
 // UpdateDeadlineMaybe sets the transactions deadline to the lower of the
 // current one (if any) and the passed value.
 //
@@ -860,7 +887,9 @@ func (txn *Txn) Send(
 		defer txn.mu.Unlock()
 
 		sender = txn.mu.sender
-		if txn.mu.Proto.Status != roachpb.PENDING || txn.mu.finalized {
+		if txn.mu.Proto.Status == roachpb.COMMITTED ||
+			txn.mu.Proto.Status == roachpb.ABORTED ||
+			(txn.mu.Proto.Status == roachpb.PENDING && txn.mu.finalized) {
 			return roachpb.NewErrorf(
 				"attempting to use transaction with wrong status or finalized: %s %v",
 				txn.mu.Proto.Status, txn.mu.finalized)

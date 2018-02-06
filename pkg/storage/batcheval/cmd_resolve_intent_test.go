@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -70,6 +71,9 @@ func (m *mockEvalCtx) AbortSpan() *abortspan.AbortSpan {
 	return m.abortSpan
 }
 func (m *mockEvalCtx) GetTxnWaitQueue() *txnwait.Queue {
+	panic("unimplemented")
+}
+func (m *mockEvalCtx) SQLExecutor() sqlutil.InternalExecutor {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) NodeID() roachpb.NodeID {

@@ -218,6 +218,14 @@ func (*CancelQuery) StatementType() StatementType { return Ack }
 func (*CancelQuery) StatementTag() string { return "CANCEL QUERY" }
 
 // StatementType implements the Statement interface.
+func (*CommitPrepared) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*CommitPrepared) StatementTag() string { return "COMMIT PREPARED" }
+
+func (*CommitPrepared) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
 func (*CommitTransaction) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -427,6 +435,14 @@ func (*Prepare) StatementTag() string { return "PREPARE" }
 func (*Prepare) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
+func (*PrepareTransaction) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*PrepareTransaction) StatementTag() string { return "PREPARE TRANSACTION" }
+
+func (*PrepareTransaction) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
 func (*ReleaseSavepoint) StatementType() StatementType { return Ack }
 
 // StatementTag returns a short string identifying the type of statement.
@@ -500,6 +516,14 @@ func (*RevokeRole) StatementType() StatementType { return DDL }
 func (*RevokeRole) StatementTag() string { return "REVOKE" }
 
 func (*RevokeRole) hiddenFromStats() {}
+
+// StatementType implements the Statement interface.
+func (*RollbackPrepared) StatementType() StatementType { return Ack }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*RollbackPrepared) StatementTag() string { return "ROLLBACK PREPARED" }
+
+func (*RollbackPrepared) hiddenFromStats() {}
 
 // StatementType implements the Statement interface.
 func (*RollbackToSavepoint) StatementType() StatementType { return Ack }
@@ -858,6 +882,7 @@ func (n *Backup) String() string                    { return AsString(n) }
 func (n *BeginTransaction) String() string          { return AsString(n) }
 func (n *CancelJob) String() string                 { return AsString(n) }
 func (n *CancelQuery) String() string               { return AsString(n) }
+func (n *CommitPrepared) String() string            { return AsString(n) }
 func (n *CommitTransaction) String() string         { return AsString(n) }
 func (n *CopyFrom) String() string                  { return AsString(n) }
 func (n *CreateDatabase) String() string            { return AsString(n) }
@@ -886,6 +911,7 @@ func (n *Import) String() string                    { return AsString(n) }
 func (n *ParenSelect) String() string               { return AsString(n) }
 func (n *PauseJob) String() string                  { return AsString(n) }
 func (n *Prepare) String() string                   { return AsString(n) }
+func (n *PrepareTransaction) String() string        { return AsString(n) }
 func (n *ReleaseSavepoint) String() string          { return AsString(n) }
 func (n *TestingRelocate) String() string           { return AsString(n) }
 func (n *RenameColumn) String() string              { return AsString(n) }
@@ -896,6 +922,7 @@ func (n *Restore) String() string                   { return AsString(n) }
 func (n *ResumeJob) String() string                 { return AsString(n) }
 func (n *Revoke) String() string                    { return AsString(n) }
 func (n *RevokeRole) String() string                { return AsString(n) }
+func (n *RollbackPrepared) String() string          { return AsString(n) }
 func (n *RollbackToSavepoint) String() string       { return AsString(n) }
 func (n *RollbackTransaction) String() string       { return AsString(n) }
 func (n *Savepoint) String() string                 { return AsString(n) }

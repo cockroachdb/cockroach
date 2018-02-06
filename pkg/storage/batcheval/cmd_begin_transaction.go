@@ -102,6 +102,11 @@ func BeginTransaction(
 				fmt.Sprintf("BeginTransaction can't overwrite %s", tmpTxn),
 			)
 
+		case roachpb.PREPARED:
+			return result.Result{}, roachpb.NewTransactionStatusError(
+				fmt.Sprintf("BeginTransaction can't overwrite %s", tmpTxn),
+			)
+
 		default:
 			return result.Result{}, roachpb.NewTransactionStatusError(
 				fmt.Sprintf("bad txn state: %s", tmpTxn),

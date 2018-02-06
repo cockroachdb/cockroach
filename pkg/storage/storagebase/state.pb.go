@@ -128,7 +128,10 @@ func init() {
 }
 func (this *ReplicaState) Equal(that interface{}) bool {
 	if that == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	}
 
 	that1, ok := that.(*ReplicaState)
@@ -141,7 +144,10 @@ func (this *ReplicaState) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	} else if this == nil {
 		return false
 	}
@@ -173,7 +179,10 @@ func (this *ReplicaState) Equal(that interface{}) bool {
 }
 func (this *RangeInfo) Equal(that interface{}) bool {
 	if that == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	}
 
 	that1, ok := that.(*RangeInfo)
@@ -186,7 +195,10 @@ func (this *RangeInfo) Equal(that interface{}) bool {
 		}
 	}
 	if that1 == nil {
-		return this == nil
+		if this == nil {
+			return true
+		}
+		return false
 	} else if this == nil {
 		return false
 	}

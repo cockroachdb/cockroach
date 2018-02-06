@@ -66,6 +66,7 @@ pg_indexes
 pg_inherits
 pg_namespace
 pg_operator
+pg_prepared_xacts
 pg_proc
 pg_range
 pg_rewrite

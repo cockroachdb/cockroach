@@ -442,6 +442,12 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.expr != nil {
 			v.expr(name, "jobID", -1, n.jobID)
 		}
+
+	case *commitPreparedNode:
+		if v.observer.expr != nil {
+			v.observer.attr(name, "commit", strconv.FormatBool(n.commit))
+			v.observer.attr(name, "git", n.txnName)
+		}
 	}
 }
 
@@ -492,6 +498,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterSequenceNode{}):        "alter sequence",
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&cancelQueryNode{}):          "cancel query",
+	reflect.TypeOf(&commitPreparedNode{}):       "commit/rollback prepared",
 	reflect.TypeOf(&controlJobNode{}):           "control job",
 	reflect.TypeOf(&createDatabaseNode{}):       "create database",
 	reflect.TypeOf(&createIndexNode{}):          "create index",

@@ -381,7 +381,7 @@ func processLocalKeyRange(
 	handleTxnIntents := func(key roachpb.Key, txn *roachpb.Transaction) error {
 		// If the transaction needs to be pushed or there are intents to
 		// resolve, invoke the cleanup function.
-		if txn.Status == roachpb.PENDING || len(txn.Intents) > 0 {
+		if txn.Status == roachpb.PENDING || txn.Status == roachpb.PREPARED || len(txn.Intents) > 0 {
 			return cleanupTxnIntentsAsyncFn(ctx, txn, roachpb.AsIntents(txn.Intents, txn))
 		}
 		gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key}) // zero timestamp
@@ -406,6 +406,8 @@ func processLocalKeyRange(
 			infoMu.TransactionSpanGCAborted++
 		case roachpb.COMMITTED:
 			infoMu.TransactionSpanGCCommitted++
+		case roachpb.PREPARED:
+			infoMu.TransactionSpanGCPrepared++
 		default:
 			panic(fmt.Sprintf("invalid transaction state: %s", txn))
 		}
@@ -620,7 +622,7 @@ type GCInfo struct {
 	TransactionSpanTotal int
 	// Summary of transactions which were found GCable (assuming that
 	// potentially necessary intent resolutions did not fail).
-	TransactionSpanGCAborted, TransactionSpanGCCommitted, TransactionSpanGCPending int
+	TransactionSpanGCAborted, TransactionSpanGCCommitted, TransactionSpanGCPending, TransactionSpanGCPrepared int
 	// TxnSpanGCThreshold is the cutoff for transaction span GC. Transactions
 	// with a smaller LastActive() were considered for GC.
 	TxnSpanGCThreshold hlc.Timestamp
@@ -658,6 +660,7 @@ func (info *GCInfo) updateMetrics(metrics *StoreMetrics) {
 	metrics.GCTransactionSpanGCAborted.Inc(int64(info.TransactionSpanGCAborted))
 	metrics.GCTransactionSpanGCCommitted.Inc(int64(info.TransactionSpanGCCommitted))
 	metrics.GCTransactionSpanGCPending.Inc(int64(info.TransactionSpanGCPending))
+	metrics.GCTransactionSpanGCPrepared.Inc(int64(info.TransactionSpanGCPrepared))
 	metrics.GCAbortSpanScanned.Inc(int64(info.AbortSpanTotal))
 	metrics.GCAbortSpanConsidered.Inc(int64(info.AbortSpanConsidered))
 	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))

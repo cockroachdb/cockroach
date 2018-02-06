@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -75,6 +76,11 @@ func (rec *SpanSetReplicaEvalContext) Clock() *hlc.Clock {
 // DB returns the Replica's client DB.
 func (rec *SpanSetReplicaEvalContext) DB() *client.DB {
 	return rec.i.DB()
+}
+
+// SQLExecutor returns the Replica's SQL executor.
+func (rec *SpanSetReplicaEvalContext) SQLExecutor() sqlutil.InternalExecutor {
+	return rec.i.SQLExecutor()
 }
 
 // GetTxnWaitQueue returns the txnwait.Queue.

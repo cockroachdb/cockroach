@@ -1065,6 +1065,28 @@ func NewDBytes(d DBytes) *DBytes {
 	return &d
 }
 
+// AsDBytes attempts to retrieve a DBytes from an Expr, returning a DBytes and
+// a flag signifying whether the assertion was successful.
+func AsDBytes(e Expr) (DBytes, bool) {
+	switch t := e.(type) {
+	case *DBytes:
+		return *t, true
+	case *DOidWrapper:
+		return AsDBytes(t.Wrapped)
+	}
+	return "", false
+}
+
+// MustBeDBytes attempts to retrieve a DBytes from an Expr, panicking if the
+// assertion fails.
+func MustBeDBytes(e Expr) DBytes {
+	b, ok := AsDBytes(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DBytes, found %T", e))
+	}
+	return b
+}
+
 // ResolvedType implements the TypedExpr interface.
 func (*DBytes) ResolvedType() types.T {
 	return types.Bytes
@@ -1752,6 +1774,29 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 		return nil, err
 	}
 	return MakeDTimestamp(t, precision), nil
+}
+
+// AsDTimestamp attempts to retrieve a *DTimestamp from an Expr,
+// returning a *DTimestamp and a flag signifying whether the
+// assertion was successful.
+func AsDTimestamp(e Expr) (*DTimestamp, bool) {
+	switch t := e.(type) {
+	case *DTimestamp:
+		return t, true
+	case *DOidWrapper:
+		return AsDTimestamp(t.Wrapped)
+	}
+	return nil, false
+}
+
+// MustBeDTimestamp attempts to retrieve a DTimestamp from an
+// Expr, panicking if the assertion fails.
+func MustBeDTimestamp(e Expr) DTimestamp {
+	i, ok := AsDTimestamp(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DTimestamp, found %T", e))
+	}
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.

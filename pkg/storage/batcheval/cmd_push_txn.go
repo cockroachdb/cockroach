@@ -17,7 +17,9 @@ package batcheval
 import (
 	"bytes"
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -154,7 +157,8 @@ func PushTxn(
 	reply.PusheeTxn = existTxn.Clone()
 
 	// If already committed or aborted, return success.
-	if reply.PusheeTxn.Status != roachpb.PENDING {
+	switch reply.PusheeTxn.Status {
+	case roachpb.COMMITTED, roachpb.ABORTED:
 		// Trivial noop.
 		return result.Result{}, nil
 	}
@@ -177,7 +181,7 @@ func PushTxn(
 	var reason string
 
 	switch {
-	case txnwait.IsExpired(args.Now, &reply.PusheeTxn):
+	case txnwait.IsExpired(args.Now, &reply.PusheeTxn, cArgs.EvalCtx.ClusterSettings()):
 		reason = "pushee is expired"
 		// When cleaning up, actually clean up (as opposed to simply pushing
 		// the garbage in the path of future writers).
@@ -218,6 +222,14 @@ func PushTxn(
 		return result.Result{}, err
 	}
 
+	// If the transaction is PREPARED and we're pushing, we must update
+	// the transaction's entry in the prepared_xacts table.
+	if reply.PusheeTxn.Status == roachpb.PREPARED {
+		if err := updatePreparedTransaction(ctx, cArgs.EvalCtx, reply.PusheeTxn.ID, reason); err != nil {
+			return result.Result{}, err
+		}
+	}
+
 	// Upgrade priority of pushed transaction to one less than pusher's.
 	reply.PusheeTxn.UpgradePriority(args.PusherTxn.Priority - 1)
 
@@ -240,4 +252,26 @@ func PushTxn(
 	result := result.Result{}
 	result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.PusheeTxn}
 	return result, nil
+}
+
+func updatePreparedTransaction(
+	ctx context.Context, evalCtx EvalContext, txnID uuid.UUID, reason string,
+) error {
+	return evalCtx.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		rows, err := evalCtx.SQLExecutor().ExecuteStatementInTransaction(
+			ctx,
+			"set-prepared-xact-status",
+			txn,
+			`UPDATE system.prepared_xacts SET status = $1 WHERE tid = $2`,
+			fmt.Sprintf("aborted: %s", reason),
+			txnID.GetBytes(),
+		)
+		if err != nil {
+			return err
+		}
+		if rows != 1 {
+			return errors.Errorf("no entry was found for txn=%s in system.prepared_xacts", txnID)
+		}
+		return nil
+	})
 }

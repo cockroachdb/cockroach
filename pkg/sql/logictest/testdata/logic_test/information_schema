@@ -276,6 +276,7 @@ pg_catalog          pg_indexes
 pg_catalog          pg_inherits
 pg_catalog          pg_namespace
 pg_catalog          pg_operator
+pg_catalog          pg_prepared_xacts
 pg_catalog          pg_proc
 pg_catalog          pg_range
 pg_catalog          pg_rewrite
@@ -295,6 +296,7 @@ system              jobs
 system              lease
 system              locations
 system              namespace
+system              prepared_xacts
 system              rangelog
 system              role_members
 system              settings
@@ -459,6 +461,7 @@ def            pg_catalog          pg_indexes                         SYSTEM VIE
 def            pg_catalog          pg_inherits                        SYSTEM VIEW  1
 def            pg_catalog          pg_namespace                       SYSTEM VIEW  1
 def            pg_catalog          pg_operator                        SYSTEM VIEW  1
+def            pg_catalog          pg_prepared_xacts                  SYSTEM VIEW  1
 def            pg_catalog          pg_proc                            SYSTEM VIEW  1
 def            pg_catalog          pg_range                           SYSTEM VIEW  1
 def            pg_catalog          pg_rewrite                         SYSTEM VIEW  1
@@ -478,6 +481,7 @@ def            system              jobs                               BASE TABLE
 def            system              lease                              BASE TABLE   1
 def            system              locations                          BASE TABLE   1
 def            system              namespace                          BASE TABLE   1
+def            system              prepared_xacts                     BASE TABLE   1
 def            system              rangelog                           BASE TABLE   1
 def            system              role_members                       BASE TABLE   1
 def            system              settings                           BASE TABLE   1
@@ -545,6 +549,7 @@ def                 system             primary          def            system   
 def                 system             primary          def            system        lease             PRIMARY KEY      NO             NO
 def                 system             primary          def            system        locations         PRIMARY KEY      NO             NO
 def                 system             primary          def            system        namespace         PRIMARY KEY      NO             NO
+def                 system             primary          def            system        prepared_xacts    PRIMARY KEY      NO             NO
 def                 system             primary          def            system        rangelog          PRIMARY KEY      NO             NO
 def                 system             primary          def            system        role_members      PRIMARY KEY      NO             NO
 def                 system             primary          def            system        settings          PRIMARY KEY      NO             NO
@@ -621,6 +626,13 @@ def            system        locations         longitude       4
 def            system        namespace         parentID        1
 def            system        namespace         name            2
 def            system        namespace         id              3
+def            system        prepared_xacts    gid             1
+def            system        prepared_xacts    tid             2
+def            system        prepared_xacts    transaction     3
+def            system        prepared_xacts    preparedAt      4
+def            system        prepared_xacts    owner           5
+def            system        prepared_xacts    database        6
+def            system        prepared_xacts    status          7
 def            system        rangelog          timestamp       1
 def            system        rangelog          rangeID         2
 def            system        rangelog          storeID         3
@@ -902,6 +914,16 @@ NULL     admin    def            system        namespace         GRANT          
 NULL     admin    def            system        namespace         SELECT          NULL          NULL
 NULL     root     def            system        namespace         GRANT           NULL          NULL
 NULL     root     def            system        namespace         SELECT          NULL          NULL
+NULL     admin    def            system        prepared_xacts    DELETE          NULL          NULL
+NULL     admin    def            system        prepared_xacts    GRANT           NULL          NULL
+NULL     admin    def            system        prepared_xacts    INSERT          NULL          NULL
+NULL     admin    def            system        prepared_xacts    SELECT          NULL          NULL
+NULL     admin    def            system        prepared_xacts    UPDATE          NULL          NULL
+NULL     root     def            system        prepared_xacts    DELETE          NULL          NULL
+NULL     root     def            system        prepared_xacts    GRANT           NULL          NULL
+NULL     root     def            system        prepared_xacts    INSERT          NULL          NULL
+NULL     root     def            system        prepared_xacts    SELECT          NULL          NULL
+NULL     root     def            system        prepared_xacts    UPDATE          NULL          NULL
 NULL     admin    def            system        rangelog          DELETE          NULL          NULL
 NULL     admin    def            system        rangelog          GRANT           NULL          NULL
 NULL     admin    def            system        rangelog          INSERT          NULL          NULL
@@ -1035,6 +1057,16 @@ NULL     admin    def            system        namespace         GRANT          
 NULL     admin    def            system        namespace         SELECT          NULL          NULL
 NULL     root     def            system        namespace         GRANT           NULL          NULL
 NULL     root     def            system        namespace         SELECT          NULL          NULL
+NULL     admin    def            system        prepared_xacts    DELETE          NULL          NULL
+NULL     admin    def            system        prepared_xacts    GRANT           NULL          NULL
+NULL     admin    def            system        prepared_xacts    INSERT          NULL          NULL
+NULL     admin    def            system        prepared_xacts    SELECT          NULL          NULL
+NULL     admin    def            system        prepared_xacts    UPDATE          NULL          NULL
+NULL     root     def            system        prepared_xacts    DELETE          NULL          NULL
+NULL     root     def            system        prepared_xacts    GRANT           NULL          NULL
+NULL     root     def            system        prepared_xacts    INSERT          NULL          NULL
+NULL     root     def            system        prepared_xacts    SELECT          NULL          NULL
+NULL     root     def            system        prepared_xacts    UPDATE          NULL          NULL
 NULL     admin    def            system        rangelog          DELETE          NULL          NULL
 NULL     admin    def            system        rangelog          GRANT           NULL          NULL
 NULL     admin    def            system        rangelog          INSERT          NULL          NULL

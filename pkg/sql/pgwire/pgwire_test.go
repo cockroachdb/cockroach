@@ -733,7 +733,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),
 		},
 		"SHOW TABLES FROM system": {
-			baseTest.Results("descriptor").Others(13),
+			baseTest.Results("descriptor").Others(14),
 		},
 		"SHOW CONSTRAINTS FROM system.users": {
 			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),

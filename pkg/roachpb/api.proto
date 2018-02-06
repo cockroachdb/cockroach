@@ -430,6 +430,10 @@ message EndTransactionRequest {
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // False to abort and rollback.
   bool commit = 2;
+  // Prepare, if true, causes the end transaction to proceed as though
+  // committing, but the transaction state is set to PREPARED instead
+  // of COMMITTED on success. If true, commit must be set to true as well.
+  bool prepare = 8;
   // If set, deadline represents the maximum timestamp at which the transaction
   // can commit (i.e. the maximum timestamp for the txn's writes). If
   // EndTransaction(Commit=true) finds that the txn's timestamp has been pushed

@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -34,6 +36,17 @@ import (
 )
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
+
+// preparedTxnTimeout is the duration for a prepared transaction after which
+// it can be aborted locally. Note this outcome is dangerous and can lead to
+// inconsistencies in a distributed environment as locally aborted transactions
+// which are part of an externally-managed two phase commit protocol will often
+// lead to inconsistencies.
+var preparedTxnTimeout = settings.RegisterDurationSetting(
+	"storage.prepared_txn.timeout",
+	"timeout for prepared transactions after which they can be aborted locally",
+	time.Hour,
+)
 
 // ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither
@@ -54,18 +67,22 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 // fulfilled by the current transaction state. This may be true
 // for transactions with pushed timestamps.
 func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
-	return (txn.Status != roachpb.PENDING ||
+	return ((txn.Status == roachpb.COMMITTED || txn.Status == roachpb.ABORTED) ||
 		(req.PushType == roachpb.PUSH_TIMESTAMP && req.PushTo.Less(txn.Timestamp)))
 }
 
 // TxnExpiration is the timestamp after which the transaction will be considered expired.
-func TxnExpiration(txn *roachpb.Transaction) hlc.Timestamp {
-	return txn.LastActive().Add(2*base.DefaultHeartbeatInterval.Nanoseconds(), 0)
+func TxnExpiration(txn *roachpb.Transaction, settings *cluster.Settings) hlc.Timestamp {
+	lastActive := txn.LastActive()
+	if txn.Status == roachpb.PREPARED {
+		return lastActive.Add(preparedTxnTimeout.Get(&settings.SV).Nanoseconds(), 0)
+	}
+	return lastActive.Add(2*base.DefaultHeartbeatInterval.Nanoseconds(), 0)
 }
 
 // IsExpired is true if the given transaction is expired.
-func IsExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
-	return TxnExpiration(txn).Less(now)
+func IsExpired(now hlc.Timestamp, txn *roachpb.Transaction, settings *cluster.Settings) bool {
+	return TxnExpiration(txn, settings).Less(now)
 }
 
 // createPushTxnResponse returns a PushTxnResponse struct with a
@@ -129,6 +146,7 @@ type StoreInterface interface {
 	Clock() *hlc.Clock
 	Stopper() *stop.Stopper
 	DB() *client.DB
+	ClusterSettings() *cluster.Settings
 }
 
 // ReplicaInterface provides some parts of a Replica without incurring a dependency.
@@ -325,7 +343,8 @@ func (q *Queue) GetDependents(txnID uuid.UUID) []uuid.UUID {
 func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) bool {
 	// First check whether txn status or priority has changed.
 	txn := pending.getTxn()
-	if txn.Status != roachpb.PENDING || txn.Priority > req.Txn.Priority {
+	if txn.Status == roachpb.COMMITTED || txn.Status == roachpb.ABORTED ||
+		txn.Priority > req.Txn.Priority {
 		return true
 	}
 	// Next, see if there is any discrepancy in the set of known dependents.
@@ -457,7 +476,8 @@ func (q *Queue) MaybeWaitForPush(
 	for {
 		// Set the timer to check for the pushee txn's expiration.
 		{
-			expiration := TxnExpiration(pending.txn.Load().(*roachpb.Transaction)).GoTime()
+			expiration := TxnExpiration(
+				pending.txn.Load().(*roachpb.Transaction), q.store.ClusterSettings()).GoTime()
 			now := q.store.Clock().Now().GoTime()
 			pusheeTxnTimer.Reset(expiration.Sub(now))
 		}
@@ -503,7 +523,7 @@ func (q *Queue) MaybeWaitForPush(
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
-			if IsExpired(q.store.Clock().Now(), updatedPushee) {
+			if IsExpired(q.store.Clock().Now(), updatedPushee, q.store.ClusterSettings()) {
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}

@@ -163,6 +163,9 @@ transaction_stmt ::=
 	| commit_stmt
 	| rollback_stmt
 	| abort_stmt
+	| prepare_transaction_stmt
+	| commit_prepared_stmt
+	| rollback_prepared_stmt
 
 truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
@@ -497,6 +500,15 @@ rollback_stmt ::=
 abort_stmt ::=
 	'ABORT' opt_abort_mod
 
+prepare_transaction_stmt ::=
+	'PREPARE' 'TRANSACTION' 'SCONST'
+
+commit_prepared_stmt ::=
+	'COMMIT' 'PREPARED' 'SCONST'
+
+rollback_prepared_stmt ::=
+	'ROLLBACK' 'PREPARED' 'SCONST'
+
 opt_table ::=
 	'TABLE'
 	| 
@@ -688,6 +700,7 @@ unreserved_keyword ::=
 	| 'PLANS'
 	| 'PRECEDING'
 	| 'PREPARE'
+	| 'PREPARED'
 	| 'PRIORITY'
 	| 'QUERIES'
 	| 'QUERY'
