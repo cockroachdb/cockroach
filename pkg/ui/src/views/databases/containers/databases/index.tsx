@@ -12,6 +12,7 @@ import { refreshDatabases } from "src/redux/apiReducers";
 
 import DatabaseSummaryTables from "src/views/databases/containers/databaseTables";
 import DatabaseSummaryGrants from "src/views/databases/containers/databaseGrants";
+import NonTableSummary from "./nonTableSummary";
 
 // excludedTableList is a list of virtual databases that should be excluded
 // from database lists; they are not physical databases, and thus cause issues
@@ -86,6 +87,7 @@ class DatabaseTablesList extends React.Component<DatabaseListProps, {}> {
           }
           return <DatabaseSummaryTables name={n} key={n} />;
         }) }
+        <NonTableSummary />
       </div>
     </div>;
   }
