@@ -136,33 +136,32 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
   };
   context: { router: InjectedRouter & RouterState };
 
-  renderAsMap(treeToRender: LocalityTree ) {
-    const { locationTree } = this.props;
-
-    // If there are any nodes directly under this locality, don't show a map.
-    if (!_.isEmpty(treeToRender.nodes)) {
-      return false;
-    }
-
-    // Otherwise, show a map as long as we're able to find or calculate a location
-    // for every child locality.
-    const children = getChildLocalities(treeToRender);
-    return _.every(
-      children,
-      (child) => !_.isNil(findOrCalculateLocation(locationTree, child)),
-    );
-  }
-
   render() {
     const treeToRender = getLocality(this.props.localityTree, this.props.tiers);
     if (_.isNil(treeToRender)) {
       this.context.router.replace(CLUSTERVIZ_ROOT);
     }
 
-    if (this.renderAsMap(treeToRender)) {
+    if (renderAsMap(this.props.locationTree, treeToRender)) {
       return <MapLayout {...this.props} localityTree={treeToRender} />;
     }
 
     return <CircleLayout {...this.props} localityTree={treeToRender} />;
   }
+}
+
+// Only exported for test purposes.
+export function renderAsMap(locationTree: LocationTree, localityTree: LocalityTree) {
+  // If there are any nodes directly under this locality, don't show a map.
+  if (!_.isEmpty(localityTree.nodes)) {
+    return false;
+  }
+
+  // Otherwise, show a map as long as we're able to find or calculate a location
+  // for every child locality.
+  const children = getChildLocalities(localityTree);
+  return _.every(
+    children,
+    (child) => !_.isNil(findOrCalculateLocation(locationTree, child)),
+  );
 }
