@@ -23,6 +23,7 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/api/option"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
@@ -73,7 +74,10 @@ func getStorage(ctx context.Context) (*storage.Client, error) {
 func init() {
 	for _, meta := range workload.Registered() {
 		gen := meta.New()
-		genFlags := gen.Flags()
+		var genFlags *pflag.FlagSet
+		if f, ok := gen.(workload.Flagser); ok {
+			genFlags = f.Flags()
+		}
 
 		genStoreCmd := &cobra.Command{
 			Use:  meta.Name + ` [CRDB URI]`,
