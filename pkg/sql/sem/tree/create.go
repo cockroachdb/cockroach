@@ -408,9 +408,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.References.Actions)
 	}
 	if node.IsComputed() {
-		ctx.WriteString(" AS ")
+		ctx.WriteString(" AS (")
 		ctx.FormatNode(node.Computed.Expr)
-		ctx.WriteString(" STORED")
+		ctx.WriteString(") STORED")
 	}
 	if node.HasColumnFamily() {
 		if node.Family.Create {
