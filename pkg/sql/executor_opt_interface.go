@@ -66,9 +66,7 @@ func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
 		return nil, err
 	}
 	var err error
-	scan.spans, err = makeSpans(
-		ee.planner.EvalContext(), nil /* constraints */, desc, &desc.PrimaryIndex,
-	)
+	scan.spans, err = unconstrainedSpans(desc, &desc.PrimaryIndex)
 	if err != nil {
 		return nil, err
 	}

@@ -859,3 +859,15 @@ MainLoop:
 	}
 	return result
 }
+
+// getColVarIdx detects whether an expression is a straightforward
+// reference to a column or index variable. In this case it returns
+// the index of that column's in the descriptor's []Column array.
+// Used by indexInfo.makeIndexConstraints().
+func getColVarIdx(expr tree.Expr) (ok bool, colIdx int) {
+	switch q := expr.(type) {
+	case *tree.IndexedVar:
+		return true, q.Idx
+	}
+	return false, -1
+}

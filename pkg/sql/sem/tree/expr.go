@@ -463,30 +463,6 @@ func (node *ComparisonExpr) TypedRight() TypedExpr {
 	return node.Right.(TypedExpr)
 }
 
-// IsMixedTypeComparison returns true when the two sides of
-// a comparison operator have different types.
-func (node *ComparisonExpr) IsMixedTypeComparison() bool {
-	switch node.Operator {
-	case In, NotIn:
-		tuple := node.TypedRight().ResolvedType().(types.TTuple)
-		for _, typ := range tuple {
-			if !sameTypeOrNull(node.TypedLeft().ResolvedType(), typ) {
-				return true
-			}
-		}
-		return false
-	case Any, Some, All:
-		array := node.TypedRight().ResolvedType().(types.TArray)
-		return !sameTypeOrNull(node.TypedLeft().ResolvedType(), array.Typ)
-	default:
-		return !sameTypeOrNull(node.TypedLeft().ResolvedType(), node.TypedRight().ResolvedType())
-	}
-}
-
-func sameTypeOrNull(left, right types.T) bool {
-	return left == types.Null || right == types.Null || left.Equivalent(right)
-}
-
 // RangeCond represents a BETWEEN [SYMMETRIC] or a NOT BETWEEN [SYMMETRIC]
 // expression.
 type RangeCond struct {
