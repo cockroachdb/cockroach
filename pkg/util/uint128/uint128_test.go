@@ -124,3 +124,33 @@ func TestEqual(t *testing.T) {
 		}
 	}
 }
+
+func TestAnd(t *testing.T) {
+	u1 := Uint128{14799720563850130797, 11152134164166830811}
+	u2 := Uint128{10868624793753271583, 6542293553298186666}
+
+	expected := Uint128{9529907221165552909, 1927615693132931210}
+	if !(u1.And(u2)).Equal(expected) {
+		t.Errorf("incorrect AND computation: %v & %v != %v", u1, u2, expected)
+	}
+}
+
+func TestOr(t *testing.T) {
+	u1 := Uint128{14799720563850130797, 11152134164166830811}
+	u2 := Uint128{10868624793753271583, 6542293553298186666}
+
+	expected := Uint128{16138438136437849471, 15766812024332086267}
+	if !(u1.Or(u2)).Equal(expected) {
+		t.Errorf("incorrect OR computation: %v | %v != %v", u1, u2, expected)
+	}
+}
+
+func TestXor(t *testing.T) {
+	u1 := Uint128{14799720563850130797, 11152134164166830811}
+	u2 := Uint128{10868624793753271583, 6542293553298186666}
+
+	expected := Uint128{6608530915272296562, 13839196331199155057}
+	if !(u1.Xor(u2)).Equal(expected) {
+		t.Errorf("incorrect XOR computation: %v ^ %v != %v", u1, u2, expected)
+	}
+}
