@@ -65,8 +65,6 @@ typedef struct DBIterator DBIterator;
 // DBOptions contains local database options.
 typedef struct {
   DBCache* cache;
-  uint64_t block_size;
-  uint64_t wal_ttl_seconds;
   bool logging_enabled;
   int num_cpu;
   int max_open_files;
