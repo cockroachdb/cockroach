@@ -360,6 +360,14 @@ func makeSimpleTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
+	// A hidden column is set if there was no primary key specified in the create
+	// statement. We require primary keys to be specified so that the sampling
+	// phase and read phase of distributed import produce the same data.
+	for _, col := range tableDesc.Columns {
+		if col.Hidden {
+			return nil, errors.New("must specify primary key")
+		}
+	}
 
 	return &tableDesc, nil
 }
