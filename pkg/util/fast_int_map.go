@@ -83,6 +83,27 @@ func (m FastIntMap) Get(key int) (value int, ok bool) {
 	return value, ok
 }
 
+// Len returns the number of keys in the map.
+func (m FastIntMap) Len() int {
+	if m.large != nil {
+		return len(m.large)
+	}
+	res := 0
+	for w := 0; w < numWords; w++ {
+		v := m.small[w]
+		// We want to count the number of non-zero groups. To do this, we OR all
+		// the bits of each group into the low-bit of that group, apply a mask
+		// selecting just those low bits and count the number of 1s.
+		// To OR the bits efficiently, we first OR the high half of each group into
+		// the low half of each group, and repeat.
+		for i := uint32(numBits / 2); i > 0; i /= 2 {
+			v |= (v >> i)
+		}
+		res += bits.OnesCount64(v & groupLowBitMask)
+	}
+	return res
+}
+
 // MaxKey returns the maximum key that is in the map. If the map
 // is empty, returns ok=false.
 func (m FastIntMap) MaxKey() (_ int, ok bool) {
@@ -180,6 +201,8 @@ const (
 	numVals        = numWords * numValsPerWord // 32
 	mask           = (1 << numBits) - 1
 	maxValue       = mask - 1
+	// Mask for the low bits of each group: 0001 0001 0001 ...
+	groupLowBitMask = 0x1111111111111111
 )
 
 // Returns -1 if the value is unmapped.
