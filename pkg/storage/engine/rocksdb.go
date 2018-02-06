@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,11 +87,6 @@ func prettyPrintKey(cKey C.DBKey) *C.char {
 }
 
 const (
-	// defaultBlockSize configures the size of a black. When reading a key-value
-	// pair from a table file, RocksDB loads an entire block into memory. The
-	// RocksDB default is 4KB. This sets it to 32KB.
-	defaultBlockSize = 32 << 10
-
 	// RecommendedMaxOpenFiles is the recommended value for RocksDB's
 	// max_open_files option.
 	RecommendedMaxOpenFiles = 10000
@@ -580,8 +574,6 @@ func (r *RocksDB) open() error {
 		existingVersion = versionCurrent
 	}
 
-	blockSize := envutil.EnvOrDefaultBytes("COCKROACH_ROCKSDB_BLOCK_SIZE", defaultBlockSize)
-	walTTL := envutil.EnvOrDefaultDuration("COCKROACH_ROCKSDB_WAL_TTL", 0).Seconds()
 	maxOpenFiles := uint64(RecommendedMaxOpenFiles)
 	if r.cfg.MaxOpenFiles != 0 {
 		maxOpenFiles = r.cfg.MaxOpenFiles
@@ -590,8 +582,6 @@ func (r *RocksDB) open() error {
 	status := C.DBOpen(&r.rdb, goToCSlice([]byte(r.cfg.Dir)),
 		C.DBOptions{
 			cache:             r.cache.cache,
-			block_size:        C.uint64_t(blockSize),
-			wal_ttl_seconds:   C.uint64_t(walTTL),
 			logging_enabled:   C.bool(log.V(3)),
 			num_cpu:           C.int(runtime.NumCPU()),
 			max_open_files:    C.int(maxOpenFiles),
