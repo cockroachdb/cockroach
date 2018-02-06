@@ -45,6 +45,12 @@ message BackupDescriptor {
     util.hlc.Timestamp end_time = 8 [(gogoproto.nullable) = false];
   }
 
+  message DescriptorRevision {
+    util.hlc.Timestamp time = 1 [(gogoproto.nullable) = false];
+    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    sql.sqlbase.Descriptor desc = 3;
+  }
+
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
   MVCCFilter mvcc_filter = 13 [(gogoproto.customname) = "MVCCFilter"];
@@ -62,6 +68,8 @@ message BackupDescriptor {
   // the coverage from (startTime, endTime] implied for all spans in Spans,
   // results in coverage from [0, endTime] for these spans.
   repeated roachpb.Span introduced_spans = 15 [(gogoproto.nullable) = false];
+
+  repeated DescriptorRevision descriptor_changes = 16  [(gogoproto.nullable) = false];
 
   repeated File files = 4 [(gogoproto.nullable) = false];
   repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
