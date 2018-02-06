@@ -65,6 +65,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.resultColumns
 	case *sortNode:
 		return n.columns
+	case *unionNode:
+		return n.columns
 	case *valueGenerator:
 		return n.columns
 	case *valuesNode:
@@ -76,7 +78,7 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 	case *showTraceNode:
 		return n.columns
 
-		// Nodes with a fixed schema.
+	// Nodes with a fixed schema.
 	case *scrubNode:
 		return n.getColumns(mut, scrubColumns)
 	case *explainDistSQLNode:
@@ -114,11 +116,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.table, mut)
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
-	case *unionNode:
-		if n.inverted {
-			return getPlanColumns(n.right, mut)
-		}
-		return getPlanColumns(n.left, mut)
 	}
 
 	// Every other node has no columns in their results.
