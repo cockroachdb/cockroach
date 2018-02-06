@@ -15,18 +15,12 @@
 package engine
 
 import (
-	"reflect"
 	"unsafe"
 )
 
 func nonZeroingMakeByteSlice(len int) []byte {
-	var b []byte
-	*(*reflect.SliceHeader)(unsafe.Pointer(&b)) = reflect.SliceHeader{
-		Data: uintptr(mallocgc(uintptr(len), nil, false)),
-		Len:  len,
-		Cap:  len,
-	}
-	return b
+	ptr := mallocgc(uintptr(len), nil, false)
+	return (*[maxArrayLen]byte)(ptr)[:len:len]
 }
 
 // Replacement for C.GoBytes which does not zero initialize the returned slice
