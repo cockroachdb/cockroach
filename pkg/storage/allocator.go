@@ -135,6 +135,8 @@ type allocatorError struct {
 	aliveStoreCount  int
 }
 
+// TODO(a-robinson): Improve this error reporting to cover more than just
+// required constraints.
 func (ae *allocatorError) Error() string {
 	anyAll := "all attributes"
 	if ae.relaxConstraints {
@@ -346,9 +348,10 @@ func (a *Allocator) AllocateTarget(
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
+	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
-		sl, constraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
+		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -418,10 +421,11 @@ func (a Allocator) RemoveTarget(
 	}
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
+	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	rankedCandidates := removeCandidates(
 		sl,
-		constraints,
+		analyzedConstraints,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		options,
@@ -476,16 +480,26 @@ func (a Allocator) RebalanceTarget(
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
+	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
-	existingCandidates, candidates := rebalanceCandidates(
+	results := rebalanceCandidates(
 		ctx,
 		sl,
-		constraints,
+		analyzedConstraints,
 		rangeInfo.Desc.Replicas,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
+		a.storePool.getNodeLocalityString,
 		options,
 	)
+
+	if len(results) == 0 {
+		return nil, ""
+	}
+
+	// TODO: Pick the most desirable results from the different groupings.
+	existingCandidates := results[0].existingCandidates
+	candidates := results[0].candidates
 
 	// We're going to add another replica to the range which will change the
 	// quorum size. Verify that the number of existing candidates is sufficient
@@ -582,6 +596,7 @@ func (a Allocator) RebalanceTarget(
 	return &target.store, string(detailsBytes)
 }
 
+// TODO: how do all the constraint changes affect this function?
 // shouldRebalanceBetween returns whether it's a good idea to rebalance to the
 // given `add` candidate if the replica that will be removed after adding it is
 // `remove`. This is a last failsafe to ensure that we don't take unnecessary

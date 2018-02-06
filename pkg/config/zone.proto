@@ -59,6 +59,11 @@ message Constraints {
   option (gogoproto.equal) = true;
 
   repeated Constraint constraints = 6 [(gogoproto.nullable) = false];
+
+  // Replicas allows for specifying different sets of constraints for each of
+  // the NumReplicas replicas. Only required constraints are currently allowed.
+  // As of v2.0, this field cannot be set if the Constraints field is.
+  repeated Constraints replicas = 7 [(gogoproto.nullable) = false];
 }
 
 // ZoneConfig holds configuration that applies to one or more ranges.
@@ -76,6 +81,7 @@ message ZoneConfig {
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
+  // As of v2.0, this field cannot be set if the Replicas field is.
   optional Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
 
   // Subzones stores config overrides for "subzones", each of which represents
