@@ -442,6 +442,9 @@ type RocksDBConfig struct {
 	// UseSwitchingEnv is true if the switching env is needed (eg: encryption-at-rest).
 	// This may force the store version to versionSwitchingEnv if currently lower.
 	UseSwitchingEnv bool
+	// RocksDBOptions contains RocksDB specific options using a semicolon
+	// separated key-value syntax ("key1=value1; key2=value2").
+	RocksDBOptions string
 	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
 	// to C CCL code.
 	ExtraOptions []byte
@@ -595,6 +598,7 @@ func (r *RocksDB) open() error {
 			use_switching_env: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),
 			read_only:         C.bool(r.cfg.ReadOnly),
+			rocksdb_options:   goToCSlice([]byte(r.cfg.RocksDBOptions)),
 			extra_options:     goToCSlice(r.cfg.ExtraOptions),
 		})
 	if err := statusToError(status); err != nil {
