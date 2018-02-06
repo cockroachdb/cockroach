@@ -110,6 +110,13 @@ func (p *planner) Update(
 		return nil, err
 	}
 
+	// TODO(justin): this is incorrect: we should allow this, but then it should
+	// error unless we both have a VALUES clause and every value being "inserted"
+	// into a computed column is DEFAULT. See #22434.
+	if err := checkHasNoComputedCols(updateCols); err != nil {
+		return nil, err
+	}
+
 	// We update the set of columns being updated into with any computed columns.
 	updateCols, computedCols, computeExprs, err :=
 		ProcessComputedColumns(ctx, updateCols, tn, en.tableDesc, &p.txCtx, p.EvalContext())

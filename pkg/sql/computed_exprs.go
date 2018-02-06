@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -39,6 +40,19 @@ func (j *descContainer) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
+}
+
+func cannotWriteToComputedColError(col sqlbase.ColumnDescriptor) error {
+	return fmt.Errorf("cannot write directly to computed column %#v", col.Name)
+}
+
+func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
+	for i := range cols {
+		if cols[i].ComputeExpr != nil {
+			return cannotWriteToComputedColError(cols[i])
+		}
+	}
 	return nil
 }
 
