@@ -316,6 +316,7 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		AS OF SYSTEM TIME %s
 		WHERE TABLE_SCHEMA = $1
 			AND TABLE_NAME = $2
+			AND GENERATION_EXPRESSION = ''
 		`, lex.EscapeSQLString(ts)), []driver.Value{md.name.Schema(), md.name.Table()})
 	if err != nil {
 		return tableMetadata{}, err
@@ -399,7 +400,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 		return err
 	}
 
-	bs := fmt.Sprintf("SELECT * FROM %s AS OF SYSTEM TIME %s ORDER BY PRIMARY KEY %[1]s",
+	bs := fmt.Sprintf("SELECT %s FROM %s AS OF SYSTEM TIME %s ORDER BY PRIMARY KEY %[2]s",
+		md.columnNames,
 		md.name,
 		lex.EscapeSQLString(clusterTS),
 	)
