@@ -48,6 +48,9 @@ export type ClusterResponseMessage = protos.cockroach.server.serverpb.ClusterRes
 export type TableStatsRequestMessage = protos.cockroach.server.serverpb.TableStatsRequest;
 export type TableStatsResponseMessage = protos.cockroach.server.serverpb.TableStatsResponse;
 
+export type NonTableStatsRequestMessage = protos.cockroach.server.serverpb.NonTableStatsRequest;
+export type NonTableStatsResponseMessage = protos.cockroach.server.serverpb.NonTableStatsResponse;
+
 export type LogsRequestMessage = protos.cockroach.server.serverpb.LogsRequest;
 export type LogEntriesResponseMessage = protos.cockroach.server.serverpb.LogEntriesResponse;
 
@@ -230,9 +233,15 @@ export function getCluster(_req: ClusterRequestMessage, timeout?: moment.Duratio
   return timeoutFetch(serverpb.ClusterResponse, `${API_PREFIX}/cluster`, null, timeout);
 }
 
-// getTableStats gets details stats about the current table
+// getTableStats gets detailed stats about the current table
 export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Duration): Promise<TableStatsResponseMessage> {
   return timeoutFetch(serverpb.TableStatsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`, null, timeout);
+}
+
+// getNonTableStats gets detailed stats about non-table data ranges on the
+// cluster.
+export function getNonTableStats(_req: NonTableStatsRequestMessage, timeout?: moment.Duration): Promise<NonTableStatsResponseMessage> {
+  return timeoutFetch(serverpb.NonTableStatsResponse, `${API_PREFIX}/nontablestats`, null, timeout);
 }
 
 // TODO (maxlang): add filtering
