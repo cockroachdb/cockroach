@@ -474,8 +474,10 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str>   HAVING HIGH HISTOGRAM HOUR
 
-%token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN INET INTERLEAVE
-%token <str>   INDEX INDEXES INITIALLY
+
+%token <str>   IMPORT INCREMENT INCREMENTAL IF IFNULL ILIKE IN
+%token <str>   INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
+%token <str>   INET_CONTAINS_OR_EQUALS INTERLEAVE INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
 %token <str>   INTERSECT INTERVAL INTO INVERTED IS ISOLATION
 
@@ -963,7 +965,7 @@ func newNameFromStr(s string) *tree.Name {
 %left      '|'
 %left      '#'
 %left      '&'
-%left      LSHIFT RSHIFT
+%left      LSHIFT RSHIFT INET_CONTAINS_OR_EQUALS INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %left      '+' '-'
 %left      '*' '/' FLOORDIV '%'
 %left      '^'
@@ -5847,6 +5849,18 @@ a_expr:
 | a_expr REMOVE_PATH a_expr
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction("json_remove_path"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr INET_CONTAINED_BY_OR_EQUALS a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("INET_CONTAINED_BY_OR_EQUALS"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr INET_CONTAINS_OR_CONTAINED_BY a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("INET_CONTAINS_OR_CONTAINED_BY"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+  }
+| a_expr INET_CONTAINS_OR_EQUALS a_expr
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("INET_CONTAINS_OR_EQUALS"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr LESS_EQUALS a_expr
   {

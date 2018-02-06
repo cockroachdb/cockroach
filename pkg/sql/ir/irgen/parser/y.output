@@ -1,0 +1,477 @@
+
+state 0
+	$accept: .top $end 
+	def_list: .    (2)
+
+	.  reduce 2 (src line 59)
+
+	def_list  goto 2
+	top  goto 1
+
+state 1
+	$accept:  top.$end 
+
+	$end  accept
+	.  error
+
+
+state 2
+	top:  def_list.    (1)
+	def_list:  def_list.def opt_semi 
+
+	ENUM  shift 8
+	PRIM  shift 9
+	STRUCT  shift 10
+	SUM  shift 11
+	.  reduce 1 (src line 56)
+
+	def  goto 3
+	enum_def  goto 4
+	prim_def  goto 5
+	struct_def  goto 6
+	sum_def  goto 7
+
+state 3
+	def_list:  def_list def.opt_semi 
+	opt_semi: .    (35)
+
+	';'  shift 13
+	.  reduce 35 (src line 134)
+
+	opt_semi  goto 12
+
+state 4
+	def:  enum_def.    (4)
+
+	.  reduce 4 (src line 63)
+
+
+state 5
+	def:  prim_def.    (5)
+
+	.  reduce 5 (src line 65)
+
+
+state 6
+	def:  struct_def.    (6)
+
+	.  reduce 6 (src line 66)
+
+
+state 7
+	def:  sum_def.    (7)
+
+	.  reduce 7 (src line 67)
+
+
+state 8
+	enum_def:  ENUM.simple_type_name '{' enum_list '}' 
+
+	IDENT  shift 15
+	.  error
+
+	simple_type_name  goto 14
+
+state 9
+	prim_def:  PRIM.type_name 
+
+	IDENT  shift 19
+	'*'  shift 18
+	.  error
+
+	qual_name  goto 17
+	type_name  goto 16
+
+state 10
+	struct_def:  STRUCT.simple_type_name '{' struct_list '}' opt_format 
+
+	IDENT  shift 15
+	.  error
+
+	simple_type_name  goto 20
+
+state 11
+	sum_def:  SUM.simple_type_name '{' sum_list '}' 
+
+	IDENT  shift 15
+	.  error
+
+	simple_type_name  goto 21
+
+state 12
+	def_list:  def_list def opt_semi.    (3)
+
+	.  reduce 3 (src line 61)
+
+
+state 13
+	opt_semi:  ';'.    (36)
+
+	.  reduce 36 (src line 136)
+
+
+state 14
+	enum_def:  ENUM simple_type_name.'{' enum_list '}' 
+
+	'{'  shift 22
+	.  error
+
+
+state 15
+	simple_type_name:  IDENT.    (28)
+
+	.  reduce 28 (src line 117)
+
+
+state 16
+	prim_def:  PRIM type_name.    (13)
+
+	.  reduce 13 (src line 82)
+
+
+state 17
+	type_name:  qual_name.    (29)
+	qual_name:  qual_name.'.' IDENT 
+
+	'.'  shift 23
+	.  reduce 29 (src line 120)
+
+
+state 18
+	type_name:  '*'.qual_name 
+
+	IDENT  shift 19
+	.  error
+
+	qual_name  goto 24
+
+state 19
+	qual_name:  IDENT.    (31)
+
+	.  reduce 31 (src line 124)
+
+
+state 20
+	struct_def:  STRUCT simple_type_name.'{' struct_list '}' opt_format 
+
+	'{'  shift 25
+	.  error
+
+
+state 21
+	sum_def:  SUM simple_type_name.'{' sum_list '}' 
+
+	'{'  shift 26
+	.  error
+
+
+state 22
+	enum_def:  ENUM simple_type_name '{'.enum_list '}' 
+	enum_list: .    (9)
+
+	.  reduce 9 (src line 73)
+
+	enum_list  goto 27
+
+state 23
+	qual_name:  qual_name '.'.IDENT 
+
+	IDENT  shift 28
+	.  error
+
+
+state 24
+	type_name:  '*' qual_name.    (30)
+	qual_name:  qual_name.'.' IDENT 
+
+	'.'  shift 23
+	.  reduce 30 (src line 122)
+
+
+state 25
+	struct_def:  STRUCT simple_type_name '{'.struct_list '}' opt_format 
+	struct_list: .    (15)
+
+	.  reduce 15 (src line 88)
+
+	struct_list  goto 29
+
+state 26
+	sum_def:  SUM simple_type_name '{'.sum_list '}' 
+	sum_list: .    (24)
+
+	.  reduce 24 (src line 108)
+
+	sum_list  goto 30
+
+state 27
+	enum_def:  ENUM simple_type_name '{' enum_list.'}' 
+	enum_list:  enum_list.enum_item opt_semi 
+
+	IDENT  shift 35
+	RESERVED  shift 36
+	'}'  shift 31
+	.  error
+
+	enum_item  goto 32
+	reserved_item  goto 34
+	item_name  goto 33
+
+state 28
+	qual_name:  qual_name '.' IDENT.    (32)
+
+	.  reduce 32 (src line 126)
+
+
+state 29
+	struct_def:  STRUCT simple_type_name '{' struct_list.'}' opt_format 
+	struct_list:  struct_list.struct_item opt_semi 
+
+	IDENT  shift 19
+	RESERVED  shift 36
+	'}'  shift 37
+	'*'  shift 18
+	.  error
+
+	reserved_item  goto 40
+	struct_item  goto 38
+	qual_name  goto 17
+	type_name  goto 39
+
+state 30
+	sum_def:  SUM simple_type_name '{' sum_list.'}' 
+	sum_list:  sum_list.sum_item opt_semi 
+
+	IDENT  shift 15
+	RESERVED  shift 36
+	'}'  shift 41
+	.  error
+
+	reserved_item  goto 44
+	sum_item  goto 42
+	simple_type_name  goto 43
+
+state 31
+	enum_def:  ENUM simple_type_name '{' enum_list '}'.    (8)
+
+	.  reduce 8 (src line 70)
+
+
+state 32
+	enum_list:  enum_list enum_item.opt_semi 
+	opt_semi: .    (35)
+
+	';'  shift 13
+	.  reduce 35 (src line 134)
+
+	opt_semi  goto 45
+
+state 33
+	enum_item:  item_name.'=' TAG 
+
+	'='  shift 46
+	.  error
+
+
+state 34
+	enum_item:  reserved_item.    (12)
+
+	.  reduce 12 (src line 79)
+
+
+state 35
+	item_name:  IDENT.    (33)
+
+	.  reduce 33 (src line 128)
+
+
+state 36
+	reserved_item:  RESERVED.TAG 
+
+	TAG  shift 47
+	.  error
+
+
+state 37
+	struct_def:  STRUCT simple_type_name '{' struct_list '}'.opt_format 
+	opt_format: .    (21)
+
+	FORMAT  shift 49
+	.  reduce 21 (src line 100)
+
+	opt_format  goto 48
+
+state 38
+	struct_list:  struct_list struct_item.opt_semi 
+	opt_semi: .    (35)
+
+	';'  shift 13
+	.  reduce 35 (src line 134)
+
+	opt_semi  goto 50
+
+state 39
+	struct_item:  type_name.opt_slice item_name '=' TAG 
+	opt_slice: .    (19)
+
+	'['  shift 52
+	.  reduce 19 (src line 96)
+
+	opt_slice  goto 51
+
+state 40
+	struct_item:  reserved_item.    (18)
+
+	.  reduce 18 (src line 94)
+
+
+state 41
+	sum_def:  SUM simple_type_name '{' sum_list '}'.    (23)
+
+	.  reduce 23 (src line 105)
+
+
+state 42
+	sum_list:  sum_list sum_item.opt_semi 
+	opt_semi: .    (35)
+
+	';'  shift 13
+	.  reduce 35 (src line 134)
+
+	opt_semi  goto 53
+
+state 43
+	sum_item:  simple_type_name.'=' TAG 
+
+	'='  shift 54
+	.  error
+
+
+state 44
+	sum_item:  reserved_item.    (27)
+
+	.  reduce 27 (src line 114)
+
+
+state 45
+	enum_list:  enum_list enum_item opt_semi.    (10)
+
+	.  reduce 10 (src line 75)
+
+
+state 46
+	enum_item:  item_name '='.TAG 
+
+	TAG  shift 55
+	.  error
+
+
+state 47
+	reserved_item:  RESERVED TAG.    (34)
+
+	.  reduce 34 (src line 131)
+
+
+state 48
+	struct_def:  STRUCT simple_type_name '{' struct_list '}' opt_format.    (14)
+
+	.  reduce 14 (src line 85)
+
+
+state 49
+	opt_format:  FORMAT.STR 
+
+	STR  shift 56
+	.  error
+
+
+state 50
+	struct_list:  struct_list struct_item opt_semi.    (16)
+
+	.  reduce 16 (src line 90)
+
+
+state 51
+	struct_item:  type_name opt_slice.item_name '=' TAG 
+
+	IDENT  shift 35
+	.  error
+
+	item_name  goto 57
+
+state 52
+	opt_slice:  '['.']' 
+
+	']'  shift 58
+	.  error
+
+
+state 53
+	sum_list:  sum_list sum_item opt_semi.    (25)
+
+	.  reduce 25 (src line 110)
+
+
+state 54
+	sum_item:  simple_type_name '='.TAG 
+
+	TAG  shift 59
+	.  error
+
+
+state 55
+	enum_item:  item_name '=' TAG.    (11)
+
+	.  reduce 11 (src line 77)
+
+
+state 56
+	opt_format:  FORMAT STR.    (22)
+
+	.  reduce 22 (src line 102)
+
+
+state 57
+	struct_item:  type_name opt_slice item_name.'=' TAG 
+
+	'='  shift 60
+	.  error
+
+
+state 58
+	opt_slice:  '[' ']'.    (20)
+
+	.  reduce 20 (src line 98)
+
+
+state 59
+	sum_item:  simple_type_name '=' TAG.    (26)
+
+	.  reduce 26 (src line 112)
+
+
+state 60
+	struct_item:  type_name opt_slice item_name '='.TAG 
+
+	TAG  shift 61
+	.  error
+
+
+state 61
+	struct_item:  type_name opt_slice item_name '=' TAG.    (17)
+
+	.  reduce 17 (src line 92)
+
+
+21 terminals, 22 nonterminals
+37 grammar rules, 62/8000 states
+0 shift/reduce, 0 reduce/reduce conflicts reported
+71 working sets used
+memory: parser 32/120000
+8 extra closures
+42 shift entries, 1 exceptions
+32 goto entries
+1 entries saved by goto default
+Optimizer space used: output 68/120000
+68 table entries, 0 zero
+maximum spread: 21, maximum offset: 51
