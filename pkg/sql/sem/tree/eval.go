@@ -2172,9 +2172,6 @@ type EvalContext struct {
 	// of a transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
 	TxnTimestamp time.Time
-	// The cluster timestamp. Needs to be stable for the lifetime of the
-	// transaction. Used for cluster_logical_timestamp().
-	ClusterTimestamp hlc.Timestamp
 
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
@@ -2230,6 +2227,7 @@ type EvalContext struct {
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext() EvalContext {
 	ctx := EvalContext{
+		Txn:         &client.Txn{},
 		SessionData: &sessiondata.SessionData{},
 	}
 	monitor := mon.MakeMonitor(
@@ -2246,9 +2244,9 @@ func MakeTestingEvalContext() EvalContext {
 	acc := monitor.MakeBoundAccount()
 	ctx.ActiveMemAcc = &acc
 	now := timeutil.Now()
+	ctx.Txn.Proto().OrigTimestamp = hlc.Timestamp{WallTime: now.Unix()}
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
-	ctx.SetClusterTimestamp(hlc.Timestamp{WallTime: now.Unix()})
 	return ctx
 }
 
@@ -2293,13 +2291,11 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
-	// TODO(knz): a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.ClusterTimestamp == (hlc.Timestamp{}) {
-		panic("zero cluster timestamp in EvalContext")
+	ts := ctx.Txn.OrigTimestamp(true /*mattersForTxnOrdering*/)
+	if ts == (hlc.Timestamp{}) {
+		panic("zero cluster timestamp in txn")
 	}
-
-	return TimestampToDecimal(ctx.ClusterTimestamp)
+	return TimestampToDecimal(ts)
 }
 
 // HasPlaceholders returns true if this EvalContext's placeholders have been
@@ -2357,11 +2353,6 @@ func (ctx *EvalContext) SetTxnTimestamp(ts time.Time) {
 // SetStmtTimestamp sets the corresponding timestamp in the EvalContext.
 func (ctx *EvalContext) SetStmtTimestamp(ts time.Time) {
 	ctx.StmtTimestamp = ts
-}
-
-// SetClusterTimestamp sets the corresponding timestamp in the EvalContext.
-func (ctx *EvalContext) SetClusterTimestamp(ts hlc.Timestamp) {
-	ctx.ClusterTimestamp = ts
 }
 
 // GetLocation returns the session timezone.

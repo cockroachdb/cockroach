@@ -268,7 +268,12 @@ func (txn *Txn) Isolation() enginepb.IsolationType {
 }
 
 // OrigTimestamp returns the transaction's starting timestamp.
-func (txn *Txn) OrigTimestamp() hlc.Timestamp {
+// When the argument mattersForTxnOrdering is set, the
+// value of OrigTimestamp returned should remain the one used
+// for the txn commit.
+// TODO(spencer): extend the comment to explain what
+// this does.
+func (txn *Txn) OrigTimestamp(mattersForTxnOrdering bool) hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.Proto.OrigTimestamp
@@ -554,7 +559,7 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 // The deadline cannot be lower than txn.OrigTimestamp.
 func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
 	if txn.deadline == nil || deadline.Less(*txn.deadline) {
-		if deadline.Less(txn.OrigTimestamp()) {
+		if deadline.Less(txn.OrigTimestamp(false)) {
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s, txn: %s",
 				deadline, txn.Proto())

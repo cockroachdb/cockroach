@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -638,26 +637,21 @@ func (s *Session) extendedEvalCtx(
 		st = s.execCfg.Settings
 		statusServer = s.execCfg.StatusServer
 	}
-	var clusterTs hlc.Timestamp
-	if txn != nil {
-		clusterTs = txn.OrigTimestamp()
-	}
 
-	return extendedEvalContext{
+	e := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:              txn,
-			SessionData:      &s.data,
-			ApplicationName:  s.dataMutator.ApplicationName(),
-			TxnState:         getTransactionState(&s.TxnState),
-			TxnReadOnly:      s.TxnState.readOnly,
-			TxnImplicit:      s.TxnState.implicitTxn,
-			Settings:         st,
-			CtxProvider:      s,
-			Mon:              &s.TxnState.mon,
-			TestingKnobs:     evalContextTestingKnobs,
-			StmtTimestamp:    stmtTimestamp,
-			TxnTimestamp:     txnTimestamp,
-			ClusterTimestamp: clusterTs,
+			Txn:             txn,
+			SessionData:     &s.data,
+			ApplicationName: s.dataMutator.ApplicationName(),
+			TxnState:        getTransactionState(&s.TxnState),
+			TxnReadOnly:     s.TxnState.readOnly,
+			TxnImplicit:     s.TxnState.implicitTxn,
+			Settings:        st,
+			CtxProvider:     s,
+			Mon:             &s.TxnState.mon,
+			TestingKnobs:    evalContextTestingKnobs,
+			StmtTimestamp:   stmtTimestamp,
+			TxnTimestamp:    txnTimestamp,
 		},
 		SessionMutator: s.dataMutator,
 		VirtualSchemas: s.execCfg.VirtualSchemas,
@@ -670,6 +664,7 @@ func (s *Session) extendedEvalCtx(
 		TxnModesSetter: &s.TxnState,
 		SchemaChangers: &s.TxnState.schemaChangers,
 	}
+	return e
 }
 
 // resetForBatch prepares the Session for executing a new batch of statements.

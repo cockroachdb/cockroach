@@ -29,7 +29,6 @@ func TestClusterTimestampConversion(t *testing.T) {
 		logical  int32
 		expected string
 	}{
-		{0, 0, "0.0000000000"},
 		{42, 0, "42.0000000000"},
 		{-42, 0, "-42.0000000000"},
 		{42, 69, "42.0000000069"},
@@ -42,7 +41,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 	ctx.PrepareOnly = true
 	for _, d := range testData {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
-		ctx.SetClusterTimestamp(ts)
+		ctx.Txn.Proto().OrigTimestamp = ts
 		dec := ctx.GetClusterTimestamp()
 		final := dec.Text('f')
 		if final != d.expected {

@@ -330,7 +330,6 @@ func (ds *ServerImpl) setupFlow(
 	}
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
-	evalCtx.SetClusterTimestamp(req.EvalContext.ClusterTimestamp)
 
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).

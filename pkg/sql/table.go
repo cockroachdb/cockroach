@@ -304,7 +304,8 @@ type dbCacheSubscriber interface {
 // Check if the timestamp used so far to pick tables has changed because
 // of a transaction retry.
 func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn) {
-	if tc.timestamp != (hlc.Timestamp{}) && tc.timestamp != txn.OrigTimestamp() {
+	if tc.timestamp != (hlc.Timestamp{}) &&
+		tc.timestamp != txn.OrigTimestamp(false /*mattersForTxnOrdering*/) {
 		if err := tc.releaseTables(ctx, dontBlockForDBCacheUpdate); err != nil {
 			log.Warningf(ctx, "error releasing tables")
 		}
@@ -386,7 +387,8 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, txn.OrigTimestamp(), dbID, tn.Table())
+	origTimestamp := txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
+	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
@@ -395,7 +397,7 @@ func (tc *TableCollection) getTableVersion(
 		}
 		return nil, err
 	}
-	tc.timestamp = txn.OrigTimestamp()
+	tc.timestamp = origTimestamp
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
@@ -447,7 +449,8 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	table, expiration, err := tc.leaseMgr.Acquire(ctx, txn.OrigTimestamp(), tableID)
+	origTimestamp := txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
+	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
@@ -457,7 +460,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 		return nil, err
 	}
-	tc.timestamp = txn.OrigTimestamp()
+	tc.timestamp = origTimestamp
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
@@ -609,7 +612,7 @@ func (tc *TableCollection) getAllDescriptors(
 		if err != nil {
 			return nil, err
 		}
-		tc.timestamp = txn.OrigTimestamp()
+		tc.timestamp = txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
 		tc.allDescriptors = descs
 	}
 	return tc.allDescriptors, nil
