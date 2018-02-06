@@ -787,3 +787,37 @@ func distsqlJoinType(joinType joinType) distsqlrun.JoinType {
 
 	panic(fmt.Sprintf("invalid join type %d", joinType))
 }
+
+func distsqlSetOpJoinType(setOpType tree.UnionType) distsqlrun.JoinType {
+	switch setOpType {
+	case tree.ExceptOp:
+		return distsqlrun.JoinType_EXCEPT_ALL
+	case tree.IntersectOp:
+		return distsqlrun.JoinType_INTERSECT_ALL
+	default:
+		panic(fmt.Sprintf("set op type %v unsupported by joins", setOpType))
+	}
+}
+
+func findJoinProcessorNodes(
+	leftRouters, rightRouters []distsqlplan.ProcessorIdx, processors []distsqlplan.Processor,
+) (nodes []roachpb.NodeID) {
+	// TODO(radu): for now we run a join processor on every node that produces
+	// data for either source. In the future we should be smarter here.
+	seen := make(map[roachpb.NodeID]struct{})
+	for _, pIdx := range leftRouters {
+		n := processors[pIdx].Node
+		if _, ok := seen[n]; !ok {
+			seen[n] = struct{}{}
+			nodes = append(nodes, n)
+		}
+	}
+	for _, pIdx := range rightRouters {
+		n := processors[pIdx].Node
+		if _, ok := seen[n]; !ok {
+			seen[n] = struct{}{}
+			nodes = append(nodes, n)
+		}
+	}
+	return nodes
+}

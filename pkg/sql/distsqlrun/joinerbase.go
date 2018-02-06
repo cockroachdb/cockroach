@@ -56,9 +56,17 @@ func (jb *joinerBase) init(
 ) error {
 	jb.joinType = joinType(jType)
 
+	numLeftCols, numRightCols := len(leftTypes), len(rightTypes)
+	if post != nil {
+		if post.Projection {
+			numLeftCols, numRightCols = len(post.OutputColumns), len(post.OutputColumns)
+		} else if post.RenderExprs != nil {
+			numLeftCols, numRightCols = len(post.RenderExprs), len(post.RenderExprs)
+		}
+	}
 	if isSetOpJoin(jb.joinType) {
 		if err := isValidSetOpJoin(
-			onExpr, len(leftTypes), len(rightTypes), len(leftEqColumns),
+			onExpr, numLeftCols, numRightCols, len(leftEqColumns),
 		); err != nil {
 			return err
 		}
@@ -157,11 +165,11 @@ func isSetOpJoin(joinType joinType) bool {
 
 func isValidSetOpJoin(onExpr Expression, numLeftCols int, numRightCols int, numEqCols int) error {
 	if onExpr.Expr != "" {
-		return errors.Errorf("Expected empty onExpr, got %v", onExpr.Expr)
+		return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 	}
 	if numLeftCols != numEqCols || numRightCols != numEqCols {
 		return errors.Errorf(
-			"Expected %v left and right columns, got %v left and %v right columns",
+			"expected %v left and right columns, got %v left and %v right columns",
 			numEqCols, numLeftCols, numRightCols)
 	}
 	return nil
