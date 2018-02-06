@@ -48,6 +48,7 @@ func testTableDesc() *sqlbase.TableDescriptor {
 			{Name: "n", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE}},
 			{Name: "o", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP}},
 			{Name: "p", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}},
+			{Name: "q", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, Nullable: true},
 		},
 		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},

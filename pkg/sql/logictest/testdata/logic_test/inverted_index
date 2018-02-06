@@ -290,10 +290,10 @@ SELECT * from d where b @> '1.23' ORDER BY a;
 ----
 15  1.23
 
-statement error pq: constraints = , .*: can't look up empty JSON
+statement error pq: .*: can't look up empty JSON
 SELECT * from d where b @> '{}' ORDER BY a;
 
-statement error pq: constraints = , .*: can't look up empty JSON
+statement error pq: .*: can't look up empty JSON
 SELECT * from d where b @> '[]' ORDER BY a;
 
 statement ok
