@@ -66,6 +66,8 @@ type unionNode struct {
 	// right and left are the data source operands.
 	// right is read first, to populate the `emit` field.
 	right, left planNode
+	// columns contains the metadata for the results of this node.
+	columns sqlbase.ResultColumns
 	// inverted, when true, indicates that the right plan corresponds to
 	// the left operand in the input SQL syntax, and vice-versa.
 	inverted bool
@@ -128,7 +130,8 @@ func (p *planner) Union(
 		return nil, fmt.Errorf("each %v query must have the same number of columns: %d vs %d",
 			n.Type, len(leftColumns), len(rightColumns))
 	}
-	for i := 0; i < len(leftColumns); i++ {
+	unionColumns := append(sqlbase.ResultColumns(nil), leftColumns...)
+	for i := 0; i < len(unionColumns); i++ {
 		l := leftColumns[i]
 		r := rightColumns[i]
 		// TODO(dan): This currently checks whether the types are exactly the same,
@@ -139,6 +142,9 @@ func (p *planner) Union(
 		}
 		if l.Hidden != r.Hidden {
 			return nil, fmt.Errorf("%v types cannot be matched", n.Type)
+		}
+		if l.Typ == types.Null {
+			unionColumns[i].Typ = r.Typ
 		}
 	}
 
@@ -156,6 +162,7 @@ func (p *planner) Union(
 	node := &unionNode{
 		right:     right,
 		left:      left,
+		columns:   unionColumns,
 		inverted:  inverted,
 		emitAll:   emitAll,
 		emit:      emit,
