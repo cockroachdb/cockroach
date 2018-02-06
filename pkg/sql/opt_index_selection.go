@@ -131,7 +131,7 @@ func (p *planner) selectIndex(
 			return nil, err
 		}
 		for _, c := range candidates {
-			if err := c.makeIndexConstraintsExperimental(
+			if err := c.makeIndexConstraints(
 				filterExpr, p.EvalContext(),
 			); err != nil {
 				return nil, err
@@ -195,7 +195,7 @@ func (p *planner) selectIndex(
 
 	logicalSpans, ok := c.ic.Spans()
 	var err error
-	s.spans, err = spansFromLogicalSpansExperimental(s.desc, c.index, logicalSpans, ok)
+	s.spans, err = spansFromLogicalSpans(s.desc, c.index, logicalSpans, ok)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "logicalSpans = %v, table ID = %d, index ID = %d",
@@ -261,7 +261,6 @@ type indexInfo struct {
 	reverse     bool
 	exactPrefix int
 
-	// Used for the new (experimental) index constraints code.
 	ic opt.IndexConstraints
 }
 
@@ -375,12 +374,10 @@ func (v indexInfoByCost) Sort() {
 	sort.Sort(v)
 }
 
-// makeIndexConstraintsExperimental uses the opt code to generate index
+// makeIndexConstraints uses the opt code to generate index
 // constraints. Initializes v.ic, as well as v.exactPrefix and v.cost (with a
 // baseline cost for the index).
-func (v *indexInfo) makeIndexConstraintsExperimental(
-	filter *opt.Expr, evalCtx *tree.EvalContext,
-) error {
+func (v *indexInfo) makeIndexConstraints(filter *opt.Expr, evalCtx *tree.EvalContext) error {
 	numIndexCols := len(v.index.ColumnIDs)
 	numExtraCols := len(v.index.ExtraColumnIDs)
 
@@ -465,15 +462,15 @@ func (v *indexInfo) makeIndexConstraintsExperimental(
 func unconstrainedSpans(
 	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
 ) (roachpb.Spans, error) {
-	return spansFromLogicalSpansExperimental(
+	return spansFromLogicalSpans(
 		tableDesc, index, nil /* logicalSpans */, false, /* logicalSpansOk */
 	)
 }
 
-// spansFromLogicalSpansExperimental converts op.LogicalSpans to roachpb.Spans.
-// interstices are pieces of the key that need to be inserted after each column
-// (for interleavings).
-func spansFromLogicalSpansExperimental(
+// spansFromLogicalSpans converts op.LogicalSpans to roachpb.Spans.  interstices
+// are pieces of the key that need to be inserted after each column (for
+// interleavings).
+func spansFromLogicalSpans(
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	logicalSpans opt.LogicalSpans,
@@ -503,7 +500,7 @@ func spansFromLogicalSpansExperimental(
 
 	if !logicalSpansOk {
 		// Encode a full span.
-		sp, err := spanFromLogicalSpanExperimental(tableDesc, index, opt.MakeFullSpan(), interstices)
+		sp, err := spanFromLogicalSpan(tableDesc, index, opt.MakeFullSpan(), interstices)
 		if err != nil {
 			return nil, err
 		}
@@ -512,7 +509,7 @@ func spansFromLogicalSpansExperimental(
 
 	spans := make(roachpb.Spans, len(logicalSpans))
 	for i, ls := range logicalSpans {
-		s, err := spanFromLogicalSpanExperimental(tableDesc, index, ls, interstices)
+		s, err := spanFromLogicalSpan(tableDesc, index, ls, interstices)
 		if err != nil {
 			return nil, err
 		}
@@ -521,9 +518,9 @@ func spansFromLogicalSpansExperimental(
 	return spans, nil
 }
 
-// encodeLogicalKeyExperimental encodes each logical part of a key into a
+// encodeLogicalKey encodes each logical part of a key into a
 // roachpb.Key; interstices[i] is inserted before the i-th value.
-func encodeLogicalKeyExperimental(
+func encodeLogicalKey(
 	index *sqlbase.IndexDescriptor, vals tree.Datums, interstices [][]byte,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
@@ -569,9 +566,9 @@ func encodeLogicalKeyExperimental(
 	return key, nil
 }
 
-// spanFromLogicalSpanExperimental converts an opt.LogicalSpan to a
+// spanFromLogicalSpan converts an opt.LogicalSpan to a
 // roachpb.Span.
-func spanFromLogicalSpanExperimental(
+func spanFromLogicalSpan(
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	ls opt.LogicalSpan,
@@ -580,7 +577,7 @@ func spanFromLogicalSpanExperimental(
 	var s roachpb.Span
 	var err error
 	// Encode each logical part of the start key.
-	s.Key, err = encodeLogicalKeyExperimental(index, ls.Start.Vals, interstices)
+	s.Key, err = encodeLogicalKey(index, ls.Start.Vals, interstices)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -591,7 +588,7 @@ func spanFromLogicalSpanExperimental(
 		s.Key = s.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	s.EndKey, err = encodeLogicalKeyExperimental(index, ls.End.Vals, interstices)
+	s.EndKey, err = encodeLogicalKey(index, ls.End.Vals, interstices)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
