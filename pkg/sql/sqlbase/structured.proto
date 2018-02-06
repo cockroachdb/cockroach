@@ -558,6 +558,9 @@ message TableDescriptor {
     optional string name = 2 [(gogoproto.nullable) = false];
     optional ConstraintValidity validity = 3 [(gogoproto.nullable) = false];
     reserved 4;
+    // An ordered list of column IDs used by the check constraint.
+    repeated uint32 column_ids = 5 [(gogoproto.customname) = "ColumnIDs",
+      (gogoproto.casttype) = "ColumnID"];
   }
 
   repeated CheckConstraint checks = 20;
