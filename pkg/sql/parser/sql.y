@@ -5852,15 +5852,15 @@ a_expr:
   }
 | a_expr INET_CONTAINED_BY_OR_EQUALS a_expr
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("INET_CONTAINED_BY_OR_EQUALS"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contained_by_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr INET_CONTAINS_OR_CONTAINED_BY a_expr
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("INET_CONTAINS_OR_CONTAINED_BY"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contains_or_contained_by"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr INET_CONTAINS_OR_EQUALS a_expr
   {
-    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("INET_CONTAINS_OR_EQUALS"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("inet_contains_or_equals"), Exprs: tree.Exprs{$1.expr(), $3.expr()}}
   }
 | a_expr LESS_EQUALS a_expr
   {
