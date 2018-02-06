@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -60,6 +62,13 @@ func (t TableDescriptors) Swap(i, j int)      { t[i], t[j] = t[j], t[i] }
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID tree.ColumnID
+
+// ColumnIDs is a slice of ColumnDescriptor IDs.
+type ColumnIDs []ColumnID
+
+func (c ColumnIDs) Len() int           { return len(c) }
+func (c ColumnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
+func (c ColumnIDs) Less(i, j int) bool { return c[i] < c[j] }
 
 // FamilyID is a custom type for ColumnFamilyDescriptor IDs.
 type FamilyID uint32
@@ -2481,6 +2490,69 @@ func (desc *ColumnDescriptor) SQLString() string {
 		f.WriteString(" STORED")
 	}
 	return f.CloseAndGetString()
+}
+
+// ColumnsUsed returns the IDs of the columns used in the check constraint's
+// expression. v2.0 binaries will populate this during table creation, but older
+// binaries will not, in which case this needs to be computed when requested.
+//
+// TODO(nvanbenschoten): we can remove this in v2.1 and replace it with a sql
+// migration to backfill all TableDescriptor_CheckConstraint.ColumnIDs slices.
+// See #22322.
+func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([]ColumnID, error) {
+	if len(cc.ColumnIDs) > 0 {
+		// Already populated.
+		return cc.ColumnIDs, nil
+	}
+
+	parsed, err := parser.ParseExpr(cc.Expr)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not parse check constraint %s", cc.Expr)
+	}
+
+	colIDsUsed := make(map[ColumnID]struct{})
+	visitFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		if vBase, ok := expr.(tree.VarName); ok {
+			v, err := vBase.NormalizeVarName()
+			if err != nil {
+				return err, false, nil
+			}
+			if c, ok := v.(*tree.ColumnItem); ok {
+				col, err := desc.FindActiveColumnByName(string(c.ColumnName))
+				if err != nil {
+					return errors.Errorf("column %q not found for constraint %q",
+						c.ColumnName, parsed.String()), false, nil
+				}
+				colIDsUsed[col.ID] = struct{}{}
+			}
+			return nil, false, v
+		}
+		return nil, true, expr
+	}
+	if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
+		return nil, err
+	}
+
+	cc.ColumnIDs = make([]ColumnID, 0, len(colIDsUsed))
+	for colID := range colIDsUsed {
+		cc.ColumnIDs = append(cc.ColumnIDs, colID)
+	}
+	sort.Sort(ColumnIDs(cc.ColumnIDs))
+	return cc.ColumnIDs, nil
+}
+
+// UsesColumn returns whether the check constraint uses the specified column.
+func (cc *TableDescriptor_CheckConstraint) UsesColumn(
+	desc *TableDescriptor, colID ColumnID,
+) (bool, error) {
+	colsUsed, err := cc.ColumnsUsed(desc)
+	if err != nil {
+		return false, err
+	}
+	i := sort.Search(len(colsUsed), func(i int) bool {
+		return colsUsed[i] >= colID
+	})
+	return i < len(colsUsed) && colsUsed[i] == colID, nil
 }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
