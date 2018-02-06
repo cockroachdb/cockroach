@@ -14,6 +14,7 @@
 
 #include "db.h"
 #include <algorithm>
+#include <rocksdb/convenience.h>
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/table.h>
 #include <stdarg.h>
@@ -81,7 +82,22 @@ DBIterState DBIterGetState(DBIterator* iter) {
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
   rocksdb::Options options = DBMakeOptions(db_opts);
 
-  std::string db_dir = ToString(dir);
+  const std::string additional_options = ToString(db_opts.rocksdb_options);
+  if (!additional_options.empty()) {
+    // TODO(peter): Investigate using rocksdb::LoadOptionsFromFile if
+    // "additional_options" starts with "@". The challenge is that
+    // LoadOptionsFromFile gives us a DBOptions and
+    // ColumnFamilyOptions with no ability to supply "base" options
+    // and no ability to determine what options were specified in the
+    // file which could cause "defaults" to override the options
+    // returned by DBMakeOptions. We might need to fix this upstream.
+    rocksdb::Status status = rocksdb::GetOptionsFromString(options, additional_options, &options);
+    if (!status.ok()) {
+      return ToDBStatus(status);
+    }
+  }
+
+  const std::string db_dir = ToString(dir);
 
   // Call hooks to handle db_opts.extra_options.
   auto hook_status = DBOpenHook(db_dir, db_opts);
