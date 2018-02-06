@@ -364,19 +364,15 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 		return dsp.checkSupportForNode(n.plan)
 
 	case *unionNode:
-		// EXCEPT and INTERSECT are currently not supported.
-		if n.all || n.unionType == tree.UnionOp {
-			recLeft, err := dsp.checkSupportForNode(n.left)
-			if err != nil {
-				return 0, err
-			}
-			recRight, err := dsp.checkSupportForNode(n.right)
-			if err != nil {
-				return 0, err
-			}
-			return recLeft.compose(recRight), nil
+		recLeft, err := dsp.checkSupportForNode(n.left)
+		if err != nil {
+			return 0, err
 		}
-		return 0, newQueryNotSupportedErrorf("unsupported node %T", node)
+		recRight, err := dsp.checkSupportForNode(n.right)
+		if err != nil {
+			return 0, err
+		}
+		return recLeft.compose(recRight), nil
 
 	case *valuesNode:
 		if !n.specifiedInQuery {
@@ -1955,6 +1951,8 @@ func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *physicalPlan) bool {
 	return false
 }
 
+// TODO(abhimadan): Refactor this function to reduce the UNION vs
+// EXCEPT/INTERSECT and DISTINCT vs ALL branching.
 func (dsp *DistSQLPlanner) createPlanForSetOp(
 	planCtx *planningCtx, n *unionNode,
 ) (physicalPlan, error) {
@@ -1972,57 +1970,23 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		leftPlan, rightPlan = rightPlan, leftPlan
 		leftLogicalPlan, rightLogicalPlan = rightLogicalPlan, leftLogicalPlan
 	}
-	childPlans := []*physicalPlan{&leftPlan, &rightPlan}
+	childPhysicalPlans := []*physicalPlan{&leftPlan, &rightPlan}
 	childLogicalPlans := []planNode{leftLogicalPlan, rightLogicalPlan}
 
-	var distinctSpec distsqlrun.ProcessorCoreUnion
-	if !n.all {
-		// Build a distinct processor spec, which will be used in three places:
-		// on the left plan, on the right, and on the union of the two once the
-		// results have been grouped together.
-		//
-		// Note there is the potential for further network I/O optimization here
-		// since rows are not deduplicated between left and right until the single
-		// group stage. In the worst case (total duplication), this causes double
-		// the amount of data to be streamed as necessary.
-		var distinctColumns []uint32
-		for planCol := range planColumns(n) {
-			if streamCol := leftPlan.planToStreamColMap[planCol]; streamCol != -1 {
-				distinctColumns = append(distinctColumns, uint32(streamCol))
-			}
-		}
-		distinctSpec = distsqlrun.ProcessorCoreUnion{
-			Distinct: &distsqlrun.DistinctSpec{
-				DistinctColumns: distinctColumns,
-			},
-		}
-
-		for _, plan := range childPlans {
-			if !dsp.isOnlyOnGateway(plan) {
-				// TODO(solon): We could skip this stage if there is a strong key on
-				// the result columns.
-				plan.AddNoGroupingStage(
-					distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, plan.MergeOrdering)
-			}
-		}
-	}
-
-	var p physicalPlan
-
-	// Merge the plans' planToStreamColMap, which should be equivalent.
+	// Check that the left and right side planToStreamColMaps are equivalent.
 	// TODO(solon): Are there any valid UNION/INTERSECT/EXCEPT cases where these
-	// differ? If we encounter any, we could handle them similarly to the differing
-	// ResultTypes case below.
+	// differ? If we encounter any, we could handle them by adding a projection on
+	// the unioned columns on each side, similar to how we handle mismatched
+	// ResultTypes.
 	if !reflect.DeepEqual(leftPlan.planToStreamColMap, rightPlan.planToStreamColMap) {
 		return physicalPlan{}, errors.Errorf(
 			"planToStreamColMap mismatch: %v, %v", leftPlan.planToStreamColMap,
 			rightPlan.planToStreamColMap)
 	}
-	p.planToStreamColMap = leftPlan.planToStreamColMap
-
-	planCols := make([]int, 0, len(p.planToStreamColMap))
-	streamCols := make([]uint32, 0, len(p.planToStreamColMap))
-	for planCol, streamCol := range p.planToStreamColMap {
+	planToStreamColMap := leftPlan.planToStreamColMap
+	planCols := make([]int, 0, len(planToStreamColMap))
+	streamCols := make([]uint32, 0, len(planToStreamColMap))
+	for planCol, streamCol := range planToStreamColMap {
 		if streamCol < 0 {
 			continue
 		}
@@ -2030,7 +1994,63 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		streamCols = append(streamCols, uint32(streamCol))
 	}
 
+	leftProps, rightProps := planPhysicalProps(leftLogicalPlan), planPhysicalProps(rightLogicalPlan)
+	var distinctSpecs [2]distsqlrun.ProcessorCoreUnion
+
+	if !n.all {
+		leftProps = leftProps.project(planCols)
+		rightProps = rightProps.project(planCols)
+
+		var distinctOrds [2]distsqlrun.Ordering
+		distinctOrds[0] = distsqlrun.ConvertToMappedSpecOrdering(
+			leftProps.ordering, leftPlan.planToStreamColMap,
+		)
+		distinctOrds[1] = distsqlrun.ConvertToMappedSpecOrdering(
+			rightProps.ordering, rightPlan.planToStreamColMap,
+		)
+
+		// Build distinct processor specs for the left and right child plans.
+		//
+		// Note there is the potential for further network I/O optimization here
+		// in the UNION case, since rows are not deduplicated between left and right
+		// until the single group stage. In the worst case (total duplication), this
+		// causes double the amount of data to be streamed as necessary.
+		for side, plan := range childPhysicalPlans {
+			sortCols := make([]uint32, len(distinctOrds[side].Columns))
+			for i, ord := range distinctOrds[side].Columns {
+				sortCols[i] = ord.ColIdx
+			}
+			distinctSpec := &distinctSpecs[side]
+			distinctSpec.Distinct = &distsqlrun.DistinctSpec{
+				DistinctColumns: streamCols,
+				OrderedColumns:  sortCols,
+			}
+			if !dsp.isOnlyOnGateway(plan) {
+				// TODO(solon): We could skip this stage if there is a strong key on
+				// the result columns.
+				plan.AddNoGroupingStage(
+					*distinctSpec, distsqlrun.PostProcessSpec{}, plan.ResultTypes, distinctOrds[side])
+				plan.AddProjection(streamCols)
+			}
+		}
+	}
+
+	var p physicalPlan
+
+	// Merge the plans' planToStreamColMap, which we know are equivalent.
+	p.planToStreamColMap = planToStreamColMap
+
 	// Merge the plans' result types and merge ordering.
+	// TODO(abhimadan): This merge ordering can still contain columns from child
+	// ORDER BY clauses, which will neither be accessible nor used in ordering
+	// after the UNION. Since they aren't accessible and UNION/EXCEPT/INTERSECT
+	// are not required to propagate orderings from their subqueries, this doesn't
+	// affect correctness. However, it does force us to stream unnecessary data
+	// until the ordering is eventually updated and they are projected out. This
+	// projection happens for every set operation except for UNION ALL, which only
+	// uses the naive ordering propagation below. To fix this, use similar logic
+	// to the distinct case above to get the new ordering, and add a projection in
+	// a no-grouping no-op stage.
 	resultTypes, err := distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
 	mergeOrdering := leftPlan.MergeOrdering
 	if n.unionType != tree.UnionOp {
@@ -2039,17 +2059,13 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// cannot keep the ordering, since some ORDER BY columns are not also
 		// equality columns. As a result, create a new ordering that only contains
 		// columns in the result.
-		newOrdering := computeMergeJoinOrdering(
-			planPhysicalProps(leftLogicalPlan),
-			planPhysicalProps(rightLogicalPlan),
-			planCols,
-			planCols,
-		)
+		newOrdering := computeMergeJoinOrdering(leftProps, rightProps, planCols, planCols)
 		mergeOrdering = distsqlrun.ConvertToMappedSpecOrdering(newOrdering, p.planToStreamColMap)
 
 		var childResultTypes [2][]sqlbase.ColumnType
-		for i, plan := range childPlans {
-			childResultTypes[i] = getTypesForPlanResult(childLogicalPlans[i], plan.planToStreamColMap)
+		for side, plan := range childPhysicalPlans {
+			childResultTypes[side] =
+				getTypesForPlanResult(childLogicalPlans[side], plan.planToStreamColMap)
 		}
 		resultTypes, err = distsqlplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
 		if err != nil {
@@ -2060,7 +2076,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// pathological cases, like if they have incompatible ORDER BY clauses.
 		// Resolve this by collecting results on a single node and adding a
 		// projection to the results that will be unioned.
-		for _, plan := range childPlans {
+		for _, plan := range childPhysicalPlans {
 			plan.AddSingleGroupStage(
 				dsp.nodeDesc.NodeID,
 				distsqlrun.ProcessorCoreUnion{Noop: &distsqlrun.NoopCoreSpec{}},
@@ -2086,9 +2102,23 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// We just need to append the left and right streams together, so append
 		// the left and right output routers.
 		p.ResultRouters = append(leftRouters, rightRouters...)
+
+		p.ResultTypes = resultTypes
+		p.SetMergeOrdering(mergeOrdering)
+
+		if !n.all {
+			// TODO(abhimadan): use columns from mergeOrdering to fill in the
+			// OrderingColumns field in DistinctSpec once the unused columns
+			// are projected out.
+			distinctSpec := distsqlrun.ProcessorCoreUnion{
+				Distinct: &distsqlrun.DistinctSpec{DistinctColumns: streamCols},
+			}
+			p.AddSingleGroupStage(
+				dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+		}
 	} else {
-		// We plan INTERSECT ALL and EXCEPT ALL queries with joiners. Get the
-		// appropriate join type.
+		// We plan INTERSECT and EXCEPT queries with joiners. Get the appropriate
+		// join type.
 		joinType := distsqlSetOpJoinType(n.unionType)
 
 		// Nodes where we will run the join processors.
@@ -2125,25 +2155,29 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			}
 		}
 
-		p.AddJoinStage(
-			nodes, core, post, eqCols, eqCols,
-			leftPlan.ResultTypes, rightPlan.ResultTypes,
-			leftPlan.MergeOrdering, rightPlan.MergeOrdering,
-			leftRouters, rightRouters,
-		)
+		if n.all {
+			p.AddJoinStage(
+				nodes, core, post, eqCols, eqCols,
+				leftPlan.ResultTypes, rightPlan.ResultTypes,
+				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
+				leftRouters, rightRouters,
+			)
+		} else {
+			p.AddDistinctSetOpStage(
+				nodes, core, distinctSpecs[:], post, eqCols,
+				leftPlan.ResultTypes, rightPlan.ResultTypes,
+				leftPlan.MergeOrdering, rightPlan.MergeOrdering,
+				leftRouters, rightRouters,
+			)
+		}
 
 		// An EXCEPT ALL is like a left outer join, so there is no guaranteed ordering.
 		if n.unionType == tree.ExceptOp {
 			mergeOrdering = distsqlrun.Ordering{}
 		}
-	}
 
-	p.ResultTypes = resultTypes
-	p.SetMergeOrdering(mergeOrdering)
-
-	if !n.all {
-		p.AddSingleGroupStage(
-			dsp.nodeDesc.NodeID, distinctSpec, distsqlrun.PostProcessSpec{}, p.ResultTypes)
+		p.ResultTypes = resultTypes
+		p.SetMergeOrdering(mergeOrdering)
 	}
 
 	return p, nil
