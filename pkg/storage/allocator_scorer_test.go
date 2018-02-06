@@ -1173,3 +1173,5 @@ func TestMaxCapacity(t *testing.T) {
 		}
 	}
 }
+
+// TODO: Test the new constraintCheck functions

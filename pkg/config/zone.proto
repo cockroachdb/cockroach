@@ -59,6 +59,13 @@ message Constraints {
   option (gogoproto.equal) = true;
 
   repeated Constraint constraints = 6 [(gogoproto.nullable) = false];
+
+  // Replicas allows for specifying different sets of constraints for each of
+  // the NumReplicas replicas. Only required constraints are currently allowed.
+  // As of v2.0, this field cannot be set if the Constraints field is.
+  // TODO: Replace this with a num_replicas field, and update ZoneConfig's
+  // constraints field to be repeated instead of optional.
+  repeated Constraints replicas = 7 [(gogoproto.nullable) = false];
 }
 
 // ZoneConfig holds configuration that applies to one or more ranges.
