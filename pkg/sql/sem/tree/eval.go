@@ -825,8 +825,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				return dd, err
 			},
 		},
-		// The following two overloads are needed becauase DInt/DInt = DDecimal. Due to this
-		// operation, normalization may sometimes create a DInt * DDecimal operation.
+		// The following two overloads are needed because DInt/DInt = DDecimal. Due
+		// to this operation, normalization may sometimes create a DInt * DDecimal
+		// operation.
 		BinOp{
 			LeftType:   types.Decimal,
 			RightType:  types.Int,
@@ -3788,7 +3789,7 @@ OldLoop:
 				break
 			}
 
-			// Token was escaped. Copy eveything over and continue.
+			// Token was escaped. Copy everything over and continue.
 			retWidth += copy(ret[retWidth:], s[start:nextIdx+len(oldStr)])
 			start = nextIdx + len(oldStr)
 
