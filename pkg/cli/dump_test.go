@@ -1100,3 +1100,43 @@ INSERT INTO t (a, b) VALUES
 		t.Fatalf("expected: %s\ngot: %s", expect, out)
 	}
 }
+
+func TestDumpWithComputedColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := newCLITest(cliTestParams{t: t})
+	defer c.cleanup()
+
+	const create = `
+	CREATE DATABASE d;
+	CREATE TABLE d.t (
+		a INT PRIMARY KEY,
+		b INT AS a + 1 STORED
+	);
+
+	INSERT INTO d.t VALUES (1);
+`
+
+	c.RunWithArgs([]string{"sql", "-e", create})
+
+	out, err := c.RunWithCapture("dump d t")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const expect = `dump d t
+CREATE TABLE t (
+	a INT NOT NULL,
+	b INT NULL AS a + 1 STORED,
+	CONSTRAINT "primary" PRIMARY KEY (a ASC),
+	FAMILY "primary" (a, b)
+);
+
+INSERT INTO t (a) VALUES
+	(1);
+`
+
+	if out != expect {
+		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	}
+}
