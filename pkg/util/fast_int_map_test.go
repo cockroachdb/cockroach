@@ -50,6 +50,10 @@ func TestFastIntMap(t *testing.T) {
 					}
 				}
 
+				if l := fm.Len(); l != len(m) {
+					t.Fatalf("incorrect Len: %d expected %d (%+v %v)", l, len(m), fm, m)
+				}
+
 				// Get maximum key and value and check MaxKey and MaxValue.
 				maxKey, maxVal, maxOk := 0, 0, (len(m) > 0)
 				for k, v := range m {
