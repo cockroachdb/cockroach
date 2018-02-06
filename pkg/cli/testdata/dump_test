@@ -1,0 +1,102 @@
+% name simple_dump
+% command dump d t
+CREATE DATABASE d;
+CREATE TABLE d.t (
+  a INT
+);
+INSERT INTO d.t VALUES
+  (1);
+----
+dump d t
+CREATE TABLE t (
+	a INT NULL,
+	FAMILY "primary" (a, rowid)
+);
+
+INSERT INTO t (a) VALUES
+	(1);
+
+% name inverted_index
+% command dump d t
+CREATE DATABASE d;
+CREATE TABLE d.t (
+	a JSON,
+	b JSON,
+	INVERTED INDEX idx (a)
+);
+
+CREATE INVERTED INDEX idx2 ON d.t (b);
+
+INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}');
+----
+dump d t
+CREATE TABLE t (
+	a JSON NULL,
+	b JSON NULL,
+	INVERTED INDEX idx (a),
+	INVERTED INDEX idx2 (b),
+	FAMILY "primary" (a, b, rowid)
+);
+
+INSERT INTO t (a, b) VALUES
+	('{"a":"b"}', '{"c":"d"}');
+
+% name reference_cycle
+% command dump d t
+-- This tests dumping in the presence of cycles.  This used to crash before
+-- with stack overflow due to an infinite loop before:
+-- https://github.com/cockroachdb/cockroach/pull/20255
+CREATE DATABASE d;
+CREATE TABLE d.t (
+  PRIMARY KEY (id),
+  FOREIGN KEY (next_id) REFERENCES d.t(id),
+  id INT,
+  next_id INT
+);
+INSERT INTO d.t VALUES (
+  1,
+  NULL
+);
+----
+dump d t
+CREATE TABLE t (
+	id INT NOT NULL,
+	next_id INT NULL,
+	CONSTRAINT "primary" PRIMARY KEY (id ASC),
+	CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES t (id),
+	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
+	FAMILY "primary" (id, next_id)
+);
+
+INSERT INTO t (id, next_id) VALUES
+	(1, NULL);
+
+% name primary_key_constraint
+% command dump d t
+-- This tests that a primary key with a non-default name works.
+CREATE DATABASE d;
+CREATE TABLE d.t (
+  i int,
+  CONSTRAINT pk_name PRIMARY KEY (i)
+);
+INSERT INTO d.t VALUES (1);
+----
+dump d t
+CREATE TABLE t (
+	i INT NOT NULL,
+	CONSTRAINT pk_name PRIMARY KEY (i ASC),
+	FAMILY "primary" (i)
+);
+
+INSERT INTO t (i) VALUES
+	(1);
+
+% name sequence_escaping
+% command dump '
+CREATE DATABASE "'";
+CREATE SEQUENCE "'"."'";
+----
+dump '
+CREATE SEQUENCE "'" MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+SELECT setval(e'"\'"', 0);

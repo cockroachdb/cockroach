@@ -15,12 +15,18 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql/driver"
+	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+)
+
+var rewriteResultsInTestfiles = flag.Bool(
+	"rewrite-results-in-testfiles", false,
+	"ignore the expected results and rewrite the test files with the actual results from this "+
+		"run. Used to update tests when a change affects many cases; please verify the testfile "+
+		"diffs carefully!",
 )
 
 func TestDumpRow(t *testing.T) {
@@ -934,169 +947,131 @@ SELECT setval('bar', 0);
 	}
 }
 
-func TestDumpSequenceEscaping(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
+func runTest(
+	t *testing.T, params map[string]string, create string, expect string, rewriteBuf *bytes.Buffer,
+) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	const create = `
-	CREATE DATABASE "'";
-	CREATE SEQUENCE "'"."'";
-`
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+	c.RunWithArgs([]string{"sql", "-e", create})
+
+	out, err := c.RunWithCapture(params["command"])
+	if err != nil {
 		t.Fatal(err)
+	}
+
+	if strings.TrimSpace(out) != strings.TrimSpace(expect) {
+		if rewriteBuf == nil {
+			t.Fatalf("\nexpected %s\n     got %s", expect, out)
+		} else {
+			rewriteBuf.WriteString(out)
+		}
+	} else if rewriteBuf != nil {
+		rewriteBuf.WriteString(expect)
+	}
+}
+
+type testFileReader struct {
+	scanner  *bufio.Scanner
+	nextLine string
+	eof      bool
+}
+
+func newTestFileReader(s *bufio.Scanner) (*testFileReader, error) {
+	if !s.Scan() {
+		return nil, fmt.Errorf("empty scanner")
+	}
+
+	return &testFileReader{
+		nextLine: s.Text(),
+		scanner:  s,
+	}, nil
+}
+
+func (t *testFileReader) peek() string {
+	return t.nextLine
+}
+
+func (t *testFileReader) next() string {
+	old := t.nextLine
+	if t.scanner.Scan() {
+		t.nextLine = t.scanner.Text()
 	} else {
-		t.Log(out)
+		t.eof = true
+		t.nextLine = ""
 	}
-
-	out, err := c.RunWithCaptureArgs([]string{"dump", "'"})
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	const expect = `dump '
-CREATE SEQUENCE "'" MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
-
-SELECT setval(e'"\'"', 0);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
+	return old
 }
 
-// TestDumpPrimaryKeyConstraint tests that a primary key with a non-default
-// name works.
-func TestDumpPrimaryKeyConstraint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+func (t *testFileReader) readParams(buf *bytes.Buffer) map[string]string {
+	params := make(map[string]string)
+	for strings.HasPrefix(t.peek(), "%") {
+		if buf != nil {
+			buf.WriteString(t.peek())
+			buf.WriteByte('\n')
+		}
+		fields := strings.Fields(t.next())
+		// Strip leading '%'.
+		fields = fields[1:]
+		param, value := fields[0], fields[1:]
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		i int,
-		CONSTRAINT pk_name PRIMARY KEY (i)
-	);
-	INSERT INTO d.t VALUES (1);
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
-	if err != nil {
-		t.Fatal(err)
+		params[param] = strings.Join(value, " ")
 	}
-
-	const expect = `dump d t
-CREATE TABLE t (
-	i INT NOT NULL,
-	CONSTRAINT pk_name PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
-);
-
-INSERT INTO t (i) VALUES
-	(1);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
+	return params
 }
 
-// TestDumpReferenceCycle tests dumping in the presence of cycles.
-// This used to crash before with stack overflow due to an infinite loop before:
-// https://github.com/cockroachdb/cockroach/pull/20255
-func TestDumpReferenceCycle(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		PRIMARY KEY (id),
-		FOREIGN KEY (next_id) REFERENCES d.t(id),
-		id INT,
-		next_id INT
-	);
-	INSERT INTO d.t VALUES (
-		1,
-		NULL
-	);
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
-	if err != nil {
-		t.Fatal(err)
+func (t *testFileReader) readToLinePrefixedWith(prefix string) string {
+	var result bytes.Buffer
+	for !strings.HasPrefix(t.peek(), prefix) && !t.eof {
+		result.WriteString(t.next())
+		result.WriteByte('\n')
 	}
-
-	const expect = `dump d t
-CREATE TABLE t (
-	id INT NOT NULL,
-	next_id INT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES t (id),
-	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
-	FAMILY "primary" (id, next_id)
-);
-
-INSERT INTO t (id, next_id) VALUES
-	(1, NULL);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
+	return result.String()
 }
 
-func TestDumpWithInvertedIndex(t *testing.T) {
+func TestDumpFileTests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	var rewriteBuf *bytes.Buffer
+	if *rewriteResultsInTestfiles {
+		rewriteBuf = &bytes.Buffer{}
+	}
 
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		a JSON,
-		b JSON,
-		INVERTED INDEX idx (a)
-	);
-
-	CREATE INVERTED INDEX idx2 ON d.t (b);
-
-	INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}');
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
+	_, fname, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("couldn't get directory")
+	}
+	file := filepath.Join(filepath.Dir(fname), "testdata", "dump_test")
+	f, err := os.Open(file)
 	if err != nil {
 		t.Fatal(err)
 	}
+	scanner := bufio.NewScanner(f)
+	reader, err := newTestFileReader(scanner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for !reader.eof {
+		params := reader.readParams(rewriteBuf)
 
-	const expect = `dump d t
-CREATE TABLE t (
-	a JSON NULL,
-	b JSON NULL,
-	INVERTED INDEX idx (a),
-	INVERTED INDEX idx2 (b),
-	FAMILY "primary" (a, b, rowid)
-);
+		setup := reader.readToLinePrefixedWith("----")
+		if rewriteBuf != nil {
+			rewriteBuf.WriteString(setup)
+		}
+		reader.next()
+		if rewriteBuf != nil {
+			rewriteBuf.WriteString("----\n")
+		}
+		expected := reader.readToLinePrefixedWith("%")
 
-INSERT INTO t (a, b) VALUES
-	('{"a":"b"}', '{"c":"d"}');
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
+		t.Run(params["name"], func(t *testing.T) {
+			runTest(t, params, setup, expected, rewriteBuf)
+		})
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if rewriteBuf != nil {
+		ioutil.WriteFile(file, rewriteBuf.Bytes(), 0644)
 	}
 }
