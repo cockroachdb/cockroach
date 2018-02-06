@@ -1767,7 +1767,9 @@ func TestJSONRemovePath(t *testing.T) {
 		errMsg   string
 	}{
 		`{"foo": 1}`: {
+			{path: []string{"foa"}, expected: `{"foo": 1}`},
 			{path: []string{"foo"}, expected: `{}`},
+			{path: []string{"foz"}, expected: `{"foo": 1}`},
 			{path: []string{}, expected: `{"foo": 1}`},
 			{path: []string{"bar"}, expected: `{"foo": 1}`},
 		},
