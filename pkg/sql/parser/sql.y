@@ -522,7 +522,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   UNBOUNDED UNCOMMITTED UNION UNIQUE UNKNOWN
 %token <str>   UPDATE UPSERT USE USER USERS USING UUID
 
-%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING
+%token <str>   VALID VALIDATE VALUE VALUES VARCHAR VARIADIC VIEW VARYING VIRTUAL
 
 %token <str>   WHEN WHERE WINDOW WITH WITHIN WITHOUT WORK WRITE
 
@@ -3041,7 +3041,7 @@ pause_stmt:
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )] [ON DELETE {NO ACTION | RESTRICT}] [ON UPDATE {NO ACTION | RESTRICT}]
 //   COLLATE <collationname>
-//   AS <expr> STORED
+//   AS ( <expr> ) STORED
 //
 // Interleave clause:
 //    INTERLEAVE IN PARENT <tablename> ( <colnames...> ) [CASCADE | RESTRICT]
@@ -3336,9 +3336,18 @@ col_qualification_elem:
       Actions: $5.referenceActions(),
     }
  }
-| AS b_expr STORED
+| AS '(' a_expr ')' STORED
  {
-    $$.val = &tree.ColumnComputedDef{Expr: $2.expr()}
+    $$.val = &tree.ColumnComputedDef{Expr: $3.expr()}
+ }
+| AS '(' a_expr ')' VIRTUAL
+ {
+    return unimplemented(sqllex, "virtual computed columns")
+ }
+| AS error
+ {
+    sqllex.Error("syntax error: use AS ( <expr> ) STORED")
+    return 1
  }
 
 index_def:
@@ -7696,6 +7705,7 @@ reserved_keyword:
 | USING
 | VARIADIC
 | VIEW
+| VIRTUAL
 | WHEN
 | WHERE
 | WINDOW

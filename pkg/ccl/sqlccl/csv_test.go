@@ -652,7 +652,7 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"bad-computed-column",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS 'hello' STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform = $1`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform = $1`,
 			nil,
 			filesWithOpts,
 			``,
