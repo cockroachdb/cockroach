@@ -337,9 +337,10 @@ func (a *Allocator) AllocateTarget(
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
+	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
-		sl, constraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
+		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
 	)
 	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
 	if target := candidates.selectGood(a.randGen); target != nil {
@@ -410,10 +411,11 @@ func (a Allocator) RemoveTarget(
 	}
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
+	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	rankedCandidates := removeCandidates(
 		sl,
-		constraints,
+		analyzedConstraints,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		options,
@@ -496,18 +498,20 @@ func (a Allocator) RebalanceTarget(
 		}
 	}
 
+	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
-	existingCandidates, candidates := rebalanceCandidates(
+	results := rebalanceCandidates(
 		ctx,
 		sl,
-		constraints,
+		analyzedConstraints,
 		rangeInfo.Desc.Replicas,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
+		a.storePool.getNodeLocalityString,
 		options,
 	)
 
-	if len(existingCandidates) == 0 || len(candidates) == 0 {
+	if len(results) == 0 {
 		return nil, ""
 	}
 
@@ -582,6 +586,7 @@ func (a Allocator) RebalanceTarget(
 	return &target.store, string(detailsBytes)
 }
 
+// TODO: how do all the constraint changes affect this function?
 // shouldRebalanceBetween returns whether it's a good idea to rebalance to the
 // given `add` candidate if the replica that will be removed after adding it is
 // `remove`. This is a last failsafe to ensure that we don't take unnecessary
