@@ -13,24 +13,24 @@ INSERT INTO t.a VALUES (1, 1.0), (2, 2.0), (3, 3.0)
 build
 SELECT * FROM t.a
 ----
-scan [out=(0,1)]
- └── columns: a.x:int:0 a.y:float,null:1
+scan
+ └── columns: a.x:int:1 a.y:float:null:2
 
-build,exec-explain
+exec-explain
 SELECT * FROM t.a
 ----
 scan  0  scan  ·      ·          (x, y)  ·
 ·     0  ·     table  a@primary  ·       ·
 ·     0  ·     spans  ALL        ·       ·
 
-build,exec
+exec
 SELECT * FROM t.a
 ----
 1  1.0
 2  2.0
 3  3.0
 
-build,exec-explain
+exec-explain
 SELECT * FROM t.a WHERE x > 1
 ----
 filter     0  filter  ·       ·          (x, y)  ·
@@ -39,13 +39,13 @@ filter     0  filter  ·       ·          (x, y)  ·
 ·          1  ·       table   a@primary  ·       ·
 ·          1  ·       spans   ALL        ·       ·
 
-build,exec
+exec
 SELECT * FROM t.a WHERE x > 1
 ----
 2  2.0
 3  3.0
 
-build,exec-explain
+exec-explain
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
 filter     0  filter  ·       ·                      (x, y)  ·
@@ -54,7 +54,7 @@ filter     0  filter  ·       ·                      (x, y)  ·
 ·          1  ·       table   a@primary              ·       ·
 ·          1  ·       spans   ALL                    ·       ·
 
-build,exec
+exec
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
 2  2.0
