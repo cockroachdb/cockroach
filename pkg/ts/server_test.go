@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"sort"
 	"testing"
+	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -263,7 +266,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	tsrv := s.(*server.TestServer)
 
 	seriesCount := workerCount * 2
-	if err := populateSeries(seriesCount, 10, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, 10, 3, tsrv.TsDB()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,6 +292,61 @@ func TestServerQueryStarvation(t *testing.T) {
 	}
 }
 
+// TestServerQueryMemoryManagement verifies that queries succeed under
+// constrained memory requirements.
+func TestServerQueryMemoryManagement(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Number of workers that will be available to process data.
+	workerCount := 20
+	// Number of series that will be queried.
+	seriesCount := workerCount * 2
+	// Number of data sources that will be generated.
+	sourceCount := 6
+	// Number of slabs (hours) of data we want to generate
+	slabCount := 5
+	// Generated datapoints every 100 seconds, so compute how many we want to
+	// generate data across the target number of hours.
+	valueCount := int(ts.Resolution10s.SlabDuration()/(100*1e9)) * slabCount
+
+	// MemoryBudget is a function of slab size and source count.
+	samplesPerSlab := ts.Resolution10s.SlabDuration() / ts.Resolution10s.SampleDuration()
+	sizeOfSlab := int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{})) + (int64(unsafe.Sizeof(roachpb.InternalTimeSeriesSample{})) * samplesPerSlab)
+	budget := 3 * sizeOfSlab * int64(sourceCount) * int64(workerCount)
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		TimeSeriesQueryWorkerMax:    workerCount,
+		TimeSeriesQueryMemoryBudget: budget,
+	})
+	defer s.Stopper().Stop(context.TODO())
+	tsrv := s.(*server.TestServer)
+
+	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	queries := make([]tspb.Query, 0, seriesCount)
+	for i := 0; i < seriesCount; i++ {
+		queries = append(queries, tspb.Query{
+			Name: seriesName(i),
+		})
+	}
+
+	if _, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 0 * 1e9,
+		EndNanos:   5 * 3600 * 1e9,
+		Queries:    queries,
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func BenchmarkServerQuery(b *testing.B) {
 	s, _, _ := serverutils.StartServer(b, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
@@ -297,7 +355,7 @@ func BenchmarkServerQuery(b *testing.B) {
 	// Populate data for large number of time series.
 	seriesCount := 50
 	sourceCount := 10
-	if err := populateSeries(seriesCount, sourceCount, tsrv.TsDB()); err != nil {
+	if err := populateSeries(seriesCount, sourceCount, 3, tsrv.TsDB()); err != nil {
 		b.Fatal(err)
 	}
 
@@ -334,27 +392,26 @@ func sourceName(sourceNum int) string {
 	return fmt.Sprintf("source.%d", sourceNum)
 }
 
-func populateSeries(seriesCount, sourceCount int, tsdb *ts.DB) error {
+func generateTimeSeriesDatapoints(valueCount int) []tspb.TimeSeriesDatapoint {
+	result := make([]tspb.TimeSeriesDatapoint, 0, valueCount)
+	var i int64
+	for i = 0; i < int64(valueCount); i++ {
+		result = append(result, tspb.TimeSeriesDatapoint{
+			TimestampNanos: i * 100 * 1e9,
+			Value:          float64(i * 100),
+		})
+	}
+	return result
+}
+
+func populateSeries(seriesCount, sourceCount, valueCount int, tsdb *ts.DB) error {
 	for series := 0; series < seriesCount; series++ {
 		for source := 0; source < sourceCount; source++ {
 			if err := tsdb.StoreData(context.TODO(), ts.Resolution10s, []tspb.TimeSeriesData{
 				{
-					Name:   seriesName(series),
-					Source: sourceName(source),
-					Datapoints: []tspb.TimeSeriesDatapoint{
-						{
-							TimestampNanos: 100 * 1e9,
-							Value:          100.0,
-						},
-						{
-							TimestampNanos: 200 * 1e9,
-							Value:          200.0,
-						},
-						{
-							TimestampNanos: 300 * 1e9,
-							Value:          300.0,
-						},
-					},
+					Name:       seriesName(series),
+					Source:     sourceName(source),
+					Datapoints: generateTimeSeriesDatapoints(valueCount),
 				},
 			}); err != nil {
 				return errors.Errorf(

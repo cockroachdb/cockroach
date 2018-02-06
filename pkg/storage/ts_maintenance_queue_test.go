@@ -300,6 +300,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 			now+ts.Resolution10s.SlabDuration(),
 			0,
 			&acc,
+			&memMon,
 		)
 		return dps, err
 	}
