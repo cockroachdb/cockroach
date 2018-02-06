@@ -140,15 +140,16 @@ func TestLoadCSVUniqueDuplicate(t *testing.T) {
 		csvName     = tableName + ".dat"
 		tableCreate = `
 			CREATE TABLE ` + tableName + ` (
+				a int primary key,
 				i int,
 				unique index idx_f (i)
 			)
 		`
-		tableCSV = `1
-2
-3
-3
-4
+		tableCSV = `1,1
+2,2
+3,3
+4,3
+5,4
 `
 	)
 
@@ -301,28 +302,29 @@ func TestLoadCSVOptions(t *testing.T) {
 		csvName     = tableName + ".dat"
 		tableCreate = `
 			CREATE TABLE ` + tableName + ` (
+				a int primary key,
 				i int,
 				s string,
 				index (s)
 			)
 		`
-		tableCSV = `1|2
+		tableCSV = `1|1|2
 # second value should be null
-2|N
+2|2|N
 # delimiter at EOL is allowed
-3|blah|
-4|"quoted "" line"
-5|"quoted "" line
+3|3|blah|
+4|4|"quoted "" line"
+5|5|"quoted "" line
 "
-6|"quoted "" line
+6|6|"quoted "" line
 "|
-7|"quoted "" line
+7|7|"quoted "" line
 # with comment
 "
-8|lazy " quotes|
-9|"lazy "quotes"|
-N|N
-10|"|"|
+8|8|lazy " quotes|
+9|9|"lazy "quotes"|
+10|N|N
+11|10|"|"|
 `
 	)
 
@@ -336,7 +338,7 @@ N|N
 		t.Fatal(err)
 	}
 	null := "N"
-	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 500, tmp)
+	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 400, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -792,7 +794,7 @@ func TestImportStmt(t *testing.T) {
 	t.Run("checkpoint-leftover", func(t *testing.T) {
 		nodetmp := "nodelocal:///tmp"
 		// Specify wrong number of columns.
-		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
+		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
 		if !testutils.IsError(err, "expected 1 fields, got 2") {
 			t.Fatalf("unexpected: %v", err)
 		}
@@ -804,7 +806,7 @@ func TestImportStmt(t *testing.T) {
 		}
 
 		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT, b STRING) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
 	})
 
 	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
