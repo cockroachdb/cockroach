@@ -1468,6 +1468,7 @@ reserved_keyword ::=
 	| 'USING'
 	| 'VARIADIC'
 	| 'VIEW'
+	| 'VIRTUAL'
 	| 'WHEN'
 	| 'WHERE'
 	| 'WINDOW'
@@ -1909,7 +1910,7 @@ col_qualification_elem ::=
 	| 'CHECK' '(' a_expr ')'
 	| 'DEFAULT' b_expr
 	| 'REFERENCES' table_name opt_name_parens reference_actions
-	| 'AS' b_expr 'STORED'
+	| 'AS' '(' a_expr ')' 'STORED'
 
 family_name ::=
 	name
