@@ -78,8 +78,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"text/tabwriter"
-	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -87,20 +85,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
-
-// NewExecFactory returns an ExecFactory that can be used to create
-// an execution plan. The implementation is in sql so this is an opaque
-// function that is initialized in TestMain.
-var NewExecFactory func(s serverutils.TestServerInterface) ExecFactory
 
 var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
@@ -215,56 +208,6 @@ func TestOpt(t *testing.T) {
 							d.Fatalf(t, "%v", err)
 						}
 						return ""
-
-					case "exec", "exec-explain":
-						if e == nil {
-							d.Fatalf(t, "no expression for exec")
-						}
-						factory := NewExecFactory(s)
-						defer factory.Close()
-						n, err := makeExec(e, factory)
-						if err != nil {
-							d.Fatalf(t, "MakeExec: %v", err)
-						}
-						var results []tree.Datums
-						if cmd == "exec-explain" {
-							results, err = n.root.Explain()
-						} else {
-							results, err = n.root.Run()
-						}
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-						// Format the results.
-						var buf bytes.Buffer
-						tw := tabwriter.NewWriter(
-							&buf,
-							2,   /* minwidth */
-							1,   /* tabwidth */
-							2,   /* padding */
-							' ', /* padchar */
-							0,   /* flags */
-						)
-						for _, r := range results {
-							for j, val := range r {
-								if j > 0 {
-									fmt.Fprintf(tw, "\t")
-								}
-								if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
-									str := string(*d)
-									if str == "" {
-										str = "·"
-									}
-									// Avoid the quotes on strings.
-									fmt.Fprintf(tw, "%s", str)
-								} else {
-									fmt.Fprintf(tw, "%s", val)
-								}
-							}
-							fmt.Fprintf(tw, "\n")
-						}
-						_ = tw.Flush()
-						return buf.String()
 
 					case "build":
 						stmt, err := parser.ParseOne(d.Input)

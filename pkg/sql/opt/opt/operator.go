@@ -35,6 +35,33 @@ func (i Operator) String() string {
 	return opNames[opIndexes[i]:opIndexes[i+1]]
 }
 
+// ComparisonOpReverseMap maps from an optimizer operator type to a semantic
+// tree comparison operator type.
+var ComparisonOpReverseMap = [...]tree.ComparisonOperator{
+	EqOp:           tree.EQ,
+	LtOp:           tree.LT,
+	GtOp:           tree.GT,
+	LeOp:           tree.LE,
+	GeOp:           tree.GE,
+	NeOp:           tree.NE,
+	InOp:           tree.In,
+	NotInOp:        tree.NotIn,
+	LikeOp:         tree.Like,
+	NotLikeOp:      tree.NotLike,
+	ILikeOp:        tree.ILike,
+	NotILikeOp:     tree.NotILike,
+	SimilarToOp:    tree.SimilarTo,
+	NotSimilarToOp: tree.NotSimilarTo,
+	RegMatchOp:     tree.RegMatch,
+	NotRegMatchOp:  tree.NotRegMatch,
+	RegIMatchOp:    tree.RegIMatch,
+	NotRegIMatchOp: tree.NotRegIMatch,
+	IsOp:           tree.IsNotDistinctFrom,
+	IsNotOp:        tree.IsDistinctFrom,
+	ContainsOp:     tree.Contains,
+	ContainedByOp:  tree.ContainedBy,
+}
+
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // binary operator type.
 var BinaryOpReverseMap = [...]tree.BinaryOperator{
