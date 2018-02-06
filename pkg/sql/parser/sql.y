@@ -863,10 +863,9 @@ func newNameFromStr(s string) *tree.Name {
 %type <coltypes.T> typename simple_typename const_typename
 %type <coltypes.T> numeric opt_numeric_modifiers
 %type <*tree.NumVal> opt_float
-%type <coltypes.T> character const_character
 %type <coltypes.T> character_with_length character_without_length
 %type <coltypes.T> const_datetime const_interval const_json
-%type <coltypes.T> bit const_bit bit_with_length bit_without_length
+%type <coltypes.T> bit_with_length bit_without_length
 %type <coltypes.T> character_base
 %type <coltypes.CastTargetType> postgres_oid
 %type <coltypes.CastTargetType> cast_target
@@ -5293,12 +5292,26 @@ const_json:
   }
 
 simple_typename:
-  numeric
-| bit
-| character
-| const_datetime
+  const_typename
+| bit_with_length
+| character_with_length
 | const_interval opt_interval // TODO(pmattis): Support opt_interval?
 | const_interval '(' ICONST ')' { return unimplemented(sqllex, "simple_type const_interval") }
+
+// We have a separate const_typename to allow defaulting fixed-length types
+// such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
+// default to a length of one, but this makes no sense for constructs like CHAR
+// 'hi' and BIT '0101', where there is an obvious better choice to make. Note
+// that const_interval is not included here since it must be pushed up higher
+// in the rules to accommodate the postfix options (e.g. INTERVAL '1'
+// YEAR). Likewise, we have to handle the generic-type-name case in
+// a_expr_const to avoid premature reduce/reduce conflicts against function
+// names.
+const_typename:
+  numeric
+| bit_without_length
+| character_without_length
+| const_datetime
 | const_json
 | BLOB
   {
@@ -5374,22 +5387,6 @@ simple_typename:
       return 1
     }
   }
-
-// We have a separate const_typename to allow defaulting fixed-length types
-// such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
-// default to a length of one, but this makes no sense for constructs like CHAR
-// 'hi' and BIT '0101', where there is an obvious better choice to make. Note
-// that const_interval is not included here since it must be pushed up higher
-// in the rules to accommodate the postfix options (e.g. INTERVAL '1'
-// YEAR). Likewise, we have to handle the generic-type-name case in
-// a_expr_const to avoid premature reduce/reduce conflicts against function
-// names.
-const_typename:
-  numeric
-| const_bit
-| const_character
-| const_datetime
-| const_json
 
 opt_numeric_modifiers:
   '(' iconst64 ')'
@@ -5534,18 +5531,6 @@ opt_float:
     $$.val = &tree.NumVal{Value: constant.MakeInt64(0)}
   }
 
-// SQL bit-field data types
-// The following implements BIT() and BIT VARYING().
-bit:
-  bit_with_length
-| bit_without_length
-
-// const_bit is like bit except "BIT" defaults to unspecified length.
-// See notes for const_character, which addresses same issue for "CHAR".
-const_bit:
-  bit_with_length
-| bit_without_length
-
 bit_with_length:
   BIT opt_varying '(' iconst64 ')'
   {
@@ -5562,16 +5547,6 @@ bit_without_length:
   {
     $$.val = coltypes.Bit
   }
-
-// SQL character data types
-// The following implements CHAR() and VARCHAR().
-character:
-  character_with_length
-| character_without_length
-
-const_character:
-  character_with_length
-| character_without_length
 
 character_with_length:
   character_base '(' iconst64 ')'
