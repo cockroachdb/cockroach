@@ -640,21 +640,20 @@ func (s *Session) extendedEvalCtx(
 		clusterTs = txn.OrigTimestamp()
 	}
 
-	return extendedEvalContext{
+	e := extendedEvalContext{
 		EvalContext: tree.EvalContext{
-			Txn:              txn,
-			SessionData:      &s.data,
-			ApplicationName:  s.dataMutator.ApplicationName(),
-			TxnState:         getTransactionState(&s.TxnState),
-			TxnReadOnly:      s.TxnState.readOnly,
-			TxnImplicit:      s.TxnState.implicitTxn,
-			Settings:         st,
-			CtxProvider:      s,
-			Mon:              &s.TxnState.mon,
-			TestingKnobs:     evalContextTestingKnobs,
-			StmtTimestamp:    stmtTimestamp,
-			TxnTimestamp:     txnTimestamp,
-			ClusterTimestamp: clusterTs,
+			Txn:             txn,
+			SessionData:     &s.data,
+			ApplicationName: s.dataMutator.ApplicationName(),
+			TxnState:        getTransactionState(&s.TxnState),
+			TxnReadOnly:     s.TxnState.readOnly,
+			TxnImplicit:     s.TxnState.implicitTxn,
+			Settings:        st,
+			CtxProvider:     s,
+			Mon:             &s.TxnState.mon,
+			TestingKnobs:    evalContextTestingKnobs,
+			StmtTimestamp:   stmtTimestamp,
+			TxnTimestamp:    txnTimestamp,
 		},
 		SessionMutator: s.dataMutator,
 		VirtualSchemas: s.execCfg.VirtualSchemas,
@@ -667,6 +666,8 @@ func (s *Session) extendedEvalCtx(
 		TxnModesSetter: &s.TxnState,
 		SchemaChangers: &s.TxnState.schemaChangers,
 	}
+	e.SetClusterTimestamp(clusterTs)
+	return e
 }
 
 // resetForBatch prepares the Session for executing a new batch of statements.

@@ -267,6 +267,15 @@ func (txn *Txn) Isolation() enginepb.IsolationType {
 	return txn.mu.Proto.Isolation
 }
 
+// OrigTimestampWasObserved when called indicates that
+// the value of OrigTimestamp was observed and matters
+// for transaction ordering (i.e. don't bump)
+func (txn *Txn) OrigTimestampWasObserved() {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	// TODO(spencer): whatever you want here.
+}
+
 // OrigTimestamp returns the transaction's starting timestamp.
 func (txn *Txn) OrigTimestamp() hlc.Timestamp {
 	txn.mu.Lock()

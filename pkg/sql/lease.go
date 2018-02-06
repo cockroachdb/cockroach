@@ -342,8 +342,12 @@ func (s LeaseStore) Publish(
 
 			tableDesc.Version++
 			// We need to set ModificationTime to the transaction's commit
-			// timestamp. Since this is a SERIALZIABLE transaction, that will
+			// timestamp. Since this is a SERIALIZABLE transaction, that will
 			// be OrigTimestamp.
+			// TODO(andrei,vivek): is this still correct if the KV EndTransaction
+			// can bump the OrigTimestamp after this table descriptor has been
+			// modified?
+			txn.OrigTimestampWasObserved()
 			modTime := txn.OrigTimestamp()
 			tableDesc.ModificationTime = modTime
 			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
