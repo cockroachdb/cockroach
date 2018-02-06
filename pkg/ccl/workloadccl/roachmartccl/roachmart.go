@@ -18,8 +18,8 @@ import (
 
 	"github.com/spf13/pflag"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 // These need to be kept in sync with the zones used when --geo is passed

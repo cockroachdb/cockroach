@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/spf13/pflag"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
