@@ -15,8 +15,6 @@
 package tree
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -80,25 +78,16 @@ func (n *UnresolvedName) ResolveFunction(
 		return d, nil
 	}
 
-	// Although the conversion from Name to string should go via
-	// Name.Normalize(), functions are special in that they are
-	// guaranteed to not contain special Unicode characters. So we can
-	// use ToLower directly.
-	// TODO(knz): this will need to be revisited once we allow
-	// function names to exist in custom namespaces, whose names
-	// may contain special characters.
-	prefix = strings.ToLower(prefix)
-	smallName := strings.ToLower(function)
-	fullName := smallName
+	fullName := function
 
-	if prefix == "pg_catalog" {
+	if prefix == sessiondata.PgCatalogName {
 		// If the user specified e.g. `pg_catalog.max()` we want to find
 		// it in the global namespace.
 		prefix = ""
 	}
 
 	if prefix != "" {
-		fullName = prefix + "." + smallName
+		fullName = prefix + "." + function
 	}
 	def, ok := FunDefs[fullName]
 	if !ok {
@@ -108,7 +97,7 @@ func (n *UnresolvedName) ResolveFunction(
 			// the search path first.
 			iter := searchPath.Iter()
 			for alt, ok := iter(); ok; alt, ok = iter() {
-				fullName = alt + "." + smallName
+				fullName = alt + "." + function
 				if def, ok = FunDefs[fullName]; ok {
 					found = true
 					break

@@ -33,3 +33,8 @@ query T
 INSERT INTO foo(x) VALUES (42) RETURNING PG_TYPEOF(x)
 ----
 int
+
+# CockroachDB is case-preserving for quoted identifiers like pg, and
+# function names only exist in lowercase.
+query error unknown function: PG_TYPEOF()
+SELECT "PG_TYPEOF"(123)
