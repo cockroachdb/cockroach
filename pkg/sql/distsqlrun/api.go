@@ -22,7 +22,6 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 	return EvalContext{
 		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),
 		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
-		ClusterTimestamp:   evalCtx.ClusterTimestamp,
 		Location:           evalCtx.GetLocation().String(),
 		Database:           evalCtx.SessionData.Database,
 		User:               evalCtx.SessionData.User,

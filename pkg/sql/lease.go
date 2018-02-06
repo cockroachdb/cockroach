@@ -142,7 +142,7 @@ func (s LeaseStore) acquire(
 ) (*tableVersionState, error) {
 	var table *tableVersionState
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		expiration := txn.OrigTimestamp()
+		expiration := txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if expiration.Less(minExpirationTime) {
 			expiration = minExpirationTime
@@ -342,9 +342,12 @@ func (s LeaseStore) Publish(
 
 			tableDesc.Version++
 			// We need to set ModificationTime to the transaction's commit
-			// timestamp. Since this is a SERIALZIABLE transaction, that will
-			// be OrigTimestamp.
-			modTime := txn.OrigTimestamp()
+			// timestamp. Since this is a SERIALIZABLE transaction, that
+			// will be OrigTimestamp. However, once we've used the
+			// timestamp, it's rather essential that we have a guarantee
+			// that the txn will commit at that exact timestamp. Using
+			// mattersForTxnOrdering=true provides this guarantee.
+			modTime := txn.OrigTimestamp(true /*mattersForTxnOrdering*/)
 			tableDesc.ModificationTime = modTime
 			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
 				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
