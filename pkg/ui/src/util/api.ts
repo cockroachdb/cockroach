@@ -48,6 +48,8 @@ export type ClusterResponseMessage = protos.cockroach.server.serverpb.ClusterRes
 export type TableStatsRequestMessage = protos.cockroach.server.serverpb.TableStatsRequest;
 export type TableStatsResponseMessage = protos.cockroach.server.serverpb.TableStatsResponse;
 
+export type TimeSeriesStatsRequestMessage = protos.cockroach.server.serverpb.TimeSeriesStatsRequest;
+
 export type LogsRequestMessage = protos.cockroach.server.serverpb.LogsRequest;
 export type LogEntriesResponseMessage = protos.cockroach.server.serverpb.LogEntriesResponse;
 
@@ -233,6 +235,12 @@ export function getCluster(_req: ClusterRequestMessage, timeout?: moment.Duratio
 // getTableStats gets details stats about the current table
 export function getTableStats(req: TableStatsRequestMessage, timeout?: moment.Duration): Promise<TableStatsResponseMessage> {
   return timeoutFetch(serverpb.TableStatsResponse, `${API_PREFIX}/databases/${req.database}/tables/${req.table}/stats`, null, timeout);
+}
+
+// getTimeSeriesStats gets details about time series data usage on the cluster.
+// Note that the response type is actually TablestatsResponse.
+export function getTimeSeriesStats(_req: TimeSeriesStatsRequestMessage, timeout?: moment.Duration): Promise<TableStatsResponseMessage> {
+  return timeoutFetch(serverpb.TableStatsResponse, `${API_PREFIX}/timeseries/stats`, null, timeout);
 }
 
 // TODO (maxlang): add filtering

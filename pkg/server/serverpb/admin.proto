@@ -208,6 +208,13 @@ message TableStatsResponse {
   repeated MissingNode missing_nodes = 5 [(gogoproto.nullable) = false];
 }
 
+// TimeSeriesStatsRequest requests statistics on stored time series data. Note
+// that the response type for this message is TableStatsResponse, as the data
+// for time series is currently identical; however, it cannot currently be
+// addressed as a database/table pair.
+message TimeSeriesStatsRequest {
+}
+
 // UsersRequest requests a list of users.
 message UsersRequest {
 }
@@ -536,6 +543,14 @@ service Admin {
   rpc TableStats(TableStatsRequest) returns (TableStatsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/databases/{database}/tables/{table}/stats"
+    };
+  }
+
+  // Example URL: /_admin/v1/timeseries/stats
+  // Note that the response type is TableStatsResponse.
+  rpc TimeSeriesStats(TimeSeriesStatsRequest) returns (TableStatsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/timeseries/stats"
     };
   }
 

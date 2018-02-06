@@ -111,6 +111,11 @@ const tableStatsReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshTableStats = tableStatsReducerObj.refresh;
 
+const timeSeriesStatsReducerObj = new CachedDataReducer(
+  api.getTimeSeriesStats, "timeSeriesStats", moment.duration(1, "m"),
+);
+export const refreshTimeSeriesStats = timeSeriesStatsReducerObj.refresh;
+
 const logsReducerObj = new CachedDataReducer(
   api.getLogs,
   "logs",
@@ -227,6 +232,7 @@ export interface APIReducersState {
   databaseDetails: KeyedCachedDataReducerState<api.DatabaseDetailsResponseMessage>;
   tableDetails: KeyedCachedDataReducerState<api.TableDetailsResponseMessage>;
   tableStats: KeyedCachedDataReducerState<api.TableStatsResponseMessage>;
+  timeSeriesStats: CachedDataReducerState<api.TableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
@@ -251,6 +257,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [databaseDetailsReducerObj.actionNamespace]: databaseDetailsReducerObj.reducer,
   [tableDetailsReducerObj.actionNamespace]: tableDetailsReducerObj.reducer,
   [tableStatsReducerObj.actionNamespace]: tableStatsReducerObj.reducer,
+  [timeSeriesStatsReducerObj.actionNamespace]: timeSeriesStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
