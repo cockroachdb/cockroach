@@ -27,7 +27,6 @@ export class StatsView extends React.Component<StatsViewProps, any> {
   static innerRadius = 55;
   static arcWidth = 6;
   static outerRadius = StatsView.innerRadius + StatsView.arcWidth;
-  static maxRadius = StatsView.outerRadius + StatsView.arcWidth;
 
   renderCapacityArc() {
     // Compute used percentage.
@@ -37,9 +36,6 @@ export class StatsView extends React.Component<StatsViewProps, any> {
 
     return (
       <g>
-        {/*<path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002 23.374 14.606 32.406 43.48 22.86 68.276" opacity=".35"/>*/}
-        {/*<path stroke="#3A7DE1" strokeLinecap="round" strokeWidth="6" d="M36.244 137.47c-5.536-15.686-4.138-33.656 5.363-48.86 16.563-26.506 51.478-34.566 77.986-18.002"/>*/}
-
         <g transform="translate(90 115)">
           {/* current value */}
           <path
