@@ -208,6 +208,19 @@ message TableStatsResponse {
   repeated MissingNode missing_nodes = 5 [(gogoproto.nullable) = false];
 }
 
+// NonTableStatsRequest requests statistics on cluster data ranges that do not
+// belong to SQL tables.
+message NonTableStatsRequest {
+}
+
+// NonTableStatsResponse returns statistics on various cluster data ranges
+// that do not belong to SQL tables. The statistics for each range are returned
+// as a TableStatsResponse.
+message NonTableStatsResponse {
+  // Information on time series ranges,
+  TableStatsResponse time_series_stats = 1;
+}
+
 // UsersRequest requests a list of users.
 message UsersRequest {
 }
@@ -536,6 +549,13 @@ service Admin {
   rpc TableStats(TableStatsRequest) returns (TableStatsResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/databases/{database}/tables/{table}/stats"
+    };
+  }
+
+  // Example URL: /_admin/v1/nontablestats
+  rpc NonTableStats(NonTableStatsRequest) returns (NonTableStatsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/nontablestats"
     };
   }
 

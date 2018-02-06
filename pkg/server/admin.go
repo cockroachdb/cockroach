@@ -501,8 +501,8 @@ func (s *adminServer) TableDetails(
 	return &resp, nil
 }
 
-// TableStats is an endpoint that returns columns, indices, and other
-// relevant details for the specified table.
+// TableStats is an endpoint that returns disk usage and replication statistics
+// for the specified table.
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
@@ -521,6 +521,30 @@ func (s *adminServer) TableStats(
 		return nil, s.serverError(err)
 	}
 
+	return s.tableStatsForSpan(ctx, tableSpan)
+}
+
+// NonTableStats is an endpoint that returns disk usage and replication
+// statistics for the time series system.
+func (s *adminServer) NonTableStats(
+	ctx context.Context, req *serverpb.NonTableStatsRequest,
+) (*serverpb.NonTableStatsResponse, error) {
+	timeSeriesStats, err := s.tableStatsForSpan(ctx, roachpb.Span{
+		Key:    keys.TimeseriesPrefix,
+		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	response := serverpb.NonTableStatsResponse{
+		TimeSeriesStats: timeSeriesStats,
+	}
+	return &response, nil
+}
+
+func (s *adminServer) tableStatsForSpan(
+	ctx context.Context, tableSpan roachpb.Span,
+) (*serverpb.TableStatsResponse, error) {
 	startKey, err := keys.Addr(tableSpan.Key)
 	if err != nil {
 		return nil, s.serverError(err)
