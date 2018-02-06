@@ -1171,7 +1171,7 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
-bin/.docgen_bnfs: $(SQLPARSER_ROOT)/sql.y
+bin/.docgen_bnfs: $(SQLPARSER_ROOT)/sql.y pkg/cmd/docgen/diagrams.go pkg/cmd/docgen/main.go
 	go run pkg/cmd/docgen/{main,diagrams}.go grammar bnf docs/generated/sql/bnf --quiet
 	touch $@
 
