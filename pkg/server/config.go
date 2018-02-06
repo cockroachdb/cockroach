@@ -504,6 +504,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				WarnLargeBatchThreshold: 500 * time.Millisecond,
 				Settings:                cfg.Settings,
 				UseSwitchingEnv:         spec.UseSwitchingEnv,
+				RocksDBOptions:          spec.RocksDBOptions,
 				ExtraOptions:            spec.ExtraOptions,
 			}
 
