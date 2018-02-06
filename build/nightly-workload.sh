@@ -21,6 +21,7 @@ artifacts=$PWD/artifacts/${TC_BUILD_ID}
 mkdir -p "$artifacts"
 
 go get -u -v github.com/cockroachdb/roachprod
+git -C "$(go env GOPATH)/src/github.com/cockroachdb/roachprod" rev-parse HEAD
 
 make build TYPE=release-linux-gnu
 
