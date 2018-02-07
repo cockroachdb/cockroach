@@ -220,12 +220,17 @@ SELECT COUNT(*) FROM NumToStr WHERE str LIKE '%five%'
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr LIMIT 5]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzEk7tq60AQhvvzFOav94B1S7GVW0Owg0kXVGy0g1mQdsReIMHo3YNWhSPjxAQVKmdG3_wfYvYCy5oOqiMP-YYMAjkECgiUEKhQC_SOG_Ke3fjJBOz1B-RWwNg-hrFdCzTsCPKCYEJLkHhV7y2dSGlyENAUlGlTSO9Mp9znzsYusA_j9BiD3OzG9GfTmbCpUA8CHMN1vQ_qTJDZIH5QuCZHy06TIz3LrYc7kgf-z_1c75FBPjPI1v8J-foKxfoK5foKDx7EiXzP1tPNVd7fvB2vlfSZptP2HF1DL46bFDOVx8SlhiYfpmk2FXubRknwO5z9Cj_N4O0tnC9JLpbA5RK4-hNcD_--AgAA__9hcK3z
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrAzEMhff-ivBmD7mhi6esgdKU0K14cM8iGO6sQ5KhJfi_l7OH0qGQ8b0nfU-6o3Ci17iSwn9gQnDYhGdSZdmtMXBOX_BHh1y2arsdHGYWgr_Dsi0Ej_f4udCVYiKBQyKLeenQTfIa5ftU6mqstqeXav5wmuDwktdsh2eE5sDVfvFq8UbwU3OPn3Al3bgo_en_j3xswYHSjcabylVmehOee82Ql77XjURqI52GOJcRtdCefgIAAP__lz9sqw==
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y LIMIT 5]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkz9r8zAQxvf3U4RnfVWw_KeDJq-BkpTQrXhQrSMIbJ-RZGgJ_u7F8pC6NA3Fg0fd3e-eH-Z8QceGDrolD_UKCYEUAhkEcggUqAR6xzV5z24amYG9eYdKBGzXD2EqVwI1O4K6INjQEBRe9FtDJ9KGHAQMBW2bGNI722r3UXZDG9iHqXscgtqVU_qTbW3YFahGAR7Cdb0P-kxQchQ3FK7J7Aw5MsvUUv5HNf7geeAH7pez9yTShYTc_juk2ytk2yvk2yvc-SdO5HvuPC3yb21Opmslc6b5uj0PrqZnx3WMmZ_HyMWCIR_mrpwf-y62ouBXWP4KPy7g5DucrknO1sD5Grj4E1yN_z4DAAD__zIVrfA=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMjzFrAzEMhff-ivBmD7mhi6esgdKU0K14cM8iGO6sQ5KhJfi_l7OH0qGQ8b0nfU-6o3Ci17iSwn9gQnDYhGdSZdmtMXBOX_BHh1y2arsdHGYWgr_Dsi0Ej_f4udCVYiKBQyKLeenQTfIa5ftU6mqstqeXav5wmuDwktdsh2eE5sDVfvFq8UbwU3OPn3Al3bgo_en_j3xswYHSjcabylVmehOee82Ql77XjURqI52GOJcRtdCefgIAAP__lz9sqw==
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT y FROM NumToStr ORDER BY y DESC LIMIT 5]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyMkLFqMzEQhPv_KczU-uHO4EaVW0Owg0kXrlBOixHcaYV2BQnm3j3oVMQOxEm5O_uNZnRFZE9HN5PAvqKHwQ6DQco8kgjnum5HB_8O2xmEmIrW9WAwcibYKzToRLA48n9OMPCkLkzr0WLARb8QUXch2O1ibmz7x7Yv7m2iMzlP-c4cKYfZ5Y99LLOyaFVPRe1mX4s8hTnoZoefIvR3EX5pdiZJHIX-VK5bBgPyF2q_J1zySM-Zx_WZNp5Wbl14Em3qtg2H2KQa8BbuH8LdN3hY_n0GAAD__0cMnlY=
 
 query I
 SELECT y FROM NumToStr ORDER BY y LIMIT 5
@@ -235,6 +240,15 @@ SELECT y FROM NumToStr ORDER BY y LIMIT 5
 3
 4
 5
+
+query I
+SELECT y FROM NumToStr ORDER BY y DESC LIMIT 5
+----
+10000
+9999
+9998
+9997
+9996
 
 query I
 SELECT y FROM NumToStr ORDER BY y OFFSET 5 LIMIT 2
