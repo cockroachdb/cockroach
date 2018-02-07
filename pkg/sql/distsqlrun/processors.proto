@@ -219,6 +219,30 @@ message JoinReaderSpec {
   // columns" will be the concatenation of the input stream columns followed by
   // the table columns.
   repeated uint32 lookup_columns = 3 [packed = true];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression variables @1 to @N refer to
+  // columns of the left stream and variables @N to @(N+M) refer to columns in
+  // the right stream.
+  // Having "ON" expression implies no merged columns.
+  optional Expression on_expr = 4 [(gogoproto.nullable) = false];
+
+  // The index map is used in lookup joins and is used to provide a map between
+  // the index columns and the columns to be outputted.
+  // Say the streamToPlan map for the right side is: [-1, 1, -1, 2], the
+  // indexMap would be [1, 2]. The internal columns on the right side would be
+  // the second and fourth columns, but since the entire right side is fetched
+  // on performing a index lookup, the mapping is needed to retrieve the index rows.
+
+  // The index map is used in lookup joins to retrieve the index rows from the
+  // internal columns.
+  // For example, say the streamToPlanColMap for the right side of a lookup
+  // join is: [-1, -1, 2, -1, 3], the internal columns would be columns 3 and
+  // 5. But when an index lookup is done, the entire right side is returned.
+  // The index map tells the processor which columns it should select. In the
+  // example the indexMap would be [2, 3].
+  repeated uint32 index_map = 5 [packed = true];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
