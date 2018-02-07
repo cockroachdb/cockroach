@@ -15,7 +15,6 @@ import * as vector from "src/util/vector";
 import "./sim.css";
 
 import { ModalLocalitiesView } from "./modalLocalities";
-import { WorldMap } from "./worldmap";
 import { NodeHistory } from "./nodeHistory";
 import { Box, ZoomTransformer } from "./zoom";
 import { LivenessStatus } from "src/redux/nodes";
@@ -122,7 +121,6 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
 
     return (
       <g>
-        <WorldMap projection={projection} />
         <ModalLocalitiesView
           nodeHistories={nodeHistories}
           localityTree={localityTree}
@@ -141,7 +139,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     // need to read its dimensions from the DOM in order to initialize the
     // state.
     return (
-      <div style={{ width: "100%", height: "100%", backgroundColor: "lavender" }}>
+      <div style={{ width: "100%", height: "100%" }}>
         <svg
           style={{ width: "100%", height: "100%" }}
           className="cluster-viz"

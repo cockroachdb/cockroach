@@ -20,6 +20,7 @@ import { findOrCalculateLocation } from "src/util/locations";
 
 import { NodeHistory } from "./nodeHistory";
 import { NodeView } from "./nodeView";
+import { WorldMap } from "./worldmap";
 import { ZoomTransformer } from "./zoom";
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
@@ -88,8 +89,12 @@ class MapLayout extends React.Component<ModalLocalitiesViewProps, any> {
   }
 
   render() {
+    const viewportSize = this.props.zoom.viewportSize();
+
     return (
       <g>
+        <rect width={viewportSize[0]} height={viewportSize[1]} fill="lavender" />
+        <WorldMap projection={this.props.projection} />
         { this.renderChildLocalities() }
       </g>
     );
