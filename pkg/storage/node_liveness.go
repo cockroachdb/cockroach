@@ -352,6 +352,22 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now(), nl.clock.MaxOffset()), nil
 }
 
+// IsHealthy returns whether or not the specified node is considered healthy
+// based on its current liveness status. It is an error if the specified node is
+// not in the local liveness table.
+func (nl *NodeLiveness) IsHealthy(nodeID roachpb.NodeID) (bool, error) {
+	liveness, err := nl.GetLiveness(nodeID)
+	if err != nil {
+		return false, err
+	}
+	ls := liveness.LivenessStatus(
+		nl.clock.Now().GoTime(),
+		nl.GetLivenessThreshold(),
+		nl.clock.MaxOffset(),
+	)
+	return ls == NodeLivenessStatus_LIVE, nil
+}
+
 // StartHeartbeat starts a periodic heartbeat to refresh this node's
 // last heartbeat in the node liveness table. The optionally provided
 // HeartbeatCallback will be invoked whenever this node updates its own liveness.
