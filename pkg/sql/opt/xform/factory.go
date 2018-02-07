@@ -37,7 +37,7 @@ import (
 type factory struct {
 	mem *memo
 
-	// maxSteps sets the maximum number of normalization patterns that the
+	// maxSteps sets the maximum number of optimization patterns that the
 	// factory will apply. Once this maximum is reached, the factory will
 	// construct the requested operator without applying any rewrites to it.
 	// This method is useful for debugging, in order to see intermediate
@@ -71,6 +71,14 @@ func (f *factory) InternList(items []opt.GroupID) opt.ListID {
 // this method is a no-op and returns the ID of the previous value.
 func (f *factory) InternPrivate(private interface{}) opt.PrivateID {
 	return f.mem.internPrivate(private)
+}
+
+// allowOptimizations returns true if optimizations are currently enabled. Each
+// individual optimization decrements the maxSteps counter. Once it reaches
+// zero (or if it was zero to begin with), no further optimizations will be
+// performed.
+func (f *factory) allowOptimizations() bool {
+	return f.maxSteps > 0
 }
 
 // onConstruct is called as a final step by each factory construction method,

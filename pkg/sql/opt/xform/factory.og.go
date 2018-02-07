@@ -16,6 +16,10 @@ func (_f *factory) ConstructSubquery(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_subqueryExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_subqueryExpr)))
 }
 
@@ -26,6 +30,10 @@ func (_f *factory) ConstructVariable(
 	_group := _f.mem.lookupGroupByFingerprint(_variableExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr)))
@@ -40,6 +48,10 @@ func (_f *factory) ConstructConst(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_constExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_constExpr)))
 }
 
@@ -50,6 +62,10 @@ func (_f *factory) ConstructTrue() opt.GroupID {
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_trueExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_trueExpr)))
 }
 
@@ -58,6 +74,10 @@ func (_f *factory) ConstructFalse() opt.GroupID {
 	_group := _f.mem.lookupGroupByFingerprint(_falseExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_falseExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_falseExpr)))
@@ -72,6 +92,10 @@ func (_f *factory) ConstructPlaceholder(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr)))
 }
 
@@ -82,6 +106,10 @@ func (_f *factory) ConstructTuple(
 	_group := _f.mem.lookupGroupByFingerprint(_tupleExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr)))
@@ -97,6 +125,10 @@ func (_f *factory) ConstructProjections(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
 }
 
@@ -109,6 +141,10 @@ func (_f *factory) ConstructFilters(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr)))
 }
 
@@ -119,6 +155,10 @@ func (_f *factory) ConstructExists(
 	_group := _f.mem.lookupGroupByFingerprint(_existsExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr)))
@@ -134,6 +174,10 @@ func (_f *factory) ConstructAnd(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_andExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
 }
 
@@ -147,6 +191,10 @@ func (_f *factory) ConstructOr(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_orExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orExpr)))
 }
 
@@ -157,6 +205,10 @@ func (_f *factory) ConstructNot(
 	_group := _f.mem.lookupGroupByFingerprint(_notExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
@@ -172,6 +224,10 @@ func (_f *factory) ConstructEq(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
 }
 
@@ -183,6 +239,10 @@ func (_f *factory) ConstructLt(
 	_group := _f.mem.lookupGroupByFingerprint(_ltExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
@@ -198,6 +258,10 @@ func (_f *factory) ConstructGt(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
 }
 
@@ -209,6 +273,10 @@ func (_f *factory) ConstructLe(
 	_group := _f.mem.lookupGroupByFingerprint(_leExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_leExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leExpr)))
@@ -224,6 +292,10 @@ func (_f *factory) ConstructGe(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_geExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_geExpr)))
 }
 
@@ -235,6 +307,10 @@ func (_f *factory) ConstructNe(
 	_group := _f.mem.lookupGroupByFingerprint(_neExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_neExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
@@ -250,6 +326,10 @@ func (_f *factory) ConstructIn(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_inExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_inExpr)))
 }
 
@@ -261,6 +341,10 @@ func (_f *factory) ConstructNotIn(
 	_group := _f.mem.lookupGroupByFingerprint(_notInExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr)))
@@ -276,6 +360,10 @@ func (_f *factory) ConstructLike(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr)))
 }
 
@@ -287,6 +375,10 @@ func (_f *factory) ConstructNotLike(
 	_group := _f.mem.lookupGroupByFingerprint(_notLikeExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr)))
@@ -302,6 +394,10 @@ func (_f *factory) ConstructILike(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr)))
 }
 
@@ -313,6 +409,10 @@ func (_f *factory) ConstructNotILike(
 	_group := _f.mem.lookupGroupByFingerprint(_notILikeExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr)))
@@ -328,6 +428,10 @@ func (_f *factory) ConstructSimilarTo(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr)))
 }
 
@@ -339,6 +443,10 @@ func (_f *factory) ConstructNotSimilarTo(
 	_group := _f.mem.lookupGroupByFingerprint(_notSimilarToExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr)))
@@ -354,6 +462,10 @@ func (_f *factory) ConstructRegMatch(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr)))
 }
 
@@ -365,6 +477,10 @@ func (_f *factory) ConstructNotRegMatch(
 	_group := _f.mem.lookupGroupByFingerprint(_notRegMatchExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr)))
@@ -380,6 +496,10 @@ func (_f *factory) ConstructRegIMatch(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr)))
 }
 
@@ -391,6 +511,10 @@ func (_f *factory) ConstructNotRegIMatch(
 	_group := _f.mem.lookupGroupByFingerprint(_notRegIMatchExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
@@ -406,6 +530,10 @@ func (_f *factory) ConstructIs(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_isExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isExpr)))
 }
 
@@ -417,6 +545,10 @@ func (_f *factory) ConstructIsNot(
 	_group := _f.mem.lookupGroupByFingerprint(_isNotExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr)))
@@ -432,6 +564,10 @@ func (_f *factory) ConstructContains(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr)))
 }
 
@@ -443,6 +579,10 @@ func (_f *factory) ConstructContainedBy(
 	_group := _f.mem.lookupGroupByFingerprint(_containedByExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr)))
@@ -458,6 +598,10 @@ func (_f *factory) ConstructBitand(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr)))
 }
 
@@ -469,6 +613,10 @@ func (_f *factory) ConstructBitor(
 	_group := _f.mem.lookupGroupByFingerprint(_bitorExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr)))
@@ -484,6 +632,10 @@ func (_f *factory) ConstructBitxor(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr)))
 }
 
@@ -495,6 +647,10 @@ func (_f *factory) ConstructPlus(
 	_group := _f.mem.lookupGroupByFingerprint(_plusExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
@@ -510,6 +666,10 @@ func (_f *factory) ConstructMinus(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
 }
 
@@ -521,6 +681,10 @@ func (_f *factory) ConstructMult(
 	_group := _f.mem.lookupGroupByFingerprint(_multExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_multExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_multExpr)))
@@ -536,6 +700,10 @@ func (_f *factory) ConstructDiv(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_divExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_divExpr)))
 }
 
@@ -547,6 +715,10 @@ func (_f *factory) ConstructFloorDiv(
 	_group := _f.mem.lookupGroupByFingerprint(_floorDivExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr)))
@@ -562,6 +734,10 @@ func (_f *factory) ConstructMod(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_modExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_modExpr)))
 }
 
@@ -573,6 +749,10 @@ func (_f *factory) ConstructPow(
 	_group := _f.mem.lookupGroupByFingerprint(_powExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_powExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_powExpr)))
@@ -588,6 +768,10 @@ func (_f *factory) ConstructConcat(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr)))
 }
 
@@ -599,6 +783,10 @@ func (_f *factory) ConstructLShift(
 	_group := _f.mem.lookupGroupByFingerprint(_lShiftExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr)))
@@ -614,6 +802,10 @@ func (_f *factory) ConstructRShift(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
 }
 
@@ -625,6 +817,10 @@ func (_f *factory) ConstructFetchVal(
 	_group := _f.mem.lookupGroupByFingerprint(_fetchValExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr)))
@@ -640,6 +836,10 @@ func (_f *factory) ConstructFetchText(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr)))
 }
 
@@ -651,6 +851,10 @@ func (_f *factory) ConstructFetchValPath(
 	_group := _f.mem.lookupGroupByFingerprint(_fetchValPathExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr)))
@@ -666,6 +870,10 @@ func (_f *factory) ConstructFetchTextPath(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr)))
 }
 
@@ -676,6 +884,10 @@ func (_f *factory) ConstructUnaryPlus(
 	_group := _f.mem.lookupGroupByFingerprint(_unaryPlusExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr)))
@@ -690,6 +902,10 @@ func (_f *factory) ConstructUnaryMinus(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr)))
 }
 
@@ -700,6 +916,10 @@ func (_f *factory) ConstructUnaryComplement(
 	_group := _f.mem.lookupGroupByFingerprint(_unaryComplementExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
@@ -715,6 +935,10 @@ func (_f *factory) ConstructFunction(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
 }
 
@@ -725,6 +949,10 @@ func (_f *factory) ConstructScan(
 	_group := _f.mem.lookupGroupByFingerprint(_scanExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_scanExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_scanExpr)))
@@ -740,6 +968,10 @@ func (_f *factory) ConstructValues(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_valuesExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_valuesExpr)))
 }
 
@@ -753,6 +985,10 @@ func (_f *factory) ConstructSelect(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr)))
 }
 
@@ -764,6 +1000,10 @@ func (_f *factory) ConstructProject(
 	_group := _f.mem.lookupGroupByFingerprint(_projectExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr)))
@@ -780,6 +1020,10 @@ func (_f *factory) ConstructInnerJoin(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
 }
 
@@ -792,6 +1036,10 @@ func (_f *factory) ConstructLeftJoin(
 	_group := _f.mem.lookupGroupByFingerprint(_leftJoinExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinExpr)))
@@ -808,6 +1056,10 @@ func (_f *factory) ConstructRightJoin(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinExpr)))
 }
 
@@ -820,6 +1072,10 @@ func (_f *factory) ConstructFullJoin(
 	_group := _f.mem.lookupGroupByFingerprint(_fullJoinExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr)))
@@ -836,6 +1092,10 @@ func (_f *factory) ConstructSemiJoin(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinExpr)))
 }
 
@@ -848,6 +1108,10 @@ func (_f *factory) ConstructAntiJoin(
 	_group := _f.mem.lookupGroupByFingerprint(_antiJoinExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinExpr)))
@@ -864,6 +1128,10 @@ func (_f *factory) ConstructInnerJoinApply(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinApplyExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinApplyExpr)))
 }
 
@@ -876,6 +1144,10 @@ func (_f *factory) ConstructLeftJoinApply(
 	_group := _f.mem.lookupGroupByFingerprint(_leftJoinApplyExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinApplyExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinApplyExpr)))
@@ -892,6 +1164,10 @@ func (_f *factory) ConstructRightJoinApply(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinApplyExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinApplyExpr)))
 }
 
@@ -904,6 +1180,10 @@ func (_f *factory) ConstructFullJoinApply(
 	_group := _f.mem.lookupGroupByFingerprint(_fullJoinApplyExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinApplyExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinApplyExpr)))
@@ -920,6 +1200,10 @@ func (_f *factory) ConstructSemiJoinApply(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinApplyExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinApplyExpr)))
 }
 
@@ -932,6 +1216,10 @@ func (_f *factory) ConstructAntiJoinApply(
 	_group := _f.mem.lookupGroupByFingerprint(_antiJoinApplyExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinApplyExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinApplyExpr)))
@@ -948,6 +1236,10 @@ func (_f *factory) ConstructGroupBy(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_groupByExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupByExpr)))
 }
 
@@ -960,6 +1252,10 @@ func (_f *factory) ConstructUnion(
 	_group := _f.mem.lookupGroupByFingerprint(_unionExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr)))
@@ -975,6 +1271,10 @@ func (_f *factory) ConstructIntersect(
 		return _group
 	}
 
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_intersectExpr))
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectExpr)))
 }
 
@@ -986,6 +1286,10 @@ func (_f *factory) ConstructExcept(
 	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
 	if _group != 0 {
 		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr))
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr)))

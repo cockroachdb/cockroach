@@ -1029,9 +1029,9 @@ func (e *MatchListExpr) Format(buf *bytes.Buffer, level int) {
 }
 
 type ConstructExpr struct {
-	OpName Expr
-	Args   ListExpr
-	Src    *SourceLoc
+	Name Expr
+	Args ListExpr
+	Src  *SourceLoc
 }
 
 func (e *ConstructExpr) Op() Operator {
@@ -1045,7 +1045,7 @@ func (e *ConstructExpr) ChildCount() int {
 func (e *ConstructExpr) Child(nth int) Expr {
 	switch nth {
 	case 0:
-		return e.OpName
+		return e.Name
 	case 1:
 		return &e.Args
 	}
@@ -1055,7 +1055,7 @@ func (e *ConstructExpr) Child(nth int) Expr {
 func (e *ConstructExpr) ChildName(nth int) string {
 	switch nth {
 	case 0:
-		return "OpName"
+		return "Name"
 	case 1:
 		return "Args"
 	}
@@ -1069,7 +1069,7 @@ func (e *ConstructExpr) Value() interface{} {
 func (e *ConstructExpr) Visit(accept AcceptFunc) Expr {
 	children := visitExprChildren(e, accept)
 	if children != nil {
-		return accept(&ConstructExpr{OpName: children[0], Args: *children[1].(*ListExpr), Src: e.Source()})
+		return accept(&ConstructExpr{Name: children[0], Args: *children[1].(*ListExpr), Src: e.Source()})
 	}
 	return accept(e)
 }
