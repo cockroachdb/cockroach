@@ -295,6 +295,31 @@ func remapOnExpr(
 	return distsqlplan.MakeExpression(n.pred.onCond, evalCtx, joinColMap)
 }
 
+// shiftExprCols remaps expression columns when merging rows in a join. It takes
+// expression columns for the right side of a join, and remaps the indices so
+// that they refer to indices in the merged row.
+func shiftExprCols(
+	evalCtx *tree.EvalContext, expr tree.TypedExpr, rightStreamToPlan, leftStreamToPlan []int,
+) distsqlrun.Expression {
+	offset := 0
+	for _, val := range leftStreamToPlan {
+		if val >= 0 {
+			offset++
+		}
+	}
+	shiftMap := make([]int, len(rightStreamToPlan))
+	idx := 0
+	for i := 0; i < len(rightStreamToPlan); i++ {
+		if rightStreamToPlan[i] >= 0 {
+			shiftMap[i] = idx + offset
+			idx++
+		} else {
+			shiftMap[i] = -1
+		}
+	}
+	return distsqlplan.MakeExpression(expr, evalCtx, shiftMap)
+}
+
 // eqCols produces a slice of ordinal references for the plan columns specified
 // in eqIndices using planToColMap.
 // That is: eqIndices contains a slice of plan column indexes and planToColMap
@@ -800,7 +825,9 @@ func distsqlSetOpJoinType(setOpType tree.UnionType) distsqlrun.JoinType {
 }
 
 func findJoinProcessorNodes(
-	leftRouters, rightRouters []distsqlplan.ProcessorIdx, processors []distsqlplan.Processor,
+	leftRouters, rightRouters []distsqlplan.ProcessorIdx,
+	processors []distsqlplan.Processor,
+	includeRight bool,
 ) (nodes []roachpb.NodeID) {
 	// TODO(radu): for now we run a join processor on every node that produces
 	// data for either source. In the future we should be smarter here.
@@ -812,11 +839,13 @@ func findJoinProcessorNodes(
 			nodes = append(nodes, n)
 		}
 	}
-	for _, pIdx := range rightRouters {
-		n := processors[pIdx].Node
-		if _, ok := seen[n]; !ok {
-			seen[n] = struct{}{}
-			nodes = append(nodes, n)
+	if includeRight {
+		for _, pIdx := range rightRouters {
+			n := processors[pIdx].Node
+			if _, ok := seen[n]; !ok {
+				seen[n] = struct{}{}
+				nodes = append(nodes, n)
+			}
 		}
 	}
 	return nodes

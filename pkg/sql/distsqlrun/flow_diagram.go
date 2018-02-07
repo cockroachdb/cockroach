@@ -120,6 +120,8 @@ func (tr *TableReaderSpec) summary() (string, []string) {
 	return "TableReader", indexDetails(tr.IndexIdx, &tr.Table)
 }
 
+// TODO(pbardea): for lookup joins should say "lookup join" and it should say
+// "looking up in table", rather than "PRIMARY".
 // summary implements the diagramCellType interface.
 func (jr *JoinReaderSpec) summary() (string, []string) {
 	index := "primary"
