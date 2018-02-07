@@ -426,6 +426,24 @@ func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue,
 	return rf.nextKV(ctx)
 }
 
+// IndexKeyString returns the currently searching index key up to `numCols`.
+// For example, if there is an index on 2 columns and the current index key
+// is '/Table/81/1/12/13/1', IndexKeyString(1) will return 'Table/81/1/12'.
+func (rf *RowFetcher) IndexKeyString(numCols int) string {
+	if rf.kv.Key == nil {
+		return ""
+	}
+	splitKey := strings.Split(rf.kv.Key.String(), "/")
+	// Take example index key from above, will be split into:
+	// ["", "Table", "81", "1", "12", "13", "1"], first 4 are always returned
+	// plus any additional columns requested.
+	targetSlashes := 4 + numCols
+	if targetSlashes > len(splitKey) {
+		return strings.Join(splitKey, "/")
+	}
+	return strings.Join(splitKey[:targetSlashes], "/")
+}
+
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
 // has been completed.
 func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {

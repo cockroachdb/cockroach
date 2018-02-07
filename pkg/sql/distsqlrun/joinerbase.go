@@ -229,6 +229,7 @@ func (jb *joinerBase) maybeEmitUnmatchedRow(
 // See CompareEncDatumRowForMerge.
 func (jb *joinerBase) render(lrow, rrow sqlbase.EncDatumRow) (sqlbase.EncDatumRow, error) {
 	n := jb.numMergedEqualityColumns
+	jb.combinedRow = jb.combinedRow[:n+len(lrow)+len(rrow)]
 	for i := 0; i < n; i++ {
 		// This function is called only when lrow and rrow match on the equality
 		// columns which can never happen if there are any NULLs in these

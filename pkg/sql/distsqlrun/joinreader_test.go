@@ -65,6 +65,7 @@ func TestJoinReader(t *testing.T) {
 	testCases := []struct {
 		description string
 		post        PostProcessSpec
+		onExpr      string
 		input       [][]tree.Datum
 		lookupCols  columns
 		outputTypes []sqlbase.ColumnType
@@ -119,7 +120,7 @@ func TestJoinReader(t *testing.T) {
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 		},
 		{
-			description: "Test selecting rows using the primary index",
+			description: "Test selecting rows using the primary index in lookup join",
 			post: PostProcessSpec{
 				Projection:    true,
 				OutputColumns: []uint32{0, 1, 4},
@@ -154,6 +155,23 @@ func TestJoinReader(t *testing.T) {
 			outputTypes: []sqlbase.ColumnType{strType},
 			expected:    "[['one'] ['five'] ['two-one'] ['one-three'] ['five-zero']]",
 		},
+		{
+			description: "Test lookup join with onExpr",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 4},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(10), bFn(10)},
+				{aFn(15), bFn(15)},
+			},
+			lookupCols:  []uint32{0, 1},
+			outputTypes: threeIntCols,
+			onExpr:      "@2 < @5",
+			expected:    "[[1 0 1] [1 5 6]]",
+		},
 	}
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
@@ -180,7 +198,7 @@ func TestJoinReader(t *testing.T) {
 			out := &RowBuffer{}
 			jr, err := newJoinReader(
 				&flowCtx,
-				&JoinReaderSpec{Table: *td, LookupColumns: c.lookupCols},
+				&JoinReaderSpec{Table: *td, LookupColumns: c.lookupCols, OnExpr: Expression{Expr: c.onExpr}},
 				in,
 				&c.post,
 				out,
