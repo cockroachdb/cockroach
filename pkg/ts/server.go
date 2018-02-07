@@ -44,6 +44,10 @@ const (
 	queryMemoryMax = int64(64 * 1024 * 1024) // 64MiB
 )
 
+// ClusterNodeCountFn is a function that returns the number of nodes active on
+// the cluster.
+type ClusterNodeCountFn func() int64
+
 // ServerConfig provides a means for tests to override settings in the time
 // series server.
 type ServerConfig struct {
@@ -83,6 +87,7 @@ type Server struct {
 	log.AmbientContext
 	db               *DB
 	stopper          *stop.Stopper
+	nodeCountFn      ClusterNodeCountFn
 	queryMemoryMax   int64
 	queryWorkerMax   int
 	workerMemMonitor mon.BytesMonitor
@@ -93,7 +98,7 @@ type Server struct {
 // MakeServer instantiates a new Server which services requests with data from
 // the supplied DB.
 func MakeServer(
-	ambient log.AmbientContext, db *DB, cfg ServerConfig, stopper *stop.Stopper,
+	ambient log.AmbientContext, db *DB, nodeCountFn ClusterNodeCountFn, cfg ServerConfig, stopper *stop.Stopper,
 ) Server {
 	ambient.AddLogTag("ts-srv", nil)
 
@@ -111,6 +116,7 @@ func MakeServer(
 		AmbientContext: ambient,
 		db:             db,
 		stopper:        stopper,
+		nodeCountFn:    nodeCountFn,
 		workerMemMonitor: mon.MakeUnlimitedMonitor(
 			context.Background(),
 			"timeseries-workers",
@@ -170,9 +176,13 @@ func (s *Server) Query(
 	// be interpolated).
 	interpolationLimit := storage.TimeUntilStoreDead.Get(&s.db.st.SV).Nanoseconds()
 
-	// TODO(mrtracy): This number should be computed from node livenesses, which
-	// will yield more accurate estimates.
-	estimatedClusterNodeCount := int64(6)
+	// Get the estimated number of nodes on the cluster, used to compute more
+	// accurate memory usage estimates. Set a minimum of 1 in order to avoid
+	// divide-by-zero panics.
+	estimatedClusterNodeCount := s.nodeCountFn()
+	if estimatedClusterNodeCount == 0 {
+		estimatedClusterNodeCount = 1
+	}
 
 	response := tspb.TimeSeriesQueryResponse{
 		Results: make([]tspb.TimeSeriesQueryResponse_Result, len(request.Queries)),

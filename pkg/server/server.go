@@ -355,7 +355,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.adminMemMetrics)
 
 	s.tsDB = ts.NewDB(s.db, s.cfg.Settings)
-	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, s.cfg.TimeSeriesServerConfig, s.stopper)
+	nodeCountFn := func() int64 {
+		return s.nodeLiveness.Metrics().LiveNodes.Value()
+	}
+	s.tsServer = ts.MakeServer(s.cfg.AmbientCtx, s.tsDB, nodeCountFn, s.cfg.TimeSeriesServerConfig, s.stopper)
 
 	// The InternalExecutor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
