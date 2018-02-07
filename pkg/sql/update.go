@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -43,7 +44,7 @@ type updateNode struct {
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	computeExprs  []tree.TypedExpr
 	tw            tableUpdater
-	checkHelper   checkHelper
+	checkHelper   sqlbase.CheckHelper
 	sourceSlots   []sourceSlot
 
 	run        updateRun
@@ -265,7 +266,9 @@ func (p *planner) Update(
 		tw:            tw,
 		sourceSlots:   sourceSlots,
 	}
-	if err := un.checkHelper.init(ctx, p, tn, en.tableDesc); err != nil {
+	if err := un.checkHelper.Init(
+		ctx, p.analyzeExpr, parser.ParseExprs, tn, en.tableDesc,
+	); err != nil {
 		return nil, err
 	}
 	if err := un.run.initEditNode(
@@ -344,13 +347,13 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.
-	if err := u.checkHelper.loadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
+	if err := u.checkHelper.LoadRow(u.tw.ru.FetchColIDtoRowIndex, oldValues, false); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.loadRow(u.updateColsIdx, updateValues, true); err != nil {
+	if err := u.checkHelper.LoadRow(u.updateColsIdx, updateValues, true); err != nil {
 		return false, err
 	}
-	if err := u.checkHelper.check(params.EvalContext()); err != nil {
+	if err := u.checkHelper.Check(params.EvalContext()); err != nil {
 		return false, err
 	}
 
