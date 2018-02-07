@@ -10,7 +10,7 @@ import React from "react";
 
 import { Bytes } from "src/util/format";
 
-import { SimulatedNodeStatus } from "./nodeSimulator";
+import { NodeHistory } from "./nodeHistory";
 import * as PathMath from "./pathmath";
 
 interface StatsViewProps {
@@ -18,7 +18,7 @@ interface StatsViewProps {
   usedCapacity: number;
   label: string;
 
-  nodeHistory?: SimulatedNodeStatus;
+  nodeHistory?: NodeHistory;
   maxClientActivityRate?: number;
 }
 

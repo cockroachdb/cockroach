@@ -18,8 +18,9 @@ import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getChildLocalities, getLeaves, getLocality } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 
-import { SimulatedNodeStatus } from "./nodeSimulator";
+import { NodeHistory } from "./nodeHistory";
 import { NodeView } from "./nodeView";
+import { WorldMap } from "./worldmap";
 import { ZoomTransformer } from "./zoom";
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
@@ -67,7 +68,7 @@ interface ModalLocalitiesViewProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
   tiers: LocalityTier[];
-  nodeHistories: { [id: string]: SimulatedNodeStatus };
+  nodeHistories: { [id: string]: NodeHistory };
   liveness: { [id: string]: LivenessStatus };
   projection: d3.geo.Projection;
   zoom: ZoomTransformer;
@@ -88,8 +89,12 @@ class MapLayout extends React.Component<ModalLocalitiesViewProps, any> {
   }
 
   render() {
+    const viewportSize = this.props.zoom.viewportSize();
+
     return (
       <g>
+        <rect width={viewportSize[0]} height={viewportSize[1]} fill="lavender" />
+        <WorldMap projection={this.props.projection} />
         { this.renderChildLocalities() }
       </g>
     );
@@ -98,6 +103,15 @@ class MapLayout extends React.Component<ModalLocalitiesViewProps, any> {
 
 class CircleLayout extends React.Component<ModalLocalitiesViewProps, any> {
   coordsFor(index: number, total: number, radius: number) {
+    if (total === 1) {
+      return [0, 0];
+    }
+
+    if (total === 2) {
+      const leftOrRight = index === 0 ? -radius : radius;
+      return [leftOrRight, 0];
+    }
+
     const angle = 2 * Math.PI * index / total - Math.PI / 2;
     return [radius * Math.cos(angle), radius * Math.sin(angle)];
   }
