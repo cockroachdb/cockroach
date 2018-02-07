@@ -180,75 +180,55 @@ func (c candidate) compactString(options scorerOptions) string {
 
 // less returns true if o is a better fit for some range than c is.
 func (c candidate) less(o candidate) bool {
-	if !o.valid {
-		return false
-	}
-	if !c.valid {
-		return true
-	}
-	if o.fullDisk {
-		return false
-	}
-	if c.fullDisk {
-		return true
-	}
-	if c.necessary != o.necessary {
-		return o.necessary
-	}
-	if c.localityScore() != o.localityScore() {
-		return c.localityScore() < o.localityScore()
-	}
-	if c.convergesScore != o.convergesScore {
-		return c.convergesScore < o.convergesScore
-	}
-	if c.balanceScore.totalScore() != o.balanceScore.totalScore() {
-		return c.balanceScore.totalScore() < o.balanceScore.totalScore()
-	}
-	return c.rangeCount > o.rangeCount
+	return c.compare(o) < 0
 }
 
-// worthRebalancingTo returns true if o is enough of a better fit for some
-// range than c is that it's worth rebalancing from c to o.
-func (c candidate) worthRebalancingTo(o candidate, options scorerOptions) bool {
+// compare is analogous to strcmp in C or string::compare in C++ -- it returns
+// a positive result if c is a better fit for the range than o, 0 if they're
+// equivalent, or a negative result if o is a better fit than c. The magnitude
+// of the result reflects some rough idea of how much better the better
+// candidate is.
+func (c candidate) compare(o candidate) float64 {
 	if !o.valid {
-		return false
+		return 6
 	}
 	if !c.valid {
-		return true
+		return -6
 	}
 	if o.fullDisk {
-		return false
+		return 5
 	}
 	if c.fullDisk {
-		return true
+		return -5
 	}
 	if c.necessary != o.necessary {
-		return o.necessary
+		if c.necessary {
+			return 4
+		}
+		return -4
 	}
 	if c.localityScore() != o.localityScore() {
-		return c.localityScore() < o.localityScore()
+		if c.localityScore() > o.localityScore() {
+			return 3
+		}
+		return -3
 	}
 	if c.convergesScore != o.convergesScore {
-		return c.convergesScore < o.convergesScore
+		if c.convergesScore > o.convergesScore {
+			return 2 + 10.0/float64(c.convergesScore-o.convergesScore)
+		}
+		return -(2 + 10.0/float64(o.convergesScore-c.convergesScore))
 	}
-	// You might intuitively think that we should require o's balanceScore to
-	// be considerably higher than c's balanceScore, but that will effectively
-	// rule out rebalancing in clusters where one locality is much larger or
-	// smaller than the others, since all the stores in that locality will tend
-	// to have either a maximal or minimal balanceScore.
 	if c.balanceScore.totalScore() != o.balanceScore.totalScore() {
-		return c.balanceScore.totalScore() < o.balanceScore.totalScore()
+		if c.balanceScore.totalScore() > o.balanceScore.totalScore() {
+			return 1 + 10.0/float64(c.balanceScore.totalScore()-o.balanceScore.totalScore())
+		}
+		return -(1 + 10.0/float64(o.balanceScore.totalScore()-c.balanceScore.totalScore()))
 	}
-	// Instead, just require a gap between their number of ranges. This isn't
-	// great, particularly for stats-based rebalancing, but it only breaks
-	// balanceScore ties and it's a workable stop-gap on the way to something
-	// like #20751.
-	avgRangeCount := float64(c.rangeCount+o.rangeCount) / 2.0
-	// Use an overfullThreshold that is at least a couple replicas larger than
-	// the average of the two, to ensure that we don't keep rebalancing back
-	// and forth between nodes that only differ by one or two replicas.
-	overfullThreshold := math.Max(overfullRangeThreshold(options, avgRangeCount), avgRangeCount+1.5)
-	return float64(c.rangeCount) > overfullThreshold
+	if c.rangeCount < o.rangeCount {
+		return float64(o.rangeCount-c.rangeCount) / float64(o.rangeCount)
+	}
+	return -float64(c.rangeCount-o.rangeCount) / float64(c.rangeCount)
 }
 
 type candidateList []candidate
@@ -691,7 +671,6 @@ func rebalanceCandidates(
 	// 6. Create sets of rebalance options, i.e. groups of candidate stores and
 	//		the existing replicas that they could legally replace in the range.  We
 	//		have to make a separate set of these for each group of comparableStores.
-	// TODO: How to determine best options out of multiple sets?
 	results := make([]rebalanceOptions, 0, len(comparableStores))
 	for localityStr, sl := range comparableStores {
 		var existingCandidates candidateList
@@ -751,6 +730,10 @@ func rebalanceCandidates(
 			}
 		}
 
+		if len(existingCandidates) == 0 || len(candidates) == 0 {
+			continue
+		}
+
 		if options.deterministic {
 			sort.Sort(sort.Reverse(byScoreAndID(existingCandidates)))
 			sort.Sort(sort.Reverse(byScoreAndID(candidates)))
@@ -760,11 +743,53 @@ func rebalanceCandidates(
 		}
 		results = append(results, rebalanceOptions{
 			existingCandidates: existingCandidates,
-			candidates:         candidates,
+			// Only return candidates better than the worst existing replica
+			candidates: candidates.betterThan(existingCandidates[len(existingCandidates)-1]),
 		})
+		log.VEventf(ctx, 5, "rebalance candidates #%d: %s\nexisting replicas: %s",
+			len(results), results[len(results)-1].candidates, results[len(results)-1].existingCandidates)
 	}
 
 	return results
+}
+
+// bestRebalanceTarget returns the best target to try to rebalance to out of
+// the provided options, and removes it from the relevant candidate list.
+// Also returns the existing replicas that the chosen candidate was compared to.
+// Returns nil if there are no more targets worth rebalancing to.
+func bestRebalanceTarget(
+	randGen allocatorRand, options []rebalanceOptions,
+) (*candidate, candidateList) {
+	bestIdx := -1
+	var bestTarget *candidate
+	var replaces candidate
+	for i, option := range options {
+		if len(option.candidates) == 0 {
+			continue
+		}
+		target := option.candidates.selectGood(randGen)
+		existing := option.existingCandidates[len(option.existingCandidates)-1]
+		if betterRebalanceTarget(target, &existing, bestTarget, &replaces) == target {
+			bestIdx = i
+			bestTarget = target
+			replaces = existing
+		}
+	}
+	if bestIdx == -1 {
+		return nil, nil
+	}
+	options[bestIdx].candidates = options[bestIdx].candidates.removeCandidate(*bestTarget)
+	return bestTarget, options[bestIdx].existingCandidates
+}
+
+func betterRebalanceTarget(target1, existing1, target2, existing2 *candidate) *candidate {
+	if target2 == nil {
+		return target1
+	}
+	if target1.compare(*existing1) >= target2.compare(*existing2) {
+		return target1
+	}
+	return target2
 }
 
 // shouldRebalance returns whether the specified store is a candidate for
