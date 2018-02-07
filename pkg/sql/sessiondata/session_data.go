@@ -38,6 +38,10 @@ type SessionData struct {
 	// DistSQLMode indicates whether to run queries using the distributed
 	// execution engine.
 	DistSQLMode DistSQLExecMode
+	// LookupJoinEnabled indicates whether the planner should try and plan a
+	// lookup join where the left side is scanned and index lookups are done on
+	// the right side. Will emit a warning if a lookup join can't be planned.
+	LookupJoinEnabled bool
 	// Location indicates the current time zone.
 	Location *time.Location
 	// OptimizerMode indicates whether to use the experimental optimizer for
