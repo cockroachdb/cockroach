@@ -21,7 +21,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -60,7 +61,7 @@ func toBackup(t testing.TB, data workload.Table, dir string, chunkBytes int64) (
 
 	// TODO(dan): The csv load will be less overhead, use it when we have it.
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := sqlccl.Load(ctx, db, &stmts, `data`, `nodelocal://`+dir, ts, chunkBytes, tempDir)
+	desc, err := importccl.Load(ctx, db, &stmts, `data`, `nodelocal://`+dir, ts, chunkBytes, tempDir)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +73,7 @@ type Backup struct {
 	// BaseDir can be used for a RESTORE. All paths in the descriptor are
 	// relative to this.
 	BaseDir string
-	Desc    sqlccl.BackupDescriptor
+	Desc    backupccl.BackupDescriptor
 
 	fileIdx int
 	iterIdx int

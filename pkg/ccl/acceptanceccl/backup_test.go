@@ -25,7 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/terrafarm"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -248,7 +248,7 @@ func BenchmarkRestoreBig(b *testing.B) {
 
 		ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 		restoreURI := getAzureEphemeralURI(b)
-		desc, err := sqlccl.Load(ctx, sqlDB, &buf, "data", restoreURI, ts, 0, os.TempDir())
+		desc, err := importccl.Load(ctx, sqlDB, &buf, "data", restoreURI, ts, 0, os.TempDir())
 		if err != nil {
 			b.Fatal(err)
 		}
