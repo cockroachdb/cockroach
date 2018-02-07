@@ -669,6 +669,10 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	if n := tc.store.metrics.AddSSTableApplications.Count(); n == 0 {
 		t.Fatalf("expected metric to show at least one AddSSTable application, but got %d", n)
 	}
+	// We don't count in-memory env SST writes as copies.
+	if n := tc.store.metrics.AddSSTableApplicationCopies.Count(); n != 0 {
+		t.Fatalf("expected metric to show 0 AddSSTable copy, but got %d", n)
+	}
 }
 
 type mockSender struct {

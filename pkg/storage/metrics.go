@@ -477,6 +477,10 @@ var (
 	metaAddSSTableApplications = metric.Metadata{
 		Name: "addsstable.applications",
 		Help: "Number of SSTable ingestions applied (i.e. applied by Replicas)"}
+	metaAddSSTableApplicationCopies = metric.Metadata{
+		Name: "addsstable.copies",
+		Help: "number of SSTable ingestions that required copying files during application",
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -662,9 +666,10 @@ type StoreMetrics struct {
 	BackpressuredOnSplitRequests *metric.Gauge
 
 	// AddSSTable stats: how many AddSSTable commands were proposed and how many
-	// were applied?
-	AddSSTableProposals    *metric.Counter
-	AddSSTableApplications *metric.Counter
+	// were applied? How many applications required writing a copy?
+	AddSSTableProposals         *metric.Counter
+	AddSSTableApplications      *metric.Counter
+	AddSSTableApplicationCopies *metric.Counter
 
 	// Stats for efficient merges.
 	mu struct {
@@ -848,8 +853,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		BackpressuredOnSplitRequests: metric.NewGauge(metaBackpressuredOnSplitRequests),
 
 		// AddSSTable proposal + applications counters.
-		AddSSTableProposals:    metric.NewCounter(metaAddSSTableProposals),
-		AddSSTableApplications: metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableProposals:         metric.NewCounter(metaAddSSTableProposals),
+		AddSSTableApplications:      metric.NewCounter(metaAddSSTableApplications),
+		AddSSTableApplicationCopies: metric.NewCounter(metaAddSSTableApplicationCopies),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
