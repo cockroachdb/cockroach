@@ -1,0 +1,127 @@
+# tests adapted from logictest -- aggregate and distinct
+
+build
+SELECT y, z FROM t.xyz
+----
+project
+ ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ ├── scan
+ │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ └── projections [type=tuple{int, float}]
+      ├── variable: xyz.y [type=int]
+      └── variable: xyz.z [type=float]
+
+build
+SELECT DISTINCT y, z FROM t.xyz
+----
+group-by
+ ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ ├── project
+ │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    └── projections [type=tuple{int, float}]
+ │         ├── variable: xyz.y [type=int]
+ │         └── variable: xyz.z [type=float]
+ ├── projections [type=tuple{int, float}]
+ │    ├── variable: xyz.y [type=int]
+ │    └── variable: xyz.z [type=float]
+ └── projections [type=tuple{}]
+
+build
+SELECT y FROM (SELECT DISTINCT y, z FROM t.xyz)
+----
+project
+ ├── columns: xyz.y:int:null:2
+ ├── group-by
+ │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ │    ├── project
+ │    │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── projections [type=tuple{int, float}]
+ │    │         ├── variable: xyz.y [type=int]
+ │    │         └── variable: xyz.z [type=float]
+ │    ├── projections [type=tuple{int, float}]
+ │    │    ├── variable: xyz.y [type=int]
+ │    │    └── variable: xyz.z [type=float]
+ │    └── projections [type=tuple{}]
+ └── projections [type=tuple{int}]
+      └── variable: xyz.y [type=int]
+
+build
+SELECT DISTINCT (y,z) FROM t.xyz
+----
+group-by
+ ├── columns: column4:tuple{int, float}:null:4
+ ├── project
+ │    ├── columns: column4:tuple{int, float}:null:4
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    └── projections [type=tuple{tuple{int, float}}]
+ │         └── tuple [type=tuple{int, float}]
+ │              ├── variable: xyz.y [type=int]
+ │              └── variable: xyz.z [type=float]
+ ├── projections [type=tuple{tuple{int, float}}]
+ │    └── variable: column4 [type=tuple{int, float}]
+ └── projections [type=tuple{}]
+
+build
+SELECT COUNT(*) FROM (SELECT DISTINCT y FROM t.xyz)
+----
+group-by
+ ├── columns: column4:int:null:4
+ ├── group-by
+ │    ├── columns: xyz.y:int:null:2
+ │    ├── project
+ │    │    ├── columns: xyz.y:int:null:2
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── projections [type=tuple{int}]
+ │    │         └── variable: xyz.y [type=int]
+ │    ├── projections [type=tuple{int}]
+ │    │    └── variable: xyz.y [type=int]
+ │    └── projections [type=tuple{}]
+ ├── projections [type=tuple{}]
+ └── projections [type=tuple{NULL}]
+      └── function: count_rows [type=NULL]
+
+build
+SELECT DISTINCT x FROM t.xyz WHERE x > 0
+----
+group-by
+ ├── columns: xyz.x:int:null:1
+ ├── project
+ │    ├── columns: xyz.x:int:1
+ │    ├── select
+ │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── gt [type=bool]
+ │    │         ├── variable: xyz.x [type=int]
+ │    │         └── const: 0 [type=int]
+ │    └── projections [type=tuple{int}]
+ │         └── variable: xyz.x [type=int]
+ ├── projections [type=tuple{int}]
+ │    └── variable: xyz.x [type=int]
+ └── projections [type=tuple{}]
+
+build
+SELECT DISTINCT z FROM t.xyz WHERE x > 0
+----
+group-by
+ ├── columns: xyz.z:float:null:3
+ ├── project
+ │    ├── columns: xyz.z:float:null:3
+ │    ├── select
+ │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── gt [type=bool]
+ │    │         ├── variable: xyz.x [type=int]
+ │    │         └── const: 0 [type=int]
+ │    └── projections [type=tuple{float}]
+ │         └── variable: xyz.z [type=float]
+ ├── projections [type=tuple{float}]
+ │    └── variable: xyz.z [type=float]
+ └── projections [type=tuple{}]

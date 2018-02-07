@@ -24,6 +24,7 @@ import (
 
 // TestColumn implements the optbase.Column interface for testing purposes.
 type TestColumn struct {
+	Hidden   bool
 	Nullable bool
 	Name     string
 	Type     types.T
@@ -48,7 +49,7 @@ func (c *TestColumn) DatumType() types.T {
 
 // IsHidden is part of the optbase.Column interface.
 func (c *TestColumn) IsHidden() bool {
-	return false
+	return c.Hidden
 }
 
 // TestTable implements the optbase.Table interface for testing purposes.
