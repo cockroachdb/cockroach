@@ -22,11 +22,28 @@ import { Box, ZoomTransformer } from "./zoom";
 import { LocalityTier } from "src/redux/localities";
 import { Breadcrumbs } from "ccl/src/views/clusterviz/containers/map/breadcrumbs";
 
-interface ClusterVisualizationState {
+export default class ClusterVisualization extends React.Component<RouterState> {
+  render() {
+    const tiers = parseLocalityRoute(this.props.params.splat);
+
+    return (
+      <div style={{ width: "100%", height: "100%" }}>
+        <Breadcrumbs tiers={tiers} />
+        <NodeCanvas tiers={tiers} />
+      </div>
+    );
+  }
+}
+
+interface NodeCanvasProps {
+  tiers: LocalityTier[];
+}
+
+interface NodeCanvasState {
   zoomTransform: ZoomTransformer;
 }
 
-export default class ClusterVisualization extends React.Component<RouterState, ClusterVisualizationState> {
+class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState> {
   graphEl: SVGElement;
   zoom: d3.behavior.Zoom<any>;
   maxLatitude = 63;
@@ -119,23 +136,18 @@ export default class ClusterVisualization extends React.Component<RouterState, C
   }
 
   render() {
-    const tiers = parseLocalityRoute(this.props.params.splat);
-
     // We must render the SVG even before initializing the state, because we
     // need to read its dimensions from the DOM in order to initialize the
     // state.
     return (
-      <div style={{ height: "100%" }}>
-        <Breadcrumbs tiers={tiers} />
-        <div style={{ width: "100%", height: "100%", backgroundColor: "lavender" }}>
-          <svg
-            style={{ width: "100%", height: "100%" }}
-            className="cluster-viz"
-            ref={svg => this.graphEl = svg}
-          >
-            { this.renderContent(tiers) }
-          </svg>
-        </div>
+      <div style={{ width: "100%", height: "100%", backgroundColor: "lavender" }}>
+        <svg
+          style={{ width: "100%", height: "100%" }}
+          className="cluster-viz"
+          ref={svg => this.graphEl = svg}
+        >
+          { this.renderContent(this.props.tiers) }
+        </svg>
       </div>
     );
   }
