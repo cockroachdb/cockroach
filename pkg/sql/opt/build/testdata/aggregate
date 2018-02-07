@@ -112,7 +112,7 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY k
 ----
 project
- ├── columns: kv.k:int:null:1 column5:int:null:5
+ ├── columns: column5:int:null:5 kv.k:int:null:1
  ├── group-by
  │    ├── columns: kv.k:int:null:1 column5:int:null:5
  │    ├── scan
@@ -130,7 +130,7 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY 2
 ----
 project
- ├── columns: kv.k:int:null:1 column5:int:null:5
+ ├── columns: column5:int:null:5 kv.k:int:null:1
  ├── group-by
  │    ├── columns: kv.k:int:null:1 column5:int:null:5
  │    ├── scan
@@ -163,7 +163,7 @@ build
 SELECT COUNT(*), kv.s FROM t.kv GROUP BY s
 ----
 project
- ├── columns: kv.s:string:null:4 column5:int:null:5
+ ├── columns: column5:int:null:5 kv.s:string:null:4
  ├── group-by
  │    ├── columns: kv.s:string:null:4 column5:int:null:5
  │    ├── scan
@@ -180,7 +180,7 @@ build
 SELECT COUNT(*), s FROM t.kv GROUP BY kv.s
 ----
 project
- ├── columns: kv.s:string:null:4 column5:int:null:5
+ ├── columns: column5:int:null:5 kv.s:string:null:4
  ├── group-by
  │    ├── columns: kv.s:string:null:4 column5:int:null:5
  │    ├── scan
@@ -197,7 +197,7 @@ build
 SELECT COUNT(*), kv.s FROM t.kv GROUP BY kv.s
 ----
 project
- ├── columns: kv.s:string:null:4 column5:int:null:5
+ ├── columns: column5:int:null:5 kv.s:string:null:4
  ├── group-by
  │    ├── columns: kv.s:string:null:4 column5:int:null:5
  │    ├── scan
@@ -214,7 +214,7 @@ build
 SELECT COUNT(*), s FROM t.kv GROUP BY s
 ----
 project
- ├── columns: kv.s:string:null:4 column5:int:null:5
+ ├── columns: column5:int:null:5 kv.s:string:null:4
  ├── group-by
  │    ├── columns: kv.s:string:null:4 column5:int:null:5
  │    ├── scan
@@ -232,7 +232,7 @@ build
 SELECT v, COUNT(*), w FROM t.kv GROUP BY v, w
 ----
 project
- ├── columns: kv.v:int:null:2 kv.w:int:null:3 column5:int:null:5
+ ├── columns: kv.v:int:null:2 column5:int:null:5 kv.w:int:null:3
  ├── group-by
  │    ├── columns: kv.v:int:null:2 kv.w:int:null:3 column5:int:null:5
  │    ├── scan
@@ -252,7 +252,7 @@ build
 SELECT v, COUNT(*), w FROM t.kv GROUP BY 1, 3
 ----
 project
- ├── columns: kv.v:int:null:2 kv.w:int:null:3 column5:int:null:5
+ ├── columns: kv.v:int:null:2 column5:int:null:5 kv.w:int:null:3
  ├── group-by
  │    ├── columns: kv.v:int:null:2 kv.w:int:null:3 column5:int:null:5
  │    ├── scan
@@ -272,7 +272,7 @@ build
 SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY UPPER(s)
 ----
 project
- ├── columns: column5:string:null:5 column6:int:null:6
+ ├── columns: column6:int:null:6 column5:string:null:5
  ├── group-by
  │    ├── columns: column5:string:null:5 column6:int:null:6
  │    ├── scan
@@ -350,7 +350,7 @@ build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
 ----
 project
- ├── columns: column5:int:null:5 column6:int:null:6
+ ├── columns: column6:int:null:6 column5:int:null:5
  ├── group-by
  │    ├── columns: column5:int:null:5 column6:int:null:6
  │    ├── scan
@@ -417,7 +417,7 @@ build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM t.kv GROUP BY kv.v + kv.w
 ----
 project
- ├── columns: column5:int:null:5 count_1:int:null:6
+ ├── columns: count_1:int:null:6 column5:int:null:5
  ├── group-by
  │    ├── columns: column5:int:null:5 count_1:int:null:6
  │    ├── scan
