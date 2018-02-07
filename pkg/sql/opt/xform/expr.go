@@ -191,11 +191,6 @@ func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	case opt.VariableOp:
 		colIndex := private.(opt.ColumnIndex)
 		private = ev.mem.metadata.ColumnLabel(colIndex)
-
-	case opt.ProjectionsOp:
-		// Projections private data is similar to its output columns, so
-		// don't print it again.
-		private = nil
 	}
 
 	if private != nil {

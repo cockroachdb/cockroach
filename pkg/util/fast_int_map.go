@@ -15,6 +15,8 @@
 package util
 
 import (
+	"bytes"
+	fmt "fmt"
 	"math/bits"
 
 	"golang.org/x/tools/container/intsets"
@@ -185,6 +187,27 @@ func (m FastIntMap) ForEach(fn func(key, val int)) {
 			fn(k, v)
 		}
 	}
+}
+
+func (m FastIntMap) String() string {
+	if m.large != nil {
+		return fmt.Sprint(m.large)
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString("map[")
+	first := true
+	for i := 0; i < numVals; i++ {
+		if val := m.getSmallVal(uint32(i)); val != -1 {
+			if !first {
+				buf.WriteByte(' ')
+			}
+			first = false
+			fmt.Fprintf(&buf, "%d:%d", i, val)
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
 }
 
 // These constants determine the "small" representation: we pack <numVals>

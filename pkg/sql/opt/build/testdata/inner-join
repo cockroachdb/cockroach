@@ -26,7 +26,7 @@ project
  │    ├── scan
  │    │    └── columns: b.x:int:null:3 b.y:float:null:4 b.rowid:int:5
  │    └── true [type=bool]
- └── projections [type=tuple{int, float, int, float}]
+ └── projections: map[0:1 1:2 2:3 3:4] [type=tuple{int, float, int, float}]
       ├── variable: a.x [type=int]
       ├── variable: a.y [type=float]
       ├── variable: b.x [type=int]
@@ -49,7 +49,7 @@ project
  │    └── eq [type=bool]
  │         ├── variable: a.x [type=int]
  │         └── variable: b.x [type=int]
- └── projections [type=tuple{int, float}]
+ └── projections: map[0:1 1:4] [type=tuple{int, float}]
       ├── variable: a.x [type=int]
       └── variable: b.y [type=float]
 
@@ -79,7 +79,7 @@ project
  │         └── eq [type=bool]
  │              ├── variable: b.x [type=int]
  │              └── variable: a.x [type=int]
- └── projections [type=tuple{int, float, string, int, float, int, float}]
+ └── projections: map[0:1 1:2 2:3 3:5 4:6 5:8 6:9] [type=tuple{int, float, string, int, float, int, float}]
       ├── variable: c.x [type=int]
       ├── variable: c.y [type=float]
       ├── variable: c.z [type=string]
