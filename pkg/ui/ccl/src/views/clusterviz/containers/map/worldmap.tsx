@@ -23,7 +23,6 @@ export class WorldMap extends React.Component<WorldMapProps, {}> {
     const pathGen = d3.geo.path().projection(this.props.projection);
     return (
       <g>
-        <rect className="map-background" />
         <g>
           {worldShapes.features.map((feature: any, i: number) =>
             <path
