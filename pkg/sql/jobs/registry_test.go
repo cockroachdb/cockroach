@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -31,6 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+func FakePHS(opName, user string) (interface{}, func()) {
+	return nil, func() {}
+}
+
 func TestRegistryCancelation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -39,9 +42,8 @@ func TestRegistryCancelation(t *testing.T) {
 
 	var db *client.DB
 	var ex sqlutil.InternalExecutor
-	var gossip *gossip.Gossip
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	registry := MakeRegistry(log.AmbientContext{}, clock, db, ex, gossip, FakeNodeID, FakeClusterID, cluster.NoSettings)
+	registry := MakeRegistry(log.AmbientContext{}, clock, db, ex, FakeNodeID, cluster.NoSettings, FakePHS)
 
 	const nodeCount = 1
 	nodeLiveness := NewFakeNodeLiveness(clock, nodeCount)

@@ -164,6 +164,14 @@ var emptyPlanner planner
 // growth in the log.
 var noteworthyInternalMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY_INTERNAL_MEMORY_USAGE", 100*1024)
 
+// NewInternalPlanner is an exported version of newInternalPlanner. It
+// returns an interface{} so it can be used outside of the sql package.
+func NewInternalPlanner(
+	opName string, txn *client.Txn, user string, memMetrics *MemoryMetrics, execCfg *ExecutorConfig,
+) (interface{}, func()) {
+	return newInternalPlanner(opName, txn, user, memMetrics, execCfg)
+}
+
 // newInternalPlanner creates a new planner instance for internal usage. This
 // planner is not associated with a sql session.
 //

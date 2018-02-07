@@ -77,7 +77,6 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 	db := s.DB()
 	ex := &sql.InternalExecutor{ExecCfg: s.InternalExecutor().(*sql.InternalExecutor).ExecCfg}
-	gossip := s.Gossip()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	nodeLiveness := jobs.NewFakeNodeLiveness(clock, 4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
@@ -86,7 +85,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 		nodeID := &base.NodeIDContainer{}
 		nodeID.Reset(id)
-		r := jobs.MakeRegistry(log.AmbientContext{}, clock, db, ex, gossip, nodeID, jobs.FakeClusterID, s.ClusterSettings())
+		r := jobs.MakeRegistry(log.AmbientContext{}, clock, db, ex, nodeID, cluster.NoSettings, jobs.FakePHS)
 		if err := r.Start(ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
 			t.Fatal(err)
 		}

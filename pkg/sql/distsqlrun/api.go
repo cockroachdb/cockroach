@@ -20,9 +20,9 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 // distsqlrun.EvalContext proto.
 func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 	return EvalContext{
-		StmtTimestampNanos: evalCtx.GetStmtTimestamp().UnixNano(),
-		TxnTimestampNanos:  evalCtx.GetTxnTimestampRaw().UnixNano(),
-		ClusterTimestamp:   evalCtx.GetClusterTimestampRaw(),
+		StmtTimestampNanos: evalCtx.StmtTimestamp.UnixNano(),
+		TxnTimestampNanos:  evalCtx.TxnTimestamp.UnixNano(),
+		ClusterTimestamp:   evalCtx.ClusterTimestamp,
 		Location:           evalCtx.GetLocation().String(),
 		Database:           evalCtx.SessionData.Database,
 		User:               evalCtx.SessionData.User,

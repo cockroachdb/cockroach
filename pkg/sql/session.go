@@ -607,7 +607,10 @@ func (s *Session) FinishPlan() {
 
 // newPlanner creates a planner inside the scope of the given Session. The
 // statement executed by the planner will be executed in txn. The planner
-// should only be used to execute one statement.
+// should only be used to execute one statement. If txn is nil, none of the
+// timestamp fields of the eval ctx will be set (this is in addition to the
+// various other fields that aren't set in either case). But presumably if that
+// is the case, the caller already doesn't care about SQL semantics too much.
 func (s *Session) newPlanner(
 	txn *client.Txn,
 	txnTimestamp time.Time,
