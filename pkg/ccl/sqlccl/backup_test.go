@@ -955,17 +955,17 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "GET" {
 				<-allowResponse
-				_, _ = w.Write([]byte("1"))
+				_, _ = w.Write([]byte(r.URL.Path[1:]))
 			}
 		}))
 		defer srv.Close()
 
 		var urls []string
 		for i := 0; i < 10; i++ {
-			urls = append(urls, fmt.Sprintf("'%s/%d.csv'", srv.URL, i))
+			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
 		}
 		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE t (i INT) CSV DATA (%s) WITH into_db = 'cancelimport'`, csvURLs)
+		query := fmt.Sprintf(`IMPORT TABLE t (i INT PRIMARY KEY) CSV DATA (%s) WITH into_db = 'cancelimport'`, csvURLs)
 
 		if _, err := run(t, "cancel", query); !testutils.IsError(err, "job canceled") {
 			t.Fatalf("expected 'job canceled' error, but got %+v", err)
