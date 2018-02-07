@@ -838,7 +838,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 			for _, res := range br.Responses {
-				if res.Export != nil || res.Import != nil {
+				if res.Export != nil || res.Import != nil || res.AddSstable != nil {
 					<-allowResponse
 				}
 			}
@@ -973,6 +973,49 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		// Check that executing again succeeds. This won't work if the first import
 		// was not successfully canceled.
 		sqlDB.Exec(t, query)
+	})
+
+	t.Run("pause import", func(t *testing.T) {
+		// Test that IMPORT can be paused and resumed. This test also attempts to
+		// only pause the job after it has begun splitting ranges. When the job
+		// is resumed, if the sampling phase is re-run, the splits points will
+		// differ. When AddSSTable attempts to import the new ranges, they will
+		// fail because there is an existing split in the key space that it cannot
+		// handle. Use a sstsize that will more-or-less (since it is statistical)
+		// always cause this condition.
+
+		sqlDB.Exec(t, `CREATE DATABASE pauseimport`)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(r.URL.Path[1:]))
+			}
+		}))
+		defer srv.Close()
+
+		const count = 100
+		urls := make([]string, count)
+		for i := 0; i < count; i++ {
+			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
+		}
+		csvURLs := strings.Join(urls, ", ")
+		query := fmt.Sprintf(`IMPORT TABLE t (i INT PRIMARY KEY) CSV DATA (%s) WITH into_db = 'pauseimport', sstsize = '50B'`, csvURLs)
+
+		if _, err := run(t, "pause", query); !testutils.IsError(err, "job paused") {
+			t.Fatalf("expected 'job paused' error, but got %+v", err)
+		}
+		jobID, err := run(t, "PAUSE", query)
+		if !testutils.IsError(err, "job paused") {
+			t.Fatalf("unexpected: %v", err)
+		}
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
+		if err := waitForJob(sqlDB.DB, jobID); err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.CheckQueryResults(t,
+			`SELECT * FROM pauseimport.t ORDER BY i`,
+			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
+		)
 	})
 }
 

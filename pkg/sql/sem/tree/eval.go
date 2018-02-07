@@ -2302,15 +2302,6 @@ func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	return TimestampToDecimal(ctx.ClusterTimestamp)
 }
 
-// GetClusterTimestampRaw exposes the ClusterTimestamp field. Also see
-// GetClusterTimestamp().
-func (ctx *EvalContext) GetClusterTimestampRaw() hlc.Timestamp {
-	if !ctx.PrepareOnly && ctx.ClusterTimestamp == (hlc.Timestamp{}) {
-		panic("zero cluster timestamp in EvalContext")
-	}
-	return ctx.ClusterTimestamp
-}
-
 // HasPlaceholders returns true if this EvalContext's placeholders have been
 // assigned. Will be false during Prepare.
 func (ctx *EvalContext) HasPlaceholders() bool {
@@ -2356,15 +2347,6 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 		panic("zero transaction timestamp in EvalContext")
 	}
 	return MakeDTimestamp(ctx.TxnTimestamp, precision)
-}
-
-// GetTxnTimestampRaw exposes the txnTimestamp field. Also see GetTxnTimestamp()
-// and GetTxnTimestampNoZone().
-func (ctx *EvalContext) GetTxnTimestampRaw() time.Time {
-	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
-	}
-	return ctx.TxnTimestamp
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.
