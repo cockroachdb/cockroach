@@ -330,12 +330,6 @@ func matchesIndex(
 	return true
 }
 
-func isCascadingReferenceAction(action tree.ReferenceAction) bool {
-	return action == tree.Cascade ||
-		action == tree.SetNull ||
-		action == tree.SetDefault
-}
-
 func (p *planner) resolveFK(
 	ctx context.Context,
 	tbl *sqlbase.TableDescriptor,
@@ -465,23 +459,6 @@ func resolveFK(
 				"there is no unique constraint matching given keys for referenced table %s",
 				targetTable.String(),
 			)
-		}
-	}
-
-	// Don't add a cascading action if there is a CHECK on any column.
-	// See #21688
-	if isCascadingReferenceAction(d.Actions.Delete) || isCascadingReferenceAction(d.Actions.Update) {
-		for _, col := range srcCols {
-			for _, check := range tbl.Checks {
-				if used, err := check.UsesColumn(tbl, col.ID); err != nil {
-					return err
-				} else if used {
-					return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-						"cannot add a cascading action (SET NULL/SET DEFAULT/CASCADE) to column %q with a CHECK CONSTRAINT",
-						col.Name,
-					)
-				}
-			}
 		}
 	}
 
@@ -1377,12 +1354,6 @@ func replaceVars(
 	return newExpr, colIDs, err
 }
 
-func isCascadingAction(action sqlbase.ForeignKeyReference_Action) bool {
-	return action == sqlbase.ForeignKeyReference_CASCADE ||
-		action == sqlbase.ForeignKeyReference_SET_NULL ||
-		action == sqlbase.ForeignKeyReference_SET_DEFAULT
-}
-
 func makeCheckConstraint(
 	desc sqlbase.TableDescriptor,
 	d *tree.CheckConstraintTableDef,
@@ -1414,20 +1385,6 @@ func makeCheckConstraint(
 		expr, types.Bool, "CHECK", semaCtx, evalCtx,
 	); err != nil {
 		return nil, err
-	}
-
-	// Don't add a constraint if there is a cascading action on any of the
-	// columns. See #21688.
-	for _, index := range desc.Indexes {
-		if isCascadingAction(index.ForeignKey.OnDelete) || isCascadingAction(index.ForeignKey.OnUpdate) {
-			for i, indexColID := range index.ColumnIDs {
-				if _, ok := colIDsUsed[indexColID]; ok {
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
-						"cannot add a check constraint as it uses column %q which already has a "+
-							"cascading action (SET NULL/SET DEFAULT/CASCADE)", index.ColumnNames[i])
-				}
-			}
-		}
 	}
 
 	colIDs := make([]sqlbase.ColumnID, 0, len(colIDsUsed))

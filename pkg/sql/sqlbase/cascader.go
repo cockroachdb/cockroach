@@ -1137,6 +1137,14 @@ func (c *cascader) cascadeAll(
 			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
 				return err
 			}
+			// Now check all check constraints for the table.
+			checkHelper := c.tablesByID[tableID].CheckHelper
+			if err := checkHelper.LoadRow(rowUpdater.updateColIDtoRowIndex, updatedRows.At(0), false); err != nil {
+				return err
+			}
+			if err := checkHelper.Check(c.evalCtx); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -1161,6 +1169,14 @@ func (c *cascader) cascadeAll(
 				}
 			}
 			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+				return err
+			}
+			// Now check all check constraints for the table.
+			checkHelper := c.tablesByID[tableID].CheckHelper
+			if err := checkHelper.LoadRow(rowUpdater.updateColIDtoRowIndex, finalRow, false); err != nil {
+				return err
+			}
+			if err := checkHelper.Check(c.evalCtx); err != nil {
 				return err
 			}
 		}
