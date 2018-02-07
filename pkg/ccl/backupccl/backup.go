@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package backupccl
 
 import (
 	"bytes"
@@ -69,24 +69,13 @@ var backupOptionExpectValues = map[string]bool{
 // to durable storage.
 var BackupCheckpointInterval = time.Minute
 
-// exportStorageFromURI returns an ExportStorage for the given URI.
-func exportStorageFromURI(
-	ctx context.Context, uri string, settings *cluster.Settings,
-) (storageccl.ExportStorage, error) {
-	conf, err := storageccl.ExportStorageConfFromURI(uri)
-	if err != nil {
-		return nil, err
-	}
-	return storageccl.MakeExportStorage(ctx, conf, settings)
-}
-
 // ReadBackupDescriptorFromURI creates an export store from the given URI, then
 // reads and unmarshals a BackupDescriptor at the standard location in the
 // export storage.
 func ReadBackupDescriptorFromURI(
 	ctx context.Context, uri string, settings *cluster.Settings,
 ) (BackupDescriptor, error) {
-	exportStore, err := exportStorageFromURI(ctx, uri, settings)
+	exportStore, err := storageccl.ExportStorageFromURI(ctx, uri, settings)
 	if err != nil {
 		return BackupDescriptor{}, err
 	}
@@ -474,11 +463,12 @@ func clusterNodeCount(g *gossip.Gossip) int {
 	return nodes
 }
 
-type backupFileDescriptors []BackupDescriptor_File
+// BackupFileDescriptors is an alias on which to implement sort's interface.
+type BackupFileDescriptors []BackupDescriptor_File
 
-func (r backupFileDescriptors) Len() int      { return len(r) }
-func (r backupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
-func (r backupFileDescriptors) Less(i, j int) bool {
+func (r BackupFileDescriptors) Len() int      { return len(r) }
+func (r BackupFileDescriptors) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r BackupFileDescriptors) Less(i, j int) bool {
 	if cmp := bytes.Compare(r[i].Span.Key, r[j].Span.Key); cmp != 0 {
 		return cmp < 0
 	}
@@ -491,7 +481,7 @@ func writeBackupDescriptor(
 	filename string,
 	desc *BackupDescriptor,
 ) error {
-	sort.Sort(backupFileDescriptors(desc.Files))
+	sort.Sort(BackupFileDescriptors(desc.Files))
 
 	descBuf, err := protoutil.Marshal(desc)
 	if err != nil {
@@ -630,10 +620,10 @@ func backup(
 		allSpans = append(allSpans, spanAndTime{span: s, start: backupDesc.StartTime, end: backupDesc.EndTime})
 	}
 
-	progressLogger := jobProgressLogger{
-		job:           job,
-		totalChunks:   len(spans),
-		startFraction: job.Payload().FractionCompleted,
+	progressLogger := jobs.ProgressLogger{
+		Job:           job,
+		TotalChunks:   len(spans),
+		StartFraction: job.Payload().FractionCompleted,
 	}
 
 	// We're already limiting these on the server-side, but sending all the
@@ -664,7 +654,7 @@ func backup(
 	// have any spans. Users should never hit this.
 	if len(spans) > 0 {
 		g.Go(func() error {
-			return progressLogger.loop(gCtx, requestFinishedCh)
+			return progressLogger.Loop(gCtx, requestFinishedCh)
 		})
 	}
 
@@ -705,7 +695,7 @@ func backup(
 				mu.files = append(mu.files, f)
 				mu.exported.Add(file.Exported)
 			}
-			var checkpointFiles backupFileDescriptors
+			var checkpointFiles BackupFileDescriptors
 			if timeutil.Since(mu.lastCheckpoint) > BackupCheckpointInterval {
 				// We optimistically assume the checkpoint will succeed to prevent
 				// multiple threads from attempting to checkpoint.
@@ -747,13 +737,13 @@ func backup(
 	return mu.exported, nil
 }
 
-// verifyUsableExportTarget ensures that the target location does not already
+// VerifyUsableExportTarget ensures that the target location does not already
 // contain a BACKUP or checkpoint and writes an empty checkpoint, both verifying
 // that the location is writable and locking out accidental concurrent
 // operations on that location if subsequently try this check. Callers must
 // clean up the written checkpoint file (BackupDescriptorCheckpointName) only
 // after writing to the backup file location (BackupDescriptorName).
-func verifyUsableExportTarget(
+func VerifyUsableExportTarget(
 	ctx context.Context, exportStore storageccl.ExportStorage, readable string,
 ) error {
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorName); err == nil {
@@ -861,7 +851,7 @@ func backupPlanHook(
 			}
 		}
 
-		exportStore, err := exportStorageFromURI(ctx, to, p.ExecCfg().Settings)
+		exportStore, err := storageccl.ExportStorageFromURI(ctx, to, p.ExecCfg().Settings)
 		if err != nil {
 			return err
 		}
@@ -1013,7 +1003,7 @@ func backupPlanHook(
 			return err
 		}
 
-		if err := verifyUsableExportTarget(ctx, exportStore, to); err != nil {
+		if err := VerifyUsableExportTarget(ctx, exportStore, to); err != nil {
 			return err
 		}
 

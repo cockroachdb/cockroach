@@ -6,34 +6,55 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl_test
+package importccl_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
 )
 
+func bankBuf(numAccounts int) *bytes.Buffer {
+	bankData := bank.FromRows(numAccounts).Tables()[0]
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "CREATE TABLE %s %s;\n", bankData.Name, bankData.Schema)
+	for rowIdx := 0; rowIdx < bankData.InitialRowCount; rowIdx++ {
+		row := workload.StringTuple(bankData.InitialRowFn(rowIdx))
+		fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row, `,`))
+	}
+	return &buf
+}
 func TestImportChunking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Generate at least 2 chunks.
 	const chunkSize = 1024 * 500
-	numAccounts := int(chunkSize / backupRestoreRowPayloadSize * 2)
+	numAccounts := int(chunkSize / 100 * 2)
 
-	ctx, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
-	defer cleanupFn()
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+
+	if _, err := tc.Conns[0].Exec("CREATE DATABASE data"); err != nil {
+		t.Fatal(err)
+	}
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	desc, err := sqlccl.Load(ctx, sqlDB.DB, bankBuf(numAccounts), "data", "nodelocal://"+dir, ts, chunkSize, dir)
+	desc, err := importccl.Load(ctx, tc.Conns[0], bankBuf(numAccounts), "data", "nodelocal://"+dir, ts, chunkSize, dir)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -45,9 +66,16 @@ func TestImportChunking(t *testing.T) {
 func TestImportOutOfOrder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
-	defer cleanupFn()
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
 
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+
+	if _, err := tc.Conns[0].Exec("CREATE DATABASE data"); err != nil {
+		t.Fatal(err)
+	}
 	bankData := bank.FromRows(2).Tables()[0]
 	row1 := workload.StringTuple(bankData.InitialRowFn(0))
 	row2 := workload.StringTuple(bankData.InitialRowFn(1))
@@ -59,7 +87,7 @@ func TestImportOutOfOrder(t *testing.T) {
 	fmt.Fprintf(&buf, "INSERT INTO %s VALUES (%s);\n", bankData.Name, strings.Join(row1, `,`))
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
-	_, err := sqlccl.Load(ctx, sqlDB.DB, &buf, "data", localFoo, ts, 0, dir)
+	_, err := importccl.Load(ctx, tc.Conns[0], &buf, "data", "nodelocal:///foo", ts, 0, dir)
 	if !testutils.IsError(err, "out of order row") {
 		t.Fatalf("expected out of order row, got: %+v", err)
 	}
@@ -69,14 +97,21 @@ func BenchmarkLoad(b *testing.B) {
 	// NB: This benchmark takes liberties in how b.N is used compared to the go
 	// documentation's description. We're getting useful information out of it,
 	// but this is not a pattern to cargo-cult.
-	ctx, _, sqlDB, dir, cleanup := backupRestoreTestSetup(b, multiNode, 0, initNone)
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(b)
 	defer cleanup()
+
+	tc := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
+	defer tc.Stopper().Stop(ctx)
+	if _, err := tc.Conns[0].Exec("CREATE DATABASE data"); err != nil {
+		b.Fatal(err)
+	}
 
 	ts := hlc.Timestamp{WallTime: hlc.UnixNano()}
 	buf := bankBuf(b.N)
 	b.SetBytes(int64(buf.Len() / b.N))
 	b.ResetTimer()
-	if _, err := sqlccl.Load(ctx, sqlDB.DB, buf, "data", dir, ts, 0, dir); err != nil {
+	if _, err := importccl.Load(ctx, tc.Conns[0], buf, "data", dir, ts, 0, dir); err != nil {
 		b.Fatalf("%+v", err)
 	}
 }

@@ -15,8 +15,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -135,7 +136,7 @@ func runLoadCSV(cmd *cobra.Command, args []string) error {
 
 	const sstMaxSize = 1024 * 1024 * 50
 
-	csv, kv, sst, err := sqlccl.LoadCSV(
+	csv, kv, sst, err := importccl.LoadCSV(
 		ctx,
 		csvTableName,
 		csvDataNames,
@@ -170,7 +171,7 @@ func runLoadShow(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
-	desc, err := sqlccl.ReadBackupDescriptorFromURI(ctx, basepath, cluster.NoSettings)
+	desc, err := backupccl.ReadBackupDescriptorFromURI(ctx, basepath, cluster.NoSettings)
 	if err != nil {
 		return err
 	}

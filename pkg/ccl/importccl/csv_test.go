@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package importccl
 
 import (
 	"context"
@@ -961,7 +961,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 	create := stmt.(*tree.CreateTable)
 	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := makeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
+	tableDesc, err := MakeSimpleTableDescriptor(ctx, st, create, sqlbase.ID(100), sqlbase.ID(100), 1)
 	if err != nil {
 		b.Fatal(err)
 	}

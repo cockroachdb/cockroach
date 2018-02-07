@@ -6,13 +6,12 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package jobs
 
 import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -28,12 +27,13 @@ const (
 	progressFractionThreshold = 0.05
 )
 
-type jobProgressLogger struct {
+// ProgressLogger is a helper for managing the progress state on a job.
+type ProgressLogger struct {
 	// These fields must be externally initialized.
-	job           *jobs.Job
-	startFraction float32
-	totalChunks   int
-	progressedFn  func(context.Context, jobs.Details)
+	Job           *Job
+	StartFraction float32
+	TotalChunks   int
+	ProgressedFn  func(context.Context, Details)
 
 	// The remaining fields are for internal use only.
 	completedChunks      int
@@ -52,10 +52,10 @@ type jobProgressLogger struct {
 // inadvertently applied backpressure on the restore's import requests and
 // slowed the job to a crawl. If multiple threads need to update progress, use a
 // channel and a dedicated goroutine that calls loop.
-func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
+func (jpl *ProgressLogger) chunkFinished(ctx context.Context) error {
 	jpl.completedChunks++
-	fraction := float32(jpl.completedChunks) / float32(jpl.totalChunks)
-	fraction = fraction*(1-jpl.startFraction) + jpl.startFraction
+	fraction := float32(jpl.completedChunks) / float32(jpl.TotalChunks)
+	fraction = fraction*(1-jpl.StartFraction) + jpl.StartFraction
 	shouldLogProgress := fraction-jpl.lastReportedFraction > progressFractionThreshold ||
 		jpl.lastReportedAt.Add(progressTimeThreshold).Before(timeutil.Now())
 	if !shouldLogProgress {
@@ -63,18 +63,18 @@ func (jpl *jobProgressLogger) chunkFinished(ctx context.Context) error {
 	}
 	jpl.lastReportedAt = timeutil.Now()
 	jpl.lastReportedFraction = fraction
-	return jpl.job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-		if jpl.progressedFn != nil {
-			jpl.progressedFn(ctx, details)
+	return jpl.Job.Progressed(ctx, func(ctx context.Context, details Details) float32 {
+		if jpl.ProgressedFn != nil {
+			jpl.ProgressedFn(ctx, details)
 		}
 		return fraction
 	})
 }
 
-// loop calls chunkFinished for every message received over chunkCh. It exits
+// Loop calls chunkFinished for every message received over chunkCh. It exits
 // when chunkCh is closed, when totalChunks messages have been received, or when
 // the context is canceled.
-func (jpl *jobProgressLogger) loop(ctx context.Context, chunkCh <-chan struct{}) error {
+func (jpl *ProgressLogger) Loop(ctx context.Context, chunkCh <-chan struct{}) error {
 	for {
 		select {
 		case _, ok := <-chunkCh:
@@ -84,7 +84,7 @@ func (jpl *jobProgressLogger) loop(ctx context.Context, chunkCh <-chan struct{})
 			if err := jpl.chunkFinished(ctx); err != nil {
 				return err
 			}
-			if jpl.completedChunks == jpl.totalChunks {
+			if jpl.completedChunks == jpl.TotalChunks {
 				return nil
 			}
 		case <-ctx.Done():

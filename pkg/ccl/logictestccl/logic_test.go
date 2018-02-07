@@ -11,7 +11,7 @@ package logictestccl
 import (
 	"testing"
 
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/logictest"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )

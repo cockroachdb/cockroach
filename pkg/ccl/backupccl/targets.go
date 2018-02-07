@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package backupccl
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

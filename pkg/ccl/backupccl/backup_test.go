@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl_test
+package backupccl_test
 
 import (
 	"bytes"
@@ -34,7 +34,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -571,19 +571,19 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	defer func(oldInterval time.Duration) {
-		sqlccl.BackupCheckpointInterval = oldInterval
-	}(sqlccl.BackupCheckpointInterval)
-	sqlccl.BackupCheckpointInterval = 0
+		backupccl.BackupCheckpointInterval = oldInterval
+	}(backupccl.BackupCheckpointInterval)
+	backupccl.BackupCheckpointInterval = 0
 
 	var checkpointPath string
 
 	checkBackup := func(ctx context.Context, ip inProgressState) error {
-		checkpointPath = filepath.Join(ip.dir, ip.name, sqlccl.BackupDescriptorCheckpointName)
+		checkpointPath = filepath.Join(ip.dir, ip.name, backupccl.BackupDescriptorCheckpointName)
 		checkpointDescBytes, err := ioutil.ReadFile(checkpointPath)
 		if err != nil {
 			return errors.Errorf("%+v", err)
 		}
-		var checkpointDesc sqlccl.BackupDescriptor
+		var checkpointDesc backupccl.BackupDescriptor
 		if err := protoutil.Unmarshal(checkpointDescBytes, &checkpointDesc); err != nil {
 			return errors.Errorf("%+v", err)
 		}
@@ -715,9 +715,9 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		backupCompletedSpan := roachpb.Span{Key: backupStartKey, EndKey: backupEndKey}
-		backupDesc, err := protoutil.Marshal(&sqlccl.BackupDescriptor{
+		backupDesc, err := protoutil.Marshal(&backupccl.BackupDescriptor{
 			ClusterID: tc.Servers[0].ClusterID(),
-			Files: []sqlccl.BackupDescriptor_File{
+			Files: []backupccl.BackupDescriptor_File{
 				{Path: "garbage-checkpoint", Span: backupCompletedSpan},
 			},
 		})
@@ -728,7 +728,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err := os.MkdirAll(backupDir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		checkpointFile := filepath.Join(backupDir, sqlccl.BackupDescriptorCheckpointName)
+		checkpointFile := filepath.Join(backupDir, backupccl.BackupDescriptorCheckpointName)
 		if err := ioutil.WriteFile(checkpointFile, backupDesc, 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -742,12 +742,12 @@ func TestBackupRestoreResume(t *testing.T) {
 
 		// If the backup properly took the (incorrect) checkpoint into account, it
 		// won't have tried to re-export any keys within backupCompletedSpan.
-		backupDescriptorFile := filepath.Join(backupDir, sqlccl.BackupDescriptorName)
+		backupDescriptorFile := filepath.Join(backupDir, backupccl.BackupDescriptorName)
 		backupDescriptorBytes, err := ioutil.ReadFile(backupDescriptorFile)
 		if err != nil {
 			t.Fatal(err)
 		}
-		var backupDescriptor sqlccl.BackupDescriptor
+		var backupDescriptor backupccl.BackupDescriptor
 		if err := protoutil.Unmarshal(backupDescriptorBytes, &backupDescriptor); err != nil {
 			t.Fatal(err)
 		}
@@ -948,6 +948,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		)
 	})
 
+	// TODO(dt): move to importccl.
 	t.Run("cancel import", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
 
@@ -975,6 +976,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		sqlDB.Exec(t, query)
 	})
 
+	// TODO(dt): move to importccl.
 	t.Run("pause import", func(t *testing.T) {
 		// Test that IMPORT can be paused and resumed. This test also attempts to
 		// only pause the job after it has begun splitting ranges. When the job
@@ -1046,7 +1048,7 @@ func TestRestoreFailCleanup(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.Name() == sqlccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
+		if info.Name() == backupccl.BackupDescriptorName || !strings.HasSuffix(path, ".sst") {
 			return nil
 		}
 		return os.Remove(path)
@@ -1922,9 +1924,9 @@ func TestBackupRestoreChecksum(t *testing.T) {
 
 	sqlDB.Exec(t, `BACKUP DATABASE data TO $1`, localFoo)
 
-	var backupDesc sqlccl.BackupDescriptor
+	var backupDesc backupccl.BackupDescriptor
 	{
-		backupDescBytes, err := ioutil.ReadFile(filepath.Join(dir, sqlccl.BackupDescriptorName))
+		backupDescBytes, err := ioutil.ReadFile(filepath.Join(dir, backupccl.BackupDescriptorName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -2671,6 +2673,7 @@ func TestBackupRestoreNotInTxn(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// TODO(dt): move to importccl.
 	tx, err = sqlDB.DB.Begin()
 	if err != nil {
 		t.Fatal(err)
