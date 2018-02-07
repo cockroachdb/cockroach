@@ -24,6 +24,5 @@ EOF
 diff -u - <(cockroach sql --insecure -e 'SELECT * FROM bank.accounts') <<EOF
 id	balance
 1	1000.50
-# 1 row
 EOF
 cockroach quit --insecure

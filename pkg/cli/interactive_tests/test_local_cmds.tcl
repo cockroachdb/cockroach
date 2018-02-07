@@ -37,7 +37,6 @@ end_test
 start_test "Check that \\| reads statements."
 send "\\| echo 'select '; echo '38 + 4;'\r"
 eexpect 42
-eexpect "1 row"
 eexpect root@
 end_test
 
@@ -58,7 +57,7 @@ send "\\?\r"
 eexpect " ->"
 
 send "1;\r"
-eexpect "1 row"
+expect "Time"
 eexpect root@
 end_test
 
@@ -90,7 +89,7 @@ send "\\?\r"
 eexpect " ->"
 send "world';\r"
 eexpect "hello\\\\nworld"
-eexpect "1 row"
+eexpect "Time"
 eexpect root@
 end_test
 
@@ -100,7 +99,7 @@ send "\\unset show_times\r\\set\r"
 eexpect "show_times\tfalse"
 eexpect root@
 send "select 1;\r"
-eexpect "1 row"
+eexpect "1\r\n1\r\n"
 expect {
     "Time:" {
 	report "unexpected Time"
