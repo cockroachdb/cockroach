@@ -17,7 +17,9 @@ package build
 import (
 	"bytes"
 	"context"
+	"flag"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"text/tabwriter"
 	"unicode/utf8"
@@ -36,6 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+var (
+	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
+)
+
 // NewExecEngine returns an exec.Engine implementation that can be used to
 // create and run an execution plan. The implementation is in sql so this is an
 // opaque function that is initialized in TestMain.
@@ -44,94 +50,106 @@ var NewExecEngine func(s serverutils.TestServerInterface) exec.Engine
 func TestBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	catalog := testCatalog{kvDB: kvDB}
+	paths, err := filepath.Glob(*testDataGlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
+	}
 
-	datadriven.RunTest(t, "testdata/build", func(d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "exec-raw":
-			_, err := sqlDB.Exec(d.Input)
-			if err != nil {
-				d.Fatalf(t, "%v", err)
-			}
-			return ""
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+			catalog := testCatalog{kvDB: kvDB}
 
-		case "build", "exec", "exec-explain":
-			// Parse the SQL.
-			stmt, err := parser.ParseOne(d.Input)
-			if err != nil {
-				d.Fatalf(t, "%v", err)
-			}
-
-			// Build and optimize the opt expression tree.
-			o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
-			root, props, err := optbuild.NewBuilder(ctx, o.Factory(), stmt).Build()
-			if err != nil {
-				d.Fatalf(t, "BuildOpt: %v", err)
-			}
-			ev := o.Optimize(root, props)
-
-			if d.Cmd == "build" {
-				return ev.String()
-			}
-
-			// Build the execution node tree.
-			eng := NewExecEngine(s)
-			defer eng.Close()
-			node, err := NewBuilder(eng.Factory(), ev).Build()
-			if err != nil {
-				d.Fatalf(t, "BuildExec: %v", err)
-			}
-
-			// Execute the node tree.
-			var results []tree.Datums
-			if d.Cmd == "exec-explain" {
-				results, err = eng.Explain(node)
-			} else {
-				results, err = eng.Execute(node)
-			}
-			if err != nil {
-				d.Fatalf(t, "Exec: %v", err)
-			}
-
-			// Format the results.
-			var buf bytes.Buffer
-			tw := tabwriter.NewWriter(
-				&buf,
-				2,   /* minwidth */
-				1,   /* tabwidth */
-				2,   /* padding */
-				' ', /* padchar */
-				0,   /* flags */
-			)
-			for _, r := range results {
-				for j, val := range r {
-					if j > 0 {
-						fmt.Fprintf(tw, "\t")
+			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+				switch d.Cmd {
+				case "exec-raw":
+					_, err := sqlDB.Exec(d.Input)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
 					}
-					if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
-						str := string(*d)
-						if str == "" {
-							str = "·"
-						}
-						// Avoid the quotes on strings.
-						fmt.Fprintf(tw, "%s", str)
+					return ""
+
+				case "build", "exec", "exec-explain":
+					// Parse the SQL.
+					stmt, err := parser.ParseOne(d.Input)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+
+					// Build and optimize the opt expression tree.
+					o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
+					root, props, err := optbuild.NewBuilder(ctx, o.Factory(), stmt).Build()
+					if err != nil {
+						d.Fatalf(t, "BuildOpt: %v", err)
+					}
+					ev := o.Optimize(root, props)
+
+					if d.Cmd == "build" {
+						return ev.String()
+					}
+
+					// Build the execution node tree.
+					eng := NewExecEngine(s)
+					defer eng.Close()
+					node, err := NewBuilder(eng.Factory(), ev).Build()
+					if err != nil {
+						d.Fatalf(t, "BuildExec: %v", err)
+					}
+
+					// Execute the node tree.
+					var results []tree.Datums
+					if d.Cmd == "exec-explain" {
+						results, err = eng.Explain(node)
 					} else {
-						fmt.Fprintf(tw, "%s", val)
+						results, err = eng.Execute(node)
 					}
-				}
-				fmt.Fprintf(tw, "\n")
-			}
-			_ = tw.Flush()
-			return buf.String()
+					if err != nil {
+						d.Fatalf(t, "Exec: %v", err)
+					}
 
-		default:
-			d.Fatalf(t, "unsupported command: %s", d.Cmd)
-			return ""
-		}
-	})
+					// Format the results.
+					var buf bytes.Buffer
+					tw := tabwriter.NewWriter(
+						&buf,
+						2,   /* minwidth */
+						1,   /* tabwidth */
+						2,   /* padding */
+						' ', /* padchar */
+						0,   /* flags */
+					)
+					for _, r := range results {
+						for j, val := range r {
+							if j > 0 {
+								fmt.Fprintf(tw, "\t")
+							}
+							if d, ok := val.(*tree.DString); ok && utf8.ValidString(string(*d)) {
+								str := string(*d)
+								if str == "" {
+									str = "·"
+								}
+								// Avoid the quotes on strings.
+								fmt.Fprintf(tw, "%s", str)
+							} else {
+								fmt.Fprintf(tw, "%s", val)
+							}
+						}
+						fmt.Fprintf(tw, "\n")
+					}
+					_ = tw.Flush()
+					return buf.String()
+
+				default:
+					d.Fatalf(t, "unsupported command: %s", d.Cmd)
+					return ""
+				}
+			})
+		})
+	}
 }
 
 // testCatalog implements the sqlbase.Catalog interface.
