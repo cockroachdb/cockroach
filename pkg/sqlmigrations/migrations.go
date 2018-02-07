@@ -20,6 +20,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -38,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 var (
@@ -175,6 +176,18 @@ type migrationDescriptor struct {
 	// migration. This is needed to automate certain tests, which check the number
 	// of ranges/descriptors present on server bootup.
 	newDescriptorIDs sqlbase.IDs
+}
+
+func init() {
+	// Ensure that all migrations have unique names.
+	names := make(map[string]struct{}, len(backwardCompatibleMigrations))
+	for _, migration := range backwardCompatibleMigrations {
+		name := migration.name
+		if _, ok := names[name]; ok {
+			log.Fatalf(context.Background(), "duplicate sql migration %q", name)
+		}
+		names[name] = struct{}{}
+	}
 }
 
 type runner struct {
@@ -858,8 +871,6 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 	return err
 }
 
-var upgradeTableDescBatchSize int64 = 50
-
 // upgradeTableDescsToInterleavedFormatVersion ensures that the upgrade to
 // InterleavedFormatVersion is persisted to disk for all table descriptors. It
 // must otherwise be performed on-the-fly whenever a table descriptor is loaded.
@@ -869,6 +880,21 @@ var upgradeTableDescBatchSize int64 = 50
 //
 // TODO(benesch): Remove this migration in v2.1.
 func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
+	return upgradeTableDescsWithFn(ctx, r, func(desc *sqlbase.TableDescriptor) (bool, error) {
+		return desc.MaybeUpgradeFormatVersion(), nil
+	})
+}
+
+var upgradeTableDescBatchSize int64 = 50
+
+// upgradeTableDescsWithFn runs the provided upgrade function on each table
+// descriptor, persisting any upgrades if the function indicates that the
+// descriptor was changed.
+func upgradeTableDescsWithFn(
+	ctx context.Context,
+	r runner,
+	upgradeFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
+) error {
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
 
@@ -899,7 +925,9 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 					return err
 				}
 				if table := sqlDesc.GetTable(); table != nil {
-					if upgraded := table.MaybeUpgradeFormatVersion(); upgraded {
+					if upgraded, err := upgradeFn(table); err != nil {
+						return err
+					} else if upgraded {
 						// Though SetUpVersion typically bails out if the table is being
 						// dropped, it's safe to ignore the DROP state here and
 						// unconditionally set UpVersion. For proof, see
