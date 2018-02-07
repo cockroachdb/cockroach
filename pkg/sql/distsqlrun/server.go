@@ -175,6 +175,7 @@ func NewServer(ctx context.Context, cfg ServerConfig) *ServerImpl {
 			cfg.Metrics.MaxBytesHist,
 			-1, /* increment: use default block size */
 			noteworthyMemoryUsageBytes,
+			cfg.Settings,
 		),
 	}
 	ds.memMonitor.Start(ctx, cfg.ParentMemoryMonitor, mon.BoundAccount{})
@@ -298,6 +299,7 @@ func (ds *ServerImpl) setupFlow(
 		ds.Metrics.MaxBytesHist,
 		-1, /* use default block size */
 		noteworthyMemoryUsageBytes,
+		ds.Settings,
 	)
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()

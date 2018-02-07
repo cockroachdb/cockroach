@@ -393,7 +393,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			evalCtx := tree.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Ctx:      context.Background(),
@@ -522,7 +522,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			evalCtx := tree.MakeTestingEvalContext()
+			evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				EvalCtx:  evalCtx,

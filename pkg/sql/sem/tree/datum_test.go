@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -40,7 +41,7 @@ func prepareExpr(t *testing.T, datumExpr string) tree.TypedExpr {
 		t.Fatalf("%s: %v", datumExpr, err)
 	}
 	// Normalization ensures that casts are processed.
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
 	if err != nil {
@@ -221,7 +222,7 @@ func TestDatumOrdering(t *testing.T) {
 		{`row(row(false), ARRAY[true])`, noPrev, `((false), ARRAY[true,NULL])`,
 			`((false), ARRAY[])`, noMax},
 	}
-	ctx := tree.NewTestingEvalContext()
+	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	for _, td := range testData {
 		expr := prepareExpr(t, td.datumExpr)
 
@@ -314,7 +315,7 @@ func TestDFloatCompare(t *testing.T) {
 			} else if i > j {
 				expected = 1
 			}
-			evalCtx := tree.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			got := x.Compare(evalCtx, y)
 			if got != expected {
@@ -364,7 +365,7 @@ func TestParseDIntervalWithField(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value INTERVAL %s: %s", td.expected, err)
 			continue
 		}
-		evalCtx := tree.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("INTERVAL %s %v: got %s, expected %s", td.str, td.field, actual, expected)
@@ -405,7 +406,7 @@ func TestParseDDate(t *testing.T) {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
 		}
-		evalCtx := tree.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if expected.Compare(evalCtx, actual) != 0 {
 			t.Errorf("DATE %s: got %s, expected %s", td.str, actual, expected)
@@ -574,7 +575,7 @@ func TestMakeDJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if j1.Compare(tree.NewTestingEvalContext(), j2) != -1 {
+	if j1.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), j2) != -1 {
 		t.Fatal("expected JSON 1 < 2")
 	}
 }

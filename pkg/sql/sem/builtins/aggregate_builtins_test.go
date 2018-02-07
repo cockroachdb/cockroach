@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -36,7 +37,7 @@ import (
 func testAggregateResultDeepCopy(
 	t *testing.T, aggFunc func([]types.T, *tree.EvalContext) tree.AggregateFunc, vals []tree.Datum,
 ) {
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx)
 	runningDatums := make([]tree.Datum, len(vals))
@@ -276,7 +277,7 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 func runBenchmarkAggregate(
 	b *testing.B, aggFunc func([]types.T, *tree.EvalContext) tree.AggregateFunc, vals []tree.Datum,
 ) {
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	params := []types.T{vals[0].ResolvedType()}
 	b.ResetTimer()

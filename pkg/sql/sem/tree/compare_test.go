@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -51,7 +52,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 			Left:     NewDString(d.left),
 			Right:    NewDString(d.right),
 		}
-		ctx := NewTestingEvalContext()
+		ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		ctx.ReCache = NewRegexpCache(8)
 		typedExpr, err := TypeCheck(expr, nil, types.Any)

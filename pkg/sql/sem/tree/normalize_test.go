@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -234,7 +235,7 @@ func TestNormalizeExpr(t *testing.T) {
 			t.Fatalf("%s: %v", d.expr, err)
 		}
 		rOrig := typedExpr.String()
-		ctx := tree.NewTestingEvalContext()
+		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		defer ctx.ActiveMemAcc.Close(context.Background())
 		r, err := ctx.NormalizeExpr(typedExpr)

@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/apd"
-
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -333,7 +333,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 					i, availType, test.c, res)
 			} else {
 				expectedDatum := parseFuncs[availType](t, test.c.RawString())
-				evalCtx := tree.NewTestingEvalContext()
+				evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 				defer evalCtx.Stop(context.Background())
 				if res.Compare(evalCtx, expectedDatum) != 0 {
 					t.Errorf("%d: type %s expected to be resolved from the tree.StrVal %v to tree.Datum %v"+

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1065,7 +1066,7 @@ func TestEval(t *testing.T) {
 		{`'192.168.2.1'::inet <<= '192.168.2.1'::inet`, `true`},
 		{`'192.168.200.95'::inet && '192.168.2.1/8'::inet`, `true`},
 	}
-	ctx := tree.NewTestingEvalContext()
+	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	// We have to manually close this account because we're doing the evaluations
 	// ourselves.
 	defer ctx.Mon.Stop(context.Background())
@@ -1172,7 +1173,7 @@ func TestTimeConversion(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		ctx := tree.NewTestingEvalContext()
+		ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer ctx.Mon.Stop(context.Background())
 		exprStr := fmt.Sprintf("experimental_strptime('%s', '%s')", test.start, test.format)
 		expr, err := parser.ParseExpr(exprStr)
@@ -1314,7 +1315,7 @@ func TestEvalError(t *testing.T) {
 		}
 		typedExpr, err := tree.TypeCheck(expr, nil, types.Any)
 		if err == nil {
-			evalCtx := tree.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			_, err = typedExpr.Eval(evalCtx)
 		}

@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -181,7 +182,7 @@ func TestMakeSpans(t *testing.T) {
 				} else {
 					expected = d.expectedDesc
 				}
-				p.extendedEvalCtx = makeTestingExtendedEvalContext()
+				p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
 				defer p.extendedEvalCtx.Stop(context.Background())
 				sel := makeSelectNode(t, p)
 				columns := strings.Split(d.columns, ",")
@@ -229,7 +230,7 @@ func TestMakeSpans(t *testing.T) {
 
 	for _, d := range testData2 {
 		t.Run(d.expr+"~"+d.expected, func(t *testing.T) {
-			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
 			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
@@ -322,7 +323,7 @@ func TestExactPrefix(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(fmt.Sprintf("%s~%d", d.expr, d.expected), func(t *testing.T) {
-			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
 			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)

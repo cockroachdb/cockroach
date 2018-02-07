@@ -2236,9 +2236,10 @@ type EvalContext struct {
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
-func MakeTestingEvalContext() EvalContext {
+func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 	ctx := EvalContext{
 		SessionData: &sessiondata.SessionData{},
+		Settings:    st,
 	}
 	monitor := mon.MakeMonitor(
 		"test-monitor",
@@ -2247,6 +2248,7 @@ func MakeTestingEvalContext() EvalContext {
 		nil,           /* maxHist */
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
+		st,
 	)
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = &monitor
@@ -2277,8 +2279,8 @@ func (ctx *EvalContext) PopIVarHelper() {
 
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext
 // that returns a pointer.
-func NewTestingEvalContext() *EvalContext {
-	ctx := MakeTestingEvalContext()
+func NewTestingEvalContext(st *cluster.Settings) *EvalContext {
+	ctx := MakeTestingEvalContext(st)
 	return &ctx
 }
 

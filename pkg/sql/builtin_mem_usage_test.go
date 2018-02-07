@@ -20,13 +20,15 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/lib/pq"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/lib/pq"
 )
 
 // lowMemoryBudget is the memory budget used to test builtins are recording
@@ -131,7 +133,7 @@ func TestBuiltinsAccountForMemory(t *testing.T) {
 
 	for _, test := range testData {
 		t.Run("", func(t *testing.T) {
-			evalCtx := tree.NewTestingEvalContext()
+			evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			defer evalCtx.ActiveMemAcc.Close(context.Background())
 			previouslyAllocated := evalCtx.ActiveMemAcc.Used()
