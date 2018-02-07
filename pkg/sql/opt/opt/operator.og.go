@@ -41,9 +41,6 @@ const (
 	IsNotOp
 	ContainsOp
 	ContainedByOp
-	AnyOp
-	SomeOp
-	AllOp
 	BitandOp
 	BitorOp
 	BitxorOp
@@ -96,9 +93,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsfiltersexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainscontained-byanysomeallbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsfiltersexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainscontained-bybitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 71, 77, 80, 82, 85, 87, 89, 91, 93, 95, 97, 99, 105, 109, 117, 123, 133, 143, 157, 166, 179, 190, 205, 207, 213, 221, 233, 236, 240, 243, 249, 254, 260, 264, 269, 273, 276, 285, 288, 291, 297, 304, 311, 320, 330, 344, 359, 369, 380, 396, 404, 408, 414, 420, 427, 437, 446, 456, 465, 474, 483, 499, 514, 530, 545, 560, 575, 583, 588, 597, 603, 607, 614}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 71, 77, 80, 82, 85, 87, 89, 91, 93, 95, 97, 99, 105, 109, 117, 123, 133, 143, 157, 166, 179, 190, 205, 207, 213, 221, 233, 239, 244, 250, 254, 259, 263, 266, 275, 278, 281, 287, 294, 301, 310, 320, 334, 349, 359, 370, 386, 394, 398, 404, 410, 417, 427, 436, 446, 455, 464, 473, 489, 504, 520, 535, 550, 565, 573, 578, 587, 593, 597, 604}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -136,9 +133,6 @@ var ScalarOperators = [...]Operator{
 	IsNotOp,
 	ContainsOp,
 	ContainedByOp,
-	AnyOp,
-	SomeOp,
-	AllOp,
 	BitandOp,
 	BitorOp,
 	BitxorOp,
@@ -193,9 +187,6 @@ var ComparisonOperators = [...]Operator{
 	IsNotOp,
 	ContainsOp,
 	ContainedByOp,
-	AnyOp,
-	SomeOp,
-	AllOp,
 }
 
 var BinaryOperators = [...]Operator{

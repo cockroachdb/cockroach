@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
 func TestCompiler(t *testing.T) {

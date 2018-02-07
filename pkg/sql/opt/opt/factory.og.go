@@ -59,9 +59,6 @@ type Factory interface {
 	ConstructIsNot(left GroupID, right GroupID) GroupID
 	ConstructContains(left GroupID, right GroupID) GroupID
 	ConstructContainedBy(left GroupID, right GroupID) GroupID
-	ConstructAny(left GroupID, right GroupID) GroupID
-	ConstructSome(left GroupID, right GroupID) GroupID
-	ConstructAll(left GroupID, right GroupID) GroupID
 	ConstructBitand(left GroupID, right GroupID) GroupID
 	ConstructBitor(left GroupID, right GroupID) GroupID
 	ConstructBitxor(left GroupID, right GroupID) GroupID

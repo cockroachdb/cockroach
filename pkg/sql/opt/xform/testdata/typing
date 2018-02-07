@@ -201,31 +201,6 @@ select
            ├── variable: a.x [type=int]
            └── const: NULL [type=NULL]
 
-# Any, Some, All
-build
-SELECT a.x = ANY (1, 2), a.y = SOME (3, 4), a.x = ALL (5, 6) FROM a
-----
-project
- ├── columns: column1:bool:null:3 column2:bool:null:4 column3:bool:null:5
- ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{bool, bool, bool}]
-      ├── any [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── tuple [type=tuple{int, int}]
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
-      ├── some [type=bool]
-      │    ├── variable: a.y [type=int]
-      │    └── tuple [type=tuple{int, int}]
-      │         ├── const: 3 [type=int]
-      │         └── const: 4 [type=int]
-      └── all [type=bool]
-           ├── variable: a.x [type=int]
-           └── tuple [type=tuple{int, int}]
-                ├── const: 5 [type=int]
-                └── const: 6 [type=int]
-
 # Bitand, Bitor, Bitxor
 build
 SELECT a.x & a.y, a.x | a.y, a.x # a.y FROM a

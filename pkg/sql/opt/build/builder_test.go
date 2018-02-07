@@ -38,27 +38,25 @@ package build
 import (
 	"context"
 	"flag"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
-	"strings"
-
-	"fmt"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/datadriven"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
