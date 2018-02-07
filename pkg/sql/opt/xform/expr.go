@@ -193,7 +193,7 @@ func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		private = ev.mem.metadata.ColumnLabel(colIndex)
 
 	case opt.ProjectionsOp:
-		// Projections private data is similar to its output columns, so
+		// Projections private data was already used to print the output columns;
 		// don't print it again.
 		private = nil
 	}
@@ -214,9 +214,26 @@ func (ev *ExprView) formatRelational(tp treeprinter.Node) {
 
 	buf.Reset()
 
-	// Write the output columns. Fall back to writing output columns in column
-	// index order, with best guess label.
-	logicalProps.formatOutputCols(ev.mem, tp)
+	// Special handling to improve the columns display for certain ops.
+	switch ev.Operator() {
+	case opt.ProjectOp:
+		// Get the list of columns from the ProjectionsOp, which has the correct
+		// order.
+		projections := ev.Child(1)
+		cols := projections.Private().(*opt.ColList)
+		var buf bytes.Buffer
+		buf.WriteString("columns:")
+		for i, n := 0, cols.Len(); i < n; i++ {
+			val, _ := cols.Get(i)
+			logicalProps.formatCol(ev.mem, &buf, opt.ColumnIndex(val))
+		}
+		tp.Child(buf.String())
+
+	default:
+		// Write the output columns. Fall back to writing output columns in column
+		// index order, with best guess label.
+		logicalProps.formatOutputCols(ev.mem, tp)
+	}
 
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)

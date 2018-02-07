@@ -1065,7 +1065,13 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 }
 
 func (b *Builder) constructProjectionList(items []opt.GroupID, cols []columnProps) opt.GroupID {
-	return b.factory.ConstructProjections(b.factory.InternList(items), b.factory.InternPrivate(makeColSet(cols)))
+	var colList opt.ColList
+	for i := range cols {
+		colList.Set(i, int(cols[i].index))
+	}
+	return b.factory.ConstructProjections(
+		b.factory.InternList(items), b.factory.InternPrivate(&colList),
+	)
 }
 
 // Builder implements the IndexedVarContainer interface so it can be
@@ -1093,15 +1099,6 @@ func (b *Builder) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func isAggregate(def *tree.FunctionDefinition) bool {
 	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
 	return ok
-}
-
-func makeColSet(cols []columnProps) *opt.ColSet {
-	// Create column index list parameter to the ProjectionList op.
-	var colSet opt.ColSet
-	for i := range cols {
-		colSet.Add(int(cols[i].index))
-	}
-	return &colSet
 }
 
 func groupingError(colName string) error {

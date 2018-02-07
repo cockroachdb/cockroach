@@ -15,7 +15,10 @@
 package util
 
 import (
+	"bytes"
+	"fmt"
 	"math/bits"
+	"sort"
 
 	"golang.org/x/tools/container/intsets"
 )
@@ -185,6 +188,42 @@ func (m FastIntMap) ForEach(fn func(key, val int)) {
 			fn(k, v)
 		}
 	}
+}
+
+// String prints out the contents of the map in the following format:
+//   map[key1:val1 key2:val2 ...]
+// The keys are in ascending order.
+func (m FastIntMap) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("map[")
+	first := true
+
+	if m.large != nil {
+		keys := make([]int, 0, len(m.large))
+		for k := range m.large {
+			keys = append(keys, k)
+		}
+		sort.Ints(keys)
+		for _, k := range keys {
+			if !first {
+				buf.WriteByte(' ')
+			}
+			first = false
+			fmt.Fprintf(&buf, "%d:%d", k, m.large[k])
+		}
+	} else {
+		for i := 0; i < numVals; i++ {
+			if val := m.getSmallVal(uint32(i)); val != -1 {
+				if !first {
+					buf.WriteByte(' ')
+				}
+				first = false
+				fmt.Fprintf(&buf, "%d:%d", i, val)
+			}
+		}
+	}
+	buf.WriteByte(']')
+	return buf.String()
 }
 
 // These constants determine the "small" representation: we pack <numVals>

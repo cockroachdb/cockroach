@@ -40,7 +40,7 @@ build
 SELECT a.y, a.x FROM t.a
 ----
 project
- ├── columns: a.x:int:1 a.y:float:null:2
+ ├── columns: a.y:float:null:2 a.x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── projections [type=tuple{float, int}]
