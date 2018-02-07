@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const outboxBufRows = 16
@@ -196,8 +197,8 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		}
 	}
 
-	flushTicker := time.NewTicker(outboxFlushPeriod)
-	defer flushTicker.Stop()
+	var flushTimer timeutil.Timer
+	defer flushTimer.Stop()
 
 	draining := false
 	defer m.RowChannel.ConsumerClosed()
@@ -233,13 +234,18 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 			}
 			if !draining || msg.Meta != nil {
 				// If we're draining, we ignore all the rows and just send metadata.
-
 				err := m.addRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err
 				}
+				// If the message to add was metadata, a flush was already forced. If
+				// this is our first row, restart the flushTimer.
+				if m.numRows == 1 {
+					flushTimer.Reset(outboxFlushPeriod)
+				}
 			}
-		case <-flushTicker.C:
+		case <-flushTimer.C:
+			flushTimer.Read = true
 			err := m.flush(ctx)
 			if err != nil {
 				return err
