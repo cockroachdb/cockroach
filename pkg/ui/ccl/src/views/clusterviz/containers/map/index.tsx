@@ -14,7 +14,7 @@ import { parseLocalityRoute } from "src/util/localities";
 import "./sim.css";
 
 import { Breadcrumbs } from "ccl/src/views/clusterviz/containers/map/breadcrumbs";
-import { NodeCanvas } from "ccl/src/views/clusterviz/containers/map/nodeCanvas";
+import NodeCanvas from "ccl/src/views/clusterviz/containers/map/nodeSimulator";
 
 export default class ClusterVisualization extends React.Component<RouterState> {
   render() {

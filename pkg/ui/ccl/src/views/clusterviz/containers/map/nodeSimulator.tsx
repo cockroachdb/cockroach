@@ -8,7 +8,6 @@
 
 import React from "react";
 import { connect } from "react-redux";
-import * as d3 from "d3";
 
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
@@ -24,8 +23,7 @@ import {
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";
 
-import { ZoomTransformer } from "./zoom";
-import { ModalLocalitiesView } from "./modalLocalities";
+import { NodeCanvas } from "./nodeCanvas";
 import { NodeHistory } from "./nodeHistory";
 
 import spinner from "assets/spinner.gif";
@@ -42,22 +40,9 @@ interface NodeSimulatorProps {
 }
 
 interface NodeSimulatorOwnProps {
-  projection: d3.geo.Projection;
   tiers: LocalityTier[];
-  zoom: ZoomTransformer;
 }
 
-// NodeSimulator augments real node data with information that is not yet
-// available, but necessary in order to display the simulation.
-//
-// TODO(mrtracy): This layer is a temporary measure needed for testing during
-// initial development. The simulator should be removed before official release,
-// with the simulated data coming from real sources.
-//
-// HACK: nodeHistories is used to maintain a list of previous node statuses
-// for individual nodes. This is used to display rates of change without
-// having to query time series data. This is a hack because this behavior
-// should be moved into the reducer or into a higher order component.
 class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOwnProps, any> {
   nodeHistories: { [id: string]: NodeHistory } = {};
 
@@ -99,14 +84,12 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
         className="loading-image loading-image__spinner-left"
         image={spinner}
       >
-        <ModalLocalitiesView
+        <NodeCanvas
           nodeHistories={this.nodeHistories}
           localityTree={this.props.localityTree}
           locationTree={this.props.locationTree}
           liveness={this.props.liveness}
           tiers={this.props.tiers}
-          projection={this.props.projection}
-          zoom={this.props.zoom}
         />
       </Loading>
     );
