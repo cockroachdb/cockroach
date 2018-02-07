@@ -86,10 +86,6 @@ type Metadata struct {
 	// ColumnIndex. Skip index 0 so that it is reserved for "unknown column".
 	cols []mdCol
 
-	// nextCol keeps track of the index that will be assigned to the next
-	// table or column added to the metadata.
-	nextCol ColumnIndex
-
 	// tables maps from table index to the catalog metadata for the table. The
 	// table index is the index of the first column in the table. The remaining
 	// columns form a contiguous group following that index.
@@ -111,15 +107,14 @@ func (md *Metadata) Catalog() optbase.Catalog {
 // AddColumn indexes a new reference to a column within the query and records
 // its label.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnIndex {
-	// Skip index 0 so that it is reserved for "unknown column".
-	md.nextCol++
 	md.cols = append(md.cols, mdCol{label: label, typ: typ})
-	return md.nextCol
+	return ColumnIndex(len(md.cols) - 1)
 }
 
 // NumColumns returns the count of columns tracked by this Metadata instance.
 func (md *Metadata) NumColumns() int {
-	return len(md.cols)
+	// Index 0 is skipped.
+	return len(md.cols) - 1
 }
 
 // ColumnLabel returns the label of the given column. It is used for pretty-
@@ -145,7 +140,7 @@ func (md *Metadata) ColumnType(index ColumnIndex) types.T {
 // references to the same table are assigned different table indexes (e.g. in
 // a self-join query).
 func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
-	tblIndex := TableIndex(md.nextCol + 1)
+	tblIndex := TableIndex(md.NumColumns() + 1)
 
 	for i := 0; i < tbl.NumColumns(); i++ {
 		col := tbl.Column(i)
