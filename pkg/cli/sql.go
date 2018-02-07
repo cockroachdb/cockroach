@@ -1232,13 +1232,13 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "%v", err)
 	}
 
-	if len(rows) == 0 || len(cols) < 2 {
+	if len(cols) < 2 {
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
 			"invalid results for SHOW SYNTAX: %q %q", cols, rows)
 	}
 
 	// If SHOW SYNTAX reports an error, then it does so on the first row.
-	if rows[0][0] == "error" {
+	if len(rows) >= 1 && rows[0][0] == "error" {
 		var message, code, detail, hint string
 		for _, row := range rows {
 			switch row[0] {
