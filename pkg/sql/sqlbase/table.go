@@ -2236,7 +2236,7 @@ type ConstraintDetail struct {
 type tableLookupFn func(ID) (*TableDescriptor, error)
 
 // GetConstraintInfo returns a summary of all constraints on the table.
-func (desc TableDescriptor) GetConstraintInfo(
+func (desc *TableDescriptor) GetConstraintInfo(
 	ctx context.Context, txn *client.Txn,
 ) (map[string]ConstraintDetail, error) {
 	var tableLookup tableLookupFn
@@ -2250,7 +2250,7 @@ func (desc TableDescriptor) GetConstraintInfo(
 
 // GetConstraintInfoWithLookup returns a summary of all constraints on the
 // table using the provided function to fetch a TableDescriptor from an ID.
-func (desc TableDescriptor) GetConstraintInfoWithLookup(
+func (desc *TableDescriptor) GetConstraintInfoWithLookup(
 	tableLookup tableLookupFn,
 ) (map[string]ConstraintDetail, error) {
 	return desc.collectConstraintInfo(tableLookup)
@@ -2258,14 +2258,14 @@ func (desc TableDescriptor) GetConstraintInfoWithLookup(
 
 // CheckUniqueConstraints returns a non-nil error if a descriptor contains two
 // constraints with the same name.
-func (desc TableDescriptor) CheckUniqueConstraints() error {
+func (desc *TableDescriptor) CheckUniqueConstraints() error {
 	_, err := desc.collectConstraintInfo(nil)
 	return err
 }
 
 // if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
 // check that constraints have unique names.
-func (desc TableDescriptor) collectConstraintInfo(
+func (desc *TableDescriptor) collectConstraintInfo(
 	tableLookup tableLookupFn,
 ) (map[string]ConstraintDetail, error) {
 	info := make(map[string]ConstraintDetail)
@@ -2329,13 +2329,13 @@ func (desc TableDescriptor) collectConstraintInfo(
 			if tableLookup != nil {
 				other, err := tableLookup(index.ForeignKey.Table)
 				if err != nil {
-					return nil, errors.Errorf("error resolving table %d referenced in foreign key",
+					return nil, errors.Wrapf(err, "error resolving table %d referenced in foreign key",
 						index.ForeignKey.Table)
 				}
 				otherIdx, err := other.FindIndexByID(index.ForeignKey.Index)
 				if err != nil {
-					return nil, errors.Errorf("error resolving index %d in table %s referenced in foreign key",
-						index.ForeignKey.Index, other.Name)
+					return nil, errors.Wrapf(err, "error resolving index %d in table %s referenced "+
+						"in foreign key", index.ForeignKey.Index, other.Name)
 				}
 				detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
 				detail.FK = &index.ForeignKey
@@ -2355,6 +2355,18 @@ func (desc TableDescriptor) collectConstraintInfo(
 		if tableLookup != nil {
 			detail.Details = c.Expr
 			detail.CheckConstraint = c
+
+			colsUsed, err := c.ColumnsUsed(desc)
+			if err != nil {
+				return nil, errors.Wrapf(err, "error computing columns used in check constraint %q", c.Name)
+			}
+			for _, colID := range colsUsed {
+				col, err := desc.FindColumnByID(colID)
+				if err != nil {
+					return nil, errors.Wrapf(err, "error finding column %d in table %s", colID, desc.Name)
+				}
+				detail.Columns = append(detail.Columns, col.Name)
+			}
 		}
 		info[c.Name] = detail
 	}

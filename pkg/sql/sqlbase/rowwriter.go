@@ -140,18 +140,12 @@ func (rh *rowHelper) skipColumnInPK(
 	return true, nil
 }
 
-type columnIDs []ColumnID
-
-func (c columnIDs) Len() int           { return len(c) }
-func (c columnIDs) Swap(i, j int)      { c[i], c[j] = c[j], c[i] }
-func (c columnIDs) Less(i, j int) bool { return c[i] < c[j] }
-
 func (rh *rowHelper) sortedColumnFamily(famID FamilyID) ([]ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
 		rh.sortedColumnFamilies = make(map[FamilyID][]ColumnID, len(rh.TableDesc.Families))
 		for _, family := range rh.TableDesc.Families {
 			colIDs := append([]ColumnID(nil), family.ColumnIDs...)
-			sort.Sort(columnIDs(colIDs))
+			sort.Sort(ColumnIDs(colIDs))
 			rh.sortedColumnFamilies[family.ID] = colIDs
 		}
 	}
