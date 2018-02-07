@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,7 +38,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		{9223372036854775807, 2147483647, "9223372036854775807.2147483647"},
 	}
 
-	ctx := tree.NewTestingEvalContext()
+	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer ctx.Mon.Stop(context.Background())
 	ctx.PrepareOnly = true
 	for _, d := range testData {

@@ -157,12 +157,13 @@ func TestJoinReader(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.description, func(t *testing.T) {
-			evalCtx := tree.MakeTestingEvalContext()
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Ctx:      context.Background(),
 				EvalCtx:  evalCtx,
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings: st,
 				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 			}
 
@@ -231,7 +232,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	)
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := tree.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),

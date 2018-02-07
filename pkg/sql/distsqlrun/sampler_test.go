@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/axiomhq/hyperloglog"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -43,11 +44,12 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 
 	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 
@@ -148,11 +150,12 @@ func TestSamplerSketch(t *testing.T) {
 
 	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 

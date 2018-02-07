@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -45,7 +46,7 @@ func withExecutor(test func(e *Executor, s *Session, evalCtx *tree.EvalContext),
 	ctx, span := ac.AnnotateCtxWithSpan(context.Background(), "test")
 	defer span.Finish()
 
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	e := s.Executor().(*Executor)
@@ -184,6 +185,7 @@ func TestBufferedWriterReset(t *testing.T) {
 		nil,           /* maxHist */
 		-1,            /* increment: use default block size */
 		math.MaxInt64, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
 	)
 	memMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memMon.Stop(ctx)

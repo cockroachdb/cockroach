@@ -65,7 +65,7 @@ func TestRouters(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	alloc := &sqlbase.DatumAlloc{}
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	// Generate tables of possible values for each column; we have fewer possible
@@ -272,7 +272,7 @@ var (
 func TestConsumerStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	testCases := []struct {
@@ -422,7 +422,7 @@ func preimageAttack(
 func TestMetadataIsForwarded(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	testCases := []struct {
@@ -572,7 +572,8 @@ func TestRouterBlocks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			flowCtx := FlowCtx{Settings: cluster.MakeTestingClusterSettings(), EvalCtx: tree.MakeTestingEvalContext()}
+			st := cluster.MakeTestingClusterSettings()
+			flowCtx := FlowCtx{Settings: st, EvalCtx: tree.MakeTestingEvalContext(st)}
 			router.init(&flowCtx, colTypes)
 			var wg sync.WaitGroup
 			router.start(context.TODO(), &wg, nil /* ctxCancel */)

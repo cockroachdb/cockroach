@@ -302,6 +302,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		nil,           /* maxHist */
 		-1,            /* increment: use default increment */
 		math.MaxInt64, /* noteworthy */
+		st,
 	)
 	rootSQLMemoryMonitor.Start(context.Background(), nil, mon.MakeStandaloneBudget(s.cfg.SQLMemoryPoolSize))
 
@@ -525,6 +526,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
+		s.ClusterSettings(),
 		s.sqlExecutor,
 		&s.internalMemMetrics,
 		&rootSQLMemoryMonitor,

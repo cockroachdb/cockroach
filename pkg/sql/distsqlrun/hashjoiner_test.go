@@ -889,13 +889,14 @@ func TestHashJoiner(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	evalCtx := tree.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
@@ -904,6 +905,7 @@ func TestHashJoiner(t *testing.T) {
 		nil, /* maxHist */
 		-1,  /* increment: use default block size */
 		math.MaxInt64,
+		st,
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
@@ -918,7 +920,7 @@ func TestHashJoiner(t *testing.T) {
 				out := &RowBuffer{}
 				flowCtx := FlowCtx{
 					Ctx:         ctx,
-					Settings:    cluster.MakeTestingClusterSettings(),
+					Settings:    st,
 					EvalCtx:     evalCtx,
 					TempStorage: tempEngine,
 					diskMonitor: &diskMonitor,
@@ -1058,13 +1060,14 @@ func TestHashJoinerError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tempEngine.Close()
 
-	evalCtx := tree.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
@@ -1073,6 +1076,7 @@ func TestHashJoinerError(t *testing.T) {
 		nil, /* maxHist */
 		-1,  /* increment: use default block size */
 		math.MaxInt64,
+		st,
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
@@ -1086,7 +1090,7 @@ func TestHashJoinerError(t *testing.T) {
 			out := &RowBuffer{}
 			flowCtx := FlowCtx{
 				Ctx:         ctx,
-				Settings:    cluster.MakeTestingClusterSettings(),
+				Settings:    st,
 				EvalCtx:     evalCtx,
 				TempStorage: tempEngine,
 				diskMonitor: &diskMonitor,
@@ -1210,14 +1214,15 @@ func TestHashJoinerDrain(t *testing.T) {
 		nil, /* rows */
 		RowBufferArgs{AccumulateRowsWhileDraining: true},
 	)
-	evalCtx := tree.MakeTestingEvalContext()
-	ctx := context.Background()
-	defer evalCtx.Stop(ctx)
 
 	// Since the use of external storage overrides h.initialBufferSize, disable
 	// it for this test.
 	settings := cluster.MakeTestingClusterSettings()
 	settingUseTempStorageJoins.Override(&settings.SV, false)
+
+	evalCtx := tree.MakeTestingEvalContext(settings)
+	ctx := context.Background()
+	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
 		Ctx:      ctx,
 		Settings: settings,
@@ -1339,11 +1344,12 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 		nil, /* rows */
 		RowBufferArgs{},
 	)
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 
@@ -1387,11 +1393,12 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 // TODO(asubiotto): More complex benchmarks.
 func BenchmarkHashJoiner(b *testing.B) {
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
 		Ctx:      ctx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 

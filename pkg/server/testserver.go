@@ -72,7 +72,7 @@ func makeTestConfig(st *cluster.Settings) Config {
 
 	// Configure the default in-memory temp storage for all tests unless
 	// otherwise configured.
-	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig()
+	cfg.TempStorageConfig = base.DefaultTestTempStorageConfig(st)
 
 	// Load test certs. In addition, the tests requiring certs
 	// need to call security.SetAssetLoader(securitytest.EmbeddedAssets)

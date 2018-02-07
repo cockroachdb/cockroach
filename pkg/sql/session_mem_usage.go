@@ -38,7 +38,7 @@ func (s *Session) StartMonitor(pool *mon.BytesMonitor, reserved mon.BoundAccount
 		mon.MemoryResource,
 		s.memMetrics.CurBytesCount,
 		s.memMetrics.MaxBytesHist,
-		-1, math.MaxInt64)
+		-1, math.MaxInt64, s.execCfg.Settings)
 	s.mon.Start(s.context, pool, reserved)
 	s.deriveAndStartMonitors()
 }
@@ -60,7 +60,7 @@ func (s *Session) deriveAndStartMonitors() {
 		mon.MemoryResource,
 		s.memMetrics.SessionCurBytesCount,
 		s.memMetrics.SessionMaxBytesHist,
-		-1, noteworthyMemoryUsageBytes)
+		-1, noteworthyMemoryUsageBytes, s.execCfg.Settings)
 	s.sessionMon.Start(s.context, &s.mon, mon.BoundAccount{})
 
 	// We merely prepare the txn monitor here. It is fully started in
@@ -69,7 +69,7 @@ func (s *Session) deriveAndStartMonitors() {
 		mon.MemoryResource,
 		s.memMetrics.TxnCurBytesCount,
 		s.memMetrics.TxnMaxBytesHist,
-		-1, noteworthyMemoryUsageBytes)
+		-1, noteworthyMemoryUsageBytes, s.execCfg.Settings)
 }
 
 func (s *Session) makeBoundAccount() mon.BoundAccount {

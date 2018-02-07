@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -93,7 +94,7 @@ func TestIndexedVars(t *testing.T) {
 	if !typ.Equivalent(types.Int) {
 		t.Errorf("invalid expression type %s", typ)
 	}
-	evalCtx := NewTestingEvalContext()
+	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	evalCtx.IVarHelper = semaContext.IVarHelper
 	d, err := typedExpr.Eval(evalCtx)

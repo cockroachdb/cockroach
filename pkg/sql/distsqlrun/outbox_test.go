@@ -42,10 +42,11 @@ func TestOutbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		stopper:  stopper,
 		EvalCtx:  evalCtx,
 		rpcCtx:   newInsecureRPCContext(stopper),
@@ -192,10 +193,11 @@ func TestOutboxInitializesStreamBeforeRecevingAnyRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		stopper:  stopper,
 		EvalCtx:  evalCtx,
 		rpcCtx:   newInsecureRPCContext(stopper),
@@ -260,10 +262,11 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			evalCtx := tree.MakeTestingEvalContext()
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings: st,
 				stopper:  stopper,
 				EvalCtx:  evalCtx,
 				rpcCtx:   newInsecureRPCContext(stopper),
@@ -385,10 +388,11 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		stopper:  stopper,
 		EvalCtx:  evalCtx,
 		rpcCtx:   newInsecureRPCContext(stopper),

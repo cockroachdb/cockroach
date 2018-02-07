@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -278,7 +279,7 @@ func initExternalIODir(ctx context.Context, firstStore base.StoreSpec) (string, 
 }
 
 func initTempStorageConfig(
-	ctx context.Context, stopper *stop.Stopper, firstStore base.StoreSpec,
+	ctx context.Context, st *cluster.Settings, stopper *stop.Stopper, firstStore base.StoreSpec,
 ) (base.TempStorageConfig, error) {
 	var recordPath string
 	if !firstStore.InMemory {
@@ -333,6 +334,7 @@ func initTempStorageConfig(
 	// cli flags.
 	tempStorageConfig := base.TempStorageConfigFromEnv(
 		ctx,
+		st,
 		firstStore,
 		startCtx.tempDir,
 		tempStorageMaxSizeBytes,
@@ -437,7 +439,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
-	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, stopper, serverCfg.Stores.Specs[0]); err != nil {
+	if serverCfg.TempStorageConfig, err = initTempStorageConfig(ctx, serverCfg.Settings, stopper, serverCfg.Stores.Specs[0]); err != nil {
 		return err
 	}
 

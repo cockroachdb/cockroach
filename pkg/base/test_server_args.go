@@ -135,7 +135,7 @@ var (
 // DefaultTestTempStorageConfig is the associated temp storage for
 // DefaultTestStoreSpec that is in-memory.
 // It has a maximum size of 100MiB.
-func DefaultTestTempStorageConfig() TempStorageConfig {
+func DefaultTestTempStorageConfig(st *cluster.Settings) TempStorageConfig {
 	var maxSizeBytes int64 = DefaultInMemTempStorageMaxSizeBytes
 	monitor := mon.MakeMonitor(
 		"in-mem temp storage",
@@ -144,6 +144,7 @@ func DefaultTestTempStorageConfig() TempStorageConfig {
 		nil,             /* maxHist */
 		1024*1024,       /* increment */
 		maxSizeBytes/10, /* noteworthy */
+		st,
 	)
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
