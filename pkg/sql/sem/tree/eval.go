@@ -2064,10 +2064,6 @@ type EvalPlanner interface {
 	// expected and returns that row.
 	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
 
-	// QualifyWithDatabase resolves a possibly unqualified table name into a
-	// normalized table name that is qualified by database.
-	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
-
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] table_name [ @ index_name ]`.
 	// If the database name is not given, it uses the search path to find it, and
