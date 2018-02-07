@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -1047,4 +1048,93 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		}
 		return nil
 	})
+}
+
+func TestModificationTimeTxnOrdering(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+
+	testingT.Skip("#22479")
+
+	// Decide how long we should run this.
+	maxTime := time.Duration(5) * time.Second
+	if testutils.NightlyStress() {
+		maxTime = time.Duration(2) * time.Minute
+	}
+
+	// Which table to exercise the test against.
+	const descID = keys.LeaseTableID
+
+	params, _ := tests.CreateTestServerParams()
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	if _, err := t.db.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+
+	// When to end the test.
+	end := timeutil.Now().Add(maxTime)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	log.Infof(ctx, "until %s", end)
+
+	go func() {
+		for count := 0; timeutil.Now().Before(end); count++ {
+			log.Infof(ctx, "renaming test%d to test%d", count, count+1)
+			if _, err := t.db.Exec(fmt.Sprintf(`ALTER TABLE t.test%d RENAME TO t.test%d`, count, count+1)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		wg.Done()
+	}()
+
+	go func() {
+		leaseMgr := t.node(1)
+		for timeutil.Now().Before(end) {
+			log.Infof(ctx, "publishing new descriptor")
+			desc, err := leaseMgr.Publish(ctx, descID, func(*sqlbase.TableDescriptor) error { return nil }, nil)
+			if err != nil {
+				t.Fatalf("error while publishing: %v", err)
+			}
+			table := desc.GetTable()
+
+			// Wait a little time to give a chance to other goroutines to
+			// race past.
+			time.Sleep(20 * time.Millisecond)
+
+			// Now check that the version that was updated is indeed observable
+			// in the database at the time it says it was modified.
+			//
+			// This checks that the modification timestamp is not lying about
+			// the transaction commit time (and that the txn commit time wasn't
+			// bumped past it).
+			log.Infof(ctx, "checking version %d", table.Version)
+			txn := client.NewTxn(t.kvDB, roachpb.NodeID(0), client.RootTxn)
+			// Make the txn look back at the known modification timestamp.
+			txn.SetFixedTimestamp(ctx, table.ModificationTime)
+
+			// Look up the descriptor.
+			descKey := sqlbase.MakeDescMetadataKey(descID)
+			dbDesc := &sqlbase.Descriptor{}
+			if err := txn.GetProto(ctx, descKey, dbDesc); err != nil {
+				t.Fatalf("error while reading proto: %v", err)
+			}
+			// Look at the descriptor that comes back from the database.
+			dbTable := dbDesc.GetTable()
+
+			if dbTable.Version != table.Version || dbTable.ModificationTime != table.ModificationTime {
+				t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
+					dbTable.Version, dbTable.ModificationTime, table.Version, table.ModificationTime)
+			}
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
 }
