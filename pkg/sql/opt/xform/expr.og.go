@@ -192,21 +192,6 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 2
 	},
 
-	// AnyOp
-	func(ev *ExprView) int {
-		return 2
-	},
-
-	// SomeOp
-	func(ev *ExprView) int {
-		return 2
-	},
-
-	// AllOp
-	func(ev *ExprView) int {
-		return 2
-	},
-
 	// BitandOp
 	func(ev *ExprView) int {
 		return 2
@@ -860,48 +845,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			return containedByExpr.left()
 		case 1:
 			return containedByExpr.right()
-		default:
-			panic("child index out of range")
-		}
-	},
-
-	// AnyOp
-	func(ev *ExprView, n int) opt.GroupID {
-		anyExpr := (*anyExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return anyExpr.left()
-		case 1:
-			return anyExpr.right()
-		default:
-			panic("child index out of range")
-		}
-	},
-
-	// SomeOp
-	func(ev *ExprView, n int) opt.GroupID {
-		someExpr := (*someExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return someExpr.left()
-		case 1:
-			return someExpr.right()
-		default:
-			panic("child index out of range")
-		}
-	},
-
-	// AllOp
-	func(ev *ExprView, n int) opt.GroupID {
-		allExpr := (*allExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return allExpr.left()
-		case 1:
-			return allExpr.right()
 		default:
 			panic("child index out of range")
 		}
@@ -1692,21 +1635,6 @@ var privateLookup = [...]privateLookupFunc{
 		return 0
 	},
 
-	// AnyOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
-	// SomeOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
-	// AllOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
 	// BitandOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
@@ -1965,9 +1893,6 @@ var isScalarLookup = [...]bool{
 	true,  // IsNotOp
 	true,  // ContainsOp
 	true,  // ContainedByOp
-	true,  // AnyOp
-	true,  // SomeOp
-	true,  // AllOp
 	true,  // BitandOp
 	true,  // BitorOp
 	true,  // BitxorOp
@@ -2051,9 +1976,6 @@ var isBooleanLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2137,9 +2059,6 @@ var isComparisonLookup = [...]bool{
 	true,  // IsNotOp
 	true,  // ContainsOp
 	true,  // ContainedByOp
-	true,  // AnyOp
-	true,  // SomeOp
-	true,  // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2223,9 +2142,6 @@ var isBinaryLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	true,  // BitandOp
 	true,  // BitorOp
 	true,  // BitxorOp
@@ -2309,9 +2225,6 @@ var isUnaryLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2395,9 +2308,6 @@ var isRelationalLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2481,9 +2391,6 @@ var isJoinLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2567,9 +2474,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2653,9 +2557,6 @@ var isEnforcerLookup = [...]bool{
 	false, // IsNotOp
 	false, // ContainsOp
 	false, // ContainedByOp
-	false, // AnyOp
-	false, // SomeOp
-	false, // AllOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -3566,81 +3467,6 @@ func (m *memoExpr) asContainedBy() *containedByExpr {
 		return nil
 	}
 	return (*containedByExpr)(m)
-}
-
-type anyExpr memoExpr
-
-func makeAnyExpr(left opt.GroupID, right opt.GroupID) anyExpr {
-	return anyExpr{op: opt.AnyOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *anyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *anyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *anyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAny() *anyExpr {
-	if m.op != opt.AnyOp {
-		return nil
-	}
-	return (*anyExpr)(m)
-}
-
-type someExpr memoExpr
-
-func makeSomeExpr(left opt.GroupID, right opt.GroupID) someExpr {
-	return someExpr{op: opt.SomeOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *someExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *someExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *someExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asSome() *someExpr {
-	if m.op != opt.SomeOp {
-		return nil
-	}
-	return (*someExpr)(m)
-}
-
-type allExpr memoExpr
-
-func makeAllExpr(left opt.GroupID, right opt.GroupID) allExpr {
-	return allExpr{op: opt.AllOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *allExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *allExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *allExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAll() *allExpr {
-	if m.op != opt.AllOp {
-		return nil
-	}
-	return (*allExpr)(m)
 }
 
 type bitandExpr memoExpr
