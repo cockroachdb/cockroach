@@ -22,6 +22,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -221,6 +222,8 @@ type BytesMonitor struct {
 
 	curBytesCount *metric.Gauge
 	maxBytesHist  *metric.Histogram
+
+	settings *cluster.Settings
 }
 
 // maxAllocatedButUnusedBlocks determines the maximum difference between the
@@ -261,8 +264,10 @@ func MakeMonitor(
 	maxHist *metric.Histogram,
 	increment int64,
 	noteworthy int64,
+	settings *cluster.Settings,
 ) BytesMonitor {
-	return MakeMonitorWithLimit(name, res, math.MaxInt64, curCount, maxHist, increment, noteworthy)
+	return MakeMonitorWithLimit(
+		name, res, math.MaxInt64, curCount, maxHist, increment, noteworthy, settings)
 }
 
 // MakeMonitorWithLimit creates a new monitor with a limit local to this
@@ -275,6 +280,7 @@ func MakeMonitorWithLimit(
 	maxHist *metric.Histogram,
 	increment int64,
 	noteworthy int64,
+	settings *cluster.Settings,
 ) BytesMonitor {
 	if increment <= 0 {
 		increment = DefaultPoolAllocationSize
@@ -290,6 +296,7 @@ func MakeMonitorWithLimit(
 		curBytesCount:        curCount,
 		maxBytesHist:         maxHist,
 		poolAllocationSize:   increment,
+		settings:             settings,
 	}
 }
 
@@ -304,6 +311,7 @@ func MakeMonitorInheritWithLimit(name string, limit int64, m *BytesMonitor) Byte
 		m.maxBytesHist,
 		m.poolAllocationSize,
 		m.noteworthyUsageBytes,
+		m.settings,
 	)
 }
 
@@ -384,9 +392,9 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 	}
 
 	if check && mm.mu.curAllocated != 0 {
-		panic(fmt.Sprintf("%s: unexpected %d leftover bytes",
-			mm.name,
-			mm.mu.curAllocated))
+		log.ReportOrPanic(
+			ctx, &mm.settings.SV,
+			fmt.Sprintf("%s: unexpected %d leftover bytes", mm.name, mm.mu.curAllocated))
 	}
 
 	mm.releaseBudget(ctx)

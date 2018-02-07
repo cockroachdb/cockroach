@@ -270,7 +270,8 @@ func TestSorter(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,6 +286,7 @@ func TestSorter(t *testing.T) {
 		nil, /* maxHist */
 		-1,  /* increment: use default block size */
 		math.MaxInt64,
+		st,
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)

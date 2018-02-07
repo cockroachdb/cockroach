@@ -21,7 +21,10 @@ import (
 	"net"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -32,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -144,6 +146,7 @@ var noteworthyConnMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWO
 func MakeServer(
 	ambientCtx log.AmbientContext,
 	cfg *base.Config,
+	st *cluster.Settings,
 	executor *sql.Executor,
 	internalMemMetrics *sql.MemoryMetrics,
 	parentMemoryMonitor *mon.BytesMonitor,
@@ -159,14 +162,14 @@ func MakeServer(
 		mon.MemoryResource,
 		server.metrics.SQLMemMetrics.CurBytesCount,
 		server.metrics.SQLMemMetrics.MaxBytesHist,
-		0, noteworthySQLMemoryUsageBytes)
+		0, noteworthySQLMemoryUsageBytes, st)
 	server.sqlMemoryPool.Start(context.Background(), parentMemoryMonitor, mon.BoundAccount{})
 
 	server.connMonitor = mon.MakeMonitor("conn",
 		mon.MemoryResource,
 		server.metrics.ConnMemMetrics.CurBytesCount,
 		server.metrics.ConnMemMetrics.MaxBytesHist,
-		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes)
+		int64(connReservationBatchSize)*baseSQLMemoryBudget, noteworthyConnMemoryUsageBytes, st)
 	server.connMonitor.Start(context.Background(), &server.sqlMemoryPool, mon.BoundAccount{})
 
 	server.mu.Lock()

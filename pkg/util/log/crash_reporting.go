@@ -357,6 +357,18 @@ func redact(r interface{}) string {
 	return reportable
 }
 
+// ReportOrPanic either reports an error to sentry, if run from a release
+// binary, or panics, if triggered in tests. This is intended to be used for
+// failing assertions which are recoverable but serious enough to report and to
+// cause tests to fail.
+func ReportOrPanic(ctx context.Context, sv *settings.Values, error string) {
+	if !build.IsRelease() {
+		panic(error)
+	}
+	var reportables []interface{}
+	SendCrashReport(ctx, sv, 0 /* depth */, error, reportables)
+}
+
 // ReportablesToSafeError inspects the given format string (taken as not needing
 // redaction) and reportables, redacts them appropriately and returns an error
 // that is safe to pass to anonymized reporting. The given depth is used to

@@ -2247,6 +2247,7 @@ func MakeTestingEvalContext() EvalContext {
 		nil,           /* maxHist */
 		-1,            /* increment */
 		math.MaxInt64, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
 	)
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = &monitor
