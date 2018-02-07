@@ -257,3 +257,70 @@ query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT l.k, r.k FROM (SELECT * FROM distsql_mj_test ORDER BY k) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k) r ON l.k = r.k)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkkFr4zAQhe_7K5Y57RIVIifOwVDwNYUmJe2thOBaU1fF8bijMbSE_Pdi65DE1EpzKL1Jo_nemydmBxUZXGRbdJA8ggYFMawV1Ew5Okfcln3T3LxDMlZgq7qRtrxWkBMjJDsQKyVCAgu6ohoUGJTMll3TXgE1ckCcZAVCMturI1kdln3InkpcYWaQT8ShZrvN-CM11ol7Kzfb142gE1CwbCT5m2oY8teX-N8TS9861aNB8eiXw01-Mtx0UPyg2VTEBhlNfxfOt3wx4S1ygTdkq_6YJT7Lv1SP_l-zLV788fA9Ko0GQ8QnIc5s9QpdTZXDby32uE2ApkD_I44azvGOKe9s_HXZcV3BoBP_OvOXeeWf2gGPYR2EozAcBeH4BNZ9eBKEp2Hn6QXOUR-Og_C457ze__kMAAD__4m9mGY=
+
+
+statement ok
+SET CLUSTER SETTING sql.distsql.experimental.lookup_joins.enabled = true;
+
+
+statement ok
+CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c))
+
+
+statement ok
+INSERT INTO distsql_lookup_test_1 VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
+
+
+statement ok
+CREATE TABLE distsql_lookup_test_2 (d INT, e INT, f INT, PRIMARY KEY (f, e))
+
+
+statement ok
+INSERT INTO distsql_lookup_test_2 VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+
+query IIIIII
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+1  1  2  NULL  2  1
+2  1  1  NULL  2  1
+
+
+query IIIIII
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+
+query IIIIII
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+
+query III
+SELECT a, b, e FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a >= e
+----
+1  1  1
+2  1  1
+2  1  2
+
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkc9Kw0AQh-8-hcx5hCa1Hva013popXiTENbsUBbTzLozAaXk3SXZg22h0R7nz_fLl9kjdOxp4w4kYN6gAIQVVAgxcUMinMZ2Xlr7LzALhNDFXsd2hdBwIjBH0KAtgYENP3AEBE_qQjstDQjc6y8i6vYEZjngSWwxH_vq3lvakfOUzsIhpnBw6dv6ICqfbd0yf_SxVhKtx3_Z9mrubYG2RLuEay7FLS7PHLpbVcpLFbSPaFdon646lWdOf5x9RxK5E_rX5RdDhUB-T_lphfvU0EviZvpMLrcTNzU8iebpMhfrLo9GwVO4mIXLebichRcXcDXc_QQAAP__D3vm2w==
+
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkT1rwzAQhvf-CnPzFfzRdNCkqZAOSQnZWhNc6wiijk-VTtAS_N-LraFJIG4z3sdzesR7hJ4NrZoDBVCvUADCAmoE57mlENiP7bS0NF-gcgTbuyhju0Zo2ROoI4iVjkDBiu_ZAYIhaWw3LQ0IHOUXCdLsCVQ14MnZYv7stnnvaEONIX92HJy3h8Z_a2ODhM9u1zF_RLcTCrIb_7KOojJdoC5RV3DNpbjF5Zltf6tKCQhPthPyKtOL7C3meUVZoZRarraXmqgfUC9QP171Lc98_4hkQ8FxH-hfqeRDjUBmTyn2wNG39OK5nZ5J5XripoahIGlapWLZp9EoeAoXs3A5D5ezcH4B18PdTwAAAP__g_HuUw==
+
+
+statement ok
+SET CLUSTER SETTING sql.distsql.experimental.lookup_joins.enabled = false;

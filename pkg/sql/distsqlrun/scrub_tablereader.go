@@ -101,8 +101,8 @@ func newScrubTableReader(
 	}
 
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), spec.Reverse,
-		neededColumns, true /* isCheck */, &tr.alloc,
+		&tr.fetcher, &tr.tableDesc, nil /* spans */, int(spec.IndexIdx),
+		spec.Reverse, neededColumns, true /* isCheck */, &tr.alloc,
 	); err != nil {
 		return nil, err
 	}

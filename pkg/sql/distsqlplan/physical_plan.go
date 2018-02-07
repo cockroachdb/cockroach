@@ -781,18 +781,22 @@ func (p *PhysicalPlan) AddJoinStage(
 	leftTypes, rightTypes []sqlbase.ColumnType,
 	leftMergeOrd, rightMergeOrd distsqlrun.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
+	shouldIncludeRight bool,
 ) {
 	pIdxStart := ProcessorIdx(len(p.Processors))
 	stageID := p.NewStageID()
 
 	for _, n := range nodes {
+		inputs := make([]distsqlrun.InputSyncSpec, 0, 2)
+		inputs = append(inputs, distsqlrun.InputSyncSpec{ColumnTypes: leftTypes})
+		if shouldIncludeRight {
+			inputs = append(inputs, distsqlrun.InputSyncSpec{ColumnTypes: rightTypes})
+		}
+
 		proc := Processor{
 			Node: n,
 			Spec: distsqlrun.ProcessorSpec{
-				Input: []distsqlrun.InputSyncSpec{
-					{ColumnTypes: leftTypes},
-					{ColumnTypes: rightTypes},
-				},
+				Input:   inputs,
 				Core:    core,
 				Post:    post,
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
@@ -831,8 +835,10 @@ func (p *PhysicalPlan) AddJoinStage(
 		// Connect left routers to the processor's first input. Currently the join
 		// node doesn't care about the orderings of the left and right results.
 		p.MergeResultStreams(leftRouters, bucket, leftMergeOrd, pIdx, 0)
-		// Connect right routers to the processor's second input.
-		p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1)
+		if shouldIncludeRight {
+			// Connect right routers to the processor's second input if it has one.
+			p.MergeResultStreams(rightRouters, bucket, rightMergeOrd, pIdx, 1)
+		}
 
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}

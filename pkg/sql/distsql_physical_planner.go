@@ -106,6 +106,12 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
+var planLookupJoin = settings.RegisterBoolSetting(
+	"sql.distsql.experimental.lookup_joins.enabled",
+	"if set, we plan lookup joins when possible",
+	false,
+)
+
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //
 // nodeDesc is the descriptor of the node on which this planner runs. It is used
@@ -1636,6 +1642,8 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	//
 	//  - The routers of the joiner processors are the result routers of the plan.
 
+	forceLookupJoin := planLookupJoin.Get(&dsp.st.SV)
+
 	leftPlan, err := dsp.createPlanForNode(planCtx, n.left.plan)
 	if err != nil {
 		return physicalPlan{}, err
@@ -1645,11 +1653,13 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		return physicalPlan{}, err
 	}
 
-	var p physicalPlan
-	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
-	p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
-		&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
-	)
+	// Can use a lookupJoiner if there is a scan node on the right that uses the
+	// table's primary index.
+	// TODO(pbardea): Loosen restriction when joinReader takes secondary indexes.
+	var sn *scanNode
+	if scan, ok := n.right.plan.(*scanNode); ok && scan.index.ID == 1 {
+		sn = scan
+	}
 
 	// Nodes where we will run the join processors.
 	var nodes []roachpb.NodeID
@@ -1660,17 +1670,71 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
 	joinType := distsqlJoinType(n.joinType)
 
+	// LookupJoins only support inner joins.
+	if joinType != distsqlrun.JoinType_INNER {
+		sn = nil
+	}
+
+	if !forceLookupJoin {
+		sn = nil
+	}
+
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes
 	rightTypes := rightPlan.ResultTypes
 
-	// Set up the output columns.
+	// Set up the equality columns.
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
-		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
-
-		// Set up the equality columns.
 		leftEqCols = eqCols(n.pred.leftEqualityIndices, leftPlan.planToStreamColMap)
 		rightEqCols = eqCols(n.pred.rightEqualityIndices, rightPlan.planToStreamColMap)
+	}
+
+	if sn != nil {
+		// Check if equality columns still allow for lookup join.
+		if len(rightEqCols) > len(sn.index.ColumnIDs) {
+			// Can't have more equality columns than index columns.
+			return physicalPlan{}, errors.Errorf("%d equality columns specified, expecting a maximum of %d",
+				len(rightEqCols), len(sn.index.ColumnIDs))
+		}
+
+		// Check if rightEqCols are prefix of index columns in scanNode sn.
+		rightEqColsMap := make(map[int]bool, len(n.pred.rightEqualityIndices))
+		for _, rightColID := range n.pred.rightEqualityIndices {
+			rightEqColsMap[rightColID+1] = true
+		}
+		for i := 0; i < len(n.pred.rightEqualityIndices); i++ {
+			indexColID := int(sn.index.ColumnIDs[i])
+			if rightEqColsMap[indexColID] {
+				delete(rightEqColsMap, indexColID)
+			} else {
+				return physicalPlan{}, errors.Errorf("equality columns must be a prefix of the index for lookup joins")
+			}
+		}
+	}
+
+	// Check if lookupJoin force was successful.
+	if forceLookupJoin {
+		if sn == nil {
+			return physicalPlan{}, errors.Errorf("lookup join was forced, but could not be used")
+		}
+	} else {
+		sn = nil
+	}
+
+	var p physicalPlan
+	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
+	if sn != nil {
+		p.PhysicalPlan = leftPlan.PhysicalPlan
+		leftRouters = leftPlan.ResultRouters
+	} else {
+		p.PhysicalPlan, leftRouters, rightRouters = distsqlplan.MergePlans(
+			&leftPlan.PhysicalPlan, &rightPlan.PhysicalPlan,
+		)
+	}
+
+	// Set up the output columns.
+	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
+		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors, sn == nil)
 
 		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
@@ -1702,9 +1766,36 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	post, joinToStreamColMap := joinOutColumns(n, leftPlan, rightPlan)
 	onExpr := remapOnExpr(planCtx.EvalContext(), n, leftPlan, rightPlan)
 
+	indexMap := make([]uint32, 0)
+	for i, m := range rightPlan.planToStreamColMap {
+		if m >= 0 {
+			indexMap = append(indexMap, uint32(i))
+		}
+	}
+
 	// Create the Core spec.
 	var core distsqlrun.ProcessorCoreUnion
-	if leftMergeOrd.Columns == nil {
+	if sn != nil {
+		lookupExpr := shiftExprCols(
+			planCtx.EvalContext(), sn.filter, rightPlan.planToStreamColMap, leftPlan.planToStreamColMap,
+		)
+		post.Filter = lookupExpr
+		var indexColumns = make([]uint32, len(sn.index.ColumnIDs))
+		for i, id := range sn.index.ColumnIDs {
+			indexColumns[i] = uint32(id)
+		}
+		indexColumns = applySortBasedOnFirst(rightEqCols, indexColumns)
+		lookupCols := applySortBasedOnFirst(indexColumns, leftEqCols)
+
+		core.JoinReader = &distsqlrun.JoinReaderSpec{
+			Table:         *(sn.desc),
+			IndexIdx:      uint32(sn.index.ID) - 1,
+			LookupColumns: lookupCols,
+			RightSpans:    sn.spans,
+			IndexMap:      indexMap,
+			OnExpr:        onExpr,
+		}
+	} else if leftMergeOrd.Columns == nil {
 		core.HashJoiner = &distsqlrun.HashJoinerSpec{
 			LeftEqColumns:  leftEqCols,
 			RightEqColumns: rightEqCols,
@@ -1722,7 +1813,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 
 	p.AddJoinStage(
 		nodes, core, post, leftEqCols, rightEqCols, leftTypes, rightTypes,
-		leftMergeOrd, rightMergeOrd, leftRouters, rightRouters,
+		leftMergeOrd, rightMergeOrd, leftRouters, rightRouters, sn == nil,
 	)
 
 	p.planToStreamColMap = joinToStreamColMap
@@ -1735,6 +1826,23 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// uses the mergeJoinOrdering.
 	p.SetMergeOrdering(dsp.convertOrdering(n.props, p.planToStreamColMap))
 	return p, nil
+}
+
+func applySortBasedOnFirst(source, target []uint32) []uint32 {
+	sorted := make([]uint32, len(source))
+	copy(sorted, source)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+
+	idxMap := make(map[uint32]int)
+	for i, val := range sorted {
+		idxMap[val] = i
+	}
+
+	result := make([]uint32, len(source))
+	for i, val := range source {
+		result[idxMap[val]] = target[i]
+	}
+	return result
 }
 
 func (dsp *DistSQLPlanner) createPlanForNode(
@@ -2092,7 +2200,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		joinType := distsqlSetOpJoinType(n.unionType)
 
 		// Nodes where we will run the join processors.
-		nodes := findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
+		nodes := findJoinProcessorNodes(leftRouters, rightRouters, p.Processors, true /* includeRight */)
 
 		// Set up the equality columns.
 		eqCols := streamCols
@@ -2129,7 +2237,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 			nodes, core, post, eqCols, eqCols,
 			leftPlan.ResultTypes, rightPlan.ResultTypes,
 			leftPlan.MergeOrdering, rightPlan.MergeOrdering,
-			leftRouters, rightRouters,
+			leftRouters, rightRouters, true, /* shouldIncludeRight */
 		)
 
 		// An EXCEPT ALL is like a left outer join, so there is no guaranteed ordering.
