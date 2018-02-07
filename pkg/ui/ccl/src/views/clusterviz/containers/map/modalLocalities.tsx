@@ -15,54 +15,14 @@ import { InjectedRouter, RouterState } from "react-router";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
-import { generateLocalityRoute, getChildLocalities, getLeaves, getLocality } from "src/util/localities";
+import { getChildLocalities, getLocality } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 
+import { CircleLayout } from "./circleLayout";
+import { MapLayout } from "./mapLayout";
 import { NodeHistory } from "./nodeHistory";
-import { NodeView } from "./nodeView";
-import { WorldMap } from "./worldmap";
 import { ZoomTransformer } from "./zoom";
-import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
-import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
-
-const MIN_RADIUS = 150;
-const PADDING = 150;
-
-interface LocalityViewProps {
-  localityTree: LocalityTree;
-  liveness: { [id: string]: LivenessStatus };
-}
-
-class LocalityView extends React.Component<LocalityViewProps, any> {
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState };
-
-  onClick = () => {
-    const localityTree = this.props.localityTree;
-    const destination = CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(localityTree.tiers);
-    this.context.router.push(destination);
-  }
-
-  render() {
-    const { tiers } = this.props.localityTree;
-    const thisTier = tiers[tiers.length - 1];
-
-    const leavesUnderMe = getLeaves(this.props.localityTree);
-    const { capacityUsable, capacityUsed } = sumNodeStats(leavesUnderMe, this.props.liveness);
-
-    return (
-      <g onClick={this.onClick} style={{ cursor: "pointer" }}>
-        <StatsView
-          usableCapacity={capacityUsable}
-          usedCapacity={capacityUsed}
-          label={`${thisTier.key}=${thisTier.value}`}
-        />
-      </g>
-    );
-  }
-}
+import { LivenessStatus } from "src/redux/nodes";
 
 interface ModalLocalitiesViewProps {
   localityTree: LocalityTree;
@@ -72,88 +32,6 @@ interface ModalLocalitiesViewProps {
   liveness: { [id: string]: LivenessStatus };
   projection: d3.geo.Projection;
   zoom: ZoomTransformer;
-}
-
-class MapLayout extends React.Component<ModalLocalitiesViewProps, any> {
-  renderChildLocalities() {
-    return getChildLocalities(this.props.localityTree).map((locality) => {
-      const location = findOrCalculateLocation(this.props.locationTree, locality);
-      const center = this.props.projection([location.longitude, location.latitude]);
-
-      return (
-        <g transform={`translate(${center})`}>
-          <LocalityView localityTree={locality} liveness={this.props.liveness} />
-        </g>
-      );
-    });
-  }
-
-  render() {
-    const viewportSize = this.props.zoom.viewportSize();
-
-    return (
-      <g>
-        <rect width={viewportSize[0]} height={viewportSize[1]} fill="lavender" />
-        <WorldMap projection={this.props.projection} />
-        { this.renderChildLocalities() }
-      </g>
-    );
-  }
-}
-
-class CircleLayout extends React.Component<ModalLocalitiesViewProps, any> {
-  coordsFor(index: number, total: number, radius: number) {
-    if (total === 1) {
-      return [0, 0];
-    }
-
-    if (total === 2) {
-      const leftOrRight = index === 0 ? -radius : radius;
-      return [leftOrRight, 0];
-    }
-
-    const angle = 2 * Math.PI * index / total - Math.PI / 2;
-    return [radius * Math.cos(angle), radius * Math.sin(angle)];
-  }
-
-  render() {
-    const { localityTree } = this.props;
-    const childLocalities = getChildLocalities(localityTree);
-
-    const total = localityTree.nodes.length + childLocalities.length;
-
-    const viewport = this.props.zoom.viewportSize();
-    const calculatedRadius = Math.min(...viewport) / 2 - PADDING;
-    const radius = Math.max(MIN_RADIUS, calculatedRadius);
-
-    return (
-      <g transform={`translate(${viewport[0] / 2},${viewport[1] / 2})`}>
-        {
-          childLocalities.map((locality, i) => (
-            <g transform={`translate(${this.coordsFor(i, total, radius)})`}>
-              <LocalityView localityTree={locality} liveness={this.props.liveness} />
-            </g>
-          ))
-        }
-        {
-          localityTree.nodes.map((node, i) => {
-            const nodeHistory = this.props.nodeHistories[node.desc.node_id];
-
-            return (
-              <g transform={`translate(${this.coordsFor(i + childLocalities.length, total, radius)})`}>
-                <NodeView
-                  node={node}
-                  nodeHistory={nodeHistory}
-                  maxClientActivityRate={10000}
-                  liveness={this.props.liveness}
-                />
-              </g>
-            );
-          })
-        }
-      </g>
-    );
-  }
 }
 
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
