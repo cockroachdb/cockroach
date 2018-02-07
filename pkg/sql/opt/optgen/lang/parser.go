@@ -541,12 +541,12 @@ func (p *Parser) parseConstruct() *ConstructExpr {
 
 	src := p.src
 
-	opName := p.parseConstructName()
-	if opName == nil {
+	name := p.parseConstructName()
+	if name == nil {
 		return nil
 	}
 
-	construct := &ConstructExpr{Src: &src, OpName: opName}
+	construct := &ConstructExpr{Src: &src, Name: name}
 	for {
 		if p.scan() == RPAREN {
 			return construct

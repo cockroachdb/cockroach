@@ -27,9 +27,24 @@ type matchWriter struct {
 	nesting int
 }
 
-func (w *matchWriter) nest(format string, args ...interface{}) {
+// marker opaquely stores a nesting level. The nest method returns the marker
+// for the nesting level that existed before the nest, and the unnestToMarker
+// method returns to that level given the marker.
+type marker int
+
+// nest writes an indented formatted string and then increases the indentation.
+// It returns a marker for the indentation level before the increase. This
+// marker can be passed to unnestToMarker to return to that level.
+func (w *matchWriter) nest(format string, args ...interface{}) marker {
 	w.writeIndent(format, args...)
 	w.nesting++
+	return marker(w.nesting - 1)
+}
+
+// marker returns the a marker for the current nesting level, which can be
+// passed to unnestToMarker in order to return to this level.
+func (w *matchWriter) marker() marker {
+	return marker(w.nesting)
 }
 
 func (w *matchWriter) write(format string, args ...interface{}) {
@@ -41,8 +56,16 @@ func (w *matchWriter) writeIndent(format string, args ...interface{}) {
 	fmt.Fprintf(w.writer, format, args...)
 }
 
-func (w *matchWriter) unnest(n int, suffix string) {
-	for ; n > 0; n-- {
+func (w *matchWriter) newline() {
+	fmt.Fprintf(w.writer, "\n")
+}
+
+func (w *matchWriter) unnest(suffix string) {
+	w.unnestToMarker(marker(w.nesting-1), suffix)
+}
+
+func (w *matchWriter) unnestToMarker(marker marker, suffix string) {
+	for w.nesting > int(marker) {
 		w.nesting--
 		fmt.Fprintf(w.writer, strings.Repeat("  ", w.nesting))
 		fmt.Fprintf(w.writer, suffix)
