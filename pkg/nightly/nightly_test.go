@@ -16,22 +16,26 @@
 package nightly
 
 import (
+	"bufio"
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 var slow = flag.Bool("slow", false, "Run slow tests")
@@ -57,22 +61,28 @@ func maybeSkip(t testing.TB) {
 	}
 
 	checkTestTimeout(t)
+	if _, err := os.Stat(*cockroach); err != nil {
+		t.Fatal(errors.Wrap(err, `missing cockroach binary`))
+	}
+	if _, err := os.Stat(*workload); err != nil {
+		t.Fatal(errors.Wrap(err, `missing workload binary`))
+	}
 }
 
-func runCmd(l *logger, args []string) error {
+func runCmd(ctx context.Context, l *logger, args ...string) error {
 	l.printf("> %s\n", strings.Join(args, " "))
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdout = &l.stdout
 	cmd.Stderr = &l.stderr
 	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, "runCmd")
+		return errors.Wrapf(err, `runCmd: %s`, strings.Join(args, ` `))
 	}
 	return nil
 }
 
-func runCmds(l *logger, cmds [][]string) error {
+func runCmds(ctx context.Context, l *logger, cmds [][]string) error {
 	for _, cmd := range cmds {
-		if err := runCmd(l, cmd); err != nil {
+		if err := runCmd(ctx, l, cmd...); err != nil {
 			return err
 		}
 	}
@@ -80,9 +90,12 @@ func runCmds(l *logger, cmds [][]string) error {
 }
 
 func destroyCluster(t testing.TB, l *logger, clusterName string) {
-	_ = runCmd(l, []string{"roachprod", "get", clusterName, "logs",
-		filepath.Join(*artifacts, fileutil.EscapeFilename(t.Name()))})
-	if err := runCmd(l, []string{"roachprod", "destroy", clusterName}); err != nil {
+	// New context so cluster shutdown is unaffected by any other contexts being
+	// canceled.
+	ctx := context.Background()
+	logPath := filepath.Join(*artifacts, fileutil.EscapeFilename(t.Name()))
+	_ = runCmd(ctx, l, "roachprod", "get", clusterName, "logs", logPath)
+	if err := runCmd(ctx, l, "roachprod", "destroy", clusterName); err != nil {
 		l.errorf("%s", err)
 	}
 }
@@ -122,6 +135,7 @@ func TestSingleDC(t *testing.T) {
 		testName, testCmd := testName, testCmd
 		t.Run(testName, func(t *testing.T) {
 			t.Parallel()
+			ctx := context.Background()
 
 			l, err := rootLogger(t.Name())
 			if err != nil {
@@ -131,15 +145,21 @@ func TestSingleDC(t *testing.T) {
 			clusterName := makeClusterName(t)
 			defer destroyCluster(t, l, clusterName)
 
-			err = runCmds(l, [][]string{
+			if err := runCmds(ctx, l, [][]string{
 				{"roachprod", "create", clusterName},
 				{"roachprod", "put", clusterName, *cockroach, "./cockroach"},
 				{"roachprod", "put", clusterName, *workload, "./workload"},
 				{"roachprod", "start", clusterName},
-				{"roachprod", "ssh", clusterName + ":1", "--", testCmd},
-			})
-			if err != nil {
+			}); err != nil {
 				t.Fatal(err)
+			}
+
+			m := monitorWithContext(ctx)
+			m.Worker(func(ctx context.Context) error {
+				return runCmd(ctx, l, "roachprod", "ssh", clusterName+":1", "--", testCmd)
+			})
+			if err := m.Monitor(l, "roachprod", "monitor", clusterName); err != nil {
+				t.Fatalf(`%+v`, err)
 			}
 		})
 	}
@@ -151,6 +171,7 @@ func TestRoachmart(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "partition", func(t *testing.T, partition bool) {
 		t.Parallel()
+		ctx := context.Background()
 
 		l, err := rootLogger(t.Name())
 		if err != nil {
@@ -160,7 +181,7 @@ func TestRoachmart(t *testing.T) {
 		clusterName := makeClusterName(t)
 		defer destroyCluster(t, l, clusterName)
 
-		err = runCmds(l, [][]string{
+		err = runCmds(ctx, l, [][]string{
 			{"roachprod", "create", clusterName, "--geo", "--nodes", "9"},
 			{"roachprod", "put", clusterName, *cockroach, "./cockroach"},
 			{"roachprod", "put", clusterName, *workload, "./workload"},
@@ -184,34 +205,149 @@ func TestRoachmart(t *testing.T) {
 			"--local-percent=90", "--users=10", "--orders=100", fmt.Sprintf("--partition=%v", partition),
 		}
 
-		err = runCmd(l, append([]string{
+		err = runCmd(ctx, l, append([]string{
 			"roachprod", "ssh", fmt.Sprintf("%s:%d", clusterName, nodes[0].i), "--",
-			"./workload", "init", "roachmart", "--local-zone", nodes[0].zone}, commonArgs...))
+			"./workload", "init", "roachmart", "--local-zone", nodes[0].zone}, commonArgs...)...)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		var wg sync.WaitGroup
+		m := monitorWithContext(ctx)
 		for _, node := range nodes {
 			node := node
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-
+			m.Worker(func(ctx context.Context) error {
 				cl, err := l.childLogger(node.zone)
 				if err != nil {
-					t.Error(err)
+					return err
 				}
 
-				err = runCmd(cl, append([]string{
+				workloadCmd := append([]string{
 					"roachprod", "ssh", fmt.Sprintf("%s:%d", clusterName, node.i), "--",
 					"./workload", "run", "roachmart", "--local-zone", node.zone, "--duration", "10m"},
-					commonArgs...))
-				if err != nil {
-					t.Errorf("%d (%s): %s", node.i, node.zone, err)
-				}
-			}()
+					commonArgs...)
+				err = runCmd(ctx, cl, workloadCmd...)
+				return errors.Wrapf(err, "%d (%s): %s", node.i, node.zone, err)
+			})
 		}
-		wg.Wait()
+		if err := m.Monitor(l, "roachprod", "monitor", clusterName); err != nil {
+			t.Fatalf(`%+v`, err)
+		}
+	})
+}
+
+type monitor struct {
+	ctx    context.Context
+	cancel func()
+	g      *errgroup.Group
+}
+
+func monitorWithContext(ctx context.Context) monitor {
+	var m monitor
+	m.ctx, m.cancel = context.WithCancel(ctx)
+	m.g, m.ctx = errgroup.WithContext(m.ctx)
+	return m
+}
+
+func (m monitor) Worker(fn func(context.Context) error) {
+	m.g.Go(func() error {
+		return fn(m.ctx)
+	})
+}
+
+func (m monitor) Monitor(l *logger, args ...string) error {
+	monG, _ := errgroup.WithContext(m.ctx)
+	monG.Go(func() error {
+		defer m.cancel()
+		err := m.g.Wait()
+		if errors.Cause(err) == context.Canceled {
+			return nil
+		}
+		return errors.Wrap(err, `worker`)
+	})
+
+	pipeR, pipeW := io.Pipe()
+	monG.Go(func() error {
+		defer func() { _ = pipeW.Close() }()
+
+		monL, err := l.childLogger(`MONITOR`)
+		if err != nil {
+			return err
+		}
+
+		cmd := exec.CommandContext(m.ctx, args[0], args[1:]...)
+		cmd.Stdout = io.MultiWriter(&monL.stdout, pipeW)
+		cmd.Stderr = &monL.stderr
+		if err := cmd.Start(); err != nil {
+			if c := errors.Cause(err); c == context.Canceled {
+				return nil
+			}
+			return errors.Wrap(err, strings.Join(args, ` `))
+		}
+
+		// If the workers finish first, the context will be canceled and so
+		// exec.CommandContext will kill the monitor and we should ignore the
+		// error.
+		if err := cmd.Wait(); err != nil && !strings.Contains(err.Error(), `killed`) {
+			return errors.Wrap(err, strings.Join(args, ` `))
+		}
+		return nil
+	})
+	monG.Go(func() error {
+		defer m.cancel()
+		scanner := bufio.NewScanner(pipeR)
+		for scanner.Scan() {
+			if strings.Contains(scanner.Text(), `dead`) {
+				return errors.Errorf(`MONITOR: %s`, scanner.Text())
+			}
+		}
+		return nil
+	})
+
+	return monG.Wait()
+}
+
+func TestMonitor(t *testing.T) {
+	defer leaktest.AfterTest(t)
+
+	l, err := rootLogger(t.Name())
+	if err != nil {
+		t.Fatalf(`%+v`, err)
+	}
+
+	t.Run(`success`, func(t *testing.T) {
+		m := monitorWithContext(context.Background())
+		m.Worker(func(ctx context.Context) error {
+			return nil
+		})
+		if err := m.Monitor(l, `sleep`, `100`); err != nil {
+			t.Errorf(`expected success got: %+v`, err)
+		}
+	})
+
+	t.Run(`dead`, func(t *testing.T) {
+		m := monitorWithContext(context.Background())
+		m.Worker(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		expectedErr := `dead`
+		if err := m.Monitor(l, `echo`, "1: 100\n1: dead"); !testutils.IsError(err, expectedErr) {
+			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
+	})
+
+	t.Run(`worker-fail`, func(t *testing.T) {
+		m := monitorWithContext(context.Background())
+		m.Worker(func(_ context.Context) error {
+			return errors.New(`worker-fail`)
+		})
+		m.Worker(func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+		expectedErr := `worker-fail`
+		if err := m.Monitor(l, `sleep`, `60`); !testutils.IsError(err, expectedErr) {
+			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
 	})
 }
