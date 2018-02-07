@@ -193,9 +193,25 @@ func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		private = ev.mem.metadata.ColumnLabel(colIndex)
 
 	case opt.ProjectionsOp:
-		// Projections private data is similar to its output columns, so
+		// private is a column list. The columns in the list are the same with the
+		// output columns, but they are in a particular order. In the common case,
+		// the column indexes are increasing and we can omit this redundant
+		// information.
 		// don't print it again.
-		private = nil
+		m := *private.(*opt.ColList)
+		last := -1
+		increasing := true
+		for i, n := 0, m.Len(); i < n; i++ {
+			v, ok := m.Get(i)
+			if !ok || v <= last {
+				increasing = false
+				break
+			}
+			last = v
+		}
+		if increasing {
+			private = nil
+		}
 	}
 
 	if private != nil {
