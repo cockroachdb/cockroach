@@ -1046,11 +1046,17 @@ func (j jsonArray) RemoveKey(key string) (JSON, error) {
 }
 
 func (j jsonObject) RemoveKey(key string) (JSON, error) {
-	newVal := make([]jsonKeyValuePair, 0, len(j))
-	for i := range j {
-		if string(j[i].k) != key {
-			newVal = append(newVal, j[i])
-		}
+	idx, ok := findPairIndexByKey(j, key)
+	if !ok {
+		return j, nil
+	}
+
+	newVal := make([]jsonKeyValuePair, len(j)-1)
+	for i, elem := range j[:idx] {
+		newVal[i] = elem
+	}
+	for i, elem := range j[idx+1:] {
+		newVal[idx+i] = elem
 	}
 	return jsonObject(newVal), nil
 }
