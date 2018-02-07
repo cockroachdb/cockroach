@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // memoLoc describes the location of an expression in the memo, which is a
@@ -200,11 +201,21 @@ func (m *memo) lookupList(id opt.ListID) []opt.GroupID {
 // NOTE: Because the internment uses the private value as a map key, only data
 //       types which can be map types can be used here.
 func (m *memo) internPrivate(private interface{}) opt.PrivateID {
-	id, ok := m.privatesMap[private]
+	// Intern the value of certain Datum types rather than a pointer to their
+	// value in order to support fast value comparison by private id. This is
+	// only possible for Datum types that can be used as map types.
+	key := private
+	switch t := private.(type) {
+	case *tree.DString:
+		// Key as a string, so that it compares equal to interned string.
+		key = string(*t)
+	}
+
+	id, ok := m.privatesMap[key]
 	if !ok {
 		id = opt.PrivateID(len(m.privates))
 		m.privates = append(m.privates, private)
-		m.privatesMap[private] = id
+		m.privatesMap[key] = id
 	}
 	return id
 }
