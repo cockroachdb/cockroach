@@ -979,12 +979,12 @@ type windowNodeColContainer struct {
 
 	// sourceInfo contains information on the for the IndexedVars from the
 	// source plan where they were originally created.
-	sourceInfo *dataSourceInfo
+	sourceInfo *sqlbase.DataSourceInfo
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) types.T {
-	return cc.sourceInfo.sourceColumns[idx].Typ
+	return cc.sourceInfo.SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.

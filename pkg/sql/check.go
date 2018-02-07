@@ -34,7 +34,7 @@ import (
 type checkHelper struct {
 	exprs        []tree.TypedExpr
 	cols         []sqlbase.ColumnDescriptor
-	sourceInfo   *dataSourceInfo
+	sourceInfo   *sqlbase.DataSourceInfo
 	ivarHelper   *tree.IndexedVarHelper
 	curSourceRow tree.Datums
 }
@@ -47,7 +47,7 @@ func (c *checkHelper) init(
 	}
 
 	c.cols = tableDesc.Columns
-	c.sourceInfo = newSourceInfoForSingleTable(
+	c.sourceInfo = sqlbase.NewSourceInfoForSingleTable(
 		*tn, sqlbase.ResultColumnsFromColDescs(tableDesc.Columns),
 	)
 
@@ -63,7 +63,7 @@ func (c *checkHelper) init(
 
 	ivarHelper := tree.MakeIndexedVarHelper(c, len(c.cols))
 	for i, raw := range exprs {
-		typedExpr, err := p.analyzeExpr(ctx, raw, multiSourceInfo{c.sourceInfo}, ivarHelper,
+		typedExpr, err := p.analyzeExpr(ctx, raw, sqlbase.MultiSourceInfo{c.sourceInfo}, ivarHelper,
 			types.Bool, false, "")
 		if err != nil {
 			return err
@@ -110,7 +110,7 @@ func (c *checkHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
 func (c *checkHelper) IndexedVarResolvedType(idx int) types.T {
-	return c.sourceInfo.sourceColumns[idx].Typ
+	return c.sourceInfo.SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the parser.IndexedVarContainer interface.
