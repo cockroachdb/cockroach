@@ -573,6 +573,7 @@ func (s *Session) resetPlanner(
 
 	p.extendedEvalCtx = s.extendedEvalCtx(txn, txnTimestamp, stmtTimestamp)
 	p.extendedEvalCtx.Planner = p
+	p.extendedEvalCtx.Sequence = p
 	p.extendedEvalCtx.ClusterID = s.execCfg.ClusterID()
 	p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
 	p.extendedEvalCtx.ReCache = reCache

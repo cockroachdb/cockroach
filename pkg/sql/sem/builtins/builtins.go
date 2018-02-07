@@ -1036,7 +1036,7 @@ CockroachDB supports the following flags:
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Planner.IncrementSequence(evalCtx.Ctx(), qualifiedName)
+				res, err := evalCtx.Sequence.IncrementSequence(evalCtx.Ctx(), qualifiedName)
 				if err != nil {
 					return nil, err
 				}
@@ -1058,7 +1058,7 @@ CockroachDB supports the following flags:
 				if err != nil {
 					return nil, err
 				}
-				res, err := evalCtx.Planner.GetLatestValueInSessionForSequence(evalCtx.Ctx(), qualifiedName)
+				res, err := evalCtx.Sequence.GetLatestValueInSessionForSequence(evalCtx.Ctx(), qualifiedName)
 				if err != nil {
 					return nil, err
 				}
@@ -1101,7 +1101,7 @@ CockroachDB supports the following flags:
 				}
 
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Planner.SetSequenceValue(
+				if err := evalCtx.Sequence.SetSequenceValue(
 					evalCtx.Ctx(), qualifiedName, int64(newVal), true); err != nil {
 					return nil, err
 				}
@@ -1127,7 +1127,7 @@ CockroachDB supports the following flags:
 				isCalled := bool(tree.MustBeDBool(args[2]))
 
 				newVal := tree.MustBeDInt(args[1])
-				if err := evalCtx.Planner.SetSequenceValue(
+				if err := evalCtx.Sequence.SetSequenceValue(
 					evalCtx.Ctx(), qualifiedName, int64(newVal), isCalled); err != nil {
 					return nil, err
 				}
