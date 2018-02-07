@@ -437,7 +437,8 @@ func MakeKeyFromEncDatums(
 	alloc *DatumAlloc,
 ) (roachpb.Key, error) {
 	dirs := index.ColumnDirections
-	if len(values) != len(dirs) {
+	// Values may be a prefix of the index columns.
+	if len(values) > len(dirs) {
 		return nil, errors.Errorf("%d values, %d directions", len(values), len(dirs))
 	}
 	if len(values) != len(types) {
