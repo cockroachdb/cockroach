@@ -37,7 +37,7 @@ import (
 type factory struct {
 	mem *memo
 
-	// maxSteps sets the maximum number of normalization patterns that the
+	// maxSteps sets the maximum number of optimization patterns that the
 	// factory will apply. Once this maximum is reached, the factory will
 	// construct the requested operator without applying any rewrites to it.
 	// This method is useful for debugging, in order to see intermediate
