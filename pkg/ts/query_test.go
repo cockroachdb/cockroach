@@ -414,12 +414,14 @@ func TestInterpolation(t *testing.T) {
 		expected    []float64
 		derivative  tspb.TimeSeriesQueryDerivative
 		maxDistance int32
+		nowOffset   int32
 		extractFn   extractFn
 	}{
 		// Extraction function tests.
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 15, 10, 5, 0, 10, 20, 30, 40},
 			tspb.TimeSeriesQueryDerivative_NONE,
+			0,
 			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
@@ -429,6 +431,7 @@ func TestInterpolation(t *testing.T) {
 			[]float64{3.4, 4.2, 5, 7.5, 10, 20, 30, 22.5, 15, 7.5, 0, 12.5, 25, 37.5, 50},
 			tspb.TimeSeriesQueryDerivative_NONE,
 			0,
+			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Maximum()
 			},
@@ -436,6 +439,7 @@ func TestInterpolation(t *testing.T) {
 		{
 			[]float64{3.4, 4.2, 5, 7.5, 10, 35, 60, 45, 30, 15, 0, 20, 40, 60, 80},
 			tspb.TimeSeriesQueryDerivative_NONE,
+			0,
 			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Sum
@@ -445,6 +449,7 @@ func TestInterpolation(t *testing.T) {
 			[]float64{0.8, 0.8, 0.8, 2.5, 2.5, 5, 5, -5, -5, -5, -5, 10, 10, 10, 10},
 			tspb.TimeSeriesQueryDerivative_DERIVATIVE,
 			0,
+			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
 			},
@@ -452,6 +457,7 @@ func TestInterpolation(t *testing.T) {
 		{
 			[]float64{0.8, 0.8, 0.8, 2.5, 2.5, 5, 5, 0, 0, 0, 0, 10, 10, 10, 10},
 			tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE,
+			0,
 			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
@@ -462,6 +468,7 @@ func TestInterpolation(t *testing.T) {
 			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 15, 10, 5, 0, 10, 20, 30, 40},
 			tspb.TimeSeriesQueryDerivative_NONE,
 			10, // 10 is sufficient to bridge every gap in the data.
+			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
 			},
@@ -470,6 +477,7 @@ func TestInterpolation(t *testing.T) {
 			[]float64{5, 7.5, 10, 15, 20, 0, 40},
 			tspb.TimeSeriesQueryDerivative_NONE,
 			2, // Distance of 2 only bridges some gaps.
+			0,
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
 			},
@@ -478,6 +486,26 @@ func TestInterpolation(t *testing.T) {
 			[]float64{5, 10, 20, 0, 40},
 			tspb.TimeSeriesQueryDerivative_NONE,
 			1, // Distance of 1 effectively disables interpolation.
+			0,
+			func(s roachpb.InternalTimeSeriesSample) float64 {
+				return s.Average()
+			},
+		},
+		// NowOffset tests.
+		{
+			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 15, 10, 5, 0, 10, 20, 30, 40, 40, 40},
+			tspb.TimeSeriesQueryDerivative_NONE,
+			10,
+			16, // Will bridge a gap of two offsets.
+			func(s roachpb.InternalTimeSeriesSample) float64 {
+				return s.Average()
+			},
+		},
+		{
+			[]float64{3.4, 4.2, 5, 7.5, 10, 15, 20, 15, 10, 5, 0, 10, 20, 30, 40},
+			tspb.TimeSeriesQueryDerivative_NONE,
+			10,
+			17, // Will not bridge a gap of three offsets.
 			func(s roachpb.InternalTimeSeriesSample) float64 {
 				return s.Average()
 			},
@@ -488,9 +516,9 @@ func TestInterpolation(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			actual := make([]float64, 0, len(tc.expected))
 			iter := newInterpolatingIterator(
-				ds, 0, 10, tc.maxDistance, tc.extractFn, downsampleSum, tc.derivative,
+				ds, 0, 10, tc.maxDistance, tc.nowOffset, tc.extractFn, downsampleSum, tc.derivative,
 			)
-			for i := 0; iter.isValid(); i++ {
+			for i := 0; iter.isValid() || i <= int(tc.nowOffset); i++ {
 				iter.advanceTo(int32(i))
 				if value, valid := iter.value(); valid {
 					actual = append(actual, value)
@@ -543,10 +571,12 @@ func TestAggregation(t *testing.T) {
 	testCases := []struct {
 		expected    []float64
 		maxDistance int32
+		nowOffset   int32
 		aggFunc     func(ui aggregatingIterator) (float64, bool)
 	}{
 		{
 			[]float64{4.4, 12, 17.5, 35, 40, 36, 92, 56},
+			0,
 			0,
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.sum()
@@ -555,6 +585,7 @@ func TestAggregation(t *testing.T) {
 		{
 			[]float64{3.4, 7, 10, 25, 20, 36, 52, 56},
 			0,
+			0,
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.max()
 			},
@@ -562,12 +593,14 @@ func TestAggregation(t *testing.T) {
 		{
 			[]float64{1, 5, 7.5, 10, 20, 0, 40, 56},
 			0,
+			0,
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.min()
 			},
 		},
 		{
 			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 56},
+			0,
 			0,
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.avg()
@@ -577,6 +610,7 @@ func TestAggregation(t *testing.T) {
 		{
 			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 56},
 			10, // Distance of 10 will bridge every gap in the data.
+			0,
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.avg()
 			},
@@ -586,6 +620,7 @@ func TestAggregation(t *testing.T) {
 			// Distance of 2 will only bridge some gaps, meaning that some data points
 			// will only have a contribution from one of the two data sets.
 			2,
+			0,
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.avg()
 			},
@@ -593,6 +628,24 @@ func TestAggregation(t *testing.T) {
 		{
 			[]float64{1, 5, 10, 17.5, 20, 0, 40, 56},
 			1, // Distance of 1 disables interpolation.
+			0,
+			func(ui aggregatingIterator) (float64, bool) {
+				return ui.avg()
+			},
+		},
+		// NowOffset tests.
+		{
+			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 48},
+			10,
+			15,
+			func(ui aggregatingIterator) (float64, bool) {
+				return ui.avg()
+			},
+		},
+		{
+			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 56},
+			10,
+			150, // Too far in the future to interpolate at leading edge.
 			func(ui aggregatingIterator) (float64, bool) {
 				return ui.avg()
 			},
@@ -607,10 +660,10 @@ func TestAggregation(t *testing.T) {
 			actual := make([]float64, 0, len(tc.expected))
 			iters := aggregatingIterator{
 				newInterpolatingIterator(
-					dataSpan1, 0, 10, tc.maxDistance, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
+					dataSpan1, 0, 10, tc.maxDistance, tc.nowOffset, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
 				),
 				newInterpolatingIterator(
-					dataSpan2, 0, 10, tc.maxDistance, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
+					dataSpan2, 0, 10, tc.maxDistance, tc.nowOffset, extractFn, downsampleSum, tspb.TimeSeriesQueryDerivative_NONE,
 				),
 			}
 			iters.init()
@@ -758,7 +811,7 @@ func (tm *testModel) assertQuery(
 		iters = append(
 			iters,
 			newInterpolatingIterator(
-				*ds, 0, sampleDuration, maxDistance, extractFn, downsampleFn, q.GetDerivative(),
+				*ds, 0, sampleDuration, maxDistance, 0, extractFn, downsampleFn, q.GetDerivative(),
 			),
 		)
 	}
