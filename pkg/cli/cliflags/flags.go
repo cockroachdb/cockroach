@@ -160,7 +160,7 @@ accept requests.`,
 Maximum memory capacity available to store temporary data for SQL clients,
 including prepared queries and intermediate data rows during query execution.
 Accepts numbers interpreted as bytes, size suffixes (e.g. 1GB and 1GiB) or a
-percentage of physical memory (e.g. 25%).
+percentage of physical memory (e.g. 25% or .25).
 If left unspecified, defaults to 128MiB.
 `,
 	}
@@ -195,7 +195,7 @@ when the first store is in-memory.
 Total size in bytes for caches, shared evenly if there are multiple
 storage devices. Size suffixes are supported (e.g. 1GB and 1GiB).
 If left unspecified, defaults to 128MiB. A percentage of physical memory
-can also be specified (e.g. 25%).`,
+can also be specified (e.g. 25% or .25).`,
 	}
 
 	ClientHost = FlagInfo{
