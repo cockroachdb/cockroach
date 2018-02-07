@@ -372,13 +372,21 @@ func newBytesOrPercentageValue(
 // Set implements the pflags.Flag interface.
 func (b *bytesOrPercentageValue) Set(s string) error {
 	b.origVal = s
-	if strings.HasSuffix(s, "%") {
-		percent, err := strconv.Atoi(s[:len(s)-1])
+	if strings.HasSuffix(s, "%") || strings.Contains(s, ".") {
+		multiplier := 100.0
+		if s[len(s)-1] == '%' {
+			// We have a percentage.
+			multiplier = 1.0
+			s = s[:len(s)-1]
+		}
+		// The user can express .123 or 0.123. Parse as float.
+		frac, err := strconv.ParseFloat(s, 32)
 		if err != nil {
 			return err
 		}
-		if percent < 0 || percent > 99 {
-			return fmt.Errorf("percentage %s out of range 0%% - 99%%", s)
+		percent := int(frac * multiplier)
+		if percent < 1 || percent > 99 {
+			return fmt.Errorf("percentage %d%% out of range 1%% - 99%%", percent)
 		}
 
 		if b.percentResolver == nil {
