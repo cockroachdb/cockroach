@@ -24,37 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// decomposeExpr analyzes and simplifies an expression, returning a list of
-// expressions of a list of expressions. The top-level list contains
-// disjunctions (a.k.a OR expressions). The second-level contains conjunctions
-// (a.k.a. AND expressions). For example:
-//
-//   (a AND b) OR c -> [[a, b], c]
-//
-// Expression analysis should only be performed on the WHERE clause of SELECT
-// statements. The returned expressions are not guaranteed to be semantically
-// identical to the original. In particular, expressions that return NULL might
-// be transformed into expressions that return false. This is ok in the context
-// of WHERE clauses where we care about not-true for filtering
-// purposes. Additionally, expressions that analysis does not handle will be
-// transformed into true. The caller is required to use the original expression
-// (which will be unchanged by decomposeExpr) for filtering.
-//
-// Returns false for equivalent if the resulting expressions are not equivalent
-// to the originals. This occurs for expressions which are currently not
-// handled by simplification (they are replaced by "true").
-func decomposeExpr(
-	evalCtx *tree.EvalContext, e tree.TypedExpr,
-) (exprs []tree.TypedExprs, equivalent bool) {
-	e, equivalent = SimplifyExpr(evalCtx, e)
-	orExprs := splitOrExpr(evalCtx, e, nil)
-	results := make([]tree.TypedExprs, len(orExprs))
-	for i := range orExprs {
-		results[i] = splitAndExpr(evalCtx, orExprs[i], nil)
-	}
-	return results, equivalent
-}
-
 // splitOrExpr flattens a tree of OR expressions returning all of the child
 // expressions as a list. Any non-OR expression is returned as a single element
 // in the list.
