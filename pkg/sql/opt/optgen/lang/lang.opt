@@ -126,8 +126,8 @@ define MatchList {
 }
 
 define Construct {
-    OpName Expr
-    Args   List
+    Name Expr
+    Args List
 }
 
 define ConstructList {
