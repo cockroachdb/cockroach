@@ -1457,6 +1457,12 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   bool retry_on_push() const;
   void set_retry_on_push(bool value);
 
+  // bool orig_timestamp_was_observed = 17;
+  void clear_orig_timestamp_was_observed();
+  static const int kOrigTimestampWasObservedFieldNumber = 17;
+  bool orig_timestamp_was_observed() const;
+  void set_orig_timestamp_was_observed(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.Transaction)
  private:
 
@@ -1474,6 +1480,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   bool writing_;
   bool write_too_old_;
   bool retry_on_push_;
+  bool orig_timestamp_was_observed_;
   mutable int _cached_size_;
   friend struct protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -3334,6 +3341,20 @@ inline void Transaction::set_allocated_epoch_zero_timestamp(::cockroach::util::h
     
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+}
+
+// bool orig_timestamp_was_observed = 17;
+inline void Transaction::clear_orig_timestamp_was_observed() {
+  orig_timestamp_was_observed_ = false;
+}
+inline bool Transaction::orig_timestamp_was_observed() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
+  return orig_timestamp_was_observed_;
+}
+inline void Transaction::set_orig_timestamp_was_observed(bool value) {
+  
+  orig_timestamp_was_observed_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
 }
 
 // -------------------------------------------------------------------

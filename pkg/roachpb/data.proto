@@ -355,6 +355,14 @@ message Transaction {
   // transaction is restarted and the epoch is bumped. It is used during
   // intent resolution to more efficiently scan for intents.
   util.hlc.Timestamp epoch_zero_timestamp = 14 [(gogoproto.nullable) = false];
+  // This flag is set if the transaction's original timestamp was
+  // "leaked" beyond the transaction (i.e. if returned via NOW() or
+  // transaction_timestamp()). If true, this prevents optimizations
+  // which commit at a higher timestamp without resorting to a
+  // client-side retry.
+  bool orig_timestamp_was_observed = 17;
+
+  reserved 16;
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.

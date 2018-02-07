@@ -3735,6 +3735,7 @@ const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kRetryOnPushFieldNumber;
 const int Transaction::kIntentsFieldNumber;
 const int Transaction::kEpochZeroTimestampFieldNumber;
+const int Transaction::kOrigTimestampWasObservedFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
@@ -3787,16 +3788,16 @@ Transaction::Transaction(const Transaction& from)
     refreshed_timestamp_ = NULL;
   }
   ::memcpy(&status_, &from.status_,
-    static_cast<size_t>(reinterpret_cast<char*>(&retry_on_push_) -
-    reinterpret_cast<char*>(&status_)) + sizeof(retry_on_push_));
+    static_cast<size_t>(reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
+    reinterpret_cast<char*>(&status_)) + sizeof(orig_timestamp_was_observed_));
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.Transaction)
 }
 
 void Transaction::SharedCtor() {
   name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   ::memset(&meta_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&retry_on_push_) -
-      reinterpret_cast<char*>(&meta_)) + sizeof(retry_on_push_));
+      reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
+      reinterpret_cast<char*>(&meta_)) + sizeof(orig_timestamp_was_observed_));
   _cached_size_ = 0;
 }
 
@@ -3867,8 +3868,8 @@ void Transaction::Clear() {
   }
   refreshed_timestamp_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
-      reinterpret_cast<char*>(&retry_on_push_) -
-      reinterpret_cast<char*>(&status_)) + sizeof(retry_on_push_));
+      reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
+      reinterpret_cast<char*>(&status_)) + sizeof(orig_timestamp_was_observed_));
   _internal_metadata_.Clear();
 }
 
@@ -3884,7 +3885,7 @@ bool Transaction::MergePartialFromCodedStream(
       &unknown_fields_string, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.Transaction)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(16383u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -4049,6 +4050,20 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
+      // bool orig_timestamp_was_observed = 17;
+      case 17: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(136u /* 136 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &orig_timestamp_was_observed_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -4148,6 +4163,11 @@ void Transaction::SerializeWithCachedSizes(
       15, *this->refreshed_timestamp_, output);
   }
 
+  // bool orig_timestamp_was_observed = 17;
+  if (this->orig_timestamp_was_observed() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(17, this->orig_timestamp_was_observed(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Transaction)
@@ -4243,6 +4263,11 @@ size_t Transaction::ByteSizeLong() const {
     total_size += 1 + 1;
   }
 
+  // bool orig_timestamp_was_observed = 17;
+  if (this->orig_timestamp_was_observed() != 0) {
+    total_size += 2 + 1;
+  }
+
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
   GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
   _cached_size_ = cached_size;
@@ -4298,6 +4323,9 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.retry_on_push() != 0) {
     set_retry_on_push(from.retry_on_push());
   }
+  if (from.orig_timestamp_was_observed() != 0) {
+    set_orig_timestamp_was_observed(from.orig_timestamp_was_observed());
+  }
 }
 
 void Transaction::CopyFrom(const Transaction& from) {
@@ -4330,6 +4358,7 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(writing_, other->writing_);
   swap(write_too_old_, other->write_too_old_);
   swap(retry_on_push_, other->retry_on_push_);
+  swap(orig_timestamp_was_observed_, other->orig_timestamp_was_observed_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
   swap(_cached_size_, other->_cached_size_);
 }
@@ -4740,6 +4769,20 @@ void Transaction::set_allocated_epoch_zero_timestamp(::cockroach::util::hlc::Tim
     
   }
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.epoch_zero_timestamp)
+}
+
+// bool orig_timestamp_was_observed = 17;
+void Transaction::clear_orig_timestamp_was_observed() {
+  orig_timestamp_was_observed_ = false;
+}
+bool Transaction::orig_timestamp_was_observed() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
+  return orig_timestamp_was_observed_;
+}
+void Transaction::set_orig_timestamp_was_observed(bool value) {
+  
+  orig_timestamp_was_observed_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
 }
 
 #endif  // PROTOBUF_INLINE_NOT_IN_HEADERS

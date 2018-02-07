@@ -343,7 +343,7 @@ func evalEndTransaction(
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
-		if retry, reason := isEndTransactionTriggeringRetryError(reply.Txn); retry {
+		if retry, reason := isEndTransactionTriggeringRetryError(reply.Txn, *args); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason)
 		}
 
@@ -422,31 +422,46 @@ func isEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransact
 // EndTransactionRequest cannot be committed and needs to return a
 // TransactionRetryError.
 func isEndTransactionTriggeringRetryError(
-	txn *roachpb.Transaction,
-) (bool, roachpb.TransactionRetryReason) {
+	txn *roachpb.Transaction, args roachpb.EndTransactionRequest,
+) (retry bool, reason roachpb.TransactionRetryReason) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
 	if txn.WriteTooOld {
-		return true, roachpb.RETRY_WRITE_TOO_OLD
+		retry, reason = true, roachpb.RETRY_WRITE_TOO_OLD
+	} else {
+		origTimestamp := txn.OrigTimestamp
+		origTimestamp.Forward(txn.RefreshedTimestamp)
+		isTxnPushed := txn.Timestamp != origTimestamp
+
+		// If the isolation level is SERIALIZABLE, return a transaction
+		// retry error if the commit timestamp isn't equal to the txn
+		// timestamp.
+		if isTxnPushed {
+			if txn.Isolation == enginepb.SERIALIZABLE {
+				retry, reason = true, roachpb.RETRY_SERIALIZABLE
+			} else if txn.RetryOnPush {
+				// If pushing requires a retry and the transaction was pushed, retry.
+				retry, reason = true, roachpb.RETRY_DELETE_RANGE
+			}
+		}
 	}
 
-	origTimestamp := txn.OrigTimestamp
-	origTimestamp.Forward(txn.RefreshedTimestamp)
-	isTxnPushed := txn.Timestamp != origTimestamp
-
-	// If the isolation level is SERIALIZABLE, return a transaction
-	// retry error if the commit timestamp isn't equal to the txn
-	// timestamp.
-	if txn.Isolation == enginepb.SERIALIZABLE && isTxnPushed {
-		return true, roachpb.RETRY_SERIALIZABLE
+	// A serializable transaction can still avoid a retry under certain conditions.
+	if retry && txn.IsSerializable() && canForwardSerializableTimestamp(txn, args.NoRefreshSpans) {
+		retry, reason = false, 0
 	}
 
-	// If pushing requires a retry and the transaction was pushed, retry.
-	if txn.RetryOnPush && isTxnPushed {
-		return true, roachpb.RETRY_DELETE_RANGE
-	}
+	return retry, reason
+}
 
-	return false, 0
+// canForwardSerializableTimestamp returns whether a serializable txn can
+// be safely committed with a forwarded timestamp. This requires that
+// the transaction's timestamp has not leaked and that the transaction
+// has encountered no spans which require refreshing at the forwarded
+// timestamp. If either of those conditions are true, a cient-side
+// retry is required.
+func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bool) bool {
+	return !txn.OrigTimestampWasObserved && noRefreshSpans
 }
 
 // resolveLocalIntents synchronously resolves any intents that are
