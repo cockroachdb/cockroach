@@ -1257,14 +1257,20 @@ func VDepth(l int32, depth int) bool {
 		// is shared so we must lock before accessing it. This is fairly expensive,
 		// but if V logging is enabled we're slow anyway.
 		logging.mu.Lock()
-		defer logging.mu.Unlock()
+		// We prefer not to use a defer in this function, which can be used in hot
+		// paths, because a defer anywhere in the body of a function causes a call
+		// to runtime.deferreturn at the end of that function. This call has a
+		// measurable performance penalty when in a very hot path.
+		// defer logging.mu.Unlock()
 		if runtime.Callers(2+depth, logging.pcs[:]) == 0 {
+			logging.mu.Unlock()
 			return false
 		}
 		v, ok := logging.vmap[logging.pcs[0]]
 		if !ok {
 			v = logging.setV(logging.pcs[0])
 		}
+		logging.mu.Unlock()
 		return v >= level(l)
 	}
 	return false
