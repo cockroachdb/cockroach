@@ -34,6 +34,9 @@ export default class ClusterVisualization extends React.Component<RouterState, C
 
   constructor(props: any) {
     super(props);
+
+    // Add debounced resize listener.
+    this.debouncedOnResize = _.debounce(this.onResize, 200);
   }
 
   updateZoomState(zt: ZoomTransformer) {
@@ -69,8 +72,6 @@ export default class ClusterVisualization extends React.Component<RouterState, C
       .on("zoom", this.onZoom);
     d3.select(this.graphEl).call(this.zoom);
 
-    // Add debounced resize listener.
-    this.debouncedOnResize = _.debounce(this.onResize, 200);
     window.addEventListener("resize", this.debouncedOnResize);
 
     // Compute zoomable area bounds based on the default mercator projection.
@@ -126,13 +127,15 @@ export default class ClusterVisualization extends React.Component<RouterState, C
     return (
       <div style={{ height: "100%" }}>
         <Breadcrumbs tiers={tiers} />
-        <svg
-          style={{ width: "100%", height: "100%" }}
-          className="cluster-viz"
-          ref={svg => this.graphEl = svg}
-        >
-          { this.renderContent(tiers) }
-        </svg>
+        <div style={{ width: "100%", height: "100%", backgroundColor: "lavender" }}>
+          <svg
+            style={{ width: "100%", height: "100%" }}
+            className="cluster-viz"
+            ref={svg => this.graphEl = svg}
+          >
+            { this.renderContent(tiers) }
+          </svg>
+        </div>
       </div>
     );
   }

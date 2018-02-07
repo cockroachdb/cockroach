@@ -7,22 +7,6 @@
  *     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
  */
 
-.map-background {
-    width: 100%;
-    height: 100%;
-    fill: lavender;
-}
-
-.btn-addnode {
-}
-
-.btn-addapp {
-}
-
-.btn-restart {
-    float: right;
-}
-
 .range {
     stroke: #f00;
     stroke-width: 0px;
