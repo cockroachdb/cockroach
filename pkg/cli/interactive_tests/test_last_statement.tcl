@@ -35,8 +35,8 @@ eexpect ":/# "
 
 send "$argv sql\r"
 eexpect root@
-send "select * from t.foo;\r"
-eexpect "0 rows"
+send "select count(*) from t.foo;\r"
+eexpect "0"
 eexpect root@
 send "\\q\r"
 eexpect ":/# "
@@ -53,8 +53,8 @@ send "echo 'insert into t.foo(x) values (42)--;' | $argv sql\r"
 eexpect "missing semicolon at end of statement"
 eexpect ":/# "
 
-send "echo 'select * from t.foo;' | $argv sql\r"
-eexpect "0 rows"
+send "echo 'select count(*) from t.foo;' | $argv sql\r"
+eexpect "0"
 eexpect ":/# "
 end_test
 
@@ -62,19 +62,19 @@ start_test "Check that a complete last statement terminated with a semicolon jus
 send "printf 'insert into t.foo(x) values(42);' | $argv sql\r"
 eexpect "INSERT"
 eexpect ":/# "
-send "echo 'select * from t.foo;' | $argv sql\r"
-eexpect "1 row"
+send "echo 'select count(*) from t.foo;' | $argv sql\r"
+eexpect "1"
 eexpect ":/# "
 end_test
 
 start_test "Check that a final comment after a final statement does not cause an error message. #9482"
 send "printf 'select 1;-- final comment' | $argv sql | cat\r"
-eexpect "1\r\n1\r\n# 1 row\r\n:/# "
+eexpect "1\r\n1\r\n:/# "
 end_test
 
 start_test "Check that a final comment does not cause an error message. #9243"
 send "printf 'select 1;\\n-- final comment' | $argv sql | cat\r"
-eexpect "1\r\n1\r\n# 1 row\r\n:/# "
+eexpect "1\r\n1\r\n:/# "
 end_test
 
 # Finally terminate with Ctrl+C

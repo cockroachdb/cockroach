@@ -31,7 +31,7 @@ eexpect "brief introduction"
 sleep 0.4
 send "show sql_safe_updates;\r"
 eexpect "true"
-eexpect "1 row"
+eexpect "\r\n"
 send "delete from d.t;\r"
 eexpect "rejected: DELETE without WHERE clause (sql_safe_updates = true)"
 send "\\q\r"
