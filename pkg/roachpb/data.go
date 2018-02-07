@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -236,13 +237,37 @@ func (v *Value) setChecksum(cksum uint32) {
 	}
 }
 
-// InitChecksum initializes a checksum based on the provided key and
-// the contents of the value. If the value contains a byte slice, the
-// checksum includes it directly.
+// ChecksumInterceptor will be called with every value before its checksum is
+// conditionally computed. This is used to prove that the decision to init
+// checksums on values or not does not affect beneath-raft consistency.
+// Interceptor is not safe to modify concurrently with calls to InitChecksum.
+var ChecksumInterceptor = func(_ *Value) {}
+
+// InitChecksum initializes a checksum based on the provided key and the
+// contents of the value if checksum computation is enabled. If the value
+// contains a byte slice, the checksum includes it directly.
+//
+// If you require that the checksum be set even if checksum computations are
+// disabled, use MustInitChecksum insted.
 //
 // TODO(peter): This method should return an error if the Value is corrupted
 // (e.g. the RawBytes field is > 0 but smaller than the header size).
+//
+// TODO(nvanbenschoten): This method and all users can be removed in any
+// binary version > 2.1.
 func (v *Value) InitChecksum(key []byte) {
+	// The branch is behind a constant conditional so that this
+	// entire method is optimized out in production builds.
+	if util.RaceEnabled {
+		ChecksumInterceptor(v)
+	}
+}
+
+// MustInitChecksum is like InitChecksum, but does not depend on the
+// shouldInitChecksum setting. This method can be used beneath raft where
+// different binaries cannot decide independently whether checksums should
+// be initialized or not.
+func (v *Value) MustInitChecksum(key []byte) {
 	if v.RawBytes == nil {
 		return
 	}
