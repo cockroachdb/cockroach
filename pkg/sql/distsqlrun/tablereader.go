@@ -74,8 +74,8 @@ func newTableReader(
 	neededColumns := tr.out.neededColumns()
 
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc,
+		&tr.fetcher, &tr.tableDesc, nil /* spans */, int(spec.IndexIdx),
+		spec.Reverse, neededColumns, spec.IsCheck, &tr.alloc,
 	); err != nil {
 		return nil, err
 	}
@@ -91,6 +91,7 @@ func newTableReader(
 func initRowFetcher(
 	fetcher *sqlbase.RowFetcher,
 	desc *sqlbase.TableDescriptor,
+	spans roachpb.Spans,
 	indexIdx int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
@@ -108,6 +109,7 @@ func initRowFetcher(
 	}
 
 	tableArgs := sqlbase.RowFetcherTableArgs{
+		Spans:            spans,
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
