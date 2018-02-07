@@ -106,9 +106,11 @@ func TestSingleDC(t *testing.T) {
 	// clusters (# of machines in each locality) are going to generalize. For now,
 	// just hardcode what we had before.
 	for testName, testCmd := range map[string]string{
-		"kv0":    "./workload run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m",
-		"kv95":   "./workload run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m",
-		"splits": "./workload run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1 --duration=10m",
+		"kv0":     "./workload run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m",
+		"kv95":    "./workload run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m",
+		"splits":  "./workload run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1 --duration=10m",
+		"tpcc_w1": "./workload run tpcc --init --warehouses=1 --wait=false --concurrency=384 --duration=10m",
+		"tpmc_w1": "./workload run tpcc --init --warehouses=1 --concurrency=10 --duration=10m",
 	} {
 		testName, testCmd := testName, testCmd
 		t.Run(testName, func(t *testing.T) {
