@@ -16,5 +16,5 @@ props
 SELECT b.z, false FROM b
 ----
 relational
- ├── columns: b.z:2 column2:3
+ ├── columns: b.z:2 column3:3
  └── not null: b.z:2
