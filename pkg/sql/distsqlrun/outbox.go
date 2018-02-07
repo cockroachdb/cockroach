@@ -196,8 +196,11 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		}
 	}
 
-	flushTicker := time.NewTicker(outboxFlushPeriod)
-	defer flushTicker.Stop()
+	// TODO(asubiotto): Not sure if this is necessary. I want to avoid a useless
+	// flush.
+	flushTimer := time.NewTimer(0)
+	<-flushTimer.C
+	defer flushTimer.Stop()
 
 	draining := false
 	defer m.RowChannel.ConsumerClosed()
@@ -233,13 +236,17 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 			}
 			if !draining || msg.Meta != nil {
 				// If we're draining, we ignore all the rows and just send metadata.
-
 				err := m.addRow(ctx, msg.Row, msg.Meta)
 				if err != nil {
 					return err
 				}
+				// If the message to add was metadata, a flush was already forced. If
+				// this is our first row, restart the flushTimer.
+				if m.numRows == 1 {
+					flushTimer.Reset(outboxFlushPeriod)
+				}
 			}
-		case <-flushTicker.C:
+		case <-flushTimer.C:
 			err := m.flush(ctx)
 			if err != nil {
 				return err
