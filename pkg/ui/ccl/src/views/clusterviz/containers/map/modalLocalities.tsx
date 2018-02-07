@@ -6,7 +6,6 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import * as d3 from "d3";
 import _ from "lodash";
 import PropTypes from "prop-types";
 import React from "react";
@@ -21,7 +20,6 @@ import { findOrCalculateLocation } from "src/util/locations";
 import { CircleLayout } from "./circleLayout";
 import { MapLayout } from "./mapLayout";
 import { NodeHistory } from "./nodeHistory";
-import { ZoomTransformer } from "./zoom";
 import { LivenessStatus } from "src/redux/nodes";
 
 interface ModalLocalitiesViewProps {
@@ -30,8 +28,7 @@ interface ModalLocalitiesViewProps {
   tiers: LocalityTier[];
   nodeHistories: { [id: string]: NodeHistory };
   liveness: { [id: string]: LivenessStatus };
-  projection: d3.geo.Projection;
-  zoom: ZoomTransformer;
+  viewportSize: [number, number];
 }
 
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
@@ -47,10 +44,20 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
     }
 
     if (renderAsMap(this.props.locationTree, treeToRender)) {
-      return <MapLayout {...this.props} localityTree={treeToRender} />;
+      return <MapLayout
+        localityTree={treeToRender}
+        locationTree={this.props.locationTree}
+        liveness={this.props.liveness}
+        viewportSize={this.props.viewportSize}
+      />;
     }
 
-    return <CircleLayout {...this.props} localityTree={treeToRender} />;
+    return <CircleLayout
+      localityTree={treeToRender}
+      liveness={this.props.liveness}
+      nodeHistories={this.props.nodeHistories}
+      viewportSize={this.props.viewportSize}
+    />;
   }
 }
 

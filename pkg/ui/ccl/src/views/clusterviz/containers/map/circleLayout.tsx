@@ -14,7 +14,6 @@ import { getChildLocalities } from "src/util/localities";
 import { LocalityView } from "./localityView";
 import { NodeHistory } from "./nodeHistory";
 import { NodeView } from "./nodeView";
-import { ZoomTransformer } from "./zoom";
 import { LivenessStatus } from "src/redux/nodes";
 
 const MIN_RADIUS = 150;
@@ -24,7 +23,7 @@ interface CircleLayoutProps {
   localityTree: LocalityTree;
   liveness: { [id: string]: LivenessStatus };
   nodeHistories: { [id: string]: NodeHistory };
-  zoom: ZoomTransformer;
+  viewportSize: [number, number];
 }
 
 export class CircleLayout extends React.Component<CircleLayoutProps, any> {
@@ -43,17 +42,16 @@ export class CircleLayout extends React.Component<CircleLayoutProps, any> {
   }
 
   render() {
-    const { localityTree } = this.props;
+    const { localityTree, viewportSize } = this.props;
     const childLocalities = getChildLocalities(localityTree);
 
     const total = localityTree.nodes.length + childLocalities.length;
 
-    const viewport = this.props.zoom.viewportSize();
-    const calculatedRadius = Math.min(...viewport) / 2 - PADDING;
+    const calculatedRadius = Math.min(...viewportSize) / 2 - PADDING;
     const radius = Math.max(MIN_RADIUS, calculatedRadius);
 
     return (
-      <g transform={`translate(${viewport[0] / 2},${viewport[1] / 2})`}>
+      <g transform={`translate(${viewportSize[0] / 2},${viewportSize[1] / 2})`}>
         {
           childLocalities.map((locality, i) => (
             <g transform={`translate(${this.coordsFor(i, total, radius)})`}>
