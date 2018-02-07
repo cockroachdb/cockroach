@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -62,7 +63,8 @@ func TestDiskRowContainer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +103,7 @@ func TestDiskRowContainer(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
-	evalCtx := tree.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	diskMonitor := mon.MakeMonitor(
 		"test-disk",
 		mon.DiskResource,
@@ -109,6 +111,7 @@ func TestDiskRowContainer(t *testing.T) {
 		nil, /* maxHist */
 		-1,  /* increment: use default block size */
 		math.MaxInt64,
+		st,
 	)
 	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer diskMonitor.Stop(ctx)
@@ -242,7 +245,8 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig())
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,6 +260,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 		nil, /* maxHist */
 		-1,  /* increment: use default block size */
 		math.MaxInt64,
+		st,
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 

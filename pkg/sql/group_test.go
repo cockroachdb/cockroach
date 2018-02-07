@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -48,7 +49,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 	p := makeTestPlanner()
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
-			p.extendedEvalCtx = makeTestingExtendedEvalContext()
+			p.extendedEvalCtx = makeTestingExtendedEvalContext(cluster.MakeTestingClusterSettings())
 			defer p.extendedEvalCtx.Stop(context.Background())
 			sel := makeSelectNode(t, p)
 			expr := parseAndNormalizeExpr(t, p, d.expr, sel)

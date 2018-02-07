@@ -21,6 +21,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -43,6 +44,7 @@ func TestMemoryAllocations(t *testing.T) {
 	t.Logf("random seed: %v", seed)
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 
 	var pool BytesMonitor
 	var m BytesMonitor
@@ -141,7 +143,7 @@ func TestMemoryAllocations(t *testing.T) {
 	}
 
 	for _, max := range maxs {
-		pool = MakeMonitor("test", MemoryResource, nil, nil, 1, 1000)
+		pool = MakeMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
 		pool.Start(ctx, nil, MakeStandaloneBudget(max))
 
 		for _, hf := range hysteresisFactors {
@@ -155,7 +157,7 @@ func TestMemoryAllocations(t *testing.T) {
 
 					// We start with a fresh monitor for every set of
 					// parameters.
-					m = MakeMonitor("test", MemoryResource, nil, nil, pa, 1000)
+					m = MakeMonitor("test", MemoryResource, nil, nil, pa, 1000, st)
 					m.Start(ctx, &pool, MakeStandaloneBudget(pb))
 
 					for i := 0; i < numAccountOps; i++ {
@@ -219,7 +221,8 @@ func TestBoundAccount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	m := MakeMonitor("test", MemoryResource, nil, nil, 1, 1000)
+	st := cluster.MakeTestingClusterSettings()
+	m := MakeMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
 	m.Start(ctx, nil, MakeStandaloneBudget(100))
 	m.poolAllocationSize = 1
 	maxAllocatedButUnusedBlocks = 1
@@ -278,7 +281,8 @@ func TestBytesMonitor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	m := MakeMonitor("test", MemoryResource, nil, nil, 1, 1000)
+	st := cluster.MakeTestingClusterSettings()
+	m := MakeMonitor("test", MemoryResource, nil, nil, 1, 1000, st)
 	m.Start(ctx, nil, MakeStandaloneBudget(100))
 	maxAllocatedButUnusedBlocks = 1
 
@@ -311,7 +315,8 @@ func TestBytesMonitor(t *testing.T) {
 		t.Fatalf("incorrect current allocation: got %d, expected %d", m.mu.curAllocated, 0)
 	}
 
-	limitedMonitor := MakeMonitorWithLimit("testlimit", MemoryResource, 10, nil, nil, 1, 1000)
+	limitedMonitor := MakeMonitorWithLimit(
+		"testlimit", MemoryResource, 10, nil, nil, 1, 1000, cluster.MakeTestingClusterSettings())
 	limitedMonitor.Start(ctx, &m, BoundAccount{})
 
 	if err := limitedMonitor.reserveBytes(ctx, 10); err != nil {
@@ -330,8 +335,9 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
 	m := MakeMonitor("test", MemoryResource,
-		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */)
+		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */, st)
 	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
 
 	a := m.MakeBoundAccount()
@@ -349,7 +355,8 @@ func TestMemoryAllocationEdgeCases(t *testing.T) {
 func BenchmarkBoundAccountGrow(b *testing.B) {
 	ctx := context.Background()
 	m := MakeMonitor("test", MemoryResource,
-		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9 /* noteworthy */)
+		nil /* curCount */, nil /* maxHist */, 1e9 /* increment */, 1e9, /* noteworthy */
+		cluster.MakeTestingClusterSettings())
 	m.Start(ctx, nil, MakeStandaloneBudget(1e9))
 
 	a := m.MakeBoundAccount()

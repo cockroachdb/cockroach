@@ -85,10 +85,11 @@ func runProcessors(tc testCase) (sqlbase.EncDatumRows, error) {
 	inR := NewRowBuffer(types, tc.inputRight, RowBufferArgs{})
 	out := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
 
+	st := cluster.MakeTestingClusterSettings()
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
-		Settings: cluster.MakeTestingClusterSettings(),
-		EvalCtx:  tree.MakeTestingEvalContext(),
+		Settings: st,
+		EvalCtx:  tree.MakeTestingEvalContext(st),
 	}
 
 	s, err := newAlgebraicSetOp(&flowCtx, &tc.spec, inL, inR, &PostProcessSpec{}, out)
@@ -225,12 +226,13 @@ func BenchmarkExceptAll(b *testing.B) {
 	const numRows = 1000
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
 		Ctx:      ctx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 	spec := &AlgebraicSetOpSpec{

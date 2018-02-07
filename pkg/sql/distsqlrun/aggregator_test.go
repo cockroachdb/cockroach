@@ -350,11 +350,12 @@ func TestAggregator(t *testing.T) {
 
 			in := NewRowBuffer(c.inputTypes, c.input, RowBufferArgs{})
 			out := NewRowBuffer(c.outputTypes, nil /* rows */, RowBufferArgs{})
-			evalCtx := tree.MakeTestingEvalContext()
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Ctx:      context.Background(),
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings: st,
 				EvalCtx:  evalCtx,
 			}
 
@@ -409,12 +410,13 @@ func BenchmarkAggregation(b *testing.B) {
 	}
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
 		Ctx:      ctx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 
@@ -452,12 +454,13 @@ func BenchmarkGrouping(b *testing.B) {
 	const numRows = 1000
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
 		Ctx:      ctx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 	spec := &AggregatorSpec{

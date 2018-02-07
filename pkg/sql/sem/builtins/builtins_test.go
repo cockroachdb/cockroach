@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -103,7 +104,8 @@ func TestStringToArray(t *testing.T) {
 				}
 			}
 
-			if result.Compare(tree.NewTestingEvalContext(), expectedArray) != 0 {
+			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			if result.Compare(evalContext, expectedArray) != 0 {
 				t.Fatalf("expected %v, got %v", tc.expected, result)
 			}
 		})

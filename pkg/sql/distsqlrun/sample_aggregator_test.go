@@ -39,11 +39,12 @@ func TestSampleAggregator(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(context.TODO())
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 		clientDB: kvDB,
 		executor: server.InternalExecutor().(sqlutil.InternalExecutor),
