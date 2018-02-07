@@ -1,14 +1,17 @@
-exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
+exec-ddl
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
 ----
+table a
+  x int NOT NULL
+  y float NULL
 
-exec-raw
+exec-ddl
 CREATE TABLE t.b (x INT, y FLOAT)
 ----
+table b
+  x int NULL
+  y float NULL
+  rowid int NOT NULL (hidden)
 
 build
 SELECT 5
