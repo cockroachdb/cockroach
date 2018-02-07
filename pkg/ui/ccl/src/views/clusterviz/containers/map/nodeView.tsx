@@ -12,7 +12,7 @@ import { NodeStatus$Properties } from "src/util/proto";
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
-import { SimulatedNodeStatus } from "ccl/src/views/clusterviz/containers/map/nodeSimulator";
+import { NodeHistory } from "ccl/src/views/clusterviz/containers/map/nodeHistory";
 
 type NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
@@ -20,7 +20,7 @@ interface NodeViewProps {
   node: NodeStatus$Properties;
   liveness: { [id: string]: NodeLivenessStatus };
 
-  nodeHistory?: SimulatedNodeStatus;
+  nodeHistory?: NodeHistory;
   maxClientActivityRate: number;
 }
 

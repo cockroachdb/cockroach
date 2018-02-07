@@ -18,7 +18,7 @@ import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getChildLocalities, getLeaves, getLocality } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 
-import { SimulatedNodeStatus } from "./nodeSimulator";
+import { NodeHistory } from "./nodeHistory";
 import { NodeView } from "./nodeView";
 import { ZoomTransformer } from "./zoom";
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
@@ -67,7 +67,7 @@ interface ModalLocalitiesViewProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
   tiers: LocalityTier[];
-  nodeHistories: { [id: string]: SimulatedNodeStatus };
+  nodeHistories: { [id: string]: NodeHistory };
   liveness: { [id: string]: LivenessStatus };
   projection: d3.geo.Projection;
   zoom: ZoomTransformer;
