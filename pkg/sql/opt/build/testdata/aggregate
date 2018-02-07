@@ -121,7 +121,7 @@ project
  │    │    └── variable: kv.k [type=int]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, int}]
+ └── projections: map[0:5 1:1] [type=tuple{int, int}]
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
 
@@ -139,7 +139,7 @@ project
  │    │    └── variable: kv.k [type=int]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, int}]
+ └── projections: map[0:5 1:1] [type=tuple{int, int}]
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
 
@@ -172,7 +172,7 @@ project
  │    │    └── variable: kv.s [type=string]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, string}]
+ └── projections: map[0:5 1:4] [type=tuple{int, string}]
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
 
@@ -189,7 +189,7 @@ project
  │    │    └── variable: kv.s [type=string]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, string}]
+ └── projections: map[0:5 1:4] [type=tuple{int, string}]
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
 
@@ -206,7 +206,7 @@ project
  │    │    └── variable: kv.s [type=string]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, string}]
+ └── projections: map[0:5 1:4] [type=tuple{int, string}]
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
 
@@ -223,7 +223,7 @@ project
  │    │    └── variable: kv.s [type=string]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, string}]
+ └── projections: map[0:5 1:4] [type=tuple{int, string}]
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
 
@@ -242,7 +242,7 @@ project
  │    │    └── variable: kv.w [type=int]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, int, int}]
+ └── projections: map[0:2 1:5 2:3] [type=tuple{int, int, int}]
       ├── variable: kv.v [type=int]
       ├── variable: column5 [type=int]
       └── variable: kv.w [type=int]
@@ -262,7 +262,7 @@ project
  │    │    └── variable: kv.w [type=int]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, int, int}]
+ └── projections: map[0:2 1:5 2:3] [type=tuple{int, int, int}]
       ├── variable: kv.v [type=int]
       ├── variable: column5 [type=int]
       └── variable: kv.w [type=int]
@@ -282,7 +282,7 @@ project
  │    │         └── variable: kv.s [type=string]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, string}]
+ └── projections: map[0:6 1:5] [type=tuple{int, string}]
       ├── variable: column6 [type=int]
       └── variable: column5 [type=string]
 
@@ -361,7 +361,7 @@ project
  │    │         └── variable: kv.v [type=int]
  │    └── projections [type=tuple{NULL}]
  │         └── function: count_rows [type=NULL]
- └── projections [type=tuple{int, int}]
+ └── projections: map[0:6 1:5] [type=tuple{int, int}]
       ├── variable: column6 [type=int]
       └── variable: column5 [type=int]
 
@@ -429,7 +429,7 @@ project
  │    └── projections [type=tuple{NULL}]
  │         └── function: count [type=NULL]
  │              └── variable: kv.k [type=int]
- └── projections [type=tuple{int, int}]
+ └── projections: map[0:6 1:5] [type=tuple{int, int}]
       ├── variable: count_1 [type=int]
       └── variable: column5 [type=int]
 
@@ -997,7 +997,7 @@ project
  │    ├── columns: ab.a:int:null:1 ab.b:int:null:2
  │    ├── scan
  │    │    └── columns: ab.a:int:1 ab.b:int:null:2
- │    ├── projections [type=tuple{int, int}]
+ │    ├── projections: map[0:2 1:1] [type=tuple{int, int}]
  │    │    ├── variable: ab.b [type=int]
  │    │    └── variable: ab.a [type=int]
  │    └── projections [type=tuple{}]
@@ -1021,7 +1021,7 @@ project
  │    │    ├── scan
  │    │    │    └── columns: xy.x:string:null:3 xy.y:string:null:4 xy.rowid:int:5
  │    │    └── true [type=bool]
- │    ├── projections [type=tuple{string, int, int}]
+ │    ├── projections: map[0:3 1:1 2:2 3:6] [type=tuple{string, int, int}]
  │    │    ├── variable: xy.x [type=string]
  │    │    ├── variable: ab.a [type=int]
  │    │    └── variable: ab.b [type=int]

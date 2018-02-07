@@ -115,7 +115,7 @@ func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) LogicalProps {
 
 	// Use output columns from projection list.
 	projections := ev.Child(1)
-	props.Relational.OutputCols = *projections.Private().(*opt.ColSet)
+	props.Relational.OutputCols = opt.ColListToSet(*projections.Private().(*opt.ColList))
 
 	// Inherit not null columns from input.
 	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
@@ -165,12 +165,12 @@ func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) LogicalProps {
 func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	// Output columns are union of columns from grouping and aggregate
+	// Output columns are the union of columns from grouping and aggregate
 	// projection lists.
 	groupings := ev.Child(1)
-	props.Relational.OutputCols = groupings.Private().(*opt.ColSet).Copy()
+	props.Relational.OutputCols = opt.ColListToSet(*groupings.Private().(*opt.ColList))
 	agg := ev.Child(2)
-	props.Relational.OutputCols.UnionWith(*agg.Private().(*opt.ColSet))
+	props.Relational.OutputCols.UnionWith(opt.ColListToSet(*agg.Private().(*opt.ColList)))
 
 	return props
 }

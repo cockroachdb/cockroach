@@ -43,7 +43,7 @@ project
  ├── columns: a.x:int:1 a.y:float:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections [type=tuple{float, int}]
+ └── projections: map[0:2 1:1] [type=tuple{float, int}]
       ├── variable: a.y [type=float]
       └── variable: a.x [type=int]
 
