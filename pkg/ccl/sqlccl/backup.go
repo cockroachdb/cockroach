@@ -733,11 +733,18 @@ func backupPlanHook(
 
 		var prevBackups []BackupDescriptor
 		if len(incrementalFrom) > 0 {
+			clusterID := p.ExecCfg().ClusterID()
 			prevBackups = make([]BackupDescriptor, len(incrementalFrom))
 			for i, uri := range incrementalFrom {
 				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().Settings)
 				if err != nil {
 					return errors.Wrapf(err, "failed to read backup from %q", uri)
+				}
+				// IDs are how we identify tables, and those are only meaningful in the
+				// context of their own cluster, so we need to ensure we only allow
+				// incremental previous backups that we created.
+				if !desc.ClusterID.Equal(clusterID) {
+					return errors.Errorf("previous BACKUP %q belongs to cluster %s", uri, desc.ClusterID.String())
 				}
 				prevBackups[i] = desc
 			}
