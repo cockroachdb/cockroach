@@ -229,7 +229,7 @@ func TestValueChecksumEmpty(t *testing.T) {
 func TestValueChecksumWithBytes(t *testing.T) {
 	k := []byte("key")
 	v := MakeValueFromString("abc")
-	v.InitChecksum(k)
+	v.MustInitChecksum(k)
 	if err := v.Verify(k); err != nil {
 		t.Error(err)
 	}
@@ -245,7 +245,7 @@ func TestValueChecksumWithBytes(t *testing.T) {
 	}
 	// Test ClearChecksum and reinitialization of checksum.
 	v.ClearChecksum()
-	v.InitChecksum(k)
+	v.MustInitChecksum(k)
 	if err := v.Verify(k); err != nil {
 		t.Error(err)
 	}
