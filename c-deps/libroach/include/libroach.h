@@ -310,7 +310,11 @@ DBString DBGetUserProperties(DBEngine* db);
 // Bulk adds the file at the given path to a database. See the RocksDB
 // documentation on `IngestExternalFile` for the various restrictions on what
 // can be added. If move_file is true, the file will be moved instead of copied.
-DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file);
+// If allow_file_modification is false, RocksDB will return an error if it would
+// have tried to modify the file's sequence number rather than editing the file
+// in place.
+DBStatus DBIngestExternalFile(DBEngine* db, DBSlice path, bool move_file,
+                              bool allow_file_modification);
 
 typedef struct DBSstFileWriter DBSstFileWriter;
 
