@@ -148,6 +148,36 @@ func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 	return base, nil
 }
 
+func DequalifyColumnRefs(tableName tree.TableName, expr tree.Expr, context string) (tree.Expr, error) {
+	return tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		vBase, ok := expr.(tree.VarName)
+		if !ok {
+			// Not a VarName, don't do anything to this node.
+			return nil, true, expr
+		}
+
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			return err, false, nil
+		}
+
+		c, ok := v.(*tree.ColumnItem)
+		if !ok {
+			return nil, true, expr
+		}
+
+		if c.TableName.Schema() != "" && c.TableName.Schema() != tableName.Schema() {
+			return errors.Errorf("cannot reference schema %q from %q in %s", c.TableName.Schema(), tableName.Schema(), context), false, nil
+		}
+
+		if c.TableName.Table() != "" && c.TableName.Table() != tableName.Table() {
+			return errors.Errorf("cannot reference table %q from %q in %s", c.TableName.Table(), tableName.Table(), context), false, nil
+		}
+
+		return nil, false, &tree.ColumnItem{ColumnName: c.ColumnName}
+	})
+}
+
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 //
@@ -157,7 +187,7 @@ func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 // The DEFAULT expression is returned in TypedExpr form for analysis (e.g. recording
 // sequence dependencies).
 func MakeColumnDefDescs(
-	d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
+	tableName *tree.TableName, d *tree.ColumnTableDef, semaCtx *tree.SemaContext, evalCtx *tree.EvalContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
 	col := &ColumnDescriptor{
 		Name:     string(d.Name),
@@ -225,7 +255,13 @@ func MakeColumnDefDescs(
 	}
 
 	if d.IsComputed() {
-		s := tree.Serialize(d.Computed.Expr)
+		// Replace <tablename>.<columnname> with <columnname>.
+		expr, err := DequalifyColumnRefs(*tableName, d.Computed.Expr, "computed column")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		s := tree.Serialize(expr)
 		col.ComputeExpr = &s
 	}
 

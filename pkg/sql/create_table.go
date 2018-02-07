@@ -832,7 +832,8 @@ func makeTableDescIfAs(
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
-		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
+
+		col, _, _, err := sqlbase.MakeColumnDefDescs(p.Table.TableName(), &columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}
@@ -902,7 +903,7 @@ func MakeTableDesc(
 					)
 				}
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, semaCtx, evalCtx)
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(n.Table.TableName(), d, semaCtx, evalCtx)
 			if err != nil {
 				return desc, err
 			}
@@ -1060,11 +1061,12 @@ func MakeTableDesc(
 					return desc, err
 				}
 			}
+
 		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx)
+			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx, *tableName)
 			if err != nil {
 				return desc, err
 			}
@@ -1369,6 +1371,7 @@ func makeCheckConstraint(
 	inuseNames map[string]struct{},
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	tableName tree.TableName,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	name := string(d.Name)
 
@@ -1402,8 +1405,25 @@ func makeCheckConstraint(
 	}
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
+	if tableName.Schema() == "" {
+		tableName.SchemaName = tree.Name(evalCtx.SessionData.Database)
+	}
+
+	if tableName.Table() == "" {
+		tableName.TableName = tree.Name(desc.GetName())
+	}
+
+	dequalifiedExpr, err := sqlbase.DequalifyColumnRefs(
+		tableName,
+		d.Expr,
+		"check constraint",
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sqlbase.TableDescriptor_CheckConstraint{
-		Expr:      tree.Serialize(d.Expr),
+		Expr:      tree.Serialize(dequalifiedExpr),
 		Name:      name,
 		ColumnIDs: colIDs,
 	}, nil

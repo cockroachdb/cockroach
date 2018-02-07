@@ -84,7 +84,11 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add computed", "adding a computed column via ALTER not supported")
 			}
-			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
+			tableName, err := n.n.Table.Normalize()
+			if err != nil {
+				return err
+			}
+			col, idx, expr, err := sqlbase.MakeColumnDefDescs(tableName, d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
 			}
@@ -181,8 +185,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
+				tableName, err := n.n.Table.Normalize()
+				if err != nil {
+					return err
+				}
 				ck, err := makeCheckConstraint(
-					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext())
+					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), *tableName)
 				if err != nil {
 					return err
 				}

@@ -227,7 +227,7 @@ func (n *createViewNode) makeViewTableDesc(
 			columnTableDef.Name = columnNames[i]
 		}
 		col, _, _, err := sqlbase.MakeColumnDefDescs(
-			&columnTableDef, &params.p.semaCtx, params.EvalContext())
+			tree.NewTableName("", ""), &columnTableDef, &params.p.semaCtx, params.EvalContext())
 		if err != nil {
 			return desc, err
 		}
