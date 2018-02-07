@@ -111,3 +111,27 @@ project
       ├── variable: a.x [type=int]
       ├── variable: a.y [type=float]
       └── true [type=bool]
+
+build
+SELECT u + 1, v + 1 FROM (SELECT a.x + 3, a.y + 1.0 FROM t.a) AS foo(u, v)
+----
+project
+ ├── columns: column5:int:null:5 column6:float:null:6
+ ├── project
+ │    ├── columns: column3:int:null:3 column4:float:null:4
+ │    ├── scan
+ │    │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── projections
+ │         ├── plus [type=int]
+ │         │    ├── variable: a.x [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── plus [type=float]
+ │              ├── variable: a.y [type=float]
+ │              └── const: 1.0 [type=float]
+ └── projections
+      ├── plus [type=int]
+      │    ├── variable: column3 [type=int]
+      │    └── const: 1 [type=int]
+      └── plus [type=float]
+           ├── variable: column4 [type=float]
+           └── const: 1.0 [type=float]
