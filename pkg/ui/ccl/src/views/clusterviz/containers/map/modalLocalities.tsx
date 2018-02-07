@@ -103,6 +103,15 @@ class MapLayout extends React.Component<ModalLocalitiesViewProps, any> {
 
 class CircleLayout extends React.Component<ModalLocalitiesViewProps, any> {
   coordsFor(index: number, total: number, radius: number) {
+    if (total === 1) {
+      return [0, 0];
+    }
+
+    if (total === 2) {
+      const leftOrRight = index === 0 ? -radius : radius;
+      return [leftOrRight, 0];
+    }
+
     const angle = 2 * Math.PI * index / total - Math.PI / 2;
     return [radius * Math.cos(angle), radius * Math.sin(angle)];
   }
