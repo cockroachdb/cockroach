@@ -14,12 +14,19 @@ import * as vector from "src/util/vector";
 
 import "./sim.css";
 
-import NodeSimulator from "./nodeSimulator";
+import { ModalLocalitiesView } from "./modalLocalities";
 import { WorldMap } from "./worldmap";
+import { NodeHistory } from "./nodeHistory";
 import { Box, ZoomTransformer } from "./zoom";
-import { LocalityTier } from "src/redux/localities";
+import { LivenessStatus } from "src/redux/nodes";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { LocationTree } from "src/redux/locations";
 
 interface NodeCanvasProps {
+  nodeHistories: { [id: string]: NodeHistory };
+  localityTree: LocalityTree;
+  locationTree: LocationTree;
+  liveness: { [id: string]: LivenessStatus };
   tiers: LocalityTier[];
 }
 
@@ -96,7 +103,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     window.removeEventListener("resize", this.debouncedOnResize);
   }
 
-  renderContent(tiers: LocalityTier[]) {
+  renderContent() {
     if (!this.state) {
       return null;
     }
@@ -111,10 +118,20 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     projection.scale(projection.scale() * scale);
     projection.translate(vector.add(vector.mult(projection.translate(), scale), translate));
 
+    const { nodeHistories, localityTree, locationTree, liveness, tiers } = this.props;
+
     return (
       <g>
         <WorldMap projection={projection} />
-        <NodeSimulator projection={projection} zoom={this.state.zoomTransform} tiers={tiers} />
+        <ModalLocalitiesView
+          nodeHistories={nodeHistories}
+          localityTree={localityTree}
+          locationTree={locationTree}
+          liveness={liveness}
+          tiers={tiers}
+          projection={projection}
+          zoom={this.state.zoomTransform}
+        />
       </g>
     );
   }
@@ -130,7 +147,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
           className="cluster-viz"
           ref={svg => this.graphEl = svg}
         >
-          { this.renderContent(this.props.tiers) }
+          { this.renderContent() }
         </svg>
       </div>
     );
