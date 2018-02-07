@@ -97,7 +97,7 @@ func TestDBWriteBatch(t *testing.T) {
 		var batch engine.RocksDBBatchBuilder
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
-		value.InitChecksum([]byte("foo"))
+		value.MustInitChecksum([]byte("foo"))
 		batch.Put(key, value.RawBytes)
 		data := batch.Finish()
 

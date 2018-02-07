@@ -174,7 +174,7 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 	{
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
 		value := roachpb.MakeValueFromString("1")
-		value.InitChecksum([]byte("foo"))
+		value.MustInitChecksum([]byte("foo"))
 		data, err := singleKVSSTable(key, value.RawBytes)
 		if err != nil {
 			t.Fatalf("%+v", err)

@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -236,13 +237,48 @@ func (v *Value) setChecksum(cksum uint32) {
 	}
 }
 
-// InitChecksum initializes a checksum based on the provided key and
-// the contents of the value. If the value contains a byte slice, the
-// checksum includes it directly.
+// shouldInitChecksum decides whether value checksums should be initialized or
+// not. Using ChecksumInterceptor, we ensure that this is safe to enable or
+// disable on different binaries running in the same cluster.
+//
+// TODO DURING REVIEW: We could make this a cluster setting, but that seems
+// pretty heavyweight. We could make it an environment variable, but that
+// still doesn't allow the compiler to optimize out calls to InitChecksum
+// completely when it is disabled.
+const shouldInitChecksum = false
+
+// ChecksumInterceptor will be called with every value before its checksum is
+// conditionally computed. This is used to prove that the decision to init
+// checksums on values or not does not affect beneath-raft consistency.
+// Interceptor is not safe to modify concurrently with calls to InitChecksum.
+var ChecksumInterceptor = func(_ *Value) {}
+
+// InitChecksum initializes a checksum based on the provided key and the
+// contents of the value if checksum computation is enabled. If the value
+// contains a byte slice, the checksum includes it directly.
+//
+// If you require that the checksum be set even if checksum computations are
+// disabled, use MustInitChecksum insted.
 //
 // TODO(peter): This method should return an error if the Value is corrupted
 // (e.g. the RawBytes field is > 0 but smaller than the header size).
 func (v *Value) InitChecksum(key []byte) {
+	// Both branches are behind const conditionals so that this
+	// entire method is optimized out in production builds.
+	if util.RaceEnabled {
+		// Not required, so only enable in race builds.
+		ChecksumInterceptor(v)
+	}
+	if shouldInitChecksum {
+		v.MustInitChecksum(key)
+	}
+}
+
+// MustInitChecksum is like InitChecksum, but does not depend on the
+// shouldInitChecksum setting. This method can be used beneath raft where
+// different binaries cannot decide independently whether checksums should
+// be initialized or not.
+func (v *Value) MustInitChecksum(key []byte) {
 	if v.RawBytes == nil {
 		return
 	}
