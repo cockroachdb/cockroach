@@ -216,7 +216,7 @@ func (s *scope) startAggFunc() {
 	var found bool
 	for curr := s; curr != nil; curr = curr.parent {
 		if curr.groupby.inAgg {
-			panic("aggregate function cannot be nested within another aggregate function")
+			panic(errorf("aggregate function cannot be nested within another aggregate function"))
 		}
 
 		if curr.groupby.groupingsScope != nil {
@@ -230,7 +230,7 @@ func (s *scope) startAggFunc() {
 	}
 
 	if !found {
-		panic("aggregate function is not allowed in this context")
+		panic(errorf("aggregate function is not allowed in this context"))
 	}
 
 	s.groupby.inAgg = true
@@ -243,12 +243,12 @@ func (s *scope) startAggFunc() {
 // added.
 func (s *scope) endAggFunc() (refScope *scope) {
 	if !s.groupby.inAgg {
-		panic("mismatched calls to start/end aggFunc")
+		panic(errorf("mismatched calls to start/end aggFunc"))
 	}
 
 	refScope = s.groupby.refScope
 	if refScope == nil {
-		panic("not in grouping scope")
+		panic(errorf("not in grouping scope"))
 	}
 
 	s.groupby.inAgg = false

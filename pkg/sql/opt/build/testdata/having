@@ -1,0 +1,260 @@
+# tests adapted from logictest -- aggregate
+
+exec-ddl
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  s STRING
+)
+----
+table kv
+  k int NOT NULL
+  v int NULL
+  w int NULL
+  s string NULL
+
+# Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
+build
+SELECT 3 FROM t.kv HAVING TRUE
+----
+project
+ ├── columns: column5:int:null:5
+ ├── select
+ │    ├── group-by
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    └── projections
+ │    └── const: true [type=bool]
+ └── projections
+      └── const: 3 [type=int]
+
+build
+SELECT s, COUNT(*) FROM t.kv GROUP BY s HAVING COUNT(*) > 1
+----
+select
+ ├── columns: kv.s:string:null:4 column5:int:null:5
+ ├── group-by
+ │    ├── columns: kv.s:string:null:4 column5:int:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── projections
+ │    │    └── variable: kv.s [type=string]
+ │    └── projections
+ │         └── function: count_rows [type=NULL]
+ └── gt [type=bool]
+      ├── variable: column5 [type=int]
+      └── const: 1 [type=int]
+
+build
+SELECT MAX(k), MIN(v) FROM t.kv HAVING MIN(v) > 2
+----
+project
+ ├── columns: column6:int:null:6 column5:int:null:5
+ ├── select
+ │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    ├── group-by
+ │    │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    └── projections
+ │    │         ├── function: min [type=NULL]
+ │    │         │    └── variable: kv.v [type=int]
+ │    │         └── function: max [type=NULL]
+ │    │              └── variable: kv.k [type=int]
+ │    └── gt [type=bool]
+ │         ├── variable: column5 [type=int]
+ │         └── const: 2 [type=int]
+ └── projections
+      ├── variable: column6 [type=int]
+      └── variable: column5 [type=int]
+
+build
+SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(v) > 2
+----
+project
+ ├── columns: column6:int:null:6 column7:int:null:7
+ ├── select
+ │    ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
+ │    ├── group-by
+ │    │    ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    └── projections
+ │    │         ├── function: max [type=NULL]
+ │    │         │    └── variable: kv.v [type=int]
+ │    │         ├── function: max [type=NULL]
+ │    │         │    └── variable: kv.k [type=int]
+ │    │         └── function: min [type=NULL]
+ │    │              └── variable: kv.v [type=int]
+ │    └── gt [type=bool]
+ │         ├── variable: column5 [type=int]
+ │         └── const: 2 [type=int]
+ └── projections
+      ├── variable: column6 [type=int]
+      └── variable: column7 [type=int]
+
+build
+SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(MIN(v)) > 2
+----
+error: aggregate function cannot be nested within another aggregate function
+
+build
+SELECT MAX(k), MIN(v) FROM t.kv HAVING k
+----
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+
+# Expressions listed in the HAVING clause must conform to same validation as the SELECT clause (grouped or aggregated).
+build
+SELECT 3 FROM t.kv GROUP BY v HAVING k > 5
+----
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+
+# pg has a special case for grouping on primary key, which would allow this, but we do not.
+# See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
+build
+SELECT 3 FROM t.kv GROUP BY k HAVING v > 2
+----
+error: column "kv.v" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT k FROM t.kv HAVING k > 7
+----
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT count(*), k+w FROM t.kv GROUP BY k+w HAVING (k+w) > 5
+----
+project
+ ├── columns: column6:int:null:6 column5:int:null:5
+ ├── select
+ │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    ├── group-by
+ │    │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    │    └── plus [type=int]
+ │    │    │         ├── variable: kv.k [type=int]
+ │    │    │         └── variable: kv.w [type=int]
+ │    │    └── projections
+ │    │         └── function: count_rows [type=NULL]
+ │    └── gt [type=bool]
+ │         ├── plus [type=int]
+ │         │    ├── variable: kv.k [type=int]
+ │         │    └── variable: kv.w [type=int]
+ │         └── const: 5 [type=int]
+ └── projections
+      ├── variable: column6 [type=int]
+      └── variable: column5 [type=int]
+
+build
+SELECT count(*), k+w FROM t.kv GROUP BY k+w HAVING (k+v) > 5
+----
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+
+# Check that everything still works with differently qualified names
+build
+SELECT MAX(kv.v) FROM kv GROUP BY v HAVING kv.v > 5
+----
+project
+ ├── columns: column5:int:null:5
+ ├── select
+ │    ├── columns: kv.v:int:null:2 column5:int:null:5
+ │    ├── group-by
+ │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    │    └── variable: kv.v [type=int]
+ │    │    └── projections
+ │    │         └── function: max [type=NULL]
+ │    │              └── variable: kv.v [type=int]
+ │    └── gt [type=bool]
+ │         ├── variable: kv.v [type=int]
+ │         └── const: 5 [type=int]
+ └── projections
+      └── variable: column5 [type=int]
+
+build
+SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING LOWER(kv.s) LIKE 'test%'
+----
+project
+ ├── columns: column6:decimal:null:6
+ ├── select
+ │    ├── columns: column5:string:null:5 column6:decimal:null:6
+ │    ├── group-by
+ │    │    ├── columns: column5:string:null:5 column6:decimal:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    │    └── function: lower [type=NULL]
+ │    │    │         └── variable: kv.s [type=string]
+ │    │    └── projections
+ │    │         └── function: sum [type=NULL]
+ │    │              └── variable: kv.w [type=int]
+ │    └── like [type=bool]
+ │         ├── function: lower [type=NULL]
+ │         │    └── variable: kv.s [type=string]
+ │         └── const: 'test%' [type=string]
+ └── projections
+      └── variable: column6 [type=decimal]
+
+build
+SELECT SUM(kv.w) FROM kv GROUP BY LOWER(s) HAVING SUM(w) IN (4, 5, 6)
+----
+project
+ ├── columns: column6:decimal:null:6
+ ├── select
+ │    ├── columns: column5:string:null:5 column6:decimal:null:6
+ │    ├── group-by
+ │    │    ├── columns: column5:string:null:5 column6:decimal:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    │    └── function: lower [type=NULL]
+ │    │    │         └── variable: kv.s [type=string]
+ │    │    └── projections
+ │    │         └── function: sum [type=NULL]
+ │    │              └── variable: kv.w [type=int]
+ │    └── in [type=bool]
+ │         ├── variable: column6 [type=decimal]
+ │         └── tuple [type=tuple{decimal, decimal, decimal}]
+ │              ├── const: 4 [type=decimal]
+ │              ├── const: 5 [type=decimal]
+ │              └── const: 6 [type=decimal]
+ └── projections
+      └── variable: column6 [type=decimal]
+
+build
+SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING k * kv.w > 5
+----
+project
+ ├── columns: kv.v:int:null:2
+ ├── select
+ │    ├── columns: kv.v:int:null:2 column5:int:null:5
+ │    ├── group-by
+ │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── projections
+ │    │    │    ├── variable: kv.v [type=int]
+ │    │    │    └── mult [type=int]
+ │    │    │         ├── variable: kv.k [type=int]
+ │    │    │         └── variable: kv.w [type=int]
+ │    │    └── projections
+ │    └── gt [type=bool]
+ │         ├── mult [type=int]
+ │         │    ├── variable: kv.k [type=int]
+ │         │    └── variable: kv.w [type=int]
+ │         └── const: 5 [type=int]
+ └── projections
+      └── variable: kv.v [type=int]
+
+build
+SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
+----
+error: column "kv.w" must appear in the GROUP BY clause or be used in an aggregate function

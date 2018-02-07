@@ -1,0 +1,247 @@
+# tests adapted from logictest -- aggregate and distinct
+
+exec-ddl
+CREATE TABLE t.xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z FLOAT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x),
+  FAMILY (x),
+  FAMILY (y),
+  FAMILY (z)
+)
+----
+table xyz
+  x int NOT NULL
+  y int NULL
+  z float NULL
+
+build
+SELECT y, z FROM t.xyz
+----
+project
+ ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ ├── scan
+ │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ └── projections
+      ├── variable: xyz.y [type=int]
+      └── variable: xyz.z [type=float]
+
+build
+SELECT DISTINCT y, z FROM t.xyz
+----
+group-by
+ ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ ├── project
+ │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    └── projections
+ │         ├── variable: xyz.y [type=int]
+ │         └── variable: xyz.z [type=float]
+ ├── projections
+ │    ├── variable: xyz.y [type=int]
+ │    └── variable: xyz.z [type=float]
+ └── projections
+
+build
+SELECT y FROM (SELECT DISTINCT y, z FROM t.xyz)
+----
+project
+ ├── columns: xyz.y:int:null:2
+ ├── group-by
+ │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ │    ├── project
+ │    │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── projections
+ │    │         ├── variable: xyz.y [type=int]
+ │    │         └── variable: xyz.z [type=float]
+ │    ├── projections
+ │    │    ├── variable: xyz.y [type=int]
+ │    │    └── variable: xyz.z [type=float]
+ │    └── projections
+ └── projections
+      └── variable: xyz.y [type=int]
+
+build
+SELECT DISTINCT (y,z) FROM t.xyz
+----
+group-by
+ ├── columns: column4:tuple{int, float}:null:4
+ ├── project
+ │    ├── columns: column4:tuple{int, float}:null:4
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    └── projections
+ │         └── tuple [type=tuple{int, float}]
+ │              ├── variable: xyz.y [type=int]
+ │              └── variable: xyz.z [type=float]
+ ├── projections
+ │    └── variable: column4 [type=tuple{int, float}]
+ └── projections
+
+build
+SELECT COUNT(*) FROM (SELECT DISTINCT y FROM t.xyz)
+----
+group-by
+ ├── columns: column4:int:null:4
+ ├── group-by
+ │    ├── columns: xyz.y:int:null:2
+ │    ├── project
+ │    │    ├── columns: xyz.y:int:null:2
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── projections
+ │    │         └── variable: xyz.y [type=int]
+ │    ├── projections
+ │    │    └── variable: xyz.y [type=int]
+ │    └── projections
+ ├── projections
+ └── projections
+      └── function: count_rows [type=NULL]
+
+build
+SELECT DISTINCT x FROM t.xyz WHERE x > 0
+----
+group-by
+ ├── columns: xyz.x:int:null:1
+ ├── project
+ │    ├── columns: xyz.x:int:1
+ │    ├── select
+ │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── gt [type=bool]
+ │    │         ├── variable: xyz.x [type=int]
+ │    │         └── const: 0 [type=int]
+ │    └── projections
+ │         └── variable: xyz.x [type=int]
+ ├── projections
+ │    └── variable: xyz.x [type=int]
+ └── projections
+
+build
+SELECT DISTINCT z FROM t.xyz WHERE x > 0
+----
+group-by
+ ├── columns: xyz.z:float:null:3
+ ├── project
+ │    ├── columns: xyz.z:float:null:3
+ │    ├── select
+ │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── gt [type=bool]
+ │    │         ├── variable: xyz.x [type=int]
+ │    │         └── const: 0 [type=int]
+ │    └── projections
+ │         └── variable: xyz.z [type=float]
+ ├── projections
+ │    └── variable: xyz.z [type=float]
+ └── projections
+
+build
+SELECT DISTINCT MAX(x) FROM xyz GROUP BY x
+----
+group-by
+ ├── columns: column4:int:null:4
+ ├── project
+ │    ├── columns: column4:int:null:4
+ │    ├── group-by
+ │    │    ├── columns: xyz.x:int:null:1 column4:int:null:4
+ │    │    ├── scan
+ │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── projections
+ │    │    │    └── variable: xyz.x [type=int]
+ │    │    └── projections
+ │    │         └── function: max [type=NULL]
+ │    │              └── variable: xyz.x [type=int]
+ │    └── projections
+ │         └── variable: column4 [type=int]
+ ├── projections
+ │    └── variable: column4 [type=int]
+ └── projections
+
+build
+SELECT DISTINCT x+y FROM xyz
+----
+group-by
+ ├── columns: column4:int:null:4
+ ├── project
+ │    ├── columns: column4:int:null:4
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    └── projections
+ │         └── plus [type=int]
+ │              ├── variable: xyz.x [type=int]
+ │              └── variable: xyz.y [type=int]
+ ├── projections
+ │    └── variable: column4 [type=int]
+ └── projections
+
+build
+SELECT DISTINCT 3 FROM xyz
+----
+group-by
+ ├── columns: column4:int:null:4
+ ├── project
+ │    ├── columns: column4:int:null:4
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    └── projections
+ │         └── const: 3 [type=int]
+ ├── projections
+ │    └── variable: column4 [type=int]
+ └── projections
+
+build
+SELECT DISTINCT 3
+----
+group-by
+ ├── columns: column1:int:null:1
+ ├── project
+ │    ├── columns: column1:int:null:1
+ │    ├── values
+ │    │    └── tuple [type=tuple{}]
+ │    └── projections
+ │         └── const: 3 [type=int]
+ ├── projections
+ │    └── variable: column1 [type=int]
+ └── projections
+
+build
+SELECT DISTINCT MAX(z), x+y, 3 FROM xyz GROUP BY x, y HAVING y > 4
+----
+group-by
+ ├── columns: column4:float:null:4 column5:int:null:5 column6:int:null:6
+ ├── project
+ │    ├── columns: column4:float:null:4 column5:int:null:5 column6:int:null:6
+ │    ├── select
+ │    │    ├── columns: xyz.x:int:null:1 xyz.y:int:null:2 column4:float:null:4
+ │    │    ├── group-by
+ │    │    │    ├── columns: xyz.x:int:null:1 xyz.y:int:null:2 column4:float:null:4
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    ├── projections
+ │    │    │    │    ├── variable: xyz.x [type=int]
+ │    │    │    │    └── variable: xyz.y [type=int]
+ │    │    │    └── projections
+ │    │    │         └── function: max [type=NULL]
+ │    │    │              └── variable: xyz.z [type=float]
+ │    │    └── gt [type=bool]
+ │    │         ├── variable: xyz.y [type=int]
+ │    │         └── const: 4 [type=int]
+ │    └── projections
+ │         ├── variable: column4 [type=float]
+ │         ├── plus [type=int]
+ │         │    ├── variable: xyz.x [type=int]
+ │         │    └── variable: xyz.y [type=int]
+ │         └── const: 3 [type=int]
+ ├── projections
+ │    ├── variable: column4 [type=float]
+ │    ├── variable: column5 [type=int]
+ │    └── variable: column6 [type=int]
+ └── projections
