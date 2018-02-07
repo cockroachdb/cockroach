@@ -337,10 +337,12 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 		c.writeBuf.writeTerminatedString(key)
 		c.writeBuf.writeTerminatedString(value)
 		if err := c.writeBuf.finishMsg(c.wr); err != nil {
+			reserved.Close(ctx)
 			return err
 		}
 	}
 	if err := c.wr.Flush(); err != nil {
+		reserved.Close(ctx)
 		return err
 	}
 
