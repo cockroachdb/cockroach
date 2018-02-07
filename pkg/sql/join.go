@@ -93,9 +93,9 @@ func (p *planner) makeJoin(
 	leftInfo, rightInfo := left.info, right.info
 
 	// Check that the same table name is not used on both sides.
-	for _, alias := range rightInfo.sourceAliases {
-		if _, ok := leftInfo.sourceAliases.srcIdx(alias.name); ok {
-			t := alias.name.Table()
+	for _, alias := range rightInfo.SourceAliases {
+		if _, ok := leftInfo.SourceAliases.SrcIdx(alias.Name); ok {
+			t := alias.Name.Table()
 			if t == "" {
 				// Allow joins of sources that define columns with no
 				// associated table name. At worst, the USING/NATURAL
@@ -109,7 +109,7 @@ func (p *planner) makeJoin(
 	}
 
 	var (
-		info          *dataSourceInfo
+		info          *sqlbase.DataSourceInfo
 		pred          *joinPredicate
 		err           error
 		mergedColumns tree.NameList
@@ -139,7 +139,7 @@ func (p *planner) makeJoin(
 		right:    right,
 		joinType: typ,
 		pred:     pred,
-		columns:  info.sourceColumns,
+		columns:  info.SourceColumns,
 	}
 
 	n.run.buffer = &RowBuffer{
@@ -221,13 +221,13 @@ func (p *planner) makeJoin(
 
 	r := &renderNode{
 		source:     joinDataSource,
-		sourceInfo: multiSourceInfo{info},
+		sourceInfo: sqlbase.MultiSourceInfo{info},
 	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(info.sourceColumns))
-	numLeft := len(leftInfo.sourceColumns)
-	numRight := len(rightInfo.sourceColumns)
-	rInfo := &dataSourceInfo{
-		sourceAliases: make(sourceAliases, 0, len(info.sourceAliases)),
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(info.SourceColumns))
+	numLeft := len(leftInfo.SourceColumns)
+	numRight := len(rightInfo.SourceColumns)
+	rInfo := &sqlbase.DataSourceInfo{
+		SourceAliases: make(sqlbase.SourceAliases, 0, len(info.SourceAliases)),
 	}
 
 	var leftHidden, rightHidden util.FastIntSet
@@ -252,7 +252,7 @@ func (p *planner) makeJoin(
 			expr = r.ivarHelper.IndexedVar(leftCol)
 			remapped[leftCol] = i
 		} else if n.joinType == joinTypeRightOuter &&
-			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftInfo.sourceColumns[leftCol].Typ) {
+			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftInfo.SourceColumns[leftCol].Typ) {
 			// The merged column is the same with the corresponding column from the
 			// right side.
 			expr = r.ivarHelper.IndexedVar(numLeft + rightCol)
@@ -273,9 +273,9 @@ func (p *planner) makeJoin(
 				return planDataSource{}, err
 			}
 		}
-		r.addRenderColumn(expr, symbolicExprStr(expr), leftInfo.sourceColumns[leftCol])
+		r.addRenderColumn(expr, symbolicExprStr(expr), leftInfo.SourceColumns[leftCol])
 	}
-	for i, c := range leftInfo.sourceColumns {
+	for i, c := range leftInfo.SourceColumns {
 		if remapped[i] != -1 {
 			// Column already included.
 			continue
@@ -287,7 +287,7 @@ func (p *planner) makeJoin(
 		}
 		r.addRenderColumn(expr, symbolicExprStr(expr), c)
 	}
-	for i, c := range rightInfo.sourceColumns {
+	for i, c := range rightInfo.SourceColumns {
 		if remapped[numLeft+i] != -1 {
 			// Column already included.
 			continue
@@ -299,40 +299,43 @@ func (p *planner) makeJoin(
 		}
 		r.addRenderColumn(expr, symbolicExprStr(expr), c)
 	}
-	rInfo.sourceColumns = r.columns
+	rInfo.SourceColumns = r.columns
 
 	// Copy the aliases, remapping the columns as necessary. We extract any
 	// anonymous aliases for special handling.
-	anonymousAlias := sourceAlias{name: anonymousTable}
-	for _, a := range info.sourceAliases {
+	anonymousAlias := sqlbase.SourceAlias{Name: sqlbase.AnonymousTable}
+	for _, a := range info.SourceAliases {
 		var colSet util.FastIntSet
-		for col, ok := a.columnSet.Next(0); ok; col, ok = a.columnSet.Next(col + 1) {
+		for col, ok := a.ColumnSet.Next(0); ok; col, ok = a.ColumnSet.Next(col + 1) {
 			colSet.Add(remapped[col])
 		}
-		if a.name == anonymousTable {
-			anonymousAlias.columnSet = colSet
+		if a.Name == sqlbase.AnonymousTable {
+			anonymousAlias.ColumnSet = colSet
 			continue
 		}
-		rInfo.sourceAliases = append(rInfo.sourceAliases, sourceAlias{name: a.name, columnSet: colSet})
+		rInfo.SourceAliases = append(
+			rInfo.SourceAliases,
+			sqlbase.SourceAlias{Name: a.Name, ColumnSet: colSet},
+		)
 	}
 
 	for i := range mergedColumns {
-		anonymousAlias.columnSet.Add(i)
+		anonymousAlias.ColumnSet.Add(i)
 	}
 
 	// Remove any anonymous aliases that refer to hidden equality columns (i.e.
 	// those that weren't equivalent to the merged column).
 	for i, col := range n.pred.leftEqualityIndices {
 		if target := remapped[col]; target != i {
-			anonymousAlias.columnSet.Remove(target)
+			anonymousAlias.ColumnSet.Remove(target)
 		}
 	}
 	for i, col := range n.pred.rightEqualityIndices {
 		if target := remapped[numLeft+col]; target != i {
-			anonymousAlias.columnSet.Remove(remapped[numLeft+col])
+			anonymousAlias.ColumnSet.Remove(remapped[numLeft+col])
 		}
 	}
-	rInfo.sourceAliases = append(rInfo.sourceAliases, anonymousAlias)
+	rInfo.SourceAliases = append(rInfo.SourceAliases, anonymousAlias)
 	return planDataSource{info: rInfo, plan: r}, nil
 }
 
@@ -701,13 +704,13 @@ func (b *buckets) Fetch(encoding []byte) (*bucket, bool) {
 
 // commonColumns returns the names of columns common on the
 // right and left sides, for use by NATURAL JOIN.
-func commonColumns(left, right *dataSourceInfo) tree.NameList {
+func commonColumns(left, right *sqlbase.DataSourceInfo) tree.NameList {
 	var res tree.NameList
-	for _, cLeft := range left.sourceColumns {
+	for _, cLeft := range left.SourceColumns {
 		if cLeft.Hidden {
 			continue
 		}
-		for _, cRight := range right.sourceColumns {
+		for _, cRight := range right.SourceColumns {
 			if cRight.Hidden {
 				continue
 			}

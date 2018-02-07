@@ -244,7 +244,7 @@ func (p *planner) groupBy(
 	// also treated as aggregate expressions (with identAggregate).
 	if typedHaving != nil {
 		havingNode = &filterNode{
-			source: planDataSource{plan: plan, info: &dataSourceInfo{}},
+			source: planDataSource{plan: plan, info: &sqlbase.DataSourceInfo{}},
 		}
 		plan = havingNode
 		havingNode.ivarHelper = tree.MakeIndexedVarHelper(havingNode, 0)
@@ -265,7 +265,9 @@ func (p *planner) groupBy(
 		}
 		// The group.columns have been updated; the sourceColumns in the node must
 		// also be updated (for IndexedVarResolvedType to work).
-		havingNode.source.info = newSourceInfoForSingleTable(anonymousTable, group.columns)
+		havingNode.source.info = sqlbase.NewSourceInfoForSingleTable(
+			sqlbase.AnonymousTable, group.columns,
+		)
 
 		havingNode.filter, err = p.analyzeExpr(
 			ctx, havingExpr, nil /* no source info */, havingNode.ivarHelper,
@@ -303,8 +305,10 @@ func (p *planner) groupBy(
 		postRender.addRenderColumn(renderExpr, symbolicExprStr(renderExpr), origColumns[i])
 	}
 
-	postRender.source.info = newSourceInfoForSingleTable(anonymousTable, group.columns)
-	postRender.sourceInfo = multiSourceInfo{postRender.source.info}
+	postRender.source.info = sqlbase.NewSourceInfoForSingleTable(
+		sqlbase.AnonymousTable, group.columns,
+	)
+	postRender.sourceInfo = sqlbase.MultiSourceInfo{postRender.source.info}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
 	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0
@@ -453,9 +457,9 @@ func (n *groupNode) setupOutput() {
 	n.run.values = make(tree.Datums, len(n.funcs))
 }
 
-// requiresIsDisinctFromNullFilter returns whether a "col IS DISTINCT FROM NULL" constraint must
-// be added. This is the case when we have a single MIN/MAX aggregation
-// function.
+// requiresIsDistinctFromNullFilter returns whether a
+// "col IS DISTINCT FROM NULL" constraint must be added. This is the case when
+// we have a single MIN/MAX aggregation function.
 func (n *groupNode) requiresIsDistinctFromNullFilter() bool {
 	return len(n.desiredOrdering) == 1
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // This file contains the implementation of common table expressions. See
@@ -122,7 +123,7 @@ func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSourc
 				frame[tn.TableName] = cteSource
 				plan := cteSource.plan
 				dataSource := planDataSource{
-					info: newSourceInfoForSingleTable(*tn, planColumns(plan)),
+					info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(plan)),
 					plan: plan,
 				}
 				dataSource, err = renameSource(dataSource, cteSource.alias, false)

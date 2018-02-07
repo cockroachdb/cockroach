@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // analyzeExpr performs semantic analysis of an expression, including:
@@ -32,7 +33,7 @@ import (
 func (p *planner) analyzeExpr(
 	ctx context.Context,
 	raw tree.Expr,
-	sources multiSourceInfo,
+	sources sqlbase.MultiSourceInfo,
 	iVarHelper tree.IndexedVarHelper,
 	expectedType types.T,
 	requireType bool,
