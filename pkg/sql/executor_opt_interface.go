@@ -89,6 +89,28 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 	return f, nil
 }
 
+// ConstructProjection is part of the exec.Factory interface.
+func (ee *execEngine) ConstructProjection(n exec.Node, exprs tree.TypedExprs) (exec.Node, error) {
+	plan := n.(planNode)
+	cols := planColumns(plan)
+	src := planDataSource{
+		info: &sqlbase.DataSourceInfo{SourceColumns: cols},
+		plan: plan,
+	}
+	r := &renderNode{
+		source:     src,
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+	}
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(cols))
+	for _, expr := range exprs {
+		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, false /* normalizeToNonNil */)
+		exprStr := symbolicExprStr(expr)
+		col := sqlbase.ResultColumn{Name: exprStr, Typ: expr.ResolvedType()}
+		r.addRenderColumn(expr, symbolicExprStr(expr), col)
+	}
+	return r, nil
+}
+
 // Execute is part of the exec.Engine interface.
 func (ee *execEngine) Execute(n exec.Node) ([]tree.Datums, error) {
 	plan := n.(planNode)
