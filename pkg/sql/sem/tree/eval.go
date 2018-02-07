@@ -2078,6 +2078,13 @@ type EvalPlanner interface {
 	// ParseType parses a column type.
 	ParseType(sql string) (coltypes.CastTargetType, error)
 
+	// EvalSubquery returns the Datum for the given subquery node.
+	EvalSubquery(expr *Subquery) (Datum, error)
+}
+
+// SequenceOperators is used for various sql related functions that can
+// be used from EvalContext.
+type SequenceOperators interface {
 	// IncrementSequence increments the given sequence and returns the result.
 	// It returns an error if the given name is not a sequence.
 	// The caller must ensure that seqName is fully qualified already.
@@ -2092,9 +2099,6 @@ type EvalPlanner interface {
 	// `newVal` is returned. Otherwise, the next call to nextval will return
 	// `newVal + seqOpts.Increment`.
 	SetSequenceValue(ctx context.Context, seqName *TableName, newVal int64, isCalled bool) error
-
-	// EvalSubquery returns the Datum for the given subquery node.
-	EvalSubquery(expr *Subquery) (Datum, error)
 }
 
 // CtxProvider is anything that can return a Context.
@@ -2199,6 +2203,8 @@ type EvalContext struct {
 	CtxProvider CtxProvider
 
 	Planner EvalPlanner
+
+	Sequence SequenceOperators
 
 	// Ths transaction in which the statement is executing.
 	Txn *client.Txn

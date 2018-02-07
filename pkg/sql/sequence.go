@@ -29,7 +29,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// IncrementSequence implements the tree.EvalPlanner interface.
+// IncrementSequence implements the tree.SequenceOperators interface.
 func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName) (int64, error) {
 	if p.EvalContext().TxnReadOnly {
 		return 0, readOnlyError("nextval()")
@@ -83,7 +83,7 @@ func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
 		`reached %s value of sequence "%s" (%d)`, word, descriptor.Name, value)
 }
 
-// GetLatestValueInSessionForSequence implements the tree.EvalPlanner interface.
+// GetLatestValueInSessionForSequence implements the tree.SequenceOperators interface.
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
@@ -102,7 +102,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	return val, nil
 }
 
-// SetSequenceValue implements the tree.EvalPlanner interface.
+// SetSequenceValue implements the tree.SequenceOperators interface.
 func (p *planner) SetSequenceValue(
 	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
 ) error {
