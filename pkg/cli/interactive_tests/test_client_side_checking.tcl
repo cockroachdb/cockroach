@@ -25,6 +25,13 @@ eexpect COMMIT
 eexpect root@
 end_test
 
+start_test "Check that the syntax checker does not get confused by empty inputs."
+# (issue #22441.)
+send ";\r"
+eexpect "0 rows"
+eexpect root@
+end_test
+
 start_test "Check that the user can force server-side handling."
 send "\\unset check_syntax\r"
 eexpect root@
