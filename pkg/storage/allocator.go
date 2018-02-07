@@ -151,7 +151,7 @@ func (*allocatorError) purgatoryErrorMarker() {}
 var _ purgatoryError = &allocatorError{}
 
 // allocatorRand pairs a rand.Rand with a mutex.
-// TODO: Allocator is typically only accessed from a single thread (the
+// NOTE: Allocator is typically only accessed from a single thread (the
 // replication queue), but this assumption is broken in tests which force
 // replication scans. If those tests can be modified to suspend the normal
 // replication queue during the forced scan, then this rand could be used
@@ -515,28 +515,31 @@ func (a Allocator) RebalanceTarget(
 		return nil, ""
 	}
 
-	// Find all candidates that are better than the worst existing replica.
-	targets := candidates.betterThan(existingCandidates[len(existingCandidates)-1])
-	target := targets.selectGood(a.randGen)
-	log.VEventf(ctx, 3, "rebalance candidates: %s\nexisting replicas: %s\ntarget: %s",
-		candidates, existingCandidates, target)
-	if target == nil {
-		return nil, ""
-	}
+	// Deep-copy the Replicas slice since we'll mutate it in the loop below.
+	desc := *rangeInfo.Desc
+	rangeInfo.Desc = &desc
 
-	// Determine whether we'll just remove the target immediately after adding it.
-	// If we would, we don't want to actually do the rebalance.
-	for len(candidates) > 0 {
+	// Keep looping until we either run out of options or find a target that we're
+	// pretty sure we won't want to remove immediately after adding it.
+	// If we would, we don't want to actually rebalance to that target.
+	var target *candidate
+	var existingCandidates candidateList
+	for {
+		target, existingCandidates = bestRebalanceTarget(a.randGen, results)
+		if target == nil {
+			return nil, ""
+		}
+
+		// Add a fake new replica to our copy of the range descriptor so that we can
+		// simulate the removal logic. If we decide not to go with this target, note
+		// that this needs to be removed from desc before we try any other target.
 		newReplica := roachpb.ReplicaDescriptor{
 			NodeID:    target.store.Node.NodeID,
 			StoreID:   target.store.StoreID,
 			ReplicaID: rangeInfo.Desc.NextReplicaID,
 		}
-
-		// Deep-copy the Replicas slice since we'll mutate it.
-		desc := *rangeInfo.Desc
+		desc := rangeInfo.Desc
 		desc.Replicas = append(desc.Replicas[:len(desc.Replicas):len(desc.Replicas)], newReplica)
-		rangeInfo.Desc = &desc
 
 		// If we can, filter replicas as we would if we were actually removing one.
 		// If we can't (e.g. because we're the leaseholder but not the raft leader),
@@ -559,18 +562,17 @@ func (a Allocator) RebalanceTarget(
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
 		}
-		if shouldRebalanceBetween(ctx, *target, removeReplica, existingCandidates, removeDetails, options) {
+		if target.store.StoreID != removeReplica.StoreID {
 			break
 		}
-		// Remove the considered target from our modified RangeDescriptor and from
-		// the candidates list, then try again if there are any other candidates.
-		rangeInfo.Desc.Replicas = rangeInfo.Desc.Replicas[:len(rangeInfo.Desc.Replicas)-1]
-		candidates = candidates.removeCandidate(*target)
-		target = candidates.selectGood(a.randGen)
-		if target == nil {
-			return nil, ""
-		}
+
+		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
+			target.store.StoreID, removeDetails)
+		desc.Replicas = desc.Replicas[:len(desc.Replicas)-1]
 	}
+
+	// Compile the details entry that will be persisted into system.rangelog for
+	// debugging/auditability purposes.
 	details := decisionDetails{
 		Target:   target.compactString(options),
 		Existing: existingCandidates.compactString(options),
@@ -583,46 +585,8 @@ func (a Allocator) RebalanceTarget(
 	if err != nil {
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
 	}
+
 	return &target.store, string(detailsBytes)
-}
-
-// TODO: how do all the constraint changes affect this function?
-// shouldRebalanceBetween returns whether it's a good idea to rebalance to the
-// given `add` candidate if the replica that will be removed after adding it is
-// `remove`. This is a last failsafe to ensure that we don't take unnecessary
-// rebalance actions that cause thrashing.
-func shouldRebalanceBetween(
-	ctx context.Context,
-	add candidate,
-	remove roachpb.ReplicaDescriptor,
-	existingCandidates candidateList,
-	removeDetails string,
-	options scorerOptions,
-) bool {
-	if remove.StoreID == add.store.StoreID {
-		log.VEventf(ctx, 2, "not rebalancing to s%d because we'd immediately remove it: %s",
-			add.store.StoreID, removeDetails)
-		return false
-	}
-
-	// It's possible that we initially decided to rebalance based on comparing
-	// rebalance candidates in one locality to an existing replica in another
-	// locality (e.g. if one locality has many more nodes than another). This can
-	// make for unnecessary rebalances and even thrashing, so do a more direct
-	// comparison here of the replicas we'll actually be adding and removing.
-	for _, removeCandidate := range existingCandidates {
-		if removeCandidate.store.StoreID == remove.StoreID {
-			if removeCandidate.worthRebalancingTo(add, options) {
-				return true
-			}
-			log.VEventf(ctx, 2, "not rebalancing to %s because it isn't an improvement over "+
-				"what we'd remove after adding it: %s", add, removeCandidate)
-			return false
-		}
-	}
-	// If the code reaches this point, remove must be a non-live store, so let the
-	// rebalance happen.
-	return true
 }
 
 func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptions {
