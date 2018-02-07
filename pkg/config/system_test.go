@@ -120,12 +120,15 @@ func TestGet(t *testing.T) {
 
 func TestGetLargestID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	testCases := []struct {
+
+	type testCase struct {
 		values  []roachpb.KeyValue
 		largest uint32
 		maxID   uint32
 		errStr  string
-	}{
+	}
+
+	testCases := []testCase{
 		// No data.
 		{nil, 0, 0, "descriptor table not found"},
 
@@ -159,7 +162,12 @@ func TestGetLargestID(t *testing.T) {
 		}, 12, 0, ""},
 
 		// Real SQL layout.
-		{sqlbase.MakeMetadataSchema().GetInitialValues(), keys.MaxSystemConfigDescID + 4, 0, ""},
+		func() testCase {
+			ms := sqlbase.MakeMetadataSchema()
+			descIDs := ms.DescriptorIDs()
+			maxDescID := descIDs[len(descIDs)-1]
+			return testCase{ms.GetInitialValues(), uint32(maxDescID), 0, ""}
+		}(),
 
 		// Test non-zero max.
 		{[]roachpb.KeyValue{

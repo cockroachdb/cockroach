@@ -1050,7 +1050,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	verifySplitsAtTablePrefixes := func() {
 		t.Helper()
 		// We expect splits at each of the user tables and at a few fixed system
-		// range boundaries, but not at system table boundaries.
+		// range boundaries, but not at system config table boundaries.
 		expKeys := []roachpb.Key{
 			testutils.MakeKey(keys.Meta2Prefix, keys.SystemPrefix),
 			testutils.MakeKey(keys.Meta2Prefix, keys.NodeLivenessPrefix),
@@ -1059,11 +1059,11 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			testutils.MakeKey(keys.Meta2Prefix, keys.TimeseriesPrefix.PrefixEnd()),
 			testutils.MakeKey(keys.Meta2Prefix, keys.TableDataMin),
 		}
-		numReservedTables := schema.SystemDescriptorCount() - schema.SystemConfigDescriptorCount()
-		for i := 1; i <= numReservedTables; i++ {
+		ids := schema.DescriptorIDs()
+		maxID := uint32(ids[len(ids)-1])
+		for i := uint32(keys.MaxSystemConfigDescID + 1); i <= maxID; i++ {
 			expKeys = append(expKeys,
-				testutils.MakeKey(keys.Meta2Prefix,
-					keys.MakeTablePrefix(keys.MaxSystemConfigDescID+uint32(i))),
+				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(i)),
 			)
 		}
 		for i := keys.MaxReservedDescID + 1; i <= userTableMax; i++ {
