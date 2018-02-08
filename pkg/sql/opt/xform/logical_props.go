@@ -73,19 +73,22 @@ func (p *LogicalProps) formatOutputCols(mem *memo, tp treeprinter.Node) {
 		var buf bytes.Buffer
 		buf.WriteString("columns:")
 		p.Relational.OutputCols.ForEach(func(i int) {
-			colIndex := opt.ColumnIndex(i)
-			label := mem.metadata.ColumnLabel(colIndex)
-			typ := mem.metadata.ColumnType(colIndex)
-			buf.WriteByte(' ')
-			buf.WriteString(label)
-			buf.WriteByte(':')
-			buf.WriteString(typ.String())
-			buf.WriteByte(':')
-			if !p.Relational.NotNullCols.Contains(int(colIndex)) {
-				buf.WriteString("null:")
-			}
-			fmt.Fprintf(&buf, "%d", colIndex)
+			p.formatCol(mem, &buf, opt.ColumnIndex(i))
 		})
 		tp.Child(buf.String())
 	}
+}
+
+func (p *LogicalProps) formatCol(mem *memo, buf *bytes.Buffer, colIndex opt.ColumnIndex) {
+	label := mem.metadata.ColumnLabel(colIndex)
+	typ := mem.metadata.ColumnType(colIndex)
+	buf.WriteByte(' ')
+	buf.WriteString(label)
+	buf.WriteByte(':')
+	buf.WriteString(typ.String())
+	buf.WriteByte(':')
+	if !p.Relational.NotNullCols.Contains(int(colIndex)) {
+		buf.WriteString("null:")
+	}
+	fmt.Fprintf(buf, "%d", colIndex)
 }

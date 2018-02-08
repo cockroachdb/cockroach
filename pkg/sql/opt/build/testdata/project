@@ -17,7 +17,7 @@ project
  ├── columns: column1:int:null:1
  ├── values
  │    └── tuple [type=tuple{}]
- └── projections [type=tuple{int}]
+ └── projections
       └── const: 5 [type=int]
 
 build
@@ -27,7 +27,7 @@ project
  ├── columns: a.x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections [type=tuple{int}]
+ └── projections
       └── variable: a.x [type=int]
 
 build
@@ -40,10 +40,10 @@ build
 SELECT a.y, a.x FROM t.a
 ----
 project
- ├── columns: a.x:int:1 a.y:float:null:2
+ ├── columns: a.y:float:null:2 a.x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections [type=tuple{float, int}]
+ └── projections
       ├── variable: a.y [type=float]
       └── variable: a.x [type=int]
 
@@ -62,7 +62,7 @@ project
  ├── columns: b.x:int:null:1 b.y:float:null:2
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections [type=tuple{int, float}]
+ └── projections
       ├── variable: b.x [type=int]
       └── variable: b.y [type=float]
 
@@ -73,7 +73,7 @@ project
  ├── columns: X:int:null:3 Y:bool:null:4
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections [type=tuple{int, bool}]
+ └── projections
       ├── plus [type=int]
       │    ├── variable: a.x [type=int]
       │    └── const: 3 [type=int]
@@ -86,7 +86,7 @@ project
  ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections [type=tuple{int, float, bool}]
+ └── projections
       ├── variable: a.x [type=int]
       ├── variable: a.y [type=float]
       └── or [type=bool]
@@ -104,7 +104,7 @@ project
  ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections [type=tuple{int, float, bool}]
+ └── projections
       ├── variable: a.x [type=int]
       ├── variable: a.y [type=float]
       └── const: true [type=bool]
