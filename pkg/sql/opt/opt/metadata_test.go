@@ -44,6 +44,10 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column type: %s", typ)
 	}
 
+	if n := md.NumColumns(); n != 1 {
+		t.Fatalf("unexpected num columns: %d", n)
+	}
+
 	// Add another column.
 	colIndex = md.AddColumn("alias2", types.String)
 	if colIndex != 2 {
@@ -58,6 +62,10 @@ func TestMetadataColumns(t *testing.T) {
 	typ = md.ColumnType(colIndex)
 	if typ != types.String {
 		t.Fatalf("unexpected column type: %s", typ)
+	}
+
+	if n := md.NumColumns(); n != 2 {
+		t.Fatalf("unexpected num columns: %d", n)
 	}
 }
 

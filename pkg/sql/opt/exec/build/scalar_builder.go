@@ -22,7 +22,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-type buildFunc func(b *Builder, ev xform.ExprView) tree.TypedExpr
+type buildScalarCtx struct {
+	ivh tree.IndexedVarHelper
+
+	// ivarMap is a map from opt.ColumnIndex to the index of an IndexedVar.
+	// If a ColumnIndex is not in the map, it cannot appear in the expression.
+	ivarMap opt.ColMap
+}
+
+type buildFunc func(b *Builder, ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr
 
 var scalarBuildFuncMap [opt.NumOperators]buildFunc
 
@@ -54,28 +62,29 @@ func init() {
 	}
 }
 
-func (b *Builder) buildScalar(ev xform.ExprView) tree.TypedExpr {
+// buildScalar converts a scalar expression to a TypedExpr. Variables are mapped
+// according to ctx.
+func (b *Builder) buildScalar(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	if fn := scalarBuildFuncMap[ev.Operator()]; fn != nil {
-		return fn(b, ev)
+		return fn(b, ctx, ev)
 	}
 	panic(fmt.Sprintf("unsupported op %s", ev.Operator()))
 }
 
-func (b *Builder) buildTypedExpr(ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	return ev.Private().(tree.TypedExpr)
 }
 
-func (b *Builder) buildVariable(ev xform.ExprView) tree.TypedExpr {
-	// Adjust index to make it 0-based.
-	// TODO(andyk): This only works when the ColumnIndex maps directly to
-	// column ordinal values. It's enough to get some simple smoke tests
-	// working, but won't generalize. To do the right mapping, we need to be
-	// tracking column ordering information as we build.
+func (b *Builder) buildVariable(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	colIndex := ev.Private().(opt.ColumnIndex)
-	return b.ivh.IndexedVar(int(colIndex) - 1)
+	idx, ok := ctx.ivarMap.Get(int(colIndex))
+	if !ok {
+		panic(fmt.Sprintf("cannot map variable %d to an indexed var", colIndex))
+	}
+	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colIndex))
 }
 
-func (b *Builder) buildTuple(ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	if isTupleOfConstants(ev) {
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := 0; i < ev.ChildCount(); i++ {
@@ -87,23 +96,23 @@ func (b *Builder) buildTuple(ev xform.ExprView) tree.TypedExpr {
 
 	typedExprs := make([]tree.TypedExpr, ev.ChildCount())
 	for i := 0; i < ev.ChildCount(); i++ {
-		typedExprs[i] = b.buildScalar(ev.Child(i))
+		typedExprs[i] = b.buildScalar(ctx, ev.Child(i))
 	}
 	return tree.NewTypedTuple(typedExprs)
 }
 
-func (b *Builder) buildBoolean(ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	switch ev.Operator() {
 	case opt.AndOp, opt.OrOp:
-		left := b.buildScalar(ev.Child(0))
-		right := b.buildScalar(ev.Child(1))
+		left := b.buildScalar(ctx, ev.Child(0))
+		right := b.buildScalar(ctx, ev.Child(1))
 		if ev.Operator() == opt.AndOp {
 			return tree.NewTypedAndExpr(left, right)
 		}
 		return tree.NewTypedOrExpr(left, right)
 
 	case opt.NotOp:
-		return tree.NewTypedNotExpr(b.buildScalar(ev.Child(0)))
+		return tree.NewTypedNotExpr(b.buildScalar(ctx, ev.Child(0)))
 
 	case opt.TrueOp:
 		return tree.DBoolTrue
@@ -116,27 +125,27 @@ func (b *Builder) buildBoolean(ev xform.ExprView) tree.TypedExpr {
 	}
 }
 
-func (b *Builder) buildComparison(ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildComparison(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	return tree.NewTypedComparisonExpr(
 		opt.ComparisonOpReverseMap[ev.Operator()],
-		b.buildScalar(ev.Child(0)),
-		b.buildScalar(ev.Child(1)),
+		b.buildScalar(ctx, ev.Child(0)),
+		b.buildScalar(ctx, ev.Child(1)),
 	)
 }
 
-func (b *Builder) buildUnary(ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildUnary(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	return tree.NewTypedUnaryExpr(
 		opt.UnaryOpReverseMap[ev.Operator()],
-		b.buildScalar(ev.Child(0)),
+		b.buildScalar(ctx, ev.Child(0)),
 		ev.Logical().Scalar.Type,
 	)
 }
 
-func (b *Builder) buildBinary(ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildBinary(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	return tree.NewTypedBinaryExpr(
 		opt.BinaryOpReverseMap[ev.Operator()],
-		b.buildScalar(ev.Child(0)),
-		b.buildScalar(ev.Child(1)),
+		b.buildScalar(ctx, ev.Child(0)),
+		b.buildScalar(ctx, ev.Child(1)),
 		ev.Logical().Scalar.Type,
 	)
 }
