@@ -7,10 +7,9 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import _ from "lodash";
-import PropTypes from "prop-types";
 import React from "react";
 import { connect } from "react-redux";
-import { InjectedRouter, RouterState } from "react-router";
+import { withRouter, WithRouterProps } from "react-router";
 import { createSelector } from "reselect";
 
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
@@ -49,13 +48,7 @@ interface HistoryAccumulatorOwnProps {
   tiers: LocalityTier[];
 }
 
-class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps, any> {
-  // TODO(couchand): use withRouter instead.
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState };
-
+class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps, any> {
   nodeHistories: { [id: string]: NodeHistory } = {};
 
   // accumulateHistory parses incoming nodeStatus properties and accumulates
@@ -82,7 +75,7 @@ class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & Histo
     this.props.refreshLocations();
   }
 
-  componentWillReceiveProps(props: HistoryAccumulatorProps & HistoryAccumulatorOwnProps) {
+  componentWillReceiveProps(props: HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps) {
     this.accumulateHistory(props);
     props.refreshNodes();
     props.refreshLiveness();
@@ -92,7 +85,7 @@ class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & Histo
   render() {
     const currentLocality = getLocality(this.props.localityTree, this.props.tiers);
     if (this.props.dataIsValid && _.isNil(currentLocality)) {
-      this.context.router.replace(CLUSTERVIZ_ROOT);
+      this.props.router.replace(CLUSTERVIZ_ROOT);
     }
 
     return (
@@ -133,4 +126,4 @@ export default connect(
     refreshLiveness,
     refreshLocations,
   },
-)(HistoryAccumulator);
+)(withRouter(HistoryAccumulator));
