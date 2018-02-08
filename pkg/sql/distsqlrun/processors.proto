@@ -528,12 +528,14 @@ message ReadCSVSpec {
   // table_desc is the table descriptor of the CSV file.
   optional sqlbase.TableDescriptor table_desc = 3 [(gogoproto.nullable) = false];
 
-  // uri is a storageccl.ExportStorage URI pointing to the CSV files to be read.
-  repeated string uri = 5;
+  // uri is a storageccl.ExportStorage URI pointing to the CSV files to be
+  // read. The map key must be unique across the entire IMPORT job.
+  map<int32, string> uri = 7;
 
   optional JobProgress progress = 6 [(gogoproto.nullable) = false];
 
   reserved 4;
+  reserved 5;
 }
 
 // SSTWriterSpec is the specification for a processor that consumes rows, uses

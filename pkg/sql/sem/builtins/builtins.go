@@ -3354,6 +3354,10 @@ var uniqueIntState struct {
 
 var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano()
 
+// NodeIDBits is the number of bits stored in the lower portion of
+// GenerateUniqueInt.
+const NodeIDBits = 15
+
 // GenerateUniqueInt creates a unique int composed of the current time at a
 // 10-microsecond granularity and the node-id. The node-id is stored in the
 // lower 15 bits of the returned value and the timestamp is stored in the upper
@@ -3369,7 +3373,6 @@ var uniqueIntEpoch = time.Date(2015, time.January, 1, 0, 0, 0, 0, time.UTC).Unix
 // adjustment)?
 func GenerateUniqueInt(nodeID roachpb.NodeID) tree.DInt {
 	const precision = uint64(10 * time.Microsecond)
-	const nodeIDBits = 15
 
 	nowNanos := timeutil.Now().UnixNano()
 	// Paranoia: nowNanos should never be less than uniqueIntEpoch.
@@ -3387,7 +3390,7 @@ func GenerateUniqueInt(nodeID roachpb.NodeID) tree.DInt {
 
 	// We xor in the nodeID so that nodeIDs larger than 32K will flip bits in the
 	// timestamp portion of the final value instead of always setting them.
-	id = (id << nodeIDBits) ^ uint64(nodeID)
+	id = (id << NodeIDBits) ^ uint64(nodeID)
 	return tree.DInt(id)
 }
 

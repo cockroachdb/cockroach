@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -224,7 +225,11 @@ func doLocalCSVTransform(
 	group.Go(func() error {
 		defer close(recordCh)
 		var err error
-		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), dataFiles, recordCh, readProgressFn, st)
+		readFiles := map[int32]string{}
+		for i, f := range dataFiles {
+			readFiles[int32(i)] = f
+		}
+		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), readFiles, recordCh, readProgressFn, st)
 		return err
 	})
 	group.Go(func() error {
@@ -358,14 +363,6 @@ func makeSimpleTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	// A hidden column is set if there was no primary key specified in the create
-	// statement. We require primary keys to be specified so that the sampling
-	// phase and read phase of distributed import produce the same data.
-	for _, col := range tableDesc.Columns {
-		if col.Hidden {
-			return nil, errors.New("must specify primary key")
-		}
-	}
 
 	return &tableDesc, nil
 }
@@ -389,20 +386,21 @@ func groupWorkers(ctx context.Context, num int, f func(context.Context) error) e
 	return group.Wait()
 }
 
-// readCSV sends records on ch from CSV listed by dataFiles. comma, if
-// non-zero, specifies the field separator. comment, if non-zero, specifies
-// the comment character. It returns the number of rows read. progressFn, if
-// not nil, is periodically invoked with a percentage of the total progress
-// of reading through all of the files. This percentage attempts to use
-// the Size() method of ExportStorage to determine how many bytes must be
-// read of the CSV files, and reports the percent of bytes read among all
-// dataFiles. If any Size() fails for any file, then progress is reported
-// only after each file has been read.
+// readCSV sends records on ch from CSV listed by dataFiles. The key part
+// of dataFiles is the unique index of the CSV file among all CSV files in
+// the IMPORT. comma, if non-zero, specifies the field separator. comment,
+// if non-zero, specifies the comment character. It returns the number of rows
+// read. progressFn, if not nil, is periodically invoked with a percentage of
+// the total progress of reading through all of the files. This percentage
+// attempts to use the Size() method of ExportStorage to determine how many
+// bytes must be read of the CSV files, and reports the percent of bytes read
+// among all dataFiles. If any Size() fails for any file, then progress is
+// reported only after each file has been read.
 func readCSV(
 	ctx context.Context,
 	comma, comment rune,
 	expectedCols int,
-	dataFiles []string,
+	dataFiles map[int32]string,
 	recordCh chan<- csvRecord,
 	progressFn func(float32) error,
 	settings *cluster.Settings,
@@ -439,7 +437,9 @@ func readCSV(
 	updateFromFiles := progressFn != nil && totalBytes == 0
 	updateFromBytes := progressFn != nil && totalBytes > 0
 
-	for dataFileI, dataFile := range dataFiles {
+	dataFileI := 0
+	for dataFileIndex, dataFile := range dataFiles {
+		dataFileI++
 		select {
 		case <-done:
 			return 0, ctx.Err()
@@ -469,6 +469,7 @@ func readCSV(
 
 			batch := csvRecord{
 				file:      dataFile,
+				fileIndex: dataFileIndex,
 				rowOffset: 1,
 				r:         make([][]string, 0, batchSize),
 			}
@@ -518,7 +519,7 @@ func readCSV(
 			return 0, errors.Wrap(err, dataFile)
 		}
 		if updateFromFiles {
-			if err := progressFn(float32(dataFileI+1) / float32(len(dataFiles))); err != nil {
+			if err := progressFn(float32(dataFileI) / float32(len(dataFiles))); err != nil {
 				return 0, err
 			}
 		}
@@ -540,10 +541,12 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 type csvRecord struct {
 	r         [][]string
 	file      string
+	fileIndex int32
 	rowOffset int
 }
 
-// convertRecord converts CSV records KV pairs and sends them on the kvCh chan.
+// convertRecord converts CSV records into KV pairs and sends them on the
+// kvCh chan.
 func convertRecord(
 	ctx context.Context,
 	recordCh <-chan csvRecord,
@@ -574,7 +577,25 @@ func convertRecord(
 		return errors.Wrap(err, "process default columns")
 	}
 
-	datums := make([]tree.Datum, len(visibleCols))
+	datums := make([]tree.Datum, len(visibleCols), len(cols))
+
+	// Check for a hidden column. This should be the unique_rowid PK if present.
+	hidden := -1
+	for i, col := range cols {
+		if col.Hidden {
+			// Check that this is the only hidden column and that it's in its expected
+			// place after all the visible columns.
+			if i != len(visibleCols) || hidden != -1 {
+				return errors.New("unexpected hidden column")
+			}
+			hidden = i
+			datums = append(datums, nil)
+		}
+	}
+	if len(datums) != len(cols) {
+		return errors.New("unexpected hidden column")
+	}
+
 	kvBatch := make([]roachpb.KeyValue, 0, kvBatchSize+padding)
 
 	for batch := range recordCh {
@@ -590,6 +611,21 @@ func convertRecord(
 						return errors.Wrapf(err, "%s: row %d: parse %q as %s", batch.file, rowNum, col.Name, col.Type.SQLString())
 					}
 				}
+			}
+			if hidden >= 0 {
+				// We don't want to call unique_rowid() for the hidden PK column because
+				// it is not idempotent. The sampling from the first stage will be useless
+				// during the read phase, producing a single range split with all of the
+				// data. Instead, we will call our own function that mimics that function,
+				// but more-or-less guarantees that it will not interfere with the numbers
+				// that will be produced by it. The lower 15 bits mimic the node id, but as
+				// the CSV file number. The upper 48 bits are the line number and mimic the
+				// timestamp. It would take a file with many more than 2**32 lines to even
+				// begin approaching what unique_rowid would return today, so we assume it
+				// to be safe. Since the timestamp is won't overlap, it is safe to use any
+				// number in the node id portion. The 15 bits in that portion should account
+				// for up to 32k CSV files in a single IMPORT.
+				datums[hidden] = generateRowInt(batch.fileIndex, rowNum)
 			}
 
 			// TODO(justin): we currently disallow computed columns in import statements.
@@ -630,6 +666,16 @@ func convertRecord(
 		return ctx.Err()
 	}
 	return nil
+}
+
+// generateRowInt attempts to mimic the behavior of builtins.GenerateUniqueInt,
+// but with an idempotent result. The lower 15 bits are set to the file number,
+// and the upper 48 bits are set to the line number. This is similar to the
+// node ID and timestamp scheme.
+func generateRowInt(file int32, line int) *tree.DInt {
+	id := uint64(line) << builtins.NodeIDBits
+	id ^= uint64(file)
+	return tree.NewDInt(tree.DInt(id))
 }
 
 type sstContent struct {
@@ -1218,7 +1264,7 @@ type readCSVProcessor struct {
 	csvOptions roachpb.CSVOptions
 	sampleSize int32
 	tableDesc  sqlbase.TableDescriptor
-	uri        []string
+	uri        map[int32]string
 	out        distsqlrun.ProcOutputHelper
 	output     distsqlrun.RowReceiver
 	settings   *cluster.Settings
