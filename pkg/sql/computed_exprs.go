@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -39,6 +40,22 @@ func (j *descContainer) IndexedVarResolvedType(idx int) types.T {
 }
 
 func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
+}
+
+func cannotWriteToComputedColError(col sqlbase.ColumnDescriptor) error {
+	return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError, "cannot write directly to computed column %q",
+		tree.ErrString(&tree.ColumnItem{
+			ColumnName: tree.Name(col.Name),
+		}))
+}
+
+func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
+	for i := range cols {
+		if cols[i].ComputeExpr != nil {
+			return cannotWriteToComputedColError(cols[i])
+		}
+	}
 	return nil
 }
 
