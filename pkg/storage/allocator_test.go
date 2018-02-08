@@ -114,7 +114,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		StoreID: 3,
 		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
-			NodeID: 2,
+			NodeID: 3,
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
@@ -127,7 +127,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		StoreID: 4,
 		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
-			NodeID: 3,
+			NodeID: 4,
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
@@ -140,7 +140,7 @@ var sameDCStores = []*roachpb.StoreDescriptor{
 		StoreID: 5,
 		Attrs:   roachpb.Attributes{Attrs: []string{"mem"}},
 		Node: roachpb.NodeDescriptor{
-			NodeID: 4,
+			NodeID: 5,
 			Attrs:  roachpb.Attributes{Attrs: []string{"a"}},
 		},
 		Capacity: roachpb.StoreCapacity{
@@ -522,8 +522,8 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
-	if result.Node.NodeID != 3 || result.StoreID != 4 {
-		t.Errorf("expected result to have node 3 and store 4: %+v", result)
+	if !(result.StoreID == 3 || result.StoreID == 4) {
+		t.Errorf("expected result to have store ID 3 or 4: %+v", result)
 	}
 }
 
