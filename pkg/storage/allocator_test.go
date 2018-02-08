@@ -369,7 +369,6 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -403,7 +402,6 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		true,
 		false,
 	)
 	if err != nil {
@@ -424,7 +422,6 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 		false,
 	)
 	if result != nil {
@@ -448,7 +445,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
@@ -461,7 +457,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			StoreID: result1.StoreID,
 		}},
 		firstRangeInfo,
-		false,
 		false,
 	)
 	if err != nil {
@@ -487,7 +482,6 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 			},
 		},
 		firstRangeInfo,
-		false,
 		false,
 	)
 	if err == nil {
@@ -517,189 +511,12 @@ func TestAllocatorExistingReplica(t *testing.T) {
 		},
 		firstRangeInfo,
 		false,
-		false,
 	)
 	if err != nil {
 		t.Fatalf("Unable to perform allocation: %v", err)
 	}
 	if !(result.StoreID == 3 || result.StoreID == 4) {
 		t.Errorf("expected result to have store ID 3 or 4: %+v", result)
-	}
-}
-
-// TestAllocatorRelaxConstraints verifies that attribute constraints
-// will be relaxed in order to match nodes lacking required attributes,
-// if necessary to find an allocation target.
-func TestAllocatorRelaxConstraints(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
-	defer stopper.Stop(context.Background())
-	gossiputil.NewStoreGossiper(g).GossipStores(multiDCStores, t)
-
-	testCases := []struct {
-		name        string
-		constraints []config.Constraint
-		existing    []int // existing store/node ID
-		expID       int   // expected store/node ID on allocate
-		expErr      bool
-	}{
-		// The two stores in the system have attributes:
-		//  storeID=1 {"a", "ssd"}
-		//  storeID=2 {"b", "ssd"}
-		{
-			name: "positive constraints (matching store 1)",
-			constraints: []config.Constraint{
-				{Value: "a"},
-				{Value: "ssd"},
-			},
-			expID: 1,
-		},
-		{
-			name: "positive constraints (matching store 2)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "ssd"},
-			},
-			expID: 2,
-		},
-		{
-			name: "positive constraints (matching store 1) with existing replica (store 1)",
-			constraints: []config.Constraint{
-				{Value: "a"},
-				{Value: "ssd"},
-			},
-			existing: []int{1},
-			expID:    2,
-		},
-		{
-			name: "positive constraints (matching store 1) with two existing replicas",
-			constraints: []config.Constraint{
-				{Value: "a"}, /* remove these?*/
-				{Value: "ssd"},
-			},
-			existing: []int{1, 2},
-			expErr:   true,
-		},
-		{
-			name: "positive constraints (matching store 2) with two existing replicas",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "ssd"},
-			},
-			existing: []int{1, 2},
-			expErr:   true,
-		},
-		{
-			name: "required constraints (matching store 1) with existing replica (store 1)",
-			constraints: []config.Constraint{
-				{Value: "a", Type: config.Constraint_REQUIRED},
-				{Value: "ssd", Type: config.Constraint_REQUIRED},
-			},
-			existing: []int{1},
-			expErr:   true,
-		},
-		{
-			name: "required constraints (matching store 2) with exiting replica (store 2)",
-			constraints: []config.Constraint{
-				{Value: "b", Type: config.Constraint_REQUIRED},
-				{Value: "ssd", Type: config.Constraint_REQUIRED},
-			},
-			existing: []int{2},
-			expErr:   true,
-		},
-		{
-			name: "positive constraints (matching store 2) with existing replica (store 1)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "ssd"},
-			},
-			existing: []int{1},
-			expID:    2,
-		},
-		{
-			name: "positive constraints (matching store 2) with existing replica (store 2)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "ssd"},
-			},
-			existing: []int{2},
-			expID:    1,
-		},
-		{
-			name: "positive constraints (half matching store 2)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "hdd"},
-			},
-			expID: 2,
-		},
-		{
-			name: "positive constraints (half matching store 2) with existing replica (store 2)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "hdd"},
-			},
-			existing: []int{2},
-			expID:    1,
-		},
-		{
-			name: "required constraints (half matching store 2) with existing replica (store 2)",
-			constraints: []config.Constraint{
-				{Value: "b", Type: config.Constraint_REQUIRED},
-				{Value: "hdd", Type: config.Constraint_REQUIRED},
-			},
-			existing: []int{2},
-			expErr:   true,
-		},
-		{
-			name: "positive constraints (half matching store 2) with two existing replica",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "hdd"},
-			},
-			existing: []int{1, 2},
-			expErr:   true,
-		},
-		{
-			name: "positive constraints (2/3 matching store 2)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "ssd"},
-				{Value: "gpu"},
-			},
-			expID: 2,
-		},
-		{
-			name: "positive constraints (1/3 matching store 2)",
-			constraints: []config.Constraint{
-				{Value: "b"},
-				{Value: "hdd"},
-				{Value: "gpu"},
-			},
-			expID: 2,
-		},
-	}
-	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
-			var existing []roachpb.ReplicaDescriptor
-			for _, id := range test.existing {
-				existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(id), StoreID: roachpb.StoreID(id)})
-			}
-			result, _, err := a.AllocateTarget(
-				context.Background(),
-				config.Constraints{Constraints: test.constraints},
-				existing,
-				firstRangeInfo,
-				false,
-				false,
-			)
-			if haveErr := (err != nil); haveErr != test.expErr {
-				t.Errorf("expected error %t; got %t: %s", test.expErr, haveErr, err)
-			} else if err == nil && roachpb.StoreID(test.expID) != result.StoreID {
-				t.Errorf("expected result to have store %d; got %+v", test.expID, result)
-			}
-		})
 	}
 }
 
@@ -1573,7 +1390,6 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 			config.Constraints{},
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
-			false,
 			false,
 		)
 		if err != nil {
@@ -2917,24 +2733,16 @@ func TestAllocatorError(t *testing.T) {
 		ae       allocatorError
 		expected string
 	}{
-		{allocatorError{nil, false, 1},
-			"0 of 1 store with all attributes matching []; likely not enough nodes in cluster"},
-		{allocatorError{constraint, false, 1},
-			"0 of 1 store with all attributes matching [one]"},
-		{allocatorError{constraint, true, 1},
-			"0 of 1 store with an attribute matching [one]; likely not enough nodes in cluster"},
-		{allocatorError{constraint, false, 2},
-			"0 of 2 stores with all attributes matching [one]"},
-		{allocatorError{constraint, true, 2},
-			"0 of 2 stores with an attribute matching [one]; likely not enough nodes in cluster"},
-		{allocatorError{constraints, false, 1},
-			"0 of 1 store with all attributes matching [one two]"},
-		{allocatorError{constraints, true, 1},
-			"0 of 1 store with an attribute matching [one two]; likely not enough nodes in cluster"},
-		{allocatorError{constraints, false, 2},
-			"0 of 2 stores with all attributes matching [one two]"},
-		{allocatorError{constraints, true, 2},
-			"0 of 2 stores with an attribute matching [one two]; likely not enough nodes in cluster"},
+		{allocatorError{nil, 1},
+			"0 of 1 store with attributes matching []; likely not enough nodes in cluster"},
+		{allocatorError{constraint, 1},
+			"0 of 1 store with attributes matching [one]"},
+		{allocatorError{constraint, 2},
+			"0 of 2 stores with attributes matching [one]"},
+		{allocatorError{constraints, 1},
+			"0 of 1 store with attributes matching [one two]"},
+		{allocatorError{constraints, 2},
+			"0 of 2 stores with attributes matching [one two]"},
 	}
 
 	for i, testCase := range testCases {
@@ -2960,7 +2768,6 @@ func TestAllocatorThrottled(t *testing.T) {
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
-		false,
 	)
 	if _, ok := err.(purgatoryError); !ok {
 		t.Fatalf("expected a purgatory error, got: %v", err)
@@ -2973,7 +2780,6 @@ func TestAllocatorThrottled(t *testing.T) {
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 		false,
 	)
 	if err != nil {
@@ -2997,7 +2803,6 @@ func TestAllocatorThrottled(t *testing.T) {
 		simpleZoneConfig.Constraints,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
-		false,
 		false,
 	)
 	if _, ok := err.(purgatoryError); ok {
