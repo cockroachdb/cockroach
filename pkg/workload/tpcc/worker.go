@@ -111,6 +111,11 @@ func initializeMix(config *tpcc) error {
 }
 
 func (w *worker) run() error {
+	// TODO(dan): Remove this when the real check in Hooks.Validate is added.
+	if w.config.doWaits && w.warehouse >= w.config.warehouses {
+		return errors.New(`--wait=true expects 10 workers per warehouse`)
+	}
+
 	transactionType := rand.Intn(w.config.totalWeight)
 	weightSum := 0
 	var t tx
