@@ -212,7 +212,7 @@ CREATE TABLE y (
 
 # We utilize the types from other columns.
 
-statement error expected computed column expression to have type int, but .* has type string
+statement error expected computed column expression to have type int, but 'a' has type string
 CREATE TABLE y (
   a STRING,
   b INT AS (a) STORED
