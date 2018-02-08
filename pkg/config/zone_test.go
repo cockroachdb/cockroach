@@ -170,21 +170,23 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 			TTLSeconds: 1,
 		},
 		NumReplicas: 1,
-		Constraints: config.Constraints{
-			Constraints: []config.Constraint{
-				{
-					Type:  config.Constraint_POSITIVE,
-					Value: "foo",
-				},
-				{
-					Type:  config.Constraint_REQUIRED,
-					Key:   "duck",
-					Value: "foo",
-				},
-				{
-					Type:  config.Constraint_PROHIBITED,
-					Key:   "duck",
-					Value: "foo",
+		Constraints: []config.Constraints{
+			{
+				Constraints: []config.Constraint{
+					{
+						Type:  config.Constraint_DEPRECATED_POSITIVE,
+						Value: "foo",
+					},
+					{
+						Type:  config.Constraint_REQUIRED,
+						Key:   "duck",
+						Value: "foo",
+					},
+					{
+						Type:  config.Constraint_PROHIBITED,
+						Key:   "duck",
+						Value: "foo",
+					},
 				},
 			},
 		},
@@ -195,7 +197,7 @@ range_max_bytes: 1
 gc:
   ttlseconds: 1
 num_replicas: 1
-constraints: [foo, +duck=foo, -duck=foo]
+constraints: [[foo, +duck=foo, -duck=foo]]
 `
 
 	body, err := yaml.Marshal(original)
