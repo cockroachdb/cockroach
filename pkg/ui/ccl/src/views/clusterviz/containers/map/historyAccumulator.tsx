@@ -34,7 +34,7 @@ import { NodeHistory } from "./nodeHistory";
 
 import spinner from "assets/spinner.gif";
 
-interface NodeSimulatorProps {
+interface HistoryAccumulatorProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
   locationTree: LocationTree;
@@ -45,11 +45,11 @@ interface NodeSimulatorProps {
   refreshLocations: typeof refreshLocations;
 }
 
-interface NodeSimulatorOwnProps {
+interface HistoryAccumulatorOwnProps {
   tiers: LocalityTier[];
 }
 
-class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOwnProps, any> {
+class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps, any> {
   // TODO(couchand): use withRouter instead.
   static contextTypes = {
     router: PropTypes.object.isRequired,
@@ -82,7 +82,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
     this.props.refreshLocations();
   }
 
-  componentWillReceiveProps(props: NodeSimulatorProps & NodeSimulatorOwnProps) {
+  componentWillReceiveProps(props: HistoryAccumulatorProps & HistoryAccumulatorOwnProps) {
     this.accumulateHistory(props);
     props.refreshNodes();
     props.refreshLiveness();
@@ -121,7 +121,7 @@ const selectDataIsValid = createSelector(
 );
 
 export default connect(
-  (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
+  (state: AdminUIState, _ownProps: HistoryAccumulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
     locationTree: selectLocationTree(state),
@@ -133,4 +133,4 @@ export default connect(
     refreshLiveness,
     refreshLocations,
   },
-)(NodeSimulator);
+)(HistoryAccumulator);
