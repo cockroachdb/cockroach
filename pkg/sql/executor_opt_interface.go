@@ -74,13 +74,17 @@ func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
 	return scan, nil
 }
 
-// ConstructFilter is part of the exec.Factory interface.
-func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
+func asDataSource(n exec.Node) planDataSource {
 	plan := n.(planNode)
-	src := planDataSource{
+	return planDataSource{
 		info: &sqlbase.DataSourceInfo{SourceColumns: planColumns(plan)},
 		plan: plan,
 	}
+}
+
+// ConstructFilter is part of the exec.Factory interface.
+func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
+	src := asDataSource(n)
 	f := &filterNode{
 		source: src,
 	}
@@ -94,17 +98,12 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 func (ee *execEngine) ConstructProject(
 	n exec.Node, exprs tree.TypedExprs, colNames []string,
 ) (exec.Node, error) {
-	plan := n.(planNode)
-	cols := planColumns(plan)
-	src := planDataSource{
-		info: &sqlbase.DataSourceInfo{SourceColumns: cols},
-		plan: plan,
-	}
+	src := asDataSource(n)
 	r := &renderNode{
 		source:     src,
 		sourceInfo: sqlbase.MultiSourceInfo{src.info},
 	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(cols))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 	for i, expr := range exprs {
 		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, false /* normalizeToNonNil */)
 		col := sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
@@ -113,6 +112,33 @@ func (ee *execEngine) ConstructProject(
 		r.addRenderColumn(expr, "" /* exprStr */, col)
 	}
 	return r, nil
+}
+
+// ConstructInnerJoin is part of the exec.Factory interface.
+func (ee *execEngine) ConstructInnerJoin(
+	left, right exec.Node, onCond tree.TypedExpr,
+) (exec.Node, error) {
+	p := ee.planner
+	leftSrc := asDataSource(left)
+	rightSrc := asDataSource(right)
+	pred, _, err := p.makeJoinPredicate(
+		context.TODO(), leftSrc.info, rightSrc.info, joinTypeInner, nil, /* cond */
+	)
+	if err != nil {
+		return nil, err
+	}
+	onCond = pred.iVarHelper.Rebind(
+		onCond, false /* alsoReset */, false, /* normmalizeToNonNil */
+	)
+	// Try to harvest equality columns from the ON expression.
+	onAndExprs := splitAndExpr(p.EvalContext(), onCond, nil /* exprs */)
+	for _, e := range onAndExprs {
+		if e != tree.DBoolTrue && !pred.tryAddEqualityFilter(e, leftSrc.info, rightSrc.info) {
+			pred.onCond = mergeConj(pred.onCond, e)
+		}
+	}
+
+	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
 }
 
 // Execute is part of the exec.Engine interface.
