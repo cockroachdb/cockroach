@@ -228,20 +228,19 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 	}
 }
 
-// RefreshSpanIterate calls the passed method with the key spans of
-// requests in the batch which have the isRefreshRead or
-// isRefreshWrite flags set, meaning they cover a key or span of keys
-// which must be checked via Refresh/RefreshRange to avoid having to
-// restart a SERIALIZABLE transaction. Usually the key spans contained
-// in the requests are used, but when a response contains a ResumeSpan
-// the ResumeSpan is subtracted from the request span to provide a
-// more minimal span of keys affected by the request. The supplied
-// function is called with each span and a bool indicating whether the
-// span updates the write timestamp cache.
+// RefreshSpanIterate calls the passed function with the key spans of
+// requests in the batch which need to be refreshed. These requests
+// must be checked via Refresh/RefreshRange to avoid having to restart
+// a SERIALIZABLE transaction. Usually the key spans contained in the
+// requests are used, but when a response contains a ResumeSpan the
+// ResumeSpan is subtracted from the request span to provide a more
+// minimal span of keys affected by the request. The supplied function
+// is called with each span and a bool indicating whether the span
+// updates the write timestamp cache.
 func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool)) {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
-		if !UpdatesTimestampCache(req) {
+		if !NeedsRefresh(req) {
 			continue
 		}
 		var resp Response

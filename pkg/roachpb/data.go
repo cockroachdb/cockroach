@@ -912,9 +912,11 @@ func (t *Transaction) Update(o *Transaction) {
 	if t.Epoch < o.Epoch || t.RefreshedTimestamp.Less(o.RefreshedTimestamp) {
 		t.WriteTooOld = o.WriteTooOld
 		t.RetryOnPush = o.RetryOnPush
+		t.OrigTimestampWasObserved = o.OrigTimestampWasObserved
 	} else {
 		t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
 		t.RetryOnPush = t.RetryOnPush || o.RetryOnPush
+		t.OrigTimestampWasObserved = t.OrigTimestampWasObserved || o.OrigTimestampWasObserved
 	}
 
 	if t.Epoch < o.Epoch {
@@ -1107,7 +1109,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	ctx context.Context, pErr *Error,
 ) (bool, *Transaction) {
 	txn := pErr.GetTxn()
-	if !txn.IsSerializable() {
+	if !txn.IsSerializable() || txn.OrigTimestampWasObserved {
 		return false, nil
 	}
 	timestamp := txn.Timestamp

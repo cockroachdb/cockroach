@@ -573,6 +573,40 @@ func (ds *DistSender) initAndVerifyBatch(
 // request.
 var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 
+// splitBatchAndCheckForRefreshSpans splits the batch according to the
+// canSplitET parmeter and checks whether the final request is an
+// EndTransaction. If so, the EndTransactionRequest.NoRefreshSpans
+// flag is reset to indicate whether earlier parts of the split may
+// result in refresh spans.
+func splitBatchAndCheckForRefreshSpans(
+	ba roachpb.BatchRequest, canSplitET bool,
+) [][]roachpb.RequestUnion {
+	parts := ba.Split(canSplitET)
+	// If the final part contains an EndTransaction, we need to check
+	// whether earlier split parts contain any refresh spans and properly
+	// set the NoRefreshSpans flag on the end transaction.
+	lastPart := parts[len(parts)-1]
+	lastReq := lastPart[len(lastPart)-1].GetInner()
+	if et, ok := lastReq.(*roachpb.EndTransactionRequest); ok && et.NoRefreshSpans {
+		hasRefreshSpans := false
+		for _, part := range parts[:len(parts)-1] {
+			for _, req := range part {
+				if roachpb.NeedsRefresh(req.GetInner()) {
+					hasRefreshSpans = true
+				}
+			}
+		}
+		if hasRefreshSpans {
+			etCopy := *et
+			etCopy.NoRefreshSpans = false
+			lastPart = append([]roachpb.RequestUnion(nil), lastPart...)
+			lastPart[len(lastPart)-1].MustSetInner(&etCopy)
+			parts[len(parts)-1] = lastPart
+		}
+	}
+	return parts
+}
+
 // Send implements the batch.Sender interface. It subdivides the Batch
 // into batches admissible for sending (preventing certain illegal
 // mixtures of requests), executes each individual part (which may
@@ -615,7 +649,7 @@ func (ds *DistSender) Send(
 	if ba.Txn != nil && ba.Txn.Epoch > 0 {
 		splitET = true
 	}
-	parts := ba.Split(splitET)
+	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
 	if len(parts) > 1 && ba.MaxSpanRequestKeys != 0 {
 		// We already verified above that the batch contains only scan requests of the same type.
 		// Such a batch should never need splitting.
@@ -646,7 +680,7 @@ func (ds *DistSender) Send(
 			if len(parts) != 1 {
 				panic("EndTransaction not in last chunk of batch")
 			}
-			parts = ba.Split(true /* split ET */)
+			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
 			if len(parts) != 2 {
 				panic("split of final EndTransaction chunk resulted in != 2 parts")
 			}

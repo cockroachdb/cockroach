@@ -9086,6 +9086,12 @@ func TestReplicaLocalRetries(t *testing.T) {
 		}
 		return br.Timestamp, nil
 	}
+	get := func(key string) (hlc.Timestamp, error) {
+		var ba roachpb.BatchRequest
+		get := getArgs(roachpb.Key(key))
+		ba.Add(&get)
+		return send(ba)
+	}
 	put := func(key, val string) (hlc.Timestamp, error) {
 		var ba roachpb.BatchRequest
 		put := putArgs(roachpb.Key(key), []byte(val))
@@ -9237,6 +9243,64 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return
 			},
 			expTSCUpdateKeys: []string{"g1", "g2", "g3"},
+		},
+		// Serializable transaction will commit with forwarded timestamp if no refresh spans.
+		{
+			name: "serializable commit with forwarded timestamp",
+			setupFn: func() (hlc.Timestamp, error) {
+				if _, err := put("h", "put"); err != nil {
+					return hlc.Timestamp{}, err
+				}
+				return get("h")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				txn := newTxn("h", ts.Prev())
+				// Send begin transaction first.
+				ba.Txn = txn
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				ba.Add(&bt)
+				if _, err := send(ba); err != nil {
+					panic(err)
+				}
+				// Send the remainder of the transaction in another batch.
+				expTS = ts.Next()
+				ba = roachpb.BatchRequest{}
+				ba.Txn = txn
+				cput := cPutArgs(ba.Txn.Key, []byte("cput"), []byte("put"))
+				ba.Add(&cput)
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				ba.Add(&et)
+				return
+			},
+			expTSCUpdateKeys: []string{"h"},
+		},
+		// Serializable transaction will commit with WriteTooOld flag if no refresh spans.
+		{
+			name: "serializable commit with write-too-old flag",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("i", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				txn := newTxn("i", ts.Prev())
+				// Send begin transaction first.
+				ba.Txn = txn
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				ba.Add(&bt)
+				if _, err := send(ba); err != nil {
+					panic(err)
+				}
+				// Send the remainder of the transaction in another batch.
+				expTS = ts.Next()
+				ba = roachpb.BatchRequest{}
+				ba.Txn = txn
+				put := putArgs(ba.Txn.Key, []byte("newput"))
+				ba.Add(&put)
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				ba.Add(&et)
+				return
+			},
 		},
 	}
 
