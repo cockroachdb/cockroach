@@ -6,9 +6,8 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-import PropTypes from "prop-types";
 import React from "react";
-import { InjectedRouter, RouterState } from "react-router";
+import { withRouter, WithRouterProps } from "react-router";
 
 import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
@@ -22,16 +21,11 @@ interface LocalityViewProps {
   liveness: { [id: string]: LivenessStatus };
 }
 
-export class LocalityView extends React.Component<LocalityViewProps, any> {
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState };
-
+class LocalityView extends React.Component<LocalityViewProps & WithRouterProps, any> {
   onClick = () => {
     const localityTree = this.props.localityTree;
     const destination = CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(localityTree.tiers);
-    this.context.router.push(destination);
+    this.props.router.push(destination);
   }
 
   render() {
@@ -52,3 +46,7 @@ export class LocalityView extends React.Component<LocalityViewProps, any> {
     );
   }
 }
+
+const localityViewWithRouter = withRouter(LocalityView);
+
+export { localityViewWithRouter as LocalityView };
