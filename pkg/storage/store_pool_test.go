@@ -341,7 +341,7 @@ func TestStoreListFilter(t *testing.T) {
 			Constraints: []config.Constraint{
 				{Type: config.Constraint_REQUIRED, Key: "region", Value: "us-west"},
 				{Type: config.Constraint_REQUIRED, Value: "MustMatch"},
-				{Type: config.Constraint_POSITIVE, Value: "MatchingOptional"},
+				{Type: config.Constraint_DEPRECATED_POSITIVE, Value: "MatchingOptional"},
 				{Type: config.Constraint_PROHIBITED, Value: "MustNotMatch"},
 			},
 		},

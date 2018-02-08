@@ -57,8 +57,8 @@ var simpleZoneConfig = config.ZoneConfig{
 	Constraints: []config.Constraints{
 		{
 			Constraints: []config.Constraint{
-				{Value: "a"},
-				{Value: "ssd"},
+				{Value: "a", Type: config.Constraint_REQUIRED},
+				{Value: "ssd", Type: config.Constraint_REQUIRED},
 			},
 		},
 	},
@@ -67,7 +67,7 @@ var simpleZoneConfig = config.ZoneConfig{
 var multiDCConfig = config.ZoneConfig{
 	NumReplicas: 2,
 	Constraints: []config.Constraints{
-		{Constraints: []config.Constraint{{Value: "ssd"}}},
+		{Constraints: []config.Constraint{{Value: "ssd", Type: config.Constraint_REQUIRED}}},
 	},
 }
 
@@ -412,7 +412,7 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 		t.Fatal(err)
 	}
 	if result.Node.NodeID != 2 || result.StoreID != 2 {
-		t.Errorf("expected NodeID 2 and StoreID 2: %+v", result)
+		t.Errorf("expected NodeID 2 and StoreID 2; got %+v", result)
 	}
 }
 
@@ -504,8 +504,8 @@ func TestAllocatorExistingReplica(t *testing.T) {
 		[]config.Constraints{
 			{
 				Constraints: []config.Constraint{
-					{Value: "a"},
-					{Value: "hdd"},
+					{Value: "a", Type: config.Constraint_REQUIRED},
+					{Value: "hdd", Type: config.Constraint_REQUIRED},
 				},
 			},
 		},
@@ -1920,7 +1920,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -1944,7 +1944,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -1978,7 +1978,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2012,7 +2012,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2041,7 +2041,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2070,7 +2070,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2109,7 +2109,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2143,7 +2143,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2184,7 +2184,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2213,7 +2213,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2242,7 +2242,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2732,8 +2732,17 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 func TestAllocatorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraint := []config.Constraints{{Constraints: []config.Constraint{{Value: "one"}}}}
-	constraints := []config.Constraints{{Constraints: []config.Constraint{{Value: "one"}, {Value: "two"}}}}
+	constraint := []config.Constraints{
+		{Constraints: []config.Constraint{{Value: "one", Type: config.Constraint_REQUIRED}}},
+	}
+	constraints := []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Value: "one", Type: config.Constraint_REQUIRED},
+				{Value: "two", Type: config.Constraint_REQUIRED},
+			},
+		},
+	}
 
 	testCases := []struct {
 		ae       allocatorError
@@ -3044,18 +3053,17 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 			expected:   nil,
 		},
 		{
-			constraint: config.Constraint{Key: "datacenter", Value: "other", Type: config.Constraint_POSITIVE},
+			constraint: config.Constraint{Key: "datacenter", Value: "other", Type: config.Constraint_DEPRECATED_POSITIVE},
 			expected:   nil,
 		},
-		// TODO(bram): re-enable these test cases once #14163 is resolved.
-		// {
-		// 	constraint: config.Constraint{Key: "datacenter", Value: "us", Type: config.Constraint_POSITIVE},
-		// 	expected:   &stores[3].StoreID,
-		// },
-		// {
-		// 	constraint: config.Constraint{Key: "datacenter", Value: "eur", Type: config.Constraint_POSITIVE},
-		// 	expected:   &stores[4].StoreID,
-		// },
+		{
+			constraint: config.Constraint{Key: "datacenter", Value: "us", Type: config.Constraint_DEPRECATED_POSITIVE},
+			expected:   nil,
+		},
+		{
+			constraint: config.Constraint{Key: "datacenter", Value: "eur", Type: config.Constraint_DEPRECATED_POSITIVE},
+			expected:   nil,
+		},
 	}
 
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)

@@ -215,7 +215,7 @@ func (c *Constraint) FromString(short string) error {
 		c.Type = Constraint_PROHIBITED
 		short = short[1:]
 	default:
-		c.Type = Constraint_POSITIVE
+		c.Type = Constraint_DEPRECATED_POSITIVE
 	}
 	parts := strings.Split(short, "=")
 	if len(parts) == 1 {

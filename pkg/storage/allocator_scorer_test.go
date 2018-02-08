@@ -415,16 +415,16 @@ func TestConstraintCheck(t *testing.T) {
 	testCases := []struct {
 		name        string
 		constraints []config.Constraint
-		expected    map[roachpb.StoreID]int
+		expected    map[roachpb.StoreID]bool
 	}{
 		{
 			name: "required constraint",
 			constraints: []config.Constraint{
 				{Value: "b", Type: config.Constraint_REQUIRED},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa1: 0,
-				testStoreUSb:  0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
 			},
 		},
 		{
@@ -432,11 +432,11 @@ func TestConstraintCheck(t *testing.T) {
 			constraints: []config.Constraint{
 				{Key: "datacenter", Value: "us", Type: config.Constraint_REQUIRED},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreUSa1:      0,
-				testStoreUSb:       0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
 			},
 		},
 		{
@@ -444,10 +444,10 @@ func TestConstraintCheck(t *testing.T) {
 			constraints: []config.Constraint{
 				{Value: "b", Type: config.Constraint_PROHIBITED},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreEurope:    0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreEurope:    true,
 			},
 		},
 		{
@@ -455,36 +455,36 @@ func TestConstraintCheck(t *testing.T) {
 			constraints: []config.Constraint{
 				{Key: "datacenter", Value: "us", Type: config.Constraint_PROHIBITED},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreEurope: 0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreEurope: true,
 			},
 		},
 		{
-			name: "positive constraints",
+			name: "positive constraints are ignored",
 			constraints: []config.Constraint{
-				{Value: "a"},
-				{Value: "b"},
-				{Value: "c"},
+				{Value: "a", Type: config.Constraint_DEPRECATED_POSITIVE},
+				{Value: "b", Type: config.Constraint_DEPRECATED_POSITIVE},
+				{Value: "c", Type: config.Constraint_DEPRECATED_POSITIVE},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     1,
-				testStoreUSa15Dupe: 1,
-				testStoreUSa1:      2,
-				testStoreUSb:       3,
-				testStoreEurope:    0,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+				testStoreEurope:    true,
 			},
 		},
 		{
-			name: "positive locality constraints",
+			name: "positive locality constraints are ignored",
 			constraints: []config.Constraint{
-				{Key: "datacenter", Value: "eur"},
+				{Key: "datacenter", Value: "eur", Type: config.Constraint_DEPRECATED_POSITIVE},
 			},
-			expected: map[roachpb.StoreID]int{
-				testStoreUSa15:     0,
-				testStoreUSa15Dupe: 0,
-				testStoreUSa1:      0,
-				testStoreUSb:       0,
-				testStoreEurope:    1,
+			expected: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+				testStoreEurope:    true,
 			},
 		},
 	}
@@ -492,14 +492,11 @@ func TestConstraintCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid, positive := constraintsCheck(s, []config.Constraints{{Constraints: tc.constraints}})
-				expectedPositive, ok := tc.expected[s.StoreID]
+				valid := constraintsCheck(s, []config.Constraints{{Constraints: tc.constraints}})
+				ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
 					continue
-				}
-				if positive != expectedPositive {
-					t.Errorf("expected store %d to have %d positives, but got %d", s.StoreID, expectedPositive, positive)
 				}
 			}
 		})
