@@ -1159,6 +1159,8 @@ func (p *planner) makeTableDesc(
 // that can be both type-checked and examined for variable expressions.
 type dummyColumnItem struct {
 	typ types.T
+	// name is only used for error-reporting.
+	name tree.Name
 }
 
 // String implements the Stringer interface.
@@ -1168,9 +1170,7 @@ func (d *dummyColumnItem) String() string {
 
 // Format implements the NodeFormatter interface.
 func (d *dummyColumnItem) Format(ctx *tree.FmtCtx) {
-	ctx.WriteByte('<')
-	ctx.WriteString(d.typ.String())
-	ctx.WriteByte('>')
+	d.name.Format(ctx)
 }
 
 // Walk implements the Expr interface.
@@ -1372,7 +1372,7 @@ func replaceVars(
 		}
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
-		return nil, false, &dummyColumnItem{col.Type.ToDatumType()}
+		return nil, false, &dummyColumnItem{typ: col.Type.ToDatumType(), name: c.ColumnName}
 	})
 	return newExpr, colIDs, err
 }
