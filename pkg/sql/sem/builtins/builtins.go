@@ -1032,7 +1032,7 @@ CockroachDB supports the following flags:
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1054,7 +1054,7 @@ CockroachDB supports the following flags:
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1095,7 +1095,7 @@ CockroachDB supports the following flags:
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
 				if err != nil {
 					return nil, err
 				}
@@ -1119,7 +1119,7 @@ CockroachDB supports the following flags:
 			Impure:     true,
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				name := tree.MustBeDString(args[0])
-				qualifiedName, err := evalCtx.Planner.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
+				qualifiedName, err := evalCtx.Sequence.ParseQualifiedTableName(evalCtx.Ctx(), string(name))
 				if err != nil {
 					return nil, err
 				}

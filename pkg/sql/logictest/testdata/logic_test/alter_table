@@ -549,6 +549,20 @@ SELECT a,b,f FROM add_default
 statement error duplicate key value .* violates unique constraint \"add_default_g_key\"
 ALTER TABLE add_default ADD g INT UNIQUE DEFAULT 1
 
+# various default evaluation errors
+
+statement ok
+CREATE SEQUENCE initial_seq
+
+statement error cannot backfill such sequence operation
+ALTER TABLE add_default ADD g INT DEFAULT nextval('initial_seq')
+
+statement error cannot backfill such evaluated expression
+ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
+
+statement error cannot backfill such evaluated expression
+ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
+
 # Multiple columns can be added at once with heterogeneous DEFAULT usage
 statement ok
 CREATE TABLE d (a INT PRIMARY KEY)
