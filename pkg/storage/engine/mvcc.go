@@ -2004,9 +2004,12 @@ func mvccResolveWriteIntent(
 		return false, err
 	}
 	// For cases where there's no value corresponding to the key we're
-	// resolving, and this is a committed transaction, log a warning.
+	// resolving, and this is a committed transaction, log a warning if
+	// the intent txn is epoch=0. For non-zero epoch transactions, this
+	// is a common occurrence for intents which were resolved by
+	// concurrent actors, and does not benefit from a warning.
 	if !ok {
-		if intent.Status == roachpb.COMMITTED {
+		if intent.Status == roachpb.COMMITTED && intent.Txn.Epoch == 0 {
 			log.Warningf(ctx, "unable to find value for %s (%+v)",
 				intent.Key, intent.Txn)
 		}
@@ -2037,14 +2040,18 @@ func mvccResolveWriteIntent(
 			if err != nil {
 				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
 					intent.Key, intent.Txn.Timestamp, err)
-			} else if !v.IsPresent() {
-				// NB: This shouldn't happen as mvccGetMetadata returned ok=true above,
-				// but best to check.
+			} else if v == nil {
+				// This should never happen as ok is true above.
 				log.Warningf(ctx, "unable to find value for %s @ %s (%+v vs %+v)",
-					intent.Key, intent.Txn.Timestamp, meta.Txn, intent.Txn)
-			} else if v.Timestamp != intent.Txn.Timestamp {
-				log.Warningf(ctx, "unable to find value for %s @ %s: %s",
-					intent.Key, intent.Txn.Timestamp, v.Timestamp)
+					intent.Key, intent.Txn.Timestamp, meta, intent.Txn)
+			} else if v.Timestamp != intent.Txn.Timestamp && intent.Txn.Epoch == 0 {
+				// We only log here if the txn epoch is zero, as it's a
+				// common case for an intent written during an earlier
+				// epoch to have been resolved already by a concurrent
+				// reader or writer. Note that this warning can *still*
+				// be a false positive.
+				log.Warningf(ctx, "unable to find value for %s @ %s: %s (txn=%+v)",
+					intent.Key, intent.Txn.Timestamp, v.Timestamp, intent.Txn)
 			}
 		}
 		return false, nil
