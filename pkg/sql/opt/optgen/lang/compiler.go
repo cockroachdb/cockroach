@@ -27,12 +27,21 @@ type CompiledExpr struct {
 	Rules       RuleSetExpr
 	DefineTags  []string
 	defineIndex map[string]*DefineExpr
+	matchIndex  map[string][]*RuleExpr
 }
 
-// LookupDefine uses the define index to find the DefineExpr with the given
-// name.
+// LookupDefine returns the DefineExpr with the given name.
 func (c *CompiledExpr) LookupDefine(name string) *DefineExpr {
 	return c.defineIndex[name]
+}
+
+// LookupMatchingRules returns the set of rules that match the given opname at
+// the top-level, or nil if none do. For example, "InnerJoin" would match this
+// rule:
+//   [CommuteJoin]
+//   (InnerJoin $r:* $s:*) => (InnerJoin $s $r)
+func (c *CompiledExpr) LookupMatchingRules(name string) []*RuleExpr {
+	return c.matchIndex[name]
 }
 
 func (c *CompiledExpr) String() string {
@@ -78,7 +87,10 @@ type Compiler struct {
 // specified list of file paths as its input files. The Compile method
 // must be called in order to compile the input files.
 func NewCompiler(files ...string) *Compiler {
-	compiled := &CompiledExpr{defineIndex: make(map[string]*DefineExpr)}
+	compiled := &CompiledExpr{
+		defineIndex: make(map[string]*DefineExpr),
+		matchIndex:  make(map[string][]*RuleExpr),
+	}
 	return &Compiler{parser: NewParser(files...), compiled: compiled}
 }
 
@@ -157,6 +169,14 @@ func (c *Compiler) compileRules(rules RuleSetExpr) bool {
 
 		var ruleCompiler ruleCompiler
 		ruleCompiler.compile(c, rule)
+	}
+
+	// Index compiled rules by the op that they match at the top-level of the
+	// rule.
+	for _, rule := range c.compiled.Rules {
+		name := string(rule.Match.Names[0])
+		existing := c.compiled.matchIndex[name]
+		c.compiled.matchIndex[name] = append(existing, rule)
 	}
 
 	return len(c.errors) == 0
@@ -249,7 +269,7 @@ func (c *ruleCompiler) acceptRuleMatchExpr(expr Expr) Expr {
 func (c *ruleCompiler) acceptRuleReplaceExpr(expr Expr) Expr {
 	if construct, ok := expr.(*ConstructExpr); ok {
 		// Handle built-in OpName function.
-		if strName, ok := construct.OpName.(*StringExpr); ok && string(*strName) == "OpName" {
+		if strName, ok := construct.Name.(*StringExpr); ok && string(*strName) == "OpName" {
 			if len(construct.Args) > 1 {
 				src := construct.Source()
 				c.compiler.addErr(src, fmt.Errorf("too many arguments to OpName function"))
