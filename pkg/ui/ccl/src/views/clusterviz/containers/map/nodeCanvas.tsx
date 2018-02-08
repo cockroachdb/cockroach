@@ -9,8 +9,11 @@
 import _ from "lodash";
 import React from "react";
 
-import { ModalLocalitiesView } from "./modalLocalities";
+import { CircleLayout } from "./circleLayout";
+import { renderAsMap } from "./layout";
+import { MapLayout } from "./mapLayout";
 import { NodeHistory } from "./nodeHistory";
+
 import { LivenessStatus } from "src/redux/nodes";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
@@ -63,18 +66,24 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const { nodeHistories, localityTree, locationTree, liveness, tiers } = this.props;
+    const { nodeHistories, localityTree, locationTree, liveness } = this.props;
+    const { viewportSize } = this.state;
 
-    return (
-      <ModalLocalitiesView
-        nodeHistories={nodeHistories}
+    if (renderAsMap(locationTree, localityTree)) {
+      return <MapLayout
         localityTree={localityTree}
         locationTree={locationTree}
         liveness={liveness}
-        tiers={tiers}
-        viewportSize={this.state.viewportSize}
-      />
-    );
+        viewportSize={viewportSize}
+      />;
+    }
+
+    return <CircleLayout
+      localityTree={localityTree}
+      liveness={liveness}
+      nodeHistories={nodeHistories}
+      viewportSize={viewportSize}
+    />;
   }
 
   render() {
