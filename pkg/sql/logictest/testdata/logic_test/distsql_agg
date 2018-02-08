@@ -643,7 +643,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlEFrq0AQx-_vU8iclLc8XD
 query T
 SELECT JSON_AGG(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
-[1,2,3,4,5,6,7,8,9,10]
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT JSONB_AGG(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)]
@@ -653,4 +653,4 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzUlEFrq0AQx-_vU8iclLc8XD
 query T
 SELECT JSONB_AGG(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
-[1,2,3,4,5,6,7,8,9,10]
+[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]

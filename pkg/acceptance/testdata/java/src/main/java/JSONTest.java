@@ -26,6 +26,6 @@ public class JSONTest extends CockroachDBTest {
         stmt = conn.prepareStatement("SELECT j FROM x");
         ResultSet rs = stmt.executeQuery();
         rs.next();
-        Assert.assertEquals("{\"a\":\"b\"}", rs.getString(1));
+        Assert.assertEquals("{\"a\": \"b\"}", rs.getString(1));
     }
 }

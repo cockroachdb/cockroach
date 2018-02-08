@@ -157,8 +157,8 @@ index-join  0  index-join  ·      ·                                        (a,
 query IT
 SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
 ----
-1  {"a":"b"}
-7  {"a":"b","c":"d"}
+1  {"a": "b"}
+7  {"a": "b", "c": "d"}
 
 
 query TITTTTT
@@ -174,8 +174,8 @@ index-join  0  index-join  ·      ·                                           
 query IT
 SELECT * from d where b @> '{"a":{"b":[1]}}' ORDER BY a;
 ----
-4  {"a":{"b":[1]}}
-5  {"a":{"b":[1,[2]]}}
+4  {"a": {"b": [1]}}
+5  {"a": {"b": [1, [2]]}}
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a":{"b":[[2]]}}';
@@ -190,8 +190,8 @@ index-join  0  index-join  ·      ·                                           
 query IT
 SELECT * from d where b @> '{"a":{"b":[[2]]}}' ORDER BY a;
 ----
-5  {"a":{"b":[1,[2]]}}
-6  {"a":{"b":[[2]]}}
+5  {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a":{"b":true}}';
@@ -206,13 +206,13 @@ index-join  0  index-join  ·      ·                                           
 query IT
 SELECT * from d where b @> '{"a":{"b":true}}' ORDER BY a;
 ----
-8  {"a":{"b":true}}
+8  {"a": {"b": true}}
 
 query IT
 SELECT * from d where b @> '{"a":{"b":[[2]]}}' ORDER BY a;
 ----
-5  {"a":{"b":[1,[2]]}}
-6  {"a":{"b":[[2]]}}
+5  {"a": {"b": [1, [2]]}}
+6  {"a": {"b": [[2]]}}
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[1]'
@@ -227,7 +227,7 @@ index-join  0  index-join  ·      ·                        (a, b)           b=
 query IT
 SELECT * from d where b @>'[1]' ORDER BY a;
 ----
-2  [1,2,3,4,"foo"]
+2  [1, 2, 3, 4, "foo"]
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'[{"a":{"b":[1]}}]'
@@ -242,7 +242,7 @@ index-join  0  index-join  ·      ·                                           
 query IT
 SELECT * from d where b @>'[{"a":{"b":[1]}}]' ORDER BY a;
 ----
-17  [{"a":{"b":[1,[2]]}},"d"]
+17  [{"a": {"b": [1, [2]]}}, "d"]
 
 statement ok
 DELETE from d WHERE a=1;
@@ -250,7 +250,7 @@ DELETE from d WHERE a=1;
 query IT
 SELECT * from d where b @>'{"a": "b"}' ORDER BY a;
 ----
-7  {"a":"b","c":"d"}
+7  {"a": "b", "c": "d"}
 
 statement ok
 DELETE from d WHERE a=6;
@@ -258,7 +258,7 @@ DELETE from d WHERE a=6;
 query IT
 SELECT * from d where b @> '{"a":{"b":[[2]]}}' ORDER BY a;
 ----
-5  {"a":{"b":[1,[2]]}}
+5  {"a": {"b": [1, [2]]}}
 
 query IT
 SELECT * from d where b @> '"a"' ORDER BY a;
@@ -302,7 +302,7 @@ INSERT INTO d VALUES (20, '["a", "a"]')
 query IT
 SELECT * from d where b @> '["a"]' ORDER BY a;
 ----
-20  ["a","a"]
+20  ["a", "a"]
 
 statement ok
 INSERT INTO d VALUES (21, '[{"a":"a"}, {"a":"a"}]')
@@ -310,7 +310,7 @@ INSERT INTO d VALUES (21, '[{"a":"a"}, {"a":"a"}]')
 query IT
 SELECT * from d where b @> '[{"a":"a"}]' ORDER BY a;
 ----
-21  [{"a":"a"},{"a":"a"}]
+21  [{"a": "a"}, {"a": "a"}]
 
 statement ok
 INSERT INTO d VALUES (22,  '[[[["a"]]],[[["a"]]]]')
@@ -318,7 +318,7 @@ INSERT INTO d VALUES (22,  '[[[["a"]]],[[["a"]]]]')
 query IT
 SELECT * from d where b @> '[[[["a"]]]]' ORDER BY a;
 ----
-22  [[[["a"]]],[[["a"]]]]
+22  [[[["a"]]], [[["a"]]]]
 
 statement ok
 INSERT INTO d VALUES (23,  '[1,2,3,1]')
@@ -326,12 +326,12 @@ INSERT INTO d VALUES (23,  '[1,2,3,1]')
 query IT
 SELECT * from d where b @> '[[[["a"]]]]' ORDER BY a;
 ----
-22  [[[["a"]]],[[["a"]]]]
+22  [[[["a"]]], [[["a"]]]]
 
 query IT
 SELECT * from d where b->'a' = '"b"'
 ----
-7  {"a":"b","c":"d"}
+7  {"a": "b", "c": "d"}
 
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b->'a' = '"b"'

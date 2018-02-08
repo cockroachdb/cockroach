@@ -101,8 +101,8 @@ INSERT INTO t.test VALUES (10, 20);
 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"v":"20"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"20"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v": "20"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "20"`, result.Details)
 	}
 }
 
@@ -175,8 +175,8 @@ CREATE INDEX secondary ON t.test (v);
 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v": "314"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
 	}
 
 	// Run SCRUB DATABASE to make sure it also catches the problem.
@@ -291,8 +291,8 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"data":"1337"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"1337"`, result.Details)
+	} else if !strings.Contains(result.Details, `"data": "1337"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"data": "1337"`, result.Details)
 	}
 
 	// Assert the dangling index error is correct.
@@ -314,8 +314,8 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 		t.Fatalf("expected primaryKey %q, got %q", "(10)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"data":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"data":"314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"data": "314"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"data": "314"`, result.Details)
 	}
 }
 
@@ -400,9 +400,9 @@ INSERT INTO t.test VALUES (10, 2);
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
 	} else if !strings.Contains(result.Details,
-		`{"constraint_name":"check_v","row_data":{"k":"10","v":"0"}}`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s",
-			`{"constraint_name":"check_v","row_data":{"k":"10","v":"0"}}`,
+		`{"constraint_name": "check_v", "row_data": {"k": "10", "v": "0"}}`) {
+		t.Fatalf("expected error details to contain `%s`, got %s",
+			`{"constraint_name": "check_v", "row_data": {"k": "10", "v": "0"}}`,
 			result.Details)
 	}
 }
@@ -510,9 +510,9 @@ INSERT INTO t.child VALUES (10, 314);
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
 	} else if !strings.Contains(result.Details,
-		`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"10","parent_id":"0"}}`) {
-		t.Fatalf("expected erorr details to contain %s, got %s",
-			`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"10","parent_id":"0"}}`,
+		`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "10", "parent_id": "0"}}`) {
+		t.Fatalf("expected error details to contain %s, got %s",
+			`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "10", "parent_id": "0"}}`,
 			result.Details)
 	}
 }
@@ -618,9 +618,9 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
 	} else if !strings.Contains(result.Details,
-		`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"11","parent_id":"1337","parent_id2":"NULL"}}`) {
-		t.Fatalf("expected erorr details to contain %s, got %s",
-			`{"constraint_name":"fk_parent_id_ref_parent","row_data":{"child_id":"11","parent_id":"1337","parent_id2":"NULL"}}`,
+		`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`) {
+		t.Fatalf("expected error details to contain %s, got %s",
+			`{"constraint_name": "fk_parent_id_ref_parent", "row_data": {"child_id": "11", "parent_id": "1337", "parent_id2": "NULL"}}`,
 			result.Details)
 	}
 }
@@ -698,10 +698,10 @@ INSERT INTO t.test VALUES (217, 314);
 		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"<unset>"`, result.Details)
+	} else if !strings.Contains(result.Details, `"k": "217"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v": "<unset>"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "<unset>"`, result.Details)
 	}
 }
 
@@ -788,12 +788,12 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
-	} else if !strings.Contains(result.Details, `"b":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.Details)
+	} else if !strings.Contains(result.Details, `"k": "217"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v": "314"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
 	}
 }
 
@@ -905,12 +905,12 @@ CREATE TABLE t.test (
 		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
-	} else if !strings.Contains(result.Details, `"b":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.Details)
+	} else if !strings.Contains(result.Details, `"k": "217"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v": "314"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
 	}
 }
 
@@ -998,11 +998,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 		t.Fatalf("expected primaryKey %q, got %q", "(217)", result.PrimaryKey)
 	} else if result.Repaired {
 		t.Fatalf("expected repaired %v, got %v", false, result.Repaired)
-	} else if !strings.Contains(result.Details, `"k":"217"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"k":"217"`, result.Details)
-	} else if !strings.Contains(result.Details, `"v":"314"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"v":"314"`, result.Details)
-	} else if !strings.Contains(result.Details, `"b":"<unset>"`) {
-		t.Fatalf("expected erorr details to contain `%s`, got %s", `"b":"<unset>"`, result.Details)
+	} else if !strings.Contains(result.Details, `"k": "217"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"k": "217"`, result.Details)
+	} else if !strings.Contains(result.Details, `"v": "314"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"v": "314"`, result.Details)
+	} else if !strings.Contains(result.Details, `"b": "<unset>"`) {
+		t.Fatalf("expected error details to contain `%s`, got %s", `"b": "<unset>"`, result.Details)
 	}
 }
