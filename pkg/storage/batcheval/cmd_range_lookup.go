@@ -29,17 +29,17 @@ import (
 )
 
 func init() {
-	RegisterCommand(roachpb.RangeLookup, declareKeysRangeLookup, RangeLookup)
+	RegisterCommand(roachpb.DeprecatedRangeLookup, declareKeysDeprecatedRangeLookup, DeprecatedRangeLookup)
 }
 
-func declareKeysRangeLookup(
+func declareKeysDeprecatedRangeLookup(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	DefaultDeclareKeys(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 }
 
-// RangeLookup is used to look up RangeDescriptors - a RangeDescriptor
+// DeprecatedRangeLookup is used to look up RangeDescriptors - a RangeDescriptor
 // is a metadata structure which describes the key range and replica locations
 // of a distinct range in the cluster.
 //
@@ -72,13 +72,13 @@ func declareKeysRangeLookup(
 // are likely to be desired by their current workload. The Reverse flag
 // specifies whether descriptors are prefetched in descending or ascending
 // order.
-func RangeLookup(
+func DeprecatedRangeLookup(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
 	log.Event(ctx, "RangeLookup")
-	args := cArgs.Args.(*roachpb.RangeLookupRequest)
+	args := cArgs.Args.(*roachpb.DeprecatedRangeLookupRequest)
 	h := cArgs.Header
-	reply := resp.(*roachpb.RangeLookupResponse)
+	reply := resp.(*roachpb.DeprecatedRangeLookupResponse)
 
 	key, err := keys.Addr(args.Key)
 	if err != nil {

@@ -487,7 +487,7 @@ func (*PushTxnRequest) Method() Method { return PushTxn }
 func (*QueryTxnRequest) Method() Method { return QueryTxn }
 
 // Method implements the Request interface.
-func (*RangeLookupRequest) Method() Method { return RangeLookup }
+func (*DeprecatedRangeLookupRequest) Method() Method { return DeprecatedRangeLookup }
 
 // Method implements the Request interface.
 func (*ResolveIntentRequest) Method() Method { return ResolveIntent }
@@ -670,7 +670,7 @@ func (qtr *QueryTxnRequest) ShallowCopy() Request {
 }
 
 // ShallowCopy implements the Request interface.
-func (rlr *RangeLookupRequest) ShallowCopy() Request {
+func (rlr *DeprecatedRangeLookupRequest) ShallowCopy() Request {
 	shallowCopy := *rlr
 	return &shallowCopy
 }
@@ -986,21 +986,21 @@ func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsT
 // EndTransaction updates the write timestamp cache to prevent
 // replays. Replays for the same transaction key and timestamp will
 // have Txn.WriteTooOld=true and must retry on EndTransaction.
-func (*EndTransactionRequest) flags() int      { return isWrite | isTxn | isAlone | updatesWriteTSCache }
-func (*AdminSplitRequest) flags() int          { return isAdmin | isAlone }
-func (*AdminMergeRequest) flags() int          { return isAdmin | isAlone }
-func (*AdminTransferLeaseRequest) flags() int  { return isAdmin | isAlone }
-func (*AdminChangeReplicasRequest) flags() int { return isAdmin | isAlone }
-func (*HeartbeatTxnRequest) flags() int        { return isWrite | isTxn }
-func (*GCRequest) flags() int                  { return isWrite | isRange }
-func (*PushTxnRequest) flags() int             { return isWrite | isAlone }
-func (*QueryTxnRequest) flags() int            { return isRead | isAlone }
-func (*RangeLookupRequest) flags() int         { return isRead }
-func (*ResolveIntentRequest) flags() int       { return isWrite }
-func (*ResolveIntentRangeRequest) flags() int  { return isWrite | isRange }
-func (*NoopRequest) flags() int                { return isRead } // slightly special
-func (*TruncateLogRequest) flags() int         { return isWrite }
-func (*MergeRequest) flags() int               { return isWrite }
+func (*EndTransactionRequest) flags() int        { return isWrite | isTxn | isAlone | updatesWriteTSCache }
+func (*AdminSplitRequest) flags() int            { return isAdmin | isAlone }
+func (*AdminMergeRequest) flags() int            { return isAdmin | isAlone }
+func (*AdminTransferLeaseRequest) flags() int    { return isAdmin | isAlone }
+func (*AdminChangeReplicasRequest) flags() int   { return isAdmin | isAlone }
+func (*HeartbeatTxnRequest) flags() int          { return isWrite | isTxn }
+func (*GCRequest) flags() int                    { return isWrite | isRange }
+func (*PushTxnRequest) flags() int               { return isWrite | isAlone }
+func (*QueryTxnRequest) flags() int              { return isRead | isAlone }
+func (*DeprecatedRangeLookupRequest) flags() int { return isRead }
+func (*ResolveIntentRequest) flags() int         { return isWrite }
+func (*ResolveIntentRangeRequest) flags() int    { return isWrite | isRange }
+func (*NoopRequest) flags() int                  { return isRead } // slightly special
+func (*TruncateLogRequest) flags() int           { return isWrite }
+func (*MergeRequest) flags() int                 { return isWrite }
 
 func (*RequestLeaseRequest) flags() int {
 	return isWrite | isAlone | skipLeaseCheck

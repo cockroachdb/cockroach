@@ -378,17 +378,18 @@ func lookupRangeRevScan(
 }
 
 // LegacyRangeLookup performs the same operation as RangeLookup, but does so
-// using a RangeLookupRequest. This request type does not support split meta2
-// splits, and as such, should not be used unless cluster.VersionMeta2Splits is
-// active. It is used for compatibility on clusters that do not have that
-// version active and therefore cannot perform RangeLookup scans with
-// ScanRequests because ScanRequest.ReturnIntents was not available yet.
+// using a DeprecatedRangeLookupRequest. This request type does not support
+// split meta2 splits, and as such, should not be used unless
+// cluster.VersionMeta2Splits is active. It is used for compatibility on
+// clusters that do not have that version active and therefore cannot perform
+// RangeLookup scans with ScanRequests because ScanRequest.ReturnIntents was not
+// available yet.
 //
 // LegacyRangeLookup does not work in all cases with split meta2 ranges. This is
-// because a RangeLookupRequest can return no matching RangeDescriptors when
-// meta2 ranges split. Remember that the range addressing keys are generated
-// from the end key of a range descriptor, not the start key. With this in mind,
-// consider the scenario:
+// because a DeprecatedRangeLookupRequest can return no matching
+// RangeDescriptors when meta2 ranges split. Remember that the range addressing
+// keys are generated from the end key of a range descriptor, not the start key.
+// With this in mind, consider the scenario:
 //
 //   range 1 [/meta2/a, /meta2/d):
 //     b -> [a, b)
@@ -415,7 +416,7 @@ func lookupRangeRevScan(
 // RangeMetaKey(desc.StartKey) and only allow meta2 split boundaries at
 // RangeMetaKey(existingSplitBoundary).
 //
-// TODO: remove in version 1.3.
+// TODO(nvanbenschoten): remove in version 2.1.
 func LegacyRangeLookup(
 	ctx context.Context,
 	sender Sender,
@@ -431,7 +432,7 @@ func LegacyRangeLookup(
 
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = rc
-	ba.Add(&roachpb.RangeLookupRequest{
+	ba.Add(&roachpb.DeprecatedRangeLookupRequest{
 		Span: roachpb.Span{
 			Key: keys.RangeMetaKey(rkey).AsRawKey(),
 		},
@@ -446,7 +447,7 @@ func LegacyRangeLookup(
 	if br.Error != nil {
 		return nil, nil, br.Error.GoError()
 	}
-	resp := br.Responses[0].GetInner().(*roachpb.RangeLookupResponse)
+	resp := br.Responses[0].GetInner().(*roachpb.DeprecatedRangeLookupResponse)
 	return resp.Ranges, resp.PrefetchedRanges, nil
 }
 
@@ -454,7 +455,7 @@ func LegacyRangeLookup(
 // using either RangeLookup or LegacyRangeLookup, depending on the provided
 // cluster version.
 //
-// TODO: remove in version 1.3.
+// TODO(nvanbenschoten): remove in version 2.1.
 func RangeLookupForVersion(
 	ctx context.Context,
 	st *cluster.Settings,

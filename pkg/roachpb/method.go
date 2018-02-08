@@ -91,9 +91,9 @@ const (
 	PushTxn
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
-	// RangeLookup looks up range descriptors, containing the
+	// DeprecatedRangeLookup looks up range descriptors, containing the
 	// locations of replicas for the range containing the specified key.
-	RangeLookup
+	DeprecatedRangeLookup
 	// ResolveIntent resolves existing write intents for a key.
 	ResolveIntent
 	// ResolveIntentRange resolves existing write intents for a key range.
