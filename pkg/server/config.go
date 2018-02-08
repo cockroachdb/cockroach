@@ -102,7 +102,7 @@ func (mo *MaxOffsetType) Set(v string) error {
 		return err
 	}
 	if nanos > maximumMaxClockOffset {
-		return errors.Errorf("%s is not a valid MaxOffset", v)
+		return errors.Errorf("%s is not a valid max offset, must be less than %v.", v, maximumMaxClockOffset)
 	}
 	*mo = MaxOffsetType(nanos)
 	return nil
