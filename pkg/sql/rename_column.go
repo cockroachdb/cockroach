@@ -127,7 +127,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 
 	// Rename the column in computed columns.
 	for i := range tableDesc.Columns {
-		if tableDesc.Columns[i].ComputeExpr != nil {
+		if tableDesc.Columns[i].IsComputed() {
 			newExpr, err := renameIn(*tableDesc.Columns[i].ComputeExpr)
 			if err != nil {
 				return nil, err
