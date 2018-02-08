@@ -516,7 +516,7 @@ func (sl StoreList) filter(constraints []config.Constraints) StoreList {
 	}
 	var filteredDescs []roachpb.StoreDescriptor
 	for _, store := range sl.stores {
-		if ok, _ := constraintsCheck(store, constraints); ok {
+		if ok := constraintsCheck(store, constraints); ok {
 			filteredDescs = append(filteredDescs, store)
 		}
 	}

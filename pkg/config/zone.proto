@@ -39,10 +39,10 @@ message Constraint {
   option (gogoproto.goproto_stringer) = false;
 
   enum Type {
-    // POSITIVE will attempt to ensure all stores the replicas are on has this
-    // constraint.
-    POSITIVE = 0;
-    // REQUIRED is like POSITIVE except replication will fail if not satisfied.
+    // DEPRECATED_POSITIVE has no effect on a replica's placement.
+    DEPRECATED_POSITIVE = 0;
+    // REQUIRED ensures all replicas are placed on stores that match the
+    // constraint. Replication will fail if there aren't any such stores.
     REQUIRED = 1;
     // PROHIBITED will prevent replicas from having this key, value.
     PROHIBITED = 2;

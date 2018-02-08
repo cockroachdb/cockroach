@@ -215,7 +215,8 @@ func (c *Constraint) FromString(short string) error {
 		c.Type = Constraint_PROHIBITED
 		short = short[1:]
 	default:
-		c.Type = Constraint_POSITIVE
+		return errors.New(
+			"constraints must be either required (prefixed with '+') or prohibited (prefixed with '-')")
 	}
 	parts := strings.Split(short, "=")
 	if len(parts) == 1 {
