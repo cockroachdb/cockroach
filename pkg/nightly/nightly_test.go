@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
@@ -39,6 +40,14 @@ var cockroach = flag.String("cockroach", "", "Path to cockroach binary to use")
 var workload = flag.String("workload", "", "Path to workload binary to use")
 var clusterID = flag.String("clusterid", "", "An identifier to use in the test cluster's name")
 
+func checkTestTimeout(t testing.TB) {
+	f := flag.Lookup("test.timeout")
+	d := f.Value.(flag.Getter).Get().(time.Duration)
+	if d > 0 && d < time.Hour {
+		t.Fatalf("-timeout is too short: %s", d)
+	}
+}
+
 func maybeSkip(t testing.TB) {
 	if !*slow {
 		if testing.Verbose() {
@@ -46,6 +55,8 @@ func maybeSkip(t testing.TB) {
 		}
 		t.Skip()
 	}
+
+	checkTestTimeout(t)
 }
 
 func runCmd(l *logger, args []string) error {
@@ -97,8 +108,6 @@ func makeClusterName(t testing.TB) string {
 }
 
 func TestSingleDC(t *testing.T) {
-	// TODO(benesch,peter): Warn if the test timeout is too low.
-
 	maybeSkip(t)
 	t.Parallel()
 
