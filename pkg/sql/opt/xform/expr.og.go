@@ -56,6 +56,18 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0 + int(projectionsExpr.elems().Length)
 	},
 
+	// AggregationsOp
+	func(ev *ExprView) int {
+		aggregationsExpr := (*aggregationsExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(aggregationsExpr.aggs().Length)
+	},
+
+	// GroupingsOp
+	func(ev *ExprView) int {
+		groupingsExpr := (*groupingsExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(groupingsExpr.elems().Length)
+	},
+
 	// FiltersOp
 	func(ev *ExprView) int {
 		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
@@ -475,6 +487,28 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		switch n {
 		default:
 			list := ev.mem.lookupList(projectionsExpr.elems())
+			return list[n-0]
+		}
+	},
+
+	// AggregationsOp
+	func(ev *ExprView, n int) opt.GroupID {
+		aggregationsExpr := (*aggregationsExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		default:
+			list := ev.mem.lookupList(aggregationsExpr.aggs())
+			return list[n-0]
+		}
+	},
+
+	// GroupingsOp
+	func(ev *ExprView, n int) opt.GroupID {
+		groupingsExpr := (*groupingsExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		default:
+			list := ev.mem.lookupList(groupingsExpr.elems())
 			return list[n-0]
 		}
 	},
@@ -1500,6 +1534,18 @@ var privateLookup = [...]privateLookupFunc{
 		return projectionsExpr.cols()
 	},
 
+	// AggregationsOp
+	func(ev *ExprView) opt.PrivateID {
+		aggregationsExpr := (*aggregationsExpr)(ev.mem.lookupExpr(ev.loc))
+		return aggregationsExpr.cols()
+	},
+
+	// GroupingsOp
+	func(ev *ExprView) opt.PrivateID {
+		groupingsExpr := (*groupingsExpr)(ev.mem.lookupExpr(ev.loc))
+		return groupingsExpr.cols()
+	},
+
 	// FiltersOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
@@ -1866,6 +1912,8 @@ var isScalarLookup = [...]bool{
 	true,  // PlaceholderOp
 	true,  // TupleOp
 	true,  // ProjectionsOp
+	true,  // AggregationsOp
+	true,  // GroupingsOp
 	true,  // FiltersOp
 	true,  // ExistsOp
 	true,  // AndOp
@@ -1949,6 +1997,8 @@ var isBooleanLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	true,  // AndOp
@@ -2032,6 +2082,8 @@ var isComparisonLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2115,6 +2167,8 @@ var isBinaryLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2198,6 +2252,8 @@ var isUnaryLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2281,6 +2337,8 @@ var isRelationalLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2364,6 +2422,8 @@ var isJoinLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2447,6 +2507,8 @@ var isJoinApplyLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2530,6 +2592,8 @@ var isEnforcerLookup = [...]bool{
 	false, // PlaceholderOp
 	false, // TupleOp
 	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
 	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
@@ -2804,6 +2868,56 @@ func (m *memoExpr) asProjections() *projectionsExpr {
 		return nil
 	}
 	return (*projectionsExpr)(m)
+}
+
+type aggregationsExpr memoExpr
+
+func makeAggregationsExpr(aggs opt.ListID, cols opt.PrivateID) aggregationsExpr {
+	return aggregationsExpr{op: opt.AggregationsOp, state: exprState{aggs.Offset, aggs.Length, uint32(cols)}}
+}
+
+func (e *aggregationsExpr) aggs() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *aggregationsExpr) cols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *aggregationsExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asAggregations() *aggregationsExpr {
+	if m.op != opt.AggregationsOp {
+		return nil
+	}
+	return (*aggregationsExpr)(m)
+}
+
+type groupingsExpr memoExpr
+
+func makeGroupingsExpr(elems opt.ListID, cols opt.PrivateID) groupingsExpr {
+	return groupingsExpr{op: opt.GroupingsOp, state: exprState{elems.Offset, elems.Length, uint32(cols)}}
+}
+
+func (e *groupingsExpr) elems() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *groupingsExpr) cols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *groupingsExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asGroupings() *groupingsExpr {
+	if m.op != opt.GroupingsOp {
+		return nil
+	}
+	return (*groupingsExpr)(m)
 }
 
 type filtersExpr memoExpr

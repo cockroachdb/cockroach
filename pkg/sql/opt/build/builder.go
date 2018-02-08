@@ -544,14 +544,14 @@ func (b *Builder) buildSelectClause(
 		// Any aggregate columns that were discovered would have been added to
 		// the grouping scope.
 		aggCols := groupingsScope.getAggregateCols()
-		aggList := b.constructProjectionList(groupingsScope.groupby.aggs, aggCols)
+		aggList := b.constructList(opt.AggregationsOp, groupingsScope.groupby.aggs, aggCols)
 
 		var groupingCols []columnProps
 		if groupings != nil {
 			groupingCols = groupingsScope.cols
 		}
 
-		groupingList := b.constructProjectionList(groupings, groupingCols)
+		groupingList := b.constructList(opt.GroupingsOp, groupings, groupingCols)
 		out = b.factory.ConstructGroupBy(out, groupingList, aggList)
 
 		// Wrap with having filter if it exists.
@@ -573,7 +573,8 @@ func (b *Builder) buildSelectClause(
 
 	// Wrap with project operator if it exists.
 	if projections != nil {
-		out = b.factory.ConstructProject(out, b.constructProjectionList(projections, projectionsScope.cols))
+		p := b.constructList(opt.ProjectionsOp, projections, projectionsScope.cols)
+		out = b.factory.ConstructProject(out, p)
 		outScope = projectionsScope
 	}
 
@@ -1064,14 +1065,29 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 	return &scope.cols[len(scope.cols)-1]
 }
 
-func (b *Builder) constructProjectionList(items []opt.GroupID, cols []columnProps) opt.GroupID {
+// constructList invokes the factory to create one of several operators that
+// contain a list of groups: ProjectionsOp, AggregationsOp, and GroupingsOp.
+func (b *Builder) constructList(
+	op opt.Operator, items []opt.GroupID, cols []columnProps,
+) opt.GroupID {
 	var colList opt.ColList
 	for i := range cols {
 		colList.Set(i, int(cols[i].index))
 	}
-	return b.factory.ConstructProjections(
-		b.factory.InternList(items), b.factory.InternPrivate(&colList),
-	)
+
+	list := b.factory.InternList(items)
+	private := b.factory.InternPrivate(&colList)
+
+	switch op {
+	case opt.ProjectionsOp:
+		return b.factory.ConstructProjections(list, private)
+	case opt.AggregationsOp:
+		return b.factory.ConstructAggregations(list, private)
+	case opt.GroupingsOp:
+		return b.factory.ConstructGroupings(list, private)
+	}
+
+	panic(fmt.Sprintf("unexpected operator: %s", op))
 }
 
 // Builder implements the IndexedVarContainer interface so it can be

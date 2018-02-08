@@ -14,6 +14,8 @@ const (
 	PlaceholderOp
 	TupleOp
 	ProjectionsOp
+	AggregationsOp
+	GroupingsOp
 	FiltersOp
 	ExistsOp
 	AndOp
@@ -93,9 +95,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsfiltersexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainscontained-bybitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsgroupingsfiltersexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainscontained-bybitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 71, 77, 80, 82, 85, 87, 89, 91, 93, 95, 97, 99, 105, 109, 117, 123, 133, 143, 157, 166, 179, 190, 205, 207, 213, 221, 233, 239, 244, 250, 254, 259, 263, 266, 275, 278, 281, 287, 294, 301, 310, 320, 334, 349, 359, 370, 386, 394, 398, 404, 410, 417, 427, 436, 446, 455, 464, 473, 489, 504, 520, 535, 550, 565, 573, 578, 587, 593, 597, 604}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 85, 92, 98, 101, 103, 106, 108, 110, 112, 114, 116, 118, 120, 126, 130, 138, 144, 154, 164, 178, 187, 200, 211, 226, 228, 234, 242, 254, 260, 265, 271, 275, 280, 284, 287, 296, 299, 302, 308, 315, 322, 331, 341, 355, 370, 380, 391, 407, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 618, 625}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -106,6 +108,8 @@ var ScalarOperators = [...]Operator{
 	PlaceholderOp,
 	TupleOp,
 	ProjectionsOp,
+	AggregationsOp,
+	GroupingsOp,
 	FiltersOp,
 	ExistsOp,
 	AndOp,

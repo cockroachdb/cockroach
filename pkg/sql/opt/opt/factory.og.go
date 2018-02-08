@@ -32,6 +32,8 @@ type Factory interface {
 	ConstructPlaceholder(value PrivateID) GroupID
 	ConstructTuple(elems ListID) GroupID
 	ConstructProjections(elems ListID, cols PrivateID) GroupID
+	ConstructAggregations(aggs ListID, cols PrivateID) GroupID
+	ConstructGroupings(elems ListID, cols PrivateID) GroupID
 	ConstructFilters(conditions ListID) GroupID
 	ConstructExists(input GroupID) GroupID
 	ConstructAnd(left GroupID, right GroupID) GroupID
