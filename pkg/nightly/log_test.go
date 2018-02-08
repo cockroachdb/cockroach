@@ -32,7 +32,7 @@ import (
 type logger struct {
 	name           string
 	file           *os.File
-	stdout, stderr dualLogger
+	stdout, stderr io.Writer
 }
 
 func newLogger(name, filename string, stdout, stderr io.Writer) (*logger, error) {
@@ -45,8 +45,8 @@ func newLogger(name, filename string, stdout, stderr io.Writer) (*logger, error)
 	return &logger{
 		name:   name,
 		file:   f,
-		stdout: dualLogger{prefix: p, shared: stdout, dedicated: f},
-		stderr: dualLogger{prefix: p, shared: stderr, dedicated: f},
+		stdout: &dualLogger{prefix: p, shared: stdout, dedicated: f},
+		stderr: &dualLogger{prefix: p, shared: stderr, dedicated: f},
 	}, nil
 }
 
@@ -54,17 +54,25 @@ func rootLogger(name string) (*logger, error) {
 	return newLogger(name, name, os.Stdout, os.Stderr)
 }
 
+func stdLogger(name string) *logger {
+	return &logger{
+		name:   "std",
+		stdout: os.Stdout,
+		stderr: os.Stderr,
+	}
+}
+
 func (l *logger) childLogger(name string) (*logger, error) {
 	filename := l.name + "_" + name
-	return newLogger(name, filename, &l.stdout, &l.stderr)
+	return newLogger(name, filename, l.stdout, l.stderr)
 }
 
 func (l *logger) printf(f string, args ...interface{}) {
-	fmt.Fprintf(&l.stdout, f, args...)
+	fmt.Fprintf(l.stdout, f, args...)
 }
 
 func (l *logger) errorf(f string, args ...interface{}) {
-	fmt.Fprintf(&l.stderr, f, args...)
+	fmt.Fprintf(l.stderr, f, args...)
 }
 
 type dualLogger struct {
