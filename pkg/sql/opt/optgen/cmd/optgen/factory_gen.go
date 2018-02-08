@@ -50,6 +50,9 @@ func (g *factoryGen) genConstructFuncs() {
 	for _, define := range filterEnforcerDefines(g.compiled.Defines) {
 		varName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
 
+		format := "// Construct%s constructs an expression for the %s operator.\n"
+		g.w.writeIndent(format, define.Name, define.Name)
+		generateDefineComments(g.w.writer, define, string(define.Name))
 		g.w.writeIndent("func (_f *factory) Construct%s(\n", define.Name)
 
 		for _, field := range define.Fields {

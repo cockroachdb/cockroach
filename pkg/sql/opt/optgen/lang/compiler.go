@@ -234,11 +234,12 @@ func (c *ruleCompiler) expandRule(opName OpNameExpr) {
 	replace := c.rule.Replace.Visit(c.acceptRuleReplaceExpr)
 
 	newRule := &RuleExpr{
-		Src:     c.rule.Src,
-		Name:    c.rule.Name,
-		Tags:    c.rule.Tags,
-		Match:   match,
-		Replace: replace,
+		Src:      c.rule.Src,
+		Name:     c.rule.Name,
+		Comments: c.rule.Comments,
+		Tags:     c.rule.Tags,
+		Match:    match,
+		Replace:  replace,
 	}
 	c.compiled.Rules = append(c.compiled.Rules, newRule)
 }

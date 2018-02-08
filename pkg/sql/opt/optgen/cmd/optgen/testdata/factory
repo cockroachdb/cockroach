@@ -3,6 +3,7 @@
 # PrivateID args.
 #
 optgen factory test.opt
+# Not is a negate operator.
 define Not {
     Input Expr
 }
@@ -28,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructNot constructs an expression for the Not operator.
+// Not is a negate operator.
 func (_f *factory) ConstructNot(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -44,6 +47,7 @@ func (_f *factory) ConstructNot(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
 }
 
+// ConstructFuncCall constructs an expression for the FuncCall operator.
 func (_f *factory) ConstructFuncCall(
 	name opt.GroupID,
 	args opt.ListID,
@@ -111,6 +115,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructInnerJoin constructs an expression for the InnerJoin operator.
 func (_f *factory) ConstructInnerJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -190,6 +195,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructEq constructs an expression for the Eq operator.
 func (_f *factory) ConstructEq(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -217,6 +223,7 @@ func (_f *factory) ConstructEq(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
 }
 
+// ConstructNe constructs an expression for the Ne operator.
 func (_f *factory) ConstructNe(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -300,6 +307,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructFunc constructs an expression for the Func operator.
 func (_f *factory) ConstructFunc(
 	name opt.GroupID,
 	args opt.ListID,
@@ -335,6 +343,7 @@ func (_f *factory) ConstructFunc(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_funcExpr)))
 }
 
+// ConstructVariable constructs an expression for the Variable operator.
 func (_f *factory) ConstructVariable(
 	col opt.PrivateID,
 ) opt.GroupID {
@@ -429,6 +438,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructSelect constructs an expression for the Select operator.
 func (_f *factory) ConstructSelect(
 	input opt.GroupID,
 	filter opt.GroupID,
@@ -475,6 +485,7 @@ func (_f *factory) ConstructSelect(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr)))
 }
 
+// ConstructInnerJoin constructs an expression for the InnerJoin operator.
 func (_f *factory) ConstructInnerJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -492,6 +503,7 @@ func (_f *factory) ConstructInnerJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
 }
 
+// ConstructFullJoin constructs an expression for the FullJoin operator.
 func (_f *factory) ConstructFullJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -509,6 +521,7 @@ func (_f *factory) ConstructFullJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr)))
 }
 
+// ConstructUnion constructs an expression for the Union operator.
 func (_f *factory) ConstructUnion(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -526,6 +539,7 @@ func (_f *factory) ConstructUnion(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr)))
 }
 
+// ConstructAnd constructs an expression for the And operator.
 func (_f *factory) ConstructAnd(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -626,6 +640,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructEq constructs an expression for the Eq operator.
 func (_f *factory) ConstructEq(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -674,6 +689,7 @@ func (_f *factory) ConstructEq(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
 }
 
+// ConstructNe constructs an expression for the Ne operator.
 func (_f *factory) ConstructNe(
 	left opt.GroupID,
 	right opt.GroupID,

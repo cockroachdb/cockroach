@@ -2663,6 +2663,8 @@ func (m *memoExpr) asSubquery() *subqueryExpr {
 	return (*subqueryExpr)(m)
 }
 
+// variableExpr is the typed scalar value of a column in the query. The private
+// field is a Metadata.ColumnIndex that references the column by index.
 type variableExpr memoExpr
 
 func makeVariableExpr(col opt.PrivateID) variableExpr {
@@ -2684,6 +2686,8 @@ func (m *memoExpr) asVariable() *variableExpr {
 	return (*variableExpr)(m)
 }
 
+// constExpr is a typed scalar constant value. The private field is a tree.Datum
+// value having any datum type that's legal in the expression's context.
 type constExpr memoExpr
 
 func makeConstExpr(value opt.PrivateID) constExpr {
@@ -2705,6 +2709,9 @@ func (m *memoExpr) asConst() *constExpr {
 	return (*constExpr)(m)
 }
 
+// trueExpr is the boolean true value that is equivalent to the tree.DBoolTrue datum
+// value. It is a separate operator to make matching and replacement simpler and
+// more efficient, as patterns can contain (trueExpr) expressions.
 type trueExpr memoExpr
 
 func makeTrueExpr() trueExpr {
@@ -2722,6 +2729,9 @@ func (m *memoExpr) asTrue() *trueExpr {
 	return (*trueExpr)(m)
 }
 
+// falseExpr is the boolean false value that is equivalent to the tree.DBoolFalse
+// datum value. It is a separate operator to make matching and replacement
+// simpler and more efficient, as patterns can contain (falseExpr) expressions.
 type falseExpr memoExpr
 
 func makeFalseExpr() falseExpr {
@@ -2781,6 +2791,10 @@ func (m *memoExpr) asTuple() *tupleExpr {
 	return (*tupleExpr)(m)
 }
 
+// projectionsExpr is a set of typed scalar expressions that will become output
+// columns for a containing relational expression, such as Project or GroupBy.
+// The private field contains the set of column indexes returned by the
+// expression, as a *ColList.
 type projectionsExpr memoExpr
 
 func makeProjectionsExpr(elems opt.ListID, cols opt.PrivateID) projectionsExpr {
@@ -3982,6 +3996,10 @@ func (m *memoExpr) asFunction() *functionExpr {
 	return (*functionExpr)(m)
 }
 
+// scanExpr returns a result set containing every row in the specified table. Rows
+// and columns are not expected to have any particular ordering. The private
+// Table field is a Metadata.TableIndex that references an optbase.Table
+// definition in the query's metadata.
 type scanExpr memoExpr
 
 func makeScanExpr(table opt.PrivateID) scanExpr {
@@ -4003,6 +4021,10 @@ func (m *memoExpr) asScan() *scanExpr {
 	return (*scanExpr)(m)
 }
 
+// valuesExpr returns a manufactured result set containing a constant number of rows
+// specified by the Rows list field. Each row must contain the same set of
+// columns in the same order. The Cols field contains the set of column indexes
+// returned by each row, as a *ColSet.
 type valuesExpr memoExpr
 
 func makeValuesExpr(rows opt.ListID, cols opt.PrivateID) valuesExpr {
@@ -4028,6 +4050,8 @@ func (m *memoExpr) asValues() *valuesExpr {
 	return (*valuesExpr)(m)
 }
 
+// selectExpr filters rows from its input result set, based on the boolean filter
+// predicate expression. Rows which do not match the filter are discarded.
 type selectExpr memoExpr
 
 func makeSelectExpr(input opt.GroupID, filter opt.GroupID) selectExpr {
@@ -4078,6 +4102,11 @@ func (m *memoExpr) asProject() *projectExpr {
 	return (*projectExpr)(m)
 }
 
+// innerJoinExpr represents creates a result set that combines columns from its left
+// and right inputs, based upon its "on" join predicate. Rows which do not match
+// the predicate are filtered. While expressions in the predicate can refer to
+// columns projected by either the left or right inputs, the inputs are not
+// allowed to refer to the other's projected columns.
 type innerJoinExpr memoExpr
 
 func makeInnerJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinExpr {
@@ -4252,6 +4281,9 @@ func (m *memoExpr) asAntiJoin() *antiJoinExpr {
 	return (*antiJoinExpr)(m)
 }
 
+// innerJoinApplyExpr has the same join semantics as InnerJoin. However, unlike
+// InnerJoin, it allows the right input to refer to columns projected by the
+// left input.
 type innerJoinApplyExpr memoExpr
 
 func makeInnerJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinApplyExpr {

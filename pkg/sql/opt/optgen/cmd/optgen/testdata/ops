@@ -1,10 +1,12 @@
 optgen ops test.opt
+# Lt is a comparison op.
 [Scalar]
 define Lt {}
 
 [Relational]
 define InnerJoinApply {}
 
+# Sort is an enforcer.
 [Enforcer]
 define Sort {}
 ----
@@ -16,13 +18,24 @@ package opt
 const (
 	UnknownOp Operator = iota
 
+	// ------------------------------------------------------------
 	// Scalar Operators
+	// ------------------------------------------------------------
+
+	// LtOp is a comparison op.
 	LtOp
 
+	// ------------------------------------------------------------
 	// Relational Operators
+	// ------------------------------------------------------------
+
 	InnerJoinApplyOp
 
+	// ------------------------------------------------------------
 	// Enforcer Operators
+	// ------------------------------------------------------------
+
+	// SortOp is an enforcer.
 	SortOp
 
 	// NumOperators tracks the total count of operators.
