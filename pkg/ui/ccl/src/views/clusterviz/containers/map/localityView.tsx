@@ -11,7 +11,7 @@ import { withRouter, WithRouterProps } from "react-router";
 
 import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
-import { generateLocalityRoute, getLeaves } from "src/util/localities";
+import { generateLocalityRoute, getLocalityLabel, getLeaves } from "src/util/localities";
 
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
@@ -30,7 +30,6 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
 
   render() {
     const { tiers } = this.props.localityTree;
-    const thisTier = tiers[tiers.length - 1];
 
     const leavesUnderMe = getLeaves(this.props.localityTree);
     const { capacityUsable, capacityUsed } = sumNodeStats(leavesUnderMe, this.props.liveness);
@@ -40,7 +39,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
         <StatsView
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
-          label={`${thisTier.key}=${thisTier.value}`}
+          label={getLocalityLabel(tiers)}
         />
       </g>
     );
