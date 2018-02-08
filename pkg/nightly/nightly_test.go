@@ -82,6 +82,7 @@ func runCmds(l *logger, cmds [][]string) error {
 func destroyCluster(t testing.TB, l *logger, clusterName string) {
 	_ = runCmd(l, []string{"roachprod", "get", clusterName, "logs",
 		filepath.Join(*artifacts, fileutil.EscapeFilename(t.Name()))})
+	unregisterCluster(clusterName)
 	if err := runCmd(l, []string{"roachprod", "destroy", clusterName}); err != nil {
 		l.errorf("%s", err)
 	}
@@ -104,6 +105,7 @@ func makeClusterName(t testing.TB) string {
 	name = strings.ToLower(name)
 	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
 	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
+	registerCluster(name)
 	return name
 }
 
