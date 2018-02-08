@@ -24,7 +24,7 @@ interface NodeViewProps {
   maxClientActivityRate: number;
 }
 
-export class NodeView extends React.Component<NodeViewProps, any> {
+export class NodeView extends React.Component<NodeViewProps> {
   render() {
     const { node, liveness } = this.props;
     const { capacityUsable, capacityUsed } = sumNodeStats([node], liveness);
