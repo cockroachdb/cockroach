@@ -476,6 +476,34 @@ func (a Allocator) RebalanceTarget(
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
+	// We're going to add another replica to the range which will change the
+	// quorum size. Verify that the number of existing live replicas is sufficient
+	// to meet the new quorum. For a range configured for 3 replicas, this will
+	// disable rebalancing if one of the replicas is on a down node. Instead,
+	// we'll have to wait for the down node to be declared dead and go through the
+	// dead-node removal dance: remove dead replica, add new replica.
+	//
+	// NB: The len(rangeInfo.Desc.Replicas) > 1 check allows rebalancing of ranges
+	// with only a single replica. This is a corner case which could happen in
+	// practice and also affects tests.
+	if len(rangeInfo.Desc.Replicas) > 1 {
+		var numLiveReplicas int
+		for _, s := range sl.stores {
+			for _, repl := range rangeInfo.Desc.Replicas {
+				if s.StoreID == repl.StoreID {
+					numLiveReplicas++
+					break
+				}
+			}
+		}
+		newQuorum := computeQuorum(len(rangeInfo.Desc.Replicas) + 1)
+		if numLiveReplicas < newQuorum {
+			// Don't rebalance as we won't be able to make quorum after the rebalance
+			// until the new replica has been caught up.
+			return nil, ""
+		}
+	}
+
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	existingCandidates, candidates := rebalanceCandidates(
 		ctx,
@@ -487,27 +515,7 @@ func (a Allocator) RebalanceTarget(
 		options,
 	)
 
-	// We're going to add another replica to the range which will change the
-	// quorum size. Verify that the number of existing candidates is sufficient
-	// to meet the new quorum. Note that "existingCandidates" only contains
-	// replicas on live nodes while "rangeInfo.Desc.Replicas" contains all of the
-	// replicas for a range. For a range configured for 3 replicas, this will
-	// disable rebalancing if one of the replicas is on a down node. Instead,
-	// we'll have to wait for the down node to be declared dead and go through the
-	// dead-node removal dance: remove dead replica, add new replica.
-	//
-	// NB: The len(rangeInfo.Desc.Replicas) > 1 check allows rebalancing of ranges
-	// with only a single replica. This is a corner case which could happen in
-	// practice and also affects tests.
-	newQuorum := computeQuorum(len(rangeInfo.Desc.Replicas) + 1)
-	if len(rangeInfo.Desc.Replicas) > 1 && len(existingCandidates) < newQuorum {
-		// Don't rebalance as we won't be able to make quorum after the rebalance
-		// until the new replica has been caught up.
-		return nil, ""
-	}
-
-	// No need to rebalance.
-	if len(existingCandidates) == 0 {
+	if len(existingCandidates) == 0 || len(candidates) == 0 {
 		return nil, ""
 	}
 
