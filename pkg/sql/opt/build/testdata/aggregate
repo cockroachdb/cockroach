@@ -1,10 +1,6 @@
 # tests adapted from logictest -- aggregate
 
-exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
+exec-ddl
 CREATE TABLE t.kv (
   k INT PRIMARY KEY,
   v INT,
@@ -12,6 +8,11 @@ CREATE TABLE t.kv (
   s STRING
 )
 ----
+table kv
+  k int NOT NULL
+  v int NULL
+  w int NULL
+  s string NULL
 
 build
 SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1),
@@ -616,7 +617,7 @@ group-by
       └── function: sum [type=NULL]
            └── variable: kv.v [type=int]
 
-exec-raw
+exec-ddl
 CREATE TABLE t.abc (
   a CHAR PRIMARY KEY,
   b FLOAT,
@@ -624,6 +625,11 @@ CREATE TABLE t.abc (
   d DECIMAL
 )
 ----
+table abc
+  a string NOT NULL
+  b float NULL
+  c bool NULL
+  d decimal NULL
 
 build
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM t.abc
@@ -680,11 +686,13 @@ group-by
            └── variable: abc.d [type=decimal]
 
 # Verify summing of intervals
-exec-raw
+exec-ddl
 CREATE TABLE t.intervals (
   a INTERVAL PRIMARY KEY
 )
 ----
+table intervals
+  a interval NOT NULL
 
 build
 SELECT SUM(a) FROM t.intervals
@@ -728,7 +736,7 @@ SELECT SUM((a,c)) FROM t.abc
 ----
 error: unknown signature: sum(tuple{string, bool})
 
-exec-raw
+exec-ddl
 CREATE TABLE t.xyz (
   x INT PRIMARY KEY,
   y INT,
@@ -740,6 +748,10 @@ CREATE TABLE t.xyz (
   FAMILY (z)
 )
 ----
+table xyz
+  x int NOT NULL
+  y int NULL
+  z float NULL
 
 build
 SELECT MIN(x) FROM t.xyz
@@ -898,9 +910,12 @@ group-by
       └── function: stddev [type=NULL]
            └── variable: xyz.x [type=int]
 
-exec-raw
+exec-ddl
 CREATE TABLE t.bools (b BOOL)
 ----
+table bools
+  b bool NULL
+  rowid int NOT NULL (hidden)
 
 build
 SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
@@ -936,9 +951,14 @@ project
  └── projections
       └── const: 1 [type=int]
 
-exec-raw
+exec-ddl
 CREATE TABLE t.xor_bytes (a bytes, b int, c int)
 ----
+table xor_bytes
+  a bytes NULL
+  b int NULL
+  c int NULL
+  rowid int NOT NULL (hidden)
 
 build
 SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM t.xor_bytes
@@ -974,7 +994,7 @@ group-by
       └── function: min [type=NULL]
            └── const: true [type=bool]
 
-exec-raw
+exec-ddl
 CREATE TABLE t.ab (
   a INT PRIMARY KEY,
   b INT,
@@ -982,10 +1002,17 @@ CREATE TABLE t.ab (
   FAMILY (b)
 )
 ----
+table ab
+  a int NOT NULL
+  b int NULL
 
-exec-raw
+exec-ddl
 CREATE TABLE t.xy(x STRING, y STRING);
 ----
+table xy
+  x string NULL
+  y string NULL
+  rowid int NOT NULL (hidden)
 
 # Grouping and rendering tuples.
 build
@@ -1059,3 +1086,54 @@ project
            └── plus [type=int]
                 ├── variable: kv.v [type=int]
                 └── variable: kv.w [type=int]
+
+# Check that everything still works with differently qualified names
+build
+SELECT SUM(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
+----
+project
+ ├── columns: column6:decimal:null:6 kv.v:int:null:2
+ ├── group-by
+ │    ├── columns: kv.v:int:null:2 column5:int:null:5 column6:decimal:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── projections
+ │    │    ├── variable: kv.v [type=int]
+ │    │    └── mult [type=int]
+ │    │         ├── variable: kv.k [type=int]
+ │    │         └── variable: kv.w [type=int]
+ │    └── projections
+ │         └── function: sum [type=NULL]
+ │              └── variable: kv.w [type=int]
+ └── projections
+      ├── variable: column6 [type=decimal]
+      └── variable: kv.v [type=int]
+
+build
+SELECT SUM(t.kv.w), LOWER(s), t.kv.v + k * t.kv.w, t.kv.v FROM t.kv GROUP BY v, LOWER(kv.s), kv.k * w
+----
+project
+ ├── columns: column7:decimal:null:7 column5:string:null:5 column8:int:null:8 kv.v:int:null:2
+ ├── group-by
+ │    ├── columns: kv.v:int:null:2 column5:string:null:5 column6:int:null:6 column7:decimal:null:7
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── projections
+ │    │    ├── variable: kv.v [type=int]
+ │    │    ├── function: lower [type=NULL]
+ │    │    │    └── variable: kv.s [type=string]
+ │    │    └── mult [type=int]
+ │    │         ├── variable: kv.k [type=int]
+ │    │         └── variable: kv.w [type=int]
+ │    └── projections
+ │         └── function: sum [type=NULL]
+ │              └── variable: kv.w [type=int]
+ └── projections
+      ├── variable: column7 [type=decimal]
+      ├── variable: column5 [type=string]
+      ├── plus [type=int]
+      │    ├── variable: kv.v [type=int]
+      │    └── mult [type=int]
+      │         ├── variable: kv.k [type=int]
+      │         └── variable: kv.w [type=int]
+      └── variable: kv.v [type=int]

@@ -531,8 +531,7 @@ func (b *Builder) buildSelectClause(
 	// columns.
 	var having opt.GroupID
 	if sel.Having != nil {
-		// TODO(rytaft): Build HAVING.
-		panic(errorf("HAVING not yet supported: %s", stmt.String()))
+		having = b.buildHaving(sel.Having.Expr, fromScope)
 	}
 
 	// If the projection is empty or a simple pass-through, then
@@ -577,6 +576,8 @@ func (b *Builder) buildSelectClause(
 		outScope = projectionsScope
 	}
 
+	// Wrap with distinct operator if it exists.
+	out = b.buildDistinct(out, sel.Distinct, outScope.cols, outScope)
 	return out, outScope
 }
 
@@ -838,6 +839,16 @@ func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
 	return false
 }
 
+func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
+	out := b.buildScalar(inScope.resolveType(having, types.Bool), inScope)
+	if len(inScope.groupby.varsUsed) > 0 {
+		i := inScope.groupby.varsUsed[0]
+		col := b.colMap[i]
+		panic(groupingError(col.String()))
+	}
+	return out
+}
+
 // buildProjectionList builds a set of memo groups that represent the given
 // list of select expressions.
 //
@@ -1021,6 +1032,9 @@ func (b *Builder) buildDefaultScalarProjection(
 				col := b.colMap[i]
 				panic(groupingError(col.String()))
 			}
+
+			// Reset varsUsed for the next projection.
+			inScope.groupby.varsUsed = inScope.groupby.varsUsed[:0]
 		}
 
 		if col := inScope.findGrouping(group); col != nil {
@@ -1072,6 +1086,25 @@ func (b *Builder) constructProjectionList(items []opt.GroupID, cols []columnProp
 	return b.factory.ConstructProjections(
 		b.factory.InternList(items), b.factory.InternPrivate(&colList),
 	)
+}
+
+func (b *Builder) buildDistinct(
+	in opt.GroupID, distinct bool, byCols []columnProps, inScope *scope,
+) opt.GroupID {
+	if !distinct {
+		return in
+	}
+
+	// Distinct is equivalent to group by without any aggregations.
+	groupings := make([]opt.GroupID, 0, len(byCols))
+	for i := range byCols {
+		v := b.factory.ConstructVariable(b.factory.InternPrivate(byCols[i].index))
+		groupings = append(groupings, v)
+	}
+
+	groupingList := b.constructProjectionList(groupings, byCols)
+	aggList := b.constructProjectionList(nil, nil)
+	return b.factory.ConstructGroupBy(in, groupingList, aggList)
 }
 
 // Builder implements the IndexedVarContainer interface so it can be

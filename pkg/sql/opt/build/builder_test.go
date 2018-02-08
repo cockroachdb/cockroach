@@ -25,14 +25,20 @@ package build
 //
 // The supported commands are:
 //
-//  - exec-raw
-//
-//    Runs the given SQL expression. It does not produce any output.
-//
 //  - build
 //
 //    Builds a memo structure from a SQL query and outputs a representation
 //    of the "expression view" of the memo structure.
+//
+//  - build-scalar
+//
+//    Builds a memo structure from a SQL scalar expression and outputs a
+//    representation of the "expression view" of the memo structure.
+//
+//  - exec-ddl
+//
+//    Parses a CREATE TABLE statement, creates a test table, and adds the
+//    table to the catalog.
 //
 
 import (
@@ -43,18 +49,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -63,16 +64,6 @@ import (
 var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
-
-// testCatalog implements the sqlbase.Catalog interface.
-type testCatalog struct {
-	kvDB *client.DB
-}
-
-// FindTable implements the sqlbase.Catalog interface.
-func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	return sqlbase.GetTableDescriptor(c.kvDB, string(name.SchemaName), string(name.TableName)), nil
-}
 
 func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -88,9 +79,7 @@ func TestBuilder(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-			defer s.Stopper().Stop(ctx)
-			catalog := testCatalog{kvDB: kvDB}
+			catalog := testutils.NewTestCatalog()
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var varTypes []types.T
@@ -122,13 +111,6 @@ func TestBuilder(t *testing.T) {
 				}
 
 				switch d.Cmd {
-				case "exec-raw":
-					_, err := sqlDB.Exec(d.Input)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return ""
-
 				case "build":
 					stmt, err := parser.ParseOne(d.Input)
 					if err != nil {
@@ -137,7 +119,7 @@ func TestBuilder(t *testing.T) {
 
 					o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
 					b := NewBuilder(ctx, o.Factory(), stmt)
-					root, props, err := build(b)
+					root, props, err := b.Build()
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
@@ -160,6 +142,26 @@ func TestBuilder(t *testing.T) {
 					exprView := o.Optimize(group, &opt.PhysicalProps{})
 					return exprView.String()
 
+				case "exec-ddl":
+					stmt, err := parser.ParseOne(d.Input)
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+
+					if stmt.StatementType() != tree.DDL {
+						d.Fatalf(t, "statement type is not DDL: %v", stmt.StatementType())
+					}
+
+					switch stmt := stmt.(type) {
+					case *tree.CreateTable:
+						tbl := catalog.CreateTable(stmt)
+						return tbl.String()
+
+					default:
+						d.Fatalf(t, "expected CREATE TABLE statement but found: %v", stmt)
+						return ""
+					}
+
 				default:
 					d.Fatalf(t, "unsupported command: %s", d.Cmd)
 					return ""
@@ -181,27 +183,18 @@ func newScalarBuilder(factory opt.Factory, ivh *tree.IndexedVarHelper) *Builder 
 }
 
 // buildScalar is a wrapper for Builder.buildScalar which catches panics and
-// converts them to errors.
+// converts those containing builderErrors back to errors.
 func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group opt.GroupID, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if _, ok := r.(builderError); ok {
+				err = r.(builderError)
+			} else {
+				panic(r)
+			}
 		}
 	}()
 
 	group = b.buildScalar(typedExpr, &scope{builder: b})
-	return
-}
-
-// build is a wrapper for Builder.Build which catches panics and
-// converts them to errors.
-func build(b *Builder) (root opt.GroupID, required *opt.PhysicalProps, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
-		}
-	}()
-
-	root, required, err = b.Build()
-	return
+	return group, err
 }
