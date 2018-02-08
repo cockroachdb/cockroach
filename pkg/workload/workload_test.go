@@ -111,3 +111,37 @@ func TestSplits(t *testing.T) {
 		})
 	}
 }
+
+func TestDatumSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		datum interface{}
+		size  int64
+	}{
+		{nil, 0},
+		{int(-1000000), 3},
+		{int(-1000), 2},
+		{int(-1), 1},
+		{int(0), 1},
+		{int(1), 1},
+		{int(1000), 2},
+		{int(1000000), 3},
+		{float64(0), 1},
+		{float64(3), 8},
+		{float64(3.1), 8},
+		{float64(3.14), 8},
+		{float64(3.141), 8},
+		{float64(3.1415), 8},
+		{float64(3.14159), 8},
+		{float64(3.141592), 8},
+		{"", 0},
+		{"a", 1},
+		{"aa", 2},
+	}
+	for _, test := range tests {
+		if size := workload.DatumSize(test.datum); size != test.size {
+			t.Errorf(`%T: %v got %d expected %d`, test.datum, test.datum, size, test.size)
+		}
+	}
+}

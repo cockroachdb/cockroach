@@ -54,8 +54,12 @@ var fixturesLoadCmd = &cobra.Command{
 		`An enterprise license is required.`,
 }
 
+var fixturesStoreCSVServerURL = fixturesStoreCmd.PersistentFlags().String(
+	`csv-server`, ``,
+	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
+
 var fixturesLoadDB = fixturesLoadCmd.PersistentFlags().String(
-	`into_db`, `workload`, `SQL database to load fixture into`)
+	`into-db`, `workload`, `SQL database to load fixture into`)
 
 const storageError = `failed to create google cloud client ` +
 	`(You may need to setup the GCS application default credentials: ` +
@@ -142,8 +146,9 @@ func fixturesStore(cmd *cobra.Command, gen workload.Generator, crdbURI string) e
 	if err != nil {
 		return err
 	}
-
-	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, useast1bFixtures, gen)
+	store := useast1bFixtures
+	store.CSVServerURL = *fixturesStoreCSVServerURL
+	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, store, gen)
 	if err != nil {
 		return err
 	}
