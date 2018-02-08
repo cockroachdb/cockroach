@@ -168,9 +168,13 @@ func (ev *ExprView) formatScalar(tp treeprinter.Node) {
 	fmt.Fprintf(&buf, "%v", ev.op)
 	ev.formatPrivate(&buf, ev.Private())
 
-	// Don't show the type of the projections op, the types of each expression are
-	// already listed in the children.
-	if ev.Operator() != opt.ProjectionsOp {
+	switch ev.Operator() {
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.GroupingsOp:
+		// Don't show the type of these ops because they are simply tuple types
+		// of their children's types, and the types of children are already
+		// listed.
+
+	default:
 		scalar := ev.Logical().Scalar
 		if scalar != nil {
 			buf.WriteString(" [")
@@ -196,9 +200,10 @@ func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		colIndex := private.(opt.ColumnIndex)
 		private = ev.mem.metadata.ColumnLabel(colIndex)
 
-	case opt.ProjectionsOp:
-		// Projections private data was already used to print the output columns;
-		// don't print it again.
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.GroupingsOp:
+		// The private data of these ops was already used to print the output
+		// columns for their containing op (Project or GroupBy), so no need to
+		// print again.
 		private = nil
 	}
 
