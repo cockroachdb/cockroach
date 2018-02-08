@@ -273,7 +273,6 @@ func (rq *replicateQueue) processOneChange(
 			zone.Constraints,
 			desc.Replicas,
 			rangeInfo,
-			true, /* relaxConstraints */
 			disableStatsBasedRebalancing,
 		)
 		if err != nil {
@@ -309,7 +308,6 @@ func (rq *replicateQueue) processOneChange(
 				zone.Constraints,
 				oldPlusNewReplicas,
 				rangeInfo,
-				true, /* relaxConstraints */
 				disableStatsBasedRebalancing,
 			)
 			if err != nil {
