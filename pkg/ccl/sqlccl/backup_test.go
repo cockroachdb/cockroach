@@ -851,7 +851,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	defer cleanup()
 
 	sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
 	run := func(t *testing.T, op, query string, args ...interface{}) (int64, error) {
 		allowResponse = make(chan struct{})
@@ -2645,15 +2644,6 @@ func TestBackupRestoreNotInTxn(t *testing.T) {
 	const numAccounts = 1
 	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
-
-	// Our override above might be lost on gossip update unless we write it.
-	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
-	testutils.SucceedsSoon(t, func() error {
-		if res := sqlDB.QueryStr(t, "SHOW CLUSTER SETTING experimental.importcsv.enabled")[0][0]; res != "true" {
-			return errors.Errorf("%q != true", res)
-		}
-		return nil
-	})
 
 	tx, err := sqlDB.DB.Begin()
 	if err != nil {
