@@ -54,11 +54,11 @@ define Tuple {
 # Projections is a set of typed scalar expressions that will become output
 # columns for a containing relational expression, such as Project or GroupBy.
 # The private Cols field contains the set of column indexes returned by the
-# expression, as a *ColSet.
+# expression, as a *ColList.
 [Scalar]
 define Projections {
     Elems ExprList
-    Cols  ColSet
+    Cols  ColList
 }
 
 [Scalar]
