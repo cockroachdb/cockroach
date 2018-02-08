@@ -147,10 +147,11 @@ func (l *DistLoader) LoadCSV(
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
+				Uri: make(map[int32]string),
 			})
 		}
 		n := i % len(nodes)
-		csvSpecs[n].Uri = append(csvSpecs[n].Uri, input)
+		csvSpecs[n].Uri[int32(i)] = input
 	}
 
 	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
