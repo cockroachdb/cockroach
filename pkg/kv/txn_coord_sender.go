@@ -269,6 +269,11 @@ func (tcf *TxnCoordSenderFactory) New(typ client.TxnType) client.TxnSender {
 	return tcs
 }
 
+// WrappedSender is part of the TxnCoordSenderFactory interface.
+func (tcf *TxnCoordSenderFactory) WrappedSender() client.Sender {
+	return tcf.wrapped
+}
+
 // Metrics returns the factory's metrics struct.
 func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
 	return tcf.metrics

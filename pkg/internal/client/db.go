@@ -194,6 +194,11 @@ func (db *DB) GetSender() Sender {
 	return db.factory.New(RootTxn)
 }
 
+// GetFactory returns the DB's TxnSenderFactory.
+func (db *DB) GetFactory() TxnSenderFactory {
+	return db.factory
+}
+
 // NewDB returns a new DB.
 func NewDB(factory TxnSenderFactory, clock *hlc.Clock) *DB {
 	return NewDBWithContext(factory, clock, DefaultDBContext())
