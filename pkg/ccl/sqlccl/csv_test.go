@@ -485,7 +485,6 @@ func TestImportStmt(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '10KB'`)
 
 	tablePath := filepath.Join(dir, "table")
@@ -878,8 +877,6 @@ func BenchmarkImport(b *testing.B) {
 	tc := testcluster.StartTestCluster(b, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{ExternalIODir: dir}})
 	defer tc.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-	sqlDB.Exec(b, `SET CLUSTER SETTING experimental.importcsv.enabled = true`)
 
 	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
 	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))

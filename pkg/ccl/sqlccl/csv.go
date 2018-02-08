@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -873,14 +872,6 @@ func importJobDescription(
 	return tree.AsStringWithFlags(&stmt, tree.FmtAlwaysQualifyTableNames), nil
 }
 
-const importCSVEnabledSetting = "experimental.importcsv.enabled"
-
-var importCSVEnabled = settings.RegisterBoolSetting(
-	importCSVEnabledSetting,
-	"enable experimental IMPORT CSV statement",
-	false,
-)
-
 func importPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
 ) (func(context.Context, chan<- tree.Datums) error, sqlbase.ResultColumns, error) {
@@ -918,14 +909,6 @@ func importPlanHook(
 		defer tracing.FinishSpan(span)
 
 		walltime := p.ExecCfg().Clock.Now().WallTime
-
-		if !importCSVEnabled.Get(&p.ExecCfg().Settings.SV) {
-			return errors.Errorf(
-				`IMPORT is an experimental feature and is disabled by default; `+
-					`enable by executing: SET CLUSTER SETTING %s = true`,
-				importCSVEnabledSetting,
-			)
-		}
 
 		if err := p.RequireSuperUser(ctx, "IMPORT"); err != nil {
 			return err

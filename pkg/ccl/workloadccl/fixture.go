@@ -246,11 +246,6 @@ func MakeFixture(
 	const writeCSVChunkSize = 64 * 1 << 20 // 64 MB
 
 	fixtureFolder := generatorToGCSFolder(store, gen)
-	if _, err := sqlDB.Exec(
-		`SET CLUSTER SETTING experimental.importcsv.enabled = true`,
-	); err != nil {
-		return Fixture{}, err
-	}
 
 	writeCSVConcurrency := runtime.NumCPU()
 	c := &groupCSVWriter{
