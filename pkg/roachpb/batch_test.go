@@ -223,6 +223,12 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}{
 		{&ConditionalPutRequest{}, &ConditionalPutResponse{},
 			Span{Key: Key("a")}, nil},
+		{&PutRequest{}, &PutResponse{},
+			Span{Key: Key("a-put")}, nil},
+		{&InitPutRequest{}, &InitPutResponse{},
+			Span{Key: Key("a-initput")}, nil},
+		{&IncrementRequest{}, &IncrementResponse{},
+			Span{Key: Key("a-inc")}, nil},
 		{&ScanRequest{}, &ScanResponse{},
 			Span{Key("a"), Key("c")}, &Span{Key("b"), Key("c")}},
 		{&GetRequest{}, &GetResponse{},
@@ -253,8 +259,8 @@ func TestRefreshSpanIterate(t *testing.T) {
 	}
 	ba.RefreshSpanIterate(&br, fn)
 	// Only the conditional put isn't considered a read span.
-	expReadSpans := []Span{testCases[0].span, testCases[1].span, testCases[2].span, testCases[3].span}
-	expWriteSpans := []Span{testCases[4].span}
+	expReadSpans := []Span{testCases[4].span, testCases[5].span, testCases[6].span}
+	expWriteSpans := []Span{testCases[7].span}
 	if !reflect.DeepEqual(expReadSpans, readSpans) {
 		t.Fatalf("unexpected read spans: expected %+v, found = %+v", expReadSpans, readSpans)
 	}
@@ -278,7 +284,6 @@ func TestRefreshSpanIterate(t *testing.T) {
 	writeSpans = []Span{}
 	ba.RefreshSpanIterate(&br, fn)
 	expReadSpans = []Span{
-		{Key: Key("a")},
 		{Key("a"), Key("b")},
 		{Key: Key("b")},
 		{Key("e"), Key("f")},

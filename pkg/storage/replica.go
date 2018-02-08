@@ -5283,15 +5283,8 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 	if isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg) {
 		return false
 	}
-	if retry, reason := isEndTransactionTriggeringRetryError(ba.Txn); retry {
-		// We can still attempt the one phase commit on serializable
-		// retries (caused by our timestamp getting pushed forward due to
-		// the timestamp cache) if the end transaction request specifies
-		// there are no refresh spans.
-		canIgnoreSerializableRetry := ba.Txn.IsSerializable() && etArg.NoRefreshSpans
-		if reason != roachpb.RETRY_SERIALIZABLE || !canIgnoreSerializableRetry {
-			return false
-		}
+	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
+		return false
 	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC
 }
@@ -5569,6 +5562,14 @@ func evaluateBatch(
 	if ba.Txn != nil {
 		// If transactional, send out the final transaction entry with the reply.
 		br.Txn = ba.Txn
+		// If a serializable transaction committed, forward the response
+		// timestamp to the commit timestamp in case we were able to
+		// optimize and commit at a higher timestamp without higher-level
+		// retry (i.e. there were no refresh spans and the commit timestamp
+		// wasn't leaked).
+		if ba.Txn.IsSerializable() && ba.Txn.Status == roachpb.COMMITTED {
+			br.Timestamp.Forward(ba.Txn.Timestamp)
+		}
 	}
 	// Always update the batch response timestamp field to the timestamp at
 	// which the batch executed.
