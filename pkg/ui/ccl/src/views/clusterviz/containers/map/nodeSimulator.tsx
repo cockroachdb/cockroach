@@ -8,6 +8,7 @@
 
 import React from "react";
 import { connect } from "react-redux";
+import { createSelector } from "reselect";
 
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
@@ -96,16 +97,20 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   }
 }
 
+const selectDataIsValid = createSelector(
+  selectNodeRequestStatus,
+  selectLocationsRequestStatus,
+  selectLivenessRequestStatus,
+  (nodes, locations, liveness) => nodes.valid && locations.valid && liveness.valid,
+);
+
 export default connect(
   (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
     locationTree: selectLocationTree(state),
     liveness: livenessStatusByNodeIDSelector(state),
-    dataIsValid:
-      selectNodeRequestStatus(state).valid
-      && selectLocationsRequestStatus(state).valid
-      && selectLivenessRequestStatus(state).valid,
+    dataIsValid: selectDataIsValid(state),
   }),
   {
     refreshNodes,
