@@ -1,18 +1,26 @@
-exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
+exec-ddl
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
 ----
+table a
+  x int NOT NULL
+  y float NULL
 
-exec-raw
+exec-ddl
 CREATE TABLE t.b (x INT, y FLOAT)
 ----
+table b
+  x int NULL
+  y float NULL
+  rowid int NOT NULL (hidden)
 
-exec-raw
+exec-ddl
 CREATE TABLE t.c (x INT, y FLOAT, z VARCHAR, CONSTRAINT fk_x_ref_a FOREIGN KEY (x) REFERENCES t.a (x))
 ----
+table c
+  x int NULL
+  y float NULL
+  z string NULL
+  rowid int NOT NULL (hidden)
 
 build
 SELECT * FROM t.a, t.b

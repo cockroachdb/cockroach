@@ -17,6 +17,9 @@ package testutils
 import (
 	"context"
 
+	"bytes"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -24,12 +27,38 @@ import (
 
 // TestColumn implements the optbase.Column interface for testing purposes.
 type TestColumn struct {
+	Hidden   bool
 	Nullable bool
 	Name     string
 	Type     types.T
 }
 
 var _ optbase.Column = &TestColumn{}
+
+func (c *TestColumn) String() string {
+	var buf bytes.Buffer
+	c.Format(&buf)
+	return buf.String()
+}
+
+// Format performs pretty-printing of the TestColumn into a bytes buffer.
+func (c *TestColumn) Format(buf *bytes.Buffer) {
+	buf.WriteString(c.Name)
+	buf.WriteByte(' ')
+	buf.WriteString(c.Type.String())
+
+	if c.Nullable {
+		buf.WriteString(" NULL")
+	} else {
+		buf.WriteString(" NOT NULL")
+	}
+
+	if c.Hidden {
+		buf.WriteString(" (hidden)")
+	}
+
+	buf.WriteString("\n")
+}
 
 // IsNullable is part of the optbase.Column interface.
 func (c *TestColumn) IsNullable() bool {
@@ -48,7 +77,7 @@ func (c *TestColumn) DatumType() types.T {
 
 // IsHidden is part of the optbase.Column interface.
 func (c *TestColumn) IsHidden() bool {
-	return false
+	return c.Hidden
 }
 
 // TestTable implements the optbase.Table interface for testing purposes.
@@ -58,6 +87,25 @@ type TestTable struct {
 }
 
 var _ optbase.Table = &TestTable{}
+
+func (t *TestTable) String() string {
+	var buf bytes.Buffer
+	t.Format(&buf)
+	return buf.String()
+}
+
+// Format performs pretty-printing of the TestTable into a bytes buffer.
+func (t *TestTable) Format(buf *bytes.Buffer) {
+	buf.WriteString(fmt.Sprintf("table %s\n", t.Name))
+	for _, col := range t.Columns {
+		buf.WriteString("  ")
+		col.Format(buf)
+	}
+
+	if len(t.Columns) == 0 {
+		buf.WriteString("\n")
+	}
+}
 
 // TabName is part of the optbase.Table interface.
 func (t *TestTable) TabName() optbase.TableName {
