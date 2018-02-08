@@ -508,7 +508,7 @@ func TestConstraintCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, s := range testStores {
-				valid, positive := constraintCheck(s, config.Constraints{Constraints: tc.constraints})
+				valid, positive := constraintsCheck(s, []config.Constraints{{Constraints: tc.constraints}})
 				expectedPositive, ok := tc.expected[s.StoreID]
 				if valid != ok {
 					t.Errorf("expected store %d to be %t, but got %t", s.StoreID, ok, valid)
@@ -652,7 +652,6 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 			tc.s,
 			tc.sl,
 			rangeInfo,
-			existingNodeLocalities,
 			options,
 		)
 		if actual != tc.expected {
