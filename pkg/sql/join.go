@@ -66,6 +66,106 @@ const (
 	joinTypeFullOuter
 )
 
+// makeJoinPredicate builds a joinPredicate from a join condition. Also returns
+// any USING or NATURAL JOIN columns (these need to be merged into one column
+// after the join).
+func (p *planner) makeJoinPredicate(
+	ctx context.Context,
+	left *sqlbase.DataSourceInfo,
+	right *sqlbase.DataSourceInfo,
+	typ joinType,
+	cond tree.JoinCond,
+) (*joinPredicate, []usingColumn, error) {
+	switch t := cond.(type) {
+	case tree.NaturalJoinCond, *tree.UsingJoinCond:
+		var usingColNames tree.NameList
+
+		switch t := cond.(type) {
+		case tree.NaturalJoinCond:
+			usingColNames = commonColumns(left, right)
+		case *tree.UsingJoinCond:
+			usingColNames = t.Cols
+		}
+
+		usingColumns, err := makeUsingColumns(
+			left.SourceColumns, right.SourceColumns, usingColNames,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		pred, err := makePredicate(typ, left, right, usingColumns)
+		if err != nil {
+			return nil, nil, err
+		}
+		return pred, usingColumns, nil
+
+	case *tree.OnJoinCond:
+		pred, err := makePredicate(typ, left, right, nil /* usingColumns */)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Determine the on condition expression. Note that the predicate can't
+		// already have onCond set (we haven't passed any usingColumns).
+		pred.onCond, err = p.analyzeExpr(
+			ctx,
+			t.Expr,
+			sqlbase.MultiSourceInfo{pred.info},
+			pred.iVarHelper,
+			types.Bool,
+			true, /* requireType */
+			"ON",
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		return pred, nil /* usingColumns */, nil
+
+	case nil:
+		pred, err := makePredicate(typ, left, right, nil /* usingColumns */)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		if err != nil {
+			return nil, nil, err
+		}
+		return pred, nil /* usingColumns */, nil
+
+	default:
+		panic(fmt.Sprintf("unsupported join condition %#v", cond))
+	}
+}
+
+func (p *planner) makeJoinNode(
+	left planDataSource, right planDataSource, pred *joinPredicate,
+) *joinNode {
+	n := &joinNode{
+		left:     left,
+		right:    right,
+		joinType: pred.joinType,
+		pred:     pred,
+		columns:  pred.info.SourceColumns,
+	}
+
+	n.run.buffer = &RowBuffer{
+		RowContainer: sqlbase.NewRowContainer(
+			p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
+		),
+	}
+
+	n.run.bucketsMemAcc = p.EvalContext().Mon.MakeBoundAccount()
+	n.run.buckets = buckets{
+		buckets: make(map[string]*bucket),
+		rowContainer: sqlbase.NewRowContainer(
+			p.EvalContext().Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
+			0,
+		),
+	}
+	return n
+}
+
 // makeJoin constructs a planDataSource for a JOIN.
 // The source might be a joinNode, or it could be a renderNode on top of a
 // joinNode (in the case of outer natural joins).
@@ -90,11 +190,9 @@ func (p *planner) makeJoin(
 		return planDataSource{}, errors.Errorf("unsupported JOIN type %T", astJoinType)
 	}
 
-	leftInfo, rightInfo := left.info, right.info
-
 	// Check that the same table name is not used on both sides.
-	for _, alias := range rightInfo.SourceAliases {
-		if _, ok := leftInfo.SourceAliases.SrcIdx(alias.Name); ok {
+	for _, alias := range right.info.SourceAliases {
+		if _, ok := left.info.SourceAliases.SrcIdx(alias.Name); ok {
 			t := alias.Name.Table()
 			if t == "" {
 				// Allow joins of sources that define columns with no
@@ -108,91 +206,11 @@ func (p *planner) makeJoin(
 		}
 	}
 
-	var (
-		pred         *joinPredicate
-		usingColumns []usingColumn
-	)
-
-	switch t := cond.(type) {
-	case tree.NaturalJoinCond, *tree.UsingJoinCond:
-		var usingColNames tree.NameList
-
-		switch t := cond.(type) {
-		case tree.NaturalJoinCond:
-			usingColNames = commonColumns(leftInfo, rightInfo)
-		case *tree.UsingJoinCond:
-			usingColNames = t.Cols
-		}
-
-		var err error
-		usingColumns, err = makeUsingColumns(
-			leftInfo.SourceColumns, rightInfo.SourceColumns, usingColNames,
-		)
-		if err != nil {
-			return planDataSource{}, err
-		}
-		pred, err = makePredicate(typ, leftInfo, rightInfo, usingColumns)
-		if err != nil {
-			return planDataSource{}, err
-		}
-
-	case *tree.OnJoinCond:
-		var err error
-		pred, err = makePredicate(typ, leftInfo, rightInfo, nil /* usingColumns */)
-		if err != nil {
-			return planDataSource{}, err
-		}
-
-		// Determine the on condition expression. Note that the predicate can't
-		// already have onCond set (we haven't passed any usingColumns).
-		pred.onCond, err = p.analyzeExpr(
-			ctx,
-			t.Expr,
-			sqlbase.MultiSourceInfo{pred.info},
-			pred.iVarHelper,
-			types.Bool,
-			true, /* requireType */
-			"ON",
-		)
-		if err != nil {
-			return planDataSource{}, err
-		}
-
-	case nil:
-		var err error
-		pred, err = makePredicate(typ, leftInfo, rightInfo, nil /* usingColumns */)
-		if err != nil {
-			return planDataSource{}, err
-		}
-
-	default:
-		panic(fmt.Sprintf("unsupported join condition %#v", cond))
+	pred, usingColumns, err := p.makeJoinPredicate(ctx, left.info, right.info, typ, cond)
+	if err != nil {
+		return planDataSource{}, err
 	}
-
-	n := &joinNode{
-		left:     left,
-		right:    right,
-		joinType: typ,
-		pred:     pred,
-		columns:  pred.info.SourceColumns,
-	}
-
-	n.run.buffer = &RowBuffer{
-		RowContainer: sqlbase.NewRowContainer(
-			p.EvalContext().Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromResCols(planColumns(n)), 0,
-		),
-	}
-
-	n.run.bucketsMemAcc = p.EvalContext().Mon.MakeBoundAccount()
-	n.run.buckets = buckets{
-		buckets: make(map[string]*bucket),
-		rowContainer: sqlbase.NewRowContainer(
-			p.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(planColumns(n.right.plan)),
-			0,
-		),
-	}
-
+	n := p.makeJoinNode(left, right, pred)
 	joinDataSource := planDataSource{info: pred.info, plan: n}
 
 	if len(usingColumns) == 0 {
@@ -259,8 +277,8 @@ func (p *planner) makeJoin(
 		sourceInfo: sqlbase.MultiSourceInfo{pred.info},
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(pred.info.SourceColumns))
-	numLeft := len(leftInfo.SourceColumns)
-	numRight := len(rightInfo.SourceColumns)
+	numLeft := len(left.info.SourceColumns)
+	numRight := len(right.info.SourceColumns)
 	rInfo := &sqlbase.DataSourceInfo{
 		SourceAliases: make(sqlbase.SourceAliases, 0, len(pred.info.SourceAliases)),
 	}
@@ -287,7 +305,7 @@ func (p *planner) makeJoin(
 			expr = r.ivarHelper.IndexedVar(leftCol)
 			remapped[leftCol] = i
 		} else if n.joinType == joinTypeRightOuter &&
-			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftInfo.SourceColumns[leftCol].Typ) {
+			!sqlbase.DatumTypeHasCompositeKeyEncoding(left.info.SourceColumns[leftCol].Typ) {
 			// The merged column is the same with the corresponding column from the
 			// right side.
 			expr = r.ivarHelper.IndexedVar(numLeft + rightCol)
@@ -308,9 +326,9 @@ func (p *planner) makeJoin(
 				return planDataSource{}, err
 			}
 		}
-		r.addRenderColumn(expr, symbolicExprStr(expr), leftInfo.SourceColumns[leftCol])
+		r.addRenderColumn(expr, symbolicExprStr(expr), left.info.SourceColumns[leftCol])
 	}
-	for i, c := range leftInfo.SourceColumns {
+	for i, c := range left.info.SourceColumns {
 		if remapped[i] != -1 {
 			// Column already included.
 			continue
@@ -322,7 +340,7 @@ func (p *planner) makeJoin(
 		}
 		r.addRenderColumn(expr, symbolicExprStr(expr), c)
 	}
-	for i, c := range rightInfo.SourceColumns {
+	for i, c := range right.info.SourceColumns {
 		if remapped[numLeft+i] != -1 {
 			// Column already included.
 			continue

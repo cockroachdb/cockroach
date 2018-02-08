@@ -36,4 +36,9 @@ type Factory interface {
 	// ConstructProject returns a node that applies a projection on the results of
 	// the given input node.
 	ConstructProject(n Node, exprs tree.TypedExprs, colNames []string) (Node, error)
+
+	// ConstructInnerJoin returns a node that runs a hash-join between the results
+	// of two input nodes. The expression can refer to columns from both inputs
+	// using IndexedVars (first the left columns, then the right columns).
+	ConstructInnerJoin(left, right Node, onCond tree.TypedExpr) (Node, error)
 }
