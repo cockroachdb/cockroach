@@ -7,6 +7,7 @@ import {
   parseLocalityRoute,
   getNodeLocalityTiers,
   getChildLocalities,
+  getLocalityLabel,
   getLeaves,
   getLocality,
 } from "./localities";
@@ -354,5 +355,40 @@ describe("getLeaves", function() {
     const leaves = getLeaves(localityTree);
 
     assert.deepEqual(leaves, [node1, node2]);
+  });
+});
+
+describe("getLocalityLabel", function() {
+  describe("with an empty list of tiers", function() {
+    it("returns the string \"Cluster\"", function() {
+      const label = getLocalityLabel([]);
+
+      assert.equal(label, "Cluster");
+    });
+  });
+
+  describe("with a single tier", function() {
+    it("returns the tier label", function() {
+      const key = "region";
+      const value = "us-east-1";
+
+      const label = getLocalityLabel([{ key, value }]);
+
+      assert.equal(label, key + "=" + value);
+    });
+  });
+
+  describe("with multiple tiers", function() {
+    it("returns the last tier's label", function() {
+      const key = "region";
+      const value = "us-east-1";
+
+      const label = getLocalityLabel([
+        { key: "country", value: "us" },
+        { key, value },
+      ]);
+
+      assert.equal(label, key + "=" + value);
+    });
   });
 });
