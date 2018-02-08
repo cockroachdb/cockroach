@@ -458,7 +458,8 @@ message EndTransactionRequest {
   // Set to true if this transaction is serializable isolation but has
   // accummulated no refresh spans. This allows the executing server
   // to retry it locally on the fast path.
-  bool no_refresh_spans = 7;
+  bool no_refresh_spans = 8;
+  reserved 7;
 }
 
 // An EndTransactionResponse is the return value from the

@@ -1852,6 +1852,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 		afterTxnStart  func(context.Context, *client.DB) error  // called after the txn chooses a timestamp
 		retryable      func(context.Context, *client.Txn) error // called during the txn; may be retried
 		filter         func(storagebase.FilterArgs) *roachpb.Error
+		tsLeaked       bool
 		// If both of these are false, no retries.
 		txnCoordRetry bool
 		clientRetry   bool
@@ -1866,7 +1867,18 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.Put(ctx, "a", "put") // put to advance txn ts
 			},
-			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with get and put timestamp leaked",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, "a", "put") // put to advance txn ts
+			},
+			tsLeaked:    true,
+			clientRetry: true,
 		},
 		{
 			name: "forwarded timestamp with get and initput",
@@ -1877,7 +1889,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.InitPut(ctx, "a", "put", false) // put to advance txn ts
 			},
-			txnCoordRetry: true,
 		},
 		{
 			name: "forwarded timestamp with get and initput value exists",
@@ -1889,7 +1900,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return err
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
-				err := txn.InitPut(ctx, "a", "init-put", false) // put to advance txn ts
+				err := txn.InitPut(ctx, "a", "init-put", false) // init-put to advance txn ts
 				// Swallow expected condition failed error.
 				if _, ok := err.(*roachpb.ConditionFailedError); !ok {
 					if err != nil {
@@ -1897,9 +1908,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 					}
 					return err
 				}
+				log.Infof(ctx, "Swallowed error")
 				return nil
 			},
-			clientRetry: true,
+			// No retries, this is a straight failure.
 		},
 		{
 			name: "forwarded timestamp with get and cput",
@@ -1910,7 +1922,21 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.CPut(ctx, "a", "cput", "put") // cput to advance txn ts, set update span
 			},
-			txnCoordRetry: true,
+		},
+		{
+			name: "forwarded timestamp with get and cput timestamp leaked",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.CPut(ctx, "a", "cput", "put") // cput to advance txn ts, set update span
+			},
+			tsLeaked:    true,
+			clientRetry: true,
 		},
 		{
 			name: "forwarded timestamp with scan and cput",
@@ -1921,7 +1947,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				return txn.CPut(ctx, "ab", "cput", nil) // cput advances, sets update span
 			},
-			txnCoordRetry: true,
 		},
 		{
 			name: "forwarded timestamp with put in batch commit",
@@ -1958,6 +1983,43 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return db.Put(ctx, "a", "put")
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, "a", "put")
+			},
+			// This trivially succeeds as there are no refresh spans.
+		},
+		{
+			name: "write too old with put timestamp leaked",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.Put(ctx, "a", "put")
+			},
+			tsLeaked:    true,
+			clientRetry: true,
+		},
+		{
+			name: "write too old with get in the clear",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if _, err := txn.Get(ctx, "b"); err != nil {
+					return nil
+				}
+				return txn.Put(ctx, "a", "put")
+			},
+			txnCoordRetry: true,
+		},
+		{
+			name: "write too old with get conflict",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if _, err := txn.Get(ctx, "a"); err != nil {
+					return nil
+				}
 				return txn.Put(ctx, "a", "put")
 			},
 			clientRetry: true,
@@ -2062,9 +2124,8 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.Put("a", "put")
 				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
 			},
-			txnCoordRetry: true,
 		},
 		{
 			name: "multi-range batch with forwarded timestamp and cput",
@@ -2079,6 +2140,42 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.CPut("a", "cput", "value")
 				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
+			},
+		},
+		{
+			name: "multi-range batch with forwarded timestamp and cput and get",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				if _, err := txn.Get(ctx, "b"); err != nil { // Get triggers txn coord retry
+					return err
+				}
+				b := txn.NewBatch()
+				b.CPut("a", "cput", "value")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry from get
+			},
+			txnCoordRetry: true,
+		},
+		{
+			name: "multi-range batch with forwarded timestamp and cput and delRange",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "c", "value")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.DelRange("a", "b", false)
+				b.CPut("c", "cput", "value")
 				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
 			},
 			txnCoordRetry: true,
@@ -2092,12 +2189,11 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				b := txn.NewBatch()
 				b.Put("a", "put")
 				b.Put("c", "put")
-				return txn.CommitInBatch(ctx, b) // both puts will succeed, et will retry
+				return txn.CommitInBatch(ctx, b) // both puts will succeed, no retry
 			},
-			txnCoordRetry: true,
 		},
 		{
-			name: "multi-range batch with write too old and cput",
+			name: "multi-range batch with write too old and failed cput",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "orig")
 			},
@@ -2113,6 +2209,22 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true, // cput with write too old requires restart
 		},
 		{
+			name: "multi-range batch with write too old and successful cput",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "orig")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "orig")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				b := txn.NewBatch()
+				b.CPut("a", "cput", "orig")
+				b.Put("c", "put")
+				return txn.CommitInBatch(ctx, b)
+			},
+			clientRetry: true, // successful cput will still retry because of mixed success
+		},
+		{
 			name: "cput within uncertainty interval",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "value")
@@ -2122,6 +2234,18 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 			filter:        newUncertaintyFilter(roachpb.Key([]byte("a"))),
 			txnCoordRetry: true,
+		},
+		{
+			name: "cput within uncertainty interval timestamp leaked",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.CPut(ctx, "a", "cput", "value")
+			},
+			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			clientRetry: true,
+			tsLeaked:    true,
 		},
 		{
 			name: "reads within uncertainty interval",
@@ -2183,23 +2307,26 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true, // will succeed because no mixed success
 		},
 		{
-			name: "multi range batch with uncertainty interval error and violating put",
+			name: "multi range batch with uncertainty interval error and get conflict",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "c", "value")
+				return db.Put(ctx, "a", "init")
 			},
 			afterTxnStart: func(ctx context.Context, db *client.DB) error {
-				return db.Put(ctx, "d", "value2")
+				if err := db.Put(ctx, "b", "value"); err != nil {
+					return err
+				}
+				return db.Put(ctx, "a", "value")
 			},
 			retryable: func(ctx context.Context, txn *client.Txn) error {
-				if err := txn.Put(ctx, "a", "put"); err != nil {
+				if _, err := txn.Get(ctx, "b"); err != nil {
 					return err
 				}
 				b := txn.NewBatch()
-				b.CPut("c", "cput", "value")
+				b.CPut("a", "cput", "value")
 				return txn.CommitInBatch(ctx, b)
 			},
-			filter:      newUncertaintyFilter(roachpb.Key([]byte("c"))),
-			clientRetry: true, // will fail because of write too old on cput
+			filter:      newUncertaintyFilter(roachpb.Key([]byte("a"))),
+			clientRetry: true, // will fail because of conflict on refresh span for the Get
 		},
 		{
 			name: "multi range batch with uncertainty interval error and mixed success",
@@ -2249,12 +2376,17 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 
 			var metrics kv.TxnMetrics
 			var lastAutoRetries int64
+			var hadClientRetry bool
 			epoch := 0
 			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				if tc.tsLeaked {
+					txn.OrigTimestampWasObserved()
+				}
 				if epoch > 0 {
 					if !tc.clientRetry {
 						t.Fatal("expected txn coord sender to retry, but got client-side retry")
 					}
+					hadClientRetry = true
 					// We expected a new epoch and got it; return success.
 					return nil
 				}
@@ -2281,7 +2413,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// can only check here that it's >= 1.
 			autoRetries := metrics.AutoRetries.Count() - lastAutoRetries
 			if tc.txnCoordRetry && autoRetries == 0 {
-				t.Errorf("expected [at least] one auto retry; got %d", autoRetries)
+				t.Errorf("expected [at least] one txn coord sender auto retry; got %d", autoRetries)
+			}
+			if tc.clientRetry && !hadClientRetry {
+				t.Errorf("expected but did not experience client retry")
 			}
 		})
 	}
