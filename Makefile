@@ -606,7 +606,10 @@ $(SNAPPY_DIR)/Makefile: $(C_DEPS_DIR)/snappy-rebuild | $(SUBMODULES_TARGET)
 	@# $(C_DEPS_DIR)/snappy-rebuild. See above for rationale.
 	cd $(SNAPPY_DIR) && cmake $(XCMAKE_FLAGS) $(SNAPPY_SRC_DIR)
 
-$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | $(SUBMODULES_TARGET)
+# TODO(benesch): make it possible to build libroach without CCL code. Because
+# libroach and libroachccl are defined in the same CMake project, CMake requires
+# that the CCL code be present even if only the OSS target will be built.
+$(LIBROACH_DIR)/Makefile: $(C_DEPS_DIR)/libroach-rebuild | $(SUBMODULES_TARGET) $(CPP_PROTOS_TARGET) $(CPP_PROTOS_CCL_TARGET)
 	rm -rf $(LIBROACH_DIR)
 	mkdir -p $(LIBROACH_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
@@ -646,11 +649,11 @@ librocksdb: $(ROCKSDB_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(ROCKSDB_DIR) rocksdb
 
 .PHONY: libroach
-libroach: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET)
+libroach: $(LIBROACH_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roach
 
 .PHONY: libroachccl
-libroachccl: $(LIBROACH_DIR)/Makefile $(CPP_PROTOS_TARGET) $(CPP_PROTOS_CCL_TARGET)
+libroachccl: $(LIBROACH_DIR)/Makefile
 	@$(MAKE) --no-print-directory -C $(LIBROACH_DIR) roachccl
 
 PHONY: check-libroach
