@@ -265,6 +265,11 @@ CREATE TABLE y (
   r INT AS (q) STORED
 )
 
+statement error computed columns cannot be foreign key references
+CREATE TABLE y (
+  r INT AS (1) STORED REFERENCES x (a)
+)
+
 statement error computed column expression '\(SELECT 1\)' may not contain variable sub-expressions
 CREATE TABLE y (
   r INT AS ((SELECT 1)) STORED

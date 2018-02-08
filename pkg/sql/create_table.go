@@ -1273,6 +1273,15 @@ func validateComputedColumn(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) error {
+	// At this point this column's foreign key constraint (if it has one) will
+	// have been hoisted to a table-level constraint, so HasFKConstraint() will
+	// return false. We still have the name of the column referenced, however,
+	// and we use this to determine if there exists a foreign-key constraint
+	// which applies to this column.
+	if d.References.Col != "" {
+		return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
+			"computed columns cannot be foreign key references")
+	}
 	dependencies := make(map[string]struct{})
 	// First, check that no column in the expression is a computed column.
 	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c sqlbase.ColumnDescriptor) error {
