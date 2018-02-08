@@ -256,7 +256,7 @@ func maybeAddSequenceDependencies(
 	}
 	var seqDescs []*sqlbase.TableDescriptor
 	for _, seqName := range seqNames {
-		parsedSeqName, err := evalCtx.Planner.ParseQualifiedTableName(ctx, seqName)
+		parsedSeqName, err := evalCtx.Sequence.ParseQualifiedTableName(ctx, seqName)
 		if err != nil {
 			return nil, err
 		}
