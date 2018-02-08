@@ -21,7 +21,7 @@ interface LocalityViewProps {
   liveness: { [id: string]: LivenessStatus };
 }
 
-class LocalityView extends React.Component<LocalityViewProps & WithRouterProps, any> {
+class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> {
   onClick = () => {
     const localityTree = this.props.localityTree;
     const destination = CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(localityTree.tiers);
