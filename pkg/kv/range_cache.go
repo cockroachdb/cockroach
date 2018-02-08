@@ -67,9 +67,10 @@ type RangeDescriptorDB interface {
 
 // legacyRangeDescriptorDB is a type which can query range descriptors from an
 // underlying datastore. It is a superset of RangeDescriptorDB which can also
-// perform compatibility RangeLookups using RangeLookupRequest batches.
+// perform compatibility RangeLookups using DeprecatedRangeLookupRequest
+// batches.
 //
-// TODO: remove in version 1.3.
+// TODO(nvanbenschoten): remove in version 2.1.
 type legacyRangeDescriptorDB interface {
 	RangeDescriptorDB
 
@@ -433,7 +434,7 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	return rdc.db.RangeLookup(ctx, key, useReverseScan)
 }
 
-// TODO: remove in version 1.3.
+// TODO(nvanbenschoten): remove in version 2.1.
 func (rdc *RangeDescriptorCache) performLegacyRangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {

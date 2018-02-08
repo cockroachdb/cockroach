@@ -51,7 +51,7 @@ func (ba *BatchRequest) getReqCounts() reqCounts {
 			counts[15]++
 		case r.PushTxn != nil:
 			counts[16]++
-		case r.RangeLookup != nil:
+		case r.DeprecatedRangeLookup != nil:
 			counts[17]++
 		case r.ResolveIntent != nil:
 			counts[18]++
@@ -122,7 +122,7 @@ var requestNames = []string{
 	"HeartbeatTxn",
 	"Gc",
 	"PushTxn",
-	"RngLookup",
+	"DeprecatedRngLookup",
 	"ResolveIntent",
 	"ResolveIntentRng",
 	"Merge",
@@ -196,7 +196,7 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 	var buf14 []HeartbeatTxnResponse
 	var buf15 []GCResponse
 	var buf16 []PushTxnResponse
-	var buf17 []RangeLookupResponse
+	var buf17 []DeprecatedRangeLookupResponse
 	var buf18 []ResolveIntentResponse
 	var buf19 []ResolveIntentRangeResponse
 	var buf20 []MergeResponse
@@ -324,11 +324,11 @@ func (ba *BatchRequest) CreateReply() *BatchResponse {
 			}
 			br.Responses[i].PushTxn = &buf16[0]
 			buf16 = buf16[1:]
-		case r.RangeLookup != nil:
+		case r.DeprecatedRangeLookup != nil:
 			if buf17 == nil {
-				buf17 = make([]RangeLookupResponse, counts[17])
+				buf17 = make([]DeprecatedRangeLookupResponse, counts[17])
 			}
-			br.Responses[i].RangeLookup = &buf17[0]
+			br.Responses[i].DeprecatedRangeLookup = &buf17[0]
 			buf17 = buf17[1:]
 		case r.ResolveIntent != nil:
 			if buf18 == nil {

@@ -96,7 +96,7 @@ type Iterator interface {
 	// allowMeta2Splits is true and keys.NoSplitSpansWithoutMeta2Splits if
 	// allowMeta2Splits is false.
 	//
-	// TODO: remove allowMeta2Splits in version 1.3.
+	// TODO(nvanbenschoten): remove allowMeta2Splits in version 2.1.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
 	// MVCCGet retrieves the value for the key at the specified timestamp. The
 	// value is returned in batch repr format with the key being present as the

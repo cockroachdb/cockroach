@@ -563,18 +563,21 @@ message AdminChangeReplicasResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
-// A RangeLookupRequest is arguments to the RangeLookup() method. A
-// forward lookup request returns a range containing the requested
-// key. A reverse lookup request returns a range containing the
-// previous key of the requested key (e.g., if a requested key is the
-// end key of range R, the reverse lookup request returns R).
+// A DeprecatedRangeLookupRequest is arguments to the LegacyRangeLookup()
+// method. It has been deprecated in favor of using ScanRequest to perform the
+// lookup.
 //
-// RangeLookupRequest also specifies the maximum number of range
-// descriptors that should be returned, if there are additional
-// consecutive addressable ranges. Specify max_ranges > 1 to pre-fill the
-// range descriptor cache. The additional ranges are scanned in the same
-// direction as lookup (forward v.s. reverse).
-message RangeLookupRequest {
+// A forward lookup request returns a range containing the requested key. A
+// reverse lookup request returns a range containing the previous key of the
+// requested key (e.g., if a requested key is the end key of range R, the
+// reverse lookup request returns R).
+//
+// DeprecatedRangeLookupRequest also specifies the maximum number of range
+// descriptors that should be returned, if there are additional consecutive
+// addressable ranges. Specify max_ranges > 1 to pre-fill the range descriptor
+// cache. The additional ranges are scanned in the same direction as lookup
+// (forward v.s. reverse).
+message DeprecatedRangeLookupRequest {
   option (gogoproto.equal) = true;
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -585,12 +588,11 @@ message RangeLookupRequest {
   bool reverse = 4;
 }
 
-// A RangeLookupResponse is the return value from the RangeLookup()
-// method. It returns metadata for the range containing the requested
-// key, optionally returning the metadata for additional consecutive
-// ranges beyond the requested range to pre-fill the range descriptor
-// cache.
-message RangeLookupResponse {
+// A DeprecatedRangeLookupResponse is the return value from the
+// LegacyRangeLookup() method. It returns metadata for the range containing the
+// requested key, optionally returning the metadata for additional consecutive
+// ranges beyond the requested range to pre-fill the range descriptor cache.
+message DeprecatedRangeLookupResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated RangeDescriptor ranges = 2 [(gogoproto.nullable) = false];
   repeated RangeDescriptor prefetched_ranges = 3 [(gogoproto.nullable) = false];
@@ -1214,7 +1216,7 @@ message RequestUnion {
   HeartbeatTxnRequest heartbeat_txn = 12;
   GCRequest gc = 13;
   PushTxnRequest push_txn = 14;
-  RangeLookupRequest range_lookup = 15;
+  DeprecatedRangeLookupRequest deprecated_range_lookup = 15;
   ResolveIntentRequest resolve_intent = 16;
   ResolveIntentRangeRequest resolve_intent_range = 17;
   MergeRequest merge = 18;
@@ -1267,7 +1269,7 @@ message ResponseUnion {
   HeartbeatTxnResponse heartbeat_txn = 12;
   GCResponse gc = 13;
   PushTxnResponse push_txn = 14;
-  RangeLookupResponse range_lookup = 15;
+  DeprecatedRangeLookupResponse deprecated_range_lookup = 15;
   ResolveIntentResponse resolve_intent = 16;
   ResolveIntentRangeResponse resolve_intent_range = 17;
   MergeResponse merge = 18;
