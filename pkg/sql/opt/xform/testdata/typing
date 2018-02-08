@@ -6,7 +6,7 @@ project
  ├── columns: a.x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{int}]
+ └── projections
       └── variable: a.x [type=int]
 
 # Const
@@ -17,7 +17,7 @@ project
  ├── columns: column1:int:null:1 column2:bool:null:2 column3:bool:null:3
  ├── values
  │    └── tuple [type=tuple{}]
- └── projections [type=tuple{int, bool, bool}]
+ └── projections
       ├── const: 1 [type=int]
       ├── const: true [type=bool]
       └── const: false [type=bool]
@@ -39,10 +39,10 @@ build
 SELECT (a.x, 1.5), a.y FROM a
 ----
 project
- ├── columns: a.y:int:null:2 column3:tuple{int, decimal}:null:3
+ ├── columns: column3:tuple{int, decimal}:null:3 a.y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{tuple{int, decimal}, int}]
+ └── projections
       ├── tuple [type=tuple{int, decimal}]
       │    ├── variable: a.x [type=int]
       │    └── const: 1.5 [type=decimal]
@@ -209,7 +209,7 @@ project
  ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{int, int, int}]
+ └── projections
       ├── bitand [type=int]
       │    ├── variable: a.x [type=int]
       │    └── variable: a.y [type=int]
@@ -228,7 +228,7 @@ project
  ├── columns: column3:decimal:null:3 column4:date:null:4 column5:decimal:null:5 column6:decimal:null:6 column7:decimal:null:7
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{decimal, date, decimal, decimal, decimal}]
+ └── projections
       ├── plus [type=decimal]
       │    ├── variable: a.x [type=int]
       │    └── const: 1.5 [type=decimal]
@@ -253,7 +253,7 @@ project
  ├── columns: column3:decimal:null:3 column4:decimal:null:4 column5:int:null:5 column6:int:null:6
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{decimal, decimal, int, int}]
+ └── projections
       ├── mod [type=decimal]
       │    ├── const: 100.1 [type=decimal]
       │    └── variable: a.x [type=int]
@@ -275,7 +275,7 @@ project
  ├── columns: column3:string:null:3
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
- └── projections [type=tuple{string}]
+ └── projections
       └── concat [type=string]
            ├── variable: b.x [type=string]
            └── const: 'more' [type=string]
@@ -288,7 +288,7 @@ project
  ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections [type=tuple{int, int, int}]
+ └── projections
       ├── unary-plus [type=int]
       │    └── variable: a.x [type=int]
       ├── unary-minus [type=int]

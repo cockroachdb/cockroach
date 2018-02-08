@@ -97,12 +97,14 @@ func TestLogicalGroupByProps(t *testing.T) {
 	col1 := f.Metadata().TableColumn(a, 1)
 	varGroup := f.ConstructVariable(f.InternPrivate(col1))
 	items1 := f.InternList([]opt.GroupID{varGroup})
-	cols1 := util.MakeFastIntSet(int(col1))
+	var cols1 util.FastIntMap
+	cols1.Set(0, int(col1))
 	groupingsGroup := f.ConstructProjections(items1, f.InternPrivate(&cols1))
 
 	col2 := f.Metadata().AddColumn("false", types.Bool)
 	items2 := f.InternList([]opt.GroupID{f.ConstructFalse()})
-	cols2 := util.MakeFastIntSet(int(col2))
+	var cols2 util.FastIntMap
+	cols2.Set(0, int(col2))
 	aggsGroup := f.ConstructProjections(items2, f.InternPrivate(&cols2))
 
 	groupByGroup := f.ConstructGroupBy(scanGroup, groupingsGroup, aggsGroup)

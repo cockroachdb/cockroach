@@ -168,15 +168,19 @@ func (ev *ExprView) formatScalar(tp treeprinter.Node) {
 	fmt.Fprintf(&buf, "%v", ev.op)
 	ev.formatPrivate(&buf, ev.Private())
 
-	scalar := ev.Logical().Scalar
-	if scalar != nil {
-		buf.WriteString(" [")
-		fmt.Fprintf(&buf, "type=%s", scalar.Type)
-		buf.WriteString("]")
-	} else {
-		// Don't panic if scalar properties don't yet exist when printing
-		// expression.
-		buf.WriteString(" [type=undefined]")
+	// Don't show the type of the projections op, the types of each expression are
+	// already listed in the children.
+	if ev.Operator() != opt.ProjectionsOp {
+		scalar := ev.Logical().Scalar
+		if scalar != nil {
+			buf.WriteString(" [")
+			fmt.Fprintf(&buf, "type=%s", scalar.Type)
+			buf.WriteString("]")
+		} else {
+			// Don't panic if scalar properties don't yet exist when printing
+			// expression.
+			buf.WriteString(" [type=undefined]")
+		}
 	}
 
 	tp = tp.Child(buf.String())
