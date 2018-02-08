@@ -132,6 +132,40 @@ func (_f *factory) ConstructProjections(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
 }
 
+func (_f *factory) ConstructAggregations(
+	aggs opt.ListID,
+	cols opt.PrivateID,
+) opt.GroupID {
+	_aggregationsExpr := makeAggregationsExpr(aggs, cols)
+	_group := _f.mem.lookupGroupByFingerprint(_aggregationsExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_aggregationsExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_aggregationsExpr)))
+}
+
+func (_f *factory) ConstructGroupings(
+	elems opt.ListID,
+	cols opt.PrivateID,
+) opt.GroupID {
+	_groupingsExpr := makeGroupingsExpr(elems, cols)
+	_group := _f.mem.lookupGroupByFingerprint(_groupingsExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_groupingsExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupingsExpr)))
+}
+
 func (_f *factory) ConstructFilters(
 	conditions opt.ListID,
 ) opt.GroupID {
@@ -1297,7 +1331,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [77]dynConstructLookupFunc
+var dynConstructLookup [79]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1343,6 +1377,16 @@ func init() {
 	// ProjectionsOp
 	dynConstructLookup[opt.ProjectionsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructProjections(f.InternList(children), private)
+	}
+
+	// AggregationsOp
+	dynConstructLookup[opt.AggregationsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructAggregations(f.InternList(children), private)
+	}
+
+	// GroupingsOp
+	dynConstructLookup[opt.GroupingsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructGroupings(f.InternList(children), private)
 	}
 
 	// FiltersOp

@@ -52,11 +52,30 @@ define Tuple {
 }
 
 # Projections is a set of typed scalar expressions that will become output
-# columns for a containing relational expression, such as Project or GroupBy.
+# columns for a containing Project operator. The private Cols field contains
+# the set of column indexes returned by the expression, as a *ColList.
+[Scalar]
+define Projections {
+    Elems ExprList
+    Cols  ColList
+}
+
+# Aggregations is a set of aggregate expressions that will become output
+# columns for a containing GroupBy operator. The private Cols field contains
+# the set of column indexes returned by the expression, as a *ColList.
+[Scalar]
+define Aggregations {
+    Aggs ExprList
+    Cols ColList
+}
+
+# Groupings is a set of grouping expressions that will become output columns
+# for a containing GroupBy operator. The GroupBy operator groups its input by
+# the value of these expressions, and may compute aggregates over the groups.
 # The private Cols field contains the set of column indexes returned by the
 # expression, as a *ColList.
 [Scalar]
-define Projections {
+define Groupings {
     Elems ExprList
     Cols  ColList
 }
