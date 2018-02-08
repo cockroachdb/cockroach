@@ -1,0 +1,297 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+table a
+  k int NOT NULL
+  i int NULL
+  f float NULL
+  s string NULL
+  j jsonb NULL
+
+#
+# EliminateAnd
+#
+opt
+SELECT * FROM a WHERE k=1 AND False AND f=3.5
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── false [type=bool]
+
+#
+# EliminateAnd
+#
+opt
+SELECT * FROM a WHERE False AND s='foo'
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── false [type=bool]
+
+#
+# EliminateOr
+#
+opt
+SELECT * FROM a WHERE k=1 OR (i=2 OR True)
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── true [type=bool]
+
+#
+# EliminateOr
+#
+opt
+SELECT * FROM a WHERE k=1 OR True OR f=3.5
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── true [type=bool]
+
+#
+# FlattenAnd
+#
+opt
+SELECT * FROM a WHERE k=1 AND i=2 AND f=3.5
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── eq [type=bool]
+      │    ├── variable: a.k [type=int]
+      │    └── const: 1 [type=int]
+      ├── eq [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 2 [type=int]
+      └── eq [type=bool]
+           ├── variable: a.f [type=float]
+           └── const: 3.5 [type=float]
+
+#
+# FlattenOr
+#
+opt
+SELECT * FROM a WHERE k=1 OR i=2 OR f=3.5
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── or [type=bool]
+      ├── eq [type=bool]
+      │    ├── variable: a.k [type=int]
+      │    └── const: 1 [type=int]
+      ├── eq [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 2 [type=int]
+      └── eq [type=bool]
+           ├── variable: a.f [type=float]
+           └── const: 3.5 [type=float]
+
+#
+# FlattenAnd + FlattenOr
+#   Combine and/or ops.
+#   Use parentheses to make and/or tree right-heavy instead of left-heavy.
+#
+opt
+SELECT * FROM a WHERE (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar')
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── or [type=bool]
+      │    ├── eq [type=bool]
+      │    │    ├── variable: a.k [type=int]
+      │    │    └── const: 1 [type=int]
+      │    ├── eq [type=bool]
+      │    │    ├── variable: a.i [type=int]
+      │    │    └── const: 2 [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: a.f [type=float]
+      │         └── const: 3.5 [type=float]
+      ├── eq [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      └── ne [type=bool]
+           ├── variable: a.s [type=string]
+           └── const: 'bar' [type=string]
+
+#
+# NegateComparison
+#   Equality and inequality comparisons.
+#
+opt
+SELECT * FROM a WHERE NOT(i=1) AND NOT(i<>1) AND NOT(i>1) AND NOT(i>=1) AND NOT(i<1) AND NOT(i<=1)
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── ne [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 1 [type=int]
+      ├── eq [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 1 [type=int]
+      ├── le [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 1 [type=int]
+      ├── ge [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: 1 [type=int]
+      └── gt [type=bool]
+           ├── variable: a.i [type=int]
+           └── const: 1 [type=int]
+
+#
+# NegateComparison
+#   IN and IS comparisons.
+#
+opt
+SELECT *
+FROM a
+WHERE NOT(i IN (1,2)) AND NOT(i NOT IN (3,4)) AND NOT(i IS NULL) AND NOT(i IS NOT NULL)
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── not-in [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      ├── in [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── tuple [type=tuple{int, int}]
+      │         ├── const: 3 [type=int]
+      │         └── const: 4 [type=int]
+      ├── is-not [type=bool]
+      │    ├── variable: a.i [type=int]
+      │    └── const: NULL [type=NULL]
+      └── is [type=bool]
+           ├── variable: a.i [type=int]
+           └── const: NULL [type=NULL]
+
+#
+# NegateComparison
+#   Like comparisons.
+#
+opt
+SELECT *
+FROM a
+WHERE NOT(s LIKE 'foo') AND NOT(s NOT LIKE 'foo') AND NOT(s ILIKE 'foo') AND NOT(s NOT ILIKE 'foo')
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── not-like [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      ├── like [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      ├── not-i-like [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      └── i-like [type=bool]
+           ├── variable: a.s [type=string]
+           └── const: 'foo' [type=string]
+
+#
+# NegateComparison
+#   SimilarTo comparisons.
+#
+opt
+SELECT * FROM a WHERE NOT(s SIMILAR TO 'foo') AND NOT(s NOT SIMILAR TO 'foo')
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── not-similar-to [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      └── similar-to [type=bool]
+           ├── variable: a.s [type=string]
+           └── const: 'foo' [type=string]
+
+#
+# NegateComparison
+#   RegMatch comparisons.
+#
+opt
+SELECT * FROM a WHERE NOT(s ~ 'foo') AND NOT(s !~ 'foo') AND NOT(s ~* 'foo') AND NOT (s !~* 'foo')
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── not-reg-match [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      ├── reg-match [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      ├── not-reg-i-match [type=bool]
+      │    ├── variable: a.s [type=string]
+      │    └── const: 'foo' [type=string]
+      └── reg-i-match [type=bool]
+           ├── variable: a.s [type=string]
+           └── const: 'foo' [type=string]
+
+#
+# NegateComparison
+#   Contains comparison (should not be negated).
+#
+opt
+SELECT * FROM a WHERE NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]')
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      ├── not [type=bool]
+      │    └── contains [type=bool]
+      │         ├── const: '[1, 2]' [type=jsonb]
+      │         └── variable: a.j [type=jsonb]
+      └── not [type=bool]
+           └── contains [type=bool]
+                ├── const: '[3, 4]' [type=jsonb]
+                └── variable: a.j [type=jsonb]
+
+#
+# EliminateNot
+#
+opt
+SELECT * FROM a WHERE NOT(NOT('[1, 2]' @> j))
+----
+select
+ ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── contains [type=bool]
+      ├── const: '[1, 2]' [type=jsonb]
+      └── variable: a.j [type=jsonb]

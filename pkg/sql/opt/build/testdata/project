@@ -80,7 +80,7 @@ project
       ├── plus [type=int]
       │    ├── variable: a.x [type=int]
       │    └── const: 3 [type=int]
-      └── const: false [type=bool]
+      └── false [type=bool]
 
 build
 SELECT *, ((x < y) OR x > 1000) FROM t.a
@@ -110,4 +110,4 @@ project
  └── projections
       ├── variable: a.x [type=int]
       ├── variable: a.y [type=float]
-      └── const: true [type=bool]
+      └── true [type=bool]

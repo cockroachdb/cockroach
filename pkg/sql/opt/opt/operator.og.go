@@ -50,14 +50,20 @@ const (
 	// expression, as a *ColList.
 	GroupingsOp
 
-	FiltersOp
-
 	ExistsOp
 
+	// AndOp is the boolean conjunction operator that evalutes to true if all of its
+	// conditions evaluate to true. If the conditions list is empty, it evalutes to
+	// true.
 	AndOp
 
+	// OrOp is the boolean disjunction operator that evalutes to true if any of its
+	// conditions evaluate to true. If the conditions list is empty, it evaluates to
+	// false.
 	OrOp
 
+	// NotOp is the boolean negation operator that evaluates to true if its input
+	// evalutes to false.
 	NotOp
 
 	EqOp
@@ -101,8 +107,6 @@ const (
 	IsNotOp
 
 	ContainsOp
-
-	ContainedByOp
 
 	BitandOp
 
@@ -234,9 +238,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsgroupingsfiltersexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainscontained-bybitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsgroupingsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 85, 92, 98, 101, 103, 106, 108, 110, 112, 114, 116, 118, 120, 126, 130, 138, 144, 154, 164, 178, 187, 200, 211, 226, 228, 234, 242, 254, 260, 265, 271, 275, 280, 284, 287, 296, 299, 302, 308, 315, 322, 331, 341, 355, 370, 380, 391, 407, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 618, 625}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 85, 91, 94, 96, 99, 101, 103, 105, 107, 109, 111, 113, 119, 123, 131, 137, 147, 157, 171, 180, 193, 204, 219, 221, 227, 235, 241, 246, 252, 256, 261, 265, 268, 277, 280, 283, 289, 296, 303, 312, 322, 336, 351, 361, 372, 388, 396, 400, 406, 412, 419, 429, 438, 448, 457, 466, 475, 491, 506, 522, 537, 552, 567, 575, 580, 589, 595, 599, 606}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -249,7 +253,6 @@ var ScalarOperators = [...]Operator{
 	ProjectionsOp,
 	AggregationsOp,
 	GroupingsOp,
-	FiltersOp,
 	ExistsOp,
 	AndOp,
 	OrOp,
@@ -275,7 +278,6 @@ var ScalarOperators = [...]Operator{
 	IsOp,
 	IsNotOp,
 	ContainsOp,
-	ContainedByOp,
 	BitandOp,
 	BitorOp,
 	BitxorOp,
@@ -329,7 +331,6 @@ var ComparisonOperators = [...]Operator{
 	IsOp,
 	IsNotOp,
 	ContainsOp,
-	ContainedByOp,
 }
 
 var BinaryOperators = [...]Operator{

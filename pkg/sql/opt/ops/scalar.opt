@@ -81,27 +81,28 @@ define Groupings {
 }
 
 [Scalar]
-define Filters {
-    Conditions ExprList
-}
-
-[Scalar]
 define Exists {
     Input Expr
 }
 
+# And is the boolean conjunction operator that evalutes to true if all of its
+# conditions evaluate to true. If the conditions list is empty, it evalutes to
+# true.
 [Scalar, Boolean]
 define And {
-    Left  Expr
-    Right Expr
+    Conditions ExprList
 }
 
+# Or is the boolean disjunction operator that evalutes to true if any of its
+# conditions evaluate to true. If the conditions list is empty, it evaluates to
+# false.
 [Scalar, Boolean]
 define Or {
-    Left  Expr
-    Right Expr
+    Conditions ExprList
 }
 
+# Not is the boolean negation operator that evaluates to true if its input
+# evalutes to false.
 [Scalar, Boolean]
 define Not {
     Input Expr
@@ -229,12 +230,6 @@ define IsNot {
 
 [Scalar, Comparison]
 define Contains {
-   Left  Expr
-   Right Expr
-}
-
-[Scalar, Comparison]
-define ContainedBy {
    Left  Expr
    Right Expr
 }

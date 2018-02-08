@@ -208,10 +208,26 @@ eq [type=bool]
 build-scalar vars=(jsonb)
 @1 @> '{"a":1}'
 ----
-error: not yet implemented: operator @>
+contains [type=bool]
+ ├── variable: @1 [type=jsonb]
+ └── const: '{"a": 1}' [type=jsonb]
 
 
 build-scalar vars=(jsonb)
 '{"a":1}' <@ @1
 ----
-error: not yet implemented: operator <@
+contains [type=bool]
+ ├── variable: @1 [type=jsonb]
+ └── const: '{"a": 1}' [type=jsonb]
+
+
+build-scalar
+TRUE
+----
+true [type=bool]
+
+
+build-scalar
+FALSE
+----
+false [type=bool]

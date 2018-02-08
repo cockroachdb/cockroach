@@ -68,12 +68,6 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0 + int(groupingsExpr.elems().Length)
 	},
 
-	// FiltersOp
-	func(ev *ExprView) int {
-		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(filtersExpr.conditions().Length)
-	},
-
 	// ExistsOp
 	func(ev *ExprView) int {
 		return 1
@@ -81,12 +75,14 @@ var childCountLookup = [...]childCountLookupFunc{
 
 	// AndOp
 	func(ev *ExprView) int {
-		return 2
+		andExpr := (*andExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(andExpr.conditions().Length)
 	},
 
 	// OrOp
 	func(ev *ExprView) int {
-		return 2
+		orExpr := (*orExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(orExpr.conditions().Length)
 	},
 
 	// NotOp
@@ -195,11 +191,6 @@ var childCountLookup = [...]childCountLookupFunc{
 	},
 
 	// ContainsOp
-	func(ev *ExprView) int {
-		return 2
-	},
-
-	// ContainedByOp
 	func(ev *ExprView) int {
 		return 2
 	},
@@ -513,17 +504,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
-	// FiltersOp
-	func(ev *ExprView, n int) opt.GroupID {
-		filtersExpr := (*filtersExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		default:
-			list := ev.mem.lookupList(filtersExpr.conditions())
-			return list[n-0]
-		}
-	},
-
 	// ExistsOp
 	func(ev *ExprView, n int) opt.GroupID {
 		existsExpr := (*existsExpr)(ev.mem.lookupExpr(ev.loc))
@@ -541,12 +521,9 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		andExpr := (*andExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
-		case 0:
-			return andExpr.left()
-		case 1:
-			return andExpr.right()
 		default:
-			panic("child index out of range")
+			list := ev.mem.lookupList(andExpr.conditions())
+			return list[n-0]
 		}
 	},
 
@@ -555,12 +532,9 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		orExpr := (*orExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
-		case 0:
-			return orExpr.left()
-		case 1:
-			return orExpr.right()
 		default:
-			panic("child index out of range")
+			list := ev.mem.lookupList(orExpr.conditions())
+			return list[n-0]
 		}
 	},
 
@@ -865,20 +839,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			return containsExpr.left()
 		case 1:
 			return containsExpr.right()
-		default:
-			panic("child index out of range")
-		}
-	},
-
-	// ContainedByOp
-	func(ev *ExprView, n int) opt.GroupID {
-		containedByExpr := (*containedByExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return containedByExpr.left()
-		case 1:
-			return containedByExpr.right()
 		default:
 			panic("child index out of range")
 		}
@@ -1546,11 +1506,6 @@ var privateLookup = [...]privateLookupFunc{
 		return groupingsExpr.cols()
 	},
 
-	// FiltersOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
 	// ExistsOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
@@ -1672,11 +1627,6 @@ var privateLookup = [...]privateLookupFunc{
 	},
 
 	// ContainsOp
-	func(ev *ExprView) opt.PrivateID {
-		return 0
-	},
-
-	// ContainedByOp
 	func(ev *ExprView) opt.PrivateID {
 		return 0
 	},
@@ -1914,7 +1864,6 @@ var isScalarLookup = [...]bool{
 	true,  // ProjectionsOp
 	true,  // AggregationsOp
 	true,  // GroupingsOp
-	true,  // FiltersOp
 	true,  // ExistsOp
 	true,  // AndOp
 	true,  // OrOp
@@ -1940,7 +1889,6 @@ var isScalarLookup = [...]bool{
 	true,  // IsOp
 	true,  // IsNotOp
 	true,  // ContainsOp
-	true,  // ContainedByOp
 	true,  // BitandOp
 	true,  // BitorOp
 	true,  // BitxorOp
@@ -1999,7 +1947,6 @@ var isBooleanLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	true,  // AndOp
 	true,  // OrOp
@@ -2025,7 +1972,6 @@ var isBooleanLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2084,7 +2030,6 @@ var isComparisonLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2110,7 +2055,6 @@ var isComparisonLookup = [...]bool{
 	true,  // IsOp
 	true,  // IsNotOp
 	true,  // ContainsOp
-	true,  // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2169,7 +2113,6 @@ var isBinaryLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2195,7 +2138,6 @@ var isBinaryLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	true,  // BitandOp
 	true,  // BitorOp
 	true,  // BitxorOp
@@ -2254,7 +2196,6 @@ var isUnaryLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2280,7 +2221,6 @@ var isUnaryLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2339,7 +2279,6 @@ var isRelationalLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2365,7 +2304,6 @@ var isRelationalLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2424,7 +2362,6 @@ var isJoinLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2450,7 +2387,6 @@ var isJoinLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2509,7 +2445,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2535,7 +2470,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2594,7 +2528,6 @@ var isEnforcerLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // GroupingsOp
-	false, // FiltersOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2620,7 +2553,6 @@ var isEnforcerLookup = [...]bool{
 	false, // IsOp
 	false, // IsNotOp
 	false, // ContainsOp
-	false, // ContainedByOp
 	false, // BitandOp
 	false, // BitorOp
 	false, // BitxorOp
@@ -2941,27 +2873,6 @@ func (m *memoExpr) asGroupings() *groupingsExpr {
 	return (*groupingsExpr)(m)
 }
 
-type filtersExpr memoExpr
-
-func makeFiltersExpr(conditions opt.ListID) filtersExpr {
-	return filtersExpr{op: opt.FiltersOp, state: exprState{conditions.Offset, conditions.Length}}
-}
-
-func (e *filtersExpr) conditions() opt.ListID {
-	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
-}
-
-func (e *filtersExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asFilters() *filtersExpr {
-	if m.op != opt.FiltersOp {
-		return nil
-	}
-	return (*filtersExpr)(m)
-}
-
 type existsExpr memoExpr
 
 func makeExistsExpr(input opt.GroupID) existsExpr {
@@ -2983,18 +2894,17 @@ func (m *memoExpr) asExists() *existsExpr {
 	return (*existsExpr)(m)
 }
 
+// andExpr is the boolean conjunction operator that evalutes to true if all of its
+// conditions evaluate to true. If the conditions list is empty, it evalutes to
+// true.
 type andExpr memoExpr
 
-func makeAndExpr(left opt.GroupID, right opt.GroupID) andExpr {
-	return andExpr{op: opt.AndOp, state: exprState{uint32(left), uint32(right)}}
+func makeAndExpr(conditions opt.ListID) andExpr {
+	return andExpr{op: opt.AndOp, state: exprState{conditions.Offset, conditions.Length}}
 }
 
-func (e *andExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *andExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
+func (e *andExpr) conditions() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
 }
 
 func (e *andExpr) fingerprint() fingerprint {
@@ -3008,18 +2918,17 @@ func (m *memoExpr) asAnd() *andExpr {
 	return (*andExpr)(m)
 }
 
+// orExpr is the boolean disjunction operator that evalutes to true if any of its
+// conditions evaluate to true. If the conditions list is empty, it evaluates to
+// false.
 type orExpr memoExpr
 
-func makeOrExpr(left opt.GroupID, right opt.GroupID) orExpr {
-	return orExpr{op: opt.OrOp, state: exprState{uint32(left), uint32(right)}}
+func makeOrExpr(conditions opt.ListID) orExpr {
+	return orExpr{op: opt.OrOp, state: exprState{conditions.Offset, conditions.Length}}
 }
 
-func (e *orExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *orExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
+func (e *orExpr) conditions() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
 }
 
 func (e *orExpr) fingerprint() fingerprint {
@@ -3033,6 +2942,8 @@ func (m *memoExpr) asOr() *orExpr {
 	return (*orExpr)(m)
 }
 
+// notExpr is the boolean negation operator that evaluates to true if its input
+// evalutes to false.
 type notExpr memoExpr
 
 func makeNotExpr(input opt.GroupID) notExpr {
@@ -3577,31 +3488,6 @@ func (m *memoExpr) asContains() *containsExpr {
 		return nil
 	}
 	return (*containsExpr)(m)
-}
-
-type containedByExpr memoExpr
-
-func makeContainedByExpr(left opt.GroupID, right opt.GroupID) containedByExpr {
-	return containedByExpr{op: opt.ContainedByOp, state: exprState{uint32(left), uint32(right)}}
-}
-
-func (e *containedByExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *containedByExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *containedByExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asContainedBy() *containedByExpr {
-	if m.op != opt.ContainedByOp {
-		return nil
-	}
-	return (*containedByExpr)(m)
 }
 
 type bitandExpr memoExpr

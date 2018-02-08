@@ -26,7 +26,7 @@ project
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    ├── groupings
  │    │    └── aggregations
- │    └── const: true [type=bool]
+ │    └── true [type=bool]
  └── projections
       └── const: 3 [type=int]
 

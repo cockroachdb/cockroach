@@ -1,0 +1,53 @@
+# =============================================================================
+# bool.opt contains normalization rules for boolean And, Or, Not operators.
+# =============================================================================
+
+
+# EliminateAnd discards the And operator if any of its operands is false.
+[EliminateAnd, Normalize]
+(And
+    $conditions:[ ... (False) ... ]
+)
+=>
+(False)
+
+# EliminateOr discards the Or operator if any of its operands is true.
+[EliminateOr, Normalize]
+(Or
+    $conditions:[ ... (True) ... ]
+)
+=>
+(True)
+
+# FlattenAnd ensures that And operators are never nested within one another. If
+# an And operator has another And as a child, then the child And is "flattened"
+# by merging its conditions into the parent And. Flattened And conditions are
+# easier to match and enumerate.
+[FlattenAnd, Normalize]
+(And
+    $conditions:[ ... (And) ... ]
+)
+=>
+(FlattenAnd $conditions)
+
+# FlattenOr ensures that Or operators are never nested within one another. If
+# an Or operator has another Or as a child, then the child Or is "flattened" by
+# merging its conditions into the parent Or. Flattened Or conditions are easier
+# to match and enumerate.
+[FlattenOr, Normalize]
+(Or
+    $conditions:[ ... (Or) ... ]
+)
+=>
+(FlattenOr $conditions)
+
+# NegateComparison inverts eligible comparison operators when they are negated
+# by the Not operator. For example, Eq maps to Ne, and Gt maps to Le.
+[NegateComparison, Normalize]
+(Not $input:(Comparison) & (CanInvertComparison $input))
+=>
+(InvertComparison $input)
+
+# EliminateNot discards a doubled Not operator.
+[EliminateNot, Normalize]
+(Not (Not $input:*)) => $input
