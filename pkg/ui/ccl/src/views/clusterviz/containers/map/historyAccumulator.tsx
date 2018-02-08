@@ -38,6 +38,7 @@ interface HistoryAccumulatorProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
   liveness: { [id: string]: LivenessStatus };
+  dataExists: boolean;
   dataIsValid: boolean;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
@@ -90,7 +91,7 @@ class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & Histo
 
     return (
       <Loading
-        loading={!this.props.dataIsValid}
+        loading={!this.props.dataExists}
         className="loading-image loading-image__spinner-left"
         image={spinner}
       >
@@ -106,6 +107,13 @@ class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & Histo
   }
 }
 
+const selectDataExists = createSelector(
+  selectNodeRequestStatus,
+  selectLocationsRequestStatus,
+  selectLivenessRequestStatus,
+  (nodes, locations, liveness) => !!nodes.data && !!locations.data && !!liveness.data,
+);
+
 const selectDataIsValid = createSelector(
   selectNodeRequestStatus,
   selectLocationsRequestStatus,
@@ -120,6 +128,7 @@ export default connect(
     locationTree: selectLocationTree(state),
     liveness: livenessStatusByNodeIDSelector(state),
     dataIsValid: selectDataIsValid(state),
+    dataExists: selectDataExists(state),
   }),
   {
     refreshNodes,
