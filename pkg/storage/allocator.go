@@ -130,25 +130,20 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	required         []config.Constraint
-	relaxConstraints bool
-	aliveStoreCount  int
+	required        []config.Constraint
+	aliveStoreCount int
 }
 
 func (ae *allocatorError) Error() string {
-	anyAll := "all attributes"
-	if ae.relaxConstraints {
-		anyAll = "an attribute"
-	}
 	var auxInfo string
 	// Whenever the likely problem is not having enough nodes up, make the
 	// message really clear.
-	if ae.relaxConstraints || len(ae.required) == 0 {
+	if len(ae.required) == 0 {
 		auxInfo = "; likely not enough nodes in cluster"
 	}
-	return fmt.Sprintf("0 of %d store%s with %s matching %s%s",
+	return fmt.Sprintf("0 of %d store%s with attributes matching %s%s",
 		ae.aliveStoreCount, util.Pluralize(int64(ae.aliveStoreCount)),
-		anyAll, ae.required, auxInfo)
+		ae.required, auxInfo)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}
@@ -284,7 +279,6 @@ func (a *Allocator) ComputeAction(
 				zone.Constraints,
 				liveReplicas,
 				rangeInfo,
-				true, /* relaxConstraints */
 				disableStatsBasedRebalancing,
 			); err == nil {
 				removeDead = true
@@ -333,15 +327,12 @@ type decisionDetails struct {
 // required attributes. Nodes already accommodating existing replicas are ruled
 // out as targets. The range ID of the replica being allocated for is also
 // passed in to ensure that we don't try to replace an existing dead replica on
-// a store. If relaxConstraints is true, then the required attributes will be
-// relaxed as necessary, from least specific to most specific, in order to
-// allocate a target.
+// a store.
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
 	constraints config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	relaxConstraints bool,
 	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
