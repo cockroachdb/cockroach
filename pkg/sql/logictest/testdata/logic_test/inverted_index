@@ -395,3 +395,36 @@ query IT
 SELECT * from d where b @> '[[]]' ORDER BY a;
 ----
 26  [[], {}]
+
+statement ok
+INSERT INTO d VALUES (29,  NULL)
+
+query IT
+SELECT * from d where b IS NULL;
+----
+29  NULL
+
+query IT
+SELECT * from d where b = NULL;
+----
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b IS NULL
+----
+index-join  0  index-join  ·       ·          (a, b)           a!=NULL; weak-key(a,b)
+ ├── scan   1  scan        ·       ·          (a, b[omitted])  a!=NULL; weak-key(a,b)
+ │          1  ·           table   d@foo_inv  ·                ·
+ │          1  ·           spans   ALL        ·                ·
+ └── scan   1  scan        ·       ·          (a, b)           ·
+·           1  ·           table   d@primary  ·                ·
+·           1  ·           filter  b IS NULL  ·                ·
+
+
+query IT
+SELECT * from d where b @> NULL;
+----
+
+query IT
+SELECT * from d where b @> 'null' ORDER BY a;
+----
+11  null
