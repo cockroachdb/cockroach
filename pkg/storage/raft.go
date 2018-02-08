@@ -19,7 +19,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -99,41 +98,13 @@ func (r *raftLogger) Fatalf(format string, v ...interface{}) {
 func (r *raftLogger) Panic(v ...interface{}) {
 	s := fmt.Sprint(v...)
 	log.ErrorfDepth(r.ctx, 1, s)
-	if is14231Error(s) {
-		log.Shout(r.ctx, log.Severity_ERROR, is14231HelpMessage)
-	}
 	panic(s)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	s := fmt.Sprintf(format, v...)
-	log.ErrorfDepth(r.ctx, 1, s)
-	if is14231Error(s) {
-		log.Shout(r.ctx, log.Severity_ERROR, is14231HelpMessage)
-	}
+	log.ErrorfDepth(r.ctx, 1, format, v...)
 	panic(fmt.Sprintf(format, v...))
 }
-
-// Returns whether the provided error message matches the error observed in
-// issue #14231. Such errors are likely to be the result of wiping a store's
-// data directory and bringing it back online without join flags but with the
-// same address, node ID, and store ID, and join flags. While we should prevent
-// these errors in our next release, for now the best we can do is help users
-// understand them.
-//
-// TODO(#14231): Remove this method once the issue is fixed (hopefully in 1.2).
-func is14231Error(s string) bool {
-	return strings.Contains(s, "is out of range [lastIndex(") &&
-		strings.Contains(s, "Was the raft log corrupted, truncated, or lost?")
-}
-
-// TODO(#14231): Remove this once the issue is fixed (hopefully in 1.2).
-const is14231HelpMessage = "Server crashing due to missing data. Was the server restarted with a\n" +
-	"different store directory than before? A --join parameter must be specified\n" +
-	"in order to make restarts with a new store directory safe. Please try again\n" +
-	"with a new directory and a valid --join flag. If this server was started with\n" +
-	"its old data or with a valid --join parameter and you are still seeing this,\n" +
-	"please report an issue at https://github.com/cockroachdb/cockroach/issues/new"
 
 func logRaftReady(ctx context.Context, ready raft.Ready) {
 	if log.V(5) {
