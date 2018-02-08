@@ -54,17 +54,21 @@ var firstRangeInfo = testRangeInfo([]roachpb.ReplicaDescriptor{}, firstRange)
 
 var simpleZoneConfig = config.ZoneConfig{
 	NumReplicas: 1,
-	Constraints: config.Constraints{
-		Constraints: []config.Constraint{
-			{Value: "a"},
-			{Value: "ssd"},
+	Constraints: []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Value: "a"},
+				{Value: "ssd"},
+			},
 		},
 	},
 }
 
 var multiDCConfig = config.ZoneConfig{
 	NumReplicas: 2,
-	Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "ssd"}}},
+	Constraints: []config.Constraints{
+		{Constraints: []config.Constraint{{Value: "ssd"}}},
+	},
 }
 
 var singleStore = []*roachpb.StoreDescriptor{
@@ -497,10 +501,12 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, _, err := a.AllocateTarget(
 		context.Background(),
-		config.Constraints{
-			Constraints: []config.Constraint{
-				{Value: "a"},
-				{Value: "hdd"},
+		[]config.Constraints{
+			{
+				Constraints: []config.Constraint{
+					{Value: "a"},
+					{Value: "hdd"},
+				},
 			},
 		},
 		[]roachpb.ReplicaDescriptor{
@@ -581,7 +587,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, _ := a.RebalanceTarget(
 			ctx,
-			config.Constraints{},
+			nil, /* constraints */
 			nil,
 			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: 3}}, firstRange),
 			storeFilterThrottled,
@@ -605,7 +611,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, nil, a.scorerOptions(false))
+		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
 		if expResult := (i >= 2); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t; desc %+v; sl: %+v", i, expResult, result, desc, sl)
 		}
@@ -736,7 +742,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			status,
 			rangeInfo,
 			storeFilterThrottled,
@@ -756,7 +762,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			status,
 			rangeInfo,
 			storeFilterThrottled,
@@ -773,7 +779,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			status,
 			rangeInfo,
 			storeFilterThrottled,
@@ -858,7 +864,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			result, _ := a.RebalanceTarget(
-				ctx, config.Constraints{}, nil, testRangeInfo(c.existing, firstRange), storeFilterThrottled, false)
+				ctx, nil, nil, testRangeInfo(c.existing, firstRange), storeFilterThrottled, false)
 			if c.expected > 0 {
 				if result == nil {
 					t.Fatalf("expected %d, but found nil", c.expected)
@@ -1001,7 +1007,7 @@ func TestAllocatorRebalanceThrashing(t *testing.T) {
 				if !ok {
 					t.Fatalf("[store %d]: unable to get store %d descriptor", j, store.StoreID)
 				}
-				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo, nil, a.scorerOptions(false)), cluster[j].shouldRebalanceFrom; a != e {
+				if a, e := shouldRebalance(context.Background(), desc, sl, firstRangeInfo, a.scorerOptions(false)), cluster[j].shouldRebalanceFrom; a != e {
 					t.Errorf("[store %d]: shouldRebalance %t != expected %t", store.StoreID, a, e)
 				}
 			}
@@ -1052,7 +1058,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, _ := a.RebalanceTarget(
 			ctx,
-			config.Constraints{},
+			nil, /* constraints */
 			nil,
 			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}}, firstRange),
 			storeFilterThrottled,
@@ -1070,7 +1076,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 			t.Fatalf("%d: unable to get store %d descriptor", i, store.StoreID)
 		}
 		sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
-		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, nil, a.scorerOptions(false))
+		result := shouldRebalance(ctx, desc, sl, firstRangeInfo, a.scorerOptions(false))
 		if expResult := (i < 3); expResult != result {
 			t.Errorf("%d: expected rebalance %t; got %t", i, expResult, result)
 		}
@@ -1124,7 +1130,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.Constraints{},
+				nil, /* constraints */
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1178,7 +1184,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.Constraints{},
+				nil, /* constraints */
 				existing,
 				c.leaseholder,
 				0,
@@ -1241,7 +1247,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			result := a.ShouldTransferLease(
 				context.Background(),
-				config.Constraints{},
+				nil, /* constraints */
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1303,7 +1309,7 @@ func TestAllocatorRemoveTargetLocality(t *testing.T) {
 		}
 		targetRepl, details, err := a.RemoveTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
 			false,
@@ -1387,7 +1393,7 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 		}
 		targetStore, details, err := a.AllocateTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
 			false,
@@ -1509,7 +1515,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 		}
 		targetStore, details := a.RebalanceTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			nil,
 			testRangeInfo(existingRepls, firstRange),
 			storeFilterThrottled,
@@ -1684,7 +1690,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			})
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				config.Constraints{},
+				nil, /* constraints */
 				existing,
 				c.leaseholder,
 				0,
@@ -1885,7 +1891,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		targetRepl, _, err := a.RemoveTarget(
 			ctx,
-			config.Constraints{},
+			nil, /* constraints */
 			replicas,
 			testRangeInfo(replicas, firstRange),
 			false,
@@ -1914,7 +1920,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -1938,7 +1944,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -1972,7 +1978,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2006,7 +2012,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2035,7 +2041,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2064,7 +2070,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   5,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2103,7 +2109,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2137,7 +2143,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2178,7 +2184,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2207,7 +2213,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2236,7 +2242,7 @@ func TestAllocatorComputeAction(t *testing.T) {
 		{
 			zone: config.ZoneConfig{
 				NumReplicas:   3,
-				Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "us-east"}}},
+				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east"}}}},
 				RangeMinBytes: 0,
 				RangeMaxBytes: 64000,
 			},
@@ -2374,7 +2380,7 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		target, _ := a.RebalanceTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			nil,
 			testRangeInfo(desc.Replicas, desc.RangeID),
 			storeFilterThrottled,
@@ -2388,7 +2394,7 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		target, _ := a.RebalanceTarget(
 			context.Background(),
-			config.Constraints{},
+			nil, /* constraints */
 			nil,
 			testRangeInfo(desc.Replicas, desc.RangeID),
 			storeFilterThrottled,
@@ -2726,8 +2732,8 @@ func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 func TestAllocatorError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	constraint := []config.Constraint{{Value: "one"}}
-	constraints := []config.Constraint{{Value: "one"}, {Value: "two"}}
+	constraint := []config.Constraints{{Constraints: []config.Constraint{{Value: "one"}}}}
+	constraints := []config.Constraints{{Constraints: []config.Constraint{{Value: "one"}, {Value: "two"}}}}
 
 	testCases := []struct {
 		ae       allocatorError
@@ -2736,13 +2742,13 @@ func TestAllocatorError(t *testing.T) {
 		{allocatorError{nil, 1},
 			"0 of 1 store with attributes matching []; likely not enough nodes in cluster"},
 		{allocatorError{constraint, 1},
-			"0 of 1 store with attributes matching [one]"},
+			"0 of 1 store with attributes matching [{0 [+one]}]"},
 		{allocatorError{constraint, 2},
-			"0 of 2 stores with attributes matching [one]"},
+			"0 of 2 stores with attributes matching [{0 [+one]}]"},
 		{allocatorError{constraints, 1},
-			"0 of 1 store with attributes matching [one two]"},
+			"0 of 1 store with attributes matching [{0 [+one +two]}]"},
 		{allocatorError{constraints, 2},
-			"0 of 2 stores with attributes matching [one two]"},
+			"0 of 2 stores with attributes matching [{0 [+one +two]}]"},
 	}
 
 	for i, testCase := range testCases {
@@ -3067,7 +3073,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 
 			actual, _ := a.RebalanceTarget(
 				ctx,
-				constraints,
+				[]config.Constraints{constraints},
 				nil,
 				testRangeInfo(existingReplicas, firstRange),
 				storeFilterThrottled,
@@ -3226,7 +3232,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 				if ts.Capacity.RangeCount > 0 {
 					target, details := alloc.RebalanceTarget(
 						ctx,
-						config.Constraints{},
+						nil, /* constraints */
 						nil,
 						testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
 						storeFilterThrottled,
@@ -3346,7 +3352,7 @@ func Example_rebalancing() {
 			ts := &testStores[j]
 			target, details := alloc.RebalanceTarget(
 				context.Background(),
-				config.Constraints{},
+				nil, /* constraints */
 				nil,
 				testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
 				storeFilterThrottled,

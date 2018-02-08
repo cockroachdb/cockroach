@@ -130,7 +130,7 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	required        []config.Constraint
+	constraints     []config.Constraints
 	aliveStoreCount int
 }
 
@@ -138,12 +138,12 @@ func (ae *allocatorError) Error() string {
 	var auxInfo string
 	// Whenever the likely problem is not having enough nodes up, make the
 	// message really clear.
-	if len(ae.required) == 0 {
+	if len(ae.constraints) == 0 {
 		auxInfo = "; likely not enough nodes in cluster"
 	}
-	return fmt.Sprintf("0 of %d store%s with attributes matching %s%s",
+	return fmt.Sprintf("0 of %d store%s with attributes matching %v%s",
 		ae.aliveStoreCount, util.Pluralize(int64(ae.aliveStoreCount)),
-		ae.required, auxInfo)
+		ae.constraints, auxInfo)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}
@@ -330,7 +330,7 @@ type decisionDetails struct {
 // a store.
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	disableStatsBasedRebalancing bool,
@@ -363,7 +363,7 @@ func (a *Allocator) AllocateTarget(
 		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
 	return nil, "", &allocatorError{
-		required:        constraints.Constraints,
+		constraints:     constraints,
 		aliveStoreCount: aliveStoreCount,
 	}
 }
@@ -371,7 +371,7 @@ func (a *Allocator) AllocateTarget(
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	disableStatsBasedRebalancing bool,
@@ -395,7 +395,7 @@ func (a Allocator) simulateRemoveTarget(
 // replicas.
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	disableStatsBasedRebalancing bool,
@@ -462,7 +462,7 @@ func (a Allocator) RemoveTarget(
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	raftStatus *raft.Status,
 	rangeInfo RangeInfo,
 	filter storeFilter,
@@ -603,7 +603,7 @@ func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptio
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -698,7 +698,7 @@ func (a *Allocator) TransferLeaseTarget(
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
