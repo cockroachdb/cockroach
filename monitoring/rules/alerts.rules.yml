@@ -1,0 +1,67 @@
+groups:
+- name: prometheus/rules/alerts.rules
+  rules:
+  - alert: InstanceDown
+    expr: up{job="cockroach"} == 0
+    for: 5m
+    annotations:
+      description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
+        down for more than 5 minutes.'
+      summary: Instance {{ $labels.instance }} down
+  - alert: InstanceDead
+    expr: up{job="cockroach"} == 0
+    for: 15m
+    annotations:
+      description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has been
+        down for more than 15 minutes.'
+      summary: Instance {{ $labels.instance }} dead
+  - alert: InstanceRestart
+    expr: resets(sys_uptime{job="cockroach"}[10m]) > 0 and resets(sys_uptime{job="cockroach"}[10m])
+      < 5
+    annotations:
+      description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
+        {{ $value }} time(s) in 10m'
+      summary: Instance {{ $labels.instance }} restarted
+  - alert: InstanceFlapping
+    expr: resets(sys_uptime{job="cockroach"}[10m]) > 5
+    annotations:
+      description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
+        {{ $value }} time(s) in 10m'
+      summary: Instance {{ $labels.instance }} flapping
+  - alert: VersionMismatch
+    expr: count(count_values("version", build_timestamp{job="cockroach"}) BY (tag,
+      cluster)) BY (cluster) > 1
+    for: 30m
+    annotations:
+      description: Cluster {{ $labels.cluster }} running {{ $value }} different versions
+      summary: Binary version mismatch on {{ $labels.cluster }}
+  - alert: StoreDiskLow
+    expr: capacity_available:ratio{job="cockroach"} < 0.15
+    annotations:
+      summary: Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value
+        }} available disk fraction
+  - alert: ClusterDiskLow
+    expr: cluster:capacity_available:ratio{job="cockroach"} < 0.2
+    annotations:
+      summary: Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction
+  - alert: ZeroSQLQps
+    expr: sql_conns{job="cockroach"} > 0 and rate(sql_query_count{job="cockroach"}[5m])
+      == 0
+    for: 10m
+    annotations:
+      summary: Instance {{ $labels.instance }} has SQL connections but no queries
+  - alert: CACertificateExpiresSoon
+    expr: (security_certificate_expiration_ca{job="cockroach"} > 0) and (security_certificate_expiration_ca{job="cockroach"}
+      - time()) < 86400 * 366
+    labels:
+      frequency: daily
+    annotations:
+      summary: CA certificate for {{ $labels.instance }} expires in less than a year
+  - alert: NodeCertificateExpiresSoon
+    expr: (security_certificate_expiration_node{job="cockroach"} > 0) and (security_certificate_expiration_node{job="cockroach"}
+      - time()) < 86400 * 183
+    labels:
+      frequency: daily
+    annotations:
+      summary: Node certificate for {{ $labels.instance }} expires in less than six
+        months
