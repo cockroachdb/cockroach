@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -2479,4 +2480,88 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 			t.Fatalf("%T %v", err.GoError(), err)
 		}
 	})
+}
+
+// Verify that range lookup operations do not synchronously perform intent
+// resolution as doing so can deadlock with the RangeDescriptorCache. See
+// #17760.
+func TestRangeLookupAsyncResolveIntent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	blockPushTxn := make(chan struct{})
+	defer close(blockPushTxn)
+
+	// Disable async tasks in the intent resolver. All tasks will be synchronous.
+	cfg := storage.TestStoreConfig(nil)
+	cfg.IntentResolverTaskLimit = -1
+	cfg.TestingKnobs.DisableSplitQueue = true
+	cfg.TestingKnobs.TestingProposalFilter =
+		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
+			for _, union := range args.Req.Requests {
+				if union.GetInner().Method() == roachpb.PushTxn {
+					<-blockPushTxn
+					break
+				}
+			}
+			return nil
+		}
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(t, stopper, cfg)
+
+	// Split range 1 at an arbitrary key so that we're not dealing with the
+	// first range for the rest of this test. The first range is handled
+	// specially by the range descriptor cache.
+	key := roachpb.Key("a")
+	args := adminSplitArgs(key)
+	if _, pErr := client.SendWrapped(ctx, rg1(store), args); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Get original meta2 descriptor.
+	rs, _, err := client.RangeLookup(ctx, rg1(store), key, roachpb.INCONSISTENT, 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	origDesc := rs[0]
+
+	key2 := roachpb.Key("e")
+	newDesc := origDesc
+	newDesc.EndKey, err = keys.Addr(key2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write the new descriptor as an intent.
+	data, err := protoutil.Marshal(&newDesc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	txn := roachpb.MakeTransaction("test", key2, 1, enginepb.SERIALIZABLE,
+		store.Clock().Now(), store.Clock().MaxOffset().Nanoseconds())
+	// Officially begin the transaction. If not for this, the intent resolution
+	// machinery would simply remove the intent we write below, see #3020.
+	// We send directly to Replica throughout this test, so there's no danger
+	// of the Store aborting this transaction (i.e. we don't have to set a high
+	// priority).
+	pArgs := putArgs(keys.RangeMetaKey(roachpb.RKey(key2)).AsRawKey(), data)
+	txn.Sequence++
+	if _, pErr := client.SendWrappedWith(ctx, rg1(store), roachpb.Header{Txn: &txn}, pArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Clear the range descriptor cache so that any future requests will first
+	// need to perform a RangeLookup.
+	store.DB().GetFactory().WrappedSender().(*kv.DistSender).RangeDescriptorCache().Clear()
+
+	// Now send a request, forcing the RangeLookup. Since the lookup is
+	// inconsistent, there's no WriteIntentError, but we'll try to resolve any
+	// intents that are found. If the RangeLookup op attempts to resolve the
+	// intents synchronously, the operation will block forever.
+	//
+	// Note that 'a' < 'e'.
+	if _, err := store.DB().Get(ctx, key); err != nil {
+		t.Fatal(err)
+	}
 }

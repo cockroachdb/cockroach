@@ -88,6 +88,8 @@ type TxnSenderFactory interface {
 	// many child "leaf" nodes in a tree of transaction objects, as is
 	// created during a DistSQL flow.
 	New(typ TxnType) TxnSender
+	// WrappedSender returns the TxnSenderFactory's wrapped Sender.
+	WrappedSender() Sender
 }
 
 // SenderFunc is an adapter to allow the use of ordinary functions
@@ -129,6 +131,11 @@ type TxnSenderFactoryFunc func(TxnType) TxnSender
 // New calls f().
 func (f TxnSenderFactoryFunc) New(typ TxnType) TxnSender {
 	return f(typ)
+}
+
+// WrappedSender is not implemented for TxnSenderFactoryFunc.
+func (f TxnSenderFactoryFunc) WrappedSender() Sender {
+	panic("unimplemented")
 }
 
 // SendWrappedWith is a convenience function which wraps the request in a batch

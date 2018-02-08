@@ -2519,13 +2519,16 @@ func (r *Replica) executeReadOnlyBatch(
 
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
-		// Do not allow synchronous intent resolution for RangeLookup requests as
-		// doing so can deadlock if the request originated from the local node
-		// which means the local range descriptor cache has an in-flight
-		// RangeLookup request which prohibits any concurrent requests for the same
-		// range. See #17760.
-		_, hasRangeLookup := ba.GetArg(roachpb.RangeLookup)
-		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, !hasRangeLookup); err != nil {
+		// We only allow synchronous intent resolution for consistent requests.
+		// Intent resolution is async/best-effort for inconsistent requests.
+		//
+		// An important case where this logic is necessary is for RangeLookup
+		// requests. In their case, synchronous intent resolution can deadlock
+		// if the request originated from the local node which means the local
+		// range descriptor cache has an in-flight RangeLookup request which
+		// prohibits any concurrent requests for the same range. See #17760.
+		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
+		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, allowSyncProcessing); err != nil {
 			log.Warning(ctx, err)
 		}
 	}
