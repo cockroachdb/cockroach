@@ -6,8 +6,11 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
+import _ from "lodash";
 import React from "react";
 import { connect } from "react-redux";
+import { withRouter, WithRouterProps } from "react-router";
+import { createSelector } from "reselect";
 
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
@@ -21,6 +24,8 @@ import {
   LivenessStatus,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
+import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
+import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 
 import { NodeCanvas } from "./nodeCanvas";
@@ -28,7 +33,7 @@ import { NodeHistory } from "./nodeHistory";
 
 import spinner from "assets/spinner.gif";
 
-interface NodeSimulatorProps {
+interface HistoryAccumulatorProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
   locationTree: LocationTree;
@@ -39,11 +44,11 @@ interface NodeSimulatorProps {
   refreshLocations: typeof refreshLocations;
 }
 
-interface NodeSimulatorOwnProps {
+interface HistoryAccumulatorOwnProps {
   tiers: LocalityTier[];
 }
 
-class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOwnProps, any> {
+class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps> {
   nodeHistories: { [id: string]: NodeHistory } = {};
 
   // accumulateHistory parses incoming nodeStatus properties and accumulates
@@ -70,7 +75,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
     this.props.refreshLocations();
   }
 
-  componentWillReceiveProps(props: NodeSimulatorProps & NodeSimulatorOwnProps) {
+  componentWillReceiveProps(props: HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps) {
     this.accumulateHistory(props);
     props.refreshNodes();
     props.refreshLiveness();
@@ -78,6 +83,11 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   }
 
   render() {
+    const currentLocality = getLocality(this.props.localityTree, this.props.tiers);
+    if (this.props.dataIsValid && _.isNil(currentLocality)) {
+      this.props.router.replace(CLUSTERVIZ_ROOT);
+    }
+
     return (
       <Loading
         loading={!this.props.dataIsValid}
@@ -86,7 +96,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
       >
         <NodeCanvas
           nodeHistories={this.nodeHistories}
-          localityTree={this.props.localityTree}
+          localityTree={currentLocality}
           locationTree={this.props.locationTree}
           liveness={this.props.liveness}
           tiers={this.props.tiers}
@@ -96,20 +106,24 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   }
 }
 
+const selectDataIsValid = createSelector(
+  selectNodeRequestStatus,
+  selectLocationsRequestStatus,
+  selectLivenessRequestStatus,
+  (nodes, locations, liveness) => nodes.valid && locations.valid && liveness.valid,
+);
+
 export default connect(
-  (state: AdminUIState, _ownProps: NodeSimulatorOwnProps) => ({
+  (state: AdminUIState, _ownProps: HistoryAccumulatorOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
     locationTree: selectLocationTree(state),
     liveness: livenessStatusByNodeIDSelector(state),
-    dataIsValid:
-      selectNodeRequestStatus(state).valid
-      && selectLocationsRequestStatus(state).valid
-      && selectLivenessRequestStatus(state).valid,
+    dataIsValid: selectDataIsValid(state),
   }),
   {
     refreshNodes,
     refreshLiveness,
     refreshLocations,
   },
-)(NodeSimulator);
+)(withRouter(HistoryAccumulator));
