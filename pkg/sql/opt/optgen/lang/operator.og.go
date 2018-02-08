@@ -11,6 +11,8 @@ const (
 	DefineSetOp
 	RuleSetOp
 	DefineOp
+	CommentsOp
+	CommentOp
 	TagsOp
 	TagOp
 	DefineFieldsOp

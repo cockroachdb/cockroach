@@ -10,6 +10,7 @@ define FuncCall {
     Def  FuncDef
 }
 
+# Union is a union operator.
 [Relational]
 define Union {
     Left   Expr
@@ -49,10 +50,19 @@ type Factory interface {
 	// ConstructXXX method that corresponds to the given operator.
 	DynamicConstruct(op Operator, children []GroupID, private PrivateID) GroupID
 
-	// Scalar operator constructors.
+	// ------------------------------------------------------------
+	// Scalar Operators
+	// ------------------------------------------------------------
+
+	// ConstructFuncCall constructs an expression for the FuncCall operator.
 	ConstructFuncCall(name GroupID, args ListID, def PrivateID) GroupID
 
-	// Relational operator constructors.
+	// ------------------------------------------------------------
+	// Relational Operators
+	// ------------------------------------------------------------
+
+	// ConstructUnion constructs an expression for the Union operator.
+	// Union is a union operator.
 	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
 }
 ----

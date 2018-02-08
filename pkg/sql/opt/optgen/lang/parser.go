@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // FileResolver is used by the parser to abstract the opening and reading of
@@ -36,6 +37,12 @@ type Parser struct {
 	s      *Scanner
 	src    SourceLoc
 	errors []error
+
+	// comments accumulates contiguous comments as they are scanned, as long as
+	// it has been initialized to a non-nil array. Parser functions initialize
+	// it when they want to remember comments. For example, the parser tags
+	// each define and rule with any comments that preceded it.
+	comments CommentsExpr
 
 	// resolver is invoked to open the input files provided to the parser.
 	resolver FileResolver
@@ -104,7 +111,11 @@ func (p *Parser) parseRoot() *RootExpr {
 	}
 
 	for {
+		var comments CommentsExpr
 		var tags TagsExpr
+
+		// Remember any comments at the top-level by initializing p.comments.
+		p.comments = make(CommentsExpr, 0)
 
 		tok := p.scan()
 		src := p.src
@@ -116,6 +127,10 @@ func (p *Parser) parseRoot() *RootExpr {
 		case LBRACKET:
 			p.unscan()
 
+			// Get any comments that have accumulated.
+			comments = p.comments
+			p.comments = nil
+
 			tags = p.parseTags()
 			if tags == nil {
 				p.tryRecover()
@@ -125,7 +140,7 @@ func (p *Parser) parseRoot() *RootExpr {
 			if p.scan() != IDENT {
 				p.unscan()
 
-				rule := p.parseRule(tags, src)
+				rule := p.parseRule(comments, tags, src)
 				if rule == nil {
 					p.tryRecover()
 					break
@@ -138,6 +153,12 @@ func (p *Parser) parseRoot() *RootExpr {
 			fallthrough
 
 		case IDENT:
+			// Get any comments that have accumulated.
+			if comments == nil {
+				comments = p.comments
+				p.comments = nil
+			}
+
 			// Only define identifier is allowed at the top level.
 			if !p.isDefineIdent() {
 				p.addExpectedTokenErr("define statement")
@@ -147,7 +168,7 @@ func (p *Parser) parseRoot() *RootExpr {
 
 			p.unscan()
 
-			define := p.parseDefine(tags, src)
+			define := p.parseDefine(comments, tags, src)
 			if define == nil {
 				p.tryRecover()
 				break
@@ -163,7 +184,7 @@ func (p *Parser) parseRoot() *RootExpr {
 }
 
 // define = 'define' define-name '{' define-field* '}'
-func (p *Parser) parseDefine(tags TagsExpr, src SourceLoc) *DefineExpr {
+func (p *Parser) parseDefine(comments CommentsExpr, tags TagsExpr, src SourceLoc) *DefineExpr {
 	if !p.scanToken(IDENT, "define statement") || p.s.Literal() != "define" {
 		return nil
 	}
@@ -173,7 +194,7 @@ func (p *Parser) parseDefine(tags TagsExpr, src SourceLoc) *DefineExpr {
 	}
 
 	name := p.s.Literal()
-	define := &DefineExpr{Src: &src, Name: StringExpr(name), Tags: tags}
+	define := &DefineExpr{Src: &src, Comments: comments, Name: StringExpr(name), Tags: tags}
 
 	if !p.scanToken(LBRACE, "'{'") {
 		return nil
@@ -213,7 +234,7 @@ func (p *Parser) parseDefineField() *DefineFieldExpr {
 }
 
 // rule = match '=>' replace
-func (p *Parser) parseRule(tags TagsExpr, src SourceLoc) *RuleExpr {
+func (p *Parser) parseRule(comments CommentsExpr, tags TagsExpr, src SourceLoc) *RuleExpr {
 	match := p.parseMatch()
 	if match == nil {
 		return nil
@@ -229,11 +250,12 @@ func (p *Parser) parseRule(tags TagsExpr, src SourceLoc) *RuleExpr {
 	}
 
 	return &RuleExpr{
-		Src:     &src,
-		Name:    StringExpr(tags[0]),
-		Tags:    tags[1:],
-		Match:   match,
-		Replace: replace,
+		Src:      &src,
+		Name:     StringExpr(tags[0]),
+		Comments: comments,
+		Tags:     tags[1:],
+		Match:    match,
+		Replace:  replace,
 	}
 }
 
@@ -683,8 +705,19 @@ func (p *Parser) scan() Token {
 			p.addErr(p.s.Literal())
 			return ERROR
 
-		case WHITESPACE, COMMENT:
-			// Skip whitespace and comments.
+		case COMMENT:
+			// Remember contiguous comments if p.comments is initialized, else
+			// skip.
+			if p.comments != nil {
+				p.comments = append(p.comments, CommentExpr(p.s.Literal()))
+			}
+
+		case WHITESPACE:
+			// A blank line resets any accumulating comments, since they have
+			// to be contiguous.
+			if p.comments != nil && strings.Count(p.s.Literal(), "\n") > 1 {
+				p.comments = p.comments[:0]
+			}
 
 		default:
 			return tok

@@ -1118,8 +1118,8 @@ func (b *Builder) buildDistinct(
 		groupings = append(groupings, v)
 	}
 
-	groupingList := b.constructProjectionList(groupings, byCols)
-	aggList := b.constructProjectionList(nil, nil)
+	groupingList := b.constructList(opt.GroupingsOp, groupings, byCols)
+	aggList := b.constructList(opt.AggregationsOp, nil, nil)
 	return b.factory.ConstructGroupBy(in, groupingList, aggList)
 }
 

@@ -1097,12 +1097,12 @@ project
  │    ├── columns: kv.v:int:null:2 column5:int:null:5 column6:decimal:null:6
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    ├── projections
+ │    ├── groupings
  │    │    ├── variable: kv.v [type=int]
  │    │    └── mult [type=int]
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.w [type=int]
- │    └── projections
+ │    └── aggregations
  │         └── function: sum [type=NULL]
  │              └── variable: kv.w [type=int]
  └── projections
@@ -1118,14 +1118,14 @@ project
  │    ├── columns: kv.v:int:null:2 column5:string:null:5 column6:int:null:6 column7:decimal:null:7
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    ├── projections
+ │    ├── groupings
  │    │    ├── variable: kv.v [type=int]
  │    │    ├── function: lower [type=NULL]
  │    │    │    └── variable: kv.s [type=string]
  │    │    └── mult [type=int]
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.w [type=int]
- │    └── projections
+ │    └── aggregations
  │         └── function: sum [type=NULL]
  │              └── variable: kv.w [type=int]
  └── projections
