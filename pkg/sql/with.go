@@ -122,8 +122,13 @@ func (p *planner) getCTEDataSource(t *tree.NormalizableTableName) (planDataSourc
 				cteSource.used = true
 				frame[tn.TableName] = cteSource
 				plan := cteSource.plan
+				cols := planColumns(plan)
+				if len(cols) == 0 {
+					return planDataSource{}, false, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+						"WITH clause \"%v\" does not have a RETURNING clause", tree.ErrString(t))
+				}
 				dataSource := planDataSource{
-					info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(plan)),
+					info: sqlbase.NewSourceInfoForSingleTable(*tn, cols),
 					plan: plan,
 				}
 				dataSource, err = renameSource(dataSource, cteSource.alias, false)
