@@ -174,7 +174,7 @@ func Load(
 			})
 
 			for _, col := range tableDesc.Columns {
-				if col.ComputeExpr != nil {
+				if col.IsComputed() {
 					return backupccl.BackupDescriptor{}, errors.Errorf("computed columns are not allowed")
 				}
 			}

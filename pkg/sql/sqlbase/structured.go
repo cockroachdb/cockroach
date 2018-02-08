@@ -2484,7 +2484,7 @@ func (desc *ColumnDescriptor) SQLString() string {
 		f.WriteString(" DEFAULT ")
 		f.WriteString(*desc.DefaultExpr)
 	}
-	if desc.ComputeExpr != nil {
+	if desc.IsComputed() {
 		f.WriteString(" AS (")
 		f.WriteString(*desc.ComputeExpr)
 		f.WriteString(") STORED")
@@ -2585,6 +2585,23 @@ func (desc *ColumnDescriptor) DatumType() types.T {
 // IsHidden is part of the optbase.Column interface.
 func (desc *ColumnDescriptor) IsHidden() bool {
 	return desc.Hidden
+}
+
+// IsComputed returns whether the given column is computed.
+func (desc *ColumnDescriptor) IsComputed() bool {
+	return desc.ComputeExpr != nil
+}
+
+// CheckCanBeFKRef returns whether the given column is computed.
+func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
+	if desc.IsComputed() {
+		return pgerror.NewErrorf(
+			pgerror.CodeInvalidTableDefinitionError,
+			"computed column %q cannot be a foreign key reference",
+			desc.Name,
+		)
+	}
+	return nil
 }
 
 var _ optbase.Table = &TableDescriptor{}
