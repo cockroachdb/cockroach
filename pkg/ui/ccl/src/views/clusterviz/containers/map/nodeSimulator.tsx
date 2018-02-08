@@ -6,8 +6,11 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
+import _ from "lodash";
+import PropTypes from "prop-types";
 import React from "react";
 import { connect } from "react-redux";
+import { InjectedRouter, RouterState } from "react-router";
 import { createSelector } from "reselect";
 
 import { refreshNodes, refreshLiveness, refreshLocations } from "src/redux/apiReducers";
@@ -22,6 +25,8 @@ import {
   LivenessStatus,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
+import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
+import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 
 import { NodeCanvas } from "./nodeCanvas";
@@ -45,6 +50,12 @@ interface NodeSimulatorOwnProps {
 }
 
 class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOwnProps, any> {
+  // TODO(couchand): use withRouter instead.
+  static contextTypes = {
+    router: PropTypes.object.isRequired,
+  };
+  context: { router: InjectedRouter & RouterState };
+
   nodeHistories: { [id: string]: NodeHistory } = {};
 
   // accumulateHistory parses incoming nodeStatus properties and accumulates
@@ -79,6 +90,11 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
   }
 
   render() {
+    const currentLocality = getLocality(this.props.localityTree, this.props.tiers);
+    if (this.props.dataIsValid && _.isNil(currentLocality)) {
+      this.context.router.replace(CLUSTERVIZ_ROOT);
+    }
+
     return (
       <Loading
         loading={!this.props.dataIsValid}
@@ -87,7 +103,7 @@ class NodeSimulator extends React.Component<NodeSimulatorProps & NodeSimulatorOw
       >
         <NodeCanvas
           nodeHistories={this.nodeHistories}
-          localityTree={this.props.localityTree}
+          localityTree={currentLocality}
           locationTree={this.props.locationTree}
           liveness={this.props.liveness}
           tiers={this.props.tiers}
