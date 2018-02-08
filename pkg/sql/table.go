@@ -1014,7 +1014,7 @@ func resolveTableNameFromID(
 	return tree.ErrString(tn)
 }
 
-// ParseQualifiedTableName implements the tree.EvalPlanner interface.
+// ParseQualifiedTableName implements the tree.EvalDatabase interface.
 func (p *planner) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
