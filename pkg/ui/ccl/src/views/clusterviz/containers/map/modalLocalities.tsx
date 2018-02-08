@@ -7,14 +7,11 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import _ from "lodash";
-import PropTypes from "prop-types";
 import React from "react";
-import { InjectedRouter, RouterState } from "react-router";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
-import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
-import { getChildLocalities, getLocality } from "src/util/localities";
+import { getChildLocalities } from "src/util/localities";
 import { findOrCalculateLocation } from "src/util/locations";
 
 import { CircleLayout } from "./circleLayout";
@@ -32,20 +29,10 @@ interface ModalLocalitiesViewProps {
 }
 
 export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProps, any> {
-  static contextTypes = {
-    router: PropTypes.object.isRequired,
-  };
-  context: { router: InjectedRouter & RouterState };
-
   render() {
-    const treeToRender = getLocality(this.props.localityTree, this.props.tiers);
-    if (_.isNil(treeToRender)) {
-      this.context.router.replace(CLUSTERVIZ_ROOT);
-    }
-
-    if (renderAsMap(this.props.locationTree, treeToRender)) {
+    if (renderAsMap(this.props.locationTree, this.props.localityTree)) {
       return <MapLayout
-        localityTree={treeToRender}
+        localityTree={this.props.localityTree}
         locationTree={this.props.locationTree}
         liveness={this.props.liveness}
         viewportSize={this.props.viewportSize}
@@ -53,7 +40,7 @@ export class ModalLocalitiesView extends React.Component<ModalLocalitiesViewProp
     }
 
     return <CircleLayout
-      localityTree={treeToRender}
+      localityTree={this.props.localityTree}
       liveness={this.props.liveness}
       nodeHistories={this.props.nodeHistories}
       viewportSize={this.props.viewportSize}
