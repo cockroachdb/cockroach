@@ -72,6 +72,34 @@ SELECT JSONB_AGG(1)
 ----
 [1]
 
+# Some aggregate functions are not normalized to NULL when given a NULL
+# argument.
+query I
+SELECT COUNT(NULL)
+----
+0
+
+query T
+SELECT JSON_AGG(NULL)
+----
+[null]
+
+query T
+SELECT JSONB_AGG(NULL)
+----
+[null]
+
+# This should ideally return {NULL}, but this is a pathological case, and
+# Postgres has the same behavior, so it's sufficient for now.
+statement error ambiguous call
+SELECT ARRAY_AGG(NULL)
+
+# With an explicit cast, this works as expected.
+query T
+SELECT ARRAY_AGG(NULL::TEXT)
+----
+{NULL}
+
 # Check that COALESCE using aggregate results over an empty table
 # work properly.
 query I
