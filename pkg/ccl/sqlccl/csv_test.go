@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -794,6 +795,23 @@ func TestImportStmt(t *testing.T) {
 			}
 		})
 	}
+
+	// Verify unique_rowid is replaced for tables without primary keys.
+	t.Run("unique_rowid", func(t *testing.T) {
+		sqlDB.Exec(t, "CREATE DATABASE pk")
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE pk.t (a INT, b STRING) CSV DATA (%s)`, strings.Join(files, ", ")))
+		// Verify the rowids are being generated as expected.
+		sqlDB.CheckQueryResults(t,
+			`SELECT count(*), sum(rowid) FROM pk.t`,
+			sqlDB.QueryStr(t, `
+				SELECT count(*), sum(rowid) FROM
+					(SELECT file + (rownum << $3) as rowid FROM
+						(SELECT generate_series(0, $1 - 1) file),
+						(SELECT generate_series(1, $2) rownum)
+					)
+			`, numFiles, rowsPerFile, builtins.NodeIDBits),
+		)
+	})
 
 	// Verify a failed IMPORT won't prevent a second IMPORT.
 	t.Run("checkpoint-leftover", func(t *testing.T) {
