@@ -26,7 +26,7 @@ interface CircleLayoutProps {
   viewportSize: [number, number];
 }
 
-export class CircleLayout extends React.Component<CircleLayoutProps, any> {
+export class CircleLayout extends React.Component<CircleLayoutProps> {
   coordsFor(index: number, total: number, radius: number) {
     if (total === 1) {
       return [0, 0];

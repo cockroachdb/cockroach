@@ -22,7 +22,7 @@ interface StatsViewProps {
   maxClientActivityRate?: number;
 }
 
-export class StatsView extends React.Component<StatsViewProps, any> {
+export class StatsView extends React.Component<StatsViewProps> {
   static radius = 42;
   static arcWidth = StatsView.radius * 0.11111;
   static outerRadius = StatsView.radius + StatsView.arcWidth;

@@ -10,7 +10,7 @@ interface BreadcrumbsProps {
   tiers: LocalityTier[];
 }
 
-export class Breadcrumbs extends React.Component<BreadcrumbsProps, {}> {
+export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
   getLabel(path: LocalityTier[]): string {
     if (path.length === 0) {
       return "Cluster";

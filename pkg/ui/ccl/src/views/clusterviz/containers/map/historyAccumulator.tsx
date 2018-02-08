@@ -48,7 +48,7 @@ interface HistoryAccumulatorOwnProps {
   tiers: LocalityTier[];
 }
 
-class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps, any> {
+class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps> {
   nodeHistories: { [id: string]: NodeHistory } = {};
 
   // accumulateHistory parses incoming nodeStatus properties and accumulates
