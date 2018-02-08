@@ -165,12 +165,11 @@ SELECT last_value FROM select_test
 statement error pq: column name "foo" not found
 SELECT foo from select_test
 
-query TTT colnames
-EXPLAIN SELECT * FROM select_test
+query TITTTTT colnames
+EXPLAIN (PLAN, METADATA) SELECT * FROM select_test
 ----
-Tree                  Field  Description
-render                ·      ·
- └── sequence select  ·      ·
+Tree             Level  Type             Field  Description  Columns                           Ordering
+sequence select  0      sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
 
 # USING THE `nextval` AND `currval` FUNCTIONS
 

@@ -530,20 +530,7 @@ func (p *planner) getSequenceSource(
 	}
 	return planDataSource{
 		plan: node,
-		info: sqlbase.NewSourceInfoForSingleTable(tn, []sqlbase.ResultColumn{
-			{
-				Name: "last_value",
-				Typ:  types.Int,
-			},
-			{
-				Name: "log_cnt",
-				Typ:  types.Int,
-			},
-			{
-				Name: "is_called",
-				Typ:  types.Bool,
-			},
-		}),
+		info: sqlbase.NewSourceInfoForSingleTable(tn, sequenceSelectColumns),
 	}, nil
 }
 
