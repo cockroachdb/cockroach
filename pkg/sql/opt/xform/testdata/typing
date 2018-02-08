@@ -19,8 +19,8 @@ project
  │    └── tuple [type=tuple{}]
  └── projections [type=tuple{int, bool, bool}]
       ├── const: 1 [type=int]
-      ├── const: true [type=bool]
-      └── const: false [type=bool]
+      ├── true [type=bool]
+      └── false [type=bool]
 
 # Placeholder
 build

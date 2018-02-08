@@ -32,10 +32,9 @@ type Factory interface {
 	ConstructPlaceholder(value PrivateID) GroupID
 	ConstructTuple(elems ListID) GroupID
 	ConstructProjections(elems ListID, cols PrivateID) GroupID
-	ConstructFilters(conditions ListID) GroupID
 	ConstructExists(input GroupID) GroupID
-	ConstructAnd(left GroupID, right GroupID) GroupID
-	ConstructOr(left GroupID, right GroupID) GroupID
+	ConstructAnd(conditions ListID) GroupID
+	ConstructOr(conditions ListID) GroupID
 	ConstructNot(input GroupID) GroupID
 	ConstructEq(left GroupID, right GroupID) GroupID
 	ConstructLt(left GroupID, right GroupID) GroupID
@@ -58,7 +57,6 @@ type Factory interface {
 	ConstructIs(left GroupID, right GroupID) GroupID
 	ConstructIsNot(left GroupID, right GroupID) GroupID
 	ConstructContains(left GroupID, right GroupID) GroupID
-	ConstructContainedBy(left GroupID, right GroupID) GroupID
 	ConstructBitand(left GroupID, right GroupID) GroupID
 	ConstructBitor(left GroupID, right GroupID) GroupID
 	ConstructBitxor(left GroupID, right GroupID) GroupID

@@ -54,10 +54,10 @@ var comparisonOpMap = [...]binaryFactoryFunc{
 	tree.NotRegIMatch:      (opt.Factory).ConstructNotRegIMatch,
 	tree.IsDistinctFrom:    (opt.Factory).ConstructIsNot,
 	tree.IsNotDistinctFrom: (opt.Factory).ConstructIs,
+	tree.Contains:          (opt.Factory).ConstructContains,
 
 	// TODO(rytaft): NYI, but these need to be nil to avoid an index out of
 	// range exception if any of these functions are used.
-	tree.Contains:       nil,
 	tree.ContainedBy:    nil,
 	tree.JSONExists:     nil,
 	tree.JSONSomeExists: nil,
@@ -309,10 +309,10 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		return b.factory.ConstructVariable(b.factory.InternPrivate(t.index))
 
 	case *tree.AndExpr:
-		out = b.factory.ConstructAnd(
-			b.buildScalar(t.TypedLeft(), inScope),
-			b.buildScalar(t.TypedRight(), inScope),
-		)
+		left := b.buildScalar(t.TypedLeft(), inScope)
+		right := b.buildScalar(t.TypedRight(), inScope)
+		conditions := b.factory.InternList([]opt.GroupID{left, right})
+		return b.factory.ConstructAnd(conditions)
 
 	case *tree.BinaryExpr:
 		out = binaryOpMap[t.Operator](b.factory,
@@ -321,18 +321,27 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		)
 
 	case *tree.ComparisonExpr:
-		// TODO(rytaft): remove this check when we are confident that all operators
-		// are included in comparisonOpMap.
-		if comparisonOpMap[t.Operator] == nil {
-			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
-		}
+		left := b.buildScalar(t.TypedLeft(), inScope)
+		right := b.buildScalar(t.TypedRight(), inScope)
+		fn := comparisonOpMap[t.Operator]
+		if fn != nil {
+			// Most comparison ops map directly to a factory method.
+			out = fn(b.factory, left, right)
+		} else {
+			// Several comparison ops need special handling.
+			// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
+			// and All to various formulations of the opt Exists operator.
+			switch t.Operator {
+			case tree.ContainedBy:
+				// This is just syntatic sugar that reverses the operands.
+				out = b.factory.ConstructContains(right, left)
 
-		// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some, and
-		// All to various formulations of the opt Exists operator.
-		out = comparisonOpMap[t.Operator](b.factory,
-			b.buildScalar(t.TypedLeft(), inScope),
-			b.buildScalar(t.TypedRight(), inScope),
-		)
+			default:
+				// TODO(rytaft): remove this check when we are confident that
+				// all operators are included in comparisonOpMap.
+				panic(errorf("not yet implemented: operator %s", t.Operator.String()))
+			}
+		}
 
 	case *tree.DTuple:
 		list := make([]opt.GroupID, len(t.D))
@@ -353,10 +362,10 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		out = b.factory.ConstructNot(b.buildScalar(t.TypedInnerExpr(), inScope))
 
 	case *tree.OrExpr:
-		out = b.factory.ConstructOr(
-			b.buildScalar(t.TypedLeft(), inScope),
-			b.buildScalar(t.TypedRight(), inScope),
-		)
+		left := b.buildScalar(t.TypedLeft(), inScope)
+		right := b.buildScalar(t.TypedRight(), inScope)
+		conditions := b.factory.InternList([]opt.GroupID{left, right})
+		return b.factory.ConstructOr(conditions)
 
 	case *tree.ParenExpr:
 		out = b.buildScalar(t.TypedInnerExpr(), inScope)
@@ -379,7 +388,14 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
 	case tree.Datum:
-		out = b.factory.ConstructConst(b.factory.InternPrivate(t))
+		// Map True/False datums to True/False operator.
+		if t == tree.DBoolTrue {
+			out = b.factory.ConstructTrue()
+		} else if t == tree.DBoolFalse {
+			out = b.factory.ConstructFalse()
+		} else {
+			out = b.factory.ConstructConst(b.factory.InternPrivate(t))
+		}
 
 	default:
 		panic(errorf("not yet implemented: scalar expr: %T", scalar))
