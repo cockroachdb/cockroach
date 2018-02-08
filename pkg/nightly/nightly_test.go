@@ -98,6 +98,7 @@ func destroyCluster(t testing.TB, l *logger, clusterName string) {
 	if err := runCmd(ctx, l, "roachprod", "destroy", clusterName); err != nil {
 		l.errorf("%s", err)
 	}
+	unregisterCluster(clusterName)
 }
 
 func makeClusterName(t testing.TB) string {
@@ -117,6 +118,7 @@ func makeClusterName(t testing.TB) string {
 	name = strings.ToLower(name)
 	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
 	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
+	registerCluster(name)
 	return name
 }
 
