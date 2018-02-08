@@ -435,7 +435,7 @@ func allocateCandidates(
 		if !preexistingReplicaCheck(s.Node.NodeID, existing) {
 			continue
 		}
-		constraintsOK, necessary, preferredMatched := allocateConstraintCheck(s, constraints)
+		constraintsOK, necessary, preferredMatched := allocateConstraintsCheck(s, constraints)
 		if !constraintsOK {
 			continue
 		}
@@ -474,7 +474,7 @@ func removeCandidates(
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
-		constraintsOK, necessary, preferredMatched := removeConstraintCheck(s, constraints)
+		constraintsOK, necessary, preferredMatched := removeConstraintsCheck(s, constraints)
 		if !constraintsOK {
 			candidates = append(candidates, candidate{
 				store:     s,
@@ -550,7 +550,9 @@ func rebalanceCandidates(
 	curDiversityScore := rangeDiversityScore(existingNodeLocalities)
 	for _, store := range sl.stores {
 		if _, ok := existingStores[store.StoreID]; ok {
-			valid, necessary, preferredScore := removeConstraintCheck(store, constraints)
+			// TODO: will this mark too many things as necessary when compared to the
+			// use of allocateConstraintsCheck on the potential rebalance targets?
+			valid, necessary, preferredScore := removeConstraintsCheck(store, constraints)
 			fullDisk := !maxCapacityCheck(store)
 			if !valid {
 				if !needRebalanceFrom {
@@ -597,7 +599,7 @@ func rebalanceCandidates(
 	localityAttrs := make(map[string]candidate)
 	var needRebalanceTo bool
 	for localityStr, stores := range storesByLocality {
-		valid, necessary, preferredScore := allocateConstraintCheck(stores[0], constraints)
+		valid, necessary, preferredScore := allocateConstraintsCheck(stores[0], constraints)
 		if valid && necessary && unnecessaryRepls > 0 {
 			if !needRebalanceTo {
 				log.VEventf(ctx, 2, "should-rebalance(necessary-constraint=s%d): locality:%q",
@@ -698,8 +700,10 @@ func rebalanceCandidates(
 				existingCandidates = append(existingCandidates, existing.cand)
 			} else {
 				maxCapacityOK := maxCapacityCheck(s)
-				// Re-check constraints here to verify node/store attributed.
-				constraintsOK, preferredScore := constraintCheck(s, constraints.constraints)
+				// Re-check constraints here to verify node/store attributes.
+				// TODO: will this fail to mark things as necessary when compared to the use
+				// of removeConstraintsCheck on the existing replicas?
+				constraintsOK, necessary, preferredScore := allocateConstraintsCheck(s, constraints)
 				if !constraintsOK || !maxCapacityOK || !rebalanceToMaxCapacityCheck(s) {
 					continue
 				}
@@ -720,6 +724,7 @@ func rebalanceCandidates(
 				candidates = append(candidates, candidate{
 					store:          s,
 					valid:          constraintsOK,
+					necessary:      necessary,
 					fullDisk:       !maxCapacityOK,
 					diversityScore: localityCand.diversityScore,
 					preferredScore: preferredScore,
@@ -919,14 +924,13 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool
 }
 
 type analyzedConstraints struct {
-	constraints config.Constraints
-	// For each set of per-replica constraints in constraints.Replicas, tracks
-	// which StoreIDs satisfy them. This field is unused if per-replica
-	// constraints aren't being used.
+	constraints []config.Constraints
+	// For each set of constraints in the above slice, track which StoreIDs
+	// satisfy them. This field is unused if there are no constraints.
 	satisfiedBy [][]roachpb.StoreID
-	// maps from StoreID to the indices in constraints.Replicas of which
-	// per-replica constraints the store satisfies. This field is unused
-	// if per-replica constraints aren't being used.
+	// Maps from StoreID to the indices in the constraints slice of which
+	// constraints the store satisfies. This field is unused if there are no
+	// constraints.
 	satisfies map[roachpb.StoreID][]int
 }
 
@@ -934,18 +938,18 @@ func analyzeConstraints(
 	ctx context.Context,
 	storePool *StorePool,
 	existing []roachpb.ReplicaDescriptor,
-	constraints config.Constraints,
+	constraints []config.Constraints,
 ) analyzedConstraints {
 	result := analyzedConstraints{
 		constraints: constraints,
 	}
 
-	if len(constraints.Replicas) > 0 {
-		result.satisfiedBy = make([][]roachpb.StoreID, len(constraints.Replicas))
+	if len(constraints) > 0 {
+		result.satisfiedBy = make([][]roachpb.StoreID, len(constraints))
 		result.satisfies = make(map[roachpb.StoreID][]int)
 	}
 
-	for i, constraints := range constraints.Replicas {
+	for i, subConstraints := range constraints {
 		for _, repl := range existing {
 			valid := true
 			// If for some reason we don't have the store descriptor (which shouldn't
@@ -954,10 +958,14 @@ func analyzeConstraints(
 			// off such a node.
 			store, ok := storePool.getStoreDescriptor(repl.StoreID)
 			if ok {
-				for _, constraint := range constraints.Constraints {
-					if constraint.Type != config.Constraint_REQUIRED {
+				for _, constraint := range subConstraints.Constraints {
+					// Note: If this policy changes, then the storeHasConstraint call
+					// below will need to change as well -- it's only directly valid for
+					// required constraints.
+					if int(subConstraints.NumReplicas) > 0 && constraint.Type != config.Constraint_REQUIRED {
 						log.Errorf(ctx,
-							"zone config has non-required constraint %v; this is not allowed", constraint)
+							"zone config has non-required constraint %v; this is not allowed when num_replicas "+
+								"is also set on the constraint", constraint)
 						continue
 					}
 					if !storeHasConstraint(store, constraint) {
@@ -975,90 +983,44 @@ func analyzeConstraints(
 	return result
 }
 
-// longestReplicaConstraintsMatch returns the index in the provided slice of the
-// longest set of constraints matched by the provided store.
-//
-// Returns -1 if the store matches none of the constraints (or no constraints
-// are provided).
-func longestReplicaConstraintsMatch(
-	store roachpb.StoreDescriptor, perReplicaConstraints []config.Constraints,
-) int {
-	longest := 0
-	longestIdx := -1
-	for i, constraints := range perReplicaConstraints {
-		if len(constraints.Constraints) <= longest {
-			continue
-		}
-		valid := true
-		for _, constraint := range constraints.Constraints {
-			if constraint.Type != config.Constraint_REQUIRED {
-				log.Errorf(context.TODO(),
-					"zone config has non-required constraint %v; this is not allowed", constraint)
-				continue
-			}
-			if !storeHasConstraint(store, constraint) {
-				valid = false
-				break
-			}
-		}
-		if valid && len(constraints.Constraints) > longest {
-			longest = len(constraints.Constraints)
-			longestIdx = i
-		}
-	}
-	return longestIdx
-}
-
-func allocateConstraintCheck(
+// TODO(a-robinson): The recent changes to analyzedConstraints stopped properly
+// handling positive/preferred scores. They'll be fully removed in a follow-up.
+func allocateConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed analyzedConstraints,
 ) (valid bool, necessary bool, preferredScore int) {
-	// Overarching (non-per-replica) constraints work the same when allocating a
-	// new replicas as they do any other time.
-	if len(analyzed.constraints.Constraints) > 0 {
-		valid, preferredScore := constraintCheck(store, analyzed.constraints)
-		return valid, false, preferredScore
-	}
-	if len(analyzed.constraints.Replicas) == 0 {
+	// All stores are valid when there are no constraints.
+	if len(analyzed.constraints) == 0 {
 		return true, false, 0
 	}
 
-	// If this matches a per-replica constraint that hasn't been satisfied,
-	// the store is both valid and necessary.
-	// constraint that hasn't already been met.
-	// TODO: This doesn't handle duplicated per-replica constraints. Switch to using
-	// a count of how many replicas we want for each set of constraints, then track
-	// how many times each has been satisfied.
-	for i, stores := range analyzed.satisfiedBy {
-		if len(stores) == 0 {
-			constraintsOK, _ := constraintCheck(store, analyzed.constraints.Replicas[i])
-			if constraintsOK {
+	// Check the store against all the constraints. If it matches a constraint at
+	// all, it's valid. If it matches a constraint that is not already fully
+	// satisfied by existing replicas, then it's necessary.
+	//
+	// NB: This assumes that the sum of all constraints.NumReplicas is equal to
+	// configured number of replicas for the range, or that there's just one set
+	// of constraints with NumReplicas set to 0. This is meant to be enforced in
+	// the config package.
+	for i, constraints := range analyzed.constraints {
+		if constraintsOK, _ := subConstraintsCheck(store, constraints); constraintsOK {
+			valid = true
+			matchingStores := analyzed.satisfiedBy[i]
+			if len(matchingStores) < int(constraints.NumReplicas) {
 				return true, true, 0
 			}
 		}
 	}
-	// If it matches a per-replica constraint that has already been satisfied,
-	// it's valid but not necessary.
-	for _, constraints := range analyzed.constraints.Replicas {
-		if constraintsOK, _ := constraintCheck(store, constraints); constraintsOK {
-			return true, false, 0
-		}
-	}
 
-	// The store satisfies none of the per-replica constraints.
-	// TODO: As above, this assumes that len(constraints.Replicas) == zoneConfig.numReplicas
-	return false, false, 0
+	return valid, false, 0
 }
 
-func removeConstraintCheck(
+// TODO(a-robinson): The recent changes to analyzedConstraints stopped properly
+// handling positive/preferred scores. They'll be fully removed in a follow-up.
+func removeConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed analyzedConstraints,
 ) (valid bool, necessary bool, preferredScore int) {
-	// Overarching (non-per-replica) constraints work the same when removing
-	// replicas as they do any other time.
-	if len(analyzed.constraints.Constraints) > 0 {
-		valid, preferredScore := constraintCheck(store, analyzed.constraints)
-		return valid, false, preferredScore
-	}
-	if len(analyzed.constraints.Replicas) == 0 {
+	// All stores are valid when there are no constraints.
+	if len(analyzed.constraints) == 0 {
 		return true, false, 0
 	}
 
@@ -1067,16 +1029,15 @@ func removeConstraintCheck(
 		return false, false, 0
 	}
 
-	// The store satisfies a constraint that isn't satisfied by any other existing
-	// replica.
-	// TODO: This assumes that len(constraints.Replicas) == zoneConfig.numReplicas.
-	// Switch to using a count of how many replicas we want for each set of
-	// constraints, then track how many times each has been satisfied.
+	// Check if the store matches a constraint that isn't overly satisfied.
+	// If so, then keeping it around is necessary to ensure that constraint stays
+	// fully satisfied.
 	for _, constraintIdx := range analyzed.satisfies[store.StoreID] {
-		if len(analyzed.satisfiedBy[constraintIdx]) == 1 {
+		if len(analyzed.satisfiedBy[constraintIdx]) <= int(analyzed.constraints[constraintIdx].NumReplicas) {
 			return true, true, 0
 		}
 	}
+
 	// If neither of the above is true, then the store is valid but nonessential.
 	// NOTE: We could be more precise here by trying to find the least essential
 	// existing replica and only considering that one nonessential, but this is
@@ -1084,41 +1045,42 @@ func removeConstraintCheck(
 	return true, false, 0
 }
 
-// constraintCheck returns true iff all required and prohibited constraints are
-// satisfied. Stores with attributes or localities that match the most positive
-// constraints return higher scores.
-func constraintCheck(store roachpb.StoreDescriptor, constraints config.Constraints) (bool, int) {
-	switch {
-	case len(constraints.Constraints) > 0:
-		// A store must meet all overarching constraints to be considered valid.
-		if len(constraints.Constraints) > 0 && len(constraints.Replicas) > 0 {
-			log.Errorf(context.TODO(),
-				"zone config has both Constraints and Replicas set; this is not allowed")
-		}
-		positive := 0
-		for _, constraint := range constraints.Constraints {
-			hasConstraint := storeHasConstraint(store, constraint)
-			switch {
-			case constraint.Type == config.Constraint_REQUIRED && !hasConstraint:
-				return false, 0
-			case constraint.Type == config.Constraint_PROHIBITED && hasConstraint:
-				return false, 0
-			case (constraint.Type == config.Constraint_POSITIVE && hasConstraint):
-				positive++
-			}
-		}
-		return true, positive
-	case len(constraints.Replicas) > 0:
-		// A store must meet only one of the per-replica sets of contraints to be
-		// considered valid.
-		if longestReplicaConstraintsMatch(store, constraints.Replicas) != -1 {
-			return true, 0
-		}
-		return false, 0
-	default:
-		// If there are no constraints, all stores are trivially valid.
+// constraintsCheck returns true iff the provided store would be a valid in a
+// range with the provided constraints. Stores with attributes or localities
+// that match the most positive constraints return higher scores.
+func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraints) (bool, int) {
+	if len(constraints) == 0 {
 		return true, 0
 	}
+
+	for _, subConstraints := range constraints {
+		if constraintsOK, _ := subConstraintsCheck(store, subConstraints); constraintsOK {
+			return true, 0
+		}
+	}
+	return false, 0
+}
+
+// subConstraintsCheck checks a store against a single set of constraints (out
+// of the possibly numerous sets that apply to a range), returning true iff the
+// store matches the constraints. Stores with attributes or localities that
+// match the most positive constraints return higher scores.
+func subConstraintsCheck(
+	store roachpb.StoreDescriptor, constraints config.Constraints,
+) (bool, int) {
+	positive := 0
+	for _, constraint := range constraints.Constraints {
+		hasConstraint := storeHasConstraint(store, constraint)
+		switch {
+		case constraint.Type == config.Constraint_REQUIRED && !hasConstraint:
+			return false, 0
+		case constraint.Type == config.Constraint_PROHIBITED && hasConstraint:
+			return false, 0
+		case (constraint.Type == config.Constraint_POSITIVE && hasConstraint):
+			positive++
+		}
+	}
+	return true, positive
 }
 
 // rangeDiversityScore returns a value between 0 and 1 based on how diverse the
