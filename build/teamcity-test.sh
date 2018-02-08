@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+go get -u github.com/benesch/go-test-teamcity
+build/builder.sh go get -u github.com/benesch/go-test-teamcity
+
 source "$(dirname "${0}")/teamcity-support.sh"
 
 tc_prepare
