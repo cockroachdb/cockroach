@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,10 +40,12 @@ import (
 )
 
 var slow = flag.Bool("slow", false, "Run slow tests")
+var local = flag.Bool("local", false, "Run tests locally")
 var artifacts = flag.String("artifacts", "", "Path to artifacts directory")
 var cockroach = flag.String("cockroach", "", "Path to cockroach binary to use")
 var workload = flag.String("workload", "", "Path to workload binary to use")
 var clusterID = flag.String("clusterid", "", "An identifier to use in the test cluster's name")
+var initOnce sync.Once
 
 func checkTestTimeout(t testing.TB) {
 	f := flag.Lookup("test.timeout")
@@ -52,7 +55,53 @@ func checkTestTimeout(t testing.TB) {
 	}
 }
 
-func maybeSkip(t testing.TB) {
+func findLocalBinary(binary string) (string, error) {
+	if _, err := os.Stat(binary); err == nil {
+		return filepath.Abs(binary)
+	}
+
+	// For "local" clusters we have to find the binary to run and translate it to
+	// an absolute path. First, look for the binary in PATH.
+	path, err := exec.LookPath(binary)
+	if err != nil {
+		if strings.HasPrefix(binary, "/") {
+			return "", err
+		}
+		// We're unable to find the binary in PATH and "binary" is a relative path:
+		// look in the cockroach repo.
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			return "", err
+		}
+		path = gopath + "/src/github.com/cockroachdb/cockroach/" + binary
+		var err2 error
+		path, err2 = exec.LookPath(path)
+		if err2 != nil {
+			return "", err
+		}
+	}
+	return filepath.Abs(path)
+}
+
+func initLocalBinaries(t *testing.T) {
+	var err error
+	if *cockroach == "" {
+		*cockroach = "cockroach"
+	}
+	*cockroach, err = findLocalBinary(*cockroach)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *workload == "" {
+		*workload = "workload"
+	}
+	*workload, err = findLocalBinary(*workload)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func maybeSkip(t *testing.T) {
 	if !*slow {
 		if testing.Verbose() {
 			fmt.Fprintf(os.Stderr, "skipping %s because -slow flag was not provided\n", t.Name())
@@ -60,13 +109,21 @@ func maybeSkip(t testing.TB) {
 		t.Skip()
 	}
 
-	checkTestTimeout(t)
-	if _, err := os.Stat(*cockroach); err != nil {
-		t.Fatal(errors.Wrap(err, `missing cockroach binary`))
-	}
-	if _, err := os.Stat(*workload); err != nil {
-		t.Fatal(errors.Wrap(err, `missing workload binary`))
-	}
+	initOnce.Do(func() {
+		checkTestTimeout(t)
+
+		if !*local {
+			if _, err := os.Stat(*cockroach); err != nil {
+				t.Fatal(errors.Wrap(err, `missing cockroach binary`))
+			}
+			if _, err := os.Stat(*workload); err != nil {
+				t.Fatal(errors.Wrap(err, `missing workload binary`))
+			}
+			t.Parallel()
+		} else {
+			initLocalBinaries(t)
+		}
+	})
 }
 
 func runCmd(ctx context.Context, l *logger, args ...string) error {
@@ -101,7 +158,12 @@ func destroyCluster(t testing.TB, l *logger, clusterName string) {
 	unregisterCluster(clusterName)
 }
 
-func makeClusterName(t testing.TB) string {
+func makeClusterName(t *testing.T) string {
+	if *local {
+		return "local"
+	}
+
+	t.Parallel()
 	username := os.Getenv("ROACHPROD_USER")
 	if username == "" {
 		usr, err := user.Current()
@@ -124,57 +186,35 @@ func makeClusterName(t testing.TB) string {
 
 func TestSingleDC(t *testing.T) {
 	maybeSkip(t)
-	t.Parallel()
 
 	// TODO(dan): It's not clear to me yet how all the various configurations of
 	// clusters (# of machines in each locality) are going to generalize. For now,
 	// just hardcode what we had before.
 	for testName, testCmd := range map[string]string{
-		"kv0":     "./workload run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m",
-		"kv95":    "./workload run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m",
-		"splits":  "./workload run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1 --duration=10m",
-		"tpcc_w1": "./workload run tpcc --init --warehouses=1 --wait=false --concurrency=384 --duration=10m",
-		"tpmc_w1": "./workload run tpcc --init --warehouses=1 --concurrency=10 --duration=10m",
+		"kv0":     "<workload> run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m",
+		"kv95":    "<workload> run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m",
+		"splits":  "<workload> run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1 --duration=10m",
+		"tpcc_w1": "<workload> run tpcc --init --warehouses=1 --wait=false --concurrency=384 --duration=10m",
+		"tpmc_w1": "<workload> run tpcc --init --warehouses=1 --concurrency=10 --duration=10m",
 	} {
 		testName, testCmd := testName, testCmd
 		t.Run(testName, func(t *testing.T) {
-			t.Parallel()
 			ctx := context.Background()
+			c := newCluster(ctx, t)
+			defer c.destroy(ctx)
 
-			l, err := rootLogger(t.Name())
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			clusterName := makeClusterName(t)
-			defer destroyCluster(t, l, clusterName)
-
-			if err := runCmds(ctx, l, [][]string{
-				{"roachprod", "create", clusterName},
-				{"roachprod", "put", clusterName, *cockroach, "./cockroach"},
-				{"roachprod", "put", clusterName, *workload, "./workload"},
-				{"roachprod", "start", clusterName},
-			}); err != nil {
-				t.Fatal(err)
-			}
-
-			m := monitorWithContext(ctx)
-			m.Worker(func(ctx context.Context) error {
-				return runCmd(ctx, l, "roachprod", "ssh", clusterName+":1", "--", testCmd)
-			})
-			if err := m.Monitor(l, "roachprod", "monitor", clusterName); err != nil {
-				t.Fatalf(`%+v`, err)
-			}
+			c.put(ctx, *cockroach, "<cockroach>")
+			c.put(ctx, *workload, "<workload>")
+			c.start(ctx, 1, 3)
+			c.ssh(ctx, 4, testCmd)
 		})
 	}
 }
 
 func TestRoachmart(t *testing.T) {
 	maybeSkip(t)
-	t.Parallel()
 
 	testutils.RunTrueAndFalse(t, "partition", func(t *testing.T, partition bool) {
-		t.Parallel()
 		ctx := context.Background()
 
 		l, err := rootLogger(t.Name())
