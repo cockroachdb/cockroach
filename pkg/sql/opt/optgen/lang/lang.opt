@@ -43,9 +43,22 @@ define RuleSet {
 }
 
 define Define {
-    Tags   Tags
-    Name   String
-    Fields DefineFields
+    Comments Comments
+    Tags     Tags
+    Name     String
+    Fields   DefineFields
+}
+
+# type CommentsExpr []CommentExpr
+[Slice]
+define Comments {
+    Element Comment
+}
+
+# type CommentExpr string
+[Value]
+define Comment {
+    Value string
 }
 
 # type TagsExpr []TagExpr
@@ -72,10 +85,11 @@ define DefineField {
 }
 
 define Rule {
-    Name    String
-    Tags    Tags
-    Match   Match
-    Replace Expr
+    Comments Comments
+    Name     String
+    Tags     Tags
+    Match    Match
+    Replace  Expr
 }
 
 define Bind {

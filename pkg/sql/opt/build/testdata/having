@@ -24,8 +24,8 @@ project
  │    ├── group-by
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
- │    │    └── projections
+ │    │    ├── groupings
+ │    │    └── aggregations
  │    └── const: true [type=bool]
  └── projections
       └── const: 3 [type=int]
@@ -39,9 +39,9 @@ select
  │    ├── columns: kv.s:string:null:4 column5:int:null:5
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    ├── projections
+ │    ├── groupings
  │    │    └── variable: kv.s [type=string]
- │    └── projections
+ │    └── aggregations
  │         └── function: count_rows [type=NULL]
  └── gt [type=bool]
       ├── variable: column5 [type=int]
@@ -58,8 +58,8 @@ project
  │    │    ├── columns: column5:int:null:5 column6:int:null:6
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
- │    │    └── projections
+ │    │    ├── groupings
+ │    │    └── aggregations
  │    │         ├── function: min [type=NULL]
  │    │         │    └── variable: kv.v [type=int]
  │    │         └── function: max [type=NULL]
@@ -82,8 +82,8 @@ project
  │    │    ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
- │    │    └── projections
+ │    │    ├── groupings
+ │    │    └── aggregations
  │    │         ├── function: max [type=NULL]
  │    │         │    └── variable: kv.v [type=int]
  │    │         ├── function: max [type=NULL]
@@ -136,11 +136,11 @@ project
  │    │    ├── columns: column5:int:null:5 column6:int:null:6
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
+ │    │    ├── groupings
  │    │    │    └── plus [type=int]
  │    │    │         ├── variable: kv.k [type=int]
  │    │    │         └── variable: kv.w [type=int]
- │    │    └── projections
+ │    │    └── aggregations
  │    │         └── function: count_rows [type=NULL]
  │    └── gt [type=bool]
  │         ├── plus [type=int]
@@ -168,9 +168,9 @@ project
  │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
+ │    │    ├── groupings
  │    │    │    └── variable: kv.v [type=int]
- │    │    └── projections
+ │    │    └── aggregations
  │    │         └── function: max [type=NULL]
  │    │              └── variable: kv.v [type=int]
  │    └── gt [type=bool]
@@ -190,10 +190,10 @@ project
  │    │    ├── columns: column5:string:null:5 column6:decimal:null:6
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
+ │    │    ├── groupings
  │    │    │    └── function: lower [type=NULL]
  │    │    │         └── variable: kv.s [type=string]
- │    │    └── projections
+ │    │    └── aggregations
  │    │         └── function: sum [type=NULL]
  │    │              └── variable: kv.w [type=int]
  │    └── like [type=bool]
@@ -214,10 +214,10 @@ project
  │    │    ├── columns: column5:string:null:5 column6:decimal:null:6
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
+ │    │    ├── groupings
  │    │    │    └── function: lower [type=NULL]
  │    │    │         └── variable: kv.s [type=string]
- │    │    └── projections
+ │    │    └── aggregations
  │    │         └── function: sum [type=NULL]
  │    │              └── variable: kv.w [type=int]
  │    └── in [type=bool]
@@ -240,12 +240,12 @@ project
  │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── projections
+ │    │    ├── groupings
  │    │    │    ├── variable: kv.v [type=int]
  │    │    │    └── mult [type=int]
  │    │    │         ├── variable: kv.k [type=int]
  │    │    │         └── variable: kv.w [type=int]
- │    │    └── projections
+ │    │    └── aggregations
  │    └── gt [type=bool]
  │         ├── mult [type=int]
  │         │    ├── variable: kv.k [type=int]

@@ -54,9 +54,9 @@ define Project {
     Projections Expr
 }
 
-# InnerJoin represents creates a result set that combines columns from its left
-# and right inputs, based upon its "on" join predicate. Rows which do not match
-# the predicate are filtered. While expressions in the predicate can refer to
+# InnerJoin creates a result set that combines columns from its left and right
+# inputs, based upon its "on" join predicate. Rows which do not match the
+# predicate are filtered. While expressions in the predicate can refer to
 # columns projected by either the left or right inputs, the inputs are not
 # allowed to refer to the other's projected columns.
 [Relational, Join]

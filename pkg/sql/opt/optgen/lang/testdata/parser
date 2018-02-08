@@ -2,6 +2,11 @@
 # Define without tags.
 #
 parse
+# This is a file header, and shouldn't be part of Lt's comment.
+
+# This is a comment about Lt.
+# And another information-packed line about it as well.
+#
 define Lt {
     Left  Expr
     Right Expr
@@ -10,13 +15,14 @@ define Lt {
 (Root
 	Defines=(DefineSet
 		(Define
+			Comments=(Comments # This is a comment about Lt. # And another information-packed line about it as well. #)
 			Tags=(Tags)
 			Name="Lt"
 			Fields=(DefineFields
-				(DefineField Name="Left" Type="Expr" Src=<test.opt:2:5>)
-				(DefineField Name="Right" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Name="Left" Type="Expr" Src=<test.opt:7:5>)
+				(DefineField Name="Right" Type="Expr" Src=<test.opt:8:5>)
 			)
-			Src=<test.opt:1:1>
+			Src=<test.opt:6:1>
 		)
 	)
 	Rules=(RuleSet)
@@ -26,6 +32,7 @@ define Lt {
 # Define with tags.
 #
 parse
+# Comment on definition with a tag. 
 [Tag1, Tag2]
 define Not {
     Input Expr
@@ -34,12 +41,13 @@ define Not {
 (Root
 	Defines=(DefineSet
 		(Define
+			Comments=(Comments # Comment on definition with a tag. )
 			Tags=(Tags Tag1 Tag2)
 			Name="Not"
 			Fields=(DefineFields
-				(DefineField Name="Input" Type="Expr" Src=<test.opt:3:5>)
+				(DefineField Name="Input" Type="Expr" Src=<test.opt:4:5>)
 			)
-			Src=<test.opt:1:1>
+			Src=<test.opt:2:1>
 		)
 	)
 	Rules=(RuleSet)
@@ -87,6 +95,50 @@ test.opt:22:5: expected define field name, found '('
 test.opt:27:11: expected define field type, found '1'
 
 #
+# Multiple rules with comments.
+#
+parse
+# This is the One rule.
+[One]
+(One) => (One)
+
+# This is an intermediate comment that shouldn't be included.
+
+# This is the Two rule.
+[Two]
+(Two) => (Two)
+----
+(Root
+	Defines=(DefineSet)
+	Rules=(RuleSet
+		(Rule
+			Comments=(Comments # This is the One rule.)
+			Name="One"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames OneOp)
+				Args=(List)
+				Src=<test.opt:3:1>
+			)
+			Replace=(Construct Name="One" Args=(List) Src=<test.opt:3:10>)
+			Src=<test.opt:2:1>
+		)
+		(Rule
+			Comments=(Comments # This is the Two rule.)
+			Name="Two"
+			Tags=(Tags)
+			Match=(Match
+				Names=(OpNames TwoOp)
+				Args=(List)
+				Src=<test.opt:9:1>
+			)
+			Replace=(Construct Name="Two" Args=(List) Src=<test.opt:9:10>)
+			Src=<test.opt:8:1>
+		)
+	)
+)
+
+#
 # Match multiple op names.
 #
 parse
@@ -97,6 +149,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="Tag"
 			Tags=(Tags)
 			Match=(Match
@@ -129,6 +182,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="Tag"
 			Tags=(Tags)
 			Match=(Match
@@ -178,6 +232,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="Bind"
 			Tags=(Tags)
 			Match=(Match
@@ -231,6 +286,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="boolean"
 			Tags=(Tags)
 			Match=(Match
@@ -271,6 +327,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="Invoke"
 			Tags=(Tags)
 			Match=(Match
@@ -309,6 +366,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="List"
 			Tags=(Tags)
 			Match=(Match
@@ -363,6 +421,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="ConstructString"
 			Tags=(Tags)
 			Match=(Match
@@ -387,6 +446,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="ConstructBound"
 			Tags=(Tags)
 			Match=(Match
@@ -413,6 +473,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="Construct"
 			Tags=(Tags)
 			Match=(Match
@@ -450,6 +511,7 @@ parse
 	Defines=(DefineSet)
 	Rules=(RuleSet
 		(Rule
+			Comments=(Comments)
 			Name="Construct"
 			Tags=(Tags)
 			Match=(Match

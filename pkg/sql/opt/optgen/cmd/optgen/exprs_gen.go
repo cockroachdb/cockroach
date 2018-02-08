@@ -238,6 +238,9 @@ func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 	opType := fmt.Sprintf("%sOp", define.Name)
 	exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
 
+	// Generate comment for the expression type.
+	generateDefineComments(g.w, define, exprType)
+
 	// Generate the expression type.
 	fmt.Fprintf(g.w, "type %s memoExpr\n\n", exprType)
 
