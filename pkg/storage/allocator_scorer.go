@@ -125,21 +125,16 @@ type candidate struct {
 	fullDisk       bool
 	necessary      bool
 	diversityScore float64
-	preferredScore int
 	convergesScore int
 	balanceScore   balanceDimensions
 	rangeCount     int
 	details        string
 }
 
-func (c candidate) localityScore() float64 {
-	return c.diversityScore + float64(c.preferredScore)
-}
-
 func (c candidate) String() string {
-	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, locality:%.2f, converges:%d, "+
+	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, converges:%d, "+
 		"balance:%s, rangeCount:%d, logicalBytes:%s, writesPerSecond:%.2f",
-		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.localityScore(), c.convergesScore,
+		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.convergesScore,
 		c.balanceScore, c.rangeCount, humanizeutil.IBytes(c.store.Capacity.LogicalBytes),
 		c.store.Capacity.WritesPerSecond)
 	if c.details != "" {
@@ -162,9 +157,6 @@ func (c candidate) compactString(options scorerOptions) string {
 	}
 	if c.diversityScore != 0 {
 		fmt.Fprintf(&buf, ", diversity:%.2f", c.diversityScore)
-	}
-	if c.preferredScore != 0 {
-		fmt.Fprintf(&buf, ", preferred:%d", c.preferredScore)
 	}
 	fmt.Fprintf(&buf, ", converges:%d, balance:%s, rangeCount:%d",
 		c.convergesScore, c.balanceScore.compactString(options), c.rangeCount)
@@ -207,8 +199,8 @@ func (c candidate) compare(o candidate) float64 {
 		}
 		return -4
 	}
-	if c.localityScore() != o.localityScore() {
-		if c.localityScore() > o.localityScore() {
+	if c.diversityScore != o.diversityScore {
+		if c.diversityScore > o.diversityScore {
 			return 3
 		}
 		return -3
@@ -277,7 +269,7 @@ var _ sort.Interface = byScoreAndID(nil)
 
 func (c byScoreAndID) Len() int { return len(c) }
 func (c byScoreAndID) Less(i, j int) bool {
-	if c[i].localityScore() == c[j].localityScore() &&
+	if c[i].diversityScore == c[j].diversityScore &&
 		c[i].convergesScore == c[j].convergesScore &&
 		c[i].balanceScore.totalScore() == c[j].balanceScore.totalScore() &&
 		c[i].rangeCount == c[j].rangeCount &&
@@ -310,8 +302,8 @@ func (cl candidateList) best() candidateList {
 	}
 	for i := 1; i < len(cl); i++ {
 		if cl[i].necessary != cl[0].necessary ||
-			cl[i].localityScore() < cl[0].localityScore() ||
-			(cl[i].localityScore() == cl[len(cl)-1].localityScore() &&
+			cl[i].diversityScore < cl[0].diversityScore ||
+			(cl[i].diversityScore == cl[len(cl)-1].diversityScore &&
 				cl[i].convergesScore < cl[len(cl)-1].convergesScore) {
 			return cl[:i]
 		}
@@ -344,8 +336,8 @@ func (cl candidateList) worst() candidateList {
 	// Find the worst constraint/locality/converges values.
 	for i := len(cl) - 2; i >= 0; i-- {
 		if cl[i].necessary != cl[len(cl)-1].necessary ||
-			cl[i].localityScore() > cl[len(cl)-1].localityScore() ||
-			(cl[i].localityScore() == cl[len(cl)-1].localityScore() &&
+			cl[i].diversityScore > cl[len(cl)-1].diversityScore ||
+			(cl[i].diversityScore == cl[len(cl)-1].diversityScore &&
 				cl[i].convergesScore > cl[len(cl)-1].convergesScore) {
 			return cl[i+1:]
 		}
@@ -435,7 +427,7 @@ func allocateCandidates(
 		if !preexistingReplicaCheck(s.Node.NodeID, existing) {
 			continue
 		}
-		constraintsOK, necessary, preferredMatched := allocateConstraintsCheck(s, constraints)
+		constraintsOK, necessary := allocateConstraintsCheck(s, constraints)
 		if !constraintsOK {
 			continue
 		}
@@ -449,7 +441,6 @@ func allocateCandidates(
 			valid:          constraintsOK,
 			necessary:      necessary,
 			diversityScore: diversityScore,
-			preferredScore: preferredMatched,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
 		})
@@ -474,7 +465,7 @@ func removeCandidates(
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
-		constraintsOK, necessary, preferredMatched := removeConstraintsCheck(s, constraints)
+		constraintsOK, necessary := removeConstraintsCheck(s, constraints)
 		if !constraintsOK {
 			candidates = append(candidates, candidate{
 				store:     s,
@@ -501,7 +492,6 @@ func removeCandidates(
 			necessary:      necessary,
 			fullDisk:       !maxCapacityCheck(s),
 			diversityScore: diversityScore,
-			preferredScore: preferredMatched,
 			convergesScore: convergesScore,
 			balanceScore:   balanceScore,
 			rangeCount:     int(s.Capacity.RangeCount),
@@ -552,7 +542,7 @@ func rebalanceCandidates(
 		if _, ok := existingStores[store.StoreID]; ok {
 			// TODO: will this mark too many things as necessary when compared to the
 			// use of allocateConstraintsCheck on the potential rebalance targets?
-			valid, necessary, preferredScore := removeConstraintsCheck(store, constraints)
+			valid, necessary := removeConstraintsCheck(store, constraints)
 			fullDisk := !maxCapacityCheck(store)
 			if !valid {
 				if !needRebalanceFrom {
@@ -578,7 +568,6 @@ func rebalanceCandidates(
 					necessary:      necessary,
 					fullDisk:       fullDisk,
 					diversityScore: curDiversityScore,
-					preferredScore: preferredScore,
 				},
 				localityStr: localityLookupFn(store.Node.NodeID),
 			}
@@ -599,7 +588,7 @@ func rebalanceCandidates(
 	localityAttrs := make(map[string]candidate)
 	var needRebalanceTo bool
 	for localityStr, stores := range storesByLocality {
-		valid, necessary, preferredScore := allocateConstraintsCheck(stores[0], constraints)
+		valid, necessary := allocateConstraintsCheck(stores[0], constraints)
 		if valid && necessary && unnecessaryRepls > 0 {
 			if !needRebalanceTo {
 				log.VEventf(ctx, 2, "should-rebalance(necessary-constraint=s%d): locality:%q",
@@ -608,10 +597,9 @@ func rebalanceCandidates(
 			needRebalanceTo = true
 		}
 		localityAttrs[localityStr] = candidate{
-			store:          stores[0], // just use the first as a representative example
-			valid:          valid,
-			necessary:      necessary,
-			preferredScore: preferredScore,
+			store:     stores[0], // just use the first as a representative example
+			valid:     valid,
+			necessary: necessary,
 		}
 	}
 
@@ -703,7 +691,7 @@ func rebalanceCandidates(
 				// Re-check constraints here to verify node/store attributes.
 				// TODO: will this fail to mark things as necessary when compared to the use
 				// of removeConstraintsCheck on the existing replicas?
-				constraintsOK, necessary, preferredScore := allocateConstraintsCheck(s, constraints)
+				constraintsOK, necessary := allocateConstraintsCheck(s, constraints)
 				if !constraintsOK || !maxCapacityOK || !rebalanceToMaxCapacityCheck(s) {
 					continue
 				}
@@ -727,7 +715,6 @@ func rebalanceCandidates(
 					necessary:      necessary,
 					fullDisk:       !maxCapacityOK,
 					diversityScore: localityCand.diversityScore,
-					preferredScore: preferredScore,
 					convergesScore: convergesScore,
 					balanceScore:   balanceScore,
 					rangeCount:     int(s.Capacity.RangeCount),
@@ -983,8 +970,6 @@ func analyzeConstraints(
 	return result
 }
 
-// TODO(a-robinson): The recent changes to analyzedConstraints stopped properly
-// handling positive/preferred scores. They'll be fully removed in a follow-up.
 // allocateConstraintsCheck checks the store against all the constraints. If it
 // matches a constraint at all, it's valid. If it matches a constraint that is
 // not already fully satisfied by existing replicas, then it's necessary.
@@ -995,38 +980,36 @@ func analyzeConstraints(
 // config package.
 func allocateConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed analyzedConstraints,
-) (valid bool, necessary bool, preferredScore int) {
+) (valid bool, necessary bool) {
 	// All stores are valid when there are no constraints.
 	if len(analyzed.constraints) == 0 {
-		return true, false, 0
+		return true, false
 	}
 
 	for i, constraints := range analyzed.constraints {
-		if constraintsOK, _ := subConstraintsCheck(store, constraints); constraintsOK {
+		if constraintsOK := subConstraintsCheck(store, constraints); constraintsOK {
 			valid = true
 			matchingStores := analyzed.satisfiedBy[i]
 			if len(matchingStores) < int(constraints.NumReplicas) {
-				return true, true, 0
+				return true, true
 			}
 		}
 	}
 
-	return valid, false, 0
+	return valid, false
 }
 
-// TODO(a-robinson): The recent changes to analyzedConstraints stopped properly
-// handling positive/preferred scores. They'll be fully removed in a follow-up.
 func removeConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed analyzedConstraints,
-) (valid bool, necessary bool, preferredScore int) {
+) (valid bool, necessary bool) {
 	// All stores are valid when there are no constraints.
 	if len(analyzed.constraints) == 0 {
-		return true, false, 0
+		return true, false
 	}
 
 	// The store satisfies none of the constraints.
 	if len(analyzed.satisfies[store.StoreID]) == 0 {
-		return false, false, 0
+		return false, false
 	}
 
 	// Check if the store matches a constraint that isn't overly satisfied.
@@ -1034,7 +1017,7 @@ func removeConstraintsCheck(
 	// fully satisfied.
 	for _, constraintIdx := range analyzed.satisfies[store.StoreID] {
 		if len(analyzed.satisfiedBy[constraintIdx]) <= int(analyzed.constraints[constraintIdx].NumReplicas) {
-			return true, true, 0
+			return true, true
 		}
 	}
 
@@ -1042,45 +1025,38 @@ func removeConstraintsCheck(
 	// NOTE: We could be more precise here by trying to find the least essential
 	// existing replica and only considering that one nonessential, but this is
 	// sufficient to avoid violating constraints.
-	return true, false, 0
+	return true, false
 }
 
 // constraintsCheck returns true iff the provided store would be a valid in a
-// range with the provided constraints. Stores with attributes or localities
-// that match the most positive constraints return higher scores.
-func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraints) (bool, int) {
+// range with the provided constraints.
+func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraints) bool {
 	if len(constraints) == 0 {
-		return true, 0
+		return true
 	}
 
 	for _, subConstraints := range constraints {
-		if constraintsOK, _ := subConstraintsCheck(store, subConstraints); constraintsOK {
-			return true, 0
+		if constraintsOK := subConstraintsCheck(store, subConstraints); constraintsOK {
+			return true
 		}
 	}
-	return false, 0
+	return false
 }
 
 // subConstraintsCheck checks a store against a single set of constraints (out
 // of the possibly numerous sets that apply to a range), returning true iff the
-// store matches the constraints. Stores with attributes or localities that
-// match the most positive constraints return higher scores.
-func subConstraintsCheck(
-	store roachpb.StoreDescriptor, constraints config.Constraints,
-) (bool, int) {
-	positive := 0
+// store matches the constraints.
+func subConstraintsCheck(store roachpb.StoreDescriptor, constraints config.Constraints) bool {
 	for _, constraint := range constraints.Constraints {
 		hasConstraint := storeHasConstraint(store, constraint)
 		switch {
 		case constraint.Type == config.Constraint_REQUIRED && !hasConstraint:
-			return false, 0
+			return false
 		case constraint.Type == config.Constraint_PROHIBITED && hasConstraint:
-			return false, 0
-		case (constraint.Type == config.Constraint_POSITIVE && hasConstraint):
-			positive++
+			return false
 		}
 	}
-	return true, positive
+	return true
 }
 
 // rangeDiversityScore returns a value between 0 and 1 based on how diverse the
