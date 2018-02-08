@@ -2129,9 +2129,7 @@ func (r *Replica) beginCmds(
 		// dependent commands if we want to cancel, so it's good to bail
 		// out early if we can.
 		if err := ctx.Err(); err != nil {
-			errStr := fmt.Sprintf("%s before command queue: %s", err, ba.Summary())
-			log.Warning(ctx, errStr)
-			log.ErrEvent(ctx, errStr)
+			log.VEventf(ctx, 2, "%s before command queue: %s", err, ba.Summary())
 			return nil, err
 		}
 
@@ -2205,9 +2203,7 @@ func (r *Replica) beginCmds(
 						newCmd.ResolvePendingPrereq()
 					case <-ctxDone:
 						err := ctx.Err()
-						errStr := fmt.Sprintf("%s while in command queue: %s", err, ba)
-						log.Warning(ctx, errStr)
-						log.ErrEvent(ctx, errStr)
+						log.VEventf(ctx, 2, "%s while in command queue: %s", err, ba)
 
 						// Remove the command from the command queue immediately. Dependents will
 						// transfer transitive dependencies when they try to block on this command,
@@ -2768,7 +2764,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			// AmbiguousResultError indicates to caller that the command may
 			// have executed.
 			if tryAbandon() {
-				log.Warningf(ctx, "context cancellation after %0.1fs of attempting command %s",
+				log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoRetry
 			}
@@ -2781,7 +2777,7 @@ func (r *Replica) tryExecuteWriteBatch(
 			// tryAbandon fails, we iterate through the loop again to wait
 			// for the command to finish.
 			if tryAbandon() {
-				log.Warningf(ctx, "shutdown cancellation after %0.1fs of attempting command %s",
+				log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
 				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown")), proposalNoRetry
 			}
