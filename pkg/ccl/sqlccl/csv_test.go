@@ -532,10 +532,10 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"schema-in-file-intodb",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'csv1'`,
+			`IMPORT TABLE csv1.t CREATE USING $1 CSV DATA (%s)`,
 			schema,
 			files,
-			`WITH into_db = 'csv1'`,
+			``,
 			"",
 		},
 		{
@@ -678,24 +678,25 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"no-database",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'nonexistent'`,
+			`IMPORT TABLE nonexistent.t CREATE USING $1 CSV DATA (%s)`,
 			schema,
 			files,
 			``,
-			`database does not exist: "nonexistent"`,
+			`database does not exist: nonexistent`,
 		},
 		{
-			"transform-and-into-db",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH transform = $2, into_db = 'nonexistent'`,
+			"into-db-fails",
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH into_db = 'test'`,
 			schema,
 			files,
 			``,
-			`cannot specify both transform and into_db`,
+			`invalid option "into_db"`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE csv%d`, i))
-			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = csv%d`, i))
+			intodb := fmt.Sprintf(`csv%d`, i)
+			sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, intodb))
+			sqlDB.Exec(t, fmt.Sprintf(`SET DATABASE = %s`, intodb))
 
 			var unused string
 			var restored struct {
@@ -720,7 +721,12 @@ func TestImportStmt(t *testing.T) {
 				return
 			}
 
-			const jobPrefix = `IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
+			jobPrefix := `IMPORT TABLE `
+			if !hasTransform {
+				jobPrefix += intodb + "."
+			}
+			jobPrefix += `t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) `
+
 			if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+testNum, jobs.TypeImport, jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", ")),
@@ -741,7 +747,7 @@ func TestImportStmt(t *testing.T) {
 				}
 				testNum++
 				if err := sqlDB.DB.QueryRow(
-					`RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, fmt.Sprintf(`csv%d`, i),
+					`RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, intodb,
 				).Scan(
 					&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 				); err != nil {
@@ -801,7 +807,7 @@ func TestImportStmt(t *testing.T) {
 
 		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
 		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s) WITH transform = $2`, files[0]), schema[0], nodetmp)
-		if !testutils.IsError(err, `file specifies a schema for table "t"`) {
+		if !testutils.IsError(err, `file specifies a schema for table t`) {
 			t.Fatalf("unexpected: %v", err)
 		}
 
