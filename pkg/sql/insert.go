@@ -119,7 +119,7 @@ func (p *planner) Insert(
 	// go by.
 	maxInsertIdx := len(cols)
 	for i, col := range cols {
-		if col.ComputeExpr != nil {
+		if col.IsComputed() {
 			maxInsertIdx = i
 			break
 		}
