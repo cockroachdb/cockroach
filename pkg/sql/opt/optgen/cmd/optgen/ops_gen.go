@@ -73,12 +73,16 @@ func (g *opsGen) genOperatorNames() {
 }
 
 func (g *opsGen) genOperatorEnumByTag(tag string) {
+	fmt.Fprintf(g.w, "  // ------------------------------------------------------------ \n")
 	fmt.Fprintf(g.w, "  // %s Operators\n", tag)
+	fmt.Fprintf(g.w, "  // ------------------------------------------------------------ \n")
 	for _, define := range g.compiled.Defines {
 		if !define.Tags.Contains(tag) {
 			continue
 		}
 
+		fmt.Fprintf(g.w, "\n")
+		generateDefineComments(g.w, define, string(define.Name)+"Op")
 		fmt.Fprintf(g.w, "  %sOp\n", define.Name)
 	}
 	fmt.Fprintf(g.w, "\n")

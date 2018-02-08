@@ -4,9 +4,9 @@ package lang
 
 import "fmt"
 
-const _Operator_name = "UnknownOpRootOpDefineSetOpRuleSetOpDefineOpTagsOpTagOpDefineFieldsOpDefineFieldOpRuleOpBindOpRefOpMatchOpOpNamesOpOpNameOpMatchAndOpMatchInvokeOpMatchNotOpMatchAnyOpMatchListOpConstructOpConstructListOpListOpStringOp"
+const _Operator_name = "UnknownOpRootOpDefineSetOpRuleSetOpDefineOpCommentsOpCommentOpTagsOpTagOpDefineFieldsOpDefineFieldOpRuleOpBindOpRefOpMatchOpOpNamesOpOpNameOpMatchAndOpMatchInvokeOpMatchNotOpMatchAnyOpMatchListOpConstructOpConstructListOpListOpStringOp"
 
-var _Operator_index = [...]uint8{0, 9, 15, 26, 35, 43, 49, 54, 68, 81, 87, 93, 98, 105, 114, 122, 132, 145, 155, 165, 176, 187, 202, 208, 216}
+var _Operator_index = [...]uint8{0, 9, 15, 26, 35, 43, 53, 62, 68, 73, 87, 100, 106, 112, 117, 124, 133, 141, 151, 164, 174, 184, 195, 206, 221, 227, 235}
 
 func (i Operator) String() string {
 	if i < 0 || i >= Operator(len(_Operator_index)-1) {

@@ -6,6 +6,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
+// ConstructSubquery constructs an expression for the Subquery operator.
 func (_f *factory) ConstructSubquery(
 	input opt.GroupID,
 	projection opt.GroupID,
@@ -23,6 +24,9 @@ func (_f *factory) ConstructSubquery(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_subqueryExpr)))
 }
 
+// ConstructVariable constructs an expression for the Variable operator.
+// Variable is the typed scalar value of a column in the query. The private
+// field is a Metadata.ColumnIndex that references the column by index.
 func (_f *factory) ConstructVariable(
 	col opt.PrivateID,
 ) opt.GroupID {
@@ -39,6 +43,9 @@ func (_f *factory) ConstructVariable(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr)))
 }
 
+// ConstructConst constructs an expression for the Const operator.
+// Const is a typed scalar constant value. The private field is a tree.Datum
+// value having any datum type that's legal in the expression's context.
 func (_f *factory) ConstructConst(
 	value opt.PrivateID,
 ) opt.GroupID {
@@ -55,6 +62,10 @@ func (_f *factory) ConstructConst(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_constExpr)))
 }
 
+// ConstructTrue constructs an expression for the True operator.
+// True is the boolean true value that is equivalent to the tree.DBoolTrue datum
+// value. It is a separate operator to make matching and replacement simpler and
+// more efficient, as patterns can contain (True) expressions.
 func (_f *factory) ConstructTrue() opt.GroupID {
 	_trueExpr := makeTrueExpr()
 	_group := _f.mem.lookupGroupByFingerprint(_trueExpr.fingerprint())
@@ -69,6 +80,10 @@ func (_f *factory) ConstructTrue() opt.GroupID {
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_trueExpr)))
 }
 
+// ConstructFalse constructs an expression for the False operator.
+// False is the boolean false value that is equivalent to the tree.DBoolFalse
+// datum value. It is a separate operator to make matching and replacement
+// simpler and more efficient, as patterns can contain (False) expressions.
 func (_f *factory) ConstructFalse() opt.GroupID {
 	_falseExpr := makeFalseExpr()
 	_group := _f.mem.lookupGroupByFingerprint(_falseExpr.fingerprint())
@@ -83,6 +98,7 @@ func (_f *factory) ConstructFalse() opt.GroupID {
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_falseExpr)))
 }
 
+// ConstructPlaceholder constructs an expression for the Placeholder operator.
 func (_f *factory) ConstructPlaceholder(
 	value opt.PrivateID,
 ) opt.GroupID {
@@ -99,6 +115,7 @@ func (_f *factory) ConstructPlaceholder(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr)))
 }
 
+// ConstructTuple constructs an expression for the Tuple operator.
 func (_f *factory) ConstructTuple(
 	elems opt.ListID,
 ) opt.GroupID {
@@ -115,6 +132,10 @@ func (_f *factory) ConstructTuple(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr)))
 }
 
+// ConstructProjections constructs an expression for the Projections operator.
+// Projections is a set of typed scalar expressions that will become output
+// columns for a containing Project operator. The private Cols field contains
+// the set of column indexes returned by the expression, as a *ColList.
 func (_f *factory) ConstructProjections(
 	elems opt.ListID,
 	cols opt.PrivateID,
@@ -132,6 +153,10 @@ func (_f *factory) ConstructProjections(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
 }
 
+// ConstructAggregations constructs an expression for the Aggregations operator.
+// Aggregations is a set of aggregate expressions that will become output
+// columns for a containing GroupBy operator. The private Cols field contains
+// the set of column indexes returned by the expression, as a *ColList.
 func (_f *factory) ConstructAggregations(
 	aggs opt.ListID,
 	cols opt.PrivateID,
@@ -149,6 +174,12 @@ func (_f *factory) ConstructAggregations(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_aggregationsExpr)))
 }
 
+// ConstructGroupings constructs an expression for the Groupings operator.
+// Groupings is a set of grouping expressions that will become output columns
+// for a containing GroupBy operator. The GroupBy operator groups its input by
+// the value of these expressions, and may compute aggregates over the groups.
+// The private Cols field contains the set of column indexes returned by the
+// expression, as a *ColList.
 func (_f *factory) ConstructGroupings(
 	elems opt.ListID,
 	cols opt.PrivateID,
@@ -166,6 +197,7 @@ func (_f *factory) ConstructGroupings(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupingsExpr)))
 }
 
+// ConstructFilters constructs an expression for the Filters operator.
 func (_f *factory) ConstructFilters(
 	conditions opt.ListID,
 ) opt.GroupID {
@@ -182,6 +214,7 @@ func (_f *factory) ConstructFilters(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr)))
 }
 
+// ConstructExists constructs an expression for the Exists operator.
 func (_f *factory) ConstructExists(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -198,6 +231,7 @@ func (_f *factory) ConstructExists(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr)))
 }
 
+// ConstructAnd constructs an expression for the And operator.
 func (_f *factory) ConstructAnd(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -215,6 +249,7 @@ func (_f *factory) ConstructAnd(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
 }
 
+// ConstructOr constructs an expression for the Or operator.
 func (_f *factory) ConstructOr(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -232,6 +267,7 @@ func (_f *factory) ConstructOr(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orExpr)))
 }
 
+// ConstructNot constructs an expression for the Not operator.
 func (_f *factory) ConstructNot(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -248,6 +284,7 @@ func (_f *factory) ConstructNot(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
 }
 
+// ConstructEq constructs an expression for the Eq operator.
 func (_f *factory) ConstructEq(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -265,6 +302,7 @@ func (_f *factory) ConstructEq(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
 }
 
+// ConstructLt constructs an expression for the Lt operator.
 func (_f *factory) ConstructLt(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -282,6 +320,7 @@ func (_f *factory) ConstructLt(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
 }
 
+// ConstructGt constructs an expression for the Gt operator.
 func (_f *factory) ConstructGt(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -299,6 +338,7 @@ func (_f *factory) ConstructGt(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
 }
 
+// ConstructLe constructs an expression for the Le operator.
 func (_f *factory) ConstructLe(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -316,6 +356,7 @@ func (_f *factory) ConstructLe(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leExpr)))
 }
 
+// ConstructGe constructs an expression for the Ge operator.
 func (_f *factory) ConstructGe(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -333,6 +374,7 @@ func (_f *factory) ConstructGe(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_geExpr)))
 }
 
+// ConstructNe constructs an expression for the Ne operator.
 func (_f *factory) ConstructNe(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -350,6 +392,7 @@ func (_f *factory) ConstructNe(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
 }
 
+// ConstructIn constructs an expression for the In operator.
 func (_f *factory) ConstructIn(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -367,6 +410,7 @@ func (_f *factory) ConstructIn(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_inExpr)))
 }
 
+// ConstructNotIn constructs an expression for the NotIn operator.
 func (_f *factory) ConstructNotIn(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -384,6 +428,7 @@ func (_f *factory) ConstructNotIn(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr)))
 }
 
+// ConstructLike constructs an expression for the Like operator.
 func (_f *factory) ConstructLike(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -401,6 +446,7 @@ func (_f *factory) ConstructLike(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr)))
 }
 
+// ConstructNotLike constructs an expression for the NotLike operator.
 func (_f *factory) ConstructNotLike(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -418,6 +464,7 @@ func (_f *factory) ConstructNotLike(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr)))
 }
 
+// ConstructILike constructs an expression for the ILike operator.
 func (_f *factory) ConstructILike(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -435,6 +482,7 @@ func (_f *factory) ConstructILike(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr)))
 }
 
+// ConstructNotILike constructs an expression for the NotILike operator.
 func (_f *factory) ConstructNotILike(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -452,6 +500,7 @@ func (_f *factory) ConstructNotILike(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr)))
 }
 
+// ConstructSimilarTo constructs an expression for the SimilarTo operator.
 func (_f *factory) ConstructSimilarTo(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -469,6 +518,7 @@ func (_f *factory) ConstructSimilarTo(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr)))
 }
 
+// ConstructNotSimilarTo constructs an expression for the NotSimilarTo operator.
 func (_f *factory) ConstructNotSimilarTo(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -486,6 +536,7 @@ func (_f *factory) ConstructNotSimilarTo(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr)))
 }
 
+// ConstructRegMatch constructs an expression for the RegMatch operator.
 func (_f *factory) ConstructRegMatch(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -503,6 +554,7 @@ func (_f *factory) ConstructRegMatch(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr)))
 }
 
+// ConstructNotRegMatch constructs an expression for the NotRegMatch operator.
 func (_f *factory) ConstructNotRegMatch(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -520,6 +572,7 @@ func (_f *factory) ConstructNotRegMatch(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr)))
 }
 
+// ConstructRegIMatch constructs an expression for the RegIMatch operator.
 func (_f *factory) ConstructRegIMatch(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -537,6 +590,7 @@ func (_f *factory) ConstructRegIMatch(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr)))
 }
 
+// ConstructNotRegIMatch constructs an expression for the NotRegIMatch operator.
 func (_f *factory) ConstructNotRegIMatch(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -554,6 +608,7 @@ func (_f *factory) ConstructNotRegIMatch(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
 }
 
+// ConstructIs constructs an expression for the Is operator.
 func (_f *factory) ConstructIs(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -571,6 +626,7 @@ func (_f *factory) ConstructIs(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isExpr)))
 }
 
+// ConstructIsNot constructs an expression for the IsNot operator.
 func (_f *factory) ConstructIsNot(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -588,6 +644,7 @@ func (_f *factory) ConstructIsNot(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr)))
 }
 
+// ConstructContains constructs an expression for the Contains operator.
 func (_f *factory) ConstructContains(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -605,6 +662,7 @@ func (_f *factory) ConstructContains(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr)))
 }
 
+// ConstructContainedBy constructs an expression for the ContainedBy operator.
 func (_f *factory) ConstructContainedBy(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -622,6 +680,7 @@ func (_f *factory) ConstructContainedBy(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr)))
 }
 
+// ConstructBitand constructs an expression for the Bitand operator.
 func (_f *factory) ConstructBitand(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -639,6 +698,7 @@ func (_f *factory) ConstructBitand(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr)))
 }
 
+// ConstructBitor constructs an expression for the Bitor operator.
 func (_f *factory) ConstructBitor(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -656,6 +716,7 @@ func (_f *factory) ConstructBitor(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr)))
 }
 
+// ConstructBitxor constructs an expression for the Bitxor operator.
 func (_f *factory) ConstructBitxor(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -673,6 +734,7 @@ func (_f *factory) ConstructBitxor(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr)))
 }
 
+// ConstructPlus constructs an expression for the Plus operator.
 func (_f *factory) ConstructPlus(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -690,6 +752,7 @@ func (_f *factory) ConstructPlus(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
 }
 
+// ConstructMinus constructs an expression for the Minus operator.
 func (_f *factory) ConstructMinus(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -707,6 +770,7 @@ func (_f *factory) ConstructMinus(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
 }
 
+// ConstructMult constructs an expression for the Mult operator.
 func (_f *factory) ConstructMult(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -724,6 +788,7 @@ func (_f *factory) ConstructMult(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_multExpr)))
 }
 
+// ConstructDiv constructs an expression for the Div operator.
 func (_f *factory) ConstructDiv(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -741,6 +806,7 @@ func (_f *factory) ConstructDiv(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_divExpr)))
 }
 
+// ConstructFloorDiv constructs an expression for the FloorDiv operator.
 func (_f *factory) ConstructFloorDiv(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -758,6 +824,7 @@ func (_f *factory) ConstructFloorDiv(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr)))
 }
 
+// ConstructMod constructs an expression for the Mod operator.
 func (_f *factory) ConstructMod(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -775,6 +842,7 @@ func (_f *factory) ConstructMod(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_modExpr)))
 }
 
+// ConstructPow constructs an expression for the Pow operator.
 func (_f *factory) ConstructPow(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -792,6 +860,7 @@ func (_f *factory) ConstructPow(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_powExpr)))
 }
 
+// ConstructConcat constructs an expression for the Concat operator.
 func (_f *factory) ConstructConcat(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -809,6 +878,7 @@ func (_f *factory) ConstructConcat(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr)))
 }
 
+// ConstructLShift constructs an expression for the LShift operator.
 func (_f *factory) ConstructLShift(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -826,6 +896,7 @@ func (_f *factory) ConstructLShift(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr)))
 }
 
+// ConstructRShift constructs an expression for the RShift operator.
 func (_f *factory) ConstructRShift(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -843,6 +914,7 @@ func (_f *factory) ConstructRShift(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
 }
 
+// ConstructFetchVal constructs an expression for the FetchVal operator.
 func (_f *factory) ConstructFetchVal(
 	json opt.GroupID,
 	index opt.GroupID,
@@ -860,6 +932,7 @@ func (_f *factory) ConstructFetchVal(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr)))
 }
 
+// ConstructFetchText constructs an expression for the FetchText operator.
 func (_f *factory) ConstructFetchText(
 	json opt.GroupID,
 	index opt.GroupID,
@@ -877,6 +950,7 @@ func (_f *factory) ConstructFetchText(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr)))
 }
 
+// ConstructFetchValPath constructs an expression for the FetchValPath operator.
 func (_f *factory) ConstructFetchValPath(
 	json opt.GroupID,
 	path opt.GroupID,
@@ -894,6 +968,7 @@ func (_f *factory) ConstructFetchValPath(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr)))
 }
 
+// ConstructFetchTextPath constructs an expression for the FetchTextPath operator.
 func (_f *factory) ConstructFetchTextPath(
 	json opt.GroupID,
 	path opt.GroupID,
@@ -911,6 +986,7 @@ func (_f *factory) ConstructFetchTextPath(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr)))
 }
 
+// ConstructUnaryPlus constructs an expression for the UnaryPlus operator.
 func (_f *factory) ConstructUnaryPlus(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -927,6 +1003,7 @@ func (_f *factory) ConstructUnaryPlus(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr)))
 }
 
+// ConstructUnaryMinus constructs an expression for the UnaryMinus operator.
 func (_f *factory) ConstructUnaryMinus(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -943,6 +1020,7 @@ func (_f *factory) ConstructUnaryMinus(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr)))
 }
 
+// ConstructUnaryComplement constructs an expression for the UnaryComplement operator.
 func (_f *factory) ConstructUnaryComplement(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -959,6 +1037,7 @@ func (_f *factory) ConstructUnaryComplement(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
 }
 
+// ConstructFunction constructs an expression for the Function operator.
 func (_f *factory) ConstructFunction(
 	args opt.ListID,
 	def opt.PrivateID,
@@ -976,6 +1055,11 @@ func (_f *factory) ConstructFunction(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
 }
 
+// ConstructScan constructs an expression for the Scan operator.
+// Scan returns a result set containing every row in the specified table. Rows
+// and columns are not expected to have any particular ordering. The private
+// Table field is a Metadata.TableIndex that references an optbase.Table
+// definition in the query's metadata.
 func (_f *factory) ConstructScan(
 	table opt.PrivateID,
 ) opt.GroupID {
@@ -992,6 +1076,11 @@ func (_f *factory) ConstructScan(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_scanExpr)))
 }
 
+// ConstructValues constructs an expression for the Values operator.
+// Values returns a manufactured result set containing a constant number of rows
+// specified by the Rows list field. Each row must contain the same set of
+// columns in the same order. The Cols field contains the set of column indexes
+// returned by each row, as a *ColSet.
 func (_f *factory) ConstructValues(
 	rows opt.ListID,
 	cols opt.PrivateID,
@@ -1009,6 +1098,9 @@ func (_f *factory) ConstructValues(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_valuesExpr)))
 }
 
+// ConstructSelect constructs an expression for the Select operator.
+// Select filters rows from its input result set, based on the boolean filter
+// predicate expression. Rows which do not match the filter are discarded.
 func (_f *factory) ConstructSelect(
 	input opt.GroupID,
 	filter opt.GroupID,
@@ -1026,6 +1118,7 @@ func (_f *factory) ConstructSelect(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr)))
 }
 
+// ConstructProject constructs an expression for the Project operator.
 func (_f *factory) ConstructProject(
 	input opt.GroupID,
 	projections opt.GroupID,
@@ -1043,6 +1136,12 @@ func (_f *factory) ConstructProject(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr)))
 }
 
+// ConstructInnerJoin constructs an expression for the InnerJoin operator.
+// InnerJoin creates a result set that combines columns from its left and right
+// inputs, based upon its "on" join predicate. Rows which do not match the
+// predicate are filtered. While expressions in the predicate can refer to
+// columns projected by either the left or right inputs, the inputs are not
+// allowed to refer to the other's projected columns.
 func (_f *factory) ConstructInnerJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1061,6 +1160,7 @@ func (_f *factory) ConstructInnerJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
 }
 
+// ConstructLeftJoin constructs an expression for the LeftJoin operator.
 func (_f *factory) ConstructLeftJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1079,6 +1179,7 @@ func (_f *factory) ConstructLeftJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinExpr)))
 }
 
+// ConstructRightJoin constructs an expression for the RightJoin operator.
 func (_f *factory) ConstructRightJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1097,6 +1198,7 @@ func (_f *factory) ConstructRightJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinExpr)))
 }
 
+// ConstructFullJoin constructs an expression for the FullJoin operator.
 func (_f *factory) ConstructFullJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1115,6 +1217,7 @@ func (_f *factory) ConstructFullJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr)))
 }
 
+// ConstructSemiJoin constructs an expression for the SemiJoin operator.
 func (_f *factory) ConstructSemiJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1133,6 +1236,7 @@ func (_f *factory) ConstructSemiJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinExpr)))
 }
 
+// ConstructAntiJoin constructs an expression for the AntiJoin operator.
 func (_f *factory) ConstructAntiJoin(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1151,6 +1255,10 @@ func (_f *factory) ConstructAntiJoin(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinExpr)))
 }
 
+// ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
+// InnerJoinApply has the same join semantics as InnerJoin. However, unlike
+// InnerJoin, it allows the right input to refer to columns projected by the
+// left input.
 func (_f *factory) ConstructInnerJoinApply(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1169,6 +1277,7 @@ func (_f *factory) ConstructInnerJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinApplyExpr)))
 }
 
+// ConstructLeftJoinApply constructs an expression for the LeftJoinApply operator.
 func (_f *factory) ConstructLeftJoinApply(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1187,6 +1296,7 @@ func (_f *factory) ConstructLeftJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinApplyExpr)))
 }
 
+// ConstructRightJoinApply constructs an expression for the RightJoinApply operator.
 func (_f *factory) ConstructRightJoinApply(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1205,6 +1315,7 @@ func (_f *factory) ConstructRightJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinApplyExpr)))
 }
 
+// ConstructFullJoinApply constructs an expression for the FullJoinApply operator.
 func (_f *factory) ConstructFullJoinApply(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1223,6 +1334,7 @@ func (_f *factory) ConstructFullJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinApplyExpr)))
 }
 
+// ConstructSemiJoinApply constructs an expression for the SemiJoinApply operator.
 func (_f *factory) ConstructSemiJoinApply(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1241,6 +1353,7 @@ func (_f *factory) ConstructSemiJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinApplyExpr)))
 }
 
+// ConstructAntiJoinApply constructs an expression for the AntiJoinApply operator.
 func (_f *factory) ConstructAntiJoinApply(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1259,6 +1372,7 @@ func (_f *factory) ConstructAntiJoinApply(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinApplyExpr)))
 }
 
+// ConstructGroupBy constructs an expression for the GroupBy operator.
 func (_f *factory) ConstructGroupBy(
 	input opt.GroupID,
 	groupings opt.GroupID,
@@ -1277,6 +1391,7 @@ func (_f *factory) ConstructGroupBy(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupByExpr)))
 }
 
+// ConstructUnion constructs an expression for the Union operator.
 func (_f *factory) ConstructUnion(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1295,6 +1410,7 @@ func (_f *factory) ConstructUnion(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr)))
 }
 
+// ConstructIntersect constructs an expression for the Intersect operator.
 func (_f *factory) ConstructIntersect(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1312,6 +1428,7 @@ func (_f *factory) ConstructIntersect(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectExpr)))
 }
 
+// ConstructExcept constructs an expression for the Except operator.
 func (_f *factory) ConstructExcept(
 	left opt.GroupID,
 	right opt.GroupID,

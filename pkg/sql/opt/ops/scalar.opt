@@ -13,15 +13,15 @@ define Subquery {
     Projection Expr
 }
 
-# Variable returns the typed scalar value of the specified column in the query.
-# The private Col field is a Metadata.ColumnIndex.
+# Variable is the typed scalar value of a column in the query. The private
+# field is a Metadata.ColumnIndex that references the column by index.
 [Scalar]
 define Variable {
     Col ColumnIndex
 }
 
-# Const returns a typed scalar constant value. The private Value field is a
-# tree.Datum value.
+# Const is a typed scalar constant value. The private field is a tree.Datum
+# value having any datum type that's legal in the expression's context.
 [Scalar]
 define Const {
     Value Datum

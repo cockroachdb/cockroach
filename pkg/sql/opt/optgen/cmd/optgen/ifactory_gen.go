@@ -66,12 +66,18 @@ func (g *ifactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 }
 
 func (g *ifactoryGen) genMethodsByTag(tag string) {
-	fmt.Fprintf(g.w, "  // %s operator constructors.\n", tag)
+	fmt.Fprintf(g.w, "  // ------------------------------------------------------------ \n")
+	fmt.Fprintf(g.w, "  // %s Operators\n", tag)
+	fmt.Fprintf(g.w, "  // ------------------------------------------------------------ \n\n")
 
 	for _, define := range g.compiled.Defines {
 		if !define.Tags.Contains(tag) {
 			continue
 		}
+
+		format := "  // Construct%s constructs an expression for the %s operator.\n"
+		fmt.Fprintf(g.w, format, define.Name, define.Name)
+		generateDefineComments(g.w, define, string(define.Name))
 
 		fmt.Fprintf(g.w, "  Construct%s(", define.Name)
 		for i, field := range define.Fields {
@@ -80,7 +86,7 @@ func (g *ifactoryGen) genMethodsByTag(tag string) {
 			}
 			fmt.Fprintf(g.w, "%s %s", unTitle(string(field.Name)), mapType(string(field.Type)))
 		}
-		fmt.Fprintf(g.w, ") GroupID\n")
+		fmt.Fprintf(g.w, ") GroupID\n\n")
 	}
 
 	fmt.Fprintf(g.w, "\n")
