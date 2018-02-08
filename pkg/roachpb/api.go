@@ -84,6 +84,7 @@ const (
 	updatesReadTSCache    // commands which update the read timestamp cache
 	updatesWriteTSCache   // commands which update the write timestamp cache
 	updatesTSCacheOnError // commands which make read data available on errors
+	needsRefresh          // commands which require refreshes to avoid serializable retries
 )
 
 // IsReadOnly returns true iff the request is read-only.
@@ -131,6 +132,12 @@ func UpdatesWriteTimestampCache(args Request) bool {
 // which was read is returned (e.g. ConditionalPut ConditionFailedError).
 func UpdatesTimestampCacheOnError(args Request) bool {
 	return (args.flags() & updatesTSCacheOnError) != 0
+}
+
+// NeedsRefresh returns whether the command must be refreshed in
+// order to avoid client-side retries on serializable transactions.
+func NeedsRefresh(args Request) bool {
+	return (args.flags() & needsRefresh) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -910,18 +917,15 @@ func NewReverseScan(key, endKey Key) Request {
 	}
 }
 
-func (*GetRequest) flags() int { return isRead | isTxn | updatesReadTSCache }
+func (*GetRequest) flags() int { return isRead | isTxn | updatesReadTSCache | needsRefresh }
 func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
 
 // ConditionalPut effectively reads and may not write, so must update
 // the timestamp cache. Note that on ConditionFailedErrors
 // ConditionalPut returns the read data and must update the timestamp
-// cache. The timestamp cache must always be updated, even though
-// conditional put leaves an intent because on a commit with a
-// write-too-old error, conditional puts must be retried if they were
-// the cause. This is true because a CPut operates on the original
-// timestamp, and will not be valid until retried using the most
-// recently written value.
+// cache. ConditionalPuts do not require a refresh because on write-too-old
+// errors, they return an error immediately instead of continuing a
+// serializable transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
 }
@@ -936,12 +940,12 @@ func (*InitPutRequest) flags() int {
 }
 
 // Increment reads the existing value, but always leaves an intent so
-// it could get away with not updating the timestamp cache. However,
-// an increment op must have its key refreshed to avoid client-side
-// serializable restarts in the case of a write-too-old error, so we
-// specify the updatesReadTSCache flag.
+// it does not need to update the timestamp cache. It also does not
+// require refresh because on write-too-old errors experienced during
+// serializable transactions, increment returns the error instead of
+// continuing the transaction.
 func (*IncrementRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache
 }
 
 func (*DeleteRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
@@ -967,15 +971,15 @@ func (drr *DeleteRangeRequest) flags() int {
 	// intents or tombstones for keys which don't yet exist. By updating
 	// the write timestamp cache, it forces subsequent writes to get a
 	// write-too-old error and avoids the phantom delete anomaly.
-	return isWrite | isTxn | isTxnWrite | isRange | updatesWriteTSCache | consultsTSCache
+	return isWrite | isTxn | isTxnWrite | isRange | updatesWriteTSCache | needsRefresh | consultsTSCache
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
 // they clear all MVCC versions.
 func (*ClearRangeRequest) flags() int { return isWrite | isRange | isAlone }
-func (*ScanRequest) flags() int       { return isRead | isRange | isTxn | updatesReadTSCache }
+func (*ScanRequest) flags() int       { return isRead | isRange | isTxn | updatesReadTSCache | needsRefresh }
 func (*ReverseScanRequest) flags() int {
-	return isRead | isRange | isReverse | isTxn | updatesReadTSCache
+	return isRead | isRange | isReverse | isTxn | updatesReadTSCache | needsRefresh
 }
 func (*BeginTransactionRequest) flags() int { return isWrite | isTxn | consultsTSCache }
 

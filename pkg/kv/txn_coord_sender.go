@@ -672,7 +672,7 @@ func (tc *TxnCoordSender) appendRefreshSpansLocked(
 		return false
 	}
 	ba.RefreshSpanIterate(br, func(span roachpb.Span, write bool) {
-		log.VEventf(ctx, 2, "refresh: %s write=%t", span, write)
+		log.VEventf(ctx, 3, "refresh: %s write=%t", span, write)
 		if write {
 			tc.mu.meta.RefreshWrites = append(tc.mu.meta.RefreshWrites, span)
 		} else {
