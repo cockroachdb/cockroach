@@ -40,10 +40,10 @@ group-by
  │    └── projections
  │         ├── variable: xyz.y [type=int]
  │         └── variable: xyz.z [type=float]
- ├── projections
+ ├── groupings
  │    ├── variable: xyz.y [type=int]
  │    └── variable: xyz.z [type=float]
- └── projections
+ └── aggregations
 
 build
 SELECT y FROM (SELECT DISTINCT y, z FROM t.xyz)
@@ -59,10 +59,10 @@ project
  │    │    └── projections
  │    │         ├── variable: xyz.y [type=int]
  │    │         └── variable: xyz.z [type=float]
- │    ├── projections
+ │    ├── groupings
  │    │    ├── variable: xyz.y [type=int]
  │    │    └── variable: xyz.z [type=float]
- │    └── projections
+ │    └── aggregations
  └── projections
       └── variable: xyz.y [type=int]
 
@@ -79,9 +79,9 @@ group-by
  │         └── tuple [type=tuple{int, float}]
  │              ├── variable: xyz.y [type=int]
  │              └── variable: xyz.z [type=float]
- ├── projections
+ ├── groupings
  │    └── variable: column4 [type=tuple{int, float}]
- └── projections
+ └── aggregations
 
 build
 SELECT COUNT(*) FROM (SELECT DISTINCT y FROM t.xyz)
@@ -96,11 +96,11 @@ group-by
  │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  │    │    └── projections
  │    │         └── variable: xyz.y [type=int]
- │    ├── projections
+ │    ├── groupings
  │    │    └── variable: xyz.y [type=int]
- │    └── projections
- ├── projections
- └── projections
+ │    └── aggregations
+ ├── groupings
+ └── aggregations
       └── function: count_rows [type=NULL]
 
 build
@@ -119,9 +119,9 @@ group-by
  │    │         └── const: 0 [type=int]
  │    └── projections
  │         └── variable: xyz.x [type=int]
- ├── projections
+ ├── groupings
  │    └── variable: xyz.x [type=int]
- └── projections
+ └── aggregations
 
 build
 SELECT DISTINCT z FROM t.xyz WHERE x > 0
@@ -139,9 +139,9 @@ group-by
  │    │         └── const: 0 [type=int]
  │    └── projections
  │         └── variable: xyz.z [type=float]
- ├── projections
+ ├── groupings
  │    └── variable: xyz.z [type=float]
- └── projections
+ └── aggregations
 
 build
 SELECT DISTINCT MAX(x) FROM xyz GROUP BY x
@@ -154,16 +154,16 @@ group-by
  │    │    ├── columns: xyz.x:int:null:1 column4:int:null:4
  │    │    ├── scan
  │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    ├── projections
+ │    │    ├── groupings
  │    │    │    └── variable: xyz.x [type=int]
- │    │    └── projections
+ │    │    └── aggregations
  │    │         └── function: max [type=NULL]
  │    │              └── variable: xyz.x [type=int]
  │    └── projections
  │         └── variable: column4 [type=int]
- ├── projections
+ ├── groupings
  │    └── variable: column4 [type=int]
- └── projections
+ └── aggregations
 
 build
 SELECT DISTINCT x+y FROM xyz
@@ -178,9 +178,9 @@ group-by
  │         └── plus [type=int]
  │              ├── variable: xyz.x [type=int]
  │              └── variable: xyz.y [type=int]
- ├── projections
+ ├── groupings
  │    └── variable: column4 [type=int]
- └── projections
+ └── aggregations
 
 build
 SELECT DISTINCT 3 FROM xyz
@@ -193,9 +193,9 @@ group-by
  │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  │    └── projections
  │         └── const: 3 [type=int]
- ├── projections
+ ├── groupings
  │    └── variable: column4 [type=int]
- └── projections
+ └── aggregations
 
 build
 SELECT DISTINCT 3
@@ -208,9 +208,9 @@ group-by
  │    │    └── tuple [type=tuple{}]
  │    └── projections
  │         └── const: 3 [type=int]
- ├── projections
+ ├── groupings
  │    └── variable: column1 [type=int]
- └── projections
+ └── aggregations
 
 build
 SELECT DISTINCT MAX(z), x+y, 3 FROM xyz GROUP BY x, y HAVING y > 4
@@ -225,10 +225,10 @@ group-by
  │    │    │    ├── columns: xyz.x:int:null:1 xyz.y:int:null:2 column4:float:null:4
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    │    ├── projections
+ │    │    │    ├── groupings
  │    │    │    │    ├── variable: xyz.x [type=int]
  │    │    │    │    └── variable: xyz.y [type=int]
- │    │    │    └── projections
+ │    │    │    └── aggregations
  │    │    │         └── function: max [type=NULL]
  │    │    │              └── variable: xyz.z [type=float]
  │    │    └── gt [type=bool]
@@ -240,8 +240,8 @@ group-by
  │         │    ├── variable: xyz.x [type=int]
  │         │    └── variable: xyz.y [type=int]
  │         └── const: 3 [type=int]
- ├── projections
+ ├── groupings
  │    ├── variable: column4 [type=float]
  │    ├── variable: column5 [type=int]
  │    └── variable: column6 [type=int]
- └── projections
+ └── aggregations

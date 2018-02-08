@@ -164,10 +164,11 @@ func (e *RuleSetExpr) Format(buf *bytes.Buffer, level int) {
 }
 
 type DefineExpr struct {
-	Tags   TagsExpr
-	Name   StringExpr
-	Fields DefineFieldsExpr
-	Src    *SourceLoc
+	Comments CommentsExpr
+	Tags     TagsExpr
+	Name     StringExpr
+	Fields   DefineFieldsExpr
+	Src      *SourceLoc
 }
 
 func (e *DefineExpr) Op() Operator {
@@ -175,16 +176,18 @@ func (e *DefineExpr) Op() Operator {
 }
 
 func (e *DefineExpr) ChildCount() int {
-	return 3
+	return 4
 }
 
 func (e *DefineExpr) Child(nth int) Expr {
 	switch nth {
 	case 0:
-		return &e.Tags
+		return &e.Comments
 	case 1:
-		return &e.Name
+		return &e.Tags
 	case 2:
+		return &e.Name
+	case 3:
 		return &e.Fields
 	}
 	panic(fmt.Sprintf("child index %d is out of range", nth))
@@ -193,10 +196,12 @@ func (e *DefineExpr) Child(nth int) Expr {
 func (e *DefineExpr) ChildName(nth int) string {
 	switch nth {
 	case 0:
-		return "Tags"
+		return "Comments"
 	case 1:
-		return "Name"
+		return "Tags"
 	case 2:
+		return "Name"
+	case 3:
 		return "Fields"
 	}
 	return ""
@@ -209,7 +214,7 @@ func (e *DefineExpr) Value() interface{} {
 func (e *DefineExpr) Visit(accept AcceptFunc) Expr {
 	children := visitExprChildren(e, accept)
 	if children != nil {
-		return accept(&DefineExpr{Tags: *children[0].(*TagsExpr), Name: *children[1].(*StringExpr), Fields: *children[2].(*DefineFieldsExpr), Src: e.Source()})
+		return accept(&DefineExpr{Comments: *children[0].(*CommentsExpr), Tags: *children[1].(*TagsExpr), Name: *children[2].(*StringExpr), Fields: *children[3].(*DefineFieldsExpr), Src: e.Source()})
 	}
 	return accept(e)
 }
@@ -225,6 +230,94 @@ func (e *DefineExpr) String() string {
 }
 
 func (e *DefineExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type CommentsExpr []CommentExpr
+
+func (e *CommentsExpr) Op() Operator {
+	return CommentsOp
+}
+
+func (e *CommentsExpr) ChildCount() int {
+	return len(*e)
+}
+
+func (e *CommentsExpr) Child(nth int) Expr {
+	return &(*e)[nth]
+}
+
+func (e *CommentsExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *CommentsExpr) Value() interface{} {
+	return nil
+}
+
+func (e *CommentsExpr) Visit(accept AcceptFunc) Expr {
+	children := visitExprChildren(e, accept)
+	if children != nil {
+		typedChildren := make(CommentsExpr, len(children))
+		for i := 0; i < len(children); i++ {
+			typedChildren[i] = *children[i].(*CommentExpr)
+		}
+		return &typedChildren
+	}
+	return accept(e)
+}
+
+func (e *CommentsExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *CommentsExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *CommentsExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type CommentExpr string
+
+func (e *CommentExpr) Op() Operator {
+	return CommentOp
+}
+
+func (e *CommentExpr) ChildCount() int {
+	return 0
+}
+
+func (e *CommentExpr) Child(nth int) Expr {
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *CommentExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *CommentExpr) Value() interface{} {
+	return string(*e)
+}
+
+func (e *CommentExpr) Visit(accept AcceptFunc) Expr {
+	return accept(e)
+}
+
+func (e *CommentExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *CommentExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *CommentExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
@@ -425,11 +518,12 @@ func (e *DefineFieldExpr) Format(buf *bytes.Buffer, level int) {
 }
 
 type RuleExpr struct {
-	Name    StringExpr
-	Tags    TagsExpr
-	Match   *MatchExpr
-	Replace Expr
-	Src     *SourceLoc
+	Comments CommentsExpr
+	Name     StringExpr
+	Tags     TagsExpr
+	Match    *MatchExpr
+	Replace  Expr
+	Src      *SourceLoc
 }
 
 func (e *RuleExpr) Op() Operator {
@@ -437,18 +531,20 @@ func (e *RuleExpr) Op() Operator {
 }
 
 func (e *RuleExpr) ChildCount() int {
-	return 4
+	return 5
 }
 
 func (e *RuleExpr) Child(nth int) Expr {
 	switch nth {
 	case 0:
-		return &e.Name
+		return &e.Comments
 	case 1:
-		return &e.Tags
+		return &e.Name
 	case 2:
-		return e.Match
+		return &e.Tags
 	case 3:
+		return e.Match
+	case 4:
 		return e.Replace
 	}
 	panic(fmt.Sprintf("child index %d is out of range", nth))
@@ -457,12 +553,14 @@ func (e *RuleExpr) Child(nth int) Expr {
 func (e *RuleExpr) ChildName(nth int) string {
 	switch nth {
 	case 0:
-		return "Name"
+		return "Comments"
 	case 1:
-		return "Tags"
+		return "Name"
 	case 2:
-		return "Match"
+		return "Tags"
 	case 3:
+		return "Match"
+	case 4:
 		return "Replace"
 	}
 	return ""
@@ -475,7 +573,7 @@ func (e *RuleExpr) Value() interface{} {
 func (e *RuleExpr) Visit(accept AcceptFunc) Expr {
 	children := visitExprChildren(e, accept)
 	if children != nil {
-		return accept(&RuleExpr{Name: *children[0].(*StringExpr), Tags: *children[1].(*TagsExpr), Match: children[2].(*MatchExpr), Replace: children[3], Src: e.Source()})
+		return accept(&RuleExpr{Comments: *children[0].(*CommentsExpr), Name: *children[1].(*StringExpr), Tags: *children[2].(*TagsExpr), Match: children[3].(*MatchExpr), Replace: children[4], Src: e.Source()})
 	}
 	return accept(e)
 }

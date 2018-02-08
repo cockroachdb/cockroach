@@ -5,90 +5,229 @@ package opt
 const (
 	UnknownOp Operator = iota
 
+	// ------------------------------------------------------------
 	// Scalar Operators
+	// ------------------------------------------------------------
+
 	SubqueryOp
+
+	// VariableOp is the typed scalar value of a column in the query. The private
+	// field is a Metadata.ColumnIndex that references the column by index.
 	VariableOp
+
+	// ConstOp is a typed scalar constant value. The private field is a tree.Datum
+	// value having any datum type that's legal in the expression's context.
 	ConstOp
+
+	// TrueOp is the boolean true value that is equivalent to the tree.DBoolTrue datum
+	// value. It is a separate operator to make matching and replacement simpler and
+	// more efficient, as patterns can contain (True) expressions.
 	TrueOp
+
+	// FalseOp is the boolean false value that is equivalent to the tree.DBoolFalse
+	// datum value. It is a separate operator to make matching and replacement
+	// simpler and more efficient, as patterns can contain (False) expressions.
 	FalseOp
+
 	PlaceholderOp
+
 	TupleOp
+
+	// ProjectionsOp is a set of typed scalar expressions that will become output
+	// columns for a containing Project operator. The private Cols field contains
+	// the set of column indexes returned by the expression, as a *ColList.
 	ProjectionsOp
+
+	// AggregationsOp is a set of aggregate expressions that will become output
+	// columns for a containing GroupBy operator. The private Cols field contains
+	// the set of column indexes returned by the expression, as a *ColList.
 	AggregationsOp
+
+	// GroupingsOp is a set of grouping expressions that will become output columns
+	// for a containing GroupBy operator. The GroupBy operator groups its input by
+	// the value of these expressions, and may compute aggregates over the groups.
+	// The private Cols field contains the set of column indexes returned by the
+	// expression, as a *ColList.
 	GroupingsOp
+
 	FiltersOp
+
 	ExistsOp
+
 	AndOp
+
 	OrOp
+
 	NotOp
+
 	EqOp
+
 	LtOp
+
 	GtOp
+
 	LeOp
+
 	GeOp
+
 	NeOp
+
 	InOp
+
 	NotInOp
+
 	LikeOp
+
 	NotLikeOp
+
 	ILikeOp
+
 	NotILikeOp
+
 	SimilarToOp
+
 	NotSimilarToOp
+
 	RegMatchOp
+
 	NotRegMatchOp
+
 	RegIMatchOp
+
 	NotRegIMatchOp
+
 	IsOp
+
 	IsNotOp
+
 	ContainsOp
+
 	ContainedByOp
+
 	BitandOp
+
 	BitorOp
+
 	BitxorOp
+
 	PlusOp
+
 	MinusOp
+
 	MultOp
+
 	DivOp
+
 	FloorDivOp
+
 	ModOp
+
 	PowOp
+
 	ConcatOp
+
 	LShiftOp
+
 	RShiftOp
+
 	FetchValOp
+
 	FetchTextOp
+
 	FetchValPathOp
+
 	FetchTextPathOp
+
 	UnaryPlusOp
+
 	UnaryMinusOp
+
 	UnaryComplementOp
+
 	FunctionOp
 
+	// ------------------------------------------------------------
 	// Relational Operators
+	// ------------------------------------------------------------
+
+	// ScanOp returns a result set containing every row in the specified table. Rows
+	// and columns are not expected to have any particular ordering. The private
+	// Table field is a Metadata.TableIndex that references an optbase.Table
+	// definition in the query's metadata.
 	ScanOp
+
+	// ValuesOp returns a manufactured result set containing a constant number of rows
+	// specified by the Rows list field. Each row must contain the same set of
+	// columns in the same order. The Cols field contains the set of column indexes
+	// returned by each row, as a *ColSet.
 	ValuesOp
+
+	// SelectOp filters rows from its input result set, based on the boolean filter
+	// predicate expression. Rows which do not match the filter are discarded.
 	SelectOp
+
 	ProjectOp
+
+	// InnerJoinOp creates a result set that combines columns from its left and right
+	// inputs, based upon its "on" join predicate. Rows which do not match the
+	// predicate are filtered. While expressions in the predicate can refer to
+	// columns projected by either the left or right inputs, the inputs are not
+	// allowed to refer to the other's projected columns.
 	InnerJoinOp
+
 	LeftJoinOp
+
 	RightJoinOp
+
 	FullJoinOp
+
 	SemiJoinOp
+
 	AntiJoinOp
+
+	// InnerJoinApplyOp has the same join semantics as InnerJoin. However, unlike
+	// InnerJoin, it allows the right input to refer to columns projected by the
+	// left input.
 	InnerJoinApplyOp
+
 	LeftJoinApplyOp
+
 	RightJoinApplyOp
+
 	FullJoinApplyOp
+
 	SemiJoinApplyOp
+
 	AntiJoinApplyOp
+
 	GroupByOp
+
 	UnionOp
+
 	IntersectOp
+
 	ExceptOp
 
+	// ------------------------------------------------------------
 	// Enforcer Operators
+	// ------------------------------------------------------------
+
+	// SortOp enforces the ordering of rows returned by its input expression. Rows can
+	// be sorted by one or more of the input columns, each of which can be sorted in
+	// either ascending or descending order. See the Ordering field in the
+	// PhysicalProps struct.
+	// TODO(andyk): Add the Ordering field.
 	SortOp
+
+	// PresentOp enforces physical properties related to column presentation, which
+	// includes column ordering, column naming, and duplicate columns. While the
+	// input expression must project the columns used by Present, it can project
+	// a superset of columns in any order and using any names. Whereas the Project
+	// operator modifies logical properties (i.e. the set of columns returned), the
+	// Present operator enforces physical properties (i.e. the presentation of the
+	// set of columns returned). See the Presentation field in the PhysicalProps
+	// struct.
+	// TODO(andyk): Add the Presentation field.
 	PresentOp
 
 	// NumOperators tracks the total count of operators.

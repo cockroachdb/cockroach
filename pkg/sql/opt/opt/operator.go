@@ -16,6 +16,7 @@ package opt
 
 import (
 	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 

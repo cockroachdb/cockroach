@@ -16,6 +16,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -89,4 +91,29 @@ func privateField(d *lang.DefineExpr) *lang.DefineFieldExpr {
 	}
 
 	return nil
+}
+
+// generateDefineComments is a helper function that generates a block of
+// op definition comments by converting the Optgen comment to a Go comment.
+// The comments are assumed to start with the name of the op and follow with a
+// description of the op, like this:
+//   # <opname> <description of what this op does>
+//   # ...
+//
+// The initial opname is replaced with the given replaceName, in order to adapt
+// it to different enums and structs that are generated.
+func generateDefineComments(w io.Writer, define *lang.DefineExpr, replaceName string) {
+	for i, comment := range define.Comments {
+		// Replace the # comment character used in Optgen with the Go
+		// comment character.
+		s := strings.Replace(string(comment), "#", "//", 1)
+
+		// Replace the definition name if it is the first word in the first
+		// comment.
+		if i == 0 && strings.HasPrefix(string(comment), "# "+string(define.Name)) {
+			s = strings.Replace(s, string(define.Name), replaceName, 1)
+		}
+
+		fmt.Fprintf(w, "  %s\n", s)
+	}
 }
