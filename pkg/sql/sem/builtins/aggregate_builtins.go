@@ -71,6 +71,13 @@ func initAggregateBuiltins() {
 // functions must return NULL when they are no rows in the source
 // table, so their evaluation must always be delayed until query
 // execution.
+// Some aggregate functions must handle nullable arguments, since normalizing
+// an aggregate function call to NULL in the presence of a NULL argument may
+// not be correct. There are two cases where an aggregate function must handle
+// nullable arguments:
+// 1) the aggregate function does not skip NULLs (e.g., ARRAY_AGG); and
+// 2) the aggregate function does not return NULL when it aggregates no rows
+//		(e.g., COUNT).
 // Exported for use in documentation.
 var Aggregates = map[string][]tree.Builtin{
 	"array_agg": arrayBuiltin(func(t types.T) tree.Builtin {
@@ -85,7 +92,8 @@ var Aggregates = map[string][]tree.Builtin{
 				return types.TArray{Typ: args[0].ResolvedType()}
 			},
 			newArrayAggregate,
-			"Aggregates the selected values into an array.")
+			"Aggregates the selected values into an array.",
+			true /* nullableArgs */)
 	}),
 
 	"avg": {
@@ -120,7 +128,7 @@ var Aggregates = map[string][]tree.Builtin{
 	},
 
 	"count": {
-		makeAggBuiltin([]types.T{types.Any}, types.Int, newCountAggregate,
+		makeAggBuiltinWithNullableArgs([]types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements."),
 	},
 
@@ -134,7 +142,8 @@ var Aggregates = map[string][]tree.Builtin{
 			WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
 				return newAggregateWindow(newCountRowsAggregate(params, evalCtx))
 			},
-			Info: "Calculates the number of rows.",
+			Info:         "Calculates the number of rows.",
+			NullableArgs: true,
 		},
 	},
 
@@ -218,12 +227,12 @@ var Aggregates = map[string][]tree.Builtin{
 	},
 
 	"json_agg": {
-		makeAggBuiltin([]types.T{types.Any}, types.JSON, newJSONAggregate,
+		makeAggBuiltinWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
 			"aggregates values as a JSON or JSONB array"),
 	},
 
 	"jsonb_agg": {
-		makeAggBuiltin([]types.T{types.Any}, types.JSON, newJSONAggregate,
+		makeAggBuiltinWithNullableArgs([]types.T{types.Any}, types.JSON, newJSONAggregate,
 			"aggregates values as a JSON or JSONB array"),
 	},
 }
@@ -231,7 +240,15 @@ var Aggregates = map[string][]tree.Builtin{
 func makeAggBuiltin(
 	in []types.T, ret types.T, f func([]types.T, *tree.EvalContext) tree.AggregateFunc, info string,
 ) tree.Builtin {
-	return makeAggBuiltinWithReturnType(in, tree.FixedReturnType(ret), f, info)
+	return makeAggBuiltinWithReturnType(
+		in, tree.FixedReturnType(ret), f, info, false /* nullableArgs */)
+}
+
+func makeAggBuiltinWithNullableArgs(
+	in []types.T, ret types.T, f func([]types.T, *tree.EvalContext) tree.AggregateFunc, info string,
+) tree.Builtin {
+	return makeAggBuiltinWithReturnType(
+		in, tree.FixedReturnType(ret), f, info, true /* nullableArgs */)
 }
 
 func makeAggBuiltinWithReturnType(
@@ -239,6 +256,7 @@ func makeAggBuiltinWithReturnType(
 	retType tree.ReturnTyper,
 	f func([]types.T, *tree.EvalContext) tree.AggregateFunc,
 	info string,
+	nullableArgs bool,
 ) tree.Builtin {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
@@ -257,7 +275,8 @@ func makeAggBuiltinWithReturnType(
 		WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
 			return newAggregateWindow(f(params, evalCtx))
 		},
-		Info: info,
+		Info:         info,
+		NullableArgs: nullableArgs,
 	}
 }
 
