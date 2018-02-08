@@ -119,3 +119,10 @@ SELECT * FROM t
 query I rowsort
 SELECT * from x
 ----
+
+# #22420: ensure okay error message for CTE clause without output columns
+query error WITH clause "t" does not have a RETURNING clause
+WITH t AS (
+    INSERT INTO x(a) VALUES(0)
+)
+SELECT * FROM t
