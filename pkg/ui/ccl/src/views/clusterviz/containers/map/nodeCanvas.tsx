@@ -68,16 +68,14 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     const { nodeHistories, localityTree, locationTree, liveness, tiers } = this.props;
 
     return (
-      <g>
-        <ModalLocalitiesView
-          nodeHistories={nodeHistories}
-          localityTree={localityTree}
-          locationTree={locationTree}
-          liveness={liveness}
-          tiers={tiers}
-          viewportSize={this.state.viewportSize}
-        />
-      </g>
+      <ModalLocalitiesView
+        nodeHistories={nodeHistories}
+        localityTree={localityTree}
+        locationTree={locationTree}
+        liveness={liveness}
+        tiers={tiers}
+        viewportSize={this.state.viewportSize}
+      />
     );
   }
 
