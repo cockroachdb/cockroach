@@ -9,8 +9,6 @@
 import _ from "lodash";
 import React from "react";
 
-import "./sim.css";
-
 import { ModalLocalitiesView } from "./modalLocalities";
 import { NodeHistory } from "./nodeHistory";
 import { LivenessStatus } from "src/redux/nodes";
