@@ -49,7 +49,6 @@ func init() {
 		opt.PlaceholderOp: typeAsTypedExpr,
 		opt.TupleOp:       typeAsTuple,
 		opt.ProjectionsOp: typeAsTuple,
-		opt.FiltersOp:     typeAsBool,
 		opt.ExistsOp:      typeAsBool,
 	}
 

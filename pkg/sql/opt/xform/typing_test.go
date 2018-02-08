@@ -39,7 +39,7 @@ func TestTyping(t *testing.T) {
 			d.Fatalf(t, "%v", err)
 		}
 
-		o := NewOptimizer(createTypingCatalog(), 0 /* maxSteps */)
+		o := NewOptimizer(createTypingCatalog(), OptimizeNone)
 		b := build.NewBuilder(context.Background(), o.Factory(), stmt)
 		root, props, err := b.Build()
 		if err != nil {
@@ -52,7 +52,7 @@ func TestTyping(t *testing.T) {
 }
 
 func TestTypingTrueFalse(t *testing.T) {
-	o := NewOptimizer(createTypingCatalog(), 0 /* maxSteps */)
+	o := NewOptimizer(createTypingCatalog(), OptimizeNone)
 	f := o.Factory()
 
 	// (True)
@@ -65,7 +65,7 @@ func TestTypingTrueFalse(t *testing.T) {
 }
 
 func TestTypingJson(t *testing.T) {
-	o := NewOptimizer(createTypingCatalog(), 0 /* maxSteps */)
+	o := NewOptimizer(createTypingCatalog(), OptimizeNone)
 	f := o.Factory()
 
 	// (Const <json>)

@@ -17,6 +17,26 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"golang.org/x/tools/container/intsets"
+)
+
+// OptimizeSteps is passed to NewOptimizer, and specifies the maximum number
+// of normalization and exploration transformations that will be applied by the
+// optimizer. This can be used to effectively disable the optimizer (if set to
+// zero), to debug the optimizer (by disabling optimizations past a certain
+// point), or to limit the running time of the optimizer.
+type OptimizeSteps int
+
+const (
+	// OptimizeNone instructs the optimizer to suppress all transformations.
+	// The unaltered input expression tree will become the output expression
+	// tree. This effectively disables the optimizer.
+	OptimizeNone = OptimizeSteps(0)
+
+	// OptimizeAll instructs the optimizer to continue applying transformations
+	// until the best plan has been found. There is no limit to the number of
+	// steps that the optimizer will take to get there.
+	OptimizeAll = OptimizeSteps(intsets.MaxInt)
 )
 
 // Optimizer transforms an input expression tree into the logically equivalent
@@ -40,7 +60,7 @@ type Optimizer struct {
 // by the optimizer. If maxSteps is zero, then the unaltered input expression
 // tree becomes the output expression tree (because no transformations are
 // applied).
-func NewOptimizer(cat optbase.Catalog, maxSteps int) *Optimizer {
+func NewOptimizer(cat optbase.Catalog, maxSteps OptimizeSteps) *Optimizer {
 	f := newFactory(cat, maxSteps)
 	return &Optimizer{f: f, mem: f.mem}
 }

@@ -197,23 +197,6 @@ func (_f *factory) ConstructGroupings(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupingsExpr)))
 }
 
-// ConstructFilters constructs an expression for the Filters operator.
-func (_f *factory) ConstructFilters(
-	conditions opt.ListID,
-) opt.GroupID {
-	_filtersExpr := makeFiltersExpr(conditions)
-	_group := _f.mem.lookupGroupByFingerprint(_filtersExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_filtersExpr)))
-}
-
 // ConstructExists constructs an expression for the Exists operator.
 func (_f *factory) ConstructExists(
 	input opt.GroupID,
@@ -232,11 +215,13 @@ func (_f *factory) ConstructExists(
 }
 
 // ConstructAnd constructs an expression for the And operator.
+// And is the boolean conjunction operator that evalutes to true if all of its
+// conditions evaluate to true. If the conditions list is empty, it evalutes to
+// true.
 func (_f *factory) ConstructAnd(
-	left opt.GroupID,
-	right opt.GroupID,
+	conditions opt.ListID,
 ) opt.GroupID {
-	_andExpr := makeAndExpr(left, right)
+	_andExpr := makeAndExpr(conditions)
 	_group := _f.mem.lookupGroupByFingerprint(_andExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -246,15 +231,43 @@ func (_f *factory) ConstructAnd(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_andExpr))
 	}
 
+	// [EliminateAnd]
+	{
+		for _, _item := range _f.mem.lookupList(conditions) {
+			_false := _f.mem.lookupNormExpr(_item).asFalse()
+			if _false != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructFalse()
+				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FlattenAnd]
+	{
+		for _, _item := range _f.mem.lookupList(conditions) {
+			_and := _f.mem.lookupNormExpr(_item).asAnd()
+			if _and != nil {
+				_f.reportOptimization()
+				_group = _f.flattenAnd(conditions)
+				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
 }
 
 // ConstructOr constructs an expression for the Or operator.
+// Or is the boolean disjunction operator that evalutes to true if any of its
+// conditions evaluate to true. If the conditions list is empty, it evaluates to
+// false.
 func (_f *factory) ConstructOr(
-	left opt.GroupID,
-	right opt.GroupID,
+	conditions opt.ListID,
 ) opt.GroupID {
-	_orExpr := makeOrExpr(left, right)
+	_orExpr := makeOrExpr(conditions)
 	_group := _f.mem.lookupGroupByFingerprint(_orExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -264,10 +277,38 @@ func (_f *factory) ConstructOr(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_orExpr))
 	}
 
+	// [EliminateOr]
+	{
+		for _, _item := range _f.mem.lookupList(conditions) {
+			_true := _f.mem.lookupNormExpr(_item).asTrue()
+			if _true != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructTrue()
+				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FlattenOr]
+	{
+		for _, _item := range _f.mem.lookupList(conditions) {
+			_or := _f.mem.lookupNormExpr(_item).asOr()
+			if _or != nil {
+				_f.reportOptimization()
+				_group = _f.flattenOr(conditions)
+				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orExpr)))
 }
 
 // ConstructNot constructs an expression for the Not operator.
+// Not is the boolean negation operator that evaluates to true if its input
+// evalutes to false.
 func (_f *factory) ConstructNot(
 	input opt.GroupID,
 ) opt.GroupID {
@@ -279,6 +320,31 @@ func (_f *factory) ConstructNot(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_notExpr))
+	}
+
+	// [NegateComparison]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if isComparisonLookup[_norm.op] {
+			if _f.canInvertComparison(input) {
+				_f.reportOptimization()
+				_group = _f.invertComparison(input)
+				_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [EliminateNot]
+	{
+		_not := _f.mem.lookupNormExpr(input).asNot()
+		if _not != nil {
+			input := _not.input()
+			_f.reportOptimization()
+			_group = input
+			_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
@@ -297,6 +363,36 @@ func (_f *factory) ConstructEq(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr))
+	}
+
+	// [NormalizeVar]
+	{
+		_variable := _f.mem.lookupNormExpr(left).asVariable()
+		if _variable == nil {
+			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
+			if _variable2 != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructEq(right, left)
+				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [NormalizeTupleEquality]
+	{
+		_tuple := _f.mem.lookupNormExpr(left).asTuple()
+		if _tuple != nil {
+			left := _tuple.elems()
+			_tuple2 := _f.mem.lookupNormExpr(right).asTuple()
+			if _tuple2 != nil {
+				right := _tuple2.elems()
+				_f.reportOptimization()
+				_group = _f.normalizeTupleEquality(left, right)
+				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
@@ -387,6 +483,20 @@ func (_f *factory) ConstructNe(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_neExpr))
+	}
+
+	// [NormalizeVar]
+	{
+		_variable := _f.mem.lookupNormExpr(left).asVariable()
+		if _variable == nil {
+			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
+			if _variable2 != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructNe(right, left)
+				_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
@@ -660,24 +770,6 @@ func (_f *factory) ConstructContains(
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr)))
-}
-
-// ConstructContainedBy constructs an expression for the ContainedBy operator.
-func (_f *factory) ConstructContainedBy(
-	left opt.GroupID,
-	right opt.GroupID,
-) opt.GroupID {
-	_containedByExpr := makeContainedByExpr(left, right)
-	_group := _f.mem.lookupGroupByFingerprint(_containedByExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containedByExpr)))
 }
 
 // ConstructBitand constructs an expression for the Bitand operator.
@@ -1448,7 +1540,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [79]dynConstructLookupFunc
+var dynConstructLookup [77]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1506,11 +1598,6 @@ func init() {
 		return f.ConstructGroupings(f.InternList(children), private)
 	}
 
-	// FiltersOp
-	dynConstructLookup[opt.FiltersOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructFilters(f.InternList(children))
-	}
-
 	// ExistsOp
 	dynConstructLookup[opt.ExistsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructExists(children[0])
@@ -1518,12 +1605,12 @@ func init() {
 
 	// AndOp
 	dynConstructLookup[opt.AndOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructAnd(children[0], children[1])
+		return f.ConstructAnd(f.InternList(children))
 	}
 
 	// OrOp
 	dynConstructLookup[opt.OrOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructOr(children[0], children[1])
+		return f.ConstructOr(f.InternList(children))
 	}
 
 	// NotOp
@@ -1634,11 +1721,6 @@ func init() {
 	// ContainsOp
 	dynConstructLookup[opt.ContainsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructContains(children[0], children[1])
-	}
-
-	// ContainedByOp
-	dynConstructLookup[opt.ContainedByOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructContainedBy(children[0], children[1])
 	}
 
 	// BitandOp

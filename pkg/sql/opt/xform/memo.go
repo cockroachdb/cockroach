@@ -150,6 +150,21 @@ func (m *memo) newGroup(norm *memoExpr) *memoGroup {
 	return &m.groups[len(m.groups)-1]
 }
 
+// addAltFingerprint adds an additional fingerprint that references an existing
+// group. The new fingerprint corresponds to a denormalized expression that is
+// an alternate form of the group's normalized expression. Adding it to the
+// fingerprint map avoids re-adding the same expression in the future.
+func (m *memo) addAltFingerprint(alt fingerprint, group opt.GroupID) {
+	existing, ok := m.exprMap[alt]
+	if ok {
+		if existing != group {
+			panic("same fingerprint cannot map to different groups")
+		}
+	} else {
+		m.exprMap[alt] = group
+	}
+}
+
 // memoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression.
@@ -180,6 +195,14 @@ func (m *memo) lookupGroupByFingerprint(f fingerprint) opt.GroupID {
 // lookupExpr returns the expression referenced by the given location.
 func (m *memo) lookupExpr(loc memoLoc) *memoExpr {
 	return m.groups[loc.group].lookupExpr(loc.expr)
+}
+
+// lookupNormExpr returns the normalized expression for the given group. Each
+// group has one canonical expression that is always the first expression in
+// the group, and which results from running normalization rules on the
+// expression until the final normal state has been reached.
+func (m *memo) lookupNormExpr(group opt.GroupID) *memoExpr {
+	return m.groups[group].lookupExpr(normExprID)
 }
 
 // internList adds the given list of group IDs to memo storage and returns an
