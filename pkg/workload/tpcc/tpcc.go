@@ -25,7 +25,7 @@ import (
 )
 
 type tpcc struct {
-	flags *pflag.FlagSet
+	flags workload.Flags
 
 	seed        int64
 	warehouses  int
@@ -50,7 +50,13 @@ var tpccMeta = workload.Meta{
 		` using a rich schema of multiple tables`,
 	Version: `1.0.0`,
 	New: func() workload.Generator {
-		g := &tpcc{flags: pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)}
+		g := &tpcc{}
+		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
+		g.flags.Meta = map[string]workload.FlagMeta{
+			`mix`:  {RuntimeOnly: true},
+			`wait`: {RuntimeOnly: true},
+		}
+
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
@@ -69,12 +75,10 @@ var tpccMeta = workload.Meta{
 // Meta implements the Generator interface.
 func (*tpcc) Meta() workload.Meta { return tpccMeta }
 
-// Flags implements the Generator interface.
-func (w *tpcc) Flags() *pflag.FlagSet {
-	return w.flags
-}
+// Flags implements the Flagser interface.
+func (w *tpcc) Flags() workload.Flags { return w.flags }
 
-// Hooks implements the Generator interface.
+// Hooks implements the Hookser interface.
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
@@ -158,7 +162,7 @@ func (w *tpcc) Tables() []workload.Table {
 	}
 }
 
-// Ops implements the Generator interface.
+// Ops implements the Opser interface.
 func (w *tpcc) Ops() []workload.Operation {
 	return []workload.Operation{{
 		Name: `tpmC`,

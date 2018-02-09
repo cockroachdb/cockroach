@@ -46,13 +46,27 @@ type Generator interface {
 	Tables() []Table
 }
 
+// FlagMeta is metadata about a workload flag.
+type FlagMeta struct {
+	// RuntimeOnly may be set to true only if the corresponding flag has no
+	// impact on the behavior of any Tables in this workload.
+	RuntimeOnly bool
+}
+
+// Flags is a container for flags and associated metadata.
+type Flags struct {
+	*pflag.FlagSet
+	// Meta is keyed by flag name and may be nil if no metadata is needed.
+	Meta map[string]FlagMeta
+}
+
 // Flagser returns the flags this Generator is configured with. Any randomness
 // in the Generator must be deterministic from these options so that table data
 // initialization, query work, etc can be distributed by sending only these
 // flags.
 type Flagser interface {
 	Generator
-	Flags() *pflag.FlagSet
+	Flags() Flags
 }
 
 // Opser returns the work functions for this generator. The tables are required

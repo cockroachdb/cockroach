@@ -50,7 +50,7 @@ func init() {
 			},
 		}
 		if f, ok := gen.(workload.Flagser); ok {
-			genExampleCmd.Flags().AddFlagSet(f.Flags())
+			genExampleCmd.Flags().AddFlagSet(f.Flags().FlagSet)
 		}
 		genExamplesCmd.AddCommand(genExampleCmd)
 	}
