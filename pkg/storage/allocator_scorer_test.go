@@ -634,23 +634,45 @@ func TestShouldRebalanceDiversity(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
+		removeStore := func(sl StoreList, nodeID roachpb.NodeID) StoreList {
+			for i, s := range sl.stores {
+				if s.Node.NodeID == nodeID {
+					return makeStoreList(append(sl.stores[:i], sl.stores[i+1:]...))
+				}
+			}
+			return sl
+		}
+		filteredSL := tc.sl
+		filteredSL.stores = append([]roachpb.StoreDescriptor(nil), filteredSL.stores...)
+		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
 		rangeInfo := RangeInfo{
 			Desc: &roachpb.RangeDescriptor{},
 		}
-		existingNodeLocalities := make(map[roachpb.NodeID]roachpb.Locality)
 		for _, nodeID := range tc.existingNodeIDs {
 			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
-				NodeID: nodeID,
+				NodeID:  nodeID,
+				StoreID: roachpb.StoreID(nodeID),
 			})
 			existingNodeLocalities[nodeID] = localityForNodeID(tc.sl, nodeID)
+			// For the sake of testing, remove all other existing stores from the
+			// store list to only test whether we want to remove the replica on tc.s.
+			if nodeID != tc.s.Node.NodeID {
+				filteredSL = removeStore(filteredSL, nodeID)
+			}
 		}
-		actual := shouldRebalance(
+
+		targets := rebalanceCandidates(
 			context.Background(),
-			tc.s,
-			tc.sl,
+			filteredSL,
+			analyzedConstraints{},
 			rangeInfo,
-			options,
-		)
+			existingNodeLocalities,
+			func(nodeID roachpb.NodeID) string {
+				locality := localityForNodeID(tc.sl, nodeID)
+				return locality.String()
+			},
+			options)
+		actual := len(targets) > 0
 		if actual != tc.expected {
 			t.Errorf("%d: shouldRebalance on s%d with replicas on %v got %t, expected %t",
 				i, tc.s.StoreID, tc.existingNodeIDs, actual, tc.expected)
