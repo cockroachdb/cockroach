@@ -16,11 +16,9 @@
 package nightly
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"os/user"
@@ -33,7 +31,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -202,8 +199,8 @@ func TestSingleDC(t *testing.T) {
 	// clusters (# of machines in each locality) are going to generalize. For now,
 	// just hardcode what we had before.
 	for testName, testCmd := range map[string]string{
-		"kv0":     "<workload> run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=1m",
-		"kv95":    "<workload> run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=1m",
+		"kv0":     "<workload> run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m",
+		"kv95":    "<workload> run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m",
 		"splits":  "<workload> run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1 --duration=10m",
 		"tpcc_w1": "<workload> run tpcc --init --warehouses=1 --wait=false --concurrency=384 --duration=10m",
 		"tpmc_w1": "<workload> run tpcc --init --warehouses=1 --concurrency=10 --duration=10m",
@@ -233,24 +230,12 @@ func TestRoachmart(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "partition", func(t *testing.T, partition bool) {
 		ctx := context.Background()
+		c := newCluster(ctx, t, "--geo", "--nodes", "9")
+		defer c.Destroy(ctx, t)
 
-		l, err := rootLogger(t.Name())
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		clusterName := makeClusterName(t)
-		defer destroyCluster(t, l, clusterName)
-
-		err = runCmds(ctx, l, [][]string{
-			{"roachprod", "create", clusterName, "--geo", "--nodes", "9"},
-			{"roachprod", "put", clusterName, *cockroach, "./cockroach"},
-			{"roachprod", "put", clusterName, *workload, "./workload"},
-			{"roachprod", "start", clusterName},
-		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		c.Put(ctx, t, *cockroach, "<cockroach>")
+		c.Put(ctx, t, *workload, "<workload>")
+		c.Start(ctx, t, 1, 9)
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {
@@ -262,153 +247,29 @@ func TestRoachmart(t *testing.T) {
 			{7, "europe-west2-b"},
 		}
 
-		commonArgs := []string{
-			"--local-percent=90", "--users=10", "--orders=100", fmt.Sprintf("--partition=%v", partition),
+		roachmartRun := func(ctx context.Context, t *testing.T, i int, args ...string) {
+			t.Helper()
+			args = append(args,
+				"--local-zone="+nodes[i].zone,
+				"--local-percent=90",
+				"--users=10",
+				"--orders=100",
+				fmt.Sprintf("--partition=%v", partition))
+
+			c := c.Child(ctx, t, fmt.Sprint(nodes[i].i))
+			c.Run(ctx, t, nodes[i].i, args...)
 		}
+		roachmartRun(ctx, t, 0, "<workload>", "init", "roachmart")
 
-		err = runCmd(ctx, l, append([]string{
-			"roachprod", "ssh", fmt.Sprintf("%s:%d", clusterName, nodes[0].i), "--",
-			"./workload", "init", "roachmart", "--local-zone", nodes[0].zone}, commonArgs...)...)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		m := monitorWithContext(ctx)
-		for _, node := range nodes {
-			node := node
-			m.Worker(func(ctx context.Context) error {
-				cl, err := l.childLogger(node.zone)
-				if err != nil {
-					return err
-				}
-
-				workloadCmd := append([]string{
-					"roachprod", "ssh", fmt.Sprintf("%s:%d", clusterName, node.i), "--",
-					"./workload", "run", "roachmart", "--local-zone", node.zone, "--duration", "10m"},
-					commonArgs...)
-				err = runCmd(ctx, cl, workloadCmd...)
-				return errors.Wrapf(err, "%d (%s): %s", node.i, node.zone, err)
+		g, ctx := errgroup.WithContext(ctx)
+		for i := range nodes {
+			i := i
+			g.Go(func() error {
+				roachmartRun(ctx, t, i, "<workload>", "run", "roachmart", "--duration", "10s")
+				return nil
 			})
 		}
-		if err := m.Monitor(l, "roachprod", "monitor", clusterName); err != nil {
-			t.Fatalf(`%+v`, err)
-		}
-	})
-}
 
-type monitor struct {
-	ctx    context.Context
-	cancel func()
-	g      *errgroup.Group
-}
-
-func monitorWithContext(ctx context.Context) monitor {
-	var m monitor
-	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.g, m.ctx = errgroup.WithContext(m.ctx)
-	return m
-}
-
-func (m monitor) Worker(fn func(context.Context) error) {
-	m.g.Go(func() error {
-		return fn(m.ctx)
-	})
-}
-
-func (m monitor) Monitor(l *logger, args ...string) error {
-	monG, _ := errgroup.WithContext(m.ctx)
-	monG.Go(func() error {
-		defer m.cancel()
-		err := m.g.Wait()
-		if errors.Cause(err) == context.Canceled {
-			return nil
-		}
-		return errors.Wrap(err, `worker`)
-	})
-
-	pipeR, pipeW := io.Pipe()
-	monG.Go(func() error {
-		defer func() { _ = pipeW.Close() }()
-
-		monL, err := l.childLogger(`MONITOR`)
-		if err != nil {
-			return err
-		}
-
-		cmd := exec.CommandContext(m.ctx, args[0], args[1:]...)
-		cmd.Stdout = io.MultiWriter(monL.stdout, pipeW)
-		cmd.Stderr = monL.stderr
-		if err := cmd.Start(); err != nil {
-			if c := errors.Cause(err); c == context.Canceled {
-				return nil
-			}
-			return errors.Wrap(err, strings.Join(args, ` `))
-		}
-
-		// If the workers finish first, the context will be canceled and so
-		// exec.CommandContext will kill the monitor and we should ignore the
-		// error.
-		if err := cmd.Wait(); err != nil && !strings.Contains(err.Error(), `killed`) {
-			return errors.Wrap(err, strings.Join(args, ` `))
-		}
-		return nil
-	})
-	monG.Go(func() error {
-		defer m.cancel()
-		scanner := bufio.NewScanner(pipeR)
-		for scanner.Scan() {
-			if strings.Contains(scanner.Text(), `dead`) {
-				return errors.Errorf(`MONITOR: %s`, scanner.Text())
-			}
-		}
-		return nil
-	})
-
-	return monG.Wait()
-}
-
-func TestMonitor(t *testing.T) {
-	defer leaktest.AfterTest(t)
-
-	l, err := rootLogger(t.Name())
-	if err != nil {
-		t.Fatalf(`%+v`, err)
-	}
-
-	t.Run(`success`, func(t *testing.T) {
-		m := monitorWithContext(context.Background())
-		m.Worker(func(ctx context.Context) error {
-			return nil
-		})
-		if err := m.Monitor(l, `sleep`, `100`); err != nil {
-			t.Errorf(`expected success got: %+v`, err)
-		}
-	})
-
-	t.Run(`dead`, func(t *testing.T) {
-		m := monitorWithContext(context.Background())
-		m.Worker(func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		})
-		expectedErr := `dead`
-		if err := m.Monitor(l, `echo`, "1: 100\n1: dead"); !testutils.IsError(err, expectedErr) {
-			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
-		}
-	})
-
-	t.Run(`worker-fail`, func(t *testing.T) {
-		m := monitorWithContext(context.Background())
-		m.Worker(func(_ context.Context) error {
-			return errors.New(`worker-fail`)
-		})
-		m.Worker(func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		})
-		expectedErr := `worker-fail`
-		if err := m.Monitor(l, `sleep`, `60`); !testutils.IsError(err, expectedErr) {
-			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
-		}
+		c.Monitor(ctx, t, g)
 	})
 }

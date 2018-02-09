@@ -167,15 +167,18 @@ var _ = (*cluster).Stop
 var _ = (*cluster).Wipe
 
 // Run a command on the specified node.
-func (c *cluster) Run(ctx context.Context, t *testing.T, node int, cmd string) {
+func (c *cluster) Run(ctx context.Context, t *testing.T, node int, args ...string) {
 	c.assertT(t)
 	if t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
 	t.Helper()
+	for i := range args {
+		args[i] = c.expand(args[i])
+	}
 	err := runCmd(ctx, c.l,
-		"roachprod", "ssh", fmt.Sprintf("%s:%d", c.name, node), "--", c.expand(cmd))
+		append([]string{"roachprod", "ssh", fmt.Sprintf("%s:%d", c.name, node), "--"}, args...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -260,6 +263,23 @@ func (c *cluster) monitor(
 			}
 		}
 	}
+}
+
+func (c *cluster) Child(ctx context.Context, t *testing.T, name string) *cluster {
+	c.assertT(t)
+	if t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return c
+	}
+	t.Helper()
+
+	l, err := c.l.childLogger(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := *c
+	r.l = l
+	return &r
 }
 
 func (c *cluster) selector(t *testing.T, nodes ...int) string {
