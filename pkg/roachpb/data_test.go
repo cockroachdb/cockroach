@@ -16,6 +16,7 @@ package roachpb
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"math/rand"
 	"reflect"
@@ -210,18 +211,38 @@ func TestIsPrev(t *testing.T) {
 	}
 }
 
+// TestingVerify verifies the value's Checksum matches a newly-computed
+// checksum of the value's contents. If the value's Checksum is not
+// set the verification is a noop.
+//
+// This method is used only to test Value.MustInitChecksum. The Value type
+// no longer exposes a method to verify its checksum because Value checksums
+// are almost never written anymore and Value.InitChecksum is now a no-op.
+func (v Value) TestingVerify(key []byte) error {
+	if n := len(v.RawBytes); n > 0 && n < headerSize {
+		return fmt.Errorf("%s: invalid header size: %d", Key(key), n)
+	}
+	if sum := v.checksum(); sum != 0 {
+		if computedSum := v.computeChecksum(key); computedSum != sum {
+			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
+				Key(key), computedSum, v.RawBytes)
+		}
+	}
+	return nil
+}
+
 func TestValueChecksumEmpty(t *testing.T) {
 	k := []byte("key")
 	v := Value{}
 	// Before initializing checksum, always works.
-	if err := v.Verify(k); err != nil {
+	if err := v.TestingVerify(k); err != nil {
 		t.Error(err)
 	}
-	if err := v.Verify([]byte("key2")); err != nil {
+	if err := v.TestingVerify([]byte("key2")); err != nil {
 		t.Error(err)
 	}
-	v.InitChecksum(k)
-	if err := v.Verify(k); err != nil {
+	v.MustInitChecksum(k)
+	if err := v.TestingVerify(k); err != nil {
 		t.Error(err)
 	}
 }
@@ -229,24 +250,24 @@ func TestValueChecksumEmpty(t *testing.T) {
 func TestValueChecksumWithBytes(t *testing.T) {
 	k := []byte("key")
 	v := MakeValueFromString("abc")
-	v.InitChecksum(k)
-	if err := v.Verify(k); err != nil {
+	v.MustInitChecksum(k)
+	if err := v.TestingVerify(k); err != nil {
 		t.Error(err)
 	}
 	// Try a different key; should fail.
-	if err := v.Verify([]byte("key2")); err == nil {
+	if err := v.TestingVerify([]byte("key2")); err == nil {
 		t.Error("expected checksum verification failure on different key")
 	}
 	// Mess with the value. In order to corrupt the data for testing purposes we
 	// have to ensure we overwrite the data without touching the checksum.
 	copy(v.RawBytes[headerSize:], "cba")
-	if err := v.Verify(k); err == nil {
+	if err := v.TestingVerify(k); err == nil {
 		t.Error("expected checksum verification failure on different value")
 	}
 	// Test ClearChecksum and reinitialization of checksum.
 	v.ClearChecksum()
-	v.InitChecksum(k)
-	if err := v.Verify(k); err != nil {
+	v.MustInitChecksum(k)
+	if err := v.TestingVerify(k); err != nil {
 		t.Error(err)
 	}
 }

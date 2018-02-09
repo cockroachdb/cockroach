@@ -88,7 +88,7 @@ func verifySSTable(
 	// we a) pass a verify flag on the iterator so that as ComputeStatsGo calls
 	// Next, we're also verifying each KV pair. We explicitly check the first key
 	// is >= start and then that we do not find a key after end.
-	dataIter, err := engineccl.NewMemSSTIterator(data, true)
+	dataIter, err := engineccl.NewMemSSTIterator(data)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
