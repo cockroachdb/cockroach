@@ -30,6 +30,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -119,8 +120,8 @@ func (w *kv) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *kv) Ops() []workload.Operation {
-	opFn := func(db *gosql.DB) (func(context.Context) error, error) {
+func (w *kv) Ops() workload.Operations {
+	opFn := func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 		var buf bytes.Buffer
 		buf.WriteString(`SELECT k, v FROM test.kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
@@ -153,6 +154,7 @@ func (w *kv) Ops() []workload.Operation {
 
 		op := kvOp{
 			config:    w,
+			hists:     reg.GetHandle(),
 			db:        db,
 			readStmt:  readStmt,
 			writeStmt: writeStmt,
@@ -166,14 +168,15 @@ func (w *kv) Ops() []workload.Operation {
 		return op.run, nil
 	}
 
-	return []workload.Operation{{
+	return workload.Operations{
 		Name: fmt.Sprintf(`r%02dw%02d`, w.readPercent, 100-w.readPercent),
 		Fn:   opFn,
-	}}
+	}
 }
 
 type kvOp struct {
 	config    *kv
+	hists     *workload.Histograms
 	db        *gosql.DB
 	readStmt  *gosql.Stmt
 	writeStmt *gosql.Stmt
@@ -186,12 +189,14 @@ func (o *kvOp) run(ctx context.Context) error {
 		for i := 0; i < o.config.batchSize; i++ {
 			args[i] = o.g.readKey()
 		}
+		start := timeutil.Now()
 		rows, err := o.readStmt.Query(args...)
 		if err != nil {
 			return err
 		}
 		for rows.Next() {
 		}
+		o.hists.Get(`read`).Record(timeutil.Since(start))
 		return rows.Err()
 	}
 	const argCount = 2
@@ -201,7 +206,9 @@ func (o *kvOp) run(ctx context.Context) error {
 		args[j+0] = o.g.writeKey()
 		args[j+1] = randomBlock(o.config, o.g.rand())
 	}
+	start := timeutil.Now()
 	_, err := o.writeStmt.Exec(args...)
+	o.hists.Get(`write`).Record(timeutil.Since(start))
 	return err
 }
 

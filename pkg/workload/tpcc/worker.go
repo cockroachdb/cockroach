@@ -16,6 +16,7 @@
 package tpcc
 
 import (
+	"context"
 	gosql "database/sql"
 	"math"
 	"math/rand"
@@ -23,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
 
@@ -32,6 +35,7 @@ const (
 
 type worker struct {
 	config    *tpcc
+	hists     *workload.Histograms
 	idx       int
 	db        *gosql.DB
 	warehouse int
@@ -110,7 +114,7 @@ func initializeMix(config *tpcc) error {
 	return nil
 }
 
-func (w *worker) run() error {
+func (w *worker) run(ctx context.Context) error {
 	// TODO(dan): Remove this when the real check in Hooks.Validate is added.
 	if w.config.doWaits && w.warehouse >= w.config.warehouses {
 		return errors.New(`--wait=true expects 10 workers per warehouse`)
@@ -132,9 +136,11 @@ func (w *worker) run() error {
 		time.Sleep(time.Duration(t.keyingTime) * time.Second)
 	}
 
+	start := timeutil.Now()
 	if _, err := t.run(w.config, w.db, warehouseID); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
+	w.hists.Get(t.name).Record(timeutil.Since(start))
 
 	if w.config.doWaits {
 		// 5.2.5.4: Think time is taken independently from a negative exponential
