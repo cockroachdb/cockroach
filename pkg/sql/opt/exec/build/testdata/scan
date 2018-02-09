@@ -1,0 +1,41 @@
+exec-raw
+CREATE DATABASE t
+----
+
+exec-raw
+CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT);
+INSERT INTO t.a VALUES (1, 1.0), (2, 2.0), (3, 3.0)
+----
+
+build
+SELECT * FROM t.a
+----
+scan
+ └── columns: a.x:int:1 a.y:float:null:2
+
+exec-explain
+SELECT * FROM t.a
+----
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  ALL        ·       ·
+
+exec
+SELECT * FROM t.a
+----
+1  1.0
+2  2.0
+3  3.0
+
+exec-raw
+CREATE TABLE t.b (x INT, y INT);
+INSERT INTO t.b VALUES (1, 10), (2, 20), (3, 30)
+----
+
+# Test with a hidden column.
+exec-explain
+SELECT x, y, rowid FROM t.b
+----
+scan  0  scan  ·      ·          (x, y, rowid[hidden])  ·
+·     0  ·     table  b@primary  ·                      ·
+·     0  ·     spans  ALL        ·                      ·

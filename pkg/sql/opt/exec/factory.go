@@ -21,6 +21,9 @@ import (
 
 // Factory defines the interface for building an execution plan, which consists
 // of a tree of execution nodes (currently a sql.planNode tree).
+//
+// The TypedExprs passed to these functions refer to columns of the input node
+// via IndexedVars.
 type Factory interface {
 	// ConstructScan returns a node that represents a scan of the given table.
 	// TODO(radu): support list of columns, index, index constraints
@@ -29,4 +32,8 @@ type Factory interface {
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.
 	ConstructFilter(n Node, filter tree.TypedExpr) (Node, error)
+
+	// ConstructProject returns a node that applies a projection on the results of
+	// the given input node.
+	ConstructProject(n Node, exprs tree.TypedExprs, colNames []string) (Node, error)
 }
