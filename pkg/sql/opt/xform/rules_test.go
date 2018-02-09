@@ -64,7 +64,7 @@ func TestRules(t *testing.T) {
 
 				case "opt":
 					o := NewOptimizer(catalog, OptimizeAll)
-					b := optbuilder.NewBuilder(context.Background(), o.Factory(), stmt)
+					b := optbuilder.New(context.Background(), o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
 						d.Fatalf(t, "%v", err)

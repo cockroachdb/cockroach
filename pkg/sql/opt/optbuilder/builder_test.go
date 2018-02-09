@@ -118,7 +118,7 @@ func TestBuilder(t *testing.T) {
 					}
 
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := NewBuilder(ctx, o.Factory(), stmt)
+					b := New(ctx, o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)

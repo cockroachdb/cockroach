@@ -83,7 +83,7 @@ func TestBuild(t *testing.T) {
 
 					// Build and optimize the opt expression tree.
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					root, props, err := optbuilder.NewBuilder(ctx, o.Factory(), stmt).Build()
+					root, props, err := optbuilder.New(ctx, o.Factory(), stmt).Build()
 					if err != nil {
 						d.Fatalf(t, "BuildOpt: %v", err)
 					}
@@ -96,7 +96,7 @@ func TestBuild(t *testing.T) {
 					// Build the execution node tree.
 					eng := NewExecEngine(s)
 					defer eng.Close()
-					node, err := NewBuilder(eng.Factory(), ev).Build()
+					node, err := New(eng.Factory(), ev).Build()
 					if err != nil {
 						d.Fatalf(t, "BuildExec: %v", err)
 					}

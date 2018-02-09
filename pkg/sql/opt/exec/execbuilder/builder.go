@@ -28,10 +28,10 @@ type Builder struct {
 	ev      xform.ExprView
 }
 
-// NewBuilder constructs an instance of the execution node builder using the
+// New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
-func NewBuilder(factory exec.Factory, ev xform.ExprView) *Builder {
+func New(factory exec.Factory, ev xform.ExprView) *Builder {
 	return &Builder{factory: factory, ev: ev}
 }
 
