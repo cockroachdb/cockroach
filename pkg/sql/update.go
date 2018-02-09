@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,7 +43,7 @@ type updateNode struct {
 	updateColsIdx map[sqlbase.ColumnID]int // index in updateCols slice
 	computeExprs  []tree.TypedExpr
 	tw            tableUpdater
-	checkHelper   sqlbase.CheckHelper
+	checkHelper   *sqlbase.CheckHelper
 	sourceSlots   []sourceSlot
 
 	run        updateRun
@@ -135,7 +134,12 @@ func (p *planner) Update(
 	}
 
 	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx, *en.tableDesc, sqlbase.CheckUpdates, p.lookupFKTable, p.CheckPrivilege,
+		ctx,
+		*en.tableDesc,
+		sqlbase.CheckUpdates,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
 	)
 	if err != nil {
 		return nil, err
@@ -274,11 +278,7 @@ func (p *planner) Update(
 		updateColsIdx: updateColsIdx,
 		tw:            tw,
 		sourceSlots:   sourceSlots,
-	}
-	if err := un.checkHelper.Init(
-		ctx, p.analyzeExpr, parser.ParseExprs, tn, en.tableDesc,
-	); err != nil {
-		return nil, err
+		checkHelper:   fkTables[en.tableDesc.ID].CheckHelper,
 	}
 	if err := un.run.initEditNode(
 		ctx, &un.editNodeBase, rows, &un.tw, alias, n.Returning, desiredTypes); err != nil {

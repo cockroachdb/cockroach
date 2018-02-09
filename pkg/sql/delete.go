@@ -82,7 +82,12 @@ func (p *planner) Delete(
 	}
 
 	fkTables, err := sqlbase.TablesNeededForFKs(
-		ctx, *en.tableDesc, sqlbase.CheckDeletes, p.lookupFKTable, p.CheckPrivilege,
+		ctx,
+		*en.tableDesc,
+		sqlbase.CheckDeletes,
+		p.lookupFKTable,
+		p.CheckPrivilege,
+		p.analyzeExpr,
 	)
 	if err != nil {
 		return nil, err
