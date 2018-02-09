@@ -195,18 +195,20 @@ func TestLocal(t *testing.T) {
 func TestSingleDC(t *testing.T) {
 	maybeSkip(t)
 
-	// TODO(dan): It's not clear to me yet how all the various configurations of
-	// clusters (# of machines in each locality) are going to generalize. For now,
-	// just hardcode what we had before.
-	for testName, testCmd := range map[string]string{
-		"kv0":     "<workload> run kv --init --read-percent=0 --splits=1000 --concurrency=384 --duration=10m",
-		"kv95":    "<workload> run kv --init --read-percent=95 --splits=1000 --concurrency=384 --duration=10m",
-		"splits":  "<workload> run kv --init --read-percent=0 --splits=100000 --concurrency=384 --max-ops=1 --duration=10m",
-		"tpcc_w1": "<workload> run tpcc --init --warehouses=1 --wait=false --concurrency=384 --duration=10m",
-		"tpmc_w1": "<workload> run tpcc --init --warehouses=1 --concurrency=10 --duration=10m",
-	} {
-		testName, testCmd := testName, testCmd
-		t.Run(testName, func(t *testing.T) {
+	concurrency := " --concurrency=384"
+	duration := " --duration=10m"
+	splits := " --splits=100000"
+	if *local {
+		concurrency = ""
+		duration = " --duration=10s"
+		splits = " --splits=2000"
+	}
+
+	run := func(name, cmd string) {
+		t.Run(name, func(t *testing.T) {
+			// TODO(dan): It's not clear to me yet how all the various configurations
+			// of clusters (# of machines in each locality) are going to
+			// generalize. For now, just hardcode what we had before.
 			ctx := context.Background()
 			c := newCluster(ctx, t, "-n", "4")
 			defer c.Destroy(ctx, t)
@@ -217,12 +219,18 @@ func TestSingleDC(t *testing.T) {
 
 			g, ctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
-				c.Run(ctx, t, 4, testCmd)
+				c.Run(ctx, t, 4, cmd)
 				return nil
 			})
-			c.Monitor(ctx, t, g)
+			c.Monitor(ctx, t, g, 1, 3)
 		})
 	}
+
+	run("kv0", "<workload> run kv --init --read-percent=0 --splits=1000"+concurrency+duration)
+	run("kv95", "<workload> run kv --init --read-percent=95 --splits=1000"+concurrency+duration)
+	run("splits", "<workload> run kv --init --read-percent=0 --max-ops=1"+concurrency+splits)
+	run("tpcc_w1", "<workload> run tpcc --init --warehouses=1 --wait=false"+concurrency+duration)
+	run("tpmc_w1", "<workload> run tpcc --init --warehouses=1 --concurrency=10"+duration)
 }
 
 func TestRoachmart(t *testing.T) {
@@ -256,16 +264,24 @@ func TestRoachmart(t *testing.T) {
 				"--orders=100",
 				fmt.Sprintf("--partition=%v", partition))
 
-			c := c.Child(ctx, t, fmt.Sprint(nodes[i].i))
-			c.Run(ctx, t, nodes[i].i, args...)
+			l, err := c.l.childLogger(fmt.Sprint(nodes[i].i))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.RunL(ctx, t, l, nodes[i].i, args...)
 		}
 		roachmartRun(ctx, t, 0, "<workload>", "init", "roachmart")
+
+		duration := "10m"
+		if *local {
+			duration = "10s"
+		}
 
 		g, ctx := errgroup.WithContext(ctx)
 		for i := range nodes {
 			i := i
 			g.Go(func() error {
-				roachmartRun(ctx, t, i, "<workload>", "run", "roachmart", "--duration", "10s")
+				roachmartRun(ctx, t, i, "<workload>", "run", "roachmart", "--duration", duration)
 				return nil
 			})
 		}
