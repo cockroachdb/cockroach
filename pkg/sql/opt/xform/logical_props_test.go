@@ -43,7 +43,7 @@ func TestLogicalProps(t *testing.T) {
 		}
 
 		f := newFactory(createLogPropsCatalog(), 0)
-		b := optbuilder.NewBuilder(context.Background(), f, stmt)
+		b := optbuilder.New(context.Background(), f, stmt)
 		root, _, err := b.Build()
 		if err != nil {
 			d.Fatalf(t, "%v", err)
