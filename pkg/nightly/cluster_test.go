@@ -168,6 +168,12 @@ var _ = (*cluster).Wipe
 
 // Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, t *testing.T, node int, args ...string) {
+	t.Helper()
+	c.RunL(ctx, t, c.l, node, args...)
+}
+
+// RunL runs a command on the specified node.
+func (c *cluster) RunL(ctx context.Context, t *testing.T, l *logger, node int, args ...string) {
 	c.assertT(t)
 	if t.Failed() {
 		// If the test has failed, don't try to limp along.
@@ -177,17 +183,18 @@ func (c *cluster) Run(ctx context.Context, t *testing.T, node int, args ...strin
 	for i := range args {
 		args[i] = c.expand(args[i])
 	}
-	err := runCmd(ctx, c.l,
+	err := runCmd(ctx, l,
 		append([]string{"roachprod", "ssh", fmt.Sprintf("%s:%d", c.name, node), "--"}, args...)...)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Monitor monitors a cockroach cluster, watching for unexpected node
-// failures. A failure occurs if either the errgroup returns an error or if a
-// cockroach node dies.
-func (c *cluster) Monitor(ctx context.Context, t *testing.T, g *errgroup.Group) {
+// Monitor monitors the specified nodes in a cockroach cluster, watching for
+// unexpected failures. A failure occurs if either the errgroup returns an
+// error or if a cockroach node dies. See cluster.Start() for a description of
+// the nodes parameter.
+func (c *cluster) Monitor(ctx context.Context, t *testing.T, g *errgroup.Group, nodes ...int) {
 	c.assertT(t)
 	if t.Failed() {
 		// If the test has failed, don't try to limp along.
@@ -195,14 +202,14 @@ func (c *cluster) Monitor(ctx context.Context, t *testing.T, g *errgroup.Group) 
 	}
 	t.Helper()
 
-	err := c.monitor(ctx, t, g, "roachprod", "monitor", c.name)
+	err := c.monitor(ctx, t, g, nodes, "roachprod", "monitor", c.name)
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func (c *cluster) monitor(
-	ctx context.Context, t *testing.T, g *errgroup.Group, args ...string,
+	ctx context.Context, t *testing.T, g *errgroup.Group, nodes []int, args ...string,
 ) error {
 	t.Helper()
 
@@ -225,7 +232,11 @@ func (c *cluster) monitor(
 		defer monL.close()
 
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-		cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
+		if testing.Verbose() {
+			cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
+		} else {
+			cmd.Stdout = pipeW
+		}
 		cmd.Stderr = monL.stderr
 		if err := cmd.Run(); err != nil {
 			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
@@ -250,6 +261,21 @@ func (c *cluster) monitor(
 		}
 	}()
 
+	_ = c.selector(t, nodes...) // check for a valid nodes specification
+
+	watchedNode := func(id int) bool {
+		switch len(nodes) {
+		case 0:
+			return true
+		case 1:
+			return id == nodes[0]
+		case 2:
+			return nodes[0] <= id && id <= nodes[1]
+		default:
+			return false
+		}
+	}
+
 	for {
 		select {
 		case err := <-done:
@@ -258,28 +284,16 @@ func (c *cluster) monitor(
 			if !ok {
 				return fmt.Errorf("monitor died unexpectedly")
 			}
-			if strings.Contains(msg, "dead") {
-				return fmt.Errorf("unexpected node event: %s", msg)
+
+			var id int
+			var s string
+			if n, _ := fmt.Sscanf(msg, "%d: %s", &id, &s); n == 2 {
+				if watchedNode(id) && strings.Contains(s, "dead") {
+					return fmt.Errorf("unexpected node event: %s", msg)
+				}
 			}
 		}
 	}
-}
-
-func (c *cluster) Child(ctx context.Context, t *testing.T, name string) *cluster {
-	c.assertT(t)
-	if t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return c
-	}
-	t.Helper()
-
-	l, err := c.l.childLogger(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	r := *c
-	r.l = l
-	return &r
 }
 
 func (c *cluster) selector(t *testing.T, nodes ...int) string {
@@ -335,7 +349,7 @@ func TestClusterMonitor(t *testing.T) {
 		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
 		g := &errgroup.Group{}
 		g.Go(func() error { return nil })
-		if err := c.monitor(context.Background(), t, g, `sleep`, `100`); err != nil {
+		if err := c.monitor(context.Background(), t, g, nil, `sleep`, `100`); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -351,10 +365,29 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := c.monitor(ctx, t, g, `echo`, "1: 100\n1: dead")
+		err := c.monitor(ctx, t, g, nil, `echo`, "1: 100\n1: dead")
 		expectedErr := `dead`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
+		}
+	})
+
+	t.Run(`nodes`, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
+		g := &errgroup.Group{}
+		g.Go(func() error {
+			<-ctx.Done()
+			return ctx.Err()
+		})
+
+		// Node 1 is dead, but we were only monitoring node 2.
+		err := c.monitor(ctx, t, g, []int{2}, `echo`, "1: dead")
+		expectedErr := `monitor died unexpectedly`
+		if !testutils.IsError(err, expectedErr) {
+			t.Fatal(err)
 		}
 	})
 
@@ -372,7 +405,7 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := c.monitor(ctx, t, g, `sleep`, `100`)
+		err := c.monitor(ctx, t, g, nil, `sleep`, `100`)
 		expectedErr := `worker-fail`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
