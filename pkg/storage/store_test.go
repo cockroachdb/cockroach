@@ -81,6 +81,10 @@ func (f *testSenderFactory) New(typ client.TxnType) client.TxnSender {
 	return &testSender{store: f.store}
 }
 
+func (f *testSenderFactory) WrappedSender() client.Sender {
+	return f.store
+}
+
 // testSender is an implementation of the client.TxnSender interface
 // which passes all requests through to a single store.
 type testSender struct {
