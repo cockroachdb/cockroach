@@ -91,20 +91,6 @@ func TestDBWriteBatch(t *testing.T) {
 			t.Errorf("expected nil, got \"%s\"", result)
 		}
 	}
-
-	// Invalid key/value entry checksum.
-	{
-		var batch engine.RocksDBBatchBuilder
-		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
-		value := roachpb.MakeValueFromString("1")
-		value.MustInitChecksum([]byte("foo"))
-		batch.Put(key, value.RawBytes)
-		data := batch.Finish()
-
-		if err := db.WriteBatch(ctx, "b", "c", data); !testutils.IsError(err, "invalid checksum") {
-			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
-		}
-	}
 }
 
 func TestWriteBatchMVCCStats(t *testing.T) {

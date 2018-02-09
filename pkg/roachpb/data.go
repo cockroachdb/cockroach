@@ -283,22 +283,6 @@ func (v *Value) ClearChecksum() {
 	v.setChecksum(0)
 }
 
-// Verify verifies the value's Checksum matches a newly-computed
-// checksum of the value's contents. If the value's Checksum is not
-// set the verification is a noop.
-func (v Value) Verify(key []byte) error {
-	if n := len(v.RawBytes); n > 0 && n < headerSize {
-		return fmt.Errorf("%s: invalid header size: %d", Key(key), n)
-	}
-	if sum := v.checksum(); sum != 0 {
-		if computedSum := v.computeChecksum(key); computedSum != sum {
-			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
-				Key(key), computedSum, v.RawBytes)
-		}
-	}
-	return nil
-}
-
 // ShallowClone returns a shallow clone of the receiver.
 func (v *Value) ShallowClone() *Value {
 	if v == nil {

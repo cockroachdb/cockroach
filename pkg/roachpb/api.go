@@ -180,8 +180,6 @@ type Response interface {
 	Header() ResponseHeader
 	// SetHeader sets the response header.
 	SetHeader(ResponseHeader)
-	// Verify verifies response integrity, as applicable.
-	Verify(req Request) error
 }
 
 // combinable is implemented by response types whose corresponding
@@ -352,46 +350,6 @@ func (*NoopResponse) Header() ResponseHeader { return ResponseHeader{} }
 
 // SetHeader implements the Response interface.
 func (*NoopResponse) SetHeader(_ ResponseHeader) {}
-
-// Verify implements the Response interface for ResopnseHeader with a
-// default noop. Individual response types should override this method
-// if they contain checksummed data which can be verified.
-func (rh *ResponseHeader) Verify(req Request) error {
-	return nil
-}
-
-// Verify verifies the integrity of the get response value.
-func (gr *GetResponse) Verify(req Request) error {
-	if gr.Value != nil {
-		return gr.Value.Verify(req.Header().Key)
-	}
-	return nil
-}
-
-// Verify verifies the integrity of every value returned in the scan.
-func (sr *ScanResponse) Verify(req Request) error {
-	for _, kv := range sr.Rows {
-		if err := kv.Value.Verify(kv.Key); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Verify verifies the integrity of every value returned in the reverse scan.
-func (sr *ReverseScanResponse) Verify(req Request) error {
-	for _, kv := range sr.Rows {
-		if err := kv.Value.Verify(kv.Key); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Verify implements the Response interface.
-func (*NoopResponse) Verify(_ Request) error {
-	return nil
-}
 
 // GetInner returns the Request contained in the union.
 func (ru RequestUnion) GetInner() Request {
