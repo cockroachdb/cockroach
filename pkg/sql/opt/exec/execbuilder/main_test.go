@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package build_test
+package execbuilder_test
 
 import (
 	"os"
@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/build"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 
-	build.NewExecEngine = func(s serverutils.TestServerInterface) exec.Engine {
+	execbuilder.NewExecEngine = func(s serverutils.TestServerInterface) exec.Engine {
 		return s.Executor().(*sql.Executor).NewExecEngine()
 	}
 

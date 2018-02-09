@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package build
+package optbuilder
 
 // This file is home to TestBuilder, which is similar to the logic tests, except it
 // is used for optimizer builder-specific testcases.
@@ -118,7 +118,7 @@ func TestBuilder(t *testing.T) {
 					}
 
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := NewBuilder(ctx, o.Factory(), stmt)
+					b := New(ctx, o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
