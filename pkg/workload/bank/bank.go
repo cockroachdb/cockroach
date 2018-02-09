@@ -126,11 +126,11 @@ func (b *bank) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (b *bank) Ops() []workload.Operation {
+func (b *bank) Ops() workload.Operations {
 	// TODO(dan): Move the various queries in the backup/restore tests here.
-	op := workload.Operation{
+	return workload.Operations{
 		Name: `balance transfers`,
-		Fn: func(sqlDB *gosql.DB) (func(context.Context) error, error) {
+		Fn: func(sqlDB *gosql.DB, reg *workload.WatchRegistry) (func(context.Context) error, error) {
 			rng := rand.New(rand.NewSource(b.seed))
 			updateStmt, err := sqlDB.Prepare(`
 				UPDATE bank
@@ -140,6 +140,7 @@ func (b *bank) Ops() []workload.Operation {
 			if err != nil {
 				return nil, err
 			}
+			watches := reg.GetHandle()
 
 			return func(ctx context.Context) error {
 				from := rng.Intn(b.rows)
@@ -148,12 +149,13 @@ func (b *bank) Ops() []workload.Operation {
 					to = rng.Intn(b.rows - 1)
 				}
 				amount := rand.Intn(maxTransfer)
+				start := timeutil.Now()
 				_, err := updateStmt.ExecContext(ctx, from, to, amount)
+				watches.Get(`transfer`).Record(timeutil.Since(start))
 				return err
 			}, nil
 		},
 	}
-	return []workload.Operation{op}
 }
 
 // Split creates the configured number of ranges in an already created version
