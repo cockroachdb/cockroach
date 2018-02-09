@@ -2043,3 +2043,306 @@ render          ·               ·
       └── scan  ·               ·
 ·               table           abg@primary
 ·               spans           /1/2-/1/2/# /1/3-
+
+# Regression tests for mixed-type equality columns (#22514).
+statement ok
+CREATE TABLE foo (
+  a INT,
+  b INT,
+  c FLOAT,
+  d FLOAT
+)
+
+statement ok
+INSERT INTO foo VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+statement ok
+CREATE TABLE bar (
+  a INT,
+  b FLOAT,
+  c FLOAT,
+  d INT
+)
+
+statement ok
+INSERT INTO bar VALUES
+  (1, 1, 1, 1),
+  (2, 2, 2, 2),
+  (3, 3, 3, 3)
+
+# Only a and c can be equality columns.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo NATURAL JOIN bar
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a, c) = (a, c)
+      │         pred      (test.foo.b = test.bar.b) AND (test.foo.d = test.bar.d)
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRR rowsort
+SELECT * FROM foo NATURAL JOIN bar
+----
+1  1  1  1
+2  2  2  2
+3  3  3  3
+
+# b can't be an equality column.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (b)
+----
+render               ·         ·
+ │                   render 0  b
+ │                   render 1  a
+ │                   render 2  c
+ │                   render 3  d
+ │                   render 4  a
+ │                   render 5  c
+ │                   render 6  d
+ └── render          ·         ·
+      │              render 0  b
+      │              render 1  a
+      │              render 2  c
+      │              render 3  d
+      │              render 4  NULL
+      │              render 5  a
+      │              render 6  NULL
+      │              render 7  c
+      │              render 8  d
+      │              render 9  NULL
+      └── join       ·         ·
+           │         type      inner
+           │         pred      test.foo.b = test.bar.b
+           ├── scan  ·         ·
+           │         table     foo@primary
+           │         spans     ALL
+           └── scan  ·         ·
+·                    table     bar@primary
+·                    spans     ALL
+
+query IIRRIRI rowsort
+SELECT * FROM foo JOIN bar USING (b)
+----
+1  1  1  1  1  1  1
+2  2  2  2  2  2  2
+3  3  3  3  3  3  3
+
+# Only a can be an equality column.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (a, b)
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  c
+ │              render 5  d
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a) = (a)
+      │         pred      test.foo.b = test.bar.b
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRRI rowsort
+SELECT * FROM foo JOIN bar USING (a, b)
+----
+1  1  1  1  1  1
+2  2  2  2  2  2
+3  3  3  3  3  3
+
+# Only a and c can be equality columns.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (a, b, c)
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  d
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a, c) = (a, c)
+      │         pred      test.foo.b = test.bar.b
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRI rowsort
+SELECT * FROM foo JOIN bar USING (a, b, c)
+----
+1  1  1  1  1
+2  2  2  2  2
+3  3  3  3  3
+
+# b can't be an equality column.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar ON foo.b = bar.b
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  a
+ │              render 5  b
+ │              render 6  c
+ │              render 7  d
+ └── join       ·         ·
+      │         type      inner
+      │         pred      test.foo.b = test.bar.b
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRIRRI rowsort
+SELECT * FROM foo JOIN bar ON foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+# Only a can be an equality column.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  a
+ │              render 5  b
+ │              render 6  c
+ │              render 7  d
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a) = (a)
+      │         pred      test.foo.b = test.bar.b
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRIRRI rowsort
+SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo, bar WHERE foo.b = bar.b
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  a
+ │              render 5  b
+ │              render 6  c
+ │              render 7  d
+ └── join       ·         ·
+      │         type      inner
+      │         pred      test.foo.b = test.bar.b
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRIRRI rowsort
+SELECT * FROM foo, bar WHERE foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+# Only a can be an equality column.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  a
+ │              render 5  b
+ │              render 6  c
+ │              render 7  d
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a) = (a)
+      │         pred      test.foo.b = test.bar.b
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRIRRI rowsort
+SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
+----
+1  1  1  1  1  1  1  1
+2  2  2  2  2  2  2  2
+3  3  3  3  3  3  3  3
+
+# Only a and c can be equality columns.
+query TTT
+EXPLAIN (EXPRS) SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
+----
+render          ·         ·
+ │              render 0  a
+ │              render 1  b
+ │              render 2  c
+ │              render 3  d
+ │              render 4  c
+ │              render 5  d
+ └── join       ·         ·
+      │         type      inner
+      │         equality  (a, c) = (a, c)
+      │         pred      (test.foo.b = test.bar.b) AND (test.foo.d = test.bar.d)
+      ├── scan  ·         ·
+      │         table     foo@primary
+      │         spans     ALL
+      └── scan  ·         ·
+·               table     bar@primary
+·               spans     ALL
+
+query IIRRRI rowsort
+SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
+----
+1  1  1  1  1  1
+2  2  2  2  2  2
+3  3  3  3  3  3
