@@ -58,7 +58,7 @@ type Flagser interface {
 // to have been created and initialized before running these.
 type Opser interface {
 	Generator
-	Ops() []Operation
+	Ops() Operations
 }
 
 // Hookser returns any hooks associated with the generator.
@@ -114,17 +114,24 @@ type Table struct {
 	SplitFn func(int) []interface{}
 }
 
-// Operation represents some SQL query workload performable on a database
+// Operations represents some SQL query workload performable on a database
 // initialized with the requisite tables.
 //
-// TODO(dan): Finish nailing down the invariants of Operation as more workloads
+// TODO(dan): Finish nailing down the invariants of Operations as more workloads
 // are ported to this framework. TPCC in particular should be informative.
-type Operation struct {
-	// Name is a name for the work performed by this Operation.
+type Operations struct {
+	// Name is a name for the work performed.
 	Name string
 	// Fn returns a function to be called once per unit of work to be done.
 	// Various generator tools use this to track progress.
-	Fn func(*gosql.DB) (func(context.Context) error, error)
+	Fn func(*gosql.DB, *WatchRegistry) (func(context.Context) error, error)
+
+	// ResultHist is the name of the Watch to use for the benchmark formatted
+	// results output at the end of `./workload run`. The empty string will use
+	// the sum of all watches.
+	//
+	// TODO(dan): This will go away once more of run.go moves inside Operations.
+	ResultHist string
 }
 
 var registered = make(map[string]Meta)
