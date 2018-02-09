@@ -86,3 +86,15 @@ export function getLeaves(tree: LocalityTree): NodeStatus$Properties[] {
   recur(tree);
   return output;
 }
+
+/*
+ * getLocalityLabel returns the human-readable label for the locality.
+ */
+export function getLocalityLabel(path: LocalityTier[]): string {
+  if (path.length === 0) {
+    return "Cluster";
+  }
+
+  const thisTier = path[path.length - 1];
+  return `${thisTier.key}=${thisTier.value}`;
+}
