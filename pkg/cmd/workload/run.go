@@ -386,7 +386,8 @@ func runRun(gen workload.Generator, args []string) error {
 				log.Error(ctx, err)
 				continue
 			}
-			return err
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 
 		case <-tick:
 			var h *hdrhistogram.Histogram
