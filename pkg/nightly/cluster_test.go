@@ -87,6 +87,7 @@ func (c *cluster) Destroy(ctx context.Context, t *testing.T) {
 		c.l.errorf("%s", err)
 	}
 	unregisterCluster(c.name)
+	c.l.close()
 }
 
 // Put a local file to all of the machines in a cluster.
@@ -214,14 +215,15 @@ func (c *cluster) monitor(
 	go func() {
 		defer func() { _ = pipeW.Close() }()
 
-		// TODO(peter): Dan's version of this code created a child logger here via
-		// l.childLogger(`MONITOR`). This doesn't work well with `stdLogger`
-		// because it creates a file named `std_MONITOR`. Figure out what to do
-		// here.
+		monL, err := c.l.childLogger(`MONITOR`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer monL.close()
 
 		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-		cmd.Stdout = pipeW
-		cmd.Stderr = c.l.stderr
+		cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
+		cmd.Stderr = monL.stderr
 		if err := cmd.Run(); err != nil {
 			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
 				// The expected reason for an error is that the monitor was killed due
