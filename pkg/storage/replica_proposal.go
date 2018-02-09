@@ -347,23 +347,30 @@ func addSSTablePreApply(
 		}
 	} else {
 		// The SST may already be on disk, thanks to the sideloading mechanism.  If
-		// so we can try to add that file directly, rather than writing another copy
-		// of it, so long as doing so does not modify the file, which would be bad
-		// since it is still part of an immutable raft log message. We *can* tell
-		// Rocks that it is not allowed to modify the file though, in which case it
-		// will return and error if it would have tried to do so (see note on
-		// DBIngestExternalFile in db.cc about what causes that), at which point we
-		// can fall back to writing a copy for Rocks.
+		// so we can try to add that file directly, via a new hardlink if the file-
+		// system support it, rather than writing a new copy of it. However, this is
+		// only safe if we can do so without modifying the file since it is still
+		// part of an immutable raft log message, but in some cases, described in
+		// DBIngestExternalFile, RocksDB would modify the file. Fortunately we can
+		// tell Rocks that it is not allowed to modify the file, in which case it
+		// will return and error if it would have tried to do so, at which point we
+		// can fall back to writing a new copy for Rocks to ingest.
 		if _, err := os.Stat(path); err == nil {
-			err = eng.IngestExternalFile(ctx, path, move, noModify)
-			if err == nil {
-				// Adding without modification succeeded, no copy necessary.
-				log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
-				return false
-			}
-			const seqNoMsg = "Global seqno is required, but disabled"
-			if err, ok := err.(*engine.RocksDBError); ok && !strings.Contains(err.Error(), seqNoMsg) {
-				log.Fatalf(ctx, "while ingesting %s: %s", path, err)
+			ingestPath := path + ".ingested"
+			// If the fs supports it, make a hard-link for rocks to ingest. We cannot
+			// pass it the path in the sideload store as it deletes the passed path on
+			// success.
+			if err := os.Link(path, ingestPath); err == nil {
+				err = eng.IngestExternalFile(ctx, ingestPath, move, noModify)
+				if err == nil {
+					// Adding without modification succeeded, no copy necessary.
+					log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, ingestPath)
+					return false
+				}
+				const seqNoMsg = "Global seqno is required, but disabled"
+				if err, ok := err.(*engine.RocksDBError); ok && !strings.Contains(err.Error(), seqNoMsg) {
+					log.Fatalf(ctx, "while ingesting %s: %s", ingestPath, err)
+				}
 			}
 		}
 
