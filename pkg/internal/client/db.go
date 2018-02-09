@@ -541,19 +541,11 @@ func (db *DB) sendUsingSender(
 	if len(ba.Requests) == 0 {
 		return nil, nil
 	}
+	if err := ba.ReadConsistency.SupportsBatch(ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
 	if ba.UserPriority == 0 && db.ctx.UserPriority != 1 {
 		ba.UserPriority = db.ctx.UserPriority
-	}
-
-	if ba.ReadConsistency == roachpb.INCONSISTENT {
-		for _, ru := range ba.Requests {
-			m := ru.GetInner().Method()
-			switch m {
-			case roachpb.Get, roachpb.Scan, roachpb.ReverseScan:
-			default:
-				return nil, roachpb.NewErrorf("method %s not allowed with INCONSISTENT batch", m)
-			}
-		}
 	}
 
 	tracing.AnnotateTrace()

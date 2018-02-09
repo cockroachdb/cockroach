@@ -481,16 +481,16 @@ func TestReplicaReadConsistency(t *testing.T) {
 		t.Errorf("expected success on consistent read: %s", err)
 	}
 
-	// Try a consensus read and verify error.
+	// Try a read commmitted read and an inconsistent read, both within a
+	// transaction.
+	txn := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 
 	if _, err := tc.SendWrappedWith(roachpb.Header{
-		ReadConsistency: roachpb.CONSENSUS,
+		Txn:             txn,
+		ReadConsistency: roachpb.READ_UNCOMMITTED,
 	}, &gArgs); err == nil {
-		t.Errorf("expected error on consensus read")
+		t.Errorf("expected error on read uncommitted read within a txn")
 	}
-
-	// Try an inconsistent read within a transaction.
-	txn := newTransaction("test", roachpb.Key("a"), 1, enginepb.SERIALIZABLE, tc.Clock())
 
 	if _, err := tc.SendWrappedWith(roachpb.Header{
 		Txn:             txn,
@@ -514,6 +514,13 @@ func TestReplicaReadConsistency(t *testing.T) {
 	// Send without Txn.
 	_, pErr := tc.SendWrappedWith(roachpb.Header{
 		ReadConsistency: roachpb.CONSISTENT,
+	}, &gArgs)
+	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
+		t.Errorf("expected not lease holder error; got %s", pErr)
+	}
+
+	_, pErr = tc.SendWrappedWith(roachpb.Header{
+		ReadConsistency: roachpb.READ_UNCOMMITTED,
 	}, &gArgs)
 	if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); !ok {
 		t.Errorf("expected not lease holder error; got %s", pErr)
@@ -2213,71 +2220,79 @@ func TestReplicaCommandQueue(t *testing.T) {
 // not wait for pending commands to complete through Raft.
 func TestReplicaCommandQueueInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	key := roachpb.Key("key1")
-	blockingStart := make(chan struct{}, 1)
-	blockingDone := make(chan struct{})
 
-	tc := testContext{}
-	tsc := TestStoreConfig(nil)
-	tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
-		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
-			if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
-				putBytes, err := put.Value.GetBytes()
-				if err != nil {
-					return roachpb.NewErrorWithTxn(err, filterArgs.Hdr.Txn)
-				}
-				if bytes.Equal(put.Key, key) && bytes.Equal(putBytes, []byte{1}) {
-					// Absence of replay protection can mean that we end up here
-					// more often than we expect, hence the select (#3669).
-					select {
-					case blockingStart <- struct{}{}:
-					default:
+	for _, rc := range []roachpb.ReadConsistencyType{
+		roachpb.READ_UNCOMMITTED,
+		roachpb.INCONSISTENT,
+	} {
+		t.Run(rc.String(), func(t *testing.T) {
+			key := roachpb.Key("key1")
+			blockingStart := make(chan struct{}, 1)
+			blockingDone := make(chan struct{})
+
+			tc := testContext{}
+			tsc := TestStoreConfig(nil)
+			tsc.TestingKnobs.EvalKnobs.TestingEvalFilter =
+				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
+					if put, ok := filterArgs.Req.(*roachpb.PutRequest); ok {
+						putBytes, err := put.Value.GetBytes()
+						if err != nil {
+							return roachpb.NewErrorWithTxn(err, filterArgs.Hdr.Txn)
+						}
+						if bytes.Equal(put.Key, key) && bytes.Equal(putBytes, []byte{1}) {
+							// Absence of replay protection can mean that we end up here
+							// more often than we expect, hence the select (#3669).
+							select {
+							case blockingStart <- struct{}{}:
+							default:
+							}
+							<-blockingDone
+						}
 					}
-					<-blockingDone
+
+					return nil
 				}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+			tc.StartWithStoreConfig(t, stopper, tsc)
+			cmd1Done := make(chan *roachpb.Error)
+			go func() {
+				args := putArgs(key, []byte{1})
+
+				_, pErr := tc.SendWrapped(&args)
+				cmd1Done <- pErr
+			}()
+			// Wait for cmd1 to get into the command queue.
+			<-blockingStart
+
+			// An inconsistent read to the key won't wait.
+			cmd2Done := make(chan *roachpb.Error)
+			go func() {
+				args := getArgs(key)
+
+				_, pErr := tc.SendWrappedWith(roachpb.Header{
+					ReadConsistency: rc,
+				}, &args)
+				cmd2Done <- pErr
+			}()
+
+			select {
+			case pErr := <-cmd2Done:
+				if pErr != nil {
+					t.Fatal(pErr)
+				}
+				// success.
+			case pErr := <-cmd1Done:
+				t.Fatalf("cmd1 should have been blocked, got %v", pErr)
 			}
 
-			return nil
-		}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.StartWithStoreConfig(t, stopper, tsc)
-	cmd1Done := make(chan *roachpb.Error)
-	go func() {
-		args := putArgs(key, []byte{1})
-
-		_, pErr := tc.SendWrapped(&args)
-		cmd1Done <- pErr
-	}()
-	// Wait for cmd1 to get into the command queue.
-	<-blockingStart
-
-	// An inconsistent read to the key won't wait.
-	cmd2Done := make(chan *roachpb.Error)
-	go func() {
-		args := getArgs(key)
-
-		_, pErr := tc.SendWrappedWith(roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, &args)
-		cmd2Done <- pErr
-	}()
-
-	select {
-	case pErr := <-cmd2Done:
-		if pErr != nil {
-			t.Fatal(pErr)
-		}
-		// success.
-	case pErr := <-cmd1Done:
-		t.Fatalf("cmd1 should have been blocked, got %v", pErr)
+			close(blockingDone)
+			if pErr := <-cmd1Done; pErr != nil {
+				t.Fatal(pErr)
+			}
+			// Success.
+		})
 	}
-
-	close(blockingDone)
-	if pErr := <-cmd1Done; pErr != nil {
-		t.Fatal(pErr)
-	}
-	// Success.
 }
 
 // TestReplicaCommandQueueCancellation verifies that commands which are
@@ -3286,32 +3301,40 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 // is not affected by inconsistent reads.
 func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	tc := testContext{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-	// Set clock to time 1s and do the read.
-	t0 := 1 * time.Second
-	tc.manualClock.Set(t0.Nanoseconds())
-	args := getArgs([]byte("a"))
-	ts := tc.Clock().Now()
 
-	_, pErr := tc.SendWrappedWith(roachpb.Header{
-		Timestamp:       ts,
-		ReadConsistency: roachpb.INCONSISTENT,
-	}, &args)
+	for _, rc := range []roachpb.ReadConsistencyType{
+		roachpb.READ_UNCOMMITTED,
+		roachpb.INCONSISTENT,
+	} {
+		t.Run(rc.String(), func(t *testing.T) {
+			tc := testContext{}
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+			tc.Start(t, stopper)
+			// Set clock to time 1s and do the read.
+			t0 := 1 * time.Second
+			tc.manualClock.Set(t0.Nanoseconds())
+			args := getArgs([]byte("a"))
+			ts := tc.Clock().Now()
 
-	if pErr != nil {
-		t.Error(pErr)
-	}
-	pArgs := putArgs([]byte("a"), []byte("value"))
+			_, pErr := tc.SendWrappedWith(roachpb.Header{
+				Timestamp:       ts,
+				ReadConsistency: rc,
+			}, &args)
 
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}, &pArgs)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-	if respH.Timestamp.WallTime == tc.Clock().Now().WallTime {
-		t.Errorf("expected write timestamp not to upgrade to 1s; got %s", respH.Timestamp)
+			if pErr != nil {
+				t.Error(pErr)
+			}
+			pArgs := putArgs([]byte("a"), []byte("value"))
+
+			_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}, &pArgs)
+			if pErr != nil {
+				t.Fatal(pErr)
+			}
+			if respH.Timestamp.WallTime == tc.Clock().Now().WallTime {
+				t.Errorf("expected write timestamp not to upgrade to 1s; got %s", respH.Timestamp)
+			}
+		})
 	}
 }
 

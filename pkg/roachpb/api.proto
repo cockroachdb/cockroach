@@ -32,11 +32,12 @@ enum ReadConsistencyType {
   // CONSISTENT reads are guaranteed to read committed data; the
   // mechanism relies on clocks to determine lease expirations.
   CONSISTENT = 0;
-  // CONSENSUS requires that reads must achieve consensus. This is a
-  // stronger guarantee of consistency than CONSISTENT.
-  //
-  // TODO(spencer): current unimplemented.
-  CONSENSUS = 1;
+  // READ_UNCOMMITTED reads return both committed and uncommitted data.
+  // The consistency type is similar to INCONSISTENT in that using it
+  // can result in dirty reads. However, like the CONSISTENT type, it
+  // requires the replica performing the read to hold a valid read lease,
+  // meaning that it can't return arbitrarily stale data.
+  READ_UNCOMMITTED = 1;
   // INCONSISTENT reads return the latest available, committed values.
   // They are more efficient, but may read stale values as pending
   // intents are ignored.
@@ -104,6 +105,9 @@ message GetRequest {
 message GetResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2;
+
+  // The intent seen, if any, when using the READ_UNCOMMITTED consistency level.
+  Value intent_value = 3;
 }
 
 // A PutRequest is the argument to the Put() method.
@@ -321,10 +325,8 @@ message ScanRequest {
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // Set to true if the KeyValue pairs for all intents encountered during the
-  // scan should also be returned. An error will be thrown if this is set to
-  // true for a consistent scan.
-  bool return_intents = 3;
+  // Replaced by the READ_UNCOMMITTED consistency level.
+  bool deprecated_return_intents = 3;
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -332,8 +334,9 @@ message ScanResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
-  // Empty if return_intents was not set to true of if no intent rows were
-  // scanned. These rows do not count against the MaxSpanRequestKeys count.
+  // The intent rows seen when performing a scan at the READ_UNCOMMITTED
+  // consistency level. These rows do not count against the MaxSpanRequestKeys
+  // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 }
 
@@ -347,10 +350,8 @@ message ReverseScanRequest {
 
   Span header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
-  // Set to true if the KeyValue pairs for all intents encountered during the
-  // scan should also be returned. An error will be thrown if this is set to
-  // true for a consistent scan.
-  bool return_intents = 3;
+  // Replaced by the READ_UNCOMMITTED consistency level.
+  bool deprecated_return_intents = 3;
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.
@@ -358,8 +359,9 @@ message ReverseScanResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // Empty if no rows were scanned.
   repeated KeyValue rows = 2 [(gogoproto.nullable) = false];
-  // Empty if return_intents was not set to true of if no intent rows were
-  // scanned. These rows do not count against the MaxSpanRequestKeys count.
+  // The intent rows seen when performing a scan at the READ_UNCOMMITTED
+  // consistency level. These rows do not count against the MaxSpanRequestKeys
+  // count.
   repeated KeyValue intent_rows = 3 [(gogoproto.nullable) = false];
 }
 

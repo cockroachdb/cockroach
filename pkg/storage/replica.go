@@ -1936,16 +1936,14 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 // TODO(tschottdorf): should check that request is contained in range
 // and that EndTransaction only occurs at the very end.
 func (r *Replica) checkBatchRequest(ba roachpb.BatchRequest, isReadOnly bool) error {
+	consistent := ba.ReadConsistency == roachpb.CONSISTENT
 	if isReadOnly {
-		if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Txn != nil {
+		if !consistent && ba.Txn != nil {
 			// Disallow any inconsistent reads within txns.
-			return errors.Errorf("cannot allow inconsistent reads within a transaction")
+			return errors.Errorf("cannot allow %v reads within a transaction", ba.ReadConsistency)
 		}
-		if ba.ReadConsistency == roachpb.CONSENSUS {
-			return errors.Errorf("consensus reads not implemented")
-		}
-	} else if ba.ReadConsistency == roachpb.INCONSISTENT {
-		return errors.Errorf("inconsistent mode is only available to reads")
+	} else if !consistent {
+		return errors.Errorf("%v mode is only available to reads", ba.ReadConsistency)
 	}
 
 	return nil
@@ -1972,7 +1970,7 @@ func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry pr
 	// retried. Each request is considered in turn; only those marked as
 	// affecting the cache are processed. Inconsistent reads are
 	// excluded.
-	if retry == proposalNoRetry && ec.ba.ReadConsistency != roachpb.INCONSISTENT {
+	if retry == proposalNoRetry && ec.ba.ReadConsistency == roachpb.CONSISTENT {
 		ec.repl.updateTimestampCache(&ec.ba, br, pErr)
 	}
 
@@ -2121,7 +2119,7 @@ func (r *Replica) beginCmds(
 	var newCmds batchCmdSet
 	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
 	// Don't use the command queue for inconsistent reads.
-	if ba.ReadConsistency != roachpb.INCONSISTENT {
+	if ba.ReadConsistency == roachpb.CONSISTENT {
 
 		// Check for context cancellation before inserting into the
 		// command queue (and check again afterward). Once we're in the
@@ -2463,8 +2461,8 @@ func (r *Replica) executeAdminBatch(
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is consistent, the read requires the range lease.
-	if ba.ReadConsistency != roachpb.INCONSISTENT {
+	// If the read is not inconsistent, the read requires the range lease.
+	if ba.ReadConsistency.RequiresReadLease() {
 		if _, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			return nil, pErr
 		}

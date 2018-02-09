@@ -49,7 +49,7 @@ func Scan(
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
 	reply.Rows = rows
-	if args.ReturnIntents {
+	if h.ReadConsistency == roachpb.READ_UNCOMMITTED || args.DeprecatedReturnIntents {
 		reply.IntentRows, err = CollectIntentRows(ctx, batch, cArgs, intents)
 	}
 	return result.FromIntents(intents, args), err
