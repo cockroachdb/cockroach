@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,17 +31,13 @@ type joinPredicate struct {
 	// operands.
 	numLeftCols, numRightCols int
 
-	// The comparison function to use for each column. We need different
-	// functions because each USING column (or columns in equality ON
-	// expressions)  may have a different type (and they may be
-	// heterogeneous between left and right).
-	cmpFunctions []func(*tree.EvalContext, tree.Datum, tree.Datum) (tree.Datum, error)
-
-	// left/rightEqualityIndices give the position of USING columns
+	// left/rightEqualityIndices give the position of equality columns
 	// on the left and right input row arrays, respectively.
 	// Left/right columns that have an equality constraint in the ON
 	// condition also have their indices appended when tryAddEqualityFilter
 	// is invoked (see planner.addJoinFilter).
+	// Only columns with the same left and right value types can be equality
+	// columns.
 	leftEqualityIndices  []int
 	rightEqualityIndices []int
 
@@ -59,7 +54,9 @@ type joinPredicate struct {
 	iVarHelper tree.IndexedVarHelper
 	info       *sqlbase.DataSourceInfo
 	curRow     tree.Datums
-	onCond     tree.TypedExpr
+	// The ON condition that needs to be evaluated (in addition to the
+	// equality columns).
+	onCond tree.TypedExpr
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -67,13 +64,6 @@ type joinPredicate struct {
 	// will link to it by reference after checkRenderStar / analyzeExpr.
 	// Enforce this using NoCopy.
 	noCopy util.NoCopy
-}
-
-// makeCrossPredicate constructs a joinPredicate object for joins with a ON clause.
-func makeCrossPredicate(
-	typ joinType, left, right *sqlbase.DataSourceInfo,
-) (*joinPredicate, *sqlbase.DataSourceInfo, error) {
-	return makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames */)
 }
 
 // tryAddEqualityFilter attempts to turn the given filter expression into
@@ -123,22 +113,10 @@ func (p *joinPredicate) tryAddEqualityFilter(
 		}
 	}
 
-	// First resolve the comparison function. We can't use the
-	// ComparisonExpr's memoized comparison directly, because we may
-	// have swapped the operands above.
-	fn, found := tree.FindEqualComparisonFunction(lhs.ResolvedType(), rhs.ResolvedType())
-	if !found {
-		// This is ... unexpected. This means we have a valid ON
-		// expression of the form "a = b" but the expression "b = a" is
-		// invalid. We could simply avoid the optimization but this is
-		// really a bug in the built-in semantics so we want to complain
-		// loudly.
-		panic(fmt.Errorf(
-			"predicate %s is valid, but '%s = %s' cannot be type checked",
-			c, lhs.ResolvedType(), rhs.ResolvedType(),
-		))
+	if !lhs.ResolvedType().Equivalent(rhs.ResolvedType()) {
+		// We can't have equality columns of different types (#22519).
+		return false
 	}
-	p.cmpFunctions = append(p.cmpFunctions, fn)
 
 	p.leftEqualityIndices = append(p.leftEqualityIndices, leftColIdx)
 	p.rightEqualityIndices = append(p.rightEqualityIndices, rightColIdx)
@@ -148,106 +126,15 @@ func (p *joinPredicate) tryAddEqualityFilter(
 	return true
 }
 
-// makeOnPredicate constructs a joinPredicate object for joins with a ON clause.
-func (p *planner) makeOnPredicate(
-	ctx context.Context, typ joinType, left, right *sqlbase.DataSourceInfo, expr tree.Expr,
-) (*joinPredicate, *sqlbase.DataSourceInfo, error) {
-	pred, info, err := makeEqualityPredicate(typ, left, right, nil /*leftColNames*/, nil /*rightColNames*/)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Determine the on condition expression.
-	onCond, err := p.analyzeExpr(
-		ctx,
-		expr,
-		sqlbase.MultiSourceInfo{info},
-		pred.iVarHelper,
-		types.Bool,
-		true, /* requireType */
-		"ON",
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	pred.onCond = onCond
-	return pred, info, nil
-}
-
-// makeUsingPredicate constructs a joinPredicate object for joins with
-// a USING clause.
-func makeUsingPredicate(
-	typ joinType, left, right *sqlbase.DataSourceInfo, usingCols tree.NameList,
-) (*joinPredicate, *sqlbase.DataSourceInfo, error) {
-	seenNames := make(map[string]struct{})
-
-	for _, syntaxColName := range usingCols {
-		colName := string(syntaxColName)
-		// Check for USING(x,x)
-		if _, ok := seenNames[colName]; ok {
-			return nil, nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
-		}
-		seenNames[colName] = struct{}{}
-	}
-
-	return makeEqualityPredicate(typ, left, right, usingCols, usingCols)
-}
-
-// makeEqualityPredicate constructs a joinPredicate object for joins. The join
-// condition includes equality between the columns specified by leftColNames and
-// rightColNames.
-func makeEqualityPredicate(
-	typ joinType, left, right *sqlbase.DataSourceInfo, leftColNames, rightColNames tree.NameList,
-) (resPred *joinPredicate, info *sqlbase.DataSourceInfo, err error) {
-	if len(leftColNames) != len(rightColNames) {
-		panic(fmt.Errorf("left columns' length %q doesn't match right columns' length %q in EqualityPredicate",
-			len(leftColNames), len(rightColNames)))
-	}
-
-	// Prepare the arrays populated below.
-	cmpOps := make([]func(*tree.EvalContext, tree.Datum, tree.Datum) (tree.Datum, error), len(leftColNames))
-	leftEqualityIndices := make([]int, len(leftColNames))
-	rightEqualityIndices := make([]int, len(rightColNames))
-
-	// Find out which columns are involved in EqualityPredicate.
-	for i := range leftColNames {
-		leftColName := string(leftColNames[i])
-		rightColName := string(rightColNames[i])
-
-		// Find the column name on the left.
-		leftIdx, leftType, err := pickUsingColumn(left.SourceColumns, leftColName, "left")
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Find the column name on the right.
-		rightIdx, rightType, err := pickUsingColumn(right.SourceColumns, rightColName, "right")
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// Remember the indices.
-		leftEqualityIndices[i] = leftIdx
-		rightEqualityIndices[i] = rightIdx
-
-		// Memoize the comparison function.
-		fn, found := tree.FindEqualComparisonFunction(leftType, rightType)
-		if !found {
-			return nil, nil, fmt.Errorf("JOIN/USING types %s for left column %s and %s for right column %s cannot be matched",
-				leftType, leftColName, rightType, rightColName)
-		}
-		cmpOps[i] = fn
-	}
-
-	// Now, prepare/complete the metadata for the result columns.
+// makePredicate constructs a joinPredicate object for joins. The join condition
+// includes equality between usingColumns.
+func makePredicate(
+	typ joinType, left, right *sqlbase.DataSourceInfo, usingColumns []usingColumn,
+) (*joinPredicate, error) {
+	// Prepare the metadata for the result columns.
 	// The structure of the join data source results is like this:
-	// - first, all the equality/USING columns;
-	// - then all the left columns,
+	// - all the left columns,
 	// - then all the right columns,
-	// The duplicate columns appended after the equality/USING columns
-	// are hidden so that they are invisible to star expansion, but
-	// not omitted so that they can still be selected separately.
-
 	columns := make(sqlbase.ResultColumns, 0, len(left.SourceColumns)+len(right.SourceColumns))
 	columns = append(columns, left.SourceColumns...)
 	columns = append(columns, right.SourceColumns...)
@@ -279,27 +166,60 @@ func makeEqualityPredicate(
 		})
 	}
 
-	info = &sqlbase.DataSourceInfo{
-		SourceColumns: columns,
-		SourceAliases: aliases,
-	}
-
 	pred := &joinPredicate{
-		joinType:             typ,
-		numLeftCols:          len(left.SourceColumns),
-		numRightCols:         len(right.SourceColumns),
-		leftColNames:         leftColNames,
-		rightColNames:        rightColNames,
-		cmpFunctions:         cmpOps,
-		leftEqualityIndices:  leftEqualityIndices,
-		rightEqualityIndices: rightEqualityIndices,
-		info:                 info,
+		joinType:     typ,
+		numLeftCols:  len(left.SourceColumns),
+		numRightCols: len(right.SourceColumns),
+		info: &sqlbase.DataSourceInfo{
+			SourceColumns: columns,
+			SourceAliases: aliases,
+		},
 	}
 	// We must initialize the indexed var helper in all cases, even when
 	// there is no on condition, so that getNeededColumns() does not get
 	// confused.
 	pred.iVarHelper = tree.MakeIndexedVarHelper(pred, len(columns))
-	return pred, info, nil
+
+	// Prepare the arrays populated below.
+	pred.leftEqualityIndices = make([]int, 0, len(usingColumns))
+	pred.rightEqualityIndices = make([]int, 0, len(usingColumns))
+	colNames := make(tree.NameList, 0, len(usingColumns))
+
+	// Find out which columns are involved in EqualityPredicate.
+	for i := range usingColumns {
+		uc := &usingColumns[i]
+
+		if !uc.leftType.Equivalent(uc.rightType) {
+			// Issue #22519: we can't have two equality columns of mismatched types
+			// because the hash-joiner assumes the encodings are the same. Move the
+			// equality to the ON condition.
+
+			// First, check if the comparison would even be valid.
+			_, found := tree.FindEqualComparisonFunction(uc.leftType, uc.rightType)
+			if !found {
+				return nil, fmt.Errorf(
+					"JOIN/USING types %s for left and %s for right cannot be matched for column %s",
+					uc.leftType, uc.rightType, uc.name,
+				)
+			}
+			expr := tree.NewTypedComparisonExpr(
+				tree.EQ,
+				pred.iVarHelper.IndexedVar(uc.leftIdx),
+				pred.iVarHelper.IndexedVar(uc.rightIdx+pred.numLeftCols),
+			)
+			pred.onCond = mergeConj(pred.onCond, expr)
+			continue
+		}
+
+		// Remember the indices.
+		pred.leftEqualityIndices = append(pred.leftEqualityIndices, uc.leftIdx)
+		pred.rightEqualityIndices = append(pred.rightEqualityIndices, uc.rightIdx)
+		colNames = append(colNames, uc.name)
+	}
+	pred.leftColNames = colNames
+	pred.rightColNames = colNames
+
+	return pred, nil
 }
 
 // IndexedVarEval implements the tree.IndexedVarContainer interface.
@@ -385,6 +305,54 @@ func (p *joinPredicate) encode(b []byte, row tree.Datums, cols []int) ([]byte, b
 		}
 	}
 	return b, containsNull, nil
+}
+
+// usingColumns captures the information about equality columns
+// from USING and NATURAL JOIN statements.
+type usingColumn struct {
+	name tree.Name
+	// Index and type of the column in the left source.
+	leftIdx  int
+	leftType types.T
+	// Index and type of the column in the right source.
+	rightIdx  int
+	rightType types.T
+}
+
+func makeUsingColumns(
+	leftCols, rightCols sqlbase.ResultColumns, usingColNames tree.NameList,
+) ([]usingColumn, error) {
+	if len(usingColNames) == 0 {
+		return nil, nil
+	}
+
+	// Check for duplicate columns, e.g. USING(x,x).
+	seenNames := make(map[string]struct{})
+	for _, syntaxColName := range usingColNames {
+		colName := string(syntaxColName)
+		if _, ok := seenNames[colName]; ok {
+			return nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
+		}
+		seenNames[colName] = struct{}{}
+	}
+
+	res := make([]usingColumn, len(usingColNames))
+	for i, name := range usingColNames {
+		res[i].name = name
+		var err error
+		// Find the column name on the left.
+		res[i].leftIdx, res[i].leftType, err = pickUsingColumn(leftCols, string(name), "left")
+		if err != nil {
+			return nil, err
+		}
+
+		// Find the column name on the right.
+		res[i].rightIdx, res[i].rightType, err = pickUsingColumn(rightCols, string(name), "right")
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 // pickUsingColumn searches for a column whose name matches colName.
