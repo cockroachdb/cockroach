@@ -18,8 +18,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -40,7 +40,7 @@ func TestTyping(t *testing.T) {
 		}
 
 		o := NewOptimizer(createTypingCatalog(), OptimizeNone)
-		b := build.NewBuilder(context.Background(), o.Factory(), stmt)
+		b := optbuilder.NewBuilder(context.Background(), o.Factory(), stmt)
 		root, props, err := b.Build()
 		if err != nil {
 			d.Fatalf(t, "%v", err)
