@@ -8,6 +8,7 @@
 
 import _ from "lodash";
 import React from "react";
+import { Link } from "react-router";
 
 import { CircleLayout } from "./circleLayout";
 import { renderAsMap } from "./layout";
@@ -17,6 +18,10 @@ import { NodeHistory } from "./nodeHistory";
 import { LivenessStatus } from "src/redux/nodes";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
+import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
+import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
+
+const BACK_BUTTON_OFFSET = 26;
 
 interface NodeCanvasProps {
   nodeHistories: { [id: string]: NodeHistory };
@@ -86,19 +91,44 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     />;
   }
 
+  renderBackButton() {
+    const { tiers } = this.props;
+
+    if (!this.state || _.isEmpty(tiers)) {
+      return null;
+    }
+
+    const parentLocality = tiers.splice(0, tiers.length - 1);
+
+    return (
+      <div style={{ position: "absolute", left: BACK_BUTTON_OFFSET, bottom: BACK_BUTTON_OFFSET }}>
+        <Link to={ CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(parentLocality) }>
+          Back to { getLocalityLabel(parentLocality) }
+        </Link>
+      </div>
+    );
+  }
+
   render() {
     // We must render the SVG even before initializing the state, because we
     // need to read its dimensions from the DOM in order to initialize the
     // state.
     return (
-      <div style={{ width: "100%", height: "100%" }}>
-        <svg
-          style={{ width: "100%", height: "100%" }}
-          className="cluster-viz"
-          ref={svg => this.graphEl = svg}
-        >
-          { this.renderContent() }
-        </svg>
+      <div style={{ flexGrow: 1, position: "relative" }}>
+        <div style={{ width: "100%", height: "100%", position: "absolute"  }}>
+          <svg
+            style={{
+              width: "100%",
+              height: "100%",
+              marginBottom: -3, // WHYYYYYYYYY?!?!?!?!?
+            }}
+            className="cluster-viz"
+            ref={svg => this.graphEl = svg}
+          >
+            { this.renderContent() }
+          </svg>
+        </div>
+        { this.renderBackButton() }
       </div>
     );
   }
