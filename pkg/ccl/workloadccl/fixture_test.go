@@ -115,6 +115,11 @@ func TestFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
+	_, err = MakeFixture(ctx, sqlDB.DB, gcs, store, gen)
+	if !testutils.IsError(err, `already exists`) {
+		t.Fatalf(`expected 'already exists' error got: %+v`, err)
+	}
+
 	fixtures, err = ListFixtures(ctx, gcs, store)
 	if err != nil {
 		t.Fatalf(`%+v`, err)

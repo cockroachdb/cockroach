@@ -304,6 +304,10 @@ func MakeFixture(
 	const writeCSVChunkSize = 64 * 1 << 20 // 64 MB
 
 	fixtureFolder := generatorToGCSFolder(store, gen)
+	if _, err := GetFixture(ctx, gcs, store, gen); err == nil {
+		return Fixture{}, errors.Errorf(
+			`fixture %s already exists`, store.objectPathToURI(fixtureFolder))
+	}
 
 	writeCSVConcurrency := runtime.NumCPU()
 	c := &groupCSVWriter{
