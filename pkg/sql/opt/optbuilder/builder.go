@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package build
+package optbuilder
 
 import (
 	"context"
@@ -123,9 +123,9 @@ type Builder struct {
 	colMap []columnProps
 }
 
-// NewBuilder creates a new Builder structure initialized with the given
+// New creates a new Builder structure initialized with the given
 // Context, Factory, and parsed SQL statement.
-func NewBuilder(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
+func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
 	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
 
 	ivarHelper := tree.MakeIndexedVarHelper(b, 0)
