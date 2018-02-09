@@ -13,8 +13,11 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -98,12 +101,27 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 		if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
+		formatted := tracing.FormatRecordedSpans(collect())
+		if err := testutils.MatchInOrder(formatted,
 			"evaluating AddSSTable",
 			"sideloadable proposal detected",
 			"ingested SSTable at index",
 		); err != nil {
 			t.Fatal(err)
+		}
+
+		// Look for the ingested path and verify it still exists.
+		re := regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
+		match := re.FindStringSubmatch(formatted)
+		if len(match) != 2 {
+			t.Fatalf("failed to extract ingested path from message %q,\n got: %v", formatted, match)
+		}
+		// The on-disk paths have `.ingested` appended unlike in-memory.
+		suffix := ".ingested"
+		if strings.HasSuffix(match[1], suffix) {
+			if _, err := os.Stat(strings.TrimSuffix(match[1], suffix)); err != nil {
+				t.Fatalf("%q file missing after ingest: %v", match[1], err)
+			}
 		}
 
 		if r, err := db.Get(ctx, "bb"); err != nil {

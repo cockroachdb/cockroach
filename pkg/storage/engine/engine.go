@@ -250,7 +250,10 @@ type Engine interface {
 	// original engine has been stopped.
 	NewSnapshot() Reader
 	// IngestExternalFile links a file into the RocksDB log-structured
-	// merge-tree.
+	// merge-tree. Removes the passed path on success if `move` is true and my
+	// modify the file (including the underlying file in the case of hard-links)
+	// if allowFileModification is passed as well. See additional comments in
+	// db.cc's IngestExternalFile explaining modification behavior.
 	IngestExternalFile(ctx context.Context, path string, move, allowFileModification bool) error
 	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
