@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -43,7 +43,7 @@ func TestLogicalProps(t *testing.T) {
 		}
 
 		f := newFactory(createLogPropsCatalog(), 0)
-		b := build.NewBuilder(context.Background(), f, stmt)
+		b := optbuilder.NewBuilder(context.Background(), f, stmt)
 		root, _, err := b.Build()
 		if err != nil {
 			d.Fatalf(t, "%v", err)

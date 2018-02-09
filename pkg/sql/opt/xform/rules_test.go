@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/build"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -64,7 +64,7 @@ func TestRules(t *testing.T) {
 
 				case "opt":
 					o := NewOptimizer(catalog, OptimizeAll)
-					b := build.NewBuilder(context.Background(), o.Factory(), stmt)
+					b := optbuilder.NewBuilder(context.Background(), o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
