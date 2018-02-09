@@ -290,25 +290,33 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	store map[*Session]struct{}
+	store map[registrySession]struct{}
 }
 
 // MakeSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func MakeSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{store: make(map[*Session]struct{})}
+	return &SessionRegistry{store: make(map[registrySession]struct{})}
 }
 
-func (r *SessionRegistry) register(s *Session) {
+func (r *SessionRegistry) register(s registrySession) {
 	r.Lock()
 	r.store[s] = struct{}{}
 	r.Unlock()
 }
 
-func (r *SessionRegistry) deregister(s *Session) {
+func (r *SessionRegistry) deregister(s registrySession) {
 	r.Lock()
 	delete(r.store, s)
 	r.Unlock()
+}
+
+type registrySession interface {
+	user() string
+	cancelQuery(queryID uint128.Uint128) bool
+	// serialize serializes a Session into a serverpb.Session
+	// that can be served over RPC.
+	serialize() serverpb.Session
 }
 
 // CancelQuery looks up the associated query in the session registry and cancels it.
@@ -322,19 +330,14 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	defer r.Unlock()
 
 	for session := range r.store {
-		if !(username == security.RootUser || username == session.data.User) {
+		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
 		}
 
-		session.mu.Lock()
-		if queryMeta, exists := session.mu.ActiveQueries[queryID]; exists {
-			queryMeta.cancel()
-
-			session.mu.Unlock()
+		if session.cancelQuery(queryID) {
 			return true, nil
 		}
-		session.mu.Unlock()
 	}
 
 	return false, fmt.Errorf("query ID %s not found", queryID)
@@ -785,8 +788,7 @@ func (s *Session) synchronizeParallelStmts(ctx context.Context) error {
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
 
-// serialize serializes a Session into a serverpb.Session
-// that can be served over RPC.
+// serialize is part of the registrySession interface.
 func (s *Session) serialize() serverpb.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1430,6 +1432,22 @@ func (s *Session) maybeRecover(action, stmts string) {
 		// Propagate the (sanitized) panic further.
 		panic(safeErr)
 	}
+}
+
+// cancelQuery is part of the registrySession interface.
+func (s *Session) cancelQuery(queryID uint128.Uint128) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if queryMeta, exists := s.mu.ActiveQueries[queryID]; exists {
+		queryMeta.cancel()
+		return true
+	}
+	return false
+}
+
+// user is part of the registrySession interface.
+func (s *Session) user() string {
+	return s.data.User
 }
 
 // SessionTracing holds the state used by SET TRACING {ON,OFF,LOCAL} statements in
