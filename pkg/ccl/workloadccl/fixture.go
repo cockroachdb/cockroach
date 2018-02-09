@@ -86,7 +86,11 @@ func serializeOptions(gen workload.Generator) string {
 	}
 	// NB: VisitAll visits in a deterministic (alphabetical) order.
 	var buf bytes.Buffer
-	f.Flags().VisitAll(func(f *pflag.Flag) {
+	flags := f.Flags()
+	flags.VisitAll(func(f *pflag.Flag) {
+		if flags.Meta != nil && flags.Meta[f.Name].RuntimeOnly {
+			return
+		}
 		if buf.Len() > 0 {
 			buf.WriteString(`,`)
 		}

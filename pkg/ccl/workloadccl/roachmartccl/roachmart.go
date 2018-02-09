@@ -67,7 +67,7 @@ const (
 )
 
 type roachmart struct {
-	flags *pflag.FlagSet
+	flags workload.Flags
 
 	seed          int64
 	partition     bool
@@ -84,7 +84,12 @@ var roachmartMeta = workload.Meta{
 	Name:        `roachmart`,
 	Description: `Roachmart models a geo-distributed online storefront with users and orders`,
 	New: func() workload.Generator {
-		g := &roachmart{flags: pflag.NewFlagSet(`roachmart`, pflag.ContinueOnError)}
+		g := &roachmart{}
+		g.flags.FlagSet = pflag.NewFlagSet(`roachmart`, pflag.ContinueOnError)
+		g.flags.Meta = map[string]workload.FlagMeta{
+			`local-zone`:    {RuntimeOnly: true},
+			`local-percent`: {RuntimeOnly: true},
+		}
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.partition, `partition`, true, `Whether to apply zone configs to the partitions of the users table.`)
 		g.flags.StringVar(&g.localZone, `local-zone`, ``, `The zone in which this load generator is running.`)
@@ -98,12 +103,10 @@ var roachmartMeta = workload.Meta{
 // Meta implements the Generator interface.
 func (m *roachmart) Meta() workload.Meta { return roachmartMeta }
 
-// Flags implements the Generator interface.
-func (m *roachmart) Flags() *pflag.FlagSet {
-	return m.flags
-}
+// Flags implements the Flagser interface.
+func (m *roachmart) Flags() workload.Flags { return m.flags }
 
-// Hooks implements the Generator interface.
+// Hooks implements the Hookser interface.
 func (m *roachmart) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
@@ -177,6 +180,7 @@ func (m *roachmart) Tables() []workload.Table {
 	return []workload.Table{users, orders}
 }
 
+// Ops implements the Opser interface.
 func (m *roachmart) Ops() []workload.Operation {
 	op := workload.Operation{
 		Name: `fetch one user's orders`,
