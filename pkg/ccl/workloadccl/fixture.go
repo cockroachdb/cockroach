@@ -171,9 +171,12 @@ func (c *groupCSVWriter) groupWriteCSVs(
 			w := c.gcs.Bucket(c.store.GCSBucket).Object(path).NewWriter(ctx)
 			var err error
 			rowIdx, err = workload.WriteCSVRows(ctx, w, table, rowStart, rowEnd, c.chunkSizeBytes)
-			_ = w.Close()
+			closeErr := w.Close()
 			if err != nil {
 				return err
+			}
+			if closeErr != nil {
+				return closeErr
 			}
 
 			pathsCh <- path
