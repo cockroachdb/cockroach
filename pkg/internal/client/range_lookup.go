@@ -290,7 +290,7 @@ func lookupRangeFwdScan(
 		// same descriptor. In other words, both the current live descriptor and
 		// a potentially valid descriptor from observed intents could be
 		// returned.
-		ReturnIntents: rc == roachpb.INCONSISTENT,
+		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 
 	br, pErr := sender.Send(ctx, ba)
@@ -356,8 +356,8 @@ func lookupRangeRevScan(
 	ba.ReadConsistency = rc
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
-		Span:          revBounds.AsRawSpanWithNoLocals(),
-		ReturnIntents: rc == roachpb.INCONSISTENT,
+		Span: revBounds.AsRawSpanWithNoLocals(),
+		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 
 	br, pErr := sender.Send(ctx, ba)

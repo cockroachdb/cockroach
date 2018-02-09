@@ -68,6 +68,40 @@ func (r RangeIDSlice) Len() int           { return len(r) }
 func (r RangeIDSlice) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
 func (r RangeIDSlice) Less(i, j int) bool { return r[i] < r[j] }
 
+// RequiresReadLease returns whether the ReadConsistencyType requires
+// that a read-only request be performed on an active valid leaseholder.
+func (rc ReadConsistencyType) RequiresReadLease() bool {
+	switch rc {
+	case CONSISTENT:
+		return true
+	case READ_UNCOMMITTED:
+		return true
+	case INCONSISTENT:
+		return false
+	}
+	panic("unreachable")
+}
+
+// SupportsBatch determines whether the methods in the provided batch
+// are supported by the ReadConsistencyType, returning an error if not.
+func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
+	switch rc {
+	case CONSISTENT:
+		return nil
+	case READ_UNCOMMITTED, INCONSISTENT:
+		for _, ru := range ba.Requests {
+			m := ru.GetInner().Method()
+			switch m {
+			case Get, Scan, ReverseScan:
+			default:
+				return errors.Errorf("method %s not allowed with %s batch", m, rc)
+			}
+		}
+		return nil
+	}
+	panic("unreachable")
+}
+
 const (
 	isAdmin    = 1 << iota // admin cmds don't go through raft, but run on lease holder
 	isRead                 // read-only cmds don't go through raft, but may run on lease holder

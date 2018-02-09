@@ -952,81 +952,88 @@ func TestMultiRangeScanReverseScanDeleteResolve(t *testing.T) {
 func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	s, _ := startNoSplitServer(t)
-	ctx := context.TODO()
-	defer s.Stopper().Stop(ctx)
-	db := s.DB()
-	if err := setupMultipleRanges(ctx, db, "b"); err != nil {
-		t.Fatal(err)
-	}
-
-	// Write keys "a" and "b", the latter of which is the first key in the
-	// second range.
-	keys := [2]string{"a", "b"}
-	ts := [2]hlc.Timestamp{}
-	for i, key := range keys {
-		b := &client.Batch{}
-		b.Put(key, "value")
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-		ts[i] = s.Clock().Now()
-		log.Infof(ctx, "%d: %s %d", i, key, ts[i])
-		if i == 0 {
-			testutils.SucceedsSoon(t, func() error {
-				// Enforce that when we write the second key, it's written
-				// with a strictly higher timestamp. We're dropping logical
-				// ticks and the clock may just have been pushed into the
-				// future, so that's necessary. See #3122.
-				if ts[0].WallTime >= s.Clock().Now().WallTime {
-					return errors.New("time stands still")
-				}
-				return nil
-			})
-		}
-	}
-
-	// Do an inconsistent Scan/ReverseScan from a new DistSender and verify
-	// it does the read at its local clock and doesn't receive an
-	// OpRequiresTxnError. We set the local clock to the timestamp of
-	// just above the first key to verify it's used to read only key "a".
-	for i, request := range []roachpb.Request{
-		roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c")),
-		roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
+	for _, rc := range []roachpb.ReadConsistencyType{
+		roachpb.READ_UNCOMMITTED,
+		roachpb.INCONSISTENT,
 	} {
-		manual := hlc.NewManualClock(ts[0].WallTime + 1)
-		clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
-		ds := kv.NewDistSender(
-			kv.DistSenderConfig{
-				AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
-				Clock:      clock, RPCContext: s.RPCContext(),
-			},
-			s.(*server.TestServer).Gossip(),
-		)
+		t.Run(rc.String(), func(t *testing.T) {
+			s, _ := startNoSplitServer(t)
+			ctx := context.TODO()
+			defer s.Stopper().Stop(ctx)
+			db := s.DB()
+			if err := setupMultipleRanges(ctx, db, "b"); err != nil {
+				t.Fatal(err)
+			}
 
-		reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
-			ReadConsistency: roachpb.INCONSISTENT,
-		}, request)
-		if err != nil {
-			t.Fatal(err)
-		}
+			// Write keys "a" and "b", the latter of which is the first key in the
+			// second range.
+			keys := [2]string{"a", "b"}
+			ts := [2]hlc.Timestamp{}
+			for i, key := range keys {
+				b := &client.Batch{}
+				b.Put(key, "value")
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+				ts[i] = s.Clock().Now()
+				log.Infof(ctx, "%d: %s %d", i, key, ts[i])
+				if i == 0 {
+					testutils.SucceedsSoon(t, func() error {
+						// Enforce that when we write the second key, it's written
+						// with a strictly higher timestamp. We're dropping logical
+						// ticks and the clock may just have been pushed into the
+						// future, so that's necessary. See #3122.
+						if ts[0].WallTime >= s.Clock().Now().WallTime {
+							return errors.New("time stands still")
+						}
+						return nil
+					})
+				}
+			}
 
-		var rows []roachpb.KeyValue
-		switch r := reply.(type) {
-		case *roachpb.ScanResponse:
-			rows = r.Rows
-		case *roachpb.ReverseScanResponse:
-			rows = r.Rows
-		default:
-			t.Fatalf("unexpected response %T: %v", reply, reply)
-		}
+			// Do an inconsistent Scan/ReverseScan from a new DistSender and verify
+			// it does the read at its local clock and doesn't receive an
+			// OpRequiresTxnError. We set the local clock to the timestamp of
+			// just above the first key to verify it's used to read only key "a".
+			for i, request := range []roachpb.Request{
+				roachpb.NewScan(roachpb.Key("a"), roachpb.Key("c")),
+				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
+			} {
+				manual := hlc.NewManualClock(ts[0].WallTime + 1)
+				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+				ds := kv.NewDistSender(
+					kv.DistSenderConfig{
+						AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},
+						Clock:      clock, RPCContext: s.RPCContext(),
+					},
+					s.(*server.TestServer).Gossip(),
+				)
 
-		if l := len(rows); l != 1 {
-			t.Fatalf("%d: expected 1 row; got %d\n%s", i, l, rows)
-		}
-		if key := string(rows[0].Key); keys[0] != key {
-			t.Errorf("expected key %q; got %q", keys[0], key)
-		}
+				reply, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
+					ReadConsistency: rc,
+				}, request)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				var rows []roachpb.KeyValue
+				switch r := reply.(type) {
+				case *roachpb.ScanResponse:
+					rows = r.Rows
+				case *roachpb.ReverseScanResponse:
+					rows = r.Rows
+				default:
+					t.Fatalf("unexpected response %T: %v", reply, reply)
+				}
+
+				if l := len(rows); l != 1 {
+					t.Fatalf("%d: expected 1 row; got %d\n%s", i, l, rows)
+				}
+				if key := string(rows[0].Key); keys[0] != key {
+					t.Errorf("expected key %q; got %q", keys[0], key)
+				}
+			}
+		})
 	}
 }
 

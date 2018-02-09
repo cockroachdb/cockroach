@@ -87,7 +87,7 @@ func DeprecatedRangeLookup(
 	if !key.Equal(args.Key) {
 		return result.Result{}, errors.Errorf("illegal lookup of range-local key %q", args.Key)
 	}
-	ts, txn, consistent, rangeCount := h.Timestamp, h.Txn, h.ReadConsistency != roachpb.INCONSISTENT, int64(args.MaxRanges)
+	ts, txn, consistent, rangeCount := h.Timestamp, h.Txn, h.ReadConsistency == roachpb.CONSISTENT, int64(args.MaxRanges)
 	if rangeCount < 1 {
 		return result.Result{}, errors.Errorf("range lookup specified invalid maximum range count %d: must be > 0", rangeCount)
 	}
