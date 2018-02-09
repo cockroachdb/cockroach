@@ -504,7 +504,6 @@ func (a Allocator) RebalanceTarget(
 		ctx,
 		sl,
 		analyzedConstraints,
-		rangeInfo.Desc.Replicas,
 		rangeInfo,
 		a.storePool.getLocalities(rangeInfo.Desc.Replicas),
 		a.storePool.getNodeLocalityString,

@@ -589,7 +589,7 @@ func TestAllocatorRebalance(t *testing.T) {
 			ctx,
 			nil, /* constraints */
 			nil,
-			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: 3}}, firstRange),
+			testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}}, firstRange),
 			storeFilterThrottled,
 			false,
 		)
@@ -774,7 +774,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	}
 
 	// Make sure rebalancing does happen if we drop just a little further down.
-	stores[1].Capacity.RangeCount = 45
+	stores[1].Capacity.RangeCount = 44
 	sg.GossipStores(stores, t)
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
@@ -786,8 +786,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 			false,
 		)
 		if result == nil || result.StoreID != stores[1].StoreID {
-			t.Fatalf("expected rebalance to s%d, but got %v; details: %s",
-				stores[1].StoreID, result, details)
+			t.Fatalf("%d: expected rebalance to s%d, but got %v; details: %s",
+				i, stores[1].StoreID, result, details)
 		}
 	}
 }
@@ -834,6 +834,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	replicas := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
 		res := make([]roachpb.ReplicaDescriptor, len(storeIDs))
 		for i, storeID := range storeIDs {
+			res[i].NodeID = roachpb.NodeID(storeID)
 			res[i].StoreID = storeID
 		}
 		return res
@@ -861,7 +862,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 		{replicas(1, 2, 3, 7, 8), 0},
 	}
 
-	for _, c := range testCases {
+	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			result, _ := a.RebalanceTarget(
 				ctx, nil, nil, testRangeInfo(c.existing, firstRange), storeFilterThrottled, false)
@@ -1505,7 +1506,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 		},
 	}
 
-	for _, c := range testCases {
+	for i, c := range testCases {
 		existingRepls := make([]roachpb.ReplicaDescriptor, len(c.existing))
 		for i, storeID := range c.existing {
 			existingRepls[i] = roachpb.ReplicaDescriptor{
@@ -1522,7 +1523,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			false,
 		)
 		if targetStore == nil {
-			t.Fatalf("RebalanceTarget(%v) returned no target store; details: %s", c.existing, details)
+			t.Fatalf("%d: RebalanceTarget(%v) returned no target store; details: %s", i, c.existing, details)
 		}
 		var found bool
 		for _, storeID := range c.expected {
@@ -1532,7 +1533,8 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("expected RebalanceTarget(%v) in %v, but got %d; details: %s", c.existing, c.expected, targetStore.StoreID, details)
+			t.Errorf("%d: expected RebalanceTarget(%v) in %v, but got %d; details: %s",
+				i, c.existing, c.expected, targetStore.StoreID, details)
 		}
 	}
 }
