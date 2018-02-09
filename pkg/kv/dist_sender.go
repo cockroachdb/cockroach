@@ -288,14 +288,14 @@ func (ds *DistSender) RangeLookup(
 }
 
 // legacyRangeLookup implements the legacyRangeDescriptorDB interface. The
-// method dispatches a RangeLookupRequest with the range metadata key for the
-// given key to the replicas of the given range. Note that we allow inconsistent
-// reads when doing range lookups for efficiency. Getting stale data is not a
-// correctness problem but instead may infrequently result in additional latency
-// as additional range lookups may be required. Note also that rangeLookup
-// bypasses the DistSender's Send() method, so there is no error inspection and
-// retry logic here; this is not an issue since the lookup performs a single
-// inconsistent read only.
+// method dispatches a DeprecatedRangeLookupRequest with the range metadata key
+// for the given key to the replicas of the given range. Note that we allow
+// inconsistent reads when doing range lookups for efficiency. Getting stale
+// data is not a correctness problem but instead may infrequently result in
+// additional latency as additional range lookups may be required. Note also
+// that rangeLookup bypasses the DistSender's Send() method, so there is no
+// error inspection and retry logic here; this is not an issue since the lookup
+// performs a single inconsistent read only.
 func (ds *DistSender) legacyRangeLookup(
 	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
