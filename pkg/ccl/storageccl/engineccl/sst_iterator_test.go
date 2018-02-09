@@ -100,7 +100,7 @@ func TestSSTIterator(t *testing.T) {
 		runTestSSTIterator(t, iter, allKVs)
 	})
 	t.Run("Mem", func(t *testing.T) {
-		iter, err := NewMemSSTIterator(data, false)
+		iter, err := NewMemSSTIterator(data)
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
