@@ -78,19 +78,24 @@ type Factory interface {
 	// expression, as a *ColList.
 	ConstructGroupings(elems ListID, cols PrivateID) GroupID
 
-	// ConstructFilters constructs an expression for the Filters operator.
-	ConstructFilters(conditions ListID) GroupID
-
 	// ConstructExists constructs an expression for the Exists operator.
 	ConstructExists(input GroupID) GroupID
 
 	// ConstructAnd constructs an expression for the And operator.
-	ConstructAnd(left GroupID, right GroupID) GroupID
+	// And is the boolean conjunction operator that evalutes to true if all of its
+	// conditions evaluate to true. If the conditions list is empty, it evalutes to
+	// true.
+	ConstructAnd(conditions ListID) GroupID
 
 	// ConstructOr constructs an expression for the Or operator.
-	ConstructOr(left GroupID, right GroupID) GroupID
+	// Or is the boolean disjunction operator that evalutes to true if any of its
+	// conditions evaluate to true. If the conditions list is empty, it evaluates to
+	// false.
+	ConstructOr(conditions ListID) GroupID
 
 	// ConstructNot constructs an expression for the Not operator.
+	// Not is the boolean negation operator that evaluates to true if its input
+	// evalutes to false.
 	ConstructNot(input GroupID) GroupID
 
 	// ConstructEq constructs an expression for the Eq operator.
@@ -155,9 +160,6 @@ type Factory interface {
 
 	// ConstructContains constructs an expression for the Contains operator.
 	ConstructContains(left GroupID, right GroupID) GroupID
-
-	// ConstructContainedBy constructs an expression for the ContainedBy operator.
-	ConstructContainedBy(left GroupID, right GroupID) GroupID
 
 	// ConstructBitand constructs an expression for the Bitand operator.
 	ConstructBitand(left GroupID, right GroupID) GroupID

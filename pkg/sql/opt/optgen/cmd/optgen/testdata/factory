@@ -659,16 +659,16 @@ func (_f *factory) ConstructEq(
 	{
 		_eq := _f.mem.lookupNormExpr(left).asEq()
 		if _eq != nil {
-			_eq2 := _f.mem.lookupNormExpr(_eq.Left()).asEq()
+			_eq2 := _f.mem.lookupNormExpr(_eq.left()).asEq()
 			if _eq2 != nil {
-				_eq3 := _f.mem.lookupNormExpr(_eq.Right()).asEq()
+				_eq3 := _f.mem.lookupNormExpr(_eq.right()).asEq()
 				if _eq3 == nil {
 					_match := false
 					_eq4 := _f.mem.lookupNormExpr(right).asEq()
 					if _eq4 != nil {
-						_eq5 := _f.mem.lookupNormExpr(_eq4.Left()).asEq()
+						_eq5 := _f.mem.lookupNormExpr(_eq4.left()).asEq()
 						if _eq5 != nil {
-							_eq6 := _f.mem.lookupNormExpr(_eq4.Right()).asEq()
+							_eq6 := _f.mem.lookupNormExpr(_eq4.right()).asEq()
 							if _eq6 == nil {
 								_match = true
 							}

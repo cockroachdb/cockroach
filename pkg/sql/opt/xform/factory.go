@@ -15,11 +15,13 @@
 package xform
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
+//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/bool.opt rules/comp.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -42,14 +44,14 @@ type factory struct {
 	// construct the requested operator without applying any rewrites to it.
 	// This method is useful for debugging, in order to see intermediate
 	// optimization steps.
-	maxSteps int
+	maxSteps OptimizeSteps
 }
 
 var _ opt.Factory = &factory{}
 
 // NewFactory returns a new Factory structure with a new, blank memo
 // structure inside.
-func newFactory(catalog optbase.Catalog, maxSteps int) *factory {
+func newFactory(catalog optbase.Catalog, maxSteps OptimizeSteps) *factory {
 	return &factory{mem: newMemo(catalog), maxSteps: maxSteps}
 }
 
@@ -81,12 +83,152 @@ func (f *factory) allowOptimizations() bool {
 	return f.maxSteps > 0
 }
 
+// reportOptimization is called when an optimization has been performed on the
+// tree. It decrements the maxSteps counter. Once that reaches zero, no further
+// optimizations will be performed.
+func (f *factory) reportOptimization() {
+	f.maxSteps--
+}
+
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
-	if f.maxSteps <= 0 {
-		return group
+	return group
+}
+
+// ----------------------------------------------------------------------
+//
+// Boolean Rules
+//   Custom match and replace functions used with bool.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// flattenAnd constructs an And operator from the list of input conditions.
+// If any of the conditions is itself an And operator, then "flatten" it by
+// merging its conditions into the top-level list. Only one level of flattening
+// is necessary, since this pattern would have already matched any And operator
+// children.
+func (f *factory) flattenAnd(conditions opt.ListID) opt.GroupID {
+	list := make([]opt.GroupID, 0, conditions.Length+1)
+	for _, item := range f.mem.lookupList(conditions) {
+		and := f.mem.lookupNormExpr(item).asAnd()
+		if and != nil {
+			list = append(list, f.mem.lookupList(and.conditions())...)
+		} else {
+			list = append(list, item)
+		}
+	}
+	return f.ConstructAnd(f.mem.internList(list))
+}
+
+// flattenOr constructs an Or operator from the list of input conditions. If
+// any of the conditions is itself an Or operator, then "flatten" it by merging
+// its conditions into the top-level list. Only one level of flattening is
+// necessary, since this pattern would have already matched any Or operator
+// children.
+func (f *factory) flattenOr(conditions opt.ListID) opt.GroupID {
+	list := make([]opt.GroupID, 0, conditions.Length+1)
+	for _, item := range f.mem.lookupList(conditions) {
+		or := f.mem.lookupNormExpr(item).asOr()
+		if or != nil {
+			list = append(list, f.mem.lookupList(or.conditions())...)
+		} else {
+			list = append(list, item)
+		}
+	}
+	return f.ConstructOr(f.mem.internList(list))
+}
+
+// canInvertComparison returns true if the given comparison op can be negated
+// by the invertComparison function. The op must already have been verified
+// to be one of the comparison ops.
+func (f *factory) canInvertComparison(comparison opt.GroupID) bool {
+	// Group was already verified to be a comparison op by the pattern, so just
+	// exclude comparisons that can't be inverted.
+	switch f.mem.lookupNormExpr(comparison).op {
+	case opt.ContainsOp:
+		return false
+	}
+	return true
+}
+
+// invertComparison negates a comparison op like:
+//   a.x = 5
+// to:
+//   a.x <> 5
+func (f *factory) invertComparison(comparison opt.GroupID) opt.GroupID {
+	ev := makeExprView(f.mem, comparison, opt.MinPhysPropsID)
+	left := ev.ChildGroup(0)
+	right := ev.ChildGroup(1)
+
+	switch ev.Operator() {
+	case opt.EqOp:
+		return f.ConstructNe(left, right)
+	case opt.NeOp:
+		return f.ConstructEq(left, right)
+	case opt.GtOp:
+		return f.ConstructLe(left, right)
+	case opt.GeOp:
+		return f.ConstructLt(left, right)
+	case opt.LtOp:
+		return f.ConstructGe(left, right)
+	case opt.LeOp:
+		return f.ConstructGt(left, right)
+	case opt.InOp:
+		return f.ConstructNotIn(left, right)
+	case opt.NotInOp:
+		return f.ConstructIn(left, right)
+	case opt.LikeOp:
+		return f.ConstructNotLike(left, right)
+	case opt.NotLikeOp:
+		return f.ConstructLike(left, right)
+	case opt.ILikeOp:
+		return f.ConstructNotILike(left, right)
+	case opt.NotILikeOp:
+		return f.ConstructILike(left, right)
+	case opt.SimilarToOp:
+		return f.ConstructNotSimilarTo(left, right)
+	case opt.NotSimilarToOp:
+		return f.ConstructSimilarTo(left, right)
+	case opt.RegMatchOp:
+		return f.ConstructNotRegMatch(left, right)
+	case opt.NotRegMatchOp:
+		return f.ConstructRegMatch(left, right)
+	case opt.RegIMatchOp:
+		return f.ConstructNotRegIMatch(left, right)
+	case opt.NotRegIMatchOp:
+		return f.ConstructRegIMatch(left, right)
+	case opt.IsOp:
+		return f.ConstructIsNot(left, right)
+	case opt.IsNotOp:
+		return f.ConstructIs(left, right)
+	default:
+		panic(fmt.Sprintf("unexpected operator: %v", ev))
+	}
+}
+
+// ----------------------------------------------------------------------
+//
+// Comparison Rules
+//   Custom match and replace functions used with comp.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// normalizeTupleEquality remaps the elements of two tuples compared for
+// equality, like this:
+//   (a, b, c) = (x, y, z)
+// into this:
+//   (a = x) AND (b = y) AND (c = z)
+func (f *factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
+	if left.Length != right.Length {
+		panic("tuple length mismatch")
 	}
 
-	return group
+	leftList := f.mem.lookupList(left)
+	rightList := f.mem.lookupList(right)
+	conditions := make([]opt.GroupID, left.Length)
+	for i := range conditions {
+		conditions[i] = f.ConstructEq(leftList[i], rightList[i])
+	}
+	return f.ConstructAnd(f.InternList(conditions))
 }
