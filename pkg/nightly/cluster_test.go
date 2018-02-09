@@ -18,6 +18,7 @@ package nightly
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -34,6 +35,8 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+var clusterID = flag.String("clusterid", "", "An identifier to use in the test cluster's name")
 
 func runCmd(ctx context.Context, l *logger, args ...string) error {
 	l.printf("> %s\n", strings.Join(args, " "))
@@ -85,6 +88,9 @@ type cluster struct {
 	l        *logger
 }
 
+// TODO(peter): Should set the lifetime of clusters to 2x the expected test
+// duration. The default lifetime of 12h is too long for some tests and will be
+// too short for others.
 func newCluster(ctx context.Context, t *testing.T, args ...string) *cluster {
 	var l *logger
 	if *local {

@@ -16,16 +16,95 @@
 package nightly
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+var slow = flag.Bool("slow", false, "Run slow tests")
+var local = flag.Bool("local", false, "Run tests locally")
+var artifacts = flag.String("artifacts", "", "Path to artifacts directory")
+var cockroach = flag.String("cockroach", "", "Path to cockroach binary to use")
+var workload = flag.String("workload", "", "Path to workload binary to use")
+
+func checkTestTimeout(t testing.TB) {
+	f := flag.Lookup("test.timeout")
+	d := f.Value.(flag.Getter).Get().(time.Duration)
+	if d > 0 && d < time.Hour {
+		t.Fatalf("-timeout is too short: %s", d)
+	}
+}
+
+func findBinary(binary, defValue string) (string, error) {
+	if binary == "" {
+		binary = defValue
+	}
+
+	if _, err := os.Stat(binary); err == nil {
+		return filepath.Abs(binary)
+	}
+
+	// For "local" clusters we have to find the binary to run and translate it to
+	// an absolute path. First, look for the binary in PATH.
+	path, err := exec.LookPath(binary)
+	if err != nil {
+		if strings.HasPrefix(binary, "/") {
+			return "", err
+		}
+		// We're unable to find the binary in PATH and "binary" is a relative path:
+		// look in the cockroach repo.
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			return "", err
+		}
+		path = filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/", binary)
+		var err2 error
+		path, err2 = exec.LookPath(path)
+		if err2 != nil {
+			return "", err
+		}
+	}
+	return filepath.Abs(path)
+}
+
+func initBinaries(t *testing.T) {
+	var err error
+	*cockroach, err = findBinary(*cockroach, "cockroach")
+	if err != nil {
+		t.Fatal(err)
+	}
+	*workload, err = findBinary(*workload, "workload")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+var initOnce sync.Once
+
+func maybeSkip(t *testing.T) {
+	if !*slow {
+		t.Skipf("-slow not specified")
+	}
+
+	initOnce.Do(func() {
+		checkTestTimeout(t)
+		initBinaries(t)
+	})
+
+	// If we're not running locally, we can run tests in parallel.
+	if !*local {
+		t.Parallel()
+	}
+}
 
 var clusters = map[string]struct{}{}
 var clustersMu syncutil.Mutex
