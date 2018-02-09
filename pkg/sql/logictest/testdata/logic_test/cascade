@@ -1791,6 +1791,183 @@ SELECT id, a_id FROM b;
 statement ok
 DROP TABLE b, a;
 
+subtest UpdateCascade_WithChecks
+### Check constraints on 3 levels, with each one being more restrictive.
+# A
+# |
+# B
+# |
+# C
+
+statement ok
+CREATE TABLE a (
+  id INT PRIMARY KEY
+);
+CREATE TABLE b (
+  id INT PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+ ,CONSTRAINT less_than_1000 CHECK (id < 1000)
+);
+CREATE TABLE c (
+  id INT PRIMARY KEY REFERENCES b ON UPDATE CASCADE
+ ,CONSTRAINT less_than_100 CHECK (id < 100)
+ ,CONSTRAINT no_99 CHECK (id != 99)
+);
+
+statement ok
+INSERT INTO a VALUES (1), (2), (3);
+INSERT INTO b VALUES (1), (2);
+INSERT INTO c VALUES (1);
+
+# Perform a standard cascading update.
+statement ok
+UPDATE a SET id = id*10;
+
+query TI rowsort
+SELECT name, id FROM (
+  SELECT 'a' AS name, id FROM a
+UNION ALL
+  SELECT 'b' AS name, id FROM b
+UNION ALL
+  SELECT 'c' AS name, id FROM c
+)
+ORDER BY name, id
+;
+----
+a  10
+a  20
+a  30
+b  10
+b  20
+c  10
+
+# Perform another cascading update that should fail c.less_than_100.
+statement error pq: failed to satisfy CHECK constraint \(id < 100\)
+UPDATE a SET id = id*10;
+
+# Perform another cascading update that should fail b.less_than_1000 or
+# c.less_than_100. The order of which check fails first is not deterministic.
+statement error pq: failed to satisfy CHECK constraint \(id < (100|1000)\)
+UPDATE a SET id = id*1000;
+
+# Perform another cascading update that should fail b.less_than_1000.
+statement error pq: failed to satisfy CHECK constraint \(id < 1000\)
+UPDATE a SET id = id*1000 WHERE id > 10;
+
+# And check another direct cascading constraint c.no_99.
+statement error pq: failed to satisfy CHECK constraint \(id != 99\)
+UPDATE a SET id = 99 WHERE id = 10;
+
+# But it should still be possible to cascade an update that doesn't hit c.
+# First check against c.no_99.
+statement ok
+UPDATE a SET id = 99 WHERE id = 20;
+
+# And for c.less_then_100.
+statement ok
+UPDATE a SET id = 999 WHERE id = 99;
+
+# And update a value that isn't cascaded at all.
+statement ok
+UPDATE a SET id = 100000 WHERE id = 30;
+
+query TI rowsort
+SELECT name, id FROM (
+  SELECT 'a' AS name, id FROM a
+UNION ALL
+  SELECT 'b' AS name, id FROM b
+UNION ALL
+  SELECT 'c' AS name, id FROM c
+)
+ORDER BY name, id
+;
+----
+a  10
+a  999
+a  100000
+b  10
+b  999
+c  10
+
+# Clean up.
+statement ok
+DROP TABLE c, b, a;
+
+subtest UpdateCascade_WithChecksMultiColumn
+### Check constraints on 3 levels using multi-column constraints.
+# A
+# |
+# B
+# |
+# C
+
+statement ok
+CREATE TABLE a (
+  id INT PRIMARY KEY
+);
+CREATE TABLE b (
+  id1 INT PRIMARY KEY REFERENCES a ON UPDATE CASCADE
+ ,id2 INT UNIQUE NOT NULL REFERENCES a ON UPDATE CASCADE
+ ,CONSTRAINT less_than_1000 CHECK (id1 + id2 < 1000)
+);
+CREATE TABLE c (
+  id1 INT PRIMARY KEY REFERENCES b(id1) ON UPDATE CASCADE
+ ,id2 INT UNIQUE NOT NULL REFERENCES b(id2) ON UPDATE CASCADE
+ ,CONSTRAINT less_than_100 CHECK (id1 + id2 < 100)
+);
+
+statement ok
+INSERT INTO a VALUES (1), (2), (3), (4), (5);
+INSERT INTO b VALUES (1, 1), (2, 2), (3, 4);
+INSERT INTO c VALUES (2, 1), (1, 2);
+
+# Perform a standard cascading update.
+statement ok
+UPDATE a SET id = id*10;
+
+query TII rowsort
+SELECT name, id1, id2 FROM (
+  SELECT 'a' AS name, id AS id1, 0 AS id2 FROM a
+UNION ALL
+  SELECT 'b' AS name, id1, id2 FROM b
+UNION ALL
+  SELECT 'c' AS name, id1, id2 FROM c
+) ORDER BY name, id1, id2
+;
+----
+a  10  0
+a  20  0
+a  30  0
+a  40  0
+a  50  0
+b  10  10
+b  20  20
+b  30  40
+c  10  20
+c  20  10
+
+# Try to update one value to fail c.less_than_100
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100\)
+UPDATE a SET id = id*10;
+
+# Try to update one value to fail c.less_than_100 or c.less_than_1000
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 100\)
+UPDATE a SET id = id*10;
+
+# Try to update one value to fail c.less_than_100
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000\)
+UPDATE a SET id = 1000 WHERE id = 30;
+
+statement error pq: failed to satisfy CHECK constraint \(\(id1 \+ id2\) < 1000\)
+UPDATE a SET id = 1000 WHERE id = 40;
+
+# Update a value that would fail the check if it was cascaded, but wasn't.
+statement ok
+UPDATE a SET id = 100000 WHERE id = 50;
+
+# Clean up.
+statement ok
+DROP TABLE c, b, a;
+
 subtest DeleteSetNull_Basic1
 ### Basic Delete Set Null
 #        a
