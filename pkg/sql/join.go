@@ -109,29 +109,64 @@ func (p *planner) makeJoin(
 	}
 
 	var (
-		info          *sqlbase.DataSourceInfo
-		pred          *joinPredicate
-		err           error
-		mergedColumns tree.NameList
+		pred         *joinPredicate
+		usingColumns []usingColumn
 	)
 
-	if cond == nil {
-		pred, info, err = makeCrossPredicate(typ, leftInfo, rightInfo)
-	} else {
+	switch t := cond.(type) {
+	case tree.NaturalJoinCond, *tree.UsingJoinCond:
+		var usingColNames tree.NameList
+
 		switch t := cond.(type) {
-		case *tree.OnJoinCond:
-			pred, info, err = p.makeOnPredicate(ctx, typ, leftInfo, rightInfo, t.Expr)
 		case tree.NaturalJoinCond:
-			cols := commonColumns(leftInfo, rightInfo)
-			mergedColumns = cols
-			pred, info, err = makeUsingPredicate(typ, leftInfo, rightInfo, mergedColumns)
+			usingColNames = commonColumns(leftInfo, rightInfo)
 		case *tree.UsingJoinCond:
-			mergedColumns = t.Cols
-			pred, info, err = makeUsingPredicate(typ, leftInfo, rightInfo, mergedColumns)
+			usingColNames = t.Cols
 		}
-	}
-	if err != nil {
-		return planDataSource{}, err
+
+		var err error
+		usingColumns, err = makeUsingColumns(
+			leftInfo.SourceColumns, rightInfo.SourceColumns, usingColNames,
+		)
+		if err != nil {
+			return planDataSource{}, err
+		}
+		pred, err = makePredicate(typ, leftInfo, rightInfo, usingColumns)
+		if err != nil {
+			return planDataSource{}, err
+		}
+
+	case *tree.OnJoinCond:
+		var err error
+		pred, err = makePredicate(typ, leftInfo, rightInfo, nil /* usingColumns */)
+		if err != nil {
+			return planDataSource{}, err
+		}
+
+		// Determine the on condition expression. Note that the predicate can't
+		// already have onCond set (we haven't passed any usingColumns).
+		pred.onCond, err = p.analyzeExpr(
+			ctx,
+			t.Expr,
+			sqlbase.MultiSourceInfo{pred.info},
+			pred.iVarHelper,
+			types.Bool,
+			true, /* requireType */
+			"ON",
+		)
+		if err != nil {
+			return planDataSource{}, err
+		}
+
+	case nil:
+		var err error
+		pred, err = makePredicate(typ, leftInfo, rightInfo, nil /* usingColumns */)
+		if err != nil {
+			return planDataSource{}, err
+		}
+
+	default:
+		panic(fmt.Sprintf("unsupported join condition %#v", cond))
 	}
 
 	n := &joinNode{
@@ -139,7 +174,7 @@ func (p *planner) makeJoin(
 		right:    right,
 		joinType: typ,
 		pred:     pred,
-		columns:  info.SourceColumns,
+		columns:  pred.info.SourceColumns,
 	}
 
 	n.run.buffer = &RowBuffer{
@@ -158,9 +193,9 @@ func (p *planner) makeJoin(
 		),
 	}
 
-	joinDataSource := planDataSource{info: info, plan: n}
+	joinDataSource := planDataSource{info: pred.info, plan: n}
 
-	if mergedColumns == nil {
+	if len(usingColumns) == 0 {
 		// No merged columns, we are done.
 		return joinDataSource, nil
 	}
@@ -221,13 +256,13 @@ func (p *planner) makeJoin(
 
 	r := &renderNode{
 		source:     joinDataSource,
-		sourceInfo: sqlbase.MultiSourceInfo{info},
+		sourceInfo: sqlbase.MultiSourceInfo{pred.info},
 	}
-	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(info.SourceColumns))
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(pred.info.SourceColumns))
 	numLeft := len(leftInfo.SourceColumns)
 	numRight := len(rightInfo.SourceColumns)
 	rInfo := &sqlbase.DataSourceInfo{
-		SourceAliases: make(sqlbase.SourceAliases, 0, len(info.SourceAliases)),
+		SourceAliases: make(sqlbase.SourceAliases, 0, len(pred.info.SourceAliases)),
 	}
 
 	var leftHidden, rightHidden util.FastIntSet
@@ -240,9 +275,9 @@ func (p *planner) makeJoin(
 	for i := range remapped {
 		remapped[i] = -1
 	}
-	for i := range mergedColumns {
-		leftCol := n.pred.leftEqualityIndices[i]
-		rightCol := n.pred.rightEqualityIndices[i]
+	for i := range usingColumns {
+		leftCol := usingColumns[i].leftIdx
+		rightCol := usingColumns[i].rightIdx
 		leftHidden.Add(leftCol)
 		rightHidden.Add(rightCol)
 		var expr tree.TypedExpr
@@ -304,7 +339,7 @@ func (p *planner) makeJoin(
 	// Copy the aliases, remapping the columns as necessary. We extract any
 	// anonymous aliases for special handling.
 	anonymousAlias := sqlbase.SourceAlias{Name: sqlbase.AnonymousTable}
-	for _, a := range info.SourceAliases {
+	for _, a := range pred.info.SourceAliases {
 		var colSet util.FastIntSet
 		for col, ok := a.ColumnSet.Next(0); ok; col, ok = a.ColumnSet.Next(col + 1) {
 			colSet.Add(remapped[col])
@@ -319,7 +354,7 @@ func (p *planner) makeJoin(
 		)
 	}
 
-	for i := range mergedColumns {
+	for i := range usingColumns {
 		anonymousAlias.ColumnSet.Add(i)
 	}
 
