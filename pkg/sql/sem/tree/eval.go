@@ -2058,22 +2058,23 @@ func (e *MultipleResultsError) Error() string {
 	return fmt.Sprintf("%s: unexpected multiple results", e.SQL)
 }
 
-// EvalPlanner is a limited planner that can be used from EvalContext.
-type EvalPlanner interface {
-	// QueryRow executes a SQL query string where exactly 1 result row is
-	// expected and returns that row.
-	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
-
-	// QualifyWithDatabase resolves a possibly unqualified table name into a
-	// normalized table name that is qualified by database.
-	QualifyWithDatabase(ctx context.Context, t *NormalizableTableName) (*TableName, error)
-
+// EvalDatabase consists of functions that reference the session database
+// and is to be used from EvalContext.
+type EvalDatabase interface {
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] table_name [ @ index_name ]`.
 	// If the database name is not given, it uses the search path to find it, and
 	// sets it on the returned TableName.
 	// It returns an error if the table doesn't exist.
 	ParseQualifiedTableName(ctx context.Context, sql string) (*TableName, error)
+}
+
+// EvalPlanner is a limited planner that can be used from EvalContext.
+type EvalPlanner interface {
+	EvalDatabase
+	// QueryRow executes a SQL query string where exactly 1 result row is
+	// expected and returns that row.
+	QueryRow(ctx context.Context, sql string, args ...interface{}) (Datums, error)
 
 	// ParseType parses a column type.
 	ParseType(sql string) (coltypes.CastTargetType, error)
@@ -2085,6 +2086,7 @@ type EvalPlanner interface {
 // SequenceOperators is used for various sql related functions that can
 // be used from EvalContext.
 type SequenceOperators interface {
+	EvalDatabase
 	// IncrementSequence increments the given sequence and returns the result.
 	// It returns an error if the given name is not a sequence.
 	// The caller must ensure that seqName is fully qualified already.
