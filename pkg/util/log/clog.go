@@ -574,6 +574,7 @@ func init() {
 	logging.stderrThreshold = Severity_INFO
 	logging.fileThreshold = Severity_INFO
 
+	logging.prefix = program
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
@@ -611,6 +612,12 @@ func SetSync(sync bool) {
 // loggingT collects all the global state of the logging setup.
 type loggingT struct {
 	noStderrRedirect bool
+
+	// Directory prefix where to store this logger's files.
+	logDir DirName
+
+	// Name prefix for log files.
+	prefix string
 
 	// Level flag for output to stderr. Handled atomically.
 	stderrThreshold Severity
@@ -768,7 +775,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		// to terminate and the user will want to know why.
 		l.outputToStderr(entry, stacks)
 	}
-	if logDir.isSet() && s >= l.fileThreshold.get() {
+	if l.logDir.IsSet() && s >= l.fileThreshold.get() {
 		if err := l.ensureFile(); err != nil {
 			// Make sure the message appears somewhere.
 			l.outputToStderr(entry, stacks)
@@ -793,7 +800,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
 		// If we got here via Exit rather than Fatal, print no stacks.
-		timeoutFlush(10 * time.Second)
+		l.timeoutFlush(10 * time.Second)
 		exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 	}
 }
@@ -803,7 +810,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 // (!stderrRedirected), as the go runtime will only print panics to
 // stderr.
 func (l *loggingT) printPanicToFile(r interface{}) {
-	if !logDir.isSet() {
+	if !l.logDir.IsSet() {
 		// There's no log file. Nothing to do.
 		return
 	}
@@ -845,16 +852,16 @@ func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
 // elapses, whichever happens first.  This is needed because the hooks invoked
 // by Flush may deadlock when clog.Fatal is called from a hook that holds
 // a lock.
-func timeoutFlush(timeout time.Duration) {
+func (l *loggingT) timeoutFlush(timeout time.Duration) {
 	done := make(chan bool, 1)
 	go func() {
-		Flush() // calls logging.lockAndFlushAll()
+		l.lockAndFlushAll() // calls logging.lockAndFlushAll()
 		done <- true
 	}()
 	select {
 	case <-done:
 	case <-time.After(timeout):
-		fmt.Fprintln(OrigStderr, "clog: Flush took longer than", timeout)
+		fmt.Fprintf(OrigStderr, "clog (%s): Flush took longer than %s\n", l.prefix, timeout)
 	}
 }
 
@@ -957,7 +964,7 @@ func (sb *syncBuffer) rotateFile(now time.Time) error {
 		}
 	}
 	var err error
-	sb.file, sb.lastRotation, _, err = create(now, sb.lastRotation)
+	sb.file, sb.lastRotation, _, err = create(&sb.logger.logDir, sb.logger.prefix, now, sb.lastRotation)
 	sb.nbytes = 0
 	if err != nil {
 		return err
@@ -1094,13 +1101,15 @@ func (l *loggingT) gcDaemon() {
 }
 
 func (l *loggingT) gcOldFiles() {
-	dir, err := logDir.get()
+	dir, err := l.logDir.get()
 	if err != nil {
 		// No log directory configured. Nothing to do.
 		return
 	}
 
-	allFiles, err := ListLogFiles()
+	// This only lists the log files for the current logger (sharing the
+	// prefix).
+	allFiles, err := l.listLogFiles()
 	if err != nil {
 		fmt.Fprintf(OrigStderr, "unable to GC log files: %s\n", err)
 		return
