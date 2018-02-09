@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -327,6 +328,8 @@ func (ds *ServerImpl) setupFlow(
 		// own context.
 		CtxProvider: simpleCtxProvider{ctx: ctx},
 		Txn:         txn,
+		Planner:     &dummyEvalPlanner{},
+		Sequence:    &dummySequenceOperators{},
 	}
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
@@ -501,3 +504,67 @@ type TestingKnobs struct {
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
+
+var errEvalPlanner = errors.New("cannot backfill such evaluated expression")
+
+// Implements the tree.EvalPlanner interface by returning errors.
+type dummyEvalPlanner struct {
+}
+
+// Implements the tree.EvalPlanner interface.
+func (ep *dummyEvalPlanner) QueryRow(
+	ctx context.Context, sql string, args ...interface{},
+) (tree.Datums, error) {
+	return nil, errEvalPlanner
+}
+
+// Implements the tree.EvalDatabase interface.
+func (ep *dummyEvalPlanner) ParseQualifiedTableName(
+	ctx context.Context, sql string,
+) (*tree.TableName, error) {
+	return nil, errEvalPlanner
+}
+
+// Implements the tree.EvalPlanner interface.
+func (ep *dummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
+	return nil, errEvalPlanner
+}
+
+// Implements the tree.EvalPlanner interface.
+func (ep *dummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
+	return nil, errEvalPlanner
+}
+
+var errSequenceOperators = errors.New("cannot backfill such sequence operation")
+
+// Implements the tree.SequenceOperators interface by returning errors.
+type dummySequenceOperators struct {
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *dummySequenceOperators) ParseQualifiedTableName(
+	ctx context.Context, sql string,
+) (*tree.TableName, error) {
+	return nil, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *dummySequenceOperators) IncrementSequence(
+	ctx context.Context, seqName *tree.TableName,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *dummySequenceOperators) GetLatestValueInSessionForSequence(
+	ctx context.Context, seqName *tree.TableName,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *dummySequenceOperators) SetSequenceValue(
+	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
+) error {
+	return errSequenceOperators
+}
