@@ -1,0 +1,26 @@
+# =============================================================================
+# comp.opt contains normalization rules for comparison operators.
+# =============================================================================
+
+
+# NormalizeVar ensures that variable references are on the left side of
+# equality and inequality operators.
+[NormalizeVar, Normalize]
+(Eq | Ne
+    $left:^(Variable)
+    $right:(Variable)
+)
+=>
+((OpName) $right $left)
+
+# NormalizeTupleEquality breaks up expressions like:
+#   (a, b, c) = (x, y, z)
+# into
+#   (a = x) AND (b = y) AND (c = z)
+#
+# This rule makes it easier to extract constraints from boolean expressions,
+# since recognition code doesn't have to handle the tuple case separately.
+[NormalizeTupleEquality]
+(Eq (Tuple $left:*) (Tuple $right:*))
+=>
+(NormalizeTupleEquality $left $right)

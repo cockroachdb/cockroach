@@ -319,7 +319,7 @@ func (g *factoryGen) genConstantMatch(
 	// operator. If there are fewer arguments than there are children, then
 	// only the first N children need to be matched.
 	for index, matchArg := range match.Args {
-		fieldName := string(g.compiled.LookupDefine(opName).Fields[index].Name)
+		fieldName := unTitle(string(g.compiled.LookupDefine(opName).Fields[index].Name))
 		g.genMatch(matchArg, fmt.Sprintf("%s.%s()", varName, fieldName), false /* noMatch */)
 	}
 }

@@ -60,7 +60,6 @@ var ComparisonOpReverseMap = [...]tree.ComparisonOperator{
 	IsOp:           tree.IsNotDistinctFrom,
 	IsNotOp:        tree.IsDistinctFrom,
 	ContainsOp:     tree.Contains,
-	ContainedByOp:  tree.ContainedBy,
 }
 
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree

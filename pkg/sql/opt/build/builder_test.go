@@ -117,7 +117,7 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
+					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
 					b := NewBuilder(ctx, o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
@@ -132,7 +132,7 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					o := xform.NewOptimizer(catalog, 0 /* maxSteps */)
+					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
 					b := newScalarBuilder(o.Factory(), &iVarHelper)
 
 					group, err := buildScalar(b, typedExpr)

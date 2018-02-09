@@ -41,9 +41,9 @@ group-by
       ├── function: variance [type=NULL]
       │    └── const: 1 [type=int]
       ├── function: bool_and [type=NULL]
-      │    └── const: true [type=bool]
+      │    └── true [type=bool]
       ├── function: bool_and [type=NULL]
-      │    └── const: false [type=bool]
+      │    └── false [type=bool]
       └── function: xor_agg [type=NULL]
            └── const: '\x01' [type=bytes]
 
@@ -990,9 +990,9 @@ group-by
  ├── groupings
  └── aggregations
       ├── function: max [type=NULL]
-      │    └── const: true [type=bool]
+      │    └── true [type=bool]
       └── function: min [type=NULL]
-           └── const: true [type=bool]
+           └── true [type=bool]
 
 exec-ddl
 CREATE TABLE t.ab (
