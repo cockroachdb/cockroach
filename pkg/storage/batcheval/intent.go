@@ -16,7 +16,6 @@ package batcheval
 
 import (
 	"context"
-	"errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -32,10 +31,9 @@ import (
 func CollectIntentRows(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, intents []roachpb.Intent,
 ) ([]roachpb.KeyValue, error) {
-	if cArgs.Header.ReadConsistency != roachpb.INCONSISTENT {
-		return nil, errors.New("can only return intents when performing an inconsistent scan")
+	if len(intents) == 0 {
+		return nil, nil
 	}
-
 	res := make([]roachpb.KeyValue, 0, len(intents))
 	for _, intent := range intents {
 		val, _, err := engine.MVCCGetAsTxn(

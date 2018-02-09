@@ -783,59 +783,68 @@ func TestConcurrentIncrements(t *testing.T) {
 	}
 }
 
-// TestInconsistentReads tests that the methods that generate inconsistent reads
-// generate outgoing requests with an INCONSISTENT read consistency.
-func TestInconsistentReads(t *testing.T) {
+// TestReadConsistencyTypes tests that the methods that generate reads with
+// differenet read consistency types generate outgoing requests with the
+// corresponding read consistency type set.
+func TestReadConsistencyTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// Mock out DistSender's sender function to check the read consistency for
-	// outgoing BatchRequests and return an empty reply.
-	factory := client.TxnSenderFactoryFunc(func(_ client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			if ba.ReadConsistency != roachpb.INCONSISTENT {
-				return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+	for _, rc := range []roachpb.ReadConsistencyType{
+		roachpb.CONSISTENT,
+		roachpb.READ_UNCOMMITTED,
+		roachpb.INCONSISTENT,
+	} {
+		t.Run(rc.String(), func(t *testing.T) {
+			// Mock out DistSender's sender function to check the read consistency for
+			// outgoing BatchRequests and return an empty reply.
+			factory := client.TxnSenderFactoryFunc(func(_ client.TxnType) client.TxnSender {
+				return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+					if ba.ReadConsistency != rc {
+						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+					}
+					return ba.CreateReply(), nil
+				})
+			})
+			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			db := client.NewDB(factory, clock)
+			ctx := context.TODO()
+
+			prepWithRC := func() *client.Batch {
+				b := &client.Batch{}
+				b.Header.ReadConsistency = rc
+				return b
 			}
-			return ba.CreateReply(), nil
+
+			// Perform reads through the mocked sender function.
+			{
+				key := roachpb.Key([]byte("key"))
+				b := prepWithRC()
+				b.Get(key)
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			{
+				b := prepWithRC()
+				key1 := roachpb.Key([]byte("key1"))
+				key2 := roachpb.Key([]byte("key2"))
+				b.Scan(key1, key2)
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			{
+				key := roachpb.Key([]byte("key"))
+				b := &client.Batch{}
+				b.Header.ReadConsistency = rc
+				b.Get(key)
+				if err := db.Run(ctx, b); err != nil {
+					t.Fatal(err)
+				}
+			}
 		})
-	})
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	db := client.NewDB(factory, clock)
-	ctx := context.TODO()
-
-	prepInconsistent := func() *client.Batch {
-		b := &client.Batch{}
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		return b
-	}
-
-	// Perform inconsistent reads through the mocked sender function.
-	{
-		key := roachpb.Key([]byte("key"))
-		b := prepInconsistent()
-		b.Get(key)
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	{
-		b := prepInconsistent()
-		key1 := roachpb.Key([]byte("key1"))
-		key2 := roachpb.Key([]byte("key2"))
-		b.Scan(key1, key2)
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	{
-		key := roachpb.Key([]byte("key"))
-		b := &client.Batch{}
-		b.Header.ReadConsistency = roachpb.INCONSISTENT
-		b.Get(key)
-		if err := db.Run(ctx, b); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 

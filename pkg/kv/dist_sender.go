@@ -435,7 +435,7 @@ func (ds *DistSender) sendSingleRange(
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
-	if !(ba.IsReadOnly() && ba.ReadConsistency == roachpb.INCONSISTENT) {
+	if !ba.IsReadOnly() || ba.ReadConsistency.RequiresReadLease() {
 		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
 			if i := replicas.FindReplica(storeID); i >= 0 {
 				replicas.MoveToFront(i)
@@ -474,7 +474,7 @@ func (ds *DistSender) initAndVerifyBatch(
 
 	// In the event that timestamp isn't set and read consistency isn't
 	// required, set the timestamp using the local clock.
-	if ba.ReadConsistency == roachpb.INCONSISTENT && ba.Timestamp == (hlc.Timestamp{}) {
+	if ba.ReadConsistency != roachpb.CONSISTENT && ba.Timestamp == (hlc.Timestamp{}) {
 		ba.Timestamp = ds.clock.Now()
 	}
 
@@ -855,7 +855,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// re-run as part of a transaction for consistency. The
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
-			if ba.Txn == nil && ba.IsPossibleTransaction() && ba.ReadConsistency != roachpb.INCONSISTENT {
+			if ba.Txn == nil && ba.IsPossibleTransaction() && ba.ReadConsistency == roachpb.CONSISTENT {
 				// TODO(nvanbenschoten): if this becomes an issue for RangeLookup
 				// scans, we could look into changing IsPossibleTransaction for
 				// ScanRequest/ReverseScanRequest to detect RangeLookups.
