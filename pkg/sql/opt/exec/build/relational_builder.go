@@ -45,7 +45,26 @@ type execPlan struct {
 	// An alternative to this would be to always use a "canonical" schema, for
 	// example the output columns in increasing index order. However, this would
 	// require a lot of otherwise unnecessary projections.
+	//
+	// TODO(radu): Maybe this should be just a ColList.
 	outputCols opt.ColMap
+}
+
+// makeBuildScalarCtx returns a buildScalarCtx that can be used with expressions
+// that refer the output columns of this plan.
+func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
+	// We get the maximum value from the map to find out how many we need to
+	// support. In most cases this is the same as the Len() of the map; it is TBD
+	// if we will have cases where this doesn't hold.
+	// TODO(radu): Should we just remember the number of columns in execPlan?
+	numVars := 0
+	if max, ok := ep.outputCols.MaxValue(); ok {
+		numVars = max + 1
+	}
+	return buildScalarCtx{
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numVars),
+		ivarMap: ep.outputCols,
+	}
 }
 
 func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
@@ -55,6 +74,9 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 
 	case opt.SelectOp:
 		return b.buildSelect(ev)
+
+	case opt.ProjectOp:
+		return b.buildProject(ev)
 
 	default:
 		panic(fmt.Sprintf("unsupported relational op %s", ev.Operator()))
@@ -81,19 +103,7 @@ func (b *Builder) buildSelect(ev xform.ExprView) (execPlan, error) {
 	if err != nil {
 		return execPlan{}, err
 	}
-	// We need to be able to create IndexedVars for the columns of the input plan.
-	// We get the maximum value from the map to find out how many we need to
-	// support. In most cases this is the same as the Len() of the map; it is TBD
-	// if we will have cases where this doesn't hold.
-	// TODO(radu): Should we just remember the number of columns in execPlan?
-	num := 0
-	if max, ok := input.outputCols.MaxValue(); ok {
-		num = max + 1
-	}
-	ctx := buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* no container */, num),
-		ivarMap: input.outputCols,
-	}
+	ctx := input.makeBuildScalarCtx()
 	filter := b.buildScalar(&ctx, ev.Child(1))
 	node, err := b.factory.ConstructFilter(input.root, filter)
 	if err != nil {
@@ -104,4 +114,31 @@ func (b *Builder) buildSelect(ev xform.ExprView) (execPlan, error) {
 		// A filtering node does not modify the schema.
 		outputCols: input.outputCols,
 	}, nil
+}
+
+func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	projections := ev.Child(1)
+	colList := *projections.Private().(*opt.ColList)
+	exprs := make(tree.TypedExprs, colList.Len())
+	colNames := make([]string, len(exprs))
+	ctx := input.makeBuildScalarCtx()
+	for i := range exprs {
+		exprs[i] = b.buildScalar(&ctx, projections.Child(i))
+		v, _ := colList.Get(i)
+		colNames[i] = ev.Metadata().ColumnLabel(opt.ColumnIndex(v))
+	}
+	node, err := b.factory.ConstructProject(input.root, exprs, colNames)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i := range exprs {
+		v, _ := colList.Get(i)
+		ep.outputCols.Set(v, i)
+	}
+	return ep, nil
 }
