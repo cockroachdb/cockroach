@@ -757,6 +757,7 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
+	defer func(save Severity) { logging.fileThreshold = save }(logging.fileThreshold)
 	logging.fileThreshold = Severity_ERROR
 
 	Infof(context.Background(), "test1")
