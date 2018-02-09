@@ -227,6 +227,9 @@ type Executor struct {
 	// Application-level SQL statistics
 	sqlStats sqlStats
 
+	auditLog *log.SecondaryLogger
+	execLog  *log.SecondaryLogger
+
 	// Attempts to use unimplemented features.
 	unimplementedErrors struct {
 		syncutil.Mutex
@@ -262,6 +265,7 @@ type ExecutorConfig struct {
 	JobRegistry     *jobs.Registry
 	VirtualSchemas  *VirtualSchemaHolder
 	DistSQLPlanner  *DistSQLPlanner
+	AuditLogDir     *log.DirName
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -376,6 +380,8 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		MiscCount:   metric.NewCounter(MetaMisc),
 		QueryCount:  metric.NewCounter(MetaQuery),
 		sqlStats:    sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
+		auditLog:    log.NewSecondaryLogger(cfg.AuditLogDir, "sql-audit", false /*enableGc*/, true /*forceSyncWrites*/),
+		execLog:     log.NewSecondaryLogger(nil, "sql-exec", true /*enableGc*/, true /*forceSyncWrites*/),
 		// The cache will be updated on Start() through gossip.
 		dbCache: newDatabaseCacheHolder(newDatabaseCache(config.SystemConfig{})),
 	}
@@ -2072,9 +2078,12 @@ func (e *Executor) execStmt(
 	err := planner.makePlan(ctx, stmt)
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	if err != nil {
+		e.maybeLogStatement(ctx, session, planner, stmt, 0, err)
 		return err
 	}
 	defer planner.curPlan.close(ctx)
+
+	defer func() { e.maybeLogStatement(ctx, session, planner, stmt, res.RowsAffected(), res.Err()) }()
 
 	// Prepare the result set, and determine the execution parameters.
 	var cols sqlbase.ResultColumns
@@ -2104,6 +2113,8 @@ func (e *Executor) execStmt(
 	} else {
 		err = e.execLocal(planner, planner.curPlan.plan, res)
 	}
+	// Ensure the error is saved where maybeLogStatement() can find it.
+	res.SetError(err)
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
 	// Complete execution: record results and optionally run the test
@@ -2142,6 +2153,7 @@ func (e *Executor) execStmtInParallel(
 	}
 
 	if err := planner.makePlan(ctx, stmt); err != nil {
+		e.maybeLogStatement(ctx, session, planner, stmt, 0, err)
 		return nil, err
 	}
 	var cols sqlbase.ResultColumns
@@ -2157,6 +2169,11 @@ func (e *Executor) execStmtInParallel(
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
 		bufferedWriter := newBufferedWriter(session.makeBoundAccount())
+		defer func() {
+			e.maybeLogStatement(
+				ctx, session, planner, stmt, bufferedWriter.RowsAffected(), bufferedWriter.Err())
+		}()
+
 		err := initStatementResult(bufferedWriter, stmt, cols)
 		if err != nil {
 			return err
@@ -2168,6 +2185,8 @@ func (e *Executor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err = e.execLocal(planner, planner.curPlan.plan, bufferedWriter)
+		// Ensure the error is saved where maybeLogStatement() can find it.
+		bufferedWriter.SetError(err)
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
@@ -2179,6 +2198,7 @@ func (e *Executor) execStmtInParallel(
 		session.removeActiveQuery(stmt.queryID)
 		return err
 	}); err != nil {
+		e.maybeLogStatement(ctx, session, planner, stmt, 0, err)
 		return nil, err
 	}
 

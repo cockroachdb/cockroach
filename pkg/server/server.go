@@ -522,6 +522,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.gossip,
 			s.stopper,
 			sqlExecutorTestingKnobs.DistSQLPlannerKnobs),
+		AuditLogDir: s.cfg.SQLAuditLogDirName,
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {
