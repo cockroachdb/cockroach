@@ -20,16 +20,57 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+func runCmd(ctx context.Context, l *logger, args ...string) error {
+	l.printf("> %s\n", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Stdout = l.stdout
+	cmd.Stderr = l.stderr
+	if err := cmd.Run(); err != nil {
+		return errors.Wrapf(err, `%s`, strings.Join(args, ` `))
+	}
+	return nil
+}
+
+func makeClusterName(t *testing.T) string {
+	if *local {
+		return "local"
+	}
+
+	t.Parallel()
+	username := os.Getenv("ROACHPROD_USER")
+	if username == "" {
+		usr, err := user.Current()
+		if err != nil {
+			panic(fmt.Sprintf("user.Current: %s", err))
+		}
+		username = usr.Username
+	}
+	id := *clusterID
+	if id == "" {
+		id = fmt.Sprintf("%d", timeutil.Now().Unix())
+	}
+	name := fmt.Sprintf("%s-%s-%s", username, id, t.Name())
+	name = strings.ToLower(name)
+	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
+	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
+	registerCluster(name)
+	return name
+}
 
 // cluster provides an interface for interacting with a set of machines,
 // starting and stopping a cockroach cluster on a subset of those machines, and
@@ -213,6 +254,8 @@ func (c *cluster) monitor(
 ) error {
 	t.Helper()
 
+	_ = c.selector(t, nodes...) // check for a valid nodes specification
+
 	done := make(chan error)
 	go func() {
 		done <- g.Wait()
@@ -221,13 +264,14 @@ func (c *cluster) monitor(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	fatal := t.Fatal
 	pipeR, pipeW := io.Pipe()
 	go func() {
 		defer func() { _ = pipeW.Close() }()
 
 		monL, err := c.l.childLogger(`MONITOR`)
 		if err != nil {
-			t.Fatal(err)
+			fatal(err)
 		}
 		defer monL.close()
 
@@ -242,7 +286,7 @@ func (c *cluster) monitor(
 			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
 				// The expected reason for an error is that the monitor was killed due
 				// to the context being canceled. Any other error is an actual error.
-				t.Fatal(err)
+				fatal(err)
 			}
 			// Returning will cause the pipe to be closed which will cause the reader
 			// goroutine to exit and close the monitoring channel.
@@ -260,8 +304,6 @@ func (c *cluster) monitor(
 			monitorCh <- scanner.Text()
 		}
 	}()
-
-	_ = c.selector(t, nodes...) // check for a valid nodes specification
 
 	watchedNode := func(id int) bool {
 		switch len(nodes) {

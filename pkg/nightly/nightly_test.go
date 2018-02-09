@@ -21,18 +21,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -110,64 +105,6 @@ func maybeSkip(t *testing.T) {
 	if !*local {
 		t.Parallel()
 	}
-}
-
-func runCmd(ctx context.Context, l *logger, args ...string) error {
-	l.printf("> %s\n", strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-	cmd.Stdout = l.stdout
-	cmd.Stderr = l.stderr
-	if err := cmd.Run(); err != nil {
-		return errors.Wrapf(err, `runCmd: %s`, strings.Join(args, ` `))
-	}
-	return nil
-}
-
-func runCmds(ctx context.Context, l *logger, cmds [][]string) error {
-	for _, cmd := range cmds {
-		if err := runCmd(ctx, l, cmd...); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func destroyCluster(t testing.TB, l *logger, clusterName string) {
-	// New context so cluster shutdown is unaffected by any other contexts being
-	// canceled.
-	ctx := context.Background()
-	logPath := filepath.Join(*artifacts, fileutil.EscapeFilename(t.Name()))
-	_ = runCmd(ctx, l, "roachprod", "get", clusterName, "logs", logPath)
-	if err := runCmd(ctx, l, "roachprod", "destroy", clusterName); err != nil {
-		l.errorf("%s", err)
-	}
-	unregisterCluster(clusterName)
-}
-
-func makeClusterName(t *testing.T) string {
-	if *local {
-		return "local"
-	}
-
-	t.Parallel()
-	username := os.Getenv("ROACHPROD_USER")
-	if username == "" {
-		usr, err := user.Current()
-		if err != nil {
-			panic(fmt.Sprintf("user.Current: %s", err))
-		}
-		username = usr.Username
-	}
-	id := *clusterID
-	if id == "" {
-		id = fmt.Sprintf("%d", timeutil.Now().Unix())
-	}
-	name := fmt.Sprintf("%s-%s-%s", username, id, t.Name())
-	name = strings.ToLower(name)
-	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
-	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
-	registerCluster(name)
-	return name
 }
 
 func TestLocal(t *testing.T) {
