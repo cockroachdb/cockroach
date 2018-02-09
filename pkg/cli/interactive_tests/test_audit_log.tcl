@@ -16,35 +16,41 @@ end_test
 start_test "Check that the audit log is not created directly after enabled"
 send "SET CLUSTER SETTING sql.auditlog.enabled = TRUE;\r"
 eexpect root@
-# Not yet true
-#system "if test -e $logfile; then false; fi"
+system "if test -e $logfile; then false; fi"
 end_test
 
 start_test "Check that statements do not get logged to the audit log directly"
 send "CREATE DATABASE t; USE t; CREATE TABLE helloworld(abc INT); INSERT INTO helloworld VALUES (123);\r"
 eexpect root@
-# Not yet true
-# system "if test -e $logfile; then false; fi"
+system "if test -e $logfile; then false; fi"
 end_test
 
 start_test "Check that statements start being logged synchronously if auditing is enabled"
-# send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET READ WRITE;\r"
-# eexpect root@
+send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET READ WRITE;\r"
+eexpect root@
+# check that the audit change itself is recorded.
+system "grep -q 'helloworld.*:READWRITE .*ALTER TABLE.*OK' $logfile"
 send "SELECT * FROM helloworld;\r"
 eexpect root@
-system "grep -q '.*SELECT.*false' $logfile"
+system "grep -q 'helloworld.*:READ .*SELECT.*OK' $logfile"
 end_test
 
 start_test "Check that write statements are logged differently"
 send "INSERT INTO helloworld VALUES(456);\r"
 eexpect root@
-system "grep -q '.*INSERT.*false' $logfile"
+system "grep -q 'helloworld.*:READWRITE .*INSERT.*OK' $logfile"
 end_test
 
 start_test "Check that errors get logged too"
 send "SELECT nonexistent FROM helloworld;\r"
 eexpect root@
-system "grep -q '.*SELECT.*true' $logfile"
+system "grep -q 'helloworld.*:READ .*SELECT.*ERROR' $logfile"
+end_test
+
+start_test "Check that audit removal is logged too"
+send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET OFF;\r"
+eexpect root@
+system "grep -q 'helloworld.*:READWRITE .*ALTER TABLE.*OK' $logfile"
 end_test
 
 start_test "Check that logging can be disabled"

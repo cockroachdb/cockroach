@@ -2627,3 +2627,24 @@ func (desc *PartitioningDescriptor) PartitionNames() []string {
 	}
 	return names
 }
+
+// SetAuditMode configures the audit mode on the descriptor.
+func (desc *TableDescriptor) SetAuditMode(mode tree.AuditMode) (bool, error) {
+	prev := desc.AuditMode
+	switch mode {
+	case tree.AuditModeDisable:
+		desc.AuditMode = TableDescriptor_DISABLED
+	case tree.AuditModeReadWrite:
+		desc.AuditMode = TableDescriptor_READWRITE
+	default:
+		return false, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"unknown audit mode: %s (%d)", mode, mode)
+	}
+	return prev != desc.AuditMode, nil
+}
+
+// GetAuditMode is part of the DescriptorProto interface.
+// This is a stub until per-database auditing is enabled.
+func (desc *DatabaseDescriptor) GetAuditMode() TableDescriptor_AuditMode {
+	return TableDescriptor_DISABLED
+}

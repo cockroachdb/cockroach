@@ -500,6 +500,17 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+
+		case *tree.AlterTableSetAudit:
+			// An auditing config change is itself auditable!
+			params.p.curPlan.auditEvents = append(params.p.curPlan.auditEvents,
+				auditEvent{desc: n.tableDesc, writing: true})
+			var err error
+			descriptorChanged, err = n.tableDesc.SetAuditMode(t.Mode)
+			if err != nil {
+				return err
+			}
+
 		default:
 			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}

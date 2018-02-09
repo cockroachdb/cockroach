@@ -721,6 +721,13 @@ message TableDescriptor {
   // from the cluster. In nanoseconds since the epoch.
   optional int64 gc_deadline = 29 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "GCDeadline"];
+
+  // AuditMode indicates which auditing actions to take when this table is used.
+  enum AuditMode {
+    DISABLED = 0;
+    READWRITE = 1;
+  }
+  optional AuditMode audit_mode = 30 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored
