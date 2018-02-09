@@ -34,6 +34,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -236,13 +237,37 @@ func (v *Value) setChecksum(cksum uint32) {
 	}
 }
 
-// InitChecksum initializes a checksum based on the provided key and
-// the contents of the value. If the value contains a byte slice, the
-// checksum includes it directly.
+// ChecksumInterceptor will be called with every value before its checksum is
+// conditionally computed. This is used to prove that the decision to init
+// checksums on values or not does not affect beneath-raft consistency.
+// Interceptor is not safe to modify concurrently with calls to InitChecksum.
+var ChecksumInterceptor = func(_ *Value) {}
+
+// InitChecksum initializes a checksum based on the provided key and the
+// contents of the value if checksum computation is enabled. If the value
+// contains a byte slice, the checksum includes it directly.
+//
+// If you require that the checksum be set even if checksum computations are
+// disabled, use MustInitChecksum insted.
 //
 // TODO(peter): This method should return an error if the Value is corrupted
 // (e.g. the RawBytes field is > 0 but smaller than the header size).
+//
+// TODO(nvanbenschoten): This method and all users can be removed in any
+// binary version > 2.1.
 func (v *Value) InitChecksum(key []byte) {
+	// The branch is behind a constant conditional so that this
+	// entire method is optimized out in production builds.
+	if util.RaceEnabled {
+		ChecksumInterceptor(v)
+	}
+}
+
+// MustInitChecksum is like InitChecksum, but does not depend on the
+// shouldInitChecksum setting. This method can be used beneath raft where
+// different binaries cannot decide independently whether checksums should
+// be initialized or not.
+func (v *Value) MustInitChecksum(key []byte) {
 	if v.RawBytes == nil {
 		return
 	}
@@ -256,22 +281,6 @@ func (v *Value) InitChecksum(key []byte) {
 // ClearChecksum clears the checksum value.
 func (v *Value) ClearChecksum() {
 	v.setChecksum(0)
-}
-
-// Verify verifies the value's Checksum matches a newly-computed
-// checksum of the value's contents. If the value's Checksum is not
-// set the verification is a noop.
-func (v Value) Verify(key []byte) error {
-	if n := len(v.RawBytes); n > 0 && n < headerSize {
-		return fmt.Errorf("%s: invalid header size: %d", Key(key), n)
-	}
-	if sum := v.checksum(); sum != 0 {
-		if computedSum := v.computeChecksum(key); computedSum != sum {
-			return fmt.Errorf("%s: invalid checksum (%x) value [% x]",
-				Key(key), computedSum, v.RawBytes)
-		}
-	}
-	return nil
 }
 
 // ShallowClone returns a shallow clone of the receiver.

@@ -817,9 +817,6 @@ func mvccGetInternal(
 	if meta.IsInline() {
 		value := &buf.value
 		*value = roachpb.Value{RawBytes: meta.RawBytes}
-		if err := value.Verify(metaKey.Key); err != nil {
-			return nil, nil, safeValue, err
-		}
 		return value, nil, safeValue, nil
 	}
 	var ignoredIntents []roachpb.Intent
@@ -933,9 +930,6 @@ func mvccGetInternal(
 		value.RawBytes = iter.Value()
 	}
 	value.Timestamp = unsafeKey.Timestamp
-	if err := value.Verify(metaKey.Key); err != nil {
-		return nil, nil, safeValue, err
-	}
 	return value, ignoredIntents, allowedSafety, nil
 }
 
