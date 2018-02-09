@@ -34,7 +34,7 @@ func TestLogFilenameParsing(t *testing.T) {
 	}
 
 	for i, testCase := range testCases {
-		filename, _ := logName(testCase)
+		filename, _ := logName(program, testCase)
 		details, err := parseLogFilename(filename)
 		if err != nil {
 			t.Fatal(err)
@@ -54,7 +54,7 @@ func TestSelectFiles(t *testing.T) {
 	year2200 := time.Date(2200, time.January, 1, 1, 0, 0, 0, time.UTC)
 	for i := 0; i < 100; i++ {
 		fileTime := year2000.AddDate(i, 0, 0)
-		name, _ := logName(fileTime)
+		name, _ := logName(program, fileTime)
 		testfile := FileInfo{
 			Name: name,
 			Details: FileDetails{
