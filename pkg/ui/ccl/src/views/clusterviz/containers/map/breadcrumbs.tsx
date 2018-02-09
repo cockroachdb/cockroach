@@ -16,7 +16,7 @@ export class Breadcrumbs extends React.Component<BreadcrumbsProps> {
     const paths = breadcrumbPaths(this.props.tiers);
 
     return (
-      <div className="breadcrumbs">
+      <div className="breadcrumbs" style={{ flex: "none" }}>
         {intersperse(
           paths.map((path) => (
             <span className="breadcrumb">
