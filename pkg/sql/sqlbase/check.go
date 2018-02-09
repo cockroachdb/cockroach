@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -46,16 +47,10 @@ type AnalyzeExprFunction func(
 	typingContext string,
 ) (tree.TypedExpr, error)
 
-// ParseExprsFunction is used by the check helper during initialization to parse
-// the check expressions. See planner/parse.go for more details on this
-// function.
-type ParseExprsFunction func(sql []string) (tree.Exprs, error)
-
 // Init initializes the CheckHelper. This step should be done during planning.
 func (c *CheckHelper) Init(
 	ctx context.Context,
 	analyzeExpr AnalyzeExprFunction,
-	parserExprs ParseExprsFunction,
 	tn *tree.TableName,
 	tableDesc *TableDescriptor,
 ) error {
@@ -73,7 +68,7 @@ func (c *CheckHelper) Init(
 	for i, check := range tableDesc.Checks {
 		exprStrings[i] = check.Expr
 	}
-	exprs, err := parserExprs(exprStrings)
+	exprs, err := parser.ParseExprs(exprStrings)
 	if err != nil {
 		return err
 	}
