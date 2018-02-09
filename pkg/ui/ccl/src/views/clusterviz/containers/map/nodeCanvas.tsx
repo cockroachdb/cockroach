@@ -98,7 +98,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const parentLocality = tiers.splice(0, tiers.length - 1);
+    const parentLocality = tiers.slice(0, tiers.length - 1);
 
     return (
       <div style={{ position: "absolute", left: BACK_BUTTON_OFFSET, bottom: BACK_BUTTON_OFFSET }}>
