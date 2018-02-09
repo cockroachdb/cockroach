@@ -114,14 +114,20 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     // need to read its dimensions from the DOM in order to initialize the
     // state.
     return (
-      <div style={{ width: "100%", height: "100%", position: "relative" }}>
-        <svg
-          style={{ width: "100%", height: "100%" }}
-          className="cluster-viz"
-          ref={svg => this.graphEl = svg}
-        >
-          { this.renderContent() }
-        </svg>
+      <div style={{ flexGrow: 1, position: "relative" }}>
+        <div style={{ width: "100%", height: "100%", position: "absolute"  }}>
+          <svg
+            style={{
+              width: "100%",
+              height: "100%",
+              marginBottom: -3, // WHYYYYYYYYY?!?!?!?!?
+            }}
+            className="cluster-viz"
+            ref={svg => this.graphEl = svg}
+          >
+            { this.renderContent() }
+          </svg>
+        </div>
         { this.renderBackButton() }
       </div>
     );
