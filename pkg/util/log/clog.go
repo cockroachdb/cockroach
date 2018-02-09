@@ -593,16 +593,42 @@ func LoggingToStderr(s Severity) bool {
 // user configures larger max sizes than the defaults.
 func StartGCDaemon() {
 	go logging.gcDaemon()
+
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, l := range secondaryLogRegistry.mu.loggers {
+		// Some loggers (e.g. the audit log) want to keep all the files.
+		if l.enableGc {
+			go l.logger.gcDaemon()
+		}
+	}
 }
 
 // Flush flushes all pending log I/O.
 func Flush() {
 	logging.lockAndFlushAll()
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, l := range secondaryLogRegistry.mu.loggers {
+		// Some loggers (e.g. the audit log) want to keep all the files.
+		l.logger.lockAndFlushAll()
+	}
 }
 
 // SetSync configures whether logging synchronizes all writes.
 func SetSync(sync bool) {
 	logging.lockAndSetSync(sync)
+	func() {
+		secondaryLogRegistry.mu.Lock()
+		defer secondaryLogRegistry.mu.Unlock()
+		for _, l := range secondaryLogRegistry.mu.loggers {
+			if !sync && l.forceSyncWrites {
+				// We're not changing this.
+				continue
+			}
+			l.logger.lockAndSetSync(sync)
+		}
+	}()
 	if sync {
 		// There may be something in the buffers already; flush it.
 		Flush()
