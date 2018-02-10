@@ -796,6 +796,8 @@ func (t *tableState) release(lease *LeaseState, m *LeaseManager) error {
 	return nil
 }
 
+var removeLeaseSem = make(chan struct{}, 10)
+
 // t.mu needs to be locked.
 func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 	t.active.remove(lease)
@@ -809,9 +811,10 @@ func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 	}
 
 	// Release to the store asynchronously, without the tableState lock.
-	if err := t.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
-		m.LeaseStore.Release(ctx, t.stopper, lease)
-	}); err != nil {
+	if err := t.stopper.RunLimitedAsyncTask(ctx, removeLeaseSem, true,
+		func(ctx context.Context) {
+			m.LeaseStore.Release(ctx, t.stopper, lease)
+		}); err != nil {
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
 	}
 }
