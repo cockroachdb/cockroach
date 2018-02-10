@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -237,113 +238,6 @@ func (c *cluster) RunL(ctx context.Context, t *testing.T, l *logger, node int, a
 	}
 }
 
-// Monitor monitors the specified nodes in a cockroach cluster, watching for
-// unexpected failures. A failure occurs if either the errgroup returns an
-// error or if a cockroach node dies. See cluster.Start() for a description of
-// the nodes parameter.
-func (c *cluster) Monitor(ctx context.Context, t *testing.T, g *errgroup.Group, nodes ...int) {
-	c.assertT(t)
-	if t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
-	t.Helper()
-
-	err := c.monitor(ctx, t, g, nodes, "roachprod", "monitor", c.name)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func (c *cluster) monitor(
-	ctx context.Context, t *testing.T, g *errgroup.Group, nodes []int, args ...string,
-) error {
-	t.Helper()
-
-	_ = c.selector(t, nodes...) // check for a valid nodes specification
-
-	done := make(chan error)
-	go func() {
-		done <- g.Wait()
-	}()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	fatal := t.Fatal
-	pipeR, pipeW := io.Pipe()
-	go func() {
-		defer func() { _ = pipeW.Close() }()
-
-		monL, err := c.l.childLogger(`MONITOR`)
-		if err != nil {
-			fatal(err)
-		}
-		defer monL.close()
-
-		cmd := exec.CommandContext(ctx, args[0], args[1:]...)
-		if testing.Verbose() {
-			cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
-		} else {
-			cmd.Stdout = pipeW
-		}
-		cmd.Stderr = monL.stderr
-		if err := cmd.Run(); err != nil {
-			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
-				// The expected reason for an error is that the monitor was killed due
-				// to the context being canceled. Any other error is an actual error.
-				fatal(err)
-			}
-			// Returning will cause the pipe to be closed which will cause the reader
-			// goroutine to exit and close the monitoring channel.
-			return
-		}
-	}()
-
-	monitorCh := make(chan string)
-	go func() {
-		defer func() { _ = pipeR.Close() }()
-		defer close(monitorCh)
-
-		scanner := bufio.NewScanner(pipeR)
-		for scanner.Scan() {
-			monitorCh <- scanner.Text()
-		}
-	}()
-
-	watchedNode := func(id int) bool {
-		switch len(nodes) {
-		case 0:
-			return true
-		case 1:
-			return id == nodes[0]
-		case 2:
-			return nodes[0] <= id && id <= nodes[1]
-		default:
-			return false
-		}
-	}
-
-	for {
-		select {
-		case err := <-done:
-			return err
-		case msg, ok := <-monitorCh:
-			if !ok {
-				return fmt.Errorf("monitor died unexpectedly")
-			}
-
-			var id int
-			var s string
-			if n, _ := fmt.Sscanf(msg, "%d: %s", &id, &s); n == 2 {
-				if watchedNode(id) && strings.Contains(s, "dead") {
-					return fmt.Errorf("unexpected node event: %s", msg)
-				}
-			}
-		}
-	}
-}
-
 func (c *cluster) selector(t *testing.T, nodes ...int) string {
 	t.Helper()
 	switch len(nodes) {
@@ -374,6 +268,165 @@ func (c *cluster) isLocal() bool {
 	return c.name == "local"
 }
 
+type monitor struct {
+	c      *cluster
+	ctx    context.Context
+	cancel func()
+	g      *errgroup.Group
+}
+
+func newMonitor(ctx context.Context, c *cluster) *monitor {
+	m := &monitor{c: c}
+	m.ctx, m.cancel = context.WithCancel(ctx)
+	m.g, m.ctx = errgroup.WithContext(m.ctx)
+	return m
+}
+
+func (m *monitor) Go(fn func(context.Context) error) {
+	m.g.Go(func() error {
+		return fn(m.ctx)
+	})
+}
+
+func (m *monitor) Wait(t *testing.T, nodes ...int) {
+	m.c.assertT(t)
+	if t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return
+	}
+	t.Helper()
+
+	err := m.wait(t, nodes, "roachprod", "monitor", m.c.name)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (m *monitor) wait(t *testing.T, nodes []int, args ...string) error {
+	t.Helper()
+	_ = m.c.selector(t, nodes...) // check for a valid nodes specification
+
+	// It is surprisingly difficult to get the cancelation semantics exactly
+	// right. We need to watch for the "workers" group (m.g) to finish, or for
+	// the monitor command to emit an unexpected node failure, or for the monitor
+	// command itself to exit. We want to capture whichever error happens first
+	// and then cancel the other goroutines. This ordering prevents the usage of
+	// an errgroup.Group for the goroutines below. Consider:
+	//
+	//   g, _ := errgroup.WithContext(m.ctx)
+	//   g.Go(func(context.Context) error {
+	//     defer m.cancel()
+	//     return m.g.Wait()
+	//   })
+	//
+	// Now consider what happens when an error is returned. Before the error
+	// reaches the errgroup, we invoke the cancelation closure which can cause
+	// the other goroutines to wake up and perhaps race and set the errgroup
+	// error first.
+	//
+	// The solution is to implement our own errgroup mechanism here which allows
+	// us to set the error before performing the cancelation.
+
+	var errOnce sync.Once
+	var err error
+	setErr := func(e error) {
+		if e != nil {
+			errOnce.Do(func() {
+				err = e
+			})
+		}
+	}
+
+	// 1. The first goroutine waits for the worker errgroup to exit.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer func() {
+			m.cancel()
+			wg.Done()
+		}()
+		setErr(m.g.Wait())
+	}()
+
+	// 2. The second goroutine forks/execs the monitoring command.
+	pipeR, pipeW := io.Pipe()
+	wg.Add(1)
+	go func() {
+		defer func() {
+			_ = pipeW.Close()
+			wg.Done()
+			// NB: we explicitly do not want to call m.cancel() here as we want the
+			// goroutine that is reading the monitoring events to be able to decide
+			// on the error if the monitoring command exits peacefully.
+		}()
+
+		monL, err := m.c.l.childLogger(`MONITOR`)
+		if err != nil {
+			setErr(err)
+			return
+		}
+		defer monL.close()
+
+		cmd := exec.CommandContext(m.ctx, args[0], args[1:]...)
+		if testing.Verbose() {
+			cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
+		} else {
+			cmd.Stdout = pipeW
+		}
+		cmd.Stderr = monL.stderr
+		if err := cmd.Run(); err != nil {
+			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {
+				// The expected reason for an error is that the monitor was killed due
+				// to the context being canceled. Any other error is an actual error.
+				setErr(err)
+				return
+			}
+		}
+		// Returning will cause the pipe to be closed which will cause the reader
+		// goroutine to exit and close the monitoring channel.
+	}()
+
+	// 3. The third goroutine reads from the monitoring pipe, watching for any
+	// unexpected death events.
+	wg.Add(1)
+	go func() {
+		defer func() {
+			_ = pipeR.Close()
+			m.cancel()
+			wg.Done()
+		}()
+
+		watchedNode := func(id int) bool {
+			switch len(nodes) {
+			case 0:
+				return true
+			case 1:
+				return id == nodes[0]
+			case 2:
+				return nodes[0] <= id && id <= nodes[1]
+			default:
+				return false
+			}
+		}
+
+		scanner := bufio.NewScanner(pipeR)
+		for scanner.Scan() {
+			msg := scanner.Text()
+			var id int
+			var s string
+			if n, _ := fmt.Sscanf(msg, "%d: %s", &id, &s); n == 2 {
+				if watchedNode(id) && strings.Contains(s, "dead") {
+					setErr(fmt.Errorf("unexpected node event: %s", msg))
+					return
+				}
+			}
+		}
+	}()
+
+	wg.Wait()
+	return err
+}
+
 func TestInvalidClusterUsage(t *testing.T) {
 	// Verify that it is invalid to share a cluster between a parent test and
 	// child tests. This is necessary because we arrange to run nightly tests in
@@ -395,25 +448,23 @@ func TestInvalidClusterUsage(t *testing.T) {
 func TestClusterMonitor(t *testing.T) {
 	t.Run(`success`, func(t *testing.T) {
 		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
-		g := &errgroup.Group{}
-		g.Go(func() error { return nil })
-		if err := c.monitor(context.Background(), t, g, nil, `sleep`, `100`); err != nil {
+		m := newMonitor(context.Background(), c)
+		m.Go(func(context.Context) error { return nil })
+		if err := m.wait(t, nil, `sleep`, `100`); err != nil {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run(`dead`, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
 		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
-		g := &errgroup.Group{}
-		g.Go(func() error {
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
+			fmt.Printf("worker done\n")
 			return ctx.Err()
 		})
 
-		err := c.monitor(ctx, t, g, nil, `echo`, "1: 100\n1: dead")
+		err := m.wait(t, nil, `echo`, "1: 100\n1: dead")
 		expectedErr := `dead`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
@@ -421,39 +472,33 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`nodes`, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
 		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
-		g := &errgroup.Group{}
-		g.Go(func() error {
+		m := newMonitor(context.Background(), c)
+		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			return ctx.Err()
 		})
 
 		// Node 1 is dead, but we were only monitoring node 2.
-		err := c.monitor(ctx, t, g, []int{2}, `echo`, "1: dead")
-		expectedErr := `monitor died unexpectedly`
+		err := m.wait(t, []int{2}, `echo`, "1: dead")
+		expectedErr := `context canceled`
 		if !testutils.IsError(err, expectedErr) {
 			t.Fatal(err)
 		}
 	})
 
 	t.Run(`worker-fail`, func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
 		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
-		g, ctx := errgroup.WithContext(ctx)
-		g.Go(func() error {
+		m := newMonitor(context.Background(), c)
+		m.Go(func(context.Context) error {
 			return errors.New(`worker-fail`)
 		})
-		g.Go(func() error {
+		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
 			return ctx.Err()
 		})
 
-		err := c.monitor(ctx, t, g, nil, `sleep`, `100`)
+		err := m.wait(t, nil, `sleep`, `100`)
 		expectedErr := `worker-fail`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)

@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestLocal(t *testing.T) {
@@ -38,12 +37,12 @@ func TestLocal(t *testing.T) {
 	c.Put(ctx, t, *workload, "<workload>")
 	c.Start(ctx, t, 1)
 
-	g, ctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
+	m := newMonitor(ctx, c)
+	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, t, 1, "<workload> run kv --init --read-percent=95 --splits=100 --duration=10s")
 		return nil
 	})
-	c.Monitor(ctx, t, g)
+	m.Wait(t)
 }
 
 func TestSingleDC(t *testing.T) {
@@ -71,12 +70,12 @@ func TestSingleDC(t *testing.T) {
 			c.Put(ctx, t, *workload, "<workload>")
 			c.Start(ctx, t, 1, 3)
 
-			g, ctx := errgroup.WithContext(ctx)
-			g.Go(func() error {
+			m := newMonitor(ctx, c)
+			m.Go(func(ctx context.Context) error {
 				c.Run(ctx, t, 4, cmd)
 				return nil
 			})
-			c.Monitor(ctx, t, g, 1, 3)
+			m.Wait(t, 1, 3)
 		})
 	}
 
@@ -131,15 +130,15 @@ func TestRoachmart(t *testing.T) {
 			duration = "10s"
 		}
 
-		g, ctx := errgroup.WithContext(ctx)
+		m := newMonitor(ctx, c)
 		for i := range nodes {
 			i := i
-			g.Go(func() error {
+			m.Go(func(ctx context.Context) error {
 				roachmartRun(ctx, t, i, "<workload>", "run", "roachmart", "--duration", duration)
 				return nil
 			})
 		}
 
-		c.Monitor(ctx, t, g)
+		m.Wait(t)
 	})
 }
