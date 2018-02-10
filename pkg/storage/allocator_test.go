@@ -862,7 +862,7 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 		{replicas(1, 2, 3, 7, 8), 0},
 	}
 
-	for i, c := range testCases {
+	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			result, _ := a.RebalanceTarget(
 				ctx, nil, nil, testRangeInfo(c.existing, firstRange), storeFilterThrottled, false)
