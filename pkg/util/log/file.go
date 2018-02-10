@@ -49,21 +49,19 @@ var LogFileMaxSize int64 = 10 << 20 // 10MiB
 // to LogFileMaxSize larger.
 var LogFilesCombinedMaxSize = LogFileMaxSize * 10 // 100MiB
 
-// If non-empty, overrides the choice of directory in which to write logs. See
-// createLogDirs for the full list of possible destinations. Note that the
-// default is to log to stderr independent of this setting. See --logtostderr.
-
-type logDirName struct {
+// DirName overrides (if non-empty) the choice of directory in
+// which to write logs. See createLogDirs for the full list of
+// possible destinations. Note that the default is to log to stderr
+// independent of this setting. See --logtostderr.
+type DirName struct {
 	syncutil.Mutex
 	name string
 }
 
-var _ flag.Value = &logDirName{}
-
-var logDir logDirName
+var _ flag.Value = &DirName{}
 
 // Set implements the flag.Value interface.
-func (l *logDirName) Set(dir string) error {
+func (l *DirName) Set(dir string) error {
 	if len(dir) > 0 && dir[0] == '~' {
 		return fmt.Errorf("log directory cannot start with '~': %s", dir)
 	}
@@ -81,18 +79,18 @@ func (l *logDirName) Set(dir string) error {
 }
 
 // Type implements the flag.Value interface.
-func (l *logDirName) Type() string {
+func (l *DirName) Type() string {
 	return "string"
 }
 
 // String implements the flag.Value interface.
-func (l *logDirName) String() string {
+func (l *DirName) String() string {
 	l.Lock()
 	defer l.Unlock()
 	return l.name
 }
 
-func (l *logDirName) get() (string, error) {
+func (l *DirName) get() (string, error) {
 	l.Lock()
 	defer l.Unlock()
 	if len(l.name) == 0 {
@@ -101,7 +99,8 @@ func (l *logDirName) get() (string, error) {
 	return l.name, nil
 }
 
-func (l *logDirName) isSet() bool {
+// IsSet returns true iff the directory name is set.
+func (l *DirName) IsSet() bool {
 	l.Lock()
 	res := l.name != ""
 	l.Unlock()
@@ -109,7 +108,7 @@ func (l *logDirName) isSet() bool {
 }
 
 // DirSet returns true of the log directory has been changed from its default.
-func DirSet() bool { return logDir.isSet() }
+func DirSet() bool { return logging.logDir.IsSet() }
 
 // logFileRE matches log files to avoid exposing non-log files accidentally
 // and it splits the details of the filename into groups for easy parsing.
@@ -161,18 +160,18 @@ func removePeriods(s string) string {
 
 // logName returns a new log file name with start time t, and the name
 // for the symlink.
-func logName(t time.Time) (name, link string) {
+func logName(prefix string, t time.Time) (name, link string) {
 	// Replace the ':'s in the time format with '_'s to allow for log files in
 	// Windows.
 	tFormatted := strings.Replace(t.Format(time.RFC3339), ":", "_", -1)
 
 	name = fmt.Sprintf("%s.%s.%s.%s.%06d.log",
-		removePeriods(program),
+		removePeriods(prefix),
 		removePeriods(host),
 		removePeriods(userName),
 		tFormatted,
 		pid)
-	return name, removePeriods(program) + ".log"
+	return name, removePeriods(prefix) + ".log"
 }
 
 var errMalformedName = errors.New("malformed log filename")
@@ -210,7 +209,7 @@ var errDirectoryNotSet = errors.New("log: log directory not set")
 // filename. If the file is created successfully, create also attempts
 // to update the symlink for that tag, ignoring errors.
 func create(
-	t time.Time, lastRotation int64,
+	logDir *DirName, prefix string, t time.Time, lastRotation int64,
 ) (f *os.File, updatedRotation int64, filename string, err error) {
 	dir, err := logDir.get()
 	if err != nil {
@@ -227,7 +226,7 @@ func create(
 	t = timeutil.Unix(unix, 0)
 
 	// Generate the file name.
-	name, link := logName(t)
+	name, link := logName(prefix, t)
 	fname := filepath.Join(dir, name)
 	// Open the file os.O_APPEND|os.O_CREATE rather than use os.Create.
 	// Append is almost always more efficient than O_RDRW on most modern file systems.
@@ -255,8 +254,12 @@ func create(
 // ListLogFiles returns a slice of FileInfo structs for each log file
 // on the local node, in any of the configured log directories.
 func ListLogFiles() ([]FileInfo, error) {
+	return logging.listLogFiles()
+}
+
+func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 	var results []FileInfo
-	dir, err := logDir.get()
+	dir, err := logging.logDir.get()
 	if err != nil {
 		// No log directory configured: simply indicate that there are no
 		// log files.
@@ -266,10 +269,15 @@ func ListLogFiles() ([]FileInfo, error) {
 	if err != nil {
 		return results, err
 	}
+	// The file names have a fixed structure with fields delimited by
+	// periods. create() for new files removes the periods from the
+	// provided prefix; do the same here to filter out selected names
+	// below.
+	programPrefix := removePeriods(l.prefix)
 	for _, info := range infos {
 		if info.Mode().IsRegular() {
 			details, err := parseLogFilename(info.Name())
-			if err == nil {
+			if err == nil && details.Program == programPrefix {
 				results = append(results, FileInfo{
 					Name:         info.Name(),
 					SizeBytes:    info.Size(),
@@ -291,7 +299,7 @@ func ListLogFiles() ([]FileInfo, error) {
 // file names will be searched in this process's log directory if not
 // found in the current directory.
 func GetLogReader(filename string, restricted bool) (io.ReadCloser, error) {
-	dir, err := logDir.get()
+	dir, err := logging.logDir.get()
 	if err != nil {
 		return nil, err
 	}

@@ -454,7 +454,7 @@ func TestGetLogReader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dir, err := logDir.get()
+	dir, err := logging.logDir.get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -596,7 +596,7 @@ func TestGC(t *testing.T) {
 	if e, a := 1, len(allFilesOriginal); e != a {
 		t.Fatalf("expected %d files, but found %d", e, a)
 	}
-	dir, err := logDir.get()
+	dir, err := logging.logDir.get()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -757,6 +757,7 @@ func TestFileSeverityFilter(t *testing.T) {
 	defer s.Close(t)
 
 	setFlags()
+	defer func(save Severity) { logging.fileThreshold = save }(logging.fileThreshold)
 	logging.fileThreshold = Severity_ERROR
 
 	Infof(context.Background(), "test1")
