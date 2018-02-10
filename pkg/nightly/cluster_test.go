@@ -55,7 +55,12 @@ func makeClusterName(t *testing.T) string {
 		return "local"
 	}
 
-	t.Parallel()
+	if strings.Contains(t.Name(), "/") {
+		t.Parallel()
+	}
+
+	// TODO(peter): Add an option to use an existing cluster.
+
 	username := os.Getenv("ROACHPROD_USER")
 	if username == "" {
 		usr, err := user.Current()
@@ -296,7 +301,7 @@ func (m *monitor) Wait(t *testing.T, nodes ...int) {
 	}
 	t.Helper()
 
-	err := m.wait(t, nodes, "roachprod", "monitor", m.c.name)
+	err := m.wait(t, nodes, "roachprod", "monitor", m.c.selector(t, nodes...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +309,6 @@ func (m *monitor) Wait(t *testing.T, nodes ...int) {
 
 func (m *monitor) wait(t *testing.T, nodes []int, args ...string) error {
 	t.Helper()
-	_ = m.c.selector(t, nodes...) // check for a valid nodes specification
 
 	// It is surprisingly difficult to get the cancelation semantics exactly
 	// right. We need to watch for the "workers" group (m.g) to finish, or for
@@ -396,26 +400,13 @@ func (m *monitor) wait(t *testing.T, nodes []int, args ...string) error {
 			wg.Done()
 		}()
 
-		watchedNode := func(id int) bool {
-			switch len(nodes) {
-			case 0:
-				return true
-			case 1:
-				return id == nodes[0]
-			case 2:
-				return nodes[0] <= id && id <= nodes[1]
-			default:
-				return false
-			}
-		}
-
 		scanner := bufio.NewScanner(pipeR)
 		for scanner.Scan() {
 			msg := scanner.Text()
 			var id int
 			var s string
 			if n, _ := fmt.Sscanf(msg, "%d: %s", &id, &s); n == 2 {
-				if watchedNode(id) && strings.Contains(s, "dead") {
+				if strings.Contains(s, "dead") {
 					setErr(fmt.Errorf("unexpected node event: %s", msg))
 					return
 				}
@@ -468,22 +459,6 @@ func TestClusterMonitor(t *testing.T) {
 		expectedErr := `dead`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
-		}
-	})
-
-	t.Run(`nodes`, func(t *testing.T) {
-		c := &cluster{testName: t.Name(), l: stdLogger(t.Name())}
-		m := newMonitor(context.Background(), c)
-		m.Go(func(ctx context.Context) error {
-			<-ctx.Done()
-			return ctx.Err()
-		})
-
-		// Node 1 is dead, but we were only monitoring node 2.
-		err := m.wait(t, []int{2}, `echo`, "1: dead")
-		expectedErr := `context canceled`
-		if !testutils.IsError(err, expectedErr) {
-			t.Fatal(err)
 		}
 	})
 
