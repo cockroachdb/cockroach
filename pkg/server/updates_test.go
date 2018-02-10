@@ -309,7 +309,7 @@ func TestReportUsage(t *testing.T) {
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 			`UPDATE _ SET _ = _ + _`,
-			`SET CLUSTER SETTING _._ = _`,
+			`SET CLUSTER SETTING _ = _`,
 		},
 	} {
 		if app, ok := bucketByApp[sql.HashAppName(appName)]; !ok {
