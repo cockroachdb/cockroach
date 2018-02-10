@@ -2520,7 +2520,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	}
 
 	// Get original meta2 descriptor.
-	rs, _, err := client.RangeLookup(ctx, rg1(store), key, roachpb.INCONSISTENT, 0, false)
+	rs, _, err := client.RangeLookup(ctx, rg1(store), key, roachpb.READ_UNCOMMITTED, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
