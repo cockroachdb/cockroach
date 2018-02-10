@@ -19,6 +19,9 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -298,6 +301,30 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 			planToString(ctx, p.curPlan.plan, p.curPlan.subqueryPlans))
 	}
 
+	return nil
+}
+
+// makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
+// optimizer.
+func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+	// execEngine is both an exec.Engine and an optbase.Catalog.
+	eng := &execEngine{
+		planner: p,
+	}
+
+	o := xform.NewOptimizer(eng, xform.OptimizeAll)
+	root, props, err := optbuilder.New(ctx, o.Factory(), stmt.AST).Build()
+	if err != nil {
+		return err
+	}
+
+	ev := o.Optimize(root, props)
+
+	node, err := execbuilder.New(eng.Factory(), ev).Build()
+	if err != nil {
+		return err
+	}
+	p.curPlan.plan = node.(planNode)
 	return nil
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -35,7 +36,7 @@ func TestMain(m *testing.M) {
 	randutil.SeedForTests()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 
-	execbuilder.NewExecEngine = func(s serverutils.TestServerInterface) exec.Engine {
+	execbuilder.NewExecEngine = func(s serverutils.TestServerInterface) (exec.Engine, optbase.Catalog) {
 		return s.Executor().(*sql.Executor).NewExecEngine()
 	}
 
