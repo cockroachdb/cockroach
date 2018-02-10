@@ -536,8 +536,6 @@ func rebalanceCandidates(
 			if store.StoreID != repl.StoreID {
 				continue
 			}
-			// TODO: will this mark too many things as necessary when compared to the
-			// use of allocateConstraintsCheck on the potential rebalance targets?
 			valid, necessary := removeConstraintsCheck(store, constraints)
 			fullDisk := !maxCapacityCheck(store)
 			if !valid {
@@ -661,10 +659,10 @@ func rebalanceCandidates(
 	for localityStr, sl := range comparableStores {
 		var existingCandidates candidateList
 		var candidates candidateList
-		var fromNodeID roachpb.NodeID
+		var fromStore roachpb.StoreDescriptor
 		for _, existing := range existingStores {
 			if existing.localityStr == localityStr {
-				fromNodeID = existing.cand.store.Node.NodeID
+				fromStore = existing.cand.store
 			}
 		}
 		for _, s := range sl.stores {
@@ -698,13 +696,12 @@ func rebalanceCandidates(
 			} else {
 				maxCapacityOK := maxCapacityCheck(s)
 				// Re-check constraints here to verify node/store attributes.
-				// TODO: will this fail to mark things as necessary when compared to the use
-				// of removeConstraintsCheck on the existing replicas?
-				constraintsOK, necessary := allocateConstraintsCheck(s, constraints)
+				// TODO: If we include attributes up-front (as we should), this won't be necessary.
+				constraintsOK, necessary := rebalanceFromConstraintsCheck(s, fromStore.StoreID, constraints)
 				if !constraintsOK || !maxCapacityOK || !rebalanceToMaxCapacityCheck(s) {
 					continue
 				}
-				diversityScore := diversityRebalanceFromScore(s, fromNodeID, existingNodeLocalities)
+				diversityScore := diversityRebalanceFromScore(s, fromStore.Node.NodeID, existingNodeLocalities)
 				balanceScore := balanceScore(sl, s.Capacity, rangeInfo, options)
 				var convergesScore int
 				if rebalanceToConvergesOnMean(sl, s.Capacity, rangeInfo, options) {
@@ -954,7 +951,7 @@ type analyzedConstraints struct {
 
 func analyzeConstraints(
 	ctx context.Context,
-	storePool *StorePool,
+	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
 	constraints []config.Constraints,
 ) analyzedConstraints {
@@ -973,7 +970,7 @@ func analyzeConstraints(
 			// happen once a node is hooked into gossip), trust that it's valid. This
 			// is a much more stable failure state than frantically moving everything
 			// off such a node.
-			store, ok := storePool.getStoreDescriptor(repl.StoreID)
+			store, ok := getStoreDescFn(repl.StoreID)
 			if !ok || subConstraintsCheck(store, subConstraints) {
 				result.satisfiedBy[i] = append(result.satisfiedBy[i], store.StoreID)
 				result.satisfies[store.StoreID] = append(result.satisfies[store.StoreID], i)
@@ -1039,6 +1036,48 @@ func removeConstraintsCheck(
 	// existing replica and only considering that one nonessential, but this is
 	// sufficient to avoid violating constraints.
 	return true, false
+}
+
+func rebalanceFromConstraintsCheck(
+	store roachpb.StoreDescriptor, fromStoreID roachpb.StoreID, analyzed analyzedConstraints,
+) (valid bool, necessary bool) {
+	// All stores are valid when there are no constraints.
+	if len(analyzed.constraints) == 0 {
+		return true, false
+	}
+
+	// Check the store against all the constraints. If it matches a constraint at
+	// all, it's valid. If it matches a constraint that is not already fully
+	// satisfied by existing replicas or that is only fully satisfied because of
+	// fromStoreID, then it's necessary.
+	//
+	// NB: This assumes that the sum of all constraints.NumReplicas is equal to
+	// configured number of replicas for the range, or that there's just one set
+	// of constraints with NumReplicas set to 0. This is meant to be enforced in
+	// the config package.
+	for i, constraints := range analyzed.constraints {
+		if constraintsOK := subConstraintsCheck(store, constraints); constraintsOK {
+			valid = true
+			matchingStores := analyzed.satisfiedBy[i]
+			if len(matchingStores) < int(constraints.NumReplicas) ||
+				(len(matchingStores) == int(constraints.NumReplicas) &&
+					containsStore(analyzed.satisfiedBy[i], fromStoreID)) {
+				return true, true
+			}
+		}
+	}
+
+	return valid, false
+}
+
+// containsStore returns true if the list of StoreIDs contains the target.
+func containsStore(stores []roachpb.StoreID, target roachpb.StoreID) bool {
+	for _, storeID := range stores {
+		if storeID == target {
+			return true
+		}
+	}
+	return false
 }
 
 // constraintsCheck returns true iff the provided store would be a valid in a

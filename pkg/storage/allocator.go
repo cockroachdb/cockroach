@@ -337,7 +337,8 @@ func (a *Allocator) AllocateTarget(
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
-	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
+	analyzedConstraints := analyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
 		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
@@ -411,7 +412,8 @@ func (a Allocator) RemoveTarget(
 	}
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
-	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
+	analyzedConstraints := analyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	rankedCandidates := removeCandidates(
 		sl,
@@ -498,7 +500,8 @@ func (a Allocator) RebalanceTarget(
 		}
 	}
 
-	analyzedConstraints := analyzeConstraints(ctx, a.storePool, rangeInfo.Desc.Replicas, constraints)
+	analyzedConstraints := analyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, constraints)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	results := rebalanceCandidates(
 		ctx,
