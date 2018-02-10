@@ -1096,8 +1096,6 @@ func (c *v3Conn) RowsAffected() int {
 // CloseResult implements the StatementResult interface.
 // It sends a "command complete" server message.
 func (c *v3Conn) CloseResult() error {
-	c.curStmtErr = nil
-
 	state := &c.streamingState
 	if state.err != nil {
 		return state.err

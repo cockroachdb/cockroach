@@ -89,7 +89,7 @@ func newCopyMachine(
 		session: s,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:              planner{},
+		p:              planner{execCfg: s.execCfg},
 		parsingEvalCtx: &evalCtx.EvalContext,
 	}
 

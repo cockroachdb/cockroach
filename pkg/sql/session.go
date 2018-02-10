@@ -393,7 +393,8 @@ func NewSession(
 			databaseCache:     e.dbCache.getDatabaseCache(),
 			dbCacheSubscriber: e.dbCache,
 		},
-		conn: conn,
+		conn:    conn,
+		planner: planner{execCfg: &e.cfg},
 	}
 	s.dataMutator = sessionDataMutator{
 		data: &s.data,
@@ -606,7 +607,7 @@ func (s *Session) FinishPlan() {
 		s.ActiveSyncQueries = make([]uint128.Uint128, 0)
 	}
 
-	s.planner = emptyPlanner
+	s.planner = planner{execCfg: s.execCfg}
 }
 
 // newPlanner creates a planner inside the scope of the given Session. The
@@ -622,7 +623,7 @@ func (s *Session) newPlanner(
 	reCache *tree.RegexpCache,
 	statsCollector sqlStatsCollector,
 ) *planner {
-	p := &planner{}
+	p := &planner{execCfg: s.execCfg}
 	s.resetPlanner(p, txn, txnTimestamp, stmtTimestamp, reCache, statsCollector)
 	return p
 }
