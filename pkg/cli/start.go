@@ -556,6 +556,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(tw, "socket:\t%s\n", serverCfg.SocketFile)
 			}
 			fmt.Fprintf(tw, "logs:\t%s\n", flag.Lookup("log-dir").Value)
+			if serverCfg.SQLAuditLogDirName.IsSet() {
+				fmt.Fprintf(tw, "SQL audit logs:\t%s\n", serverCfg.SQLAuditLogDirName)
+			}
 			if serverCfg.Attrs != "" {
 				fmt.Fprintf(tw, "attrs:\t%s\n", serverCfg.Attrs)
 			}

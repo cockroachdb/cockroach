@@ -240,6 +240,10 @@ type planTop struct {
 
 	// plannedExecute is true if this planner has planned an EXECUTE statement.
 	plannedExecute bool
+
+	// auditEvents becomes non-nil if any of the descriptors used by
+	// current statement is causing an auditing event. See exec_log.go.
+	auditEvents []auditEvent
 }
 
 // makePlan implements the Planner interface. It populates the

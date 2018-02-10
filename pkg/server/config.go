@@ -163,6 +163,9 @@ type Config struct {
 	// used by SQL clients to store row data in server RAM.
 	SQLMemoryPoolSize int64
 
+	// SQLAuditLogDirName is the target directory name for SQL audit logs.
+	SQLAuditLogDirName *log.DirName
+
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.
