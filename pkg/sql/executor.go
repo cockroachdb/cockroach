@@ -57,14 +57,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// logStatementsExecuteEnabled causes the Executor to log executed
-// statements and, if any, resulting errors.
-var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
-	"sql.trace.log_statement_execute",
-	"set to true to enable logging of executed statements",
-	false,
-)
-
 // ClusterOrganization is the organization name.
 var ClusterOrganization = settings.RegisterStringSetting(
 	"cluster.organization",
@@ -262,6 +254,7 @@ type ExecutorConfig struct {
 	JobRegistry     *jobs.Registry
 	VirtualSchemas  *VirtualSchemaHolder
 	DistSQLPlanner  *DistSQLPlanner
+	ExecLogger      *log.SecondaryLogger
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -538,27 +531,32 @@ func (e *Executor) Prepare(
 	planner.extendedEvalCtx.PrepareOnly = true
 	planner.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
 
+	ctx := session.Ctx()
 	if protoTS != nil {
 		planner.asOfSystemTime = true
 		// We can't use cached descriptors anywhere in this query, because
 		// we want the descriptors at the timestamp given, not the latest
 		// known to the cache.
 		planner.avoidCachedDescriptors = true
-		txn.SetFixedTimestamp(session.Ctx(), *protoTS)
+		txn.SetFixedTimestamp(ctx, *protoTS)
 	}
 
-	if err := planner.prepare(session.Ctx(), stmt.AST); err != nil {
+	startTime := timeutil.Now()
+	if err := planner.prepare(ctx, stmt.AST); err != nil {
+		planner.maybeLogStatementInternal(ctx, "prepare", 0, err, startTime)
 		return nil, err
 	}
+	planner.maybeLogStatementInternal(ctx, "prepare", 0, nil, startTime)
+
 	if planner.curPlan.plan == nil {
 		// The statement cannot be prepared. Nothing to do.
 		return prepared, nil
 	}
 	defer func() {
-		planner.curPlan.close(session.Ctx())
+		planner.curPlan.close(ctx)
 		// NB: if we start caching the plan, we'll want to keep around the memory
 		// account used for the plan, rather than clearing it.
-		prepared.memAcc.Clear(session.Ctx())
+		prepared.memAcc.Clear(ctx)
 	}()
 	prepared.Columns = planner.curPlan.columns()
 	for _, c := range prepared.Columns {
@@ -644,10 +642,6 @@ func (e *Executor) ExecutePreparedStatement(
 func (e *Executor) execPrepared(
 	session *Session, stmt *PreparedStatement, pinfo *tree.PlaceholderInfo,
 ) error {
-	if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) {
-		log.Infof(session.Ctx(), "execPrepared: %s", stmt.Str)
-	}
-
 	var stmts StatementList
 	if stmt.Statement != nil {
 		stmts = StatementList{{
@@ -677,19 +671,12 @@ func (e *Executor) execPrepared(
 func (e *Executor) execRequest(session *Session, sql string, pinfo *tree.PlaceholderInfo) error {
 	txnState := &session.TxnState
 
-	if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) {
-		log.Infof(session.Ctx(), "execRequest: %s", sql)
-	}
-
 	session.phaseTimes[sessionStartParse] = timeutil.Now()
 	sl, err := parser.Parse(sql)
 	stmts := NewStatementList(sl)
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
 
 	if err != nil {
-		if log.V(2) || logStatementsExecuteEnabled.Get(&e.cfg.Settings.SV) {
-			log.Infof(session.Ctx(), "execRequest: error: %v", err)
-		}
 		// A parse error occurred: we can't determine if there were multiple
 		// statements or only one, so just pretend there was one.
 		if txnState.mu.txn != nil {
@@ -1453,9 +1440,7 @@ func (e *Executor) execStmtInCommitWaitTxn(
 // sessionEventf logs an event to the current transaction context and to the
 // session event log.
 func sessionEventf(session *Session, format string, args ...interface{}) {
-	if session.eventLog == nil {
-		log.VEventf(session.context, 2, format, args...)
-	} else {
+	if session.eventLog != nil {
 		str := fmt.Sprintf(format, args...)
 		log.VEvent(session.context, 2, str)
 		session.eventLog.Printf("%s", str)
@@ -2099,11 +2084,14 @@ func (e *Executor) execStmt(
 		err = planner.makePlan(ctx, stmt)
 	}
 	if err != nil {
+		planner.maybeLogStatement(ctx, "exec", 0, err)
 		return err
 	}
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 
 	defer planner.curPlan.close(ctx)
+
+	defer func() { planner.maybeLogStatement(ctx, "exec", res.RowsAffected(), res.Err()) }()
 
 	// Prepare the result set, and determine the execution parameters.
 	var cols sqlbase.ResultColumns
@@ -2138,6 +2126,8 @@ func (e *Executor) execStmt(
 	} else {
 		err = e.execLocal(planner, planner.curPlan.plan, res)
 	}
+	// Ensure the error is saved where maybeLogStatement can find it.
+	res.SetError(err)
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
 	// Complete execution: record results and optionally run the test
@@ -2176,6 +2166,7 @@ func (e *Executor) execStmtInParallel(
 	}
 
 	if err := planner.makePlan(ctx, stmt); err != nil {
+		planner.maybeLogStatement(ctx, "par-prepare", 0, err)
 		return nil, err
 	}
 	var cols sqlbase.ResultColumns
@@ -2191,8 +2182,14 @@ func (e *Executor) execStmtInParallel(
 		// TODO(andrei): this should really be a result writer implementation that
 		// does nothing.
 		bufferedWriter := newBufferedWriter(session.makeBoundAccount())
+
+		defer func() {
+			params.p.maybeLogStatement(ctx, "par-exec", bufferedWriter.RowsAffected(), bufferedWriter.Err())
+		}()
+
 		err := initStatementResult(bufferedWriter, stmt, cols)
 		if err != nil {
+			bufferedWriter.SetError(err)
 			return err
 		}
 
@@ -2202,6 +2199,8 @@ func (e *Executor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err = e.execLocal(planner, planner.curPlan.plan, bufferedWriter)
+		// Ensure err is saved where maybeLogStatement can find it.
+		bufferedWriter.SetError(err)
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(planner, stmt, false, 0, bufferedWriter, err, &e.EngineMetrics)
 		if e.cfg.TestingKnobs.AfterExecute != nil {
@@ -2213,6 +2212,7 @@ func (e *Executor) execStmtInParallel(
 		session.removeActiveQuery(stmt.queryID)
 		return err
 	}); err != nil {
+		planner.maybeLogStatement(ctx, "par-queue", 0, err)
 		return nil, err
 	}
 

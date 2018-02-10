@@ -216,6 +216,9 @@ var _ planNodeFastPath = &setZoneConfigNode{}
 // TODO(jordan): investigate whether/how per-plan state like
 // placeholder data can be concentrated in a single struct.
 type planTop struct {
+	// AST is the syntax tree for the current statement.
+	AST tree.Statement
+
 	// plan is the top-level node of the logical plan.
 	plan planNode
 
@@ -252,7 +255,7 @@ type planTop struct {
 // p.curPlan.Close().
 func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	// Reinitialize.
-	p.curPlan = planTop{}
+	p.curPlan = planTop{AST: stmt.AST}
 
 	var err error
 	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
@@ -728,7 +731,7 @@ func (p *planner) newPlan(
 // The resulting plan is stored in p.curPlan.
 func (p *planner) prepare(ctx context.Context, stmt tree.Statement) error {
 	// Reinitialize.
-	p.curPlan = planTop{}
+	p.curPlan = planTop{AST: stmt}
 
 	// Prepare the plan.
 	plan, err := p.doPrepare(ctx, stmt)
