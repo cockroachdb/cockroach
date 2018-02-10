@@ -560,12 +560,29 @@ func (t *tableState) acquire(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	acquiredNewLease := false
 	for {
 		s := t.active.findNewest(version)
 		if s != nil {
 			if checkedLease := t.checkLease(s, version, m.clock); checkedLease != nil {
 				return checkedLease, nil
 			}
+			// We found an active lease that we couldn't use (because it's
+			// too close to expiration). Leases are deleted from the table
+			// when they have a refcount of zero and they are no longer
+			// the newest. It's possible that this lease had its refcount
+			// drop to zero while it was the newest version, in which case
+			// it's our responsibility to delete it when we make it no
+			// longer the newest.
+			defer func(lease *LeaseState) {
+				if acquiredNewLease {
+					lease.mu.Lock()
+					defer lease.mu.Unlock()
+					if lease.refcount == 0 {
+						t.removeLease(lease, m)
+					}
+				}
+			}(s)
 		} else if version != 0 {
 			n := t.active.findNewest(0)
 			if n != nil && version < n.Version {
@@ -578,6 +595,7 @@ func (t *tableState) acquire(
 			return nil, err
 		}
 		// A new lease was added, so loop and perform the lookup again.
+		acquiredNewLease = true
 	}
 }
 
