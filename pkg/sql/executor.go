@@ -2003,6 +2003,19 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
+// shouldUseOptimizer determines whether we should use the experimental
+// optimizer for planning.
+func shouldUseOptimizer(optMode sessiondata.OptimizerMode, stmt Statement) bool {
+	if optMode == sessiondata.OptimizerOff {
+		return false
+	}
+	// Don't try to run SET commands with the optimizer.
+	if _, setVar := stmt.AST.(*tree.SetVar); setVar {
+		return false
+	}
+	return true
+}
+
 // shouldUseDistSQL determines whether we should use DistSQL for the
 // given logical plan, based on the session settings.
 func shouldUseDistSQL(
@@ -2067,13 +2080,20 @@ func (e *Executor) execStmt(
 ) error {
 	ctx := session.Ctx()
 
-	// Perform logical planning and measure the duration of that phase.
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
-	err := planner.makePlan(ctx, stmt)
-	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+	useOptimizer := shouldUseOptimizer(session.data.OptimizerMode, stmt)
+	var err error
+	if useOptimizer {
+		// Experimental path (disabled by default).
+		err = planner.makeOptimizerPlan(ctx, stmt)
+	} else {
+		err = planner.makePlan(ctx, stmt)
+	}
 	if err != nil {
 		return err
 	}
+	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+
 	defer planner.curPlan.close(ctx)
 
 	// Prepare the result set, and determine the execution parameters.
@@ -2081,15 +2101,20 @@ func (e *Executor) execStmt(
 	if stmt.AST.StatementType() == tree.Rows {
 		cols = planColumns(planner.curPlan.plan)
 	}
-	err = initStatementResult(res, stmt, cols)
-	if err != nil {
+	if err := initStatementResult(res, stmt, cols); err != nil {
 		return err
 	}
 
-	useDistSQL, err := shouldUseDistSQL(session.Ctx(),
-		session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan)
-	if err != nil {
-		return err
+	useDistSQL := false
+	// TODO(radu): for now, we restrict the optimizer to local execution.
+	if !useOptimizer {
+		var err error
+		useDistSQL, err = shouldUseDistSQL(
+			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Start execution.

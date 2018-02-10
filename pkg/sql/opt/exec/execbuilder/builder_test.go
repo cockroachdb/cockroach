@@ -25,14 +25,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -45,7 +43,7 @@ var (
 // NewExecEngine returns an exec.Engine implementation that can be used to
 // create and run an execution plan. The implementation is in sql so this is an
 // opaque function that is initialized in TestMain.
-var NewExecEngine func(s serverutils.TestServerInterface) exec.Engine
+var NewExecEngine func(s serverutils.TestServerInterface) (exec.Engine, optbase.Catalog)
 
 func TestBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -61,9 +59,8 @@ func TestBuild(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
-			catalog := testCatalog{kvDB: kvDB}
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				switch d.Cmd {
@@ -81,7 +78,11 @@ func TestBuild(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
+					eng, catalog := NewExecEngine(s)
+					defer eng.Close()
+
 					// Build and optimize the opt expression tree.
+					// We know that the ExecEngine also implements Catalog.
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
 					root, props, err := optbuilder.New(ctx, o.Factory(), stmt).Build()
 					if err != nil {
@@ -94,8 +95,6 @@ func TestBuild(t *testing.T) {
 					}
 
 					// Build the execution node tree.
-					eng := NewExecEngine(s)
-					defer eng.Close()
 					node, err := New(eng.Factory(), ev).Build()
 					if err != nil {
 						d.Fatalf(t, "BuildExec: %v", err)
@@ -150,14 +149,4 @@ func TestBuild(t *testing.T) {
 			})
 		})
 	}
-}
-
-// testCatalog implements the sqlbase.Catalog interface.
-type testCatalog struct {
-	kvDB *client.DB
-}
-
-// FindTable implements the sqlbase.Catalog interface.
-func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	return sqlbase.GetTableDescriptor(c.kvDB, string(name.SchemaName), string(name.TableName)), nil
 }
