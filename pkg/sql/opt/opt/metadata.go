@@ -38,7 +38,7 @@ type ColSet = util.FastIntSet
 // It is represented as a map from 0,1,2,.. to column indexes.
 // TODO(radu): perhaps implement a FastIntList with the same "small"
 // representation as FastIntMap but with a slice for large cases.
-type ColList = util.FastIntMap
+type ColList = []ColumnIndex
 
 // ColMap provides a 1:1 mapping from one column index to another. It is used
 // by operators that need to match columns from its inputs.
@@ -180,12 +180,8 @@ func (md *Metadata) TableColumn(tblIndex TableIndex, ord int) ColumnIndex {
 // ColListToSet converts a column index list to a column index set.
 func ColListToSet(colList ColList) ColSet {
 	var r ColSet
-	for i, n := 0, colList.Len(); i < n; i++ {
-		col, ok := colList.Get(i)
-		if !ok {
-			panic("corrupt column set")
-		}
-		r.Add(col)
+	for _, col := range colList {
+		r.Add(int(col))
 	}
 	return r
 }

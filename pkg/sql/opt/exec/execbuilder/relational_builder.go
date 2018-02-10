@@ -46,7 +46,11 @@ type execPlan struct {
 	// example the output columns in increasing index order. However, this would
 	// require a lot of otherwise unnecessary projections.
 	//
-	// TODO(radu): Maybe this should be just a ColList.
+	// The number of entries set in the map is always the same with the number of
+	// columns emitted by Node.
+	//
+	// Note: conceptually, this could be a ColList; however, the map is more
+	// convenient when converting VariableOps to IndexedVars.
 	outputCols opt.ColMap
 }
 
@@ -123,22 +127,20 @@ func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
 	}
 	projections := ev.Child(1)
 	colList := *projections.Private().(*opt.ColList)
-	exprs := make(tree.TypedExprs, colList.Len())
+	exprs := make(tree.TypedExprs, len(colList))
 	colNames := make([]string, len(exprs))
 	ctx := input.makeBuildScalarCtx()
-	for i := range exprs {
+	for i, col := range colList {
 		exprs[i] = b.buildScalar(&ctx, projections.Child(i))
-		v, _ := colList.Get(i)
-		colNames[i] = ev.Metadata().ColumnLabel(opt.ColumnIndex(v))
+		colNames[i] = ev.Metadata().ColumnLabel(opt.ColumnIndex(col))
 	}
 	node, err := b.factory.ConstructProject(input.root, exprs, colNames)
 	if err != nil {
 		return execPlan{}, err
 	}
 	ep := execPlan{root: node}
-	for i := range exprs {
-		v, _ := colList.Get(i)
-		ep.outputCols.Set(v, i)
+	for i, col := range colList {
+		ep.outputCols.Set(int(col), i)
 	}
 	return ep, nil
 }
