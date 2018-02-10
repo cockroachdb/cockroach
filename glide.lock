@@ -89,7 +89,8 @@ imports:
 - name: github.com/codegangsta/cli
   version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
 - name: github.com/coreos/etcd
-  version: 6dd807481cebac062e82c5ecaecdb2c3d0f605ad
+  version: 32f2a3d4ffbc585f1b467ac0da142f8c75191ecf
+  repo: https://github.com/cockroachdb/etcd
   subpackages:
   - raft
   - raft/raftpb
