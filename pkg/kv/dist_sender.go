@@ -271,20 +271,32 @@ func (ds *DistSender) LeaseHolderCache() *LeaseHolderCache {
 // client.Sender. This means that the scan will recurse into DistSender, which
 // will in turn use the RangeDescriptorCache again to lookup the RangeDescriptor
 // necessary to perform the scan.
-//
-// Note that we allow inconsistent reads when doing range lookups for
-// efficiency. Getting stale data is not a correctness problem but instead may
-// infrequently result in additional latency as additional range lookups may be
-// required.
 func (ds *DistSender) RangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
+	// We perform the range lookup scan with a READ_UNCOMMITTED consistency
+	// level because we want the scan to return intents as well as committed
+	// values. The reason for this is because it's not clear whether the intent
+	// or the previous value points to the correct location of the Range. It
+	// gets even more complicated when there are split-related intents or a txn
+	// record co-located with a replica involved in the split. Since we cannot
+	// know the correct answer, we lookup both the pre- and post- transaction
+	// values.
+	rc := roachpb.READ_UNCOMMITTED
+	if !ds.st.Version.IsActive(cluster.VersionReadUncommittedRangeLookups) {
+		// READ_UNCOMMITTED was unsupported before this version. RangeLookup
+		// will set the DeprecatedReturnIntents when scanning inconsistently,
+		// which will have the same effect of returning both committed and
+		// uncommitted values.
+		//
+		// TODO(nvanbenschoten): remove in version 2.1.
+		rc = roachpb.INCONSISTENT
+	}
 	// By using DistSender as the sender, we guarantee that even if the desired
 	// RangeDescriptor is not on the first range we send the lookup too, we'll
 	// still find it when we scan to the next range. This addresses the issue
 	// described in #18032 and #16266, allowing us to support meta2 splits.
-	return client.RangeLookup(ctx, ds, key.AsRawKey(),
-		roachpb.INCONSISTENT, rangeLookupPrefetchCount, useReverseScan)
+	return client.RangeLookup(ctx, ds, key.AsRawKey(), rc, rangeLookupPrefetchCount, useReverseScan)
 }
 
 // legacyRangeLookup implements the legacyRangeDescriptorDB interface. The
@@ -296,6 +308,8 @@ func (ds *DistSender) RangeLookup(
 // that rangeLookup bypasses the DistSender's Send() method, so there is no
 // error inspection and retry logic here; this is not an issue since the lookup
 // performs a single inconsistent read only.
+//
+// TODO(nvanbenschoten): remove in version 2.1.
 func (ds *DistSender) legacyRangeLookup(
 	ctx context.Context, key roachpb.RKey, desc *roachpb.RangeDescriptor, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {

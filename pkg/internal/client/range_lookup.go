@@ -279,7 +279,7 @@ func lookupRangeFwdScan(
 		Span: bounds.AsRawSpanWithNoLocals(),
 		// NOTE (subtle): we want the scan to return intents as well as values
 		// when scanning inconsistently. The reason is because it's not clear
-		// whether the intent or the previous value point to the correct
+		// whether the intent or the previous value points to the correct
 		// location of the Range. It gets even more complicated when there are
 		// split-related intents or a txn record co-located with a replica
 		// involved in the split. Since we cannot know the correct answer, we
@@ -290,6 +290,12 @@ func lookupRangeFwdScan(
 		// same descriptor. In other words, both the current live descriptor and
 		// a potentially valid descriptor from observed intents could be
 		// returned.
+		//
+		// We don't need to set this when rc == roachpb.READ_UNCOMMITTED
+		// because all read_uncommitted requests will return intents, which
+		// is why this option is now deprecated.
+		//
+		// TODO(nvanbenschoten): remove in version 2.1.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 
@@ -357,6 +363,7 @@ func lookupRangeRevScan(
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
 		Span: revBounds.AsRawSpanWithNoLocals(),
+		// See explanation above in lookupRangeFwdScan.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
 

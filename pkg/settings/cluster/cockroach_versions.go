@@ -44,6 +44,7 @@ const (
 	VersionRecomputeStats
 	VersionNoRaftProposalKeys
 	VersionTxnSpanRefresh
+	VersionReadUncommittedRangeLookups
 
 	// Add new versions here (step one of two).
 
@@ -163,6 +164,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionTxnSpanRefresh is https://github.com/cockroachdb/cockroach/pull/21140.
 		Key:     VersionTxnSpanRefresh,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 12},
+	},
+	{
+		// VersionReadUncommittedRangeLookups is https://github.com/cockroachdb/cockroach/pull/21276.
+		Key:     VersionReadUncommittedRangeLookups,
+		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 13},
 	},
 
 	// Add new versions here (step two of two).
