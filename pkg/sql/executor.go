@@ -255,6 +255,7 @@ type ExecutorConfig struct {
 	VirtualSchemas  *VirtualSchemaHolder
 	DistSQLPlanner  *DistSQLPlanner
 	ExecLogger      *log.SecondaryLogger
+	AuditLogger     *log.SecondaryLogger
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs

@@ -243,6 +243,8 @@ func init() {
 		VarFlag(f, diskTempStorageSizeValue, cliflags.SQLTempStorage)
 		StringFlag(f, &startCtx.tempDir, cliflags.TempDir, startCtx.tempDir)
 		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
+
+		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
 	}
 
 	for _, cmd := range certCmds {

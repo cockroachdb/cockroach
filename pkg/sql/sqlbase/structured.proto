@@ -725,7 +725,6 @@ message TableDescriptor {
   optional int64 gc_deadline = 29 [(gogoproto.nullable) = false,
            (gogoproto.customname) = "GCDeadline"];
 
-
   message Replacement {
     optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
     optional util.hlc.Timestamp time = 2 [(gogoproto.nullable) = false];
@@ -736,6 +735,13 @@ message TableDescriptor {
   // one, it should note on the new table the ID of the table it replaced. This
   // can be used when trying to track a table's history across truncatations.
   optional Replacement replacement_of = 30 [(gogoproto.nullable) = false];
+
+  // AuditMode indicates which auditing actions to take when this table is used.
+  enum AuditMode {
+    DISABLED = 0;
+    READWRITE = 1;
+  }
+  optional AuditMode audit_mode = 31 [(gogoproto.nullable) = false];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

@@ -15,10 +15,14 @@
 package sql
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -51,28 +55,100 @@ func (p *planner) maybeLogStatementInternal(
 	// can't miss any statement.
 
 	s := &p.sessionDataMutator
-	// Are we emitting to the execution log?
+
 	logV := log.V(2)
-	if logV || logStatementsExecuteEnabled.Get(&s.settings.SV) {
-		logger := p.execCfg.ExecLogger
+	logExecuteEnabled := logStatementsExecuteEnabled.Get(&s.settings.SV)
+	auditEventsDetected := len(p.curPlan.auditEvents) != 0
 
-		appName := s.ApplicationName()
-		stmtStr := p.curPlan.AST.String()
-		plStr := p.extendedEvalCtx.Placeholders.Values.String()
-		age := float64(timeutil.Now().Sub(startTime).Nanoseconds()) / 1e6
-		errStr := ""
-		if err != nil {
-			errStr = err.Error()
-		}
-
-		// The string fields below are quoted to facilitate parsing,
-		// except for the placeholder string which already contains
-		// quoted strings.
-
-		logger.Logf(ctx, "%s %q {} %q %s %.3f %d %q", lbl, appName, stmtStr, plStr, age, rows, errStr)
-		if logV {
-			// Copy to the main log.
-			log.VEventf(ctx, 2, "%s %q {} %q %s %.3f %d %q", lbl, appName, stmtStr, plStr, age, rows, errStr)
-		}
+	if !logV && !logExecuteEnabled && !auditEventsDetected {
+		return
 	}
+
+	// Logged data, in order:
+
+	// label passed as argument.
+
+	appName := s.ApplicationName()
+
+	logTrigger := "{}"
+	if auditEventsDetected {
+		var buf bytes.Buffer
+		buf.WriteByte('{')
+		sep := ""
+		for _, ev := range p.curPlan.auditEvents {
+			mode := "READ"
+			if ev.writing {
+				mode = "READWRITE"
+			}
+			fmt.Fprintf(&buf, "%s%q[%d]:%s", sep, ev.desc.GetName(), ev.desc.GetID(), mode)
+			sep = ", "
+		}
+		buf.WriteByte('}')
+		logTrigger = buf.String()
+	}
+
+	stmtStr := p.curPlan.AST.String()
+
+	plStr := p.extendedEvalCtx.Placeholders.Values.String()
+
+	age := float64(timeutil.Now().Sub(startTime).Nanoseconds()) / 1e6
+
+	// rows passed as argument.
+
+	execErrStr := ""
+	auditErrStr := "OK"
+	if err != nil {
+		execErrStr = err.Error()
+		auditErrStr = "ERROR"
+	}
+
+	// Now log!
+	if auditEventsDetected {
+		logger := p.execCfg.AuditLogger
+		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %s",
+			lbl, appName, logTrigger, stmtStr, plStr, age, rows, auditErrStr)
+	}
+	if logExecuteEnabled {
+		logger := p.execCfg.ExecLogger
+		logger.Logf(ctx, "%s %q %s %q %s %.3f %d %q",
+			lbl, appName, logTrigger, stmtStr, plStr, age, rows, execErrStr)
+	}
+	if logV {
+		// Copy to the main log.
+		log.VEventf(ctx, 2, "%s %q %s %q %s %.3f %d %q",
+			lbl, appName, logTrigger, stmtStr, plStr, age, rows, execErrStr)
+	}
+}
+
+// maybeAudit marks the current plan being constructed as flagged
+// for auditing if the table being touched has an auditing mode set.
+// This is later picked up by maybeLogStatement() above.
+//
+// It is crucial that this gets checked reliably -- we don't want to
+// miss any statements! For now, we call this from CheckPrivilege(),
+// as this is the function most likely to be called reliably from any
+// caller that also uses a descriptor. Future changes that move the
+// call to this method elsewhere must find a way to ensure that
+// contributors who later add features do not have to remember to call
+// this to get it right.
+func (p *planner) maybeAudit(desc sqlbase.DescriptorProto, priv privilege.Kind) {
+	wantedMode := desc.GetAuditMode()
+	if wantedMode == sqlbase.TableDescriptor_DISABLED {
+		return
+	}
+
+	switch priv {
+	case privilege.INSERT, privilege.DELETE, privilege.UPDATE:
+		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: true})
+	default:
+		p.curPlan.auditEvents = append(p.curPlan.auditEvents, auditEvent{desc: desc, writing: false})
+	}
+}
+
+// auditEvent represents an audit event for a single table.
+type auditEvent struct {
+	// The descriptor being audited.
+	desc sqlbase.DescriptorProto
+	// Whether the event was for INSERT/DELETE/UPDATE.
+	writing bool
 }
