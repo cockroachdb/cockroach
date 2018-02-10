@@ -39,7 +39,12 @@ var workload = flag.String("workload", "", "Path to workload binary to use")
 func checkTestTimeout(t testing.TB) {
 	f := flag.Lookup("test.timeout")
 	d := f.Value.(flag.Getter).Get().(time.Duration)
-	if d > 0 && d < time.Hour {
+	if d == 0 {
+		// The default timeout is 10m, despite the flag setting due to special code
+		// in the go tool.
+		d = 10 * time.Minute
+	}
+	if d < time.Hour {
 		t.Fatalf("-timeout is too short: %s", d)
 	}
 }
