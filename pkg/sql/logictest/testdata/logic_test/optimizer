@@ -1,0 +1,17 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, v INT)
+
+statement ok
+INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
+
+statement ok
+SET EXPERIMENTAL_OPT = ON
+
+query II
+SELECT * FROM test.t
+----
+1 10
+2 20
+3 30
