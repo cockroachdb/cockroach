@@ -40,6 +40,9 @@ type SessionData struct {
 	DistSQLMode DistSQLExecMode
 	// Location indicates the current time zone.
 	Location *time.Location
+	// OptimizerMode indicates whether to use the experimental optimizer for
+	// query planning.
+	OptimizerMode OptimizerMode
 	// SearchPath is a list of databases that will be searched for a table name
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
@@ -111,17 +114,51 @@ func (m DistSQLExecMode) String() string {
 }
 
 // DistSQLExecModeFromString converts a string into a DistSQLExecMode
-func DistSQLExecModeFromString(val string) DistSQLExecMode {
+func DistSQLExecModeFromString(val string) (_ DistSQLExecMode, ok bool) {
 	switch strings.ToUpper(val) {
 	case "OFF":
-		return DistSQLOff
+		return DistSQLOff, true
 	case "AUTO":
-		return DistSQLAuto
+		return DistSQLAuto, true
 	case "ON":
-		return DistSQLOn
+		return DistSQLOn, true
 	case "ALWAYS":
-		return DistSQLAlways
+		return DistSQLAlways, true
 	default:
-		panic(fmt.Sprintf("unknown DistSQL mode %s", val))
+		return 0, false
+	}
+}
+
+// OptimizerMode controls if and when the Executor uses DistSQL.
+type OptimizerMode int64
+
+const (
+	// OptimizerOff means that we don't use the optimizer.
+	OptimizerOff = iota
+	// OptimizerOn means that we use the optimizer for all statements.
+	OptimizerOn
+	// TODO(radu): we will want an Auto mode to decide on a case-by-case basis.
+)
+
+func (m OptimizerMode) String() string {
+	switch m {
+	case OptimizerOff:
+		return "off"
+	case OptimizerOn:
+		return "on"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// OptimizerModeFromString converts a string into a OptimizerMode
+func OptimizerModeFromString(val string) (_ OptimizerMode, ok bool) {
+	switch strings.ToUpper(val) {
+	case "OFF":
+		return OptimizerOff, true
+	case "ON":
+		return OptimizerOn, true
+	default:
+		return 0, false
 	}
 }
