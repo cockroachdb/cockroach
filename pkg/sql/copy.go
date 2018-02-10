@@ -61,7 +61,6 @@ type copyMachine struct {
 	// conn is the pgwire connection from which data is to be read.
 	conn pgwirebase.Conn
 
-	execCfg *ExecutorConfig
 	// resetPlanner is a function to be used to prepare the planner for inserting
 	// data.
 	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time)
@@ -96,8 +95,7 @@ func newCopyMachine(
 		columns: n.Columns,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:            planner{},
-		execCfg:      execCfg,
+		p:            planner{execCfg: execCfg},
 		resetPlanner: resetPlanner,
 	}
 	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
@@ -263,8 +261,8 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 	stmtTs := c.txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		txn = client.NewTxn(c.execCfg.DB, c.execCfg.NodeID.Get(), client.RootTxn)
-		txnTs = c.execCfg.Clock.PhysicalTime()
+		txn = client.NewTxn(c.p.execCfg.DB, c.p.execCfg.NodeID.Get(), client.RootTxn)
+		txnTs = c.p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true
 	}
