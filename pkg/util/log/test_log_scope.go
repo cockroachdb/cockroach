@@ -98,7 +98,7 @@ func enableLogFileOutput(dir string, stderrSeverity Severity) (func(), error) {
 	}
 	logging.stderrThreshold = stderrSeverity
 	logging.noStderrRedirect = true
-	return undo, logDir.Set(dir)
+	return undo, logging.logDir.Set(dir)
 }
 
 // Close cleans up a TestLogScope. The directory and its contents are
@@ -166,16 +166,16 @@ func dirTestOverride(expected, newDir string) error {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 
-	logDir.Lock()
+	logging.logDir.Lock()
 	// The following check is intended to catch concurrent uses of
 	// Scope() or TestLogScope.Close(), which would be invalid.
-	if logDir.name != expected {
-		logDir.Unlock()
+	if logging.logDir.name != expected {
+		logging.logDir.Unlock()
 		return errors.Errorf("unexpected logDir setting: set to %q, expected %q",
-			logDir.name, expected)
+			logging.logDir.name, expected)
 	}
-	logDir.name = newDir
-	logDir.Unlock()
+	logging.logDir.name = newDir
+	logging.logDir.Unlock()
 
 	// When we change the directory we close the current logging
 	// output, so that a rotation to the new directory is forced on
