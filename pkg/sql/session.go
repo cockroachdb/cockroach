@@ -1893,6 +1893,10 @@ func (m *sessionDataMutator) SetDistSQLMode(val sessiondata.DistSQLExecMode) {
 	m.data.DistSQLMode = val
 }
 
+func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
+	m.data.OptimizerMode = val
+}
+
 func (m *sessionDataMutator) SetSafeUpdates(val bool) {
 	m.data.SafeUpdates = val
 }
