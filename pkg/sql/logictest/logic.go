@@ -909,7 +909,10 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		wantedMode := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode) // off => 0, etc
+		wantedMode, ok := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
+		if !ok {
+			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
+		}
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.t, func() error {
 			for i := 0; i < t.cluster.NumServers(); i++ {
