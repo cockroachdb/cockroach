@@ -135,7 +135,8 @@ type OptimizerMode int64
 const (
 	// OptimizerOff means that we don't use the optimizer.
 	OptimizerOff = iota
-	OptimizerOn  = iota
+	// OptimizerOn means that we use the optimizer for all statements.
+	OptimizerOn
 	// TODO(radu): we will want an Auto mode to decide on a case-by-case basis.
 )
 

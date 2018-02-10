@@ -40,6 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2060,6 +2063,45 @@ func initStatementResult(res StatementResult, stmt Statement, cols sqlbase.Resul
 	return nil
 }
 
+// makeOptPlan uses the experimental optimizer to create a plan, depending on
+// the session variable value. On success, sets the plan in planner.curPlan.
+// The ok flag is false if the optimizer is disabled for this statement.
+func (e *Executor) makeOptimizerPlan(
+	stmt Statement, session *Session, planner *planner,
+) (ok bool, _ error) {
+	if session.data.OptimizerMode == sessiondata.OptimizerOff {
+		return false, nil
+	}
+	// Don't try to run SET commands with the optimizer.
+	if _, setVar := stmt.AST.(*tree.SetVar); setVar {
+		return false, nil
+	}
+
+	// execEngine is both an exec.Engine and an optbase.Catalog.
+	eng := &execEngine{
+		planner: planner,
+	}
+
+	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
+	defer func() {
+		planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+	}()
+	o := xform.NewOptimizer(eng, xform.OptimizeAll)
+	root, props, err := optbuilder.New(session.Ctx(), o.Factory(), stmt.AST).Build()
+	if err != nil {
+		return false, err
+	}
+
+	ev := o.Optimize(root, props)
+
+	node, err := execbuilder.New(eng.Factory(), ev).Build()
+	if err != nil {
+		return false, err
+	}
+	planner.curPlan.plan = node.(planNode)
+	return true, nil
+}
+
 // execStmt executes the statement synchronously and writes the result to
 // res.
 func (e *Executor) execStmt(
@@ -2067,12 +2109,20 @@ func (e *Executor) execStmt(
 ) error {
 	ctx := session.Ctx()
 
-	// Perform logical planning and measure the duration of that phase.
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
-	err := planner.makePlan(ctx, stmt)
-	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+	// Experimental path (disabled by default).
+	isOptPlan, err := e.makeOptimizerPlan(stmt, session, planner)
 	if err != nil {
 		return err
+	}
+	if !isOptPlan {
+		// Perform logical planning and measure the duration of that phase.
+		planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
+		err := planner.makePlan(ctx, stmt)
+		planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+		if err != nil {
+			return err
+		}
 	}
 	defer planner.curPlan.close(ctx)
 
@@ -2081,15 +2131,20 @@ func (e *Executor) execStmt(
 	if stmt.AST.StatementType() == tree.Rows {
 		cols = planColumns(planner.curPlan.plan)
 	}
-	err = initStatementResult(res, stmt, cols)
-	if err != nil {
+	if err := initStatementResult(res, stmt, cols); err != nil {
 		return err
 	}
 
-	useDistSQL, err := shouldUseDistSQL(session.Ctx(),
-		session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan)
-	if err != nil {
-		return err
+	useDistSQL := false
+	// TODO(radu): for now, we restrict the optimizer to local execution.
+	if !isOptPlan {
+		var err error
+		useDistSQL, err = shouldUseDistSQL(
+			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Start execution.
