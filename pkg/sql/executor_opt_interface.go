@@ -25,13 +25,14 @@ import (
 )
 
 // NewExecEngine is used from exec tests to create and execute plans.
-func (e *Executor) NewExecEngine() exec.Engine {
+func (e *Executor) NewExecEngine() (exec.Engine, optbase.Catalog) {
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 	p, cleanup := newInternalPlanner("opt", txn, "root", &MemoryMetrics{}, &e.cfg)
-	return &execEngine{
+	ee := &execEngine{
 		planner: p,
 		cleanup: cleanup,
 	}
+	return ee, ee
 }
 
 type execEngine struct {
@@ -160,4 +161,12 @@ func (ee *execEngine) Explain(n exec.Node) ([]tree.Datums, error) {
 
 	// Execute the explain node.
 	return ee.Execute(explainNode)
+}
+
+var _ optbase.Catalog = &execEngine{}
+
+// FindTable is part of the optbase.Catalog interface.
+func (ee *execEngine) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
+	p := ee.planner
+	return p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), name)
 }
