@@ -40,6 +40,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2067,12 +2070,36 @@ func (e *Executor) execStmt(
 ) error {
 	ctx := session.Ctx()
 
-	// Perform logical planning and measure the duration of that phase.
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
-	err := planner.makePlan(ctx, stmt)
-	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
-	if err != nil {
-		return err
+	// Don't try to run SET commands with the optimizer.
+	if _, setVar := stmt.AST.(*tree.SetVar); !setVar && session.data.OptimizerMode == sessiondata.OptimizerOn {
+		// execEngine is both an exec.Engine and an optbase.Catalog.
+		eng := &execEngine{
+			planner: planner,
+		}
+
+		o := xform.NewOptimizer(eng, xform.OptimizeNone)
+		root, props, err := optbuilder.New(ctx, o.Factory(), stmt.AST).Build()
+		if err != nil {
+			planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+			return err
+		}
+
+		ev := o.Optimize(root, props)
+
+		node, err := execbuilder.New(eng.Factory(), ev).Build()
+		planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+		if err != nil {
+			return err
+		}
+		planner.curPlan.plan = node.(planNode)
+	} else {
+		// Perform logical planning and measure the duration of that phase.
+		err := planner.makePlan(ctx, stmt)
+		planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
+		if err != nil {
+			return err
+		}
 	}
 	defer planner.curPlan.close(ctx)
 
@@ -2081,15 +2108,21 @@ func (e *Executor) execStmt(
 	if stmt.AST.StatementType() == tree.Rows {
 		cols = planColumns(planner.curPlan.plan)
 	}
-	err = initStatementResult(res, stmt, cols)
+	err := initStatementResult(res, stmt, cols)
 	if err != nil {
 		return err
 	}
 
-	useDistSQL, err := shouldUseDistSQL(session.Ctx(),
-		session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan)
-	if err != nil {
-		return err
+	useDistSQL := false
+	// TODO(radu): for now, we restrict the optimizer to local execution.
+	if session.data.OptimizerMode == sessiondata.OptimizerOff {
+		var err error
+		useDistSQL, err = shouldUseDistSQL(
+			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan,
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Start execution.

@@ -151,8 +151,8 @@ func (b *Builder) Build() (root opt.GroupID, required *opt.PhysicalProps, err er
 			// lots of checks for `if err != nil` throughout the code. This is
 			// only possible because the code does not update shared state and does
 			// not manipulate locks.
-			if _, ok := r.(builderError); ok {
-				err = r.(builderError)
+			if bldErr, ok := r.(builderError); ok {
+				err = bldErr
 			} else {
 				panic(r)
 			}
@@ -171,12 +171,15 @@ func (b *Builder) Build() (root opt.GroupID, required *opt.PhysicalProps, err er
 // builderError is used for semantic errors that occur during the build process
 // and is passed as an argument to panic. These panics are caught and converted
 // back to errors inside Builder.Build.
-type builderError error
+type builderError struct {
+	error
+}
 
 // errorf formats according to a format specifier and returns the
 // string as a builderError.
 func errorf(format string, a ...interface{}) builderError {
-	return fmt.Errorf(format, a...)
+	err := fmt.Errorf(format, a...)
+	return builderError{err}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -247,11 +250,11 @@ func (b *Builder) buildTable(
 	case *tree.NormalizableTableName:
 		tn, err := source.Normalize()
 		if err != nil {
-			panic(builderError(err))
+			panic(builderError{err})
 		}
 		tbl, err := b.factory.Metadata().Catalog().FindTable(b.ctx, tn)
 		if err != nil {
-			panic(builderError(err))
+			panic(builderError{err})
 		}
 
 		return b.buildScan(tbl, inScope)
@@ -438,7 +441,7 @@ func (b *Builder) buildFunction(
 ) (out opt.GroupID, col *columnProps) {
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
 	if err != nil {
-		panic(builderError(err))
+		panic(builderError{err})
 	}
 
 	isAgg := isAggregate(def)
@@ -734,7 +737,7 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 		if i.ShouldBeInt64() {
 			val, err := i.AsInt64()
 			if err != nil {
-				panic(builderError(err))
+				panic(builderError{err})
 			}
 			ord = val
 		} else {
@@ -792,7 +795,7 @@ func (b *Builder) expandStarAndResolveType(
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
-			panic(builderError(err))
+			panic(builderError{err})
 		}
 		return b.expandStarAndResolveType(vn, inScope)
 
