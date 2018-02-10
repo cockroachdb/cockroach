@@ -513,6 +513,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			n.tableDesc.PrimaryIndex.Partitioning = partitioning
+
+		case *tree.AlterTableSetAudit:
+			var err error
+			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
+			if err != nil {
+				return err
+			}
+
 		default:
 			return fmt.Errorf("unsupported alter command: %T", cmd)
 		}
@@ -572,6 +580,23 @@ func (n *alterTableNode) startExec(params runParams) error {
 	params.p.notifySchemaChange(n.tableDesc, mutationID)
 
 	return nil
+}
+
+func (p *planner) setAuditMode(
+	ctx context.Context, desc *sqlbase.TableDescriptor, auditMode tree.AuditMode,
+) (bool, error) {
+	// An auditing config change is itself auditable!
+	// We record the event even if the permission check below fails:
+	// auditing wants to know who tried to change the settings.
+	p.curPlan.auditEvents = append(p.curPlan.auditEvents,
+		auditEvent{desc: desc, writing: true})
+
+	// We require root for now. Later maybe use a different permission?
+	if err := p.RequireSuperUser(ctx, "change auditing settings on a table"); err != nil {
+		return false, err
+	}
+
+	return desc.SetAuditMode(auditMode)
 }
 
 func (n *alterTableNode) Next(runParams) (bool, error) { return false, nil }
