@@ -298,6 +298,9 @@ func lookupRangeFwdScan(
 		// TODO(nvanbenschoten): remove in version 2.1.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
+	if !TestingIsRangeLookup(ba) {
+		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
+	}
 
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
@@ -366,6 +369,9 @@ func lookupRangeRevScan(
 		// See explanation above in lookupRangeFwdScan.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
+	if !TestingIsRangeLookup(ba) {
+		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
+	}
 
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
@@ -521,6 +527,15 @@ func TestingIsRangeLookup(ba roachpb.BatchRequest) bool {
 	return false
 }
 
+var rangeLookupStartKeyBounds = roachpb.Span{
+	Key:    keys.Meta1Prefix,
+	EndKey: keys.Meta2KeyMax.Next(),
+}
+var rangeLookupEndKeyBounds = roachpb.Span{
+	Key:    keys.Meta1Prefix.Next(),
+	EndKey: keys.SystemPrefix.Next(),
+}
+
 // TestingIsRangeLookupRequest returns if the provided Request looks like a single
 // RangeLookup scan. It can return false positives and should only be used in
 // tests.
@@ -532,5 +547,6 @@ func TestingIsRangeLookupRequest(req roachpb.Request) bool {
 		return false
 	}
 	s := req.Header()
-	return s.Key.Compare(keys.Meta2KeyMax) <= 0 && s.EndKey.Compare(keys.MetaMax) <= 0
+	return rangeLookupStartKeyBounds.ContainsKey(s.Key) &&
+		rangeLookupEndKeyBounds.ContainsKey(s.EndKey)
 }
