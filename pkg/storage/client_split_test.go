@@ -2493,7 +2493,7 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 
 	// Disable async tasks in the intent resolver. All tasks will be synchronous.
 	cfg := storage.TestStoreConfig(nil)
-	cfg.IntentResolverTaskLimit = -1
+	cfg.TestingKnobs.ForceSyncIntentResolution = true
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.TestingProposalFilter =
 		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
