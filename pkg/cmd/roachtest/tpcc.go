@@ -1,0 +1,60 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+
+package main
+
+import (
+	"context"
+	"fmt"
+)
+
+func init() {
+	runTPCC := func(t *test, warehouses, nodes int, extra string) {
+		duration := " --duration=10m"
+		if local {
+			duration = " --duration=10s"
+		}
+
+		ctx := context.Background()
+		c := newCluster(ctx, t, "-n", nodes+1)
+		defer c.Destroy(ctx)
+
+		c.Put(ctx, cockroach, "<cockroach>")
+		c.Put(ctx, workload, "<workload>")
+		c.Start(ctx, 1, nodes)
+
+		m := newMonitor(ctx, c)
+		m.Go(func(ctx context.Context) error {
+			cmd := fmt.Sprintf(
+				"<workload> run tpcc --init --warehouses=%d"+
+					extra+duration+" {pgurl:1-%d}",
+				warehouses, nodes)
+			c.Run(ctx, nodes+1, cmd)
+			return nil
+		})
+		m.Wait(1, nodes)
+	}
+
+	tests.Add("tpcc/w=1/nodes=3", func(t *test) {
+		concurrency := " --concurrency=384"
+		if local {
+			concurrency = ""
+		}
+		runTPCC(t, 1, 3, " --wait=false"+concurrency)
+	})
+	tests.Add("tpmc/w=1/nodes=3", func(t *test) {
+		runTPCC(t, 1, 3, " --concurrency=10")
+	})
+}
