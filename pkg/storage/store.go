@@ -743,6 +743,10 @@ type StoreTestingKnobs struct {
 	// path (but leaves synchronous resolution). This can avoid some
 	// edge cases in tests that start and stop servers.
 	DisableAsyncIntentResolution bool
+	// ForceSyncIntentResolution forces all asynchronous intent resolution to be
+	// performed synchronously. It is equivalent to setting IntentResolverTaskLimit
+	// to -1.
+	ForceSyncIntentResolution bool
 	// DisableLeaseCapacityGossip disables the ability of a changing number of
 	// leases to trigger the store to gossip its capacity. With this enabled,
 	// only changes in the number of replicas can cause the store to gossip its
@@ -782,10 +786,10 @@ func (sc *StoreConfig) SetDefaults() {
 	if sc.RaftEntryCacheSize == 0 {
 		sc.RaftEntryCacheSize = defaultRaftEntryCacheSize
 	}
-	if sc.IntentResolverTaskLimit == 0 {
-		sc.IntentResolverTaskLimit = defaultIntentResolverTaskLimit
-	} else if sc.IntentResolverTaskLimit == -1 {
+	if sc.IntentResolverTaskLimit == -1 || sc.TestingKnobs.ForceSyncIntentResolution {
 		sc.IntentResolverTaskLimit = 0
+	} else if sc.IntentResolverTaskLimit == 0 {
+		sc.IntentResolverTaskLimit = defaultIntentResolverTaskLimit
 	}
 	if sc.concurrentSnapshotApplyLimit == 0 {
 		// NB: setting this value higher than 1 is likely to degrade client
