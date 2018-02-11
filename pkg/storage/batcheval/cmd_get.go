@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func init() {
@@ -34,7 +35,22 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*roachpb.GetResponse)
 
-	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp,
+		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+
 	reply.Value = val
+	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {
+		var intentVals []roachpb.KeyValue
+		intentVals, err = CollectIntentRows(ctx, batch, cArgs, intents)
+		if err == nil {
+			switch len(intentVals) {
+			case 0:
+			case 1:
+				reply.IntentValue = &intentVals[0].Value
+			default:
+				log.Fatalf(ctx, "more than 1 intent on single key: %v", intentVals)
+			}
+		}
+	}
 	return result.FromIntents(intents, args), err
 }
