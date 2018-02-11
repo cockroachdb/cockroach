@@ -12,7 +12,11 @@ build/builder.sh env \
 	TARGET=stressrace \
 	github-pull-request-make
 
+# Due to a limit on the number of running goroutines in the race
+# detector, testrace fails when run on 16-CPU machines. Set GOMAXPROCS
+# to work around this.
 build/builder.sh env \
+        GOMAXPROCS=8 \
 	make testrace \
 	TESTFLAGS='-v' \
 	2>&1 \
