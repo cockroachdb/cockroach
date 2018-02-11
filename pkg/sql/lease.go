@@ -561,11 +561,13 @@ func (t *tableState) acquire(
 	defer t.mu.Unlock()
 
 	for {
-		s := t.active.findNewest(version)
-		if s != nil {
-			if checkedLease := t.checkLease(s, version, m.clock); checkedLease != nil {
+		existingLeaseFailedCheck := false
+		existingLease := t.active.findNewest(version)
+		if existingLease != nil {
+			if checkedLease := t.checkLease(existingLease, version, m.clock); checkedLease != nil {
 				return checkedLease, nil
 			}
+			existingLeaseFailedCheck = true
 		} else if version != 0 {
 			n := t.active.findNewest(0)
 			if n != nil && version < n.Version {
@@ -577,6 +579,28 @@ func (t *tableState) acquire(
 		if err := t.acquireFromStoreLocked(ctx, txn, version, m); err != nil {
 			return nil, err
 		}
+
+		// We found an active lease that we couldn't use (because it's too
+		// close to expiration), and then we created a new one. Leases are
+		// deleted from the table when they have a refcount of zero and
+		// they are no longer the newest. It's possible that this lease
+		// had its refcount drop to zero while it was the newest version,
+		// in which case it's our responsibility to delete it when we make
+		// it no longer the newest.
+		if existingLeaseFailedCheck {
+			// It may have been removed already.
+			for _, s := range t.active.data {
+				if s == existingLease {
+					existingLease.mu.Lock()
+					if existingLease.refcount == 0 {
+						t.removeLease(existingLease, m)
+					}
+					existingLease.mu.Unlock()
+					break
+				}
+			}
+		}
+
 		// A new lease was added, so loop and perform the lookup again.
 	}
 }
@@ -778,6 +802,8 @@ func (t *tableState) release(lease *LeaseState, m *LeaseManager) error {
 	return nil
 }
 
+var removeLeaseSem = make(chan struct{}, 10)
+
 // t.mu needs to be locked.
 func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 	t.active.remove(lease)
@@ -792,6 +818,10 @@ func (t *tableState) removeLease(lease *LeaseState, m *LeaseManager) {
 
 	// Release to the store asynchronously, without the tableState lock.
 	if err := t.stopper.RunAsyncTask(ctx, func(ctx context.Context) {
+		removeLeaseSem <- struct{}{}
+		defer func() {
+			<-removeLeaseSem
+		}()
 		m.LeaseStore.Release(ctx, t.stopper, lease)
 	}); err != nil {
 		log.Warningf(ctx, "error: %s, not releasing lease: %q", err, lease)
