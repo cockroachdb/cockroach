@@ -15,7 +15,6 @@
 package optbuilder
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
@@ -152,7 +151,7 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr, _ = tree.WalkExpr(s, expr)
 	texpr, err := tree.TypeCheck(expr, &s.builder.semaCtx, desired)
 	if err != nil {
-		panic(err)
+		panic(builderError(err))
 	}
 
 	return texpr
@@ -270,7 +269,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
-			panic(err)
+			panic(builderError(err))
 		}
 		return s.VisitPre(vn)
 
@@ -297,7 +296,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	case *tree.FuncExpr:
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
 		if err != nil {
-			panic(fmt.Sprintf("%v", err))
+			panic(builderError(err))
 		}
 		if len(t.Exprs) != 1 {
 			break
@@ -308,7 +307,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 		vn, err = vn.NormalizeVarName()
 		if err != nil {
-			panic(err)
+			panic(builderError(err))
 		}
 		t.Exprs[0] = vn
 
@@ -329,7 +328,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 				// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 				// expression; we should not hit an error here.
 				if _, err := e.TypeCheck(&tree.SemaContext{}, types.Any); err != nil {
-					panic(err)
+					panic(builderError(err))
 				}
 				e.Filter = t.Filter
 				e.WindowDef = t.WindowDef
