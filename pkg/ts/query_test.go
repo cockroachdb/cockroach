@@ -543,42 +543,42 @@ func TestAggregation(t *testing.T) {
 	testCases := []struct {
 		expected    []float64
 		maxDistance int32
-		aggFunc     func(ui aggregatingIterator) (float64, bool)
+		aggFunc     func(aggregatingIterator) func() (float64, bool)
 	}{
 		{
 			[]float64{4.4, 12, 17.5, 35, 40, 36, 92, 56},
 			0,
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.sum()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.sum
 			},
 		},
 		{
 			[]float64{3.4, 7, 10, 25, 20, 36, 52, 56},
 			0,
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.max()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.max
 			},
 		},
 		{
 			[]float64{1, 5, 7.5, 10, 20, 0, 40, 56},
 			0,
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.min()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.min
 			},
 		},
 		{
 			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 56},
 			0,
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.avg()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.avg
 			},
 		},
 		// Interpolation max distance tests.
 		{
 			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 56},
 			10, // Distance of 10 will bridge every gap in the data.
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.avg()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.avg
 			},
 		},
 		{
@@ -586,15 +586,49 @@ func TestAggregation(t *testing.T) {
 			// Distance of 2 will only bridge some gaps, meaning that some data points
 			// will only have a contribution from one of the two data sets.
 			2,
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.avg()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.avg
 			},
 		},
 		{
 			[]float64{1, 5, 10, 17.5, 20, 0, 40, 56},
 			1, // Distance of 1 disables interpolation.
-			func(ui aggregatingIterator) (float64, bool) {
-				return ui.avg()
+			func(ai aggregatingIterator) func() (float64, bool) {
+				return ai.avg
+			},
+		},
+		// Leading edge filter tests.
+		{
+			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46, 56},
+			10,
+			func(ai aggregatingIterator) func() (float64, bool) {
+				// Leading edge very far in the future, do not trim incomplete points.
+				return ai.makeLeadingEdgeFilter(aggregatingIterator.avg, 2000)
+			},
+		},
+		{
+			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46},
+			10,
+			func(ai aggregatingIterator) func() (float64, bool) {
+				// Trim leading edge.
+				return ai.makeLeadingEdgeFilter(aggregatingIterator.avg, 170)
+			},
+		},
+		{
+			[]float64{2.2, 6, 8.75, 17.5, 20, 18, 46},
+			10,
+			func(ai aggregatingIterator) func() (float64, bool) {
+				// Odd behavior, but set leading edge of zero; should filter all partial
+				// points.
+				return ai.makeLeadingEdgeFilter(aggregatingIterator.avg, 0)
+			},
+		},
+		{
+			[]float64{3.4, 7, 10, 25, 20, 36, 52},
+			0,
+			func(ai aggregatingIterator) func() (float64, bool) {
+				// Different aggregation function.
+				return ai.makeLeadingEdgeFilter(aggregatingIterator.max, 170)
 			},
 		},
 	}
@@ -614,8 +648,9 @@ func TestAggregation(t *testing.T) {
 				),
 			}
 			iters.init()
+			valueFn := tc.aggFunc(iters)
 			for iters.isValid() {
-				if value, valid := tc.aggFunc(iters); valid {
+				if value, valid := valueFn(); valid {
 					actual = append(actual, value)
 				}
 				iters.advance()
