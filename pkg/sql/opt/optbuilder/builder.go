@@ -1100,9 +1100,9 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 func (b *Builder) constructList(
 	op opt.Operator, items []opt.GroupID, cols []columnProps,
 ) opt.GroupID {
-	var colList opt.ColList
+	colList := make(opt.ColList, len(cols))
 	for i := range cols {
-		colList.Set(i, int(cols[i].index))
+		colList[i] = cols[i].index
 	}
 
 	list := b.factory.InternList(items)
