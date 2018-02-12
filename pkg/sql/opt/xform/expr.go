@@ -229,13 +229,10 @@ func (ev *ExprView) formatRelational(tp treeprinter.Node) {
 		// Get the list of columns from the ProjectionsOp, which has the correct
 		// order.
 		projections := ev.Child(1)
-		cols := *projections.Private().(*opt.ColList)
-		var buf bytes.Buffer
-		buf.WriteString("columns:")
-		for _, col := range cols {
-			logicalProps.formatCol(ev.mem, &buf, col)
-		}
-		tp.Child(buf.String())
+		formatColList(ev.mem, logicalProps, *projections.Private().(*opt.ColList), tp)
+
+	case opt.ValuesOp:
+		formatColList(ev.mem, logicalProps, *ev.Private().(*opt.ColList), tp)
 
 	default:
 		// Write the output columns. Fall back to writing output columns in column
@@ -246,5 +243,16 @@ func (ev *ExprView) formatRelational(tp treeprinter.Node) {
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)
 		child.format(tp)
+	}
+}
+
+func formatColList(mem *memo, logicalProps *LogicalProps, cols opt.ColList, tp treeprinter.Node) {
+	if len(cols) > 0 {
+		var buf bytes.Buffer
+		buf.WriteString("columns:")
+		for _, col := range cols {
+			logicalProps.formatCol(mem, &buf, col)
+		}
+		tp.Child(buf.String())
 	}
 }
