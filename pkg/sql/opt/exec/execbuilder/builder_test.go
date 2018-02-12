@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -39,11 +38,6 @@ import (
 var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
-
-// NewExecEngine returns an exec.Engine implementation that can be used to
-// create and run an execution plan. The implementation is in sql so this is an
-// opaque function that is initialized in TestMain.
-var NewExecEngine func(s serverutils.TestServerInterface) (exec.Engine, optbase.Catalog)
 
 func TestBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -78,12 +72,11 @@ func TestBuild(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					eng, catalog := NewExecEngine(s)
+					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine()
 					defer eng.Close()
 
 					// Build and optimize the opt expression tree.
-					// We know that the ExecEngine also implements Catalog.
-					o := xform.NewOptimizer(catalog, xform.OptimizeAll)
+					o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
 					root, props, err := optbuilder.New(ctx, o.Factory(), stmt).Build()
 					if err != nil {
 						d.Fatalf(t, "BuildOpt: %v", err)
