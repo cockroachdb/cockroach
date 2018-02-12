@@ -89,7 +89,7 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedE
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := 0; i < ev.ChildCount(); i++ {
 			child := ev.Child(i)
-			datums[i] = *child.Private().(*tree.Datum)
+			datums[i] = child.Private().(tree.Datum)
 		}
 		return tree.NewDTuple(datums...)
 	}

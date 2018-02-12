@@ -1,0 +1,188 @@
+# This file tests that we build scalar expressions correctly. We do this by
+# putting expressions inside projections and checking that they roundtrip
+# correctly.
+
+exec-raw
+CREATE DATABASE t;
+CREATE TABLE t.t (a INT, b INT, c INT, d INT, j JSONB, s STRING)
+----
+
+exec-explain
+SELECT 1 + 2
+----
+render       0  render  ·         ·                 (column1)  ·
+ │           0  ·       render 0  3                 ·          ·
+ └── values  1  values  ·         ·                 ()         ·
+·            1  ·       size      0 columns, 1 row  ·          ·
+
+exec-explain
+SELECT 1 + 2 FROM t.t
+----
+render     0  render  ·         ·          (column8)                          ·
+ │         0  ·       render 0  3          ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
+
+exec-explain
+SELECT a + 2 FROM t.t
+----
+render     0  render  ·         ·          (column8)                          ·
+ │         0  ·       render 0  a + 2      ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
+
+exec-explain
+SELECT a >= 5 AND b <= 10 AND c < 4 FROM t.t
+----
+render     0  render  ·         ·                                     (column8)                          ·
+ │         0  ·       render 0  ((a >= 5) AND (b <= 10)) AND (c < 4)  ·                                  ·
+ └── scan  1  scan    ·         ·                                     (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                             ·                                  ·
+·          1  ·       spans     ALL                                   ·                                  ·
+
+exec-explain
+SELECT (a, b) = (1, 2)  FROM t.t
+----
+render     0  render  ·         ·                (column8)                          ·
+ │         0  ·       render 0  (a, b) = (1, 2)  ·                                  ·
+ └── scan  1  scan    ·         ·                (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary        ·                                  ·
+·          1  ·       spans     ALL              ·                                  ·
+
+exec-explain
+SELECT a IN (1, 2) FROM t.t
+----
+render     0  render  ·         ·            (column8)                          ·
+ │         0  ·       render 0  a IN (1, 2)  ·                                  ·
+ └── scan  1  scan    ·         ·            (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary    ·                                  ·
+·          1  ·       spans     ALL          ·                                  ·
+
+exec-explain
+SELECT (a, b) IN ((1, 2), (3, 4)) FROM t.t
+----
+render     0  render  ·         ·                           (column8)                          ·
+ │         0  ·       render 0  (a, b) IN ((1, 2), (3, 4))  ·                                  ·
+ └── scan  1  scan    ·         ·                           (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                   ·                                  ·
+·          1  ·       spans     ALL                         ·                                  ·
+
+exec-explain
+SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  FROM t.t
+----
+render     0  render  ·         ·                                            (column8)                          ·
+ │         0  ·       render 0  (a, b + c, 5 + (d * 2)) = (b + c, 8, a - c)  ·                                  ·
+ └── scan  1  scan    ·         ·                                            (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                    ·                                  ·
+·          1  ·       spans     ALL                                          ·                                  ·
+
+exec-explain
+SELECT ((a, b), (c, d)) = ((1, 2), (3, 4))  FROM t.t
+----
+render     0  render  ·         ·                                    (column8)                          ·
+ │         0  ·       render 0  ((a, b), (c, d)) = ((1, 2), (3, 4))  ·                                  ·
+ └── scan  1  scan    ·         ·                                    (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                            ·                                  ·
+·          1  ·       spans     ALL                                  ·                                  ·
+
+exec-explain
+SELECT (a, (b, 'a'), (c, 'b', 5)) = (9, (a+c, s), (5, s, a)) FROM t.t
+----
+render     0  render  ·         ·                                                        (column8)                          ·
+ │         0  ·       render 0  (a, (b, 'a'), (c, 'b', 5)) = (9, (a + c, s), (5, s, a))  ·                                  ·
+ └── scan  1  scan    ·         ·                                                        (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                                ·                                  ·
+·          1  ·       spans     ALL                                                      ·                                  ·
+
+exec-explain
+SELECT a IS NULL FROM t.t
+----
+render     0  render  ·         ·          (column8)                          ·
+ │         0  ·       render 0  a IS NULL  ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
+
+exec-explain
+SELECT a IS NOT DISTINCT FROM NULL FROM t.t
+----
+render     0  render  ·         ·          (column8)                          ·
+ │         0  ·       render 0  a IS NULL  ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
+
+exec-explain
+SELECT a IS NOT DISTINCT FROM b FROM t.t
+----
+render     0  render  ·         ·                         (column8)                          ·
+ │         0  ·       render 0  a IS NOT DISTINCT FROM b  ·                                  ·
+ └── scan  1  scan    ·         ·                         (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                 ·                                  ·
+·          1  ·       spans     ALL                       ·                                  ·
+
+exec-explain
+SELECT a IS NOT NULL FROM t.t
+----
+render     0  render  ·         ·              (column8)                          ·
+ │         0  ·       render 0  a IS NOT NULL  ·                                  ·
+ └── scan  1  scan    ·         ·              (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary      ·                                  ·
+·          1  ·       spans     ALL            ·                                  ·
+
+exec-explain
+SELECT a IS DISTINCT FROM NULL FROM t.t
+----
+render     0  render  ·         ·              (column8)                          ·
+ │         0  ·       render 0  a IS NOT NULL  ·                                  ·
+ └── scan  1  scan    ·         ·              (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary      ·                                  ·
+·          1  ·       spans     ALL            ·                                  ·
+
+exec-explain
+SELECT a IS DISTINCT FROM b FROM t.t
+----
+render     0  render  ·         ·                     (column8)                          ·
+ │         0  ·       render 0  a IS DISTINCT FROM b  ·                                  ·
+ └── scan  1  scan    ·         ·                     (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary             ·                                  ·
+·          1  ·       spans     ALL                   ·                                  ·
+
+exec-explain
+SELECT +a + (-b) FROM t.t
+----
+render     0  render  ·         ·            (column8)                          ·
+ │         0  ·       render 0  (+a) + (-b)  ·                                  ·
+ └── scan  1  scan    ·         ·            (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary    ·                                  ·
+·          1  ·       spans     ALL          ·                                  ·
+
+# CASE not supported yet.
+#exec-explain
+#SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t.t
+#----
+
+# Functions not supported yet.
+#exec-explain
+#SELECT LENGTH(s) = 2 FROM t.t
+#----
+
+exec-explain
+SELECT j @> '{"a": 1}' FROM t.t
+----
+render     0  render  ·         ·                (column8)                          ·
+ │         0  ·       render 0  j @> '{"a": 1}'  ·                                  ·
+ └── scan  1  scan    ·         ·                (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary        ·                                  ·
+·          1  ·       spans     ALL              ·                                  ·
+
+exec-explain
+SELECT '{"a": 1}' <@ j FROM t.t
+----
+render     0  render  ·         ·                (column8)                          ·
+ │         0  ·       render 0  j @> '{"a": 1}'  ·                                  ·
+ └── scan  1  scan    ·         ·                (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary        ·                                  ·
+·          1  ·       spans     ALL              ·                                  ·

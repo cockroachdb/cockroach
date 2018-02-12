@@ -62,7 +62,9 @@ func (ee *execEngine) ConstructValues(
 	}
 	values := ee.planner.newContainerValuesNode(sqlbase.ResultColumns{}, len(rows))
 	for range rows {
-		values.rows.AddRow(context.TODO(), tree.Datums{})
+		if _, err := values.rows.AddRow(context.TODO(), tree.Datums{}); err != nil {
+			return nil, err
+		}
 	}
 	return values, nil
 }
