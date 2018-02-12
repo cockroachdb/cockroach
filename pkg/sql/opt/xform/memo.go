@@ -175,7 +175,7 @@ func (m *memo) memoizeNormExpr(norm *memoExpr) opt.GroupID {
 
 	mgrp := m.newGroup(norm)
 	e := makeExprView(m, mgrp.id, opt.MinPhysPropsID)
-	mgrp.logical = m.logPropsFactory.constructProps(&e)
+	mgrp.logical = m.logPropsFactory.constructProps(e)
 
 	m.exprMap[norm.fingerprint()] = mgrp.id
 	return mgrp.id
