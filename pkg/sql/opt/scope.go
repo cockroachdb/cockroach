@@ -43,7 +43,7 @@ func (s *scope) resolve(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr, _ = tree.WalkExpr(s, expr)
 	texpr, err := tree.TypeCheck(expr, &s.state.semaCtx, desired)
 	if err != nil {
-		panic(err)
+		panic(builderError{err})
 	}
 
 	return texpr
@@ -57,7 +57,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
-			panic(err)
+			panic(builderError{err})
 		}
 		return s.VisitPre(vn)
 
@@ -78,7 +78,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 				}
 			}
 		}
-		panic(fmt.Sprintf("unknown column %s", t))
+		panic(errorf("unknown column %s", t))
 
 		// TODO(rytaft): Implement function expressions and subquery replacement.
 	}
