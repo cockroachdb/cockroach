@@ -12,11 +12,14 @@ import { Bytes } from "src/util/format";
 
 import { NodeHistory } from "./nodeHistory";
 import * as PathMath from "./pathmath";
+import { QpsSparkline } from "./qpsSparkline";
 
 interface StatsViewProps {
   usableCapacity: number;
   usedCapacity: number;
   label: string;
+
+  nodes: string[];
 
   nodeHistory?: NodeHistory;
   maxClientActivityRate?: number;
@@ -126,6 +129,14 @@ export class StatsView extends React.Component<StatsViewProps> {
     );
   }
 
+  renderQps() {
+    return (
+      <g transform={`translate(${-StatsView.outerRadius},${20 + StatsView.outerRadius})`}>
+        <QpsSparkline nodes={this.props.nodes} />
+      </g>
+    );
+  }
+
   render() {
     return (
       <g className="locality">
@@ -134,6 +145,7 @@ export class StatsView extends React.Component<StatsViewProps> {
           {this.renderCapacityArc()}
           {this.props.nodeHistory ? this.renderNetworkActivity() : null}
           {this.renderLabel()}
+          {this.renderQps()}
         </g>
       </g>
     );
