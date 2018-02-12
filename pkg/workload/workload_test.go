@@ -112,7 +112,7 @@ func TestSplits(t *testing.T) {
 	}
 }
 
-func TestDatumSize(t *testing.T) {
+func TestApproxDatumSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
@@ -140,7 +140,7 @@ func TestDatumSize(t *testing.T) {
 		{"aa", 2},
 	}
 	for _, test := range tests {
-		if size := workload.DatumSize(test.datum); size != test.size {
+		if size := workload.ApproxDatumSize(test.datum); size != test.size {
 			t.Errorf(`%T: %v got %d expected %d`, test.datum, test.datum, size, test.size)
 		}
 	}

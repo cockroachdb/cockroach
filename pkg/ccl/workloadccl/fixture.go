@@ -86,7 +86,11 @@ func serializeOptions(gen workload.Generator) string {
 	}
 	// NB: VisitAll visits in a deterministic (alphabetical) order.
 	var buf bytes.Buffer
-	f.Flags().VisitAll(func(f *pflag.Flag) {
+	flags := f.Flags()
+	flags.VisitAll(func(f *pflag.Flag) {
+		if flags.Meta != nil && flags.Meta[f.Name].RuntimeOnly {
+			return
+		}
 		if buf.Len() > 0 {
 			buf.WriteString(`,`)
 		}
@@ -249,7 +253,7 @@ func csvServerPaths(
 	{
 		var approxRowSize int64
 		for _, datum := range table.InitialRowFn(0) {
-			approxRowSize += workload.DatumSize(datum)
+			approxRowSize += workload.ApproxDatumSize(datum)
 		}
 		if approxRowSize <= 0 {
 			approxRowSize = 1
@@ -304,6 +308,10 @@ func MakeFixture(
 	const writeCSVChunkSize = 64 * 1 << 20 // 64 MB
 
 	fixtureFolder := generatorToGCSFolder(store, gen)
+	if _, err := GetFixture(ctx, gcs, store, gen); err == nil {
+		return Fixture{}, errors.Errorf(
+			`fixture %s already exists`, store.objectPathToURI(fixtureFolder))
+	}
 
 	writeCSVConcurrency := runtime.NumCPU()
 	c := &groupCSVWriter{

@@ -80,7 +80,7 @@ func init() {
 		gen := meta.New()
 		var genFlags *pflag.FlagSet
 		if f, ok := gen.(workload.Flagser); ok {
-			genFlags = f.Flags()
+			genFlags = f.Flags().FlagSet
 		}
 		var genHooks workload.Hooks
 		if h, ok := gen.(workload.Hookser); ok {

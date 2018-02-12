@@ -38,7 +38,7 @@ const (
 )
 
 type kv struct {
-	flags *pflag.FlagSet
+	flags workload.Flags
 
 	batchSize                            int
 	minBlockSizeBytes, maxBlockSizeBytes int
@@ -59,7 +59,11 @@ var kvMeta = workload.Meta{
 		` at random) across the cluster`,
 	Version: `1.0.0`,
 	New: func() workload.Generator {
-		g := &kv{flags: pflag.NewFlagSet(`kv`, pflag.ContinueOnError)}
+		g := &kv{}
+		g.flags.FlagSet = pflag.NewFlagSet(`kv`, pflag.ContinueOnError)
+		g.flags.Meta = map[string]workload.FlagMeta{
+			`batch`: {RuntimeOnly: true},
+		}
 		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to insert in a single SQL statement`)
 		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
 		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
@@ -76,12 +80,10 @@ var kvMeta = workload.Meta{
 // Meta implements the Generator interface.
 func (*kv) Meta() workload.Meta { return kvMeta }
 
-// Flags implements the Generator interface.
-func (w *kv) Flags() *pflag.FlagSet {
-	return w.flags
-}
+// Flags implements the Flagser interface.
+func (w *kv) Flags() workload.Flags { return w.flags }
 
-// Hooks implements the Generator interface.
+// Hooks implements the Hookser interface.
 func (w *kv) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
@@ -116,7 +118,7 @@ func (w *kv) Tables() []workload.Table {
 	return []workload.Table{table}
 }
 
-// Ops implements the Generator interface.
+// Ops implements the Opser interface.
 func (w *kv) Ops() []workload.Operation {
 	opFn := func(db *gosql.DB) (func(context.Context) error, error) {
 		var buf bytes.Buffer
