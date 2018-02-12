@@ -77,19 +77,20 @@ func newSorter(
 		return nil, err
 	}
 
+	// Choose the optimal processor.
 	if s.matchLen == 0 {
 		if s.count == 0 {
 			// No specified ordering match length and unspecified limit; no
 			// optimizations are possible so we simply load all rows into memory and
 			// sort all values in-place. It has a worst-case time complexity of
 			// O(n*log(n)) and a worst-case space complexity of O(n).
-			return newSortAllStrategy(s), nil
+			return newSortAllProcessor(s), nil
 		}
 		// No specified ordering match length but specified limit; we can optimize
 		// our sort procedure by maintaining a max-heap populated with only the
 		// smallest k rows seen. It has a worst-case time complexity of
 		// O(n*log(k)) and a worst-case space complexity of O(k).
-		return newSortTopKStrategy(s, s.count), nil
+		return newSortTopKProcessor(s, s.count), nil
 	}
 	// Ordering match length is specified. We will be able to use existing
 	// ordering in order to avoid loading all the rows into memory. If we're
@@ -98,16 +99,16 @@ func newSorter(
 	// chunk and then output.
 	// TODO(irfansharif): Add optimization for case where both ordering match
 	// length and limit is specified.
-	return newSortChunksStrategy(s), nil
+	return newSortChunksProcessor(s), nil
 
 }
 
-// sortAllStrategy reads in all values into the wrapped rows and
+// sortAllProcessor reads in all values into the wrapped rows and
 // uses sort.Sort to sort all values in-place. It has a worst-case time
 // complexity of O(n*log(n)) and a worst-case space complexity of O(n).
 //
-// The strategy is intended to be used when all values need to be sorted.
-type sortAllStrategy struct {
+// This processor is intended to be used when all values need to be sorted.
+type sortAllProcessor struct {
 	*sorterBase
 
 	useTempStorage  bool
@@ -120,24 +121,24 @@ type sortAllStrategy struct {
 	i      rowIterator
 	closed bool
 
-	// sortAllStrategy first calls Next() on its input stream to completion before
+	// sortAllProcessor first calls Next() on its input stream to completion before
 	// outputting a single row. Thus when it receives ProducerMetadata, it has to
 	// cache it and output the rows its received so far, before emitting that metadata.
 	meta *ProducerMetadata
 }
 
-var _ Processor = &sortAllStrategy{}
+var _ Processor = &sortAllProcessor{}
 
-func newSortAllStrategy(s *sorterBase) Processor {
+func newSortAllProcessor(s *sorterBase) Processor {
 	var rows memRowContainer
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	useTempStorage := settingUseTempStorageSorts.Get(&s.flowCtx.Settings.SV) ||
 		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
 	if useTempStorage {
-		// We will use the sortAllStrategy in this case and potentially fall
+		// We will use the sortAllProcessor in this case and potentially fall
 		// back to disk.
 		// Limit the memory use by creating a child monitor with a hard limit.
-		// The strategy will overflow to disk if this limit is not enough.
+		// The processor will overflow to disk if this limit is not enough.
 		limit := s.flowCtx.testingKnobs.MemoryLimitBytes
 		if limit <= 0 {
 			limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
@@ -151,7 +152,7 @@ func newSortAllStrategy(s *sorterBase) Processor {
 	}
 	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
 
-	return &sortAllStrategy{
+	return &sortAllProcessor{
 		sorterBase:      s,
 		rows:            &rows,
 		rowContainerMon: rowContainerMon,
@@ -159,11 +160,11 @@ func newSortAllStrategy(s *sorterBase) Processor {
 	}
 }
 
-func (s *sortAllStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.closed {
 		return nil, nil
 	}
-	if s.maybeStart("sortAllStrategy", "sortAllStrategy") {
+	if s.maybeStart("sortAllProcessor", "sortAllProcessor") {
 		if err := s.fill(); err != nil {
 			return nil, s.producerMeta(err)
 		}
@@ -200,7 +201,7 @@ func (s *sortAllStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 // its cache so that subsequent calls return nil.
 // TODO(arjun): This is unnecessary. Metadata can be emitted immediately.
 // This should be refactored away.
-func (s *sortAllStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortAllProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	s.close()
 	if s.meta != nil {
 		meta := s.meta
@@ -210,7 +211,7 @@ func (s *sortAllStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMeta
 	return nil, nil
 }
 
-func (s *sortAllStrategy) fill() error {
+func (s *sortAllProcessor) fill() error {
 	ctx := s.evalCtx.Ctx()
 	// Attempt an in memory implementation of a sort. If this run fails with a
 	// memory error, fall back to use disk.
@@ -276,7 +277,7 @@ func (s *sortAllStrategy) fill() error {
 // fill the rows from the input into the given container. If an error occurs,
 // or the input sends metadata while adding a row to the given container, the
 // row is returned in order to not lose it.
-func (s *sortAllStrategy) fillWithContainer(
+func (s *sortAllProcessor) fillWithContainer(
 	ctx context.Context, r sortableRowContainer,
 ) (sqlbase.EncDatumRow, *ProducerMetadata, error) {
 	var meta *ProducerMetadata
@@ -302,7 +303,7 @@ func (s *sortAllStrategy) fillWithContainer(
 	return nil, meta, nil
 }
 
-func (s *sortAllStrategy) Run(wg *sync.WaitGroup) {
+func (s *sortAllProcessor) Run(wg *sync.WaitGroup) {
 	if s.out.output == nil {
 		panic("sorter output not initialized for emitting rows")
 	}
@@ -312,7 +313,7 @@ func (s *sortAllStrategy) Run(wg *sync.WaitGroup) {
 	}
 }
 
-func (s *sortAllStrategy) close() {
+func (s *sortAllProcessor) close() {
 	// We are done sorting rows, close the iterators we have open. The row
 	// containers require a context, so must be called before internalClose().
 	if !s.closed {
@@ -333,12 +334,12 @@ func (s *sortAllStrategy) close() {
 }
 
 // ConsumerDone is part of the RowSource interface.
-func (s *sortAllStrategy) ConsumerDone() {
+func (s *sortAllProcessor) ConsumerDone() {
 	s.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (s *sortAllStrategy) ConsumerClosed() {
+func (s *sortAllProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	s.close()
 }
@@ -347,7 +348,7 @@ func (s *sortAllStrategy) ConsumerClosed() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (s *sortAllStrategy) producerMeta(err error) *ProducerMetadata {
+func (s *sortAllProcessor) producerMeta(err error) *ProducerMetadata {
 	var meta *ProducerMetadata
 	if !s.closed {
 		if err != nil {
@@ -362,7 +363,7 @@ func (s *sortAllStrategy) producerMeta(err error) *ProducerMetadata {
 	return meta
 }
 
-// sortTopKStrategy creates a max-heap in its wrapped rows and keeps
+// sortTopKProcessor creates a max-heap in its wrapped rows and keeps
 // this heap populated with only the top k values seen. It accomplishes this
 // by comparing new values (before the deep copy) with the top of the heap.
 // If the new value is less than the current top, the top will be replaced
@@ -371,7 +372,7 @@ func (s *sortAllStrategy) producerMeta(err error) *ProducerMetadata {
 // correctly in-place. It has a worst-case time complexity of O(n*log(k)) and a
 // worst-case space complexity of O(k).
 //
-// The strategy is intended to be used when exactly k values need to be sorted,
+// This processor is intended to be used when exactly k values need to be sorted,
 // where k is known before sorting begins.
 //
 // TODO(irfansharif): (taken from TODO found in sql/sort.go) There are better
@@ -381,7 +382,7 @@ func (s *sortAllStrategy) producerMeta(err error) *ProducerMetadata {
 // sorted in linearithmic time.
 //
 // TODO(asubiotto): Use diskRowContainer for these other strategies.
-type sortTopKStrategy struct {
+type sortTopKProcessor struct {
 	sorterBase
 
 	rows            *memRowContainer
@@ -391,13 +392,13 @@ type sortTopKStrategy struct {
 	meta *ProducerMetadata
 }
 
-var _ Processor = &sortTopKStrategy{}
+var _ Processor = &sortTopKProcessor{}
 
-func newSortTopKStrategy(s *sorterBase, k int64) Processor {
+func newSortTopKProcessor(s *sorterBase, k int64) Processor {
 	var rows memRowContainer
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
-	return &sortTopKStrategy{
+	return &sortTopKProcessor{
 		sorterBase:      *s,
 		rows:            &rows,
 		rowContainerMon: rowContainerMon,
@@ -405,10 +406,10 @@ func newSortTopKStrategy(s *sorterBase, k int64) Processor {
 	}
 }
 
-func (s *sortTopKStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.maybeStart("sortTopK", "SortTopK") {
-		// The execution loop for the SortTopK strategy is similar to that of the
-		// SortAll strategy; the difference is that we push rows into a max-heap
+		// The execution loop for the SortTopK processor is similar to that of the
+		// SortAll processor; the difference is that we push rows into a max-heap
 		// of size at most K, and only sort those.
 		ctx := s.evalCtx.Ctx()
 
@@ -462,7 +463,7 @@ func (s *sortTopKStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-func (s *sortTopKStrategy) Run(wg *sync.WaitGroup) {
+func (s *sortTopKProcessor) Run(wg *sync.WaitGroup) {
 	if s.out.output == nil {
 		panic("sorter output not initialized for emitting rows")
 	}
@@ -472,7 +473,7 @@ func (s *sortTopKStrategy) Run(wg *sync.WaitGroup) {
 	}
 }
 
-func (s *sortTopKStrategy) close() {
+func (s *sortTopKProcessor) close() {
 	if s.internalClose() {
 		ctx := s.evalCtx.Ctx()
 		s.rows.Close(ctx)
@@ -481,12 +482,12 @@ func (s *sortTopKStrategy) close() {
 }
 
 // ConsumerDone is part of the RowSource interface.
-func (s *sortTopKStrategy) ConsumerDone() {
+func (s *sortTopKProcessor) ConsumerDone() {
 	s.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (s *sortTopKStrategy) ConsumerClosed() {
+func (s *sortTopKProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	s.close()
 }
@@ -495,7 +496,7 @@ func (s *sortTopKStrategy) ConsumerClosed() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (s *sortTopKStrategy) producerMeta(err error) *ProducerMetadata {
+func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
 	var meta *ProducerMetadata
 	if !s.closed {
 		if err != nil {
@@ -515,7 +516,7 @@ func (s *sortTopKStrategy) producerMeta(err error) *ProducerMetadata {
 // must cache metadata, and output it after outputting all their non-metadata rows.
 // trailingMetadata() returns any cached metadata to output to Next(), and evicts
 // its cache so that subsequent calls return nil.
-func (s *sortTopKStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortTopKProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	s.close()
 	if s.meta != nil {
 		meta := s.meta
@@ -527,28 +528,28 @@ func (s *sortTopKStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMet
 
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
 // for equal fields in this prefix, sort the accumulated chunk and then output.
-type sortChunksStrategy struct {
+type sortChunksProcessor struct {
 	sorterBase
 
 	rows            *memRowContainer
 	rowContainerMon *mon.BytesMonitor
 	alloc           sqlbase.DatumAlloc
 
-	// sortChunksStrategy accumulates rows that are equal on a prefix, until it
+	// sortChunksProcessor accumulates rows that are equal on a prefix, until it
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
 	prefix       sqlbase.EncDatumRow
 	nextChunkRow sqlbase.EncDatumRow
 	meta         *ProducerMetadata
 }
 
-var _ Processor = &sortChunksStrategy{}
+var _ Processor = &sortChunksProcessor{}
 
-func newSortChunksStrategy(s *sorterBase) Processor {
+func newSortChunksProcessor(s *sorterBase) Processor {
 	var rows memRowContainer
 	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
 
-	return &sortChunksStrategy{
+	return &sortChunksProcessor{
 		sorterBase:      *s,
 		rows:            &rows,
 		rowContainerMon: rowContainerMon,
@@ -557,7 +558,7 @@ func newSortChunksStrategy(s *sorterBase) Processor {
 
 // chunkCompleted is a helper function that determines if the given row shares the same
 // values for the first matchLen ordering columns with the given prefix.
-func (s *sortChunksStrategy) chunkCompleted() (bool, error) {
+func (s *sortChunksProcessor) chunkCompleted() (bool, error) {
 	for _, ord := range s.ordering[:s.matchLen] {
 		col := ord.ColIdx
 		cmp, err := s.nextChunkRow[col].Compare(&s.rows.types[col], &s.alloc, s.rows.evalCtx, &s.prefix[col])
@@ -569,7 +570,7 @@ func (s *sortChunksStrategy) chunkCompleted() (bool, error) {
 }
 
 // fill one chunk of rows from the input and sort them.
-func (s *sortChunksStrategy) fill() (*ProducerMetadata, error) {
+func (s *sortChunksProcessor) fill() (*ProducerMetadata, error) {
 	ctx := s.evalCtx.Ctx()
 
 	var meta *ProducerMetadata
@@ -616,7 +617,7 @@ func (s *sortChunksStrategy) fill() (*ProducerMetadata, error) {
 	return nil, nil
 }
 
-func (s *sortChunksStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	s.maybeStart("sortChunks", "SortChunks")
 	for {
 		// If we don't have an active chunk, clear and refill it.
@@ -650,7 +651,7 @@ func (s *sortChunksStrategy) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-func (s *sortChunksStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (s *sortChunksProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	s.close()
 	if s.meta != nil {
 		meta := s.meta
@@ -660,7 +661,7 @@ func (s *sortChunksStrategy) trailingMetadata() (sqlbase.EncDatumRow, *ProducerM
 	return nil, nil
 }
 
-func (s *sortChunksStrategy) Run(wg *sync.WaitGroup) {
+func (s *sortChunksProcessor) Run(wg *sync.WaitGroup) {
 	if s.out.output == nil {
 		panic("sorter output not initialized for emitting rows")
 	}
@@ -670,7 +671,7 @@ func (s *sortChunksStrategy) Run(wg *sync.WaitGroup) {
 	}
 }
 
-func (s *sortChunksStrategy) close() {
+func (s *sortChunksProcessor) close() {
 	if s.internalClose() {
 		ctx := s.evalCtx.Ctx()
 		s.rows.Close(ctx)
@@ -679,12 +680,12 @@ func (s *sortChunksStrategy) close() {
 }
 
 // ConsumerDone is part of the RowSource interface.
-func (s *sortChunksStrategy) ConsumerDone() {
+func (s *sortChunksProcessor) ConsumerDone() {
 	s.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.
-func (s *sortChunksStrategy) ConsumerClosed() {
+func (s *sortChunksProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	s.close()
 }
@@ -693,7 +694,7 @@ func (s *sortChunksStrategy) ConsumerClosed() {
 // terminated, either due to being indicated by the consumer, or because the
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
-func (s *sortChunksStrategy) producerMeta(err error) *ProducerMetadata {
+func (s *sortChunksProcessor) producerMeta(err error) *ProducerMetadata {
 	var meta *ProducerMetadata
 	if !s.closed {
 		if err != nil {
