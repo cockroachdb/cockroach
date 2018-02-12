@@ -249,11 +249,11 @@ func TestSorter(t *testing.T) {
 		// 1150: This is the memory used after we store a couple of rows in
 		// memory. Tests the transfer of rows from memory to disk on
 		// initialization.
-		// 2048: A memory limit that should not be hit; the strategy will not
+		// 2048: A memory limit that should not be hit; the processor will not
 		// use disk.
 		for _, memLimit := range []int64{0, 1, 1150, 2048} {
 			// In theory, SortAllProcessor should be able to handle all sorting
-			// strategies, as the other strategies are optimizations.
+			// strategies, as the other processors are optimizations.
 			for _, testingForceSortAll := range []bool{false, true} {
 				t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
 					in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
@@ -271,7 +271,7 @@ func TestSorter(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
-						s = newSortAllStrategy(sb)
+						s = newSortAllProcessor(sb)
 					}
 					// Override the default memory limit. This will result in using
 					// a memory row container which will hit this limit and fall
