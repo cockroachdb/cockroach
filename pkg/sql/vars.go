@@ -251,18 +251,40 @@ var varGen = map[string]sessionVar{
 			if err != nil {
 				return err
 			}
-			switch strings.ToLower(s) {
-			case "off":
-				m.SetDistSQLMode(sessiondata.DistSQLOff)
-			case "on":
-				m.SetDistSQLMode(sessiondata.DistSQLOn)
-			case "auto":
-				m.SetDistSQLMode(sessiondata.DistSQLAuto)
-			case "always":
-				m.SetDistSQLMode(sessiondata.DistSQLAlways)
-			default:
+			mode, ok := sessiondata.DistSQLExecModeFromString(s)
+			if !ok {
 				return fmt.Errorf("set distsql: \"%s\" not supported", s)
 			}
+			m.SetDistSQLMode(mode)
+
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.DistSQLMode.String()
+		},
+		Reset: func(m sessionDataMutator) error {
+			m.SetDistSQLMode(sessiondata.DistSQLExecMode(
+				DistSQLClusterExecMode.Get(&m.settings.SV)),
+			)
+			return nil
+		},
+	},
+
+	// CockroachDB extension.
+	`experimental_opt`: {
+		Set: func(
+			_ context.Context, m sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getStringVal(&evalCtx.EvalContext, `experimental_opt`, values)
+			if err != nil {
+				return err
+			}
+			mode, ok := sessiondata.OptimizerModeFromString(s)
+			if !ok {
+				return fmt.Errorf("set experimental_opt: \"%s\" not supported", s)
+			}
+			m.SetOptimizerMode(mode)
 
 			return nil
 		},
