@@ -180,6 +180,38 @@ func TestSorter(t *testing.T) {
 				{v[0], v[2], v[2], v[4]},
 				{v[1], v[2], v[2], v[5]},
 			},
+		}, {
+			name: "SortInputOrderingAlreadySorted",
+			spec: SorterSpec{
+				OrderingMatchLen: 2,
+				OutputOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 1, Direction: asc},
+						{ColIdx: 2, Direction: asc},
+						{ColIdx: 3, Direction: asc},
+					}),
+			},
+			types: []sqlbase.ColumnType{intType, intType, intType, intType},
+			input: sqlbase.EncDatumRows{
+				{v[1], v[1], v[2], v[2]},
+				{v[0], v[1], v[2], v[3]},
+				{v[0], v[1], v[2], v[4]},
+				{v[1], v[1], v[2], v[5]},
+				{v[1], v[2], v[2], v[2]},
+				{v[0], v[2], v[2], v[3]},
+				{v[0], v[2], v[2], v[4]},
+				{v[1], v[2], v[2], v[5]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[1], v[1], v[2], v[2]},
+				{v[0], v[1], v[2], v[3]},
+				{v[0], v[1], v[2], v[4]},
+				{v[1], v[1], v[2], v[5]},
+				{v[1], v[2], v[2], v[2]},
+				{v[0], v[2], v[2], v[3]},
+				{v[0], v[2], v[2], v[4]},
+				{v[1], v[2], v[2], v[5]},
+			},
 		},
 	}
 
@@ -220,39 +252,53 @@ func TestSorter(t *testing.T) {
 		// 2048: A memory limit that should not be hit; the strategy will not
 		// use disk.
 		for _, memLimit := range []int64{0, 1, 1150, 2048} {
-			t.Run(fmt.Sprintf("%sMemLimit=%d", c.name, memLimit), func(t *testing.T) {
-				in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
-				out := &RowBuffer{}
+			// In theory, SortAllProcessor should be able to handle all sorting
+			// strategies, as the other strategies are optimizations.
+			for _, testingForceSortAll := range []bool{false, true} {
+				t.Run(fmt.Sprintf("MemLimit=%d", memLimit), func(t *testing.T) {
+					in := NewRowBuffer(c.types, c.input, RowBufferArgs{})
+					out := &RowBuffer{}
 
-				s, err := newSorter(&flowCtx, &c.spec, in, &c.post, out)
-				if err != nil {
-					t.Fatal(err)
-				}
-				// Override the default memory limit. This will result in using
-				// a memory row container which will hit this limit and fall
-				// back to using a disk row container.
-				s.flowCtx.testingKnobs.MemoryLimitBytes = memLimit
-				s.Run(nil)
-				if !out.ProducerClosed {
-					t.Fatalf("output RowReceiver not closed")
-				}
-
-				var retRows sqlbase.EncDatumRows
-				for {
-					row := out.NextNoMeta(t)
-					if row == nil {
-						break
+					var s Processor
+					if !testingForceSortAll {
+						var err error
+						s, err = newSorter(&flowCtx, &c.spec, in, &c.post, out)
+						if err != nil {
+							t.Fatal(err)
+						}
+					} else {
+						sb, err := newSorterBase(&flowCtx, &c.spec, in, &c.post, out)
+						if err != nil {
+							t.Fatal(err)
+						}
+						s = newSortAllStrategy(sb)
 					}
-					retRows = append(retRows, row)
-				}
+					// Override the default memory limit. This will result in using
+					// a memory row container which will hit this limit and fall
+					// back to using a disk row container.
+					flowCtx.testingKnobs.MemoryLimitBytes = memLimit
+					s.Run(nil)
+					if !out.ProducerClosed {
+						t.Fatalf("output RowReceiver not closed")
+					}
 
-				expStr := c.expected.String(c.types)
-				retStr := retRows.String(c.types)
-				if expStr != retStr {
-					t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
-						expStr, retStr)
-				}
-			})
+					var retRows sqlbase.EncDatumRows
+					for {
+						row := out.NextNoMeta(t)
+						if row == nil {
+							break
+						}
+						retRows = append(retRows, row)
+					}
+
+					expStr := c.expected.String(c.types)
+					retStr := retRows.String(c.types)
+					if expStr != retStr {
+						t.Errorf("invalid results; expected:\n   %s\ngot:\n   %s",
+							expStr, retStr)
+					}
+				})
+			}
 		}
 	}
 }
