@@ -278,15 +278,8 @@ func allocateTableRewrites(
 
 				// Check that the table name is _not_ in use.
 				// This would fail the CPut later anyway, but this yields a prettier error.
-				{
-					nameKey := sqlbase.MakeNameMetadataKey(parentID, table.Name)
-					res, err := txn.Get(ctx, nameKey)
-					if err != nil {
-						return err
-					}
-					if res.Exists() {
-						return sqlbase.NewRelationAlreadyExistsError(table.Name)
-					}
+				if err := CheckTableExists(ctx, txn, parentID, table.Name); err != nil {
+					return err
 				}
 
 				// Check privileges. These will be checked again in the transaction
@@ -349,6 +342,22 @@ func allocateTableRewrites(
 	}
 
 	return tableRewrites, nil
+}
+
+// CheckTableExists returns an error if a table already exists with given
+// parent and name.
+func CheckTableExists(
+	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
+) error {
+	nameKey := sqlbase.MakeNameMetadataKey(parentID, name)
+	res, err := txn.Get(ctx, nameKey)
+	if err != nil {
+		return err
+	}
+	if res.Exists() {
+		return sqlbase.NewRelationAlreadyExistsError(name)
+	}
+	return nil
 }
 
 // rewriteTableDescs mutates tables to match the ID and privilege specified in
