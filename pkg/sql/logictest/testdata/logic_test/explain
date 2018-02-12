@@ -161,11 +161,11 @@ query TTT
 EXPLAIN SHOW TABLES
 ----
 sort                   ·      ·
- │                     order  +"Table"
- └── render            ·      ·
+│                     order  +"Table"
+└── render            ·      ·
       └── filter       ·      ·
-           └── values  ·      ·
-·                      size   5 columns, 93 rows
+            └── values  ·      ·
+·                      size   5 columns, 94 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -211,21 +211,21 @@ query TTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
 sort                                       ·         ·
- │                                         order     +ordinal_position
- └── render                                ·         ·
+│                                         order     +ordinal_position
+└── render                                ·         ·
       └── group                            ·         ·
-           │                               group by  @1-@5
-           └── render                      ·         ·
-                └── join                   ·         ·
-                     │                     type      left outer
-                     │                     equality  (column_name) = (column_name)
-                     ├── render            ·         ·
-                     │    └── filter       ·         ·
-                     │         └── values  ·         ·
-                     │                     size      17 columns, 783 rows
-                     └── render            ·         ·
-                          └── filter       ·         ·
-                               └── values  ·         ·
+            │                               group by  @1-@5
+            └── render                      ·         ·
+                  └── join                   ·         ·
+                        │                     type      left outer
+                        │                     equality  (column_name) = (column_name)
+                        ├── render            ·         ·
+                        │    └── filter       ·         ·
+                        │         └── values  ·         ·
+                        │                     size      17 columns, 790 rows
+                        └── render            ·         ·
+                        └── filter       ·         ·
+                              └── values  ·         ·
 ·                                          size      13 columns, 37 rows
 
 query TTT
