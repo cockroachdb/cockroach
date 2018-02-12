@@ -473,7 +473,7 @@ def            pg_catalog          pg_user                            SYSTEM VIE
 def            pg_catalog          pg_user_mapping                    SYSTEM VIEW  1
 def            pg_catalog          pg_views                           SYSTEM VIEW  1
 def            system              descriptor                         BASE TABLE   1
-def            system              eventlog                           BASE TABLE   2
+def            system              eventlog                           BASE TABLE   1
 def            system              jobs                               BASE TABLE   1
 def            system              lease                              BASE TABLE   1
 def            system              locations                          BASE TABLE   1
@@ -495,7 +495,6 @@ SELECT TABLE_SCHEMA, TABLE_NAME, VERSION FROM information_schema.tables WHERE ve
 ----
 table_schema  table_name  version
 other_db      xyz         6
-system        eventlog    2
 system        users       4
 
 user testuser
