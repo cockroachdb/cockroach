@@ -375,6 +375,7 @@ const (
 )
 
 func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetadata) error {
+	// Get sequence value.
 	vals, err := conn.QueryRow(fmt.Sprintf(
 		"SELECT last_value FROM %s AS OF SYSTEM TIME %s",
 		bmd.name, lex.EscapeSQLString(clusterTS),
@@ -382,12 +383,28 @@ func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMet
 	if err != nil {
 		return err
 	}
-
 	seqVal := vals[0].(int64)
 
+	// Get sequence increment.
+	vals2, err := conn.QueryRow(fmt.Sprintf(
+		"SELECT seqincrement FROM pg_catalog.pg_sequence AS OF SYSTEM TIME %s",
+		lex.EscapeSQLString(clusterTS),
+	), nil)
+	if err != nil {
+		return err
+	}
+	seqInc := vals2[0].(int64)
+
 	fmt.Fprintln(w)
+
+	// Dump `setval(name, val + inc, false)`. This will cause the value to be
+	// set to `(val + inc) - inc = val`, so that the next value given out by the
+	// sequence will be `val`. This also avoids the minval check -- a sequence with
+	// a minval of 1 will have its value saved in KV as 0, so that the next value
+	// given out is 1.
 	fmt.Fprintf(
-		w, "SELECT setval(%s, %d);\n", lex.EscapeSQLString(tree.NameString(bmd.name.Table())), seqVal,
+		w, "SELECT setval(%s, %d, false);\n",
+		lex.EscapeSQLString(tree.NameString(bmd.name.Table())), seqVal+seqInc,
 	)
 
 	return nil
