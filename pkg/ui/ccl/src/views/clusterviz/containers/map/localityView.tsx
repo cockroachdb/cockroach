@@ -35,6 +35,8 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
     const leavesUnderMe = getLeaves(this.props.localityTree);
     const { capacityUsable, capacityUsed } = sumNodeStats(leavesUnderMe, this.props.liveness);
 
+    const nodeIds = leavesUnderMe.map((node) => `${node.desc.node_id}`);
+
     return (
       <g onClick={this.onClick} style={{ cursor: "pointer" }}>
         <StatsView
@@ -43,6 +45,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
           label={getLocalityLabel(tiers)}
           subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
           isLocality={true}
+          nodes={nodeIds}
         />
       </g>
     );
