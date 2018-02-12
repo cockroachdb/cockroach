@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -594,6 +595,16 @@ func (ai aggregatingIterator) isValid() bool {
 	return len(ai) > 0 && ai[0].isValid()
 }
 
+// anyInvalid returns true if any component interpolatingIterator is invalid.
+func (ai aggregatingIterator) anyInvalid() bool {
+	for i := range ai {
+		if !ai[i].isValid() {
+			return true
+		}
+	}
+	return false
+}
+
 // init initializes the aggregatingIterator. This method moves all component
 // iterators to the first offset for which *any* interpolatingIterator in the
 // set has *real* data.
@@ -716,6 +727,46 @@ func (ai aggregatingIterator) min() (float64, bool) {
 		}
 	}
 	return min, anyValid
+}
+
+// makeLeadingEdgeFilter returns a function that filters data points near the
+// leading edge of time that are "incomplete". Any data point with a timestamp
+// later than the supplied "leading edge" timestamp (leadingEdgeNanos) is
+// required to have a valid contribution from all sources being aggregated.
+//
+// A detailed explanation of why this is necessary: New time series data points
+// are, in typical usage, always added at the current time; however, due to the
+// curiosities of clock skew, it is a common occurrence for the most recent data
+// point to be available for some sources, but not from others. For queries
+// which aggregate from multple sources, this can lead to a situation where a
+// persistent and precipitous dip at very end of data graphs. This happens
+// because the most recent point only represents the aggregation of a subset of
+// sources, even though the missing sources are not actually offline, they are
+// simply slightly delayed in reporting.
+//
+// Linear interpolation can handle small gaps in the middle of data, but it does
+// not work in this case as the current time is later than any data available
+// from the missing sources.
+//
+// In this case, we can assume that a missing data point will be added soon, and
+// instead do *not* return the partially aggregated data point to the client.
+func (ai aggregatingIterator) makeLeadingEdgeFilter(
+	fn func(aggregatingIterator) (float64, bool), leadingEdgeNanos int64,
+) func() (float64, bool) {
+	return func() (float64, bool) {
+		value, valid := fn(ai)
+		if valid {
+			// Only check if the iterator's current offset is later than the cutoff.
+			timestampNanos := ai.timestamp()
+			if timestampNanos > leadingEdgeNanos {
+				// Filter if any component iterators are invalid.
+				if ai.anyInvalid() {
+					valid = false
+				}
+			}
+		}
+		return value, valid
+	}
 }
 
 // getMaxTimespan computes the longest timespan that can be safely queried while
@@ -986,17 +1037,22 @@ func (db *DB) Query(
 
 	// Choose an aggregation function to use when taking values from the
 	// aggregatingIterator.
-	var valueFn func() (float64, bool)
+	var aggFn func(aggregatingIterator) (float64, bool)
 	switch query.GetSourceAggregator() {
 	case tspb.TimeSeriesQueryAggregator_SUM:
-		valueFn = iters.sum
+		aggFn = aggregatingIterator.sum
 	case tspb.TimeSeriesQueryAggregator_AVG:
-		valueFn = iters.avg
+		aggFn = aggregatingIterator.avg
 	case tspb.TimeSeriesQueryAggregator_MAX:
-		valueFn = iters.max
+		aggFn = aggregatingIterator.max
 	case tspb.TimeSeriesQueryAggregator_MIN:
-		valueFn = iters.min
+		aggFn = aggregatingIterator.min
 	}
+
+	// Filter the result of the aggregation function through a leading edge
+	// filter.
+	cutoffNanos := timeutil.Now().UnixNano() - queryResolution.SampleDuration()
+	valueFn := iters.makeLeadingEdgeFilter(aggFn, cutoffNanos)
 
 	// Iterate over all requested offsets, recording a value from the
 	// aggregatingIterator at each offset encountered. If the query is
@@ -1009,7 +1065,6 @@ func (db *DB) Query(
 	}
 
 	var responseData []tspb.TimeSeriesDatapoint
-
 	for iters.isValid() && iters.timestamp() <= endNanos {
 		if value, valid := valueFn(); valid {
 			if err := resultAccount.Grow(ctx, sizeOfDataPoint); err != nil {
