@@ -403,10 +403,12 @@ EXECUTE x21701a(NULL)
 statement ok
 PREPARE x21701b AS SELECT * FROM kv WHERE k IS DISTINCT FROM $1
 
-# This is broken (#21704).
 query II
 EXECUTE x21701b(NULL)
 ----
+1  1
+2  2
+3  3
 
 statement ok
 PREPARE x21701c AS SELECT * FROM kv WHERE k IS NOT DISTINCT FROM $1
