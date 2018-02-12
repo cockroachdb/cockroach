@@ -290,15 +290,47 @@ SELECT * from d where b @> '1.23' ORDER BY a;
 ----
 15  1.23
 
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{}';
+----
+index-join  0  index-join  ·       ·          (a, b)           a!=NULL; b!=NULL; key(a,b)
+  ├── scan   1  scan        ·       ·          (a, b[omitted])  a!=NULL; b!=NULL; key(a,b)
+  │          1  ·           table   d@foo_inv  ·                ·
+  │          1  ·           spans   ALL        ·                ·
+  └── scan   1  scan        ·       ·          (a, b)           ·
+ ·           1  ·           table   d@primary  ·                ·
+ ·           1  ·           filter  b @> '{}'  ·                ·
+
+
 query IT
 SELECT * from d where b @> '{}' ORDER BY a;
 ----
+3   {"a": {"b": "c"}}
+4   {"a": {"b": [1]}}
+5   {"a": {"b": [1, [2]]}}
+7   {"a": "b", "c": "d"}
+8   {"a": {"b": true}}
+9   {"a": {"b": false}}
 17  {}
 
 query IT
 SELECT * from d where b @> '[]' ORDER BY a;
 ----
+2   [1, 2, 3, 4, "foo"]
+16  [{"a": {"b": [1, [2]]}}, "d"]
 18  []
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '[]';
+----
+index-join  0  index-join  ·       ·          (a, b)           a!=NULL; b!=NULL; key(a,b)
+  ├── scan   1  scan        ·       ·          (a, b[omitted])  a!=NULL; b!=NULL; key(a,b)
+  │          1  ·           table   d@foo_inv  ·                ·
+  │          1  ·           spans   ALL        ·                ·
+  └── scan   1  scan        ·       ·          (a, b)           ·
+ ·           1  ·           table   d@primary  ·                ·
+ ·           1  ·           filter  b @> '[]'  ·                ·
+
 
 statement ok
 INSERT INTO d VALUES (19, '["a", "a"]')

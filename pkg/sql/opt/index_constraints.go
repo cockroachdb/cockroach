@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // makeEqSpan returns a span that constraints column <offset> to a single value.
@@ -809,6 +810,12 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 		if !c.isIndexColumn(lhs, 0 /* index */) || rhs.op != constOp {
 			return nil, false, false
 		}
+
+		// We want to have a full index scan for an empty json array or object on the RHS of @>.
+		if isEmptyArrayOrObjectJSON(rhs.private.(tree.Datum)) {
+			return nil, false, false
+		}
+
 		return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
 
 	case andOp:
@@ -826,6 +833,16 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 		}
 	}
 	return nil, false, false
+}
+
+func isEmptyArrayOrObjectJSON(datum tree.Datum) bool {
+	j := datum.(*tree.DJSON)
+	switch j.Type() {
+	case json.ArrayJSONType, json.ObjectJSONType:
+		return j.JSON.Len() < 1
+	default:
+		return false
+	}
 }
 
 var constTrueExpr = &Expr{
