@@ -315,10 +315,15 @@ func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
 	return parser.ParseType(sql)
 }
 
-// ParseTableNameWithIndex implements the parser.EvalPlanner interface.
-// We define this here to break the dependency from builtins.go to the parser.
-func (p *planner) ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
-	return parser.ParseTableNameWithIndex(sql)
+// ParseQualifiedTableName implements the tree.EvalDatabase interface.
+func (p *planner) ParseQualifiedTableName(
+	ctx context.Context, sql string,
+) (*tree.TableName, error) {
+	tn, err := parser.ParseTableName(sql)
+	if err != nil {
+		return nil, err
+	}
+	return p.QualifyWithDatabase(ctx, tn)
 }
 
 // QueryRow implements the parser.EvalPlanner interface.
