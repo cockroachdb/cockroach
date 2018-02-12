@@ -97,24 +97,24 @@ func makeExprView(mem *memo, group opt.GroupID, required opt.PhysicalPropsID) Ex
 }
 
 // Operator returns the type of the expression.
-func (ev *ExprView) Operator() opt.Operator {
+func (ev ExprView) Operator() opt.Operator {
 	return ev.op
 }
 
 // Logical returns the set of logical properties that this expression provides.
-func (ev *ExprView) Logical() *LogicalProps {
+func (ev ExprView) Logical() *LogicalProps {
 	return &ev.mem.lookupGroup(ev.loc.group).logical
 }
 
 // ChildCount returns the number of expressions that are inputs to this
 // parent expression.
-func (ev *ExprView) ChildCount() int {
+func (ev ExprView) ChildCount() int {
 	return childCountLookup[ev.op](ev)
 }
 
 // Child returns the nth expression that is an input to this parent expression.
 // It panics if the requested child does not exist.
-func (ev *ExprView) Child(nth int) ExprView {
+func (ev ExprView) Child(nth int) ExprView {
 	group := ev.ChildGroup(nth)
 	if ev.required == opt.MinPhysPropsID {
 		return makeExprView(ev.mem, group, opt.MinPhysPropsID)
@@ -125,36 +125,36 @@ func (ev *ExprView) Child(nth int) ExprView {
 
 // ChildGroup returns the memo group containing the nth child of this parent
 // expression.
-func (ev *ExprView) ChildGroup(nth int) opt.GroupID {
+func (ev ExprView) ChildGroup(nth int) opt.GroupID {
 	return childGroupLookup[ev.op](ev, nth)
 }
 
 // Private returns any private data associated with this expression, or nil if
 // there is none.
-func (ev *ExprView) Private() interface{} {
+func (ev ExprView) Private() interface{} {
 	return ev.mem.lookupPrivate(ev.privateID())
 }
 
 // Metadata returns the metadata that's specific to this expression tree. Some
 // operator types refer to the metadata in their private fields. For example,
 // the Scan operator holds a metadata table index.
-func (ev *ExprView) Metadata() *opt.Metadata {
+func (ev ExprView) Metadata() *opt.Metadata {
 	return ev.mem.metadata
 }
 
 // String returns a string representation of this expression for testing and
 // debugging.
-func (ev *ExprView) String() string {
+func (ev ExprView) String() string {
 	tp := treeprinter.New()
 	ev.format(tp)
 	return tp.String()
 }
 
-func (ev *ExprView) privateID() opt.PrivateID {
+func (ev ExprView) privateID() opt.PrivateID {
 	return privateLookup[ev.op](ev)
 }
 
-func (ev *ExprView) format(tp treeprinter.Node) {
+func (ev ExprView) format(tp treeprinter.Node) {
 	if ev.IsScalar() {
 		ev.formatScalar(tp)
 	} else {
@@ -162,7 +162,7 @@ func (ev *ExprView) format(tp treeprinter.Node) {
 	}
 }
 
-func (ev *ExprView) formatScalar(tp treeprinter.Node) {
+func (ev ExprView) formatScalar(tp treeprinter.Node) {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "%v", ev.op)
@@ -194,7 +194,7 @@ func (ev *ExprView) formatScalar(tp treeprinter.Node) {
 	}
 }
 
-func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
+func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	switch ev.op {
 	case opt.VariableOp:
 		colIndex := private.(opt.ColumnIndex)
@@ -212,7 +212,7 @@ func (ev *ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 	}
 }
 
-func (ev *ExprView) formatRelational(tp treeprinter.Node) {
+func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "%v", ev.op)
