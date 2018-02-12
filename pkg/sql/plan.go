@@ -307,7 +307,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 // makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
-	// execEngine is both an exec.Engine and an optbase.Catalog.
+	// execEngine is both an exec.Factory and an optbase.Catalog.
 	eng := &execEngine{
 		planner: p,
 	}
@@ -320,7 +320,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	ev := o.Optimize(root, props)
 
-	node, err := execbuilder.New(eng.Factory(), ev).Build()
+	node, err := execbuilder.New(eng, ev).Build()
 	if err != nil {
 		return err
 	}

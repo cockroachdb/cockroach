@@ -24,15 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// NewExecEngine is used from exec tests to create and execute plans.
-func (e *Executor) NewExecEngine() (exec.Engine, optbase.Catalog) {
+var _ exec.TestEngineFactory = &Executor{}
+
+// NewTestEngine is part of the exec.TestEngineFactory interface.
+func (e *Executor) NewTestEngine() exec.TestEngine {
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 	p, cleanup := newInternalPlanner("opt", txn, "root", &MemoryMetrics{}, &e.cfg)
 	ee := &execEngine{
 		planner: p,
 		cleanup: cleanup,
 	}
-	return ee, ee
+	return ee
 }
 
 type execEngine struct {
@@ -40,18 +42,72 @@ type execEngine struct {
 	cleanup func()
 }
 
-var _ exec.Engine = &execEngine{}
-var _ exec.Factory = &execEngine{}
+var _ exec.TestEngine = &execEngine{}
 
-// Factory is part of the exec.Engine interface.
+// Factory is part of the exec.TestEngine interface.
 func (ee *execEngine) Factory() exec.Factory {
 	return ee
 }
 
-// Close is part of the exec.Engine interface.
+// Catalog is part of the exec.TestEngine interface.
+func (ee *execEngine) Catalog() optbase.Catalog {
+	return ee
+}
+
+// Execute is part of the exec.TestEngine interface.
+func (ee *execEngine) Execute(n exec.Node) ([]tree.Datums, error) {
+	plan := n.(planNode)
+
+	params := runParams{
+		ctx:             context.TODO(),
+		extendedEvalCtx: &ee.planner.extendedEvalCtx,
+		p:               ee.planner,
+	}
+	if err := startPlan(params, plan); err != nil {
+		return nil, err
+	}
+	var res []tree.Datums
+	for {
+		ok, err := plan.Next(params)
+		if err != nil {
+			return res, nil
+		}
+		if !ok {
+			break
+		}
+		res = append(res, append(tree.Datums(nil), plan.Values()...))
+	}
+	plan.Close(context.TODO())
+	return res, nil
+}
+
+// Explain is part of the exec.TestEngine interface.
+func (ee *execEngine) Explain(n exec.Node) ([]tree.Datums, error) {
+	plan := n.(planNode)
+
+	// Add an explain node to the plan and run that.
+	flags := explainFlags{
+		showMetadata: true,
+		showExprs:    true,
+		qualifyNames: true,
+	}
+	explainNode, err := ee.planner.makeExplainPlanNodeWithPlan(
+		context.TODO(), flags, false /* expanded */, false /* optimized */, plan,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Execute the explain node.
+	return ee.Execute(explainNode)
+}
+
+// Close is part of the exec.TestEngine interface.
 func (ee *execEngine) Close() {
 	ee.cleanup()
 }
+
+var _ exec.Factory = &execEngine{}
 
 // ConstructScan is part of the exec.Factory interface.
 func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
@@ -63,7 +119,9 @@ func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
 	}
 	// Create a scanNode.
 	scan := ee.planner.Scan()
-	if err := scan.initTable(context.TODO(), ee.planner, desc, nil /* hints */, publicColumns, columns); err != nil {
+	if err := scan.initTable(
+		context.TODO(), ee.planner, desc, nil /* hints */, publicColumns, columns,
+	); err != nil {
 		return nil, err
 	}
 	var err error
@@ -113,54 +171,6 @@ func (ee *execEngine) ConstructProject(
 		r.addRenderColumn(expr, "" /* exprStr */, col)
 	}
 	return r, nil
-}
-
-// Execute is part of the exec.Engine interface.
-func (ee *execEngine) Execute(n exec.Node) ([]tree.Datums, error) {
-	plan := n.(planNode)
-
-	params := runParams{
-		ctx:             context.TODO(),
-		extendedEvalCtx: &ee.planner.extendedEvalCtx,
-		p:               ee.planner,
-	}
-	if err := startPlan(params, plan); err != nil {
-		return nil, err
-	}
-	var res []tree.Datums
-	for {
-		ok, err := plan.Next(params)
-		if err != nil {
-			return res, nil
-		}
-		if !ok {
-			break
-		}
-		res = append(res, append(tree.Datums(nil), plan.Values()...))
-	}
-	plan.Close(context.TODO())
-	return res, nil
-}
-
-// Explain is part of the exec.Engine interface.
-func (ee *execEngine) Explain(n exec.Node) ([]tree.Datums, error) {
-	plan := n.(planNode)
-
-	// Add an explain node to the plan and run that.
-	flags := explainFlags{
-		showMetadata: true,
-		showExprs:    true,
-		qualifyNames: true,
-	}
-	explainNode, err := ee.planner.makeExplainPlanNodeWithPlan(
-		context.TODO(), flags, false /* expanded */, false /* optimized */, plan,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	// Execute the explain node.
-	return ee.Execute(explainNode)
 }
 
 var _ optbase.Catalog = &execEngine{}

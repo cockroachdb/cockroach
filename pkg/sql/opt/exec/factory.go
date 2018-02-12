@@ -19,8 +19,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// Node represents a node in the execution tree (currently maps to a
+// sql.planNode).
+type Node interface{}
+
 // Factory defines the interface for building an execution plan, which consists
 // of a tree of execution nodes (currently a sql.planNode tree).
+//
+// The tree is always built bottom-up. The Construct methods either construct
+// leaf nodes, or they take other nodes previously constructed by this same
+// factory as children.
 //
 // The TypedExprs passed to these functions refer to columns of the input node
 // via IndexedVars.
