@@ -107,10 +107,10 @@ type test struct {
 	name   string
 	fn     func(*test)
 	runner string
+	start  time.Time
 	mu     struct {
 		syncutil.RWMutex
 		failed bool
-		start  time.Time
 		output []byte
 	}
 }
@@ -207,22 +207,26 @@ func (t *test) run(wg *sync.WaitGroup, sem chan struct{}) {
 		t.runner = callerName()
 
 		defer func() {
+			duration := timeutil.Now().Sub(t.start)
+
 			if err := recover(); err != nil {
 				t.Fatal(err)
 			}
 
 			if !dryrun {
+				dstr := fmt.Sprintf("%.2fs", duration.Seconds())
 				if t.Failed() {
-					fmt.Printf("--- FAIL: %s\n%s", t.name, t.mu.output)
+					fmt.Printf("--- FAIL: %s (%s)\n%s", t.name, dstr, t.mu.output)
 				} else {
-					fmt.Printf("--- PASS: %s\n", t.name)
+					fmt.Printf("--- PASS: %s (%s)\n", t.name, dstr)
 				}
 			}
+
 			wg.Done()
 			<-sem
 		}()
 
-		t.mu.start = timeutil.Now()
+		t.start = timeutil.Now()
 		if !dryrun {
 			t.fn(t)
 		}
