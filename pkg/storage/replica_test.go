@@ -2463,9 +2463,9 @@ func TestReplicaCommandQueueCancellationRandom(t *testing.T) {
 	}
 }
 
-// TestReplicaCommandQueueCancellationLocal tests various cancellation scenerios
+// TestReplicaCommandQueueCancellationLocal tests various cancellation scenarios
 // surrounding EndTxnReqs, PushTxnReqs, and HeartbeatTxnReqs. One of these
-// scenerios was the cause of #16266.
+// scenarios was the cause of #16266.
 func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
