@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -407,11 +408,22 @@ func (dsi *downsamplingIterator) computeEnd() {
 // not be interpolated between real data points which have a difference in
 // offset greater than maxDistance.
 //
+// A special case for interpolation occurs near the leading edge of time. New
+// time series data points are added at the current time; however, due to the
+// curiosities of clock skew, it is a common occurrence for the most recent data
+// point to be available for some sources, but not others. This can lead to a
+// situation where graphs show a precipitous dip at the current time; normal
+// interpolation can handle other type of gaps, but it does not work in this
+// case as the needed data from the missing sources is past all currently
+// available data. In this case, we will assume that a missing data point will
+// be added soon and simply use the value of the last available datapoint.
+//
 // If the derivative option is set, value() will return the derivative of the
 // series at the current offset in units per offset.
 type interpolatingIterator struct {
 	offset      int32                // Current offset within dataSpan
 	maxDistance int32                // Maximum distance between real values for interpolation.
+	nowOffset   int32                // Offset of the current wall time.
 	nextReal    downsamplingIterator // Next sample with an offset >= iterator's offset
 	prevReal    downsamplingIterator // Prev sample with offset < iterator's offset
 	derivative  tspb.TimeSeriesQueryDerivative
@@ -426,6 +438,7 @@ func newInterpolatingIterator(
 	startOffset int32,
 	sampleNanos int64,
 	maxDistance int32,
+	nowOffset int32,
 	extractFn extractFn,
 	downsampleFn downsampleFn,
 	derivative tspb.TimeSeriesQueryDerivative,
@@ -438,6 +451,7 @@ func newInterpolatingIterator(
 	iterator := interpolatingIterator{
 		offset:      startOffset,
 		maxDistance: maxDistance,
+		nowOffset:   nowOffset,
 		nextReal:    nextReal,
 		derivative:  derivative,
 	}
@@ -485,6 +499,15 @@ func (ii *interpolatingIterator) midTimestamp() int64 {
 // to return a value at the current offset.
 func (ii *interpolatingIterator) value() (float64, bool) {
 	if !ii.isValid() {
+		if !ii.prevReal.isValid() {
+			return 0, false
+		}
+		// Account for the case where we are near the leading edge of time. We allow
+		// a grace period of two sample periods, assuming that the polling interval
+		// is the same as the sample period.
+		if ii.nowOffset >= ii.offset && ii.nowOffset-ii.prevReal.offset() <= 2 {
+			return ii.prevReal.value(), true
+		}
 		return 0, false
 	}
 	isDerivative := ii.derivative != tspb.TimeSeriesQueryDerivative_NONE
@@ -974,13 +997,14 @@ func (db *DB) Query(
 	sources := make([]string, 0, len(sourceSpans))
 	iters := make(aggregatingIterator, 0, len(sourceSpans))
 	maxDistance := int32(interpolationLimitNanos / sampleDuration)
+	nowOffset := int32((timeutil.Now().UnixNano() - startNanos) / sampleDuration)
 	for name, span := range sourceSpans {
 		if err := resultAccount.Grow(ctx, int64(len(name))); err != nil {
 			return nil, nil, err
 		}
 		sources = append(sources, name)
 		iters = append(iters, newInterpolatingIterator(
-			*span, 0, sampleDuration, maxDistance, extractor, downsampler, query.GetDerivative(),
+			*span, 0, sampleDuration, maxDistance, nowOffset, extractor, downsampler, query.GetDerivative(),
 		))
 	}
 
