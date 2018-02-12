@@ -582,15 +582,17 @@ func makeImportSpans(
 			maxEndTime = b.EndTime
 		}
 
-		var backupSpanCovering intervalccl.Covering
+		var backupNewSpanCovering intervalccl.Covering
 		for _, s := range b.IntroducedSpans {
-			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
+			backupNewSpanCovering = append(backupNewSpanCovering, intervalccl.Range{
 				Start:   s.Key,
 				End:     s.EndKey,
 				Payload: importEntry{Span: s, entryType: backupSpan, start: hlc.Timestamp{}, end: b.StartTime},
 			})
 		}
+		backupCoverings = append(backupCoverings, backupNewSpanCovering)
 
+		var backupSpanCovering intervalccl.Covering
 		for _, s := range b.Spans {
 			backupSpanCovering = append(backupSpanCovering, intervalccl.Range{
 				Start:   s.Key,
