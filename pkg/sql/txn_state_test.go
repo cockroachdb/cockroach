@@ -639,6 +639,25 @@ func TestTransitions(t *testing.T) {
 				isFinalized: &varTrue,
 			},
 		},
+		{
+			// Restarting from Open via ROLLBACK TO SAVEPOINT.
+			name: "Open + restart",
+			init: func() (State, *txnState2, error) {
+				s, ts := testCon.createOpenState(explicitTxn, retryIntentSet)
+				return s, ts, nil
+			},
+			ev:       eventTxnRestart{},
+			expState: stateOpen{ImplicitTxn: False, RetryIntent: True},
+			expAdv: expAdvance{
+				expCode:  advanceOne,
+				expFlush: flush,
+				expEv:    txnRestart,
+			},
+			expTxn: &expKVTxn{
+			// We would like to test that the transaction's epoch bumped if the txn
+			// performed any operations, but it's not easy to do the test.
+			},
+		},
 		//
 		// Tests starting from the Aborted state.
 		//
