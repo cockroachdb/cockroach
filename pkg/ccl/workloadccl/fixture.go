@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -45,6 +46,12 @@ type FixtureStore struct {
 	// GCSPrefix is a prefix to prepend to each Google Cloud Storage object
 	// path.
 	GCSPrefix string
+
+	// CSVServerURL is a url to a `./workload csv-server` to use as a source of
+	// CSV data. The url is anything accepted by our backup/restore. Notably, if
+	// you run a csv-server next to each CockroachDB node,
+	// `http://localhost:<port>` will work.
+	CSVServerURL string
 }
 
 func (s FixtureStore) objectPathToURI(folder string) string {
@@ -179,7 +186,7 @@ func (c *groupCSVWriter) groupWriteCSVs(
 				return closeErr
 			}
 
-			pathsCh <- path
+			pathsCh <- c.store.objectPathToURI(path)
 			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, w.Attrs().Size)
 			d := timeutil.Since(c.start)
 			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
@@ -230,6 +237,54 @@ func (c *groupCSVWriter) groupWriteCSVs(
 	return g.Wait()
 }
 
+func csvServerPaths(
+	csvServerURL string, gen workload.Generator, table workload.Table, chunkSizeBytes int64,
+) []string {
+	if table.InitialRowCount == 0 {
+		return nil
+	}
+
+	// TODO(dan): Do some better sampling to figure out these row splits.
+	var rowStep int
+	{
+		var approxRowSize int64
+		for _, datum := range table.InitialRowFn(0) {
+			approxRowSize += workload.DatumSize(datum)
+		}
+		if approxRowSize <= 0 {
+			approxRowSize = 1
+		}
+		rowStep = int(chunkSizeBytes / approxRowSize)
+		if rowStep <= 0 {
+			rowStep = 1
+		}
+	}
+
+	var paths []string
+	for rowIdx := 0; rowIdx < table.InitialRowCount; {
+		chunkRowStart, chunkRowEnd := rowIdx, rowIdx+rowStep
+		if chunkRowEnd > table.InitialRowCount {
+			chunkRowEnd = table.InitialRowCount
+		}
+
+		params := url.Values{
+			`row-start`: []string{strconv.Itoa(chunkRowStart)},
+			`row-end`:   []string{strconv.Itoa(chunkRowEnd)},
+		}
+		if f, ok := gen.(workload.Flagser); ok {
+			f.Flags().VisitAll(func(f *pflag.Flag) {
+				params[f.Name] = append(params[f.Name], f.Value.String())
+			})
+		}
+		path := fmt.Sprintf(`%s/csv/%s/%s?%s`,
+			csvServerURL, gen.Meta().Name, table.Name, params.Encode())
+		paths = append(paths, path)
+
+		rowIdx = chunkRowEnd
+	}
+	return paths
+}
+
 // MakeFixture regenerates a fixture, storing it to GCS. It is expected that the
 // generator will have had Configure called on it.
 //
@@ -267,8 +322,15 @@ func MakeFixture(
 
 		g.Go(func() error {
 			defer close(tableCSVPathsCh)
-			startRow, endRow := 0, table.InitialRowCount
-			return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
+			if len(store.CSVServerURL) == 0 {
+				startRow, endRow := 0, table.InitialRowCount
+				return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
+			}
+			paths := csvServerPaths(store.CSVServerURL, gen, table, writeCSVChunkSize)
+			for _, path := range paths {
+				tableCSVPathsCh <- path
+			}
+			return nil
 		})
 		g.Go(func() error {
 			params := []interface{}{
@@ -278,7 +340,7 @@ func MakeFixture(
 			// ctx.Done because a context cancel will cause the above goroutine
 			// to finish and close tableCSVPathsCh.
 			for tableCSVPath := range tableCSVPathsCh {
-				params = append(params, store.objectPathToURI(tableCSVPath))
+				params = append(params, tableCSVPath)
 			}
 			select {
 			case <-gCtx.Done():

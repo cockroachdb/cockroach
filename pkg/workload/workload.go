@@ -23,6 +23,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
+	"math/bits"
 	"sort"
 	"strconv"
 	"strings"
@@ -165,9 +166,12 @@ func DatumSize(x interface{}) int64 {
 	}
 	switch t := x.(type) {
 	case int:
-		return int64(math.Log10(float64(t)))
+		if t < 0 {
+			t = -t
+		}
+		return int64(bits.Len(uint(t))+8) / 8
 	case float64:
-		return int64(math.Log10(t))
+		return int64(bits.Len64(math.Float64bits(t))+8) / 8
 	case string:
 		return int64(len(t))
 	default:
