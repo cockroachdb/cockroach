@@ -13,14 +13,18 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -52,7 +56,7 @@ func TestDBAddSSTable(t *testing.T) {
 		s, _, db := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
-		runTestDBAddSSTable(ctx, t, db)
+		runTestDBAddSSTable(ctx, t, db, nil)
 	})
 	t.Run("store=on-disk", func(t *testing.T) {
 		dir, dirCleanupFn := testutils.TempDir(t)
@@ -67,11 +71,16 @@ func TestDBAddSSTable(t *testing.T) {
 		})
 		ctx := context.Background()
 		defer s.Stopper().Stop(ctx)
-		runTestDBAddSSTable(ctx, t, db)
+		store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		runTestDBAddSSTable(ctx, t, db, store)
 	})
 }
 
-func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
+// if store != nil, assume it is on-disk and check ingestion semantics.
+func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store *storage.Store) {
 	{
 		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 2}}
 		data, err := singleKVSSTable(key, roachpb.MakeValueFromString("1").RawBytes)
@@ -98,7 +107,8 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 		if err := db.AddSSTable(ingestCtx, "b", "c", data); err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()),
+		formatted := tracing.FormatRecordedSpans(collect())
+		if err := testutils.MatchInOrder(formatted,
 			"evaluating AddSSTable",
 			"sideloadable proposal detected",
 			"ingested SSTable at index",
@@ -106,6 +116,19 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 			t.Fatal(err)
 		}
 
+		if store != nil {
+			// Look for the ingested path and verify it still exists.
+			re := regexp.MustCompile(`ingested SSTable at index \d+, term \d+: (\S+)`)
+			match := re.FindStringSubmatch(formatted)
+			if len(match) != 2 {
+				t.Fatalf("failed to extract ingested path from message %q,\n got: %v", formatted, match)
+			}
+			// The on-disk paths have `.ingested` appended unlike in-memory.
+			suffix := ".ingested"
+			if _, err := os.Stat(strings.TrimSuffix(match[1], suffix)); err != nil {
+				t.Fatalf("%q file missing after ingest: %v", match[1], err)
+			}
+		}
 		if r, err := db.Get(ctx, "bb"); err != nil {
 			t.Fatalf("%+v", err)
 		} else if expected := []byte("1"); !bytes.Equal(expected, r.ValueBytes()) {
@@ -130,6 +153,12 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 		} else if expected := []byte("1"); !bytes.Equal(expected, r.ValueBytes()) {
 			t.Errorf("expected %q, got %q", expected, r.ValueBytes())
 		}
+		if store != nil {
+			metrics := store.Metrics()
+			if expected, got := int64(2), metrics.AddSSTableApplications.Count(); expected != got {
+				t.Fatalf("expected %d sst ingestions, got %d", expected, got)
+			}
+		}
 	}
 
 	// Key range in request span is not empty. First time through a different
@@ -141,6 +170,12 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 			t.Fatalf("%+v", err)
 		}
 
+		var metrics *storage.StoreMetrics
+		var before int64
+		if store != nil {
+			metrics = store.Metrics()
+			before = metrics.AddSSTableApplicationCopies.Count()
+		}
 		for i := 0; i < 2; i++ {
 			ingestCtx, collect, cancel := tracing.ContextWithRecordingSpan(ctx, "test-recording")
 			defer cancel()
@@ -166,6 +201,17 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB) {
 				t.Fatalf("%+v", err)
 			} else if expected := []byte("3"); !bytes.Equal(expected, r.ValueBytes()) {
 				t.Errorf("expected %q, got %q", expected, r.ValueBytes())
+			}
+		}
+		if store != nil {
+			if expected, got := int64(4), metrics.AddSSTableApplications.Count(); expected != got {
+				t.Fatalf("expected %d sst ingestions, got %d", expected, got)
+			}
+			// The second time though we had to make a copy of the SST since rocks saw
+			// existing data (from the first time), and rejected the no-modification
+			// attempt.
+			if after := metrics.AddSSTableApplicationCopies.Count(); before >= after {
+				t.Fatalf("expected sst copies to increase, %d before %d after", before, after)
 			}
 		}
 	}
