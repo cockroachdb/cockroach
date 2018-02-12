@@ -192,9 +192,12 @@ func newInternalPlanner(
 			Location: time.UTC,
 			User:     user,
 		},
-		TxnState:       txnState{Ctx: ctx, implicitTxn: true},
-		context:        ctx,
-		tables:         TableCollection{databaseCache: newDatabaseCache(config.SystemConfig{})},
+		TxnState: txnState{Ctx: ctx, implicitTxn: true},
+		context:  ctx,
+		tables: TableCollection{
+			leaseMgr:      execCfg.LeaseManager,
+			databaseCache: newDatabaseCache(config.SystemConfig{}),
+		},
 		execCfg:        execCfg,
 		distSQLPlanner: execCfg.DistSQLPlanner,
 	}
