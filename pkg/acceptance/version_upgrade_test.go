@@ -40,7 +40,6 @@ func TestVersionUpgrade(t *testing.T) {
 }
 
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
-	t.Skip("#22581")
 
 	// Version 1.0.5 does not contain
 	// https://github.com/cockroachdb/cockroach/pull/19493 and the test will be
