@@ -89,7 +89,7 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedE
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := 0; i < ev.ChildCount(); i++ {
 			child := ev.Child(i)
-			datums[i] = *child.Private().(*tree.Datum)
+			datums[i] = child.Private().(tree.Datum)
 		}
 		return tree.NewDTuple(datums...)
 	}
@@ -104,12 +104,16 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedE
 func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	switch ev.Operator() {
 	case opt.AndOp, opt.OrOp:
-		left := b.buildScalar(ctx, ev.Child(0))
-		right := b.buildScalar(ctx, ev.Child(1))
-		if ev.Operator() == opt.AndOp {
-			return tree.NewTypedAndExpr(left, right)
+		expr := b.buildScalar(ctx, ev.Child(0))
+		for i, n := 1, ev.ChildCount(); i < n; i++ {
+			right := b.buildScalar(ctx, ev.Child(i))
+			if ev.Operator() == opt.AndOp {
+				expr = tree.NewTypedAndExpr(expr, right)
+			} else {
+				expr = tree.NewTypedOrExpr(expr, right)
+			}
 		}
-		return tree.NewTypedOrExpr(left, right)
+		return expr
 
 	case opt.NotOp:
 		return tree.NewTypedNotExpr(b.buildScalar(ctx, ev.Child(0)))
