@@ -14,7 +14,7 @@ exec-explain
 SELECT * FROM t.a WHERE x > 1
 ----
 filter     0  filter  ·       ·          (x, y)  ·
- │         0  ·       filter  @1 > 1     ·       ·
+ │         0  ·       filter  x > 1      ·       ·
  └── scan  1  scan    ·       ·          (x, y)  ·
 ·          1  ·       table   a@primary  ·       ·
 ·          1  ·       spans   ALL        ·       ·
@@ -29,7 +29,7 @@ exec-explain
 SELECT * FROM t.a WHERE y > 1
 ----
 filter     0  filter  ·       ·          (x, y)  ·
- │         0  ·       filter  @2 > 1     ·       ·
+ │         0  ·       filter  y > 1      ·       ·
  └── scan  1  scan    ·       ·          (x, y)  ·
 ·          1  ·       table   a@primary  ·       ·
 ·          1  ·       spans   ALL        ·       ·
@@ -44,11 +44,11 @@ SELECT * FROM t.a WHERE y > 1
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
-filter     0  filter  ·       ·                      (x, y)  ·
- │         0  ·       filter  (@1 > 1) AND (@1 < 3)  ·       ·
- └── scan  1  scan    ·       ·                      (x, y)  ·
-·          1  ·       table   a@primary              ·       ·
-·          1  ·       spans   ALL                    ·       ·
+filter     0  filter  ·       ·                    (x, y)  ·
+ │         0  ·       filter  (x > 1) AND (x < 3)  ·       ·
+ └── scan  1  scan    ·       ·                    (x, y)  ·
+·          1  ·       table   a@primary            ·       ·
+·          1  ·       spans   ALL                  ·       ·
 
 exec
 SELECT * FROM t.a WHERE x > 1 AND x < 3
@@ -132,14 +132,14 @@ SELECT x, x, y, x FROM t.a
 exec-explain
 SELECT x + 1, x + y FROM t.a WHERE x + y > 20
 ----
-render          0  render  ·         ·               (column3, column4)  ·
- │              0  ·       render 0  x + 1           ·                   ·
- │              0  ·       render 1  x + y           ·                   ·
- └── filter     1  filter  ·         ·               (x, y)              ·
-      │         1  ·       filter    (@1 + @2) > 20  ·                   ·
-      └── scan  2  scan    ·         ·               (x, y)              ·
-·               2  ·       table     a@primary       ·                   ·
-·               2  ·       spans     ALL             ·                   ·
+render          0  render  ·         ·             (column3, column4)  ·
+ │              0  ·       render 0  x + 1         ·                   ·
+ │              0  ·       render 1  x + y         ·                   ·
+ └── filter     1  filter  ·         ·             (x, y)              ·
+      │         1  ·       filter    (x + y) > 20  ·                   ·
+      └── scan  2  scan    ·         ·             (x, y)              ·
+·               2  ·       table     a@primary     ·                   ·
+·               2  ·       spans     ALL           ·                   ·
 
 exec
 SELECT x + 1, x + y FROM t.a WHERE x + y > 20
@@ -176,7 +176,7 @@ SELECT x FROM t.b WHERE rowid > 0
 render          0  render  ·         ·          ("b.x")                ·
  │              0  ·       render 0  x          ·                      ·
  └── filter     1  filter  ·         ·          (x, y, rowid[hidden])  ·
-      │         1  ·       filter    @3 > 0     ·                      ·
+      │         1  ·       filter    rowid > 0  ·                      ·
       └── scan  2  scan    ·         ·          (x, y, rowid[hidden])  ·
 ·               2  ·       table     b@primary  ·                      ·
 ·               2  ·       spans     ALL        ·                      ·

@@ -62,7 +62,9 @@ func (ee *execEngine) ConstructValues(
 	}
 	values := ee.planner.newContainerValuesNode(sqlbase.ResultColumns{}, len(rows))
 	for range rows {
-		values.rows.AddRow(context.TODO(), tree.Datums{})
+		if _, err := values.rows.AddRow(context.TODO(), tree.Datums{}); err != nil {
+			return nil, err
+		}
 	}
 	return values, nil
 }
@@ -103,8 +105,7 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 		source: src,
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
-	f.filter = filter
-	f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	return f, nil
 }
 
@@ -119,7 +120,7 @@ func (ee *execEngine) ConstructProject(
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 	for i, expr := range exprs {
-		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, false /* normalizeToNonNil */)
+		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
 		col := sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
 		// We don't need to pass the render string, it is only used
 		// in planning code.
