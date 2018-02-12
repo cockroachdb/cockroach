@@ -99,12 +99,12 @@ var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
-// testCatalog implements the sqlbase.Catalog interface.
+// testCatalog implements the optbase.Catalog interface.
 type testCatalog struct {
 	kvDB *client.DB
 }
 
-// FindTable implements the sqlbase.Catalog interface.
+// FindTable implements the optbase.Catalog interface.
 func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
 	return sqlbase.GetTableDescriptor(c.kvDB, string(name.SchemaName), string(name.TableName)), nil
 }

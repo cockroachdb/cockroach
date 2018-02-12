@@ -187,8 +187,8 @@ func newScalarBuilder(factory opt.Factory, ivh *tree.IndexedVarHelper) *Builder 
 func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group opt.GroupID, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			if _, ok := r.(builderError); ok {
-				err = r.(builderError)
+			if bldErr, ok := r.(builderError); ok {
+				err = bldErr
 			} else {
 				panic(r)
 			}
