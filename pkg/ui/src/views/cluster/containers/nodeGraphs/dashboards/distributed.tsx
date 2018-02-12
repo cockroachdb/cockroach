@@ -4,7 +4,7 @@ import _ from "lodash";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeAddress } from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources } = props;
@@ -59,7 +59,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={node}
               name="cr.node.txn.durations-p99"
-              title={nodeAddress(nodesSummary, node)}
+              title={nodeDisplayName(nodesSummary, node)}
               sources={[node]}
               downsampleMax
             />
@@ -77,7 +77,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={node}
               name="cr.node.txn.durations-p90"
-              title={nodeAddress(nodesSummary, node)}
+              title={nodeDisplayName(nodesSummary, node)}
               sources={[node]}
               downsampleMax
             />
@@ -95,7 +95,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={node}
               name="cr.node.liveness.heartbeatlatency-p99"
-              title={nodeAddress(nodesSummary, node)}
+              title={nodeDisplayName(nodesSummary, node)}
               sources={[node]}
               downsampleMax
             />
@@ -113,7 +113,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={node}
               name="cr.node.liveness.heartbeatlatency-p90"
-              title={nodeAddress(nodesSummary, node)}
+              title={nodeDisplayName(nodesSummary, node)}
               sources={[node]}
               downsampleMax
             />

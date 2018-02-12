@@ -4,7 +4,7 @@ import _ from "lodash";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeAddress, storeIDsForNode } from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
@@ -47,7 +47,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.raft.process.logcommit.latency-p99"
-              title={nodeAddress(nodesSummary, nid)}
+              title={nodeDisplayName(nodesSummary, nid)}
               sources={storeIDsForNode(nodesSummary, nid)}
             />
           ))
@@ -66,7 +66,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.raft.process.commandcommit.latency-p99"
-              title={nodeAddress(nodesSummary, nid)}
+              title={nodeDisplayName(nodesSummary, nid)}
               sources={storeIDsForNode(nodesSummary, nid)}
             />
           ))
