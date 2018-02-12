@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -144,7 +143,7 @@ func TestLogicalValuesProps(t *testing.T) {
 	rows := f.InternList(nil)
 	a0 := f.Metadata().TableColumn(a, 0)
 	a1 := f.Metadata().TableColumn(a, 1)
-	cols := util.MakeFastIntSet(int(a0), int(a1))
+	cols := opt.ColList{a0, a1}
 	valuesGroup := f.ConstructValues(rows, f.InternPrivate(&cols))
 
 	expected := "columns: a.x:int:null:1 a.y:int:null:2\n"

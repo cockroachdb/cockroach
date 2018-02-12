@@ -630,7 +630,10 @@ func (b *Builder) buildFrom(
 		// TODO(peter): This should be a table with 1 row and 0 columns to match
 		// current cockroach behavior.
 		rows := []opt.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
-		out = b.factory.ConstructValues(b.factory.InternList(rows), b.factory.InternPrivate(&opt.ColSet{}))
+		out = b.factory.ConstructValues(
+			b.factory.InternList(rows),
+			b.factory.InternPrivate(&opt.ColList{}),
+		)
 		outScope = inScope
 	} else {
 		out = left
