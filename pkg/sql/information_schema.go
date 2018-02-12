@@ -40,6 +40,7 @@ var informationSchema = virtualSchema{
 		informationSchemaApplicableRoles,
 		informationSchemaColumnPrivileges,
 		informationSchemaColumnsTable,
+		informationSchemaConstraintColumnUsageTable,
 		informationSchemaEnabledRoles,
 		informationSchemaKeyColumnUsageTable,
 		informationSchemaReferentialConstraintsTable,
@@ -340,6 +341,59 @@ func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
 	return tree.DNull
 }
 
+// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-constraint-column-usage.html
+// MySQL:    missing
+var informationSchemaConstraintColumnUsageTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE information_schema.constraint_column_usage (
+	TABLE_CATALOG STRING NOT NULL,
+	TABLE_SCHEMA STRING NOT NULL,
+	TABLE_NAME STRING NOT NULL,
+	COLUMN_NAME STRING NOT NULL,
+	CONSTRAINT_CATALOG STRING NOT NULL,
+	CONSTRAINT_SCHEMA STRING NOT NULL,
+	CONSTRAINT_NAME STRING NOT NULL
+);`,
+	populate: func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error {
+		return forEachTableDescWithTableLookup(ctx, p, prefix, func(
+			db *sqlbase.DatabaseDescriptor,
+			table *sqlbase.TableDescriptor,
+			tableLookup tableLookupFn,
+		) error {
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			if err != nil {
+				return err
+			}
+
+			for conName, con := range conInfo {
+				conTable := table
+				conCols := con.Columns
+				if con.Kind == sqlbase.ConstraintTypeFK {
+					// For foreign key constraint, constraint_column_usage
+					// identifies the table/columns that the foreign key
+					// references.
+					conTable = con.ReferencedTable
+					conCols = con.ReferencedIndex.ColumnNames
+				}
+				for _, col := range conCols {
+					if err := addRow(
+						defString,                      // table_catalog
+						tree.NewDString(db.Name),       // table_schema
+						tree.NewDString(conTable.Name), // table_name
+						tree.NewDString(col),           // column_name
+						defString,                      // constraint_catalog
+						tree.NewDString(db.Name),       // constraint_schema
+						tree.NewDString(conName),       // constraint_name
+					); err != nil {
+						return err
+					}
+				}
+			}
+			return nil
+		})
+	},
+}
+
 // Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-key-column-usage.html
 // MySQL:    https://dev.mysql.com/doc/refman/5.7/en/key-column-usage-table.html
 var informationSchemaKeyColumnUsageTable = virtualSchemaTable{
@@ -361,14 +415,14 @@ CREATE TABLE information_schema.key_column_usage (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 			if err != nil {
 				return err
 			}
 
-			for name, c := range info {
+			for conName, con := range conInfo {
 				// Only Primary Key, Foreign Key, and Unique constraints are included.
-				switch c.Kind {
+				switch con.Kind {
 				case sqlbase.ConstraintTypePK:
 				case sqlbase.ConstraintTypeFK:
 				case sqlbase.ConstraintTypeUnique:
@@ -376,20 +430,20 @@ CREATE TABLE information_schema.key_column_usage (
 					continue
 				}
 
-				for pos, column := range c.Columns {
+				for pos, col := range con.Columns {
 					ordinalPos := tree.NewDInt(tree.DInt(pos + 1))
 					uniquePos := tree.DNull
-					if c.Kind == sqlbase.ConstraintTypeFK {
+					if con.Kind == sqlbase.ConstraintTypeFK {
 						uniquePos = ordinalPos
 					}
 					if err := addRow(
 						defString,                   // constraint_catalog
 						tree.NewDString(db.Name),    // constraint_schema
-						tree.NewDString(name),       // constraint_name
+						tree.NewDString(conName),    // constraint_name
 						defString,                   // table_catalog
 						tree.NewDString(db.Name),    // table_schema
 						tree.NewDString(table.Name), // table_name
-						tree.NewDString(column),     // column_name
+						tree.NewDString(col),        // column_name
 						ordinalPos,                  // ordinal_position, 1-indexed
 						uniquePos,                   // position_in_unique_constraint
 					); err != nil {
@@ -737,22 +791,22 @@ CREATE TABLE information_schema.table_constraints (
 			table *sqlbase.TableDescriptor,
 			tableLookup tableLookupFn,
 		) error {
-			info, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
+			conInfo, err := table.GetConstraintInfoWithLookup(tableLookup.tableOrErr)
 			if err != nil {
 				return err
 			}
 
-			for name, c := range info {
+			for conName, con := range conInfo {
 				if err := addRow(
-					defString,                       // constraint_catalog
-					tree.NewDString(db.Name),        // constraint_schema
-					tree.NewDString(name),           // constraint_name
-					defString,                       // table_catalog
-					tree.NewDString(db.Name),        // table_schema
-					tree.NewDString(table.Name),     // table_name
-					tree.NewDString(string(c.Kind)), // constraint_type
-					yesOrNoDatum(false),             // is_deferrable
-					yesOrNoDatum(false),             // initially_deferred
+					defString,                         // constraint_catalog
+					tree.NewDString(db.Name),          // constraint_schema
+					tree.NewDString(conName),          // constraint_name
+					defString,                         // table_catalog
+					tree.NewDString(db.Name),          // table_schema
+					tree.NewDString(table.Name),       // table_name
+					tree.NewDString(string(con.Kind)), // constraint_type
+					yesOrNoDatum(false),               // is_deferrable
+					yesOrNoDatum(false),               // initially_deferred
 				); err != nil {
 					return err
 				}

@@ -111,6 +111,7 @@ administrable_role_authorizations
 applicable_roles
 column_privileges
 columns
+constraint_column_usage
 enabled_roles
 key_column_usage
 referential_constraints
@@ -243,6 +244,7 @@ information_schema  administrable_role_authorizations
 information_schema  applicable_roles
 information_schema  column_privileges
 information_schema  columns
+information_schema  constraint_column_usage
 information_schema  enabled_roles
 information_schema  key_column_usage
 information_schema  referential_constraints
@@ -424,6 +426,7 @@ def            information_schema  administrable_role_authorizations  SYSTEM VIE
 def            information_schema  applicable_roles                   SYSTEM VIEW  1
 def            information_schema  column_privileges                  SYSTEM VIEW  1
 def            information_schema  columns                            SYSTEM VIEW  1
+def            information_schema  constraint_column_usage            SYSTEM VIEW  1
 def            information_schema  enabled_roles                      SYSTEM VIEW  1
 def            information_schema  key_column_usage                   SYSTEM VIEW  1
 def            information_schema  referential_constraints            SYSTEM VIEW  1
@@ -531,6 +534,7 @@ statement ok
 SET DATABASE = test
 
 ## information_schema.table_constraints
+## information_schema.constraint_column_usage
 
 query TTTTTTTTT colnames
 SELECT *
@@ -552,6 +556,36 @@ def                 system             primary          def            system   
 def                 system             primary          def            system        users             PRIMARY KEY      NO             NO
 def                 system             primary          def            system        web_sessions      PRIMARY KEY      NO             NO
 def                 system             primary          def            system        zones             PRIMARY KEY      NO             NO
+
+query TTTTTTT colnames
+SELECT *
+FROM information_schema.constraint_column_usage
+ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
+----
+table_catalog  table_schema  table_name        column_name    constraint_catalog  constraint_schema  constraint_name
+def            system        descriptor        id             def                 system             primary
+def            system        eventlog          timestamp      def                 system             primary
+def            system        eventlog          uniqueID       def                 system             primary
+def            system        jobs              id             def                 system             primary
+def            system        lease             descID         def                 system             primary
+def            system        lease             expiration     def                 system             primary
+def            system        lease             nodeID         def                 system             primary
+def            system        lease             version        def                 system             primary
+def            system        locations         localityKey    def                 system             primary
+def            system        locations         localityValue  def                 system             primary
+def            system        namespace         name           def                 system             primary
+def            system        namespace         parentID       def                 system             primary
+def            system        rangelog          timestamp      def                 system             primary
+def            system        rangelog          uniqueID       def                 system             primary
+def            system        role_members      member         def                 system             primary
+def            system        role_members      role           def                 system             primary
+def            system        settings          name           def                 system             primary
+def            system        table_statistics  statisticID    def                 system             primary
+def            system        table_statistics  tableID        def                 system             primary
+def            system        ui                key            def                 system             primary
+def            system        users             username       def                 system             primary
+def            system        web_sessions      id             def                 system             primary
+def            system        zones             id             def                 system             primary
 
 statement ok
 CREATE DATABASE constraint_db
@@ -585,6 +619,19 @@ def                 constraint_db      check_a          def            constrain
 def                 constraint_db      primary          def            constraint_db  t1          PRIMARY KEY      NO             NO
 def                 constraint_db      t1_a_key         def            constraint_db  t1          UNIQUE           NO             NO
 def                 constraint_db      fk               def            constraint_db  t2          FOREIGN KEY      NO             NO
+
+query TTTTTTT colnames
+SELECT *
+FROM information_schema.constraint_column_usage
+WHERE constraint_schema = 'constraint_db'
+ORDER BY TABLE_NAME, COLUMN_NAME, CONSTRAINT_NAME
+----
+table_catalog  table_schema   table_name  column_name  constraint_catalog  constraint_schema  constraint_name
+def            constraint_db  t1          a            def                 constraint_db      c2
+def            constraint_db  t1          a            def                 constraint_db      check_a
+def            constraint_db  t1          a            def                 constraint_db      fk
+def            constraint_db  t1          a            def                 constraint_db      t1_a_key
+def            constraint_db  t1          p            def                 constraint_db      primary
 
 statement ok
 DROP DATABASE constraint_db CASCADE
