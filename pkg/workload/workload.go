@@ -46,13 +46,27 @@ type Generator interface {
 	Tables() []Table
 }
 
+// FlagMeta is metadata about a workload flag.
+type FlagMeta struct {
+	// RuntimeOnly may be set to true only if the corresponding flag has no
+	// impact on the behavior of any Tables in this workload.
+	RuntimeOnly bool
+}
+
+// Flags is a container for flags and associated metadata.
+type Flags struct {
+	*pflag.FlagSet
+	// Meta is keyed by flag name and may be nil if no metadata is needed.
+	Meta map[string]FlagMeta
+}
+
 // Flagser returns the flags this Generator is configured with. Any randomness
 // in the Generator must be deterministic from these options so that table data
 // initialization, query work, etc can be distributed by sending only these
 // flags.
 type Flagser interface {
 	Generator
-	Flags() *pflag.FlagSet
+	Flags() Flags
 }
 
 // Opser returns the work functions for this generator. The tables are required
@@ -158,9 +172,11 @@ func Registered() []Meta {
 	return gens
 }
 
-// DatumSize returns the canonical size of a datum as returned from a call to
-// `Table.InitialRowFn`.
-func DatumSize(x interface{}) int64 {
+// ApproxDatumSize returns the canonical size of a datum as returned from a call
+// to `Table.InitialRowFn`. NB: These datums end up getting serialized in
+// different ways, which means there's no one size that will be correct for all
+// of them.
+func ApproxDatumSize(x interface{}) int64 {
 	if x == nil {
 		return 0
 	}
@@ -169,6 +185,9 @@ func DatumSize(x interface{}) int64 {
 		if t < 0 {
 			t = -t
 		}
+		// This and float64 are `+8` so a `0` results in `1`. This function is
+		// used to batch things by size and table of all `0`s should not get
+		// infinite size batches.
 		return int64(bits.Len(uint(t))+8) / 8
 	case float64:
 		return int64(bits.Len64(math.Float64bits(t))+8) / 8
@@ -185,7 +204,7 @@ func DatumSize(x interface{}) int64 {
 //
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. The exact definition of this is deferred to the
-// DatumSize implementation.
+// ApproxDatumSize implementation.
 func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 1000
@@ -225,7 +244,7 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 				insertStmtBuf.WriteString(`(`)
 				row := table.InitialRowFn(rowIdx)
 				for i, datum := range row {
-					size += DatumSize(datum)
+					size += ApproxDatumSize(datum)
 					if i != 0 {
 						insertStmtBuf.WriteString(`,`)
 					}

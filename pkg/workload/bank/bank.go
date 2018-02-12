@@ -45,7 +45,7 @@ const (
 )
 
 type bank struct {
-	flags *pflag.FlagSet
+	flags workload.Flags
 
 	seed                       int64
 	rows, payloadBytes, ranges int
@@ -60,7 +60,8 @@ var bankMeta = workload.Meta{
 	Description: `Bank models a set of accounts with currency balances`,
 	Version:     `1.0.0`,
 	New: func() workload.Generator {
-		g := &bank{flags: pflag.NewFlagSet(`bank`, pflag.ContinueOnError)}
+		g := &bank{}
+		g.flags.FlagSet = pflag.NewFlagSet(`bank`, pflag.ContinueOnError)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
@@ -93,10 +94,8 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 // Meta implements the Generator interface.
 func (*bank) Meta() workload.Meta { return bankMeta }
 
-// Flags implements the Generator interface.
-func (b *bank) Flags() *pflag.FlagSet {
-	return b.flags
-}
+// Flags implements the Flagser interface.
+func (b *bank) Flags() workload.Flags { return b.flags }
 
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
@@ -126,7 +125,7 @@ func (b *bank) Tables() []workload.Table {
 	return []workload.Table{table}
 }
 
-// Ops implements the Generator interface.
+// Ops implements the Opser interface.
 func (b *bank) Ops() []workload.Operation {
 	// TODO(dan): Move the various queries in the backup/restore tests here.
 	op := workload.Operation{
