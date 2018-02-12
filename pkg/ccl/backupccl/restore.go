@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package backupccl
 
 import (
 	"context"
@@ -806,19 +806,19 @@ func splitAndScatter(
 	return g.Wait()
 }
 
-// Write the new descriptors. First the ID -> TableDescriptor for the new table,
-// then flip (or initialize) the name -> ID entry so any new queries will use
-// the new one. The tables are assigned the permissions of their parent database
-// and the user must have CREATE permission on that database at the time this
-// function is called.
-func restoreTableDescs(
+// WriteTableDescs writes all the the new descriptors: First the ID ->
+// TableDescriptor for the new table, then flip (or initialize) the name -> ID
+// entry so any new queries will use the new one. The tables are assigned the
+// permissions of their parent database and the user must have CREATE permission
+// on that database at the time this function is called.
+func WriteTableDescs(
 	ctx context.Context,
 	txn *client.Txn,
 	databases []*sqlbase.DatabaseDescriptor,
 	tables []*sqlbase.TableDescriptor,
 	user string,
 ) error {
-	ctx, span := tracing.ChildSpan(ctx, "restoreTableDescs")
+	ctx, span := tracing.ChildSpan(ctx, "WriteTableDescs")
 	defer tracing.FinishSpan(span)
 	err := func() error {
 		b := txn.NewBatch()
@@ -966,11 +966,11 @@ func restore(
 
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	progressLogger := jobProgressLogger{
-		job:           job,
-		totalChunks:   len(importSpans),
-		startFraction: job.Payload().FractionCompleted,
-		progressedFn: func(progressedCtx context.Context, details jobs.Details) {
+	progressLogger := jobs.ProgressLogger{
+		Job:           job,
+		TotalChunks:   len(importSpans),
+		StartFraction: job.Payload().FractionCompleted,
+		ProgressedFn: func(progressedCtx context.Context, details jobs.Details) {
 			switch d := details.(type) {
 			case *jobs.Payload_Restore:
 				mu.Lock()
@@ -1024,7 +1024,7 @@ func restore(
 	g.Go(func() error {
 		progressCtx, progressSpan := tracing.ChildSpan(gCtx, "progress-log")
 		defer tracing.FinishSpan(progressSpan)
-		return progressLogger.loop(progressCtx, requestFinishedCh)
+		return progressLogger.Loop(progressCtx, requestFinishedCh)
 	})
 
 	log.Eventf(restoreCtx, "commencing import of data with concurrency %d", maxConcurrentImports)
@@ -1091,7 +1091,8 @@ func restore(
 	return mu.res, databases, tables, nil
 }
 
-var restoreHeader = sqlbase.ResultColumns{
+// RestoreHeader is the header for RESTORE stmt results.
+var RestoreHeader = sqlbase.ResultColumns{
 	{Name: "job_id", Typ: types.Int},
 	{Name: "status", Typ: types.String},
 	{Name: "fraction_completed", Typ: types.Float},
@@ -1175,7 +1176,7 @@ func restorePlanHook(
 		}
 		return doRestorePlan(ctx, restoreStmt, p, from, endTime, opts, resultsCh)
 	}
-	return fn, restoreHeader, nil
+	return fn, RestoreHeader, nil
 }
 
 func doRestorePlan(
@@ -1331,7 +1332,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := restoreTableDescs(ctx, txn, r.databases, r.tables, job.Record.Username); err != nil {
+	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Record.Username); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 

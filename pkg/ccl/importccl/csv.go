@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package importccl
 
 import (
 	"bytes"
@@ -25,6 +25,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -111,7 +112,7 @@ func LoadCSV(
 	// rejected during restore.
 	st := cluster.MakeTestingClusterSettings()
 
-	tableDesc, err := makeSimpleTableDescriptor(
+	tableDesc, err := MakeSimpleTableDescriptor(
 		ctx, st, createTable, parentID, defaultCSVTableID, walltime)
 	if err != nil {
 		return 0, 0, 0, err
@@ -185,7 +186,7 @@ func doLocalCSVTransform(
 	recordCh := make(chan csvRecord, chanSize)
 	kvCh := make(chan []roachpb.KeyValue, chanSize)
 	contentCh := make(chan sstContent)
-	var backupDesc *BackupDescriptor
+	var backupDesc *backupccl.BackupDescriptor
 	conf, err := storageccl.ExportStorageConfFromURI(dest)
 	if err != nil {
 		return 0, 0, 0, err
@@ -279,7 +280,7 @@ const (
 func readCreateTableFromStore(
 	ctx context.Context, filename string, settings *cluster.Settings,
 ) (*tree.CreateTable, error) {
-	store, err := exportStorageFromURI(ctx, filename, settings)
+	store, err := storageccl.ExportStorageFromURI(ctx, filename, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -304,11 +305,11 @@ func readCreateTableFromStore(
 	return create, nil
 }
 
-// makeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
+// MakeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
-func makeSimpleTableDescriptor(
+func MakeSimpleTableDescriptor(
 	ctx context.Context,
 	st *cluster.Settings,
 	create *tree.CreateTable,
@@ -814,9 +815,9 @@ func makeSSTs(
 // descriptor populated with the written SST files.
 func makeBackup(
 	ctx context.Context, contentCh <-chan sstContent, walltime int64, es storageccl.ExportStorage,
-) (*BackupDescriptor, error) {
-	backupDesc := BackupDescriptor{
-		FormatVersion: BackupFormatInitialVersion,
+) (*backupccl.BackupDescriptor, error) {
+	backupDesc := backupccl.BackupDescriptor{
+		FormatVersion: backupccl.BackupFormatInitialVersion,
 		EndTime:       hlc.Timestamp{WallTime: walltime},
 	}
 	i := 0
@@ -832,7 +833,7 @@ func makeBackup(
 			return nil, err
 		}
 
-		backupDesc.Files = append(backupDesc.Files, BackupDescriptor_File{
+		backupDesc.Files = append(backupDesc.Files, backupccl.BackupDescriptor_File{
 			Path:   name,
 			Span:   sst.span,
 			Sha512: checksum,
@@ -845,13 +846,13 @@ const csvDatabaseName = "csv"
 
 func finalizeCSVBackup(
 	ctx context.Context,
-	backupDesc *BackupDescriptor,
+	backupDesc *backupccl.BackupDescriptor,
 	parentID sqlbase.ID,
 	tableDesc *sqlbase.TableDescriptor,
 	es storageccl.ExportStorage,
 	execCfg *sql.ExecutorConfig,
 ) error {
-	sort.Sort(backupFileDescriptors(backupDesc.Files))
+	sort.Sort(backupccl.BackupFileDescriptors(backupDesc.Files))
 	backupDesc.Spans = []roachpb.Span{tableDesc.TableSpan()}
 	backupDesc.Descriptors = []sqlbase.Descriptor{
 		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
@@ -860,7 +861,7 @@ func finalizeCSVBackup(
 		}),
 		*sqlbase.WrapDescriptor(tableDesc),
 	}
-	backupDesc.FormatVersion = BackupFormatInitialVersion
+	backupDesc.FormatVersion = backupccl.BackupFormatInitialVersion
 	backupDesc.BuildInfo = build.GetInfo()
 	if execCfg != nil {
 		backupDesc.NodeID = execCfg.NodeID.Get()
@@ -870,7 +871,7 @@ func finalizeCSVBackup(
 	if err != nil {
 		return err
 	}
-	return es.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf))
+	return es.WriteFile(ctx, backupccl.BackupDescriptorName, bytes.NewReader(descBuf))
 }
 
 func importJobDescription(
@@ -1049,7 +1050,7 @@ func importPlanHook(
 			}
 		}
 
-		tableDesc, err := makeSimpleTableDescriptor(
+		tableDesc, err := MakeSimpleTableDescriptor(
 			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
 		if err != nil {
 			return err
@@ -1061,12 +1062,12 @@ func importPlanHook(
 		}
 
 		if transform != "" {
-			transformStorage, err := exportStorageFromURI(ctx, transform, p.ExecCfg().Settings)
+			transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, p.ExecCfg().Settings)
 			if err != nil {
 				return err
 			}
 			// Delay writing the BACKUP-CHECKPOINT file until as late as possible.
-			err = verifyUsableExportTarget(ctx, transformStorage, transform)
+			err = backupccl.VerifyUsableExportTarget(ctx, transformStorage, transform)
 			transformStorage.Close()
 			if err != nil {
 				return err
@@ -1111,7 +1112,7 @@ func importPlanHook(
 		}
 		return <-errCh
 	}
-	return fn, restoreHeader, nil
+	return fn, backupccl.RestoreHeader, nil
 }
 
 func doDistributedCSVTransform(
@@ -1188,7 +1189,7 @@ func doDistributedCSVTransform(
 		return nil
 	}
 
-	backupDesc := BackupDescriptor{
+	backupDesc := backupccl.BackupDescriptor{
 		EndTime: hlc.Timestamp{WallTime: walltime},
 	}
 	n := rows.Len()
@@ -1200,7 +1201,7 @@ func doDistributedCSVTransform(
 		spanStart := row[3].(*tree.DBytes)
 		spanEnd := row[4].(*tree.DBytes)
 		backupDesc.EntryCounts.DataSize += int64(*size)
-		backupDesc.Files = append(backupDesc.Files, BackupDescriptor_File{
+		backupDesc.Files = append(backupDesc.Files, backupccl.BackupDescriptor_File{
 			Path: string(*name),
 			Span: roachpb.Span{
 				Key:    roachpb.Key(*spanStart),
@@ -1757,7 +1758,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 		// Write the new TableDescriptors and flip the namespace entries over to
 		// them. After this call, any queries on a table will be served by the newly
 		// imported data.
-		if err := restoreTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username); err != nil {
+		if err := backupccl.WriteTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username); err != nil {
 			return errors.Wrapf(err, "creating table %q", details.Desc.Name)
 		}
 	}
@@ -1771,12 +1772,12 @@ func (r *importResumer) OnTerminal(
 	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
 
 	if transform := details.BackupPath; transform != "" {
-		transformStorage, err := exportStorageFromURI(ctx, transform, r.settings)
+		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)
 		if err != nil {
 			log.Warningf(ctx, "unable to create storage: %+v", err)
 		} else {
 			// Always attempt to cleanup the checkpoint even if the import failed.
-			if err := transformStorage.Delete(ctx, BackupDescriptorCheckpointName); err != nil {
+			if err := transformStorage.Delete(ctx, backupccl.BackupDescriptorCheckpointName); err != nil {
 				log.Warningf(ctx, "unable to delete checkpointed backup descriptor: %+v", err)
 			}
 			transformStorage.Close()

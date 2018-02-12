@@ -153,7 +153,7 @@ func TestLint(t *testing.T) {
 				excludes: []string{
 					":!acceptance",
 					":!ccl/acceptanceccl/backup_test.go",
-					":!ccl/sqlccl/backup_cloud_test.go",
+					":!ccl/backupccl/backup_cloud_test.go",
 					":!ccl/storageccl/export_storage_test.go",
 					":!ccl/workloadccl/fixture_test.go",
 					":!cmd",
