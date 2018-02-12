@@ -53,12 +53,13 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
    */
   private nodeDropdownOptions = createSelector(
     (summary: NodesSummary) => summary.nodeStatuses,
-    (nodeStatuses): DropdownOption[] => {
+    (summary: NodesSummary) => summary.nodeDisplayNameByID,
+    (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
       const base = [{value: "", label: "Cluster"}];
       return base.concat(_.map(nodeStatuses, (ns) => {
         return {
           value: ns.desc.node_id.toString(),
-          label: ns.desc.address.address_field,
+          label: nodeDisplayNameByID[ns.desc.node_id],
         };
       }));
     },
