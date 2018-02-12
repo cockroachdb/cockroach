@@ -57,16 +57,8 @@ type execPlan struct {
 // makeBuildScalarCtx returns a buildScalarCtx that can be used with expressions
 // that refer the output columns of this plan.
 func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
-	// We get the maximum value from the map to find out how many we need to
-	// support. In most cases this is the same as the Len() of the map; it is TBD
-	// if we will have cases where this doesn't hold.
-	// TODO(radu): Should we just remember the number of columns in execPlan?
-	numVars := 0
-	if max, ok := ep.outputCols.MaxValue(); ok {
-		numVars = max + 1
-	}
 	return buildScalarCtx{
-		ivh:     tree.MakeIndexedVarHelper(nil /* container */, numVars),
+		ivh:     tree.MakeIndexedVarHelper(nil /* container */, ep.outputCols.Len()),
 		ivarMap: ep.outputCols,
 	}
 }
@@ -81,6 +73,9 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 
 	case opt.ProjectOp:
 		return b.buildProject(ev)
+
+	case opt.InnerJoinOp:
+		return b.buildInnerJoin(ev)
 
 	default:
 		panic(fmt.Sprintf("unsupported relational op %s", ev.Operator()))
@@ -141,6 +136,36 @@ func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
 	ep := execPlan{root: node}
 	for i, col := range colList {
 		ep.outputCols.Set(int(col), i)
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildInnerJoin(ev xform.ExprView) (execPlan, error) {
+	left, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	right, err := b.buildRelational(ev.Child(1))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	// Calculate the outputCols map for the join plan: the first numLeftCols
+	// correspond to the columns from the left, the rest correspond to columns
+	// from the right.
+	var ep execPlan
+	numLeftCols := left.outputCols.Len()
+	ep.outputCols = left.outputCols.Copy()
+	right.outputCols.ForEach(func(colIdx, rightIdx int) {
+		ep.outputCols.Set(colIdx, rightIdx+numLeftCols)
+	})
+
+	ctx := ep.makeBuildScalarCtx()
+	onExpr := b.buildScalar(&ctx, ev.Child(2))
+
+	ep.root, err = b.factory.ConstructInnerJoin(left.root, right.root, onExpr)
+	if err != nil {
+		return execPlan{}, err
 	}
 	return ep, nil
 }
