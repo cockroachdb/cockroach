@@ -870,9 +870,6 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// case where we don't need to re-run is if the read
 			// consistency is not required.
 			if ba.Txn == nil && ba.IsPossibleTransaction() && ba.ReadConsistency == roachpb.CONSISTENT {
-				// TODO(nvanbenschoten): if this becomes an issue for RangeLookup
-				// scans, we could look into changing IsPossibleTransaction for
-				// ScanRequest/ReverseScanRequest to detect RangeLookups.
 				responseCh <- response{pErr: roachpb.NewError(&roachpb.OpRequiresTxnError{})}
 				return
 			}

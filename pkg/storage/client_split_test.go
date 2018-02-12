@@ -2482,6 +2482,129 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	})
 }
 
+// TestStoreSplitRangeLookupRace verifies that a RangeLookup scanning across
+// multiple meta2 ranges that races with a split and misses all matching
+// descriptors will retry its scan until it succeeds.
+func TestStoreSplitRangeLookupRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The scenerio is modeled after:
+	// https://github.com/cockroachdb/cockroach/issues/19147#issuecomment-336741791
+	// See that comment for a description of why a non-transactional scan
+	// starting at "/meta2/k" may only see non-matching descriptors when racing
+	// with a split.
+	//
+	// To simulate this situation, we first perform splits at "/meta2/n", "j",
+	// and "p". This creates the following structure, where the descriptor for
+	// range [j, p) is stored on the second meta2 range:
+	//
+	//   [/meta2/a,/meta2/n), [/meta2/n,/meta2/z)
+	//                     -----^
+	//       ...      [j, p)      ...
+	//
+	// We then initiate a range lookup for key "k". This lookup will begin
+	// scanning on the first meta2 range but won't find its desired desriptor. Normally,
+	// it would continue scanning onto the second meta2 range and find the descriptor
+	// for range [j, p) at "/meta2/p" (see TestRangeLookupAfterMeta2Split). However,
+	// because RangeLookup scans are non-transactional, this can race with a split.
+	// Here, we split at key "m", which creates the structure:
+	//
+	//   [/meta2/a,/meta2/n), [/meta2/n,/meta2/z)
+	//             ^--        ---^
+	//       ...   [j,m), [m,p)      ...
+	//
+	// If the second half of the RangeLookup scan sees the second meta2 range after
+	// this split, it will miss the old descriptor for [j, p) and the new descriptor
+	// for [j, m). In this case, the RangeLookup should retry.
+	lookupKey := roachpb.Key("k")
+	bounds, err := keys.MetaScanBounds(keys.RangeMetaKey(roachpb.RKey(lookupKey)))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The following filter and set of channels is used to block the RangeLookup
+	// scan for key "k" after it has scanned over the first meta2 range but not
+	// the second.
+	blockRangeLookups := make(chan struct{})
+	rangeLookupIsBlocked := make(chan struct{}, 1)
+	unblockRangeLookups := make(chan struct{})
+	respFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+		select {
+		case <-blockRangeLookups:
+			if client.TestingIsRangeLookup(ba) &&
+				ba.Requests[0].GetInner().(*roachpb.ScanRequest).Key.Equal(bounds.Key.AsRawKey()) {
+
+				select {
+				case rangeLookupIsBlocked <- struct{}{}:
+				default:
+				}
+				<-unblockRangeLookups
+			}
+		default:
+		}
+		return nil
+	}
+
+	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableSplitQueue:         true,
+				ForceSyncIntentResolution: true,
+				TestingResponseFilter:     respFilter,
+			},
+		},
+	})
+	s := srv.(*server.TestServer)
+	defer s.Stopper().Stop(context.Background())
+	store, err := s.Stores().GetStore(s.GetFirstStoreID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mustSplit := func(splitKey roachpb.Key) {
+		args := adminSplitArgs(splitKey)
+
+		// Don't use s.DistSender() so that we don't disturb the RangeDescriptorCache.
+		rangeID := store.LookupReplica(roachpb.RKey(splitKey), nil).RangeID
+		_, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
+			RangeID: rangeID,
+		}, args)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Perform the initial splits. See above.
+	mustSplit(keys.SystemPrefix)
+	mustSplit(keys.RangeMetaKey(roachpb.RKey("n")).AsRawKey())
+	mustSplit(roachpb.Key("j"))
+	mustSplit(roachpb.Key("p"))
+
+	// Launch a goroutine to perform a range lookup for key "k" that will race
+	// with a split at key "m".
+	rangeLookupErr := make(chan error)
+	go func() {
+		close(blockRangeLookups)
+		s.DistSender().RangeDescriptorCache().Clear()
+
+		_, err := s.DB().Get(context.Background(), lookupKey)
+		rangeLookupErr <- err
+	}()
+
+	// Wait until the range lookup is blocked after performing a scan of the
+	// first range [/meta2/a,/meta2/n) but before performing a scan of the
+	// second range [/meta2/n,/meta2/z). Then split at key "m". Finally, let the
+	// range lookup finish. The lookup will fail because it won't get consistent
+	// results but will eventually succeed after retrying.
+	<-rangeLookupIsBlocked
+	mustSplit(roachpb.Key("m"))
+	close(unblockRangeLookups)
+
+	if err := <-rangeLookupErr; err != nil {
+		t.Fatalf("unexpected range lookup error %v", err)
+	}
+}
+
 // Verify that range lookup operations do not synchronously perform intent
 // resolution as doing so can deadlock with the RangeDescriptorCache. See
 // #17760.
