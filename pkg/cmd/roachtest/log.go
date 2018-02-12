@@ -13,7 +13,7 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package nightly
+package main
 
 import (
 	"bytes"
@@ -35,9 +35,11 @@ type logger struct {
 	stdout, stderr io.Writer
 }
 
+// TODO(peter): put all of the logs for a test in a directory named by the
+// test.
 func newLogger(name, filename string, stdout, stderr io.Writer) (*logger, error) {
 	filename = fmt.Sprintf("%s.log", fileutil.EscapeFilename(filename))
-	f, err := os.Create(filepath.Join(*artifacts, filename))
+	f, err := os.Create(filepath.Join(artifacts, filename))
 	if err != nil {
 		return nil, err
 	}
