@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/sqlccl"
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"

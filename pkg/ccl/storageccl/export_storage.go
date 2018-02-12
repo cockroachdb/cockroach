@@ -140,6 +140,17 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	return conf, nil
 }
 
+// ExportStorageFromURI returns an ExportStorage for the given URI.
+func ExportStorageFromURI(
+	ctx context.Context, uri string, settings *cluster.Settings,
+) (ExportStorage, error) {
+	conf, err := ExportStorageConfFromURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	return MakeExportStorage(ctx, conf, settings)
+}
+
 // SanitizeExportStorageURI returns the export storage URI with sensitive
 // credentials stripped.
 func SanitizeExportStorageURI(path string) (string, error) {

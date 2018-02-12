@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package partitionccl
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -114,7 +115,7 @@ func (t *partitioningTest) parse() error {
 		}
 		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MaxReservedDescID + 1, keys.MaxReservedDescID + 2
-		t.parsed.tableDesc, err = makeSimpleTableDescriptor(
+		t.parsed.tableDesc, err = importccl.MakeSimpleTableDescriptor(
 			ctx, st, createTable, parentID, tableID, hlc.UnixNano())
 		if err != nil {
 			return err

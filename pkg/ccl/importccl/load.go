@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-package sqlccl
+package importccl
 
 import (
 	"bufio"
@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -51,7 +52,7 @@ func Load(
 	ts hlc.Timestamp,
 	loadChunkBytes int64,
 	tempPrefix string,
-) (BackupDescriptor, error) {
+) (backupccl.BackupDescriptor, error) {
 	if loadChunkBytes == 0 {
 		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
@@ -64,11 +65,11 @@ func Load(
 
 	conf, err := storageccl.ExportStorageConfFromURI(uri)
 	if err != nil {
-		return BackupDescriptor{}, err
+		return backupccl.BackupDescriptor{}, err
 	}
 	dir, err := storageccl.MakeExportStorage(ctx, conf, cluster.NoSettings)
 	if err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
+		return backupccl.BackupDescriptor{}, errors.Wrap(err, "export storage from URI")
 	}
 	defer dir.Close()
 
@@ -82,11 +83,11 @@ func Load(
 		keys.RootNamespaceID,
 		database,
 	).Scan(&dbDescBytes); err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "fetch database descriptor")
+		return backupccl.BackupDescriptor{}, errors.Wrap(err, "fetch database descriptor")
 	}
 	var dbDescWrapper sqlbase.Descriptor
 	if err := protoutil.Unmarshal(dbDescBytes, &dbDescWrapper); err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "unmarshal database descriptor")
+		return backupccl.BackupDescriptor{}, errors.Wrap(err, "unmarshal database descriptor")
 	}
 	dbDesc := dbDescWrapper.GetDatabase()
 
@@ -104,7 +105,7 @@ func Load(
 	var prevKey roachpb.Key
 	var kvs []engine.MVCCKeyValue
 	var kvBytes int64
-	backup := BackupDescriptor{
+	backup := backupccl.BackupDescriptor{
 		Descriptors: []sqlbase.Descriptor{
 			{Union: &sqlbase.Descriptor_Database{Database: dbDesc}},
 		},
@@ -115,7 +116,7 @@ func Load(
 			break
 		}
 		if err != nil {
-			return BackupDescriptor{}, errors.Wrap(err, "read line")
+			return backupccl.BackupDescriptor{}, errors.Wrap(err, "read line")
 		}
 		currentCmd.WriteString(line)
 		if !isEndOfStatement(currentCmd.String()) {
@@ -126,13 +127,13 @@ func Load(
 		currentCmd.Reset()
 		stmt, err := parser.ParseOne(cmd)
 		if err != nil {
-			return BackupDescriptor{}, errors.Wrapf(err, "parsing: %q", cmd)
+			return backupccl.BackupDescriptor{}, errors.Wrapf(err, "parsing: %q", cmd)
 		}
 		switch s := stmt.(type) {
 		case *tree.CreateTable:
 			if tableDesc != nil {
 				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
-					return BackupDescriptor{}, errors.Wrap(err, "writeSST")
+					return backupccl.BackupDescriptor{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
 				kvBytes = 0
@@ -144,7 +145,7 @@ func Load(
 			tableName = s.Table.String()
 			tableDesc = tableDescs[tableName]
 			if tableDesc != nil {
-				return BackupDescriptor{}, errors.Errorf("duplicate CREATE TABLE for %s", tableName)
+				return backupccl.BackupDescriptor{}, errors.Errorf("duplicate CREATE TABLE for %s", tableName)
 			}
 
 			// Using test cluster settings means that we'll generate a backup using
@@ -163,7 +164,7 @@ func Load(
 			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, st, s, dbDesc.ID,
 				0 /* table ID */, ts, privs, affected, dbDesc.Name, nil, &evalCtx)
 			if err != nil {
-				return BackupDescriptor{}, errors.Wrap(err, "make table desc")
+				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
 
 			tableDesc = &desc
@@ -174,28 +175,28 @@ func Load(
 
 			for _, col := range tableDesc.Columns {
 				if col.ComputeExpr != nil {
-					return BackupDescriptor{}, errors.Errorf("computed columns are not allowed")
+					return backupccl.BackupDescriptor{}, errors.Errorf("computed columns are not allowed")
 				}
 			}
 
 			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns,
 				true, &sqlbase.DatumAlloc{})
 			if err != nil {
-				return BackupDescriptor{}, errors.Wrap(err, "make row inserter")
+				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make row inserter")
 			}
 			cols, defaultExprs, err =
 				sqlbase.ProcessDefaultColumns(tableDesc.Columns, tableDesc, &txCtx, &evalCtx)
 			if err != nil {
-				return BackupDescriptor{}, errors.Wrap(err, "process default columns")
+				return backupccl.BackupDescriptor{}, errors.Wrap(err, "process default columns")
 			}
 
 		case *tree.Insert:
 			name := tree.AsString(s.Table)
 			if tableDesc == nil {
-				return BackupDescriptor{}, errors.Errorf("expected previous CREATE TABLE %s statement", name)
+				return backupccl.BackupDescriptor{}, errors.Errorf("expected previous CREATE TABLE %s statement", name)
 			}
 			if name != tableName {
-				return BackupDescriptor{}, errors.Errorf("unexpected INSERT for table %s after CREATE TABLE %s", name, tableName)
+				return backupccl.BackupDescriptor{}, errors.Errorf("unexpected INSERT for table %s after CREATE TABLE %s", name, tableName)
 			}
 			outOfOrder := false
 			err := insertStmtToKVs(ctx, tableDesc, defaultExprs, cols, evalCtx, ri, s, func(kv roachpb.KeyValue) {
@@ -211,37 +212,37 @@ func Load(
 				})
 			})
 			if err != nil {
-				return BackupDescriptor{}, errors.Wrapf(err, "insertStmtToKVs")
+				return backupccl.BackupDescriptor{}, errors.Wrapf(err, "insertStmtToKVs")
 			}
 			if outOfOrder {
-				return BackupDescriptor{}, errors.Errorf("out of order row: %s", cmd)
+				return backupccl.BackupDescriptor{}, errors.Errorf("out of order row: %s", cmd)
 			}
 
 			if kvBytes > loadChunkBytes {
 				if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
-					return BackupDescriptor{}, errors.Wrap(err, "writeSST")
+					return backupccl.BackupDescriptor{}, errors.Wrap(err, "writeSST")
 				}
 				kvs = kvs[:0]
 				kvBytes = 0
 			}
 
 		default:
-			return BackupDescriptor{}, errors.Errorf("unsupported load statement: %q", stmt)
+			return backupccl.BackupDescriptor{}, errors.Errorf("unsupported load statement: %q", stmt)
 		}
 	}
 
 	if tableDesc != nil {
 		if err := writeSST(ctx, &backup, dir, tempPrefix, kvs, ts); err != nil {
-			return BackupDescriptor{}, errors.Wrap(err, "writeSST")
+			return backupccl.BackupDescriptor{}, errors.Wrap(err, "writeSST")
 		}
 	}
 
 	descBuf, err := protoutil.Marshal(&backup)
 	if err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "marshal backup descriptor")
+		return backupccl.BackupDescriptor{}, errors.Wrap(err, "marshal backup descriptor")
 	}
-	if err := dir.WriteFile(ctx, BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
-		return BackupDescriptor{}, errors.Wrap(err, "uploading backup descriptor")
+	if err := dir.WriteFile(ctx, backupccl.BackupDescriptorName, bytes.NewReader(descBuf)); err != nil {
+		return backupccl.BackupDescriptor{}, errors.Wrap(err, "uploading backup descriptor")
 	}
 
 	return backup, nil
@@ -354,7 +355,7 @@ func isEndOfStatement(stmt string) bool {
 
 func writeSST(
 	ctx context.Context,
-	backup *BackupDescriptor,
+	backup *backupccl.BackupDescriptor,
 	base storageccl.ExportStorage,
 	tempPrefix string,
 	kvs []engine.MVCCKeyValue,
@@ -387,7 +388,7 @@ func writeSST(
 		return err
 	}
 
-	backup.Files = append(backup.Files, BackupDescriptor_File{
+	backup.Files = append(backup.Files, backupccl.BackupDescriptor_File{
 		Span: roachpb.Span{
 			Key: kvs[0].Key.Key,
 			// The EndKey is exclusive, so use PrefixEnd to get the first key
