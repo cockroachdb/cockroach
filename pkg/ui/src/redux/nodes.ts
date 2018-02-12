@@ -176,6 +176,35 @@ export function sumNodeStats(
   return result;
 }
 
+// nodeAddressByID gets a unique address string for a node, given its node ID.
+// This includes the deduplication of Node IDs which have been re-used via
+// decommissioning.
+export const nodeAddressByIDSelector = createSelector(
+  nodeStatusesSelector,
+  (nodeStatuses) => {
+    const result: {[id: string]: string} = {};
+    if (!_.isArray(nodeStatuses)) {
+      return result;
+    }
+
+    const groupedAddresses = _.groupBy(nodeStatuses, (ns) => ns.desc.address.address_field);
+    _.forEach(groupedAddresses, (value, key) => {
+      // If this address is unique, no need to append NodeID.
+      if (value.length === 1) {
+        result[value[0].desc.node_id] = key;
+        return;
+      }
+      // This address is not unique; append NodeID to each value with the
+      // address.
+      value.forEach(ns => {
+        const nodeID = ns.desc.node_id;
+        result[nodeID] = key + ` (${nodeID})`;
+      });
+    });
+    return result;
+  },
+);
+
 /**
  * nodesSummarySelector returns a directory object containing a variety of
  * computed information based on the current nodes. This object is easy to
@@ -186,14 +215,16 @@ export const nodesSummarySelector = createSelector(
   nodeIDsSelector,
   nodeStatusByIDSelector,
   nodeSumsSelector,
+  nodeAddressByIDSelector,
   livenessStatusByNodeIDSelector,
   livenessByNodeIDSelector,
-  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, livenessStatusByNodeID, livenessByNodeID) => {
+  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, nodeAddressByID, livenessStatusByNodeID, livenessByNodeID) => {
     return {
       nodeStatuses,
       nodeIDs,
       nodeStatusByID,
       nodeSums,
+      nodeAddressByID,
       livenessStatusByNodeID,
       livenessByNodeID,
     };

@@ -41,7 +41,7 @@ export function nodeAddress(nodesSummary: NodesSummary, nid: string) {
     // associated graphs should display no data.
     return "unknown address";
   }
-  return ns.desc.address.address_field;
+  return nodesSummary.nodeAddressByID[ns.desc.node_id];
 }
 
 export function storeIDsForNode(nodesSummary: NodesSummary, nid: string): string[] {
