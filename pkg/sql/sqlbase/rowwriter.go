@@ -707,7 +707,7 @@ func (ru *RowUpdater) UpdateRow(
 
 		if ru.cascader != nil {
 			if err := ru.cascader.txn.Run(ctx, batch); err != nil {
-				return nil, err
+				return nil, ConvertBatchError(ctx, ru.Helper.TableDesc, batch)
 			}
 			if err := ru.cascader.cascadeAll(
 				ctx,
@@ -853,7 +853,7 @@ func (ru *RowUpdater) UpdateRow(
 
 	if ru.cascader != nil {
 		if err := ru.cascader.txn.Run(ctx, batch); err != nil {
-			return nil, err
+			return nil, ConvertBatchError(ctx, ru.Helper.TableDesc, batch)
 		}
 		if err := ru.cascader.cascadeAll(
 			ctx,
