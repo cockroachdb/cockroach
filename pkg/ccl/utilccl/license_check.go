@@ -11,8 +11,8 @@ package utilccl
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,8 +55,8 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 }
 
 func init() {
-	server.LicenseCheckFn = CheckEnterpriseEnabled
-	server.LicenseTypeFn = getLicenseType
+	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
+	base.LicenseType = getLicenseType
 }
 
 func checkEnterpriseEnabledAt(
