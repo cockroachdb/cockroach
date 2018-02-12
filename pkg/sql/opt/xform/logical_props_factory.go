@@ -38,7 +38,7 @@ func (f *logicalPropsFactory) init(mem *memo) {
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (f *logicalPropsFactory) constructProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
 	if ev.IsRelational() {
 		return f.constructRelationalProps(ev)
 	}
@@ -46,7 +46,7 @@ func (f *logicalPropsFactory) constructProps(ev *ExprView) LogicalProps {
 	return f.constructScalarProps(ev)
 }
 
-func (f *logicalPropsFactory) constructRelationalProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
 	switch ev.Operator() {
 	case opt.ScanOp:
 		return f.constructScanProps(ev)
@@ -75,7 +75,7 @@ func (f *logicalPropsFactory) constructRelationalProps(ev *ExprView) LogicalProp
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f *logicalPropsFactory) constructScanProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	tblIndex := ev.Private().(opt.TableIndex)
@@ -94,7 +94,7 @@ func (f *logicalPropsFactory) constructScanProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructSelectProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
@@ -108,7 +108,7 @@ func (f *logicalPropsFactory) constructSelectProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
@@ -124,7 +124,7 @@ func (f *logicalPropsFactory) constructProjectProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
@@ -162,7 +162,7 @@ func (f *logicalPropsFactory) constructJoinProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Output columns are the union of columns from grouping and aggregate
@@ -175,7 +175,7 @@ func (f *logicalPropsFactory) constructGroupByProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructSetProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
@@ -202,7 +202,7 @@ func (f *logicalPropsFactory) constructSetProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
@@ -210,7 +210,7 @@ func (f *logicalPropsFactory) constructValuesProps(ev *ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructScalarProps(ev *ExprView) LogicalProps {
+func (f *logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	return LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
 }
 

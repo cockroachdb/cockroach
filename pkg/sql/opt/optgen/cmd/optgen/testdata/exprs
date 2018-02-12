@@ -17,31 +17,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
-type childCountLookupFunc func(ev *ExprView) int
+type childCountLookupFunc func(ev ExprView) int
 
 var childCountLookup = [...]childCountLookupFunc{
 	// UnknownOp
-	func(ev *ExprView) int {
+	func(ev ExprView) int {
 		panic("op type not initialized")
 	},
 
 	// FuncCallOp
-	func(ev *ExprView) int {
+	func(ev ExprView) int {
 		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
 		return 1 + int(funcCallExpr.args().Length)
 	},
 }
 
-type childGroupLookupFunc func(ev *ExprView, n int) opt.GroupID
+type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID
 
 var childGroupLookup = [...]childGroupLookupFunc{
 	// UnknownOp
-	func(ev *ExprView, n int) opt.GroupID {
+	func(ev ExprView, n int) opt.GroupID {
 		panic("op type not initialized")
 	},
 
 	// FuncCallOp
-	func(ev *ExprView, n int) opt.GroupID {
+	func(ev ExprView, n int) opt.GroupID {
 		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -54,16 +54,16 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 }
 
-type privateLookupFunc func(ev *ExprView) opt.PrivateID
+type privateLookupFunc func(ev ExprView) opt.PrivateID
 
 var privateLookup = [...]privateLookupFunc{
 	// UnknownOp
-	func(ev *ExprView) opt.PrivateID {
+	func(ev ExprView) opt.PrivateID {
 		panic("op type not initialized")
 	},
 
 	// FuncCallOp
-	func(ev *ExprView) opt.PrivateID {
+	func(ev ExprView) opt.PrivateID {
 		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
 		return funcCallExpr.def()
 	},
@@ -118,30 +118,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 )
 
-type childCountLookupFunc func(ev *ExprView) int
+type childCountLookupFunc func(ev ExprView) int
 
 var childCountLookup = [...]childCountLookupFunc{
 	// UnknownOp
-	func(ev *ExprView) int {
+	func(ev ExprView) int {
 		panic("op type not initialized")
 	},
 
 	// SortOp
-	func(ev *ExprView) int {
+	func(ev ExprView) int {
 		return 1
 	},
 }
 
-type childGroupLookupFunc func(ev *ExprView, n int) opt.GroupID
+type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID
 
 var childGroupLookup = [...]childGroupLookupFunc{
 	// UnknownOp
-	func(ev *ExprView, n int) opt.GroupID {
+	func(ev ExprView, n int) opt.GroupID {
 		panic("op type not initialized")
 	},
 
 	// SortOp
-	func(ev *ExprView, n int) opt.GroupID {
+	func(ev ExprView, n int) opt.GroupID {
 		if n == 0 {
 			return ev.loc.group
 		}
@@ -150,16 +150,16 @@ var childGroupLookup = [...]childGroupLookupFunc{
 	},
 }
 
-type privateLookupFunc func(ev *ExprView) opt.PrivateID
+type privateLookupFunc func(ev ExprView) opt.PrivateID
 
 var privateLookup = [...]privateLookupFunc{
 	// UnknownOp
-	func(ev *ExprView) opt.PrivateID {
+	func(ev ExprView) opt.PrivateID {
 		panic("op type not initialized")
 	},
 
 	// SortOp
-	func(ev *ExprView) opt.PrivateID {
+	func(ev ExprView) opt.PrivateID {
 		return 0
 	},
 }
@@ -170,7 +170,7 @@ var isEnforcerLookup = [...]bool{
 	true, // SortOp
 }
 
-func (ev *ExprView) IsEnforcer() bool {
+func (ev ExprView) IsEnforcer() bool {
 	return isEnforcerLookup[ev.op]
 }
 ----
