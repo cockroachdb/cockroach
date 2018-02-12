@@ -5,7 +5,7 @@ import docsURL from "src/util/docs";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps, nodeAddress, storeIDsForNode } from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
   const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
@@ -43,7 +43,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={node}
               name="cr.node.sql.service.latency-p99"
-              title={nodeAddress(nodesSummary, node)}
+              title={nodeDisplayName(nodesSummary, node)}
               sources={[node]}
               downsampleMax
             />
@@ -68,7 +68,7 @@ export default function (props: GraphDashboardProps) {
             <Metric
               key={nid}
               name="cr.store.replicas"
-              title={nodeAddress(nodesSummary, nid)}
+              title={nodeDisplayName(nodesSummary, nid)}
               sources={storeIDsForNode(nodesSummary, nid)}
             />
           ))
