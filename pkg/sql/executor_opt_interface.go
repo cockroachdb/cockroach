@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -51,6 +52,19 @@ func (ee *execEngine) Factory() exec.Factory {
 // Close is part of the exec.Engine interface.
 func (ee *execEngine) Close() {
 	ee.cleanup()
+}
+
+func (ee *execEngine) ConstructValues(
+	rows [][]tree.TypedExpr, colTypes []types.T, colNames []string,
+) (exec.Node, error) {
+	if len(colTypes) != 0 {
+		panic("values with columns not implemented")
+	}
+	values := ee.planner.newContainerValuesNode(sqlbase.ResultColumns{}, len(rows))
+	for range rows {
+		values.rows.AddRow(context.TODO(), tree.Datums{})
+	}
+	return values, nil
 }
 
 // ConstructScan is part of the exec.Factory interface.
