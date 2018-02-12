@@ -253,7 +253,7 @@ func csvServerPaths(
 	{
 		var approxRowSize int64
 		for _, datum := range table.InitialRowFn(0) {
-			approxRowSize += workload.DatumSize(datum)
+			approxRowSize += workload.ApproxDatumSize(datum)
 		}
 		if approxRowSize <= 0 {
 			approxRowSize = 1
