@@ -36,6 +36,7 @@ export class NodeView extends React.Component<NodeViewProps> {
         label={node.desc.address.address_field}
         subLabel={""} // TODO(vilterp): uptime
         isLocality={false}
+        nodes={["" + node.desc.node_id]}
       />
     );
   }
