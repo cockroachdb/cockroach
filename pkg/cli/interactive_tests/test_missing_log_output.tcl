@@ -90,10 +90,7 @@ eexpect ":/# "
 
 end_test
 
-# Quit is broken, so skip the rest of the tests.
-#
-# TODO: Remove this once #22536 is fixed.
-exit
+
 
 start_server $argv
 
