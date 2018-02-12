@@ -574,7 +574,17 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 	return false
 }
 
+// Deadline exposes the txn's deadline.
+func (txn *Txn) Deadline() *hlc.Timestamp {
+	return txn.deadline
+}
+
 // ResetDeadline resets the deadline.
+//
+// TODO(andrei): As of Feb 2018 this is done by SQL between txn retries. It'd be
+// better if this were done by KV upon seeing retriable errors, but
+// unfortunately with the current structure of the TxnCoordSender code there's
+// no greate place to put it.
 func (txn *Txn) ResetDeadline() {
 	txn.deadline = nil
 }

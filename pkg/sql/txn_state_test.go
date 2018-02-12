@@ -116,6 +116,8 @@ func (tc *testContext) createOpenState(
 		mon:          &txnStateMon,
 	}
 	ts.mu.txn = client.NewTxn(tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */, client.RootTxn)
+	// Set a deadline so that tests can check whether it is reset.
+	ts.mu.txn.UpdateDeadlineMaybe(tc.ctx, tc.clock.Now().Add(time.Minute.Nanoseconds(), 0))
 
 	state := stateOpen{
 		ImplicitTxn: FromBool(typ == implicitTxn),
@@ -203,6 +205,8 @@ type expKVTxn struct {
 	origTSNanos *int64
 	maxTSNanos  *int64
 	isFinalized *bool
+	// If set, this means that we expect the txn to not have a deadline any more.
+	resetDeadline bool
 }
 
 func checkTxn(txn *client.Txn, exp expKVTxn) error {
@@ -235,6 +239,12 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 	}
 	if exp.isFinalized != nil && *exp.isFinalized != txn.IsFinalized() {
 		return errors.Errorf("expected finalized: %t but wasn't", *exp.isFinalized)
+	}
+	// We test that the deadline is reset when expected, but we don't test that it
+	// isn't reset when not expected - it's not worth it, giving that transitions
+	// that create new transactions start with no deadline.
+	if exp.resetDeadline && txn.Deadline() != nil {
+		return errors.Errorf("expected deadline reset but wasn't")
 	}
 	return nil
 }
@@ -434,7 +444,8 @@ func TestTransitions(t *testing.T) {
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
+				isFinalized:   &varFalse,
+				resetDeadline: true,
 			},
 		},
 		{
@@ -464,7 +475,8 @@ func TestTransitions(t *testing.T) {
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
+				isFinalized:   &varFalse,
+				resetDeadline: true,
 			},
 		},
 		{
@@ -493,7 +505,8 @@ func TestTransitions(t *testing.T) {
 			},
 			// Expect non-nil txn.
 			expTxn: &expKVTxn{
-				isFinalized: &varFalse,
+				isFinalized:   &varFalse,
+				resetDeadline: true,
 			},
 		},
 		{

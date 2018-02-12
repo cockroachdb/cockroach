@@ -256,7 +256,10 @@ var TxnStateTransitions = Compile(Pattern{
 			Next:        stateOpen{ImplicitTxn: Var("implicitTxn"), RetryIntent: Var("retryIntent")},
 			Action: func(args Args) error {
 				// The caller will call rewCap.rewindAndUnlock().
-				args.Extended.(*txnState2).setAdvanceInfo(
+				state := args.Extended.(*txnState2)
+				state.mu.txn.ResetDeadline()
+				// The caller will call rewCap.rewindAndUnlock().
+				state.setAdvanceInfo(
 					rewind,
 					noFlush,
 					args.Payload.(eventRetriableErrPayload).rewCap,
@@ -319,7 +322,9 @@ var TxnStateTransitions = Compile(Pattern{
 			Action: func(args Args) error {
 				// Note: Preparing the KV txn for restart has already happened by this
 				// point.
-				args.Extended.(*txnState2).setAdvanceInfo(skipBatch, flush, noRewind, txnRestart)
+				state := args.Extended.(*txnState2)
+				state.mu.txn.ResetDeadline()
+				state.setAdvanceInfo(skipBatch, flush, noRewind, txnRestart)
 				return nil
 			},
 		},
