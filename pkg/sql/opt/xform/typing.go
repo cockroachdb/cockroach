@@ -26,7 +26,7 @@ import (
 // the operator, the type may be fixed, or it may be dependent upon the
 // operands. inferType is called during initial construction of the expression,
 // so its logical properties are not yet available.
-func inferType(ev *ExprView) types.T {
+func inferType(ev ExprView) types.T {
 	fn := typingFuncMap[ev.Operator()]
 	if fn == nil {
 		// TODO(rytaft): This should cause a panic, but for now just return NULL
@@ -36,7 +36,7 @@ func inferType(ev *ExprView) types.T {
 	return fn(ev)
 }
 
-type typingFunc func(ev *ExprView) types.T
+type typingFunc func(ev ExprView) types.T
 
 // typingFuncMap is a lookup table from scalar operator type to a function
 // which returns the data type of an instance of that operator.
@@ -71,7 +71,7 @@ func init() {
 
 // typeVariable returns the type of a variable expression, which is stored in
 // the query metadata and acessed by column index.
-func typeVariable(ev *ExprView) types.T {
+func typeVariable(ev ExprView) types.T {
 	colIndex := ev.Private().(opt.ColumnIndex)
 	typ := ev.Metadata().ColumnType(colIndex)
 	if typ == nil {
@@ -81,13 +81,13 @@ func typeVariable(ev *ExprView) types.T {
 }
 
 // typeAsBool returns the fixed boolean type.
-func typeAsBool(_ *ExprView) types.T {
+func typeAsBool(_ ExprView) types.T {
 	return types.Bool
 }
 
 // typeAsTuple constructs a tuple type that is composed of the types of all the
 // expression's children.
-func typeAsTuple(ev *ExprView) types.T {
+func typeAsTuple(ev ExprView) types.T {
 	types := make(types.TTuple, ev.ChildCount())
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)
@@ -98,13 +98,13 @@ func typeAsTuple(ev *ExprView) types.T {
 
 // typeAsTypedExpr returns the resolved type of the private field, with the
 // assumption that it is a tree.TypedExpr.
-func typeAsTypedExpr(ev *ExprView) types.T {
+func typeAsTypedExpr(ev ExprView) types.T {
 	return ev.Private().(tree.TypedExpr).ResolvedType()
 }
 
 // typeAsUnary returns the type of a unary expression by hooking into the sql
 // semantics code that searches for unary operator overloads.
-func typeAsUnary(ev *ExprView) types.T {
+func typeAsUnary(ev ExprView) types.T {
 	unaryOp := opt.UnaryOpReverseMap[ev.Operator()]
 
 	input := ev.Child(0)
@@ -123,7 +123,7 @@ func typeAsUnary(ev *ExprView) types.T {
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
 // semantics code that searches for binary operator overloads.
-func typeAsBinary(ev *ExprView) types.T {
+func typeAsBinary(ev ExprView) types.T {
 	binOp := opt.BinaryOpReverseMap[ev.Operator()]
 
 	left := ev.Child(0)

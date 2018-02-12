@@ -59,11 +59,11 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 // genChildCountLookup generates a lookup table used to implement the ExprView
 // ChildCount method for each different kind of memo expression.
 func (g *exprsGen) genChildCountLookup() {
-	fmt.Fprintf(g.w, "type childCountLookupFunc func(ev *ExprView) int\n")
+	fmt.Fprintf(g.w, "type childCountLookupFunc func(ev ExprView) int\n")
 
 	fmt.Fprintf(g.w, "var childCountLookup = [...]childCountLookupFunc{\n")
 	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev *ExprView) int {\n")
+	fmt.Fprintf(g.w, "  func(ev ExprView) int {\n")
 	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
 	fmt.Fprintf(g.w, "  },\n\n")
 
@@ -72,7 +72,7 @@ func (g *exprsGen) genChildCountLookup() {
 		varName := exprType
 
 		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev *ExprView) int {\n")
+		fmt.Fprintf(g.w, "  func(ev ExprView) int {\n")
 
 		count := len(define.Fields)
 		if privateField(define) != nil {
@@ -97,11 +97,11 @@ func (g *exprsGen) genChildCountLookup() {
 // genChildGroupLookup generates a lookup table used to implement the ExprView
 // ChildGroup method for each different kind of memo expression.
 func (g *exprsGen) genChildGroupLookup() {
-	fmt.Fprintf(g.w, "type childGroupLookupFunc func(ev *ExprView, n int) opt.GroupID\n")
+	fmt.Fprintf(g.w, "type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID\n")
 
 	fmt.Fprintf(g.w, "var childGroupLookup = [...]childGroupLookupFunc{\n")
 	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev *ExprView, n int) opt.GroupID {\n")
+	fmt.Fprintf(g.w, "  func(ev ExprView, n int) opt.GroupID {\n")
 	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
 	fmt.Fprintf(g.w, "  },\n\n")
 
@@ -110,7 +110,7 @@ func (g *exprsGen) genChildGroupLookup() {
 		varName := exprType
 
 		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev *ExprView, n int) opt.GroupID {\n")
+		fmt.Fprintf(g.w, "  func(ev ExprView, n int) opt.GroupID {\n")
 
 		count := len(define.Fields)
 		if privateField(define) != nil {
@@ -173,11 +173,11 @@ func (g *exprsGen) genChildGroupLookup() {
 // genPrivateFieldLookup generates a lookup table used to implement the
 // ExprView Private method for each different kind of memo expression.
 func (g *exprsGen) genPrivateFieldLookup() {
-	fmt.Fprintf(g.w, "type privateLookupFunc func(ev *ExprView) opt.PrivateID\n")
+	fmt.Fprintf(g.w, "type privateLookupFunc func(ev ExprView) opt.PrivateID\n")
 
 	fmt.Fprintf(g.w, "var privateLookup = [...]privateLookupFunc{\n")
 	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev *ExprView) opt.PrivateID {\n")
+	fmt.Fprintf(g.w, "  func(ev ExprView) opt.PrivateID {\n")
 	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
 	fmt.Fprintf(g.w, "  },\n\n")
 
@@ -186,7 +186,7 @@ func (g *exprsGen) genPrivateFieldLookup() {
 		varName := unTitle(exprType)
 
 		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev *ExprView) opt.PrivateID {\n")
+		fmt.Fprintf(g.w, "  func(ev ExprView) opt.PrivateID {\n")
 
 		private := privateField(define)
 		if private != nil {
@@ -226,7 +226,7 @@ func (g *exprsGen) genTagLookup() {
 // genIsTag generates IsXXX tag methods on ExprView for every unique tag.
 func (g *exprsGen) genIsTag() {
 	for _, tag := range g.compiled.DefineTags {
-		fmt.Fprintf(g.w, "func (ev *ExprView) Is%s() bool {\n", tag)
+		fmt.Fprintf(g.w, "func (ev ExprView) Is%s() bool {\n", tag)
 		fmt.Fprintf(g.w, "  return is%sLookup[ev.op]\n", tag)
 		fmt.Fprintf(g.w, "}\n\n")
 	}
