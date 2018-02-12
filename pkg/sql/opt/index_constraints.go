@@ -836,6 +836,11 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 
 		switch rd.Type() {
 		case json.ArrayJSONType, json.ObjectJSONType:
+			// We want to have a full index scan for an empty json array or object on the RHS of @>.
+			if rd.Len() < 1 {
+				return nil, false, false
+			}
+
 			return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
