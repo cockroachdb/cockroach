@@ -13,90 +13,22 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 
-package nightly
+package main
 
 import (
 	"context"
 	"fmt"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
-func TestLocal(t *testing.T) {
-	if !*local {
-		t.Skipf("-local not specified")
-	}
-	maybeSkip(t)
-
-	ctx := context.Background()
-	c := newCluster(ctx, t, "-n", "1")
-	defer c.Destroy(ctx, t)
-
-	c.Put(ctx, t, *cockroach, "<cockroach>")
-	c.Put(ctx, t, *workload, "<workload>")
-	c.Start(ctx, t, 1)
-
-	m := newMonitor(ctx, c)
-	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, t, 1, "<workload> run kv --init --read-percent=95 --splits=100 --duration=10s")
-		return nil
-	})
-	m.Wait(t)
-}
-
-func TestSingleDC(t *testing.T) {
-	maybeSkip(t)
-
-	concurrency := " --concurrency=384"
-	duration := " --duration=10m"
-	splits := " --splits=100000"
-	if *local {
-		concurrency = ""
-		duration = " --duration=10s"
-		splits = " --splits=2000"
-	}
-
-	run := func(name, cmd string) {
-		t.Run(name, func(t *testing.T) {
-			// TODO(dan): It's not clear to me yet how all the various configurations
-			// of clusters (# of machines in each locality) are going to
-			// generalize. For now, just hardcode what we had before.
-			ctx := context.Background()
-			c := newCluster(ctx, t, "-n", "4")
-			defer c.Destroy(ctx, t)
-
-			c.Put(ctx, t, *cockroach, "<cockroach>")
-			c.Put(ctx, t, *workload, "<workload>")
-			c.Start(ctx, t, 1, 3)
-
-			m := newMonitor(ctx, c)
-			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, t, 4, cmd)
-				return nil
-			})
-			m.Wait(t, 1, 3)
-		})
-	}
-
-	run("kv0", "<workload> run kv --init --read-percent=0 --splits=1000"+concurrency+duration)
-	run("kv95", "<workload> run kv --init --read-percent=95 --splits=1000"+concurrency+duration)
-	run("splits", "<workload> run kv --init --read-percent=0 --max-ops=1"+concurrency+splits)
-	run("tpcc_w1", "<workload> run tpcc --init --warehouses=1 --wait=false"+concurrency+duration)
-	run("tpmc_w1", "<workload> run tpcc --init --warehouses=1 --concurrency=10"+duration)
-}
-
-func TestRoachmart(t *testing.T) {
-	maybeSkip(t)
-
-	testutils.RunTrueAndFalse(t, "partition", func(t *testing.T, partition bool) {
+func init() {
+	runRoachmart := func(t *test, partition bool) {
 		ctx := context.Background()
 		c := newCluster(ctx, t, "--geo", "--nodes", "9")
-		defer c.Destroy(ctx, t)
+		defer c.Destroy(ctx)
 
-		c.Put(ctx, t, *cockroach, "<cockroach>")
-		c.Put(ctx, t, *workload, "<workload>")
-		c.Start(ctx, t, 1, 9)
+		c.Put(ctx, cockroach, "<cockroach>")
+		c.Put(ctx, workload, "<workload>")
+		c.Start(ctx, 1, 9)
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {
@@ -108,8 +40,7 @@ func TestRoachmart(t *testing.T) {
 			{7, "europe-west2-b"},
 		}
 
-		roachmartRun := func(ctx context.Context, t *testing.T, i int, args ...string) {
-			t.Helper()
+		roachmartRun := func(ctx context.Context, i int, args ...string) {
 			args = append(args,
 				"--local-zone="+nodes[i].zone,
 				"--local-percent=90",
@@ -121,24 +52,30 @@ func TestRoachmart(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.RunL(ctx, t, l, nodes[i].i, args...)
+			defer l.close()
+			c.RunL(ctx, l, nodes[i].i, args...)
 		}
-		roachmartRun(ctx, t, 0, "<workload>", "init", "roachmart")
+		roachmartRun(ctx, 0, "<workload>", "init", "roachmart")
 
-		duration := "10m"
-		if *local {
-			duration = "10s"
-		}
+		duration := " --duration=" + ifLocal("10s", "10m")
 
 		m := newMonitor(ctx, c)
 		for i := range nodes {
 			i := i
 			m.Go(func(ctx context.Context) error {
-				roachmartRun(ctx, t, i, "<workload>", "run", "roachmart", "--duration", duration)
+				roachmartRun(ctx, i, "<workload>", "run", "roachmart", duration)
 				return nil
 			})
 		}
 
-		m.Wait(t)
-	})
+		m.Wait()
+	}
+
+	for _, v := range []bool{true, false} {
+		v := v
+		tests.Add(fmt.Sprintf("roachmart/partition=%v", v),
+			func(t *test) {
+				runRoachmart(t, v)
+			})
+	}
 }
