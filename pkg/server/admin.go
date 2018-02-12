@@ -1015,13 +1015,8 @@ func (s *adminServer) Cluster(
 	// Check if enterprise features are enabled.  We currently test for the
 	// feature "BACKUP", although enterprise licenses do not yet distinguish
 	// between different features.
-	enterpriseEnabled := false
 	organization := sql.ClusterOrganization.Get(&s.server.st.SV)
-	if err := LicenseCheckFn(
-		s.server.st, clusterID, organization, "BACKUP",
-	); err == nil {
-		enterpriseEnabled = true
-	}
+	enterpriseEnabled := base.CheckEnterpriseEnabled(s.server.st, clusterID, organization, "BACKUP") == nil
 
 	return &serverpb.ClusterResponse{
 		ClusterID:         clusterID.String(),

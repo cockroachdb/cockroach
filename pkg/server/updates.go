@@ -31,6 +31,7 @@ import (
 	"github.com/mitchellh/reflectwalk"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -169,7 +170,7 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 	q.Set("internal",
 		strconv.FormatBool(strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")))
 
-	licenseType, err := LicenseTypeFn(s.st)
+	licenseType, err := base.LicenseType(s.st)
 	if err == nil {
 		q.Set("licensetype", licenseType)
 	} else {
