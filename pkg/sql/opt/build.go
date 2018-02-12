@@ -219,7 +219,7 @@ func (bc *buildContext) resolve(expr tree.Expr, desired types.T) tree.TypedExpr 
 	texpr := bc.scope.resolve(expr, desired)
 	nexpr, err := bc.evalCtx.NormalizeExpr(texpr)
 	if err != nil {
-		panic(err)
+		panic(builderError{err})
 	}
 
 	return nexpr
@@ -236,7 +236,7 @@ func (bc *buildContext) build(stmt tree.Statement) *Expr {
 		result = bc.buildSelect(stmt)
 
 	default:
-		panic(fmt.Sprintf("unexpected statement: %T", stmt))
+		panic(errorf("unexpected statement: %T", stmt))
 	}
 
 	return result
@@ -252,12 +252,12 @@ func (bc *buildContext) buildSelect(stmt *tree.Select) *Expr {
 
 	case *tree.SelectClause:
 		if (t.GroupBy != nil && len(t.GroupBy) > 0) || len(t.Exprs) > 1 || t.Distinct {
-			panic("complex queries not yet supported.")
+			panic(errorf("complex queries not yet supported."))
 		}
 		result = bc.buildFrom(t.From, t.Where)
 
 	default:
-		panic(fmt.Sprintf("unexpected select statement: %T", stmt.Select))
+		panic(errorf("unexpected select statement: %T", stmt.Select))
 	}
 
 	return result
@@ -267,7 +267,7 @@ func (bc *buildContext) buildSelect(stmt *tree.Select) *Expr {
 // will expand significantly once we implement joins.
 func (bc *buildContext) buildFrom(from *tree.From, where *tree.Where) *Expr {
 	if len(from.Tables) != 1 {
-		panic("joins not yet supported.")
+		panic(errorf("joins not yet supported."))
 	}
 	result := bc.buildTable(from.Tables[0])
 	bc.scope = bc.scope.push()
@@ -297,7 +297,7 @@ func (bc *buildContext) buildTable(texpr tree.TableExpr) *Expr {
 		result := bc.buildTable(source.Expr)
 		if source.As.Alias != "" {
 			if n := len(source.As.Cols); n > 0 && n != len(result.relProps.columns) {
-				panic(fmt.Sprintf("rename specified %d columns, but table contains %d",
+				panic(errorf("rename specified %d columns, but table contains %d",
 					n, len(result.relProps.columns)))
 			}
 
@@ -312,19 +312,19 @@ func (bc *buildContext) buildTable(texpr tree.TableExpr) *Expr {
 		return result
 
 	case *tree.FuncExpr:
-		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+		panic(errorf("unimplemented table expr: %T", texpr))
 
 	case *tree.JoinTableExpr:
-		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+		panic(errorf("unimplemented table expr: %T", texpr))
 
 	case *tree.NormalizableTableName:
 		tn, err := source.Normalize()
 		if err != nil {
-			panic(fmt.Sprintf("%s", err))
+			panic(errorf("%s", err))
 		}
 		tab, err := bc.catalog.FindTable(bc.ctx, tn)
 		if err != nil {
-			panic(fmt.Sprintf("%s", err))
+			panic(errorf("%s", err))
 		}
 
 		return bc.buildScan(tab)
@@ -333,16 +333,16 @@ func (bc *buildContext) buildTable(texpr tree.TableExpr) *Expr {
 		return bc.buildTable(source.Expr)
 
 	case *tree.StatementSource:
-		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+		panic(errorf("unimplemented table expr: %T", texpr))
 
 	case *tree.Subquery:
 		return bc.build(source.Select)
 
 	case *tree.TableRef:
-		panic(fmt.Sprintf("unimplemented table expr: %T", texpr))
+		panic(errorf("unimplemented table expr: %T", texpr))
 
 	default:
-		panic(fmt.Sprintf("unexpected table expr: %T", texpr))
+		panic(errorf("unexpected table expr: %T", texpr))
 	}
 }
 
@@ -467,10 +467,10 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	case *tree.Placeholder:
 		d, err := t.Eval(bc.evalCtx)
 		if err != nil {
-			panic(err)
+			panic(builderError{err})
 		}
 		if _, ok := d.(*tree.Placeholder); ok {
-			panic("no placeholder value")
+			panic(errorf("no placeholder value"))
 		}
 		initConstExpr(e, d)
 
@@ -483,13 +483,31 @@ func (bc *buildContext) buildScalar(pexpr tree.TypedExpr) *Expr {
 	return e
 }
 
+// builderError is used for semantic errors that occur during the build process
+// and is passed as an argument to panic. These panics are caught and converted
+// back to errors inside Builder.Build.
+type builderError struct {
+	error
+}
+
+// errorf formats according to a format specifier and returns the
+// string as a builderError.
+func errorf(format string, a ...interface{}) builderError {
+	err := fmt.Errorf(format, a...)
+	return builderError{err}
+}
+
 // build converts a tree.Statement to an Expr tree.
 func build(
 	ctx context.Context, stmt tree.Statement, catalog optbase.Catalog, evalCtx *tree.EvalContext,
 ) (_ *Expr, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if bldErr, ok := r.(builderError); ok {
+				err = bldErr
+			} else {
+				panic(r)
+			}
 		}
 	}()
 	buildCtx := makeBuildContext(ctx, evalCtx, catalog)
@@ -506,7 +524,11 @@ func buildScalar(pexpr tree.TypedExpr, evalCtx *tree.EvalContext) (_ *Expr, err 
 	// buildScalar doesn't alter global state so catching panics is safe.
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if bldErr, ok := r.(builderError); ok {
+				err = bldErr
+			} else {
+				panic(r)
+			}
 		}
 	}()
 	buildCtx := makeBuildContext(context.TODO(), evalCtx, nil /* catalog */)
