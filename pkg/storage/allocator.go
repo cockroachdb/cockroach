@@ -341,7 +341,7 @@ func (a *Allocator) AllocateTarget(
 	rangeInfo RangeInfo,
 	relaxConstraints bool,
 ) (*roachpb.StoreDescriptor, string, error) {
-	sl, _, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
+	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	candidates := allocateCandidates(
 		a.storePool.st,
@@ -372,7 +372,8 @@ func (a *Allocator) AllocateTarget(
 		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
 	return nil, "", &allocatorError{
-		required: constraints.Constraints,
+		required:        constraints.Constraints,
+		aliveStoreCount: aliveStoreCount,
 	}
 }
 
