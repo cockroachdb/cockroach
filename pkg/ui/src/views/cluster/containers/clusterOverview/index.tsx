@@ -15,7 +15,7 @@ import "./cluster.styl";
 import spinner from "assets/spinner.gif";
 
 // tslint:disable-next-line:variable-name
-const CapacityChart = createChartComponent(capacityChart);
+const CapacityChart = createChartComponent("svg", capacityChart());
 
 interface CapacityUsageProps {
   usedCapacity: number;
