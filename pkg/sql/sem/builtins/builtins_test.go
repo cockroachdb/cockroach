@@ -14,7 +14,11 @@
 
 package builtins
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 func TestCategory(t *testing.T) {
 	if expected, actual := categoryString, Builtins["lower"][0].Category; expected != actual {
@@ -28,5 +32,24 @@ func TestCategory(t *testing.T) {
 	}
 	if expected, actual := categorySystemInfo, Builtins["version"][0].Category; expected != actual {
 		t.Fatalf("bad category: expected %q got %q", expected, actual)
+	}
+}
+
+// TestGenerateUniqueIDOrder verifies the expected ordering of
+// GenerateUniqueID.
+func TestGenerateUniqueIDOrder(t *testing.T) {
+	tests := []tree.DInt{
+		GenerateUniqueID(0, 0),
+		GenerateUniqueID(1, 0),
+		GenerateUniqueID(2<<15, 0),
+		GenerateUniqueID(0, 1),
+		GenerateUniqueID(0, 10000),
+		GenerateUniqueInt(0),
+	}
+	prev := tests[0]
+	for _, tc := range tests[1:] {
+		if tc <= prev {
+			t.Fatalf("%d > %d", tc, prev)
+		}
 	}
 }
