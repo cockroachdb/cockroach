@@ -135,9 +135,12 @@ type OptimizerMode int64
 const (
 	// OptimizerOff means that we don't use the optimizer.
 	OptimizerOff = iota
-	// OptimizerOn means that we use the optimizer for all statements.
+	// OptimizerOn means that we use the optimizer for all supported statements.
 	OptimizerOn
-	// TODO(radu): we will want an Auto mode to decide on a case-by-case basis.
+	// OptimizerAlways means that we attempt to use the optimizer always, even
+	// for unsupported statements which result in errors. This mode is useful
+	// for testing.
+	OptimizerAlways
 )
 
 func (m OptimizerMode) String() string {
@@ -146,6 +149,8 @@ func (m OptimizerMode) String() string {
 		return "off"
 	case OptimizerOn:
 		return "on"
+	case OptimizerAlways:
+		return "always"
 	default:
 		return fmt.Sprintf("invalid (%d)", m)
 	}
@@ -158,6 +163,8 @@ func OptimizerModeFromString(val string) (_ OptimizerMode, ok bool) {
 		return OptimizerOff, true
 	case "ON":
 		return OptimizerOn, true
+	case "ALWAYS":
+		return OptimizerAlways, true
 	default:
 		return 0, false
 	}
