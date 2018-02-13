@@ -1593,7 +1593,7 @@ func EncodeInvertedIndexKeys(
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
 	switch t := tree.UnwrapDatum(nil, val).(type) {
 	case *tree.DJSON:
-		return (t.JSON).EncodeInvertedIndexKeys(inKey)
+		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
 	}
 	return nil, pgerror.NewError(pgerror.CodeInternalError, "trying to apply inverted index to non JSON type")
 }

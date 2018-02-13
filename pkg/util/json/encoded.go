@@ -693,13 +693,13 @@ func (j *jsonEncoded) Len() int {
 }
 
 // EncodeInvertedIndexKeys implements the JSON interface.
-func (j *jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// TODO(justin): this could possibly be optimized.
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
 	}
-	return decoded.EncodeInvertedIndexKeys(b)
+	return decoded.encodeInvertedIndexKeys(b)
 }
 
 // preprocessForContains implements the JSON interface.

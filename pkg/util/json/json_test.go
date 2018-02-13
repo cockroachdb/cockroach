@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"bytes"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1128,72 +1127,120 @@ func TestJSONRemoveIndex(t *testing.T) {
 	}
 }
 
+func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
+	testCases := []struct {
+		value  string
+		expEnc []string
+	}{
+		{`{"a":"b"}`, []string{`/"a"/"b"`}},
+		{`null`, []string{`/NULL`}},
+		{`false`, []string{`/False`}},
+		{`true`, []string{`/True`}},
+		{`1.23`, []string{`/1.23`}},
+		{`"a"`, []string{`/"a"`}},
+		{`[]`, []string{`/[]`}},
+		{`{}`, []string{`/{}`}},
+		{`["c", {"a":"b"}]`, []string{`/Arr/"c"`, `/Arr/"a"/"b"`}},
+		{`["c", {"a":["c","d"]}]`, []string{`/Arr/"c"`,
+			`/Arr/"a"/Arr/"c"`,
+			`/Arr/"a"/Arr/"d"`}},
+		{`{"a":[]}`, []string{`/"a"/[]`}},
+		{`{"a":[{}]}`, []string{`/"a"/Arr/{}`}},
+		{`[[],{}]`, []string{`/Arr/[]`, `/Arr/{}`}},
+		{`[["a"]]`, []string{`/Arr/Arr/"a"`}},
+	}
+
+	for _, c := range testCases {
+		enc, err := EncodeInvertedIndexKeys(nil, jsonTestShorthand(c.value))
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for j, path := range enc {
+			str := encoding.PrettyPrintValue(nil, path, "/")
+			if str != c.expEnc[j] {
+				t.Errorf("unexpected encoding mismatch for %v. expected [%s], got [%s]",
+					c.value, c.expEnc[j], str)
+			}
+		}
+	}
+}
+
 func getApdEncoding(num float64) *apd.Decimal {
 	dec := &apd.Decimal{}
 	dec, _ = dec.SetFloat64(num)
 	return dec
 }
 
-func arraySeparator(b []byte) []byte {
-	return encoding.EncodeArrayAscending(b)
-}
+func TestEncodeJSONInvertedIndex(t *testing.T) {
+	jsonPrefix := make([]byte, 1, 100)
+	jsonPrefix[0] = 0x37
 
-func keyPrefix(b []byte) []byte {
-	return encoding.EncodeNotNullAscending(b)
-}
+	terminator := make([]byte, 2, 100)
+	terminator[0] = 0x00
+	terminator[1] = 0x01
 
-func TestEncodeDecodeJSONInvertedIndex(t *testing.T) {
-	bytePrefix := make([]byte, 1, 100)
-	bytePrefix[0] = 0x0f
+	objectSeparator := make([]byte, 2, 100)
+	objectSeparator[0] = 0x00
+	objectSeparator[1] = 0x02
+
+	arrayPrefix := make([]byte, 2, 100)
+	arrayPrefix[0] = 0x00
+	arrayPrefix[1] = 0x03
+
+	aEncoding := make([]byte, 1, 100)
+	aEncoding[0] = 0x61
+
+	bEncoding := make([]byte, 1, 100)
+	bEncoding[0] = 0x62
+
+	emptyObjectEncoding := make([]byte, 1, 100)
+	emptyObjectEncoding[0] = 0x39
+
+	emptyArrayEncoding := make([]byte, 1, 100)
+	emptyArrayEncoding[0] = 0x38
 
 	testCases := []struct {
 		value  string
 		expEnc [][]byte
 	}{
-		{`{"a":"b"}`, [][]byte{bytes.Join([][]byte{keyPrefix(bytePrefix),
-			encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil)}},
-		{`["a", "b"]`, [][]byte{bytes.Join([][]byte{arraySeparator(bytePrefix),
-			encoding.EncodeStringAscending(nil, "a")}, nil),
-			bytes.Join([][]byte{arraySeparator(bytePrefix),
-				encoding.EncodeStringAscending(nil, "b")}, nil)}},
-		{`null`, [][]byte{encoding.EncodeNullAscending(bytePrefix)}},
-		{`false`, [][]byte{encoding.EncodeFalseAscending(bytePrefix)}},
-		{`true`, [][]byte{encoding.EncodeTrueAscending(bytePrefix)}},
-		{`1.23`, [][]byte{encoding.EncodeDecimalAscending(bytePrefix, getApdEncoding(1.23))}},
-		{`"a"`, [][]byte{encoding.EncodeStringAscending(bytePrefix, "a")}},
-		{`["c", {"a":"b"}]`, [][]byte{bytes.Join([][]byte{arraySeparator(bytePrefix),
-			encoding.EncodeStringAscending(nil, "c")}, nil),
-			bytes.Join([][]byte{arraySeparator(bytePrefix),
-				keyPrefix(nil),
-				encoding.EncodeStringAscending(nil, "a"),
-				encoding.EncodeStringAscending(nil, "b")}, nil)}},
-		{`["c", {"a":["c","d"]}]`, [][]byte{bytes.Join([][]byte{
-			arraySeparator(bytePrefix),
-			encoding.EncodeStringAscending(nil, "c")}, nil),
-
-			bytes.Join([][]byte{arraySeparator(bytePrefix),
-				keyPrefix(nil),
-				encoding.EncodeStringAscending(nil, "a"),
-				arraySeparator(nil),
-				encoding.EncodeStringAscending(nil, "c")}, nil),
-
-			bytes.Join([][]byte{arraySeparator(bytePrefix),
-				keyPrefix(nil),
-				encoding.EncodeStringAscending(nil, "a"),
-				arraySeparator(nil),
-				encoding.EncodeStringAscending(nil, "d")}, nil)}},
-
-		{`{"a":"b","e":"f"}`, [][]byte{
-			bytes.Join([][]byte{keyPrefix(bytePrefix),
-				encoding.EncodeStringAscending(nil, "a"), encoding.EncodeStringAscending(nil, "b")}, nil),
-
-			bytes.Join([][]byte{keyPrefix(bytePrefix),
-				encoding.EncodeStringAscending(nil, "e"), encoding.EncodeStringAscending(nil, "f")}, nil),
-		}},
+		{`{"a":"b"}`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, terminator, encoding.EncodeStringAscending(nil, "b")},
+			nil)}},
+		{`{"a":{"b":"c"}}`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, bEncoding, terminator, encoding.EncodeStringAscending(nil, "c")},
+			nil)}},
+		{`{"a":{"b":[]}}`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, bEncoding, terminator, emptyArrayEncoding},
+			nil)}},
+		{`{"a":{"b":{}}}`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, bEncoding, terminator, emptyObjectEncoding},
+			nil)}},
+		{`null`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, encoding.EncodeNullAscending(nil)},
+			nil)}},
+		{`false`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, encoding.EncodeFalseAscending(nil)},
+			nil)}},
+		{`true`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, encoding.EncodeTrueAscending(nil)},
+			nil)}},
+		{`1.23`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, encoding.EncodeDecimalAscending(nil, getApdEncoding(1.23))},
+			nil)}},
+		{`"a"`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, encoding.EncodeStringAscending(nil, "a")},
+			nil)}},
+		{`[["a"]]`, [][]byte{bytes.Join([][]byte{jsonPrefix, arrayPrefix, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "a")},
+			nil)}},
+		{`{"a":["b","c"]}]`, [][]byte{bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "b")}, nil),
+			bytes.Join([][]byte{jsonPrefix, aEncoding, objectSeparator, arrayPrefix, terminator, encoding.EncodeStringAscending(nil, "c")}, nil)}},
+		{`[]`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, emptyArrayEncoding},
+			nil)}},
+		{`{}`, [][]byte{bytes.Join([][]byte{jsonPrefix, terminator, emptyObjectEncoding},
+			nil)}},
+		{`[{}, []]`, [][]byte{bytes.Join([][]byte{jsonPrefix, arrayPrefix, terminator, emptyObjectEncoding},
+			nil),
+			bytes.Join([][]byte{jsonPrefix, arrayPrefix, terminator, emptyArrayEncoding}, nil)}},
+		{`[[[]]]`, [][]byte{bytes.Join([][]byte{jsonPrefix, arrayPrefix, arrayPrefix, terminator, emptyArrayEncoding},
+			nil)}},
+		{`[[{}]]`, [][]byte{bytes.Join([][]byte{jsonPrefix, arrayPrefix, arrayPrefix, terminator, emptyObjectEncoding},
+			nil)}},
 	}
 
 	for _, c := range testCases {
-		enc, err := jsonTestShorthand(c.value).EncodeInvertedIndexKeys(bytePrefix)
+		enc, err := EncodeInvertedIndexKeys(nil, jsonTestShorthand(c.value))
 		if err != nil {
 			t.Fatal(err)
 		}
