@@ -206,7 +206,7 @@ func (f *logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
-	props.Relational.OutputCols = *ev.Private().(*opt.ColSet)
+	props.Relational.OutputCols = opt.ColListToSet(*ev.Private().(*opt.ColList))
 	return props
 }
 

@@ -83,7 +83,7 @@ func TestBuild(t *testing.T) {
 
 					// Build and optimize the opt expression tree.
 					// We know that the ExecEngine also implements Catalog.
-					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
+					o := xform.NewOptimizer(catalog, xform.OptimizeAll)
 					root, props, err := optbuilder.New(ctx, o.Factory(), stmt).Build()
 					if err != nil {
 						d.Fatalf(t, "BuildOpt: %v", err)
