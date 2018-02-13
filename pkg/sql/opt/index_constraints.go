@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
-// makeEqSpan returns a span that constraints column <offset> to a single value.
+// makeEqSpan returns a span that constraints a column to a single value.
 // The value can be NULL.
-func (c *indexConstraintCtx) makeEqSpan(offset int, value tree.Datum) LogicalSpan {
+func (c *indexConstraintCtx) makeEqSpan(value tree.Datum) LogicalSpan {
 	return LogicalSpan{
 		Start: LogicalKey{Vals: tree.Datums{value}, Inclusive: true},
 		End:   LogicalKey{Vals: tree.Datums{value}, Inclusive: true},
@@ -51,7 +51,7 @@ func (c *indexConstraintCtx) makeNotNullSpan(offset int) LogicalSpan {
 	return sp
 }
 
-// makeStringPrefixSpan returns a span that constraints string column <offset>
+// makeStringPrefixSpan returns a span that constrains string column <offset>
 // to strings having the given prefix.
 func (c *indexConstraintCtx) makeStringPrefixSpan(offset int, prefix string) LogicalSpan {
 	span := c.makeNotNullSpan(offset)
@@ -113,10 +113,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 				// Ignore NULLs - they can't match any values
 				continue
 			}
-			spans = append(spans, LogicalSpan{
-				Start: LogicalKey{Vals: tree.Datums{datum}, Inclusive: true},
-				End:   LogicalKey{Vals: tree.Datums{datum}, Inclusive: true},
-			})
+			spans = append(spans, c.makeEqSpan(datum))
 		}
 		if c.colInfos[offset].Direction == encoding.Descending {
 			// Reverse the order of the spans.
@@ -148,7 +145,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 				// The column is not nullable; IS NULL is always false.
 				return LogicalSpans{}, true, true
 			}
-			return LogicalSpans{c.makeEqSpan(offset, tree.DNull)}, true, true
+			return LogicalSpans{c.makeEqSpan(tree.DNull)}, true, true
 
 		case isNotOp:
 			return LogicalSpans{c.makeNotNullSpan(offset)}, true, true
@@ -158,11 +155,18 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 
 	switch op {
 	case eqOp, isOp:
-		return LogicalSpans{c.makeEqSpan(offset, datum)}, true, true
+		return LogicalSpans{c.makeEqSpan(datum)}, true, true
 
 	case ltOp, gtOp, leOp, geOp:
 		sp := c.makeNotNullSpan(offset)
 		inclusive := (op == leOp || op == geOp)
+		// We have an upper bound if the direction of the comparison "matches" the
+		// direction of the column, or a lower bound otherwise. More precisely:
+		//
+		//  Op \ Dir |  Ascending  |  Descending
+		//  ---------+-------------+------------
+		//  LT,LE    | Upper bound | Lower bound
+		//  GT,GE    | Lower bound | Upper bound
 		if (op == ltOp || op == leOp) == (c.colInfos[offset].Direction == encoding.Ascending) {
 			sp.End = LogicalKey{Vals: tree.Datums{datum}, Inclusive: inclusive}
 		} else {
@@ -196,7 +200,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 				return LogicalSpans{span}, true, tight
 			}
 			// No wildcard characters, this is an equality.
-			return LogicalSpans{c.makeEqSpan(offset, &s)}, true, true
+			return LogicalSpans{c.makeEqSpan(&s)}, true, true
 		}
 
 	case similarToOp:
@@ -206,7 +210,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 			if re, err := regexp.Compile(pattern); err == nil {
 				prefix, complete := re.LiteralPrefix()
 				if complete {
-					return LogicalSpans{c.makeEqSpan(offset, tree.NewDString(prefix))}, true, true
+					return LogicalSpans{c.makeEqSpan(tree.NewDString(prefix))}, true, true
 				}
 				span := c.makeStringPrefixSpan(offset, prefix)
 				return LogicalSpans{span}, true, false
@@ -343,7 +347,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 		inclusive = false
 		tight = true
 	} else if prefixLen < len(lhs.children) {
-		// If we only keep a prefix, exclusive inequalities become exclusive.
+		// If we only keep a prefix, exclusive inequalities become inclusive.
 		// For example:
 		//   (a, b, c) > (1, 2, 3) becomes (a, b) >= (1, 2)
 		inclusive = true
@@ -836,7 +840,7 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 
 		switch rd.Type() {
 		case json.ArrayJSONType, json.ObjectJSONType:
-			return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
+			return LogicalSpans{c.makeEqSpan(rhs.private.(tree.Datum))}, true, true
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
 			// both matching scalars and arrays that contain that value. In order to do this we generate
