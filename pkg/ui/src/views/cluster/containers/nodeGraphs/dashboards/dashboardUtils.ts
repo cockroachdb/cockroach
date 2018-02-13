@@ -34,14 +34,14 @@ export interface GraphDashboardProps {
   tooltipSelection: string;
 }
 
-export function nodeAddress(nodesSummary: NodesSummary, nid: string) {
+export function nodeDisplayName(nodesSummary: NodesSummary, nid: string) {
   const ns = nodesSummary.nodeStatusByID[nid];
   if (!ns) {
     // This should only happen immediately after loading a page, and
     // associated graphs should display no data.
-    return "unknown address";
+    return "unknown node";
   }
-  return nodesSummary.nodeAddressByID[ns.desc.node_id];
+  return nodesSummary.nodeDisplayNameByID[ns.desc.node_id];
 }
 
 export function storeIDsForNode(nodesSummary: NodesSummary, nid: string): string[] {

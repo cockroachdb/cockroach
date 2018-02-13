@@ -1,6 +1,6 @@
 import { assert } from "chai";
 
-import { nodeAddressByIDSelector } from "./nodes";
+import { nodeDisplayNameByIDSelector } from "./nodes";
 import { nodesReducerObj  } from "./apiReducers";
 import { createAdminUIStore } from "./state";
 
@@ -21,7 +21,7 @@ function makeNodesState(...addresses: { id: number, address: string }[]) {
 }
 
 describe("node data selectors", function() {
-  describe("node address by ID", function() {
+  describe("display name by ID", function() {
     it("does nothing for unique addresses", function() {
       const state: any = makeNodesState(
         { id: 1, address: "addressA" },
@@ -30,7 +30,7 @@ describe("node data selectors", function() {
         { id: 4, address: "addressD" },
       );
 
-      const addressesByID = nodeAddressByIDSelector(state);
+      const addressesByID = nodeDisplayNameByIDSelector(state);
       assert.deepEqual(addressesByID, {
         1: "addressA",
         2: "addressB",
@@ -50,7 +50,7 @@ describe("node data selectors", function() {
         { id: 7, address: "addressA" },
       );
 
-      const addressesByID = nodeAddressByIDSelector(state);
+      const addressesByID = nodeDisplayNameByIDSelector(state);
       assert.deepEqual(addressesByID, {
         1: "addressA (1)",
         2: "addressB",
@@ -63,7 +63,7 @@ describe("node data selectors", function() {
     });
 
     it("returns empty collection for empty state", function() {
-      assert.deepEqual(nodeAddressByIDSelector(makeNodesState()), {});
+      assert.deepEqual(nodeDisplayNameByIDSelector(makeNodesState()), {});
     });
   });
 });

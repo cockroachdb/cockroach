@@ -176,10 +176,9 @@ export function sumNodeStats(
   return result;
 }
 
-// nodeAddressByID gets a unique address string for a node, given its node ID.
-// This includes the deduplication of Node IDs which have been re-used via
-// decommissioning.
-export const nodeAddressByIDSelector = createSelector(
+// nodeDisplayNameByIDSelector provides a unique, human-readable display name
+// for each node.
+export const nodeDisplayNameByIDSelector = createSelector(
   nodeStatusesSelector,
   (nodeStatuses) => {
     const result: {[id: string]: string} = {};
@@ -215,16 +214,16 @@ export const nodesSummarySelector = createSelector(
   nodeIDsSelector,
   nodeStatusByIDSelector,
   nodeSumsSelector,
-  nodeAddressByIDSelector,
+  nodeDisplayNameByIDSelector,
   livenessStatusByNodeIDSelector,
   livenessByNodeIDSelector,
-  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, nodeAddressByID, livenessStatusByNodeID, livenessByNodeID) => {
+  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, nodeDisplayNameByID, livenessStatusByNodeID, livenessByNodeID) => {
     return {
       nodeStatuses,
       nodeIDs,
       nodeStatusByID,
       nodeSums,
-      nodeAddressByID,
+      nodeDisplayNameByID,
       livenessStatusByNodeID,
       livenessByNodeID,
     };
