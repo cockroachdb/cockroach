@@ -544,12 +544,6 @@ func (c *conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) 
 	return nil
 }
 
-// SendError is part of te pgwirebase.Conn interface.
-func (c *conn) SendError(err error) error {
-	// TODO(andrei)
-	return nil
-}
-
 // SendCommandComplete is part of the pgwirebase.Conn interface.
 func (c *conn) SendCommandComplete(tag []byte) error {
 	// TODO(andrei)
