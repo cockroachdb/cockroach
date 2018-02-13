@@ -1063,6 +1063,7 @@ message ExportResponse {
 
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   repeated File files = 2 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 }
 
 // ImportRequest is the argument to the Import() method, to bulk load key/value
