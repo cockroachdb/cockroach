@@ -13,9 +13,13 @@ import { LocalityTree } from "src/redux/localities";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel, getLeaves } from "src/util/localities";
 
-import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 import { pluralize } from "src/util/pluralize";
+import { trustIcon } from "src/util/trust";
+import localityIcon from "!!raw-loader!assets/localityIcon.svg";
+import { StatsBars } from "ccl/src/views/clusterviz/components/nodeOrLocality/statsBars";
+import { CapacityArc } from "ccl/src/views/clusterviz/components/nodeOrLocality/capacityArc";
+import { Labels } from "ccl/src/views/clusterviz/components/nodeOrLocality/labels";
 
 interface LocalityViewProps {
   localityTree: LocalityTree;
@@ -29,6 +33,13 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
     this.props.router.push(destination);
   }
 
+  renderLivenessIcon() {
+    // TODO(vilterp): aggregate liveness of child nodes; render composite icon
+    return (
+      <g />
+    );
+  }
+
   render() {
     const { tiers } = this.props.localityTree;
 
@@ -36,14 +47,23 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
     const { capacityUsable, capacityUsed } = sumNodeStats(leavesUnderMe, this.props.liveness);
 
     return (
-      <g onClick={this.onClick} style={{ cursor: "pointer" }}>
-        <StatsView
-          usableCapacity={capacityUsable}
-          usedCapacity={capacityUsed}
+      <g
+        onClick={this.onClick}
+        style={{ cursor: "pointer" }}
+        fill="none"
+        transform="translate(-90 -100)"
+      >
+        <Labels
           label={getLocalityLabel(tiers)}
           subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
-          isLocality={true}
         />
+        <g dangerouslySetInnerHTML={trustIcon(localityIcon)} transform="translate(14 14)" />
+        {this.renderLivenessIcon()}
+        <CapacityArc
+          usableCapacity={capacityUsable}
+          usedCapacity={capacityUsed}
+        />
+        <StatsBars />
       </g>
     );
   }
