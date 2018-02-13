@@ -48,4 +48,18 @@ func TestVerifyBatchRepr(t *testing.T) {
 	if _, err := VerifyBatchRepr(data, keyA, keyB, 0); !testutils.IsError(err, "request range") {
 		t.Fatalf("expected request range error got: %+v", err)
 	}
+
+	// Invalid key/value entry checksum.
+	{
+		var batch engine.RocksDBBatchBuilder
+		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		value := roachpb.MakeValueFromString("1")
+		value.InitChecksum([]byte("foo"))
+		batch.Put(key, value.RawBytes)
+		data := batch.Finish()
+
+		if _, err := VerifyBatchRepr(data, keyB, keyC, 0); !testutils.IsError(err, "invalid checksum") {
+			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
+		}
+	}
 }

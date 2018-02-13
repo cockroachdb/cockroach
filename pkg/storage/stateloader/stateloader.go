@@ -350,15 +350,7 @@ func (rsl StateLoader) LoadMVCCStats(
 func (rsl StateLoader) SetMVCCStats(
 	ctx context.Context, eng engine.ReadWriter, newMS *enginepb.MVCCStats,
 ) error {
-	key := rsl.RangeStatsKey()
-	value := roachpb.Value{}
-	if err := value.SetProto(newMS); err != nil {
-		return err
-	}
-	// We're beneath Raft and need to maintain strict consistency on this key
-	// because it is replicated, so we must always initialize the checksum.
-	value.MustInitChecksum(key)
-	return engine.MVCCPut(ctx, eng, nil /* ms */, key, hlc.Timestamp{}, value, nil /* txn */)
+	return engine.MVCCPutProto(ctx, eng, nil, rsl.RangeStatsKey(), hlc.Timestamp{}, nil, newMS)
 }
 
 // The rest is not technically part of ReplicaState.
