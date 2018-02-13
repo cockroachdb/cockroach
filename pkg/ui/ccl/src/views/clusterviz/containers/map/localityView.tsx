@@ -42,6 +42,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
           usedCapacity={capacityUsed}
           label={getLocalityLabel(tiers)}
           subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
+          isLocality={true}
         />
       </g>
     );

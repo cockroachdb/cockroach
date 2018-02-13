@@ -12,13 +12,15 @@ import { Bytes } from "src/util/format";
 import { NodeHistory } from "./nodeHistory";
 import * as PathMath from "./pathmath";
 import localityIcon from "!!raw-loader!assets/localityIcon.svg";
-import {trustIcon} from "oss/src/util/trust";
+import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
+import { trustIcon } from "src/util/trust";
 
 interface StatsViewProps {
   usableCapacity: number;
   usedCapacity: number;
   label: string;
   subLabel: string; // shows up under the label
+  isLocality: boolean;
 
   nodeHistory?: NodeHistory;
   maxClientActivityRate?: number;
@@ -152,6 +154,12 @@ export class StatsView extends React.Component<StatsViewProps> {
     );
   }
 
+  renderNodeIcon() {
+    return (
+      <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
+    );
+  }
+
   render() {
     return (
       <g fill="none" fillRule="evenodd" transform="translate(-90 -100)">
@@ -159,7 +167,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         {this.renderLabel()}
         {this.renderCPUBar()}
         {this.renderQPS()}
-        {this.renderLocalityIcon()}
+        {this.props.isLocality ? this.renderLocalityIcon() : this.renderNodeIcon()}
         {this.renderLiveCheckmark()}
       </g>
     );
