@@ -782,7 +782,7 @@ INSERT INTO d (i, e, f) VALUES
 INSERT INTO c (i) VALUES
 	(1);
 
-SELECT setval('s', 2);
+SELECT setval('s', 3, false);
 
 INSERT INTO s_tbl (id, v) VALUES
 	(1, 10),
@@ -904,32 +904,116 @@ func TestDumpSequence(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(url.String())
+	defer conn.Close()
+
+	// Create database and sequence.
+
 	const create = `
 	CREATE DATABASE d;
-	CREATE SEQUENCE d.bar;
+	CREATE SEQUENCE d.s1; -- test one sequence right at its minval
+	CREATE SEQUENCE d.s2; -- test another that's been incremented
+	SELECT nextval('d.s2'); -- 1
+	SELECT nextval('d.s2'); -- 2
 `
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
+	if createOut, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(out)
+		t.Log(createOut)
 	}
 
-	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	// Dump the database.
+
+	const expectSQL = `CREATE SEQUENCE s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+CREATE SEQUENCE s2 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+
+SELECT setval('s1', 1, false);
+
+SELECT setval('s2', 3, false);
+`
+
+	dumpOut, err := c.RunWithCaptureArgs([]string{"dump", "d"})
 	if err != nil {
 		t.Fatal(err)
 	} else {
-		t.Log(out)
+		t.Log(dumpOut)
 	}
 
-	const expect = `dump d
-CREATE SEQUENCE bar MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+	outSQL := removeFirstLine(dumpOut)
+	if outSQL != expectSQL {
+		t.Fatalf("expected: %s\ngot: %s", expectSQL, outSQL)
+	}
 
-SELECT setval('bar', 0);
+	// Round-trip: load this dump and then export it again.
+	const recreateDatabase = `
+	DROP DATABASE d CASCADE;
+	CREATE DATABASE d;
 `
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	if recreateOut, err := c.RunWithCaptureArgs([]string{"sql", "-e", recreateDatabase}); err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(recreateOut)
 	}
+
+	// Use conn.Exec here because it returns errors cleanly, as opposed to mixing them with
+	// the command line input.
+	if err := conn.Exec("USE d", nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.Exec(outSQL, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Now, dump again.
+	dumpOut2, err := c.RunWithCaptureArgs([]string{"dump", "d"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(dumpOut2)
+	}
+	outSQL2 := removeFirstLine(dumpOut2)
+	if outSQL2 != expectSQL {
+		t.Fatalf("expected: %s\ngot: %s", expectSQL, outSQL2)
+	}
+
+	// Verify the next value the sequences give out.
+	incOutS1, err := c.RunWithCaptureArgs([]string{"sql", "-d", "d", "-e", "SELECT nextval('s1')"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(incOutS1)
+	}
+	incOutValueS1 := removeFirstLine(incOutS1)
+	const expectedOutValueS1 = `nextval
+1
+`
+	if incOutValueS1 != expectedOutValueS1 {
+		t.Fatalf("expected: %s\ngot: %s", expectedOutValueS1, incOutValueS1)
+	}
+
+	incOutS2, err := c.RunWithCaptureArgs([]string{"sql", "-d", "d", "-e", "SELECT nextval('s2')"})
+	if err != nil {
+		t.Fatal(err)
+	} else {
+		t.Log(incOutS2)
+	}
+	incOutValueS2 := removeFirstLine(incOutS2)
+	const expectedOutValueS2 = `nextval
+3
+`
+	if incOutValueS2 != expectedOutValueS2 {
+		t.Fatalf("expected: %s\ngot: %s", expectedOutValueS2, incOutValueS2)
+	}
+}
+
+func removeFirstLine(s string) string {
+	lines := strings.Split(s, "\n")
+	linesWithoutFirst := lines[1:]
+	return strings.Join(linesWithoutFirst, "\n")
 }
 
 func TestDumpSequenceEscaping(t *testing.T) {
@@ -958,7 +1042,7 @@ func TestDumpSequenceEscaping(t *testing.T) {
 	const expect = `dump '
 CREATE SEQUENCE "'" MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 
-SELECT setval(e'"\'"', 0);
+SELECT setval(e'"\'"', 1, false);
 `
 
 	if out != expect {
