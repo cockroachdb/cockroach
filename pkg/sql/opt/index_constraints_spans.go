@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
@@ -161,6 +162,18 @@ func ExactPrefix(spans LogicalSpans, evalCtx *tree.EvalContext) int {
 	}
 }
 
+// IndexColumnInfo encompasses the information for index columns, needed for
+// index constraints.
+type IndexColumnInfo struct {
+	// VarIdx identifies the indexed var that corresponds to this column.
+	VarIdx    int
+	Typ       types.T
+	Direction encoding.Direction
+	// Nullable should be set to false if this column cannot store NULLs; used
+	// to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
+	Nullable bool
+}
+
 type indexConstraintCtx struct {
 	// types of the columns of the index we are generating constraints for.
 	colInfos []IndexColumnInfo
@@ -186,12 +199,6 @@ func makeIndexConstraintCtx(
 		isInverted: isInverted,
 		evalCtx:    evalCtx,
 	}
-}
-
-// isIndexColumn returns true if e is an indexed var that corresponds
-// to index column <offset>.
-func (c *indexConstraintCtx) isIndexColumn(e *Expr, index int) bool {
-	return isIndexedVar(e, c.colInfos[index].VarIdx)
 }
 
 // compareKeyVals compares two lists of values for a sequence of index columns
