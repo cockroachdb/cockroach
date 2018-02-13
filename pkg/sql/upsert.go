@@ -256,14 +256,18 @@ func upsertExprsAndIndex(
 		}
 		updateExprs := make(tree.UpdateExprs, 0, len(insertCols))
 		for _, c := range insertCols {
-			if _, ok := indexColSet[c.ID]; !ok {
-				n := tree.Name(c.Name)
-				expr := &tree.ColumnItem{
-					TableName:  upsertExcludedTable,
-					ColumnName: n,
-				}
-				updateExprs = append(updateExprs, &tree.UpdateExpr{Names: tree.NameList{n}, Expr: expr})
+			if c.ComputeExpr != nil {
+				continue
 			}
+			if _, ok := indexColSet[c.ID]; ok {
+				continue
+			}
+			n := tree.Name(c.Name)
+			expr := &tree.ColumnItem{
+				TableName:  upsertExcludedTable,
+				ColumnName: n,
+			}
+			updateExprs = append(updateExprs, &tree.UpdateExpr{Names: tree.NameList{n}, Expr: expr})
 		}
 		return updateExprs, conflictIndex, nil
 	}
