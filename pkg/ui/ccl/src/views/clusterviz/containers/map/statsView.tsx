@@ -31,6 +31,8 @@ const ARC_WIDTH = 6;
 const ARC_OUTER_RADIUS = ARC_INNER_RADIUS + ARC_WIDTH;
 
 const MAIN_BLUE = "#3A7DE1";
+const BACKGROUND_BLUE = "#B8CCEC";
+const LIGHT_TEXT_BLUE = "#85A7E3";
 const DARK_BLUE = "#152849";
 
 export class StatsView extends React.Component<StatsViewProps> {
@@ -43,7 +45,19 @@ export class StatsView extends React.Component<StatsViewProps> {
     return (
       <g>
         <g transform="translate(90 115)">
-          {/* current value */}
+          {/* background arc */}
+          <path
+            fill={BACKGROUND_BLUE}
+            strokeLinecap="round"
+            d={PathMath.createArcPath(
+              ARC_INNER_RADIUS,
+              ARC_OUTER_RADIUS,
+              PathMath.arcAngleFromPct(0),
+              PathMath.arcAngleFromPct(1),
+              ARC_WIDTH,
+            )}
+          />
+          {/* current value arc */}
           <path
             fill={MAIN_BLUE}
             strokeLinecap="round"
@@ -52,19 +66,6 @@ export class StatsView extends React.Component<StatsViewProps> {
               ARC_OUTER_RADIUS,
               PathMath.arcAngleFromPct(0),
               PathMath.arcAngleFromPct(capacityUsedPct / 100),
-              ARC_WIDTH,
-            )}
-          />
-          {/* background */}
-          <path
-            fill={MAIN_BLUE}
-            strokeLinecap="round"
-            opacity={0.35}
-            d={PathMath.createArcPath(
-              ARC_INNER_RADIUS,
-              ARC_OUTER_RADIUS,
-              PathMath.arcAngleFromPct(0),
-              PathMath.arcAngleFromPct(1),
               ARC_WIDTH,
             )}
           />
@@ -83,7 +84,7 @@ export class StatsView extends React.Component<StatsViewProps> {
           {Math.round(capacityUsedPct)}%
         </text>
         <text
-          fill="#152849"
+          fill={DARK_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
@@ -96,14 +97,12 @@ export class StatsView extends React.Component<StatsViewProps> {
         </text>
 
         {/* labels at ends of arc */}
-        <g fill={MAIN_BLUE}>
-          <text x="17" y="156" textAnchor="center">
-            {Bytes(usedCapacity)}
-          </text>
-          <text opacity=".65" x="118" y="156" textAnchor="center">
-            {Bytes(capacity)}
-          </text>
-        </g>
+        <text fill={MAIN_BLUE} x="17" y="156" textAnchor="center">
+          {Bytes(usedCapacity)}
+        </text>
+        <text fill={LIGHT_TEXT_BLUE} x="118" y="156" textAnchor="center">
+          {Bytes(capacity)}
+        </text>
       </g>
     );
   }
@@ -125,7 +124,7 @@ export class StatsView extends React.Component<StatsViewProps> {
     return (
       <g>
         <text
-          fill="#152849"
+          fill={DARK_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
@@ -144,7 +143,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         >
           XX%
         </text>
-        <path fill={MAIN_BLUE} d="M56 169h69v10H56z" opacity=".35"/>
+        <path fill={BACKGROUND_BLUE} d="M56 169h69v10H56z" />
         <path fill={MAIN_BLUE} d="M56 172h54a2 2 0 0 1 0 4H56v-4z"/>
       </g>
     );
@@ -154,7 +153,7 @@ export class StatsView extends React.Component<StatsViewProps> {
     return (
       <g>
         <text
-          fill="#152849"
+          fill={DARK_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
@@ -182,7 +181,7 @@ export class StatsView extends React.Component<StatsViewProps> {
     // TODO(vilterp): replace this with the sparkline
     return (
       <g transform="translate(56 188)">
-        <path fill={MAIN_BLUE} opacity=".35" d="M0 0h69v10H0z"/>
+        <path fill={BACKGROUND_BLUE} d="M0 0h69v10H0z"/>
         <path
           stroke={MAIN_BLUE}
           strokeWidth="2"
