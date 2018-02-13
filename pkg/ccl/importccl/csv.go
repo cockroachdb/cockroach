@@ -1073,6 +1073,10 @@ func importPlanHook(
 				return err
 			}
 		} else {
+			if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
+				return err
+			}
+
 			// Verification steps have passed, generate a new table ID if we're
 			// restoring. We do this last because we want to avoid calling
 			// GenerateUniqueDescID if there's any kind of error above.

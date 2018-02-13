@@ -815,21 +815,29 @@ func TestImportStmt(t *testing.T) {
 
 	// Verify a failed IMPORT won't prevent a second IMPORT.
 	t.Run("checkpoint-leftover", func(t *testing.T) {
-		nodetmp := "nodelocal:///tmp"
+		sqlDB.Exec(t, "CREATE DATABASE checkpoint; USE checkpoint")
+
 		// Specify wrong number of columns.
-		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
+		_, err := conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY) CSV DATA (%s)`, files[0]))
 		if !testutils.IsError(err, "expected 1 fields, got 2") {
 			t.Fatalf("unexpected: %v", err)
 		}
 
 		// Specify wrong table name; still shouldn't leave behind a checkpoint file.
-		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s) WITH transform = $2`, files[0]), schema[0], nodetmp)
+		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE bad CREATE USING $1 CSV DATA (%s)`, files[0]), schema[0])
 		if !testutils.IsError(err, `file specifies a schema for table t`) {
 			t.Fatalf("unexpected: %v", err)
 		}
 
 		// Expect it to succeed with correct columns.
-		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s) WITH transform = $1`, files[0]), nodetmp)
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
+
+		// A second attempt should fail fast. A "slow fail" is the error message
+		// "restoring table desc and namespace entries: table already exists".
+		_, err = conn.Exec(fmt.Sprintf(`IMPORT TABLE t (a INT PRIMARY KEY, b STRING) CSV DATA (%s)`, files[0]))
+		if !testutils.IsError(err, `relation "t" already exists`) {
+			t.Fatalf("unexpected: %v", err)
+		}
 	})
 
 	// Verify DEFAULT columns and SERIAL are allowed but not evaluated.
