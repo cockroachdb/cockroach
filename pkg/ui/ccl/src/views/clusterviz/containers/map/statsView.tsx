@@ -123,14 +123,12 @@ export class StatsView extends React.Component<StatsViewProps> {
 
   renderCPUBar() {
     return (
-      <g>
+      <g transform="translate(19 178)">
         <text
           fill={DARK_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
-          x="19"
-          y="178"
         >
           CPU
         </text>
@@ -139,13 +137,12 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="700"
-          x="143"
-          y="178"
+          x="124"
         >
           XX%
         </text>
-        <path fill={BACKGROUND_BLUE} d="M56 169h69v10H56z" />
-        <path fill={MAIN_BLUE} d="M56 172h54a2 2 0 0 1 0 4H56v-4z"/>
+        <rect x="37" y="-9" width="69" height="10" fill={BACKGROUND_BLUE} />
+        <rect x="37" y="-6" width="40" height="4" fill={MAIN_BLUE} />
       </g>
     );
   }
