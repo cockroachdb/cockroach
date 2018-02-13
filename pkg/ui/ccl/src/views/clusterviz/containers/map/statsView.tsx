@@ -9,9 +9,10 @@
 import React from "react";
 
 import { Bytes } from "src/util/format";
-
 import { NodeHistory } from "./nodeHistory";
 import * as PathMath from "./pathmath";
+import localityIcon from "!!raw-loader!assets/localityIcon.svg";
+import {trustIcon} from "oss/src/util/trust";
 
 interface StatsViewProps {
   usableCapacity: number;
@@ -145,6 +146,12 @@ export class StatsView extends React.Component<StatsViewProps> {
     );
   }
 
+  renderLocalityIcon() {
+    return (
+      <g dangerouslySetInnerHTML={trustIcon(localityIcon)} transform="translate(14 14)" />
+    );
+  }
+
   render() {
     return (
       <g fill="none" fillRule="evenodd" transform="translate(-90 -100)">
@@ -152,34 +159,10 @@ export class StatsView extends React.Component<StatsViewProps> {
         {this.renderLabel()}
         {this.renderCPUBar()}
         {this.renderQPS()}
-        {localityIcon}
+        {this.renderLocalityIcon()}
         {this.renderLiveCheckmark()}
       </g>
     );
   }
 
 }
-
-const nodeIcon = (
-  <path d="M14.163 14.086a.901.901 0 0 1 .004.08c0 1.381-3.172 2.5-7.084 2.5-3.912 0-7.083-1.119-7.083-2.5 0-.026.001-.053.004-.08A1.013 1.013 0 0 1 0 14V2.667c0-.03.001-.058.004-.086A.901.901 0 0 1 0 2.5C0 1.12 3.171 0 7.083 0c3.912 0 7.084 1.12 7.084 2.5a.901.901 0 0 1-.004.08c.002.03.004.058.004.087V14c0 .029-.002.058-.004.086z" />
-);
-
-const localityIcon = (
-  <g>
-    <g strokeLinecap="round" strokeLinejoin="round" transform="matrix(-1 0 0 1 36.667 17)">
-      <g fill="#3A7DE1">{nodeIcon}</g>
-      <path stroke="#FFF" d="M14.664 14.086c.002.024.002.038.003.08 0 1.8-3.405 3-7.584 3s-7.583-1.2-7.583-3c0-.062 0-.062.005-.038A1.513 1.513 0 0 1-.5 14V2.667c0-.043.002-.086.006-.041C-.5 2.563-.5 2.563-.5 2.5c0-1.798 3.404-3 7.583-3 4.18 0 7.584 1.202 7.584 3-.001.063-.001.063-.006.038.004.043.006.086.006.129V14c0 .029-.001.057-.003.086z"/>
-    </g>
-    <path stroke="#FFF" strokeWidth="1.03" d="M37.182 20.652H21.985v.515c0 1.81 3.411 3.015 7.598 3.015 4.187 0 7.599-1.204 7.599-3.015v-.515zM37.182 25.652H21.985v.515c0 1.81 3.411 3.015 7.598 3.015 4.187 0 7.599-1.204 7.599-3.015v-.515z"/>
-    <g strokeLinecap="round" strokeLinejoin="round" transform="matrix(-1 0 0 1 30 22)">
-      <g fill="#3A7DE1">{nodeIcon}</g>
-      <path stroke="#FFF" d="M14.664 14.086c.002.024.002.038.003.08 0 1.8-3.405 3-7.584 3s-7.583-1.2-7.583-3c0-.062 0-.062.005-.038A1.513 1.513 0 0 1-.5 14V2.667c0-.043.002-.086.006-.041C-.5 2.563-.5 2.563-.5 2.5c0-1.798 3.404-3 7.583-3 4.18 0 7.584 1.202 7.584 3-.001.063-.001.063-.006.038.004.043.006.086.006.129V14c0 .029-.001.057-.003.086z"/>
-    </g>
-    <path stroke="#FFF" strokeWidth="1.03" d="M30.515 25.652H15.318v.515c0 1.81 3.412 3.015 7.599 3.015s7.598-1.204 7.598-3.015v-.515zM30.515 30.652H15.318v.515c0 1.81 3.412 3.015 7.599 3.015s7.598-1.204 7.598-3.015v-.515z"/>
-    <g strokeLinecap="round" strokeLinejoin="round" transform="matrix(-1 0 0 1 40 25.333)">
-      <g fill="#3A7DE1">{nodeIcon}</g>
-      <path stroke="#FFF" d="M14.664 14.086c.002.024.002.038.003.08 0 1.8-3.405 3-7.584 3s-7.583-1.2-7.583-3c0-.062 0-.062.005-.038A1.513 1.513 0 0 1-.5 14V2.667c0-.043.002-.086.006-.041C-.5 2.563-.5 2.563-.5 2.5c0-1.798 3.404-3 7.583-3 4.18 0 7.584 1.202 7.584 3-.001.063-.001.063-.006.038.004.043.006.086.006.129V14c0 .029-.001.057-.003.086z"/>
-    </g>
-    <path stroke="#FFF" strokeWidth="1.03" d="M40.515 28.985H25.318v.515c0 1.811 3.412 3.015 7.599 3.015s7.598-1.204 7.598-3.015v-.515zM40.515 33.985H25.318v.515c0 1.811 3.412 3.015 7.599 3.015s7.598-1.204 7.598-3.015v-.515z"/>
-  </g>
-);
