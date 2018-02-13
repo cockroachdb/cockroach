@@ -30,6 +30,9 @@ const ARC_INNER_RADIUS = 56;
 const ARC_WIDTH = 6;
 const ARC_OUTER_RADIUS = ARC_INNER_RADIUS + ARC_WIDTH;
 
+const MAIN_BLUE = "#3A7DE1";
+const DARK_BLUE = "#152849";
+
 export class StatsView extends React.Component<StatsViewProps> {
   renderCapacityArc() {
     // Compute used percentage.
@@ -42,7 +45,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         <g transform="translate(90 115)">
           {/* current value */}
           <path
-            fill="#3A7DE1"
+            fill={MAIN_BLUE}
             strokeLinecap="round"
             d={PathMath.createArcPath(
               ARC_INNER_RADIUS,
@@ -54,7 +57,7 @@ export class StatsView extends React.Component<StatsViewProps> {
           />
           {/* background */}
           <path
-            fill="#3A7DE1"
+            fill={MAIN_BLUE}
             strokeLinecap="round"
             opacity={0.35}
             d={PathMath.createArcPath(
@@ -69,14 +72,15 @@ export class StatsView extends React.Component<StatsViewProps> {
 
         {/* text inside arc */}
         <text
-          fill="#3A7DE1"
+          fill={MAIN_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="34"
           fontWeight="bold"
-          transform="translate(83 8)"
-          textAnchor="end"
+          textAnchor="center"
+          x="70"
+          y="110"
         >
-          <tspan x="41.129" y="105">{Math.round(capacityUsedPct)}%</tspan>
+          {Math.round(capacityUsedPct)}%
         </text>
         <text
           fill="#152849"
@@ -85,17 +89,19 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontWeight="bold"
           letterSpacing="1.333"
           transform="translate(15 8)"
+          x="41"
+          y="124"
         >
-          <tspan x="41.088" y="124">CAPACITY</tspan>
+          CAPACITY
         </text>
 
         {/* labels at ends of arc */}
-        <g fill="#3A7DE1">
-          <text transform="translate(21 144)">
-            <tspan x=".194" y="12">{Bytes(usedCapacity)}</tspan>
+        <g fill={MAIN_BLUE}>
+          <text x="17" y="156" textAnchor="center">
+            {Bytes(usedCapacity)}
           </text>
-          <text opacity=".65" transform="translate(21 144)">
-            <tspan x="97.194" y="13">{Bytes(capacity)}</tspan>
+          <text opacity=".65" x="118" y="156" textAnchor="center">
+            {Bytes(capacity)}
           </text>
         </g>
       </g>
@@ -105,11 +111,11 @@ export class StatsView extends React.Component<StatsViewProps> {
   renderLabel() {
     return (
       <g fontFamily="Lato-Bold, Lato" fontSize="14" fontWeight="bold" letterSpacing="1">
-        <text fill="#152849" transform="translate(50 8)">
-          <tspan x=".17" y="14">{this.props.label}</tspan>
+        <text fill={DARK_BLUE} x="50" y="22">
+          {this.props.label}
         </text>
-        <text fill="#3A7DE1" transform="translate(50 8)">
-          <tspan x=".17" y="34">{this.props.subLabel}</tspan>
+        <text fill={MAIN_BLUE} x="50" y="42">
+          {this.props.subLabel}
         </text>
       </g>
     );
@@ -123,21 +129,23 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
-          transform="translate(15 8)"
+          x="19"
+          y="178"
         >
-          <tspan x="4.718" y="170">CPU</tspan>
+          CPU
         </text>
         <text
-          fill="#3A7DE1"
+          fill={MAIN_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="700"
-          transform="translate(15 8)"
+          x="143"
+          y="178"
         >
-          <tspan x="123" y="170">XX%</tspan>
+          XX%
         </text>
-        <path fill="#3A7DE1" d="M56 169h69v10H56z" opacity=".35"/>
-        <path fill="#3A7DE1" d="M56 172h54a2 2 0 0 1 0 4H56v-4z"/>
+        <path fill={MAIN_BLUE} d="M56 169h69v10H56z" opacity=".35"/>
+        <path fill={MAIN_BLUE} d="M56 172h54a2 2 0 0 1 0 4H56v-4z"/>
       </g>
     );
   }
@@ -150,32 +158,36 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
-          transform="translate(15 8)"
+          x="20"
+          y="197"
         >
-          <tspan x="5.468" y="189">QPS</tspan>
+          QPS
         </text>
         <text
-          fill="#3A7DE1"
+          fill={MAIN_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="700"
-          transform="translate(15 8)"
+          x="138"
+          y="197"
         >
-          <tspan x="123" y="189">XXXX</tspan>
+          XXXX
         </text>
-        {/* TODO(vilterp): replace this with the sparkline */}
-        <g transform="translate(56 188)">
-          <mask fill="#fff">
-            <path d="M0 0h69v10H0z"/>
-          </mask>
-          <path fill="#3A7DE1" opacity=".35" d="M0 0h69v10H0z"/>
-          <path
-            stroke="#3A7DE1"
-            strokeWidth="2"
-            d="M-.838 4.29l5.819 3.355L10.984 9l4.429-3.04 5.311 1.685L26.178 2l5.397 7 5.334-3.04h10.656l6.037-.331L57.625 2l4.402 3.922 7.898-2.683"
-            mask="url(#e)"
-          />
-        </g>
+        {this.renderQPSSparkline()}
+      </g>
+    );
+  }
+
+  renderQPSSparkline() {
+    // TODO(vilterp): replace this with the sparkline
+    return (
+      <g transform="translate(56 188)">
+        <path fill={MAIN_BLUE} opacity=".35" d="M0 0h69v10H0z"/>
+        <path
+          stroke={MAIN_BLUE}
+          strokeWidth="2"
+          d="M-.838 4.29l5.819 3.355L10.984 9l4.429-3.04 5.311 1.685L26.178 2l5.397 7 5.334-3.04h10.656l6.037-.331L57.625 2l4.402 3.922 7.898-2.683"
+        />
       </g>
     );
   }
