@@ -2,16 +2,11 @@
 
 package pgwirebase
 
-import "fmt"
+import "strconv"
 
 const (
 	_PrepareType_name_0 = "PreparePortal"
 	_PrepareType_name_1 = "PrepareStatement"
-)
-
-var (
-	_PrepareType_index_0 = [...]uint8{0, 13}
-	_PrepareType_index_1 = [...]uint8{0, 16}
 )
 
 func (i PrepareType) String() string {
@@ -21,6 +16,6 @@ func (i PrepareType) String() string {
 	case i == 83:
 		return _PrepareType_name_1
 	default:
-		return fmt.Sprintf("PrepareType(%d)", i)
+		return "PrepareType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }

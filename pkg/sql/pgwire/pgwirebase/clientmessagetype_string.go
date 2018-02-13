@@ -2,7 +2,7 @@
 
 package pgwirebase
 
-import "fmt"
+import "strconv"
 
 const (
 	_ClientMessageType_name_0 = "ClientMsgBindClientMsgCloseClientMsgDescribeClientMsgExecute"
@@ -17,13 +17,8 @@ const (
 
 var (
 	_ClientMessageType_index_0 = [...]uint8{0, 13, 27, 44, 60}
-	_ClientMessageType_index_1 = [...]uint8{0, 14}
 	_ClientMessageType_index_2 = [...]uint8{0, 14, 34}
-	_ClientMessageType_index_3 = [...]uint8{0, 13}
-	_ClientMessageType_index_4 = [...]uint8{0, 18}
 	_ClientMessageType_index_5 = [...]uint8{0, 17, 34}
-	_ClientMessageType_index_6 = [...]uint8{0, 17}
-	_ClientMessageType_index_7 = [...]uint8{0, 17}
 )
 
 func (i ClientMessageType) String() string {
@@ -48,6 +43,6 @@ func (i ClientMessageType) String() string {
 	case i == 112:
 		return _ClientMessageType_name_7
 	default:
-		return fmt.Sprintf("ClientMessageType(%d)", i)
+		return "ClientMessageType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }

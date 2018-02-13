@@ -1125,7 +1125,7 @@
     "go/types/typeutil",
     "imports"
   ]
-  revision = "9b61fcc4c548d69663d915801fc4b42a43b6cd9c"
+  revision = "90b807ada4cc7ab5d1409d637b1f3beb5a776be7"
 
 [[projects]]
   branch = "master"
