@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -255,4 +256,24 @@ func formatColList(mem *memo, logicalProps *LogicalProps, cols opt.ColList, tp t
 		}
 		tp.Child(buf.String())
 	}
+}
+
+// IsTupleOfConstants returns true if the expression is a TupleOp with ConstOp
+// children.
+func (ev ExprView) IsTupleOfConstants() bool {
+	if ev.Operator() != opt.TupleOp {
+		return false
+	}
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
+		if child.Operator() != opt.ConstOp {
+			return false
+		}
+	}
+	return true
+}
+
+// IsConstNull returns true if ev is a ConstOp with NULL value.
+func (ev ExprView) IsConstNull() bool {
+	return ev.Operator() == opt.ConstOp && ev.Private() == tree.DNull
 }

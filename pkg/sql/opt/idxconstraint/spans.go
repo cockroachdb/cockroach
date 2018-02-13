@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -162,11 +163,13 @@ func ExactPrefix(spans LogicalSpans, evalCtx *tree.EvalContext) int {
 	}
 }
 
+var _ = ExactPrefix
+
 // IndexColumnInfo encompasses the information for index columns, needed for
 // index constraints.
 type IndexColumnInfo struct {
 	// VarIdx identifies the indexed var that corresponds to this column.
-	VarIdx    int
+	VarIdx    opt.ColumnIndex
 	Typ       types.T
 	Direction encoding.Direction
 	// Nullable should be set to false if this column cannot store NULLs; used
