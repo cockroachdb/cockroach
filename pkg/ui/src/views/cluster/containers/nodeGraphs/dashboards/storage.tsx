@@ -110,5 +110,31 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
       </Axis>
     </LineGraph>,
+
+    <LineGraph
+      title="Time Series Writes"
+      sources={nodeSources}
+      tooltip={
+        `The number of successfully written time series samples, and number of errors attempting
+        to write time series, per second ${tooltipSelection}.`
+      }
+    >
+      <Axis label="count">
+        <Metric name="cr.node.timeseries.write.samples" title="Samples Written" nonNegativeRate />
+        <Metric name="cr.node.timeseries.write.errors" title="Errors" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Time Series Bytes Written"
+      sources={nodeSources}
+      tooltip={
+        `The number of bytes written by the time series system per second ${tooltipSelection}.`
+      }
+    >
+      <Axis units={AxisUnits.Bytes}>
+        <Metric name="cr.node.timeseries.write.bytes" title="Bytes Written" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
   ];
 }
