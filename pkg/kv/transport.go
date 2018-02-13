@@ -253,6 +253,11 @@ func (gt *grpcTransport) send(
 		}
 		reply, err := roachpb.NewInternalClient(conn).Batch(ctx, &client.args)
 		if reply != nil {
+			for i := range reply.Responses {
+				if err := reply.Responses[i].GetInner().Verify(client.args.Requests[i].GetInner()); err != nil {
+					log.Error(ctx, err)
+				}
+			}
 			// Import the remotely collected spans, if any.
 			if len(reply.CollectedSpans) != 0 {
 				span := opentracing.SpanFromContext(ctx)
