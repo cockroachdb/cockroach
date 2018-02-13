@@ -1293,11 +1293,6 @@ func (c *v3Conn) Rd() pgwirebase.BufferedReader {
 	return &pgwireReader{conn: c}
 }
 
-// SendError is part of te pgwirebase.Conn interface.
-func (c *v3Conn) SendError(err error) error {
-	return c.sendError(err)
-}
-
 // SendCommandComplete is part of the pgwirebase.Conn interface.
 func (c *v3Conn) SendCommandComplete(tag []byte) error {
 	return c.sendCommandComplete(tag, &c.streamingState.buf)

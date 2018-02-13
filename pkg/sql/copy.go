@@ -61,8 +61,12 @@ type copyMachine struct {
 	// conn is the pgwire connection from which data is to be read.
 	conn pgwirebase.Conn
 
-	session *Session
-	txnOpt  copyTxnOpt
+	execCfg *ExecutorConfig
+	// resetPlanner is a function to be used to prepare the planner for inserting
+	// data.
+	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time)
+
+	txnOpt copyTxnOpt
 
 	// p is the planner used to plan inserts. preparePlanner() needs to be called
 	// before preparing each new statement.
@@ -79,19 +83,25 @@ type copyMachine struct {
 
 // newCopyMachine creates a new copyMachine.
 func newCopyMachine(
-	ctx context.Context, conn pgwirebase.Conn, s *Session, n *tree.CopyFrom, txnOpt copyTxnOpt,
+	ctx context.Context,
+	conn pgwirebase.Conn,
+	n *tree.CopyFrom,
+	txnOpt copyTxnOpt,
+	execCfg *ExecutorConfig,
+	resetPlanner func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time),
 ) (_ *copyMachine, retErr error) {
-	evalCtx := s.extendedEvalCtx(nil /* txn */, time.Time{} /* txnTimestamp */, time.Time{} /* stmtTimestamp */)
 	c := &copyMachine{
 		conn:    conn,
 		table:   &n.Table,
 		columns: n.Columns,
-		session: s,
 		txnOpt:  txnOpt,
 		// The planner will be prepared before use.
-		p:              planner{},
-		parsingEvalCtx: &evalCtx.EvalContext,
+		p:            planner{},
+		execCfg:      execCfg,
+		resetPlanner: resetPlanner,
 	}
+	c.resetPlanner(&c.p, nil /* txn */, time.Time{} /* txnTS */, time.Time{} /* stmtTS */)
+	c.parsingEvalCtx = c.p.EvalContext()
 
 	cleanup := c.preparePlanner(ctx)
 	defer func() {
@@ -253,15 +263,12 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 	stmtTs := c.txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		txn = client.NewTxn(c.session.execCfg.DB, c.session.execCfg.NodeID.Get(), client.RootTxn)
-		txnTs = c.session.execCfg.Clock.PhysicalTime()
+		txn = client.NewTxn(c.execCfg.DB, c.execCfg.NodeID.Get(), client.RootTxn)
+		txnTs = c.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true
 	}
-	c.session.resetPlanner(
-		&c.p, txn, txnTs, stmtTs,
-		nil /* reCache */, c.session.statsCollector(),
-	)
+	c.resetPlanner(&c.p, txn, txnTs, stmtTs)
 	c.p.autoCommit = autoCommit
 
 	return func(ctx context.Context, err error) error {
