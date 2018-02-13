@@ -23,12 +23,11 @@ interface StatsViewProps {
   maxClientActivityRate?: number;
 }
 
-export class StatsView extends React.Component<StatsViewProps> {
-  static radius = 42;
-  static arcWidth = StatsView.radius * 0.11111;
-  static outerRadius = StatsView.radius + StatsView.arcWidth;
-  static maxRadius = StatsView.outerRadius + StatsView.arcWidth;
+const ARC_INNER_RADIUS = 56;
+const ARC_WIDTH = 6;
+const ARC_OUTER_RADIUS = ARC_INNER_RADIUS + ARC_WIDTH;
 
+export class StatsView extends React.Component<StatsViewProps> {
   renderCapacityArc() {
     // Compute used percentage.
     const usedCapacity = this.props.usedCapacity;
@@ -43,11 +42,11 @@ export class StatsView extends React.Component<StatsViewProps> {
             fill="#3A7DE1"
             strokeLinecap="round"
             d={PathMath.createArcPath(
-              StatsView.innerRadius,
-              StatsView.outerRadius,
+              ARC_INNER_RADIUS,
+              ARC_OUTER_RADIUS,
               PathMath.arcAngleFromPct(0),
               PathMath.arcAngleFromPct(capacityUsedPct / 100),
-              StatsView.arcWidth,
+              ARC_WIDTH,
             )}
           />
           {/* background */}
@@ -56,11 +55,11 @@ export class StatsView extends React.Component<StatsViewProps> {
             strokeLinecap="round"
             opacity={0.35}
             d={PathMath.createArcPath(
-              StatsView.innerRadius,
-              StatsView.outerRadius,
+              ARC_INNER_RADIUS,
+              ARC_OUTER_RADIUS,
               PathMath.arcAngleFromPct(0),
               PathMath.arcAngleFromPct(1),
-              StatsView.arcWidth,
+              ARC_WIDTH,
             )}
           />
         </g>

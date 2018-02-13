@@ -15,6 +15,7 @@ import { generateLocalityRoute, getLocalityLabel, getLeaves } from "src/util/loc
 
 import { StatsView } from "ccl/src/views/clusterviz/containers/map/statsView";
 import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
+import { pluralize } from "src/util/pluralize";
 
 interface LocalityViewProps {
   localityTree: LocalityTree;
@@ -40,6 +41,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
           label={getLocalityLabel(tiers)}
+          subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
         />
       </g>
     );
