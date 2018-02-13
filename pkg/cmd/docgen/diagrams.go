@@ -476,7 +476,10 @@ var specs = []stmtSpec{
 		},
 		unlink: []string{"table_name", "column_name", "column_type", "default_value", "table_constraints"},
 	},
-	{name: "delete_stmt", inline: []string{"relation_expr_opt_alias", "where_clause", "returning_clause", "target_list", "target_elem"}},
+	{
+		name:   "delete_stmt",
+		inline: []string{"relation_expr_opt_alias", "where_clause", "returning_clause", "target_list", "target_elem", "opt_sort_clause", "sort_clause", "opt_limit_clause", "limit_clause"},
+	},
 	{
 		name:   "drop_column",
 		stmt:   "alter_onetable_stmt",
