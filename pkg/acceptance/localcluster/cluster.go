@@ -479,7 +479,7 @@ func (n *Node) StatusClient() serverpb.StatusClient {
 		return existingClient
 	}
 
-	conn, err := n.rpcCtx.GRPCDialRaw(n.RPCAddr())
+	conn, _, err := n.rpcCtx.GRPCDialRaw(n.RPCAddr())
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}

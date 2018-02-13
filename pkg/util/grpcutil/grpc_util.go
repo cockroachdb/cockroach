@@ -30,6 +30,11 @@ import (
 	"google.golang.org/grpc/transport"
 )
 
+// ErrCannotReuseClientConn is returned when a failed connection is
+// being reused. We require that new connections be created with
+// pkg/rpc.GRPCDial instead.
+var ErrCannotReuseClientConn = errors.New("cannot reuse client connection")
+
 type localRequestKey struct{}
 
 // NewLocalRequestContext returns a Context that can be used for local (in-process) requests.
@@ -46,6 +51,9 @@ func IsLocalRequestContext(ctx context.Context) bool {
 // on closed connections.
 func IsClosedConnection(err error) bool {
 	err = errors.Cause(err)
+	if err == ErrCannotReuseClientConn {
+		return true
+	}
 	if s, ok := status.FromError(err); ok {
 		if s.Code() == codes.Canceled ||
 			s.Code() == codes.Unavailable ||
