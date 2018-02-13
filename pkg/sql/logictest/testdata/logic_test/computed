@@ -495,4 +495,6 @@ WHERE table_name = 'x' and generation_expression = ''
 ----
 1
 
-# TODO(justin): adding computed columns.
+# TODO(justin): #22652
+statement error adding a computed column via ALTER not supported
+ALTER TABLE x ADD COLUMN c INT AS (4) STORED
