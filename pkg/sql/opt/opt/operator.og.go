@@ -306,6 +306,12 @@ var ScalarOperators = [...]Operator{
 	FunctionOp,
 }
 
+var ConstValueOperators = [...]Operator{
+	ConstOp,
+	TrueOp,
+	FalseOp,
+}
+
 var BooleanOperators = [...]Operator{
 	TrueOp,
 	FalseOp,
