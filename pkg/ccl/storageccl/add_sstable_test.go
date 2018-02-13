@@ -215,6 +215,21 @@ func runTestDBAddSSTable(ctx context.Context, t *testing.T, db *client.DB, store
 			}
 		}
 	}
+
+	// Invalid key/value entry checksum.
+	{
+		key := engine.MVCCKey{Key: []byte("bb"), Timestamp: hlc.Timestamp{WallTime: 1}}
+		value := roachpb.MakeValueFromString("1")
+		value.InitChecksum([]byte("foo"))
+		data, err := singleKVSSTable(key, value.RawBytes)
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+
+		if err := db.AddSSTable(ctx, "b", "c", data); !testutils.IsError(err, "invalid checksum") {
+			t.Fatalf("expected 'invalid checksum' error got: %+v", err)
+		}
+	}
 }
 
 func randomMVCCKeyValues(rng *rand.Rand, numKVs int) []engine.MVCCKeyValue {
