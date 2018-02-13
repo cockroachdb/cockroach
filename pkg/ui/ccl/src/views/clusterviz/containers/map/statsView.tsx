@@ -78,8 +78,8 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontFamily="Lato-Bold, Lato"
           fontSize="34"
           fontWeight="bold"
-          textAnchor="center"
-          x="70"
+          textAnchor="middle"
+          x="90"
           y="110"
         >
           {Math.round(capacityUsedPct)}%
@@ -90,9 +90,9 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontSize="12"
           fontWeight="bold"
           letterSpacing="1.333"
-          transform="translate(15 8)"
-          x="41"
-          y="124"
+          textAnchor="middle"
+          x="90"
+          y="132"
         >
           CAPACITY
         </text>
