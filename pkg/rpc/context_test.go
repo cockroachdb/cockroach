@@ -377,14 +377,6 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	}
 
 	isUnhealthy := func(err error) bool {
-		// Most of the time, an unhealthy connection will get
-		// ErrNotConnected, but there are brief periods during which we
-		// could get ErrNotHeartbeated (while we're trying to start a new
-		// connection) or one of the grpc errors below (while the old
-		// connection is in the middle of closing).
-		if err == ErrNotConnected || err == ErrNotHeartbeated {
-			return true
-		}
 		// The expected code here is Unavailable, but at least on OSX you can also get
 		//
 		// rpc error: code = Internal desc = connection error: desc = "transport: authentication
@@ -425,16 +417,12 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 		if timeutil.Since(then) > 45*time.Second {
 			t.Fatal(err)
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
 
 	close(done)
 
-	// We can reconnect and the connection becomes healthy again.
+	// Should become healthy again after GRPC reconnects.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background()); err != nil {
-			return err
-		}
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
