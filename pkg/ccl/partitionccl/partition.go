@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -214,6 +215,16 @@ func CreatePartitioning(
 	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
 		return sqlbase.PartitioningDescriptor{},
 			errors.New("cluster version does not support partitioning")
+	}
+
+	// Skip license check if removing partitioning.
+	if partBy == nil {
+		return sqlbase.PartitioningDescriptor{}, nil
+	}
+
+	org := sql.ClusterOrganization.Get(&st.SV)
+	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
+		return sqlbase.PartitioningDescriptor{}, err
 	}
 
 	return createPartitioningImpl(
