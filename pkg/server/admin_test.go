@@ -1050,13 +1050,11 @@ func TestClusterAPI(t *testing.T) {
 		testutils.RunTrueAndFalse(t, "enterpriseOn", func(t *testing.T, enterpriseOn bool) {
 			// Override server license check.
 			if enterpriseOn {
-				oldLicenseCheck := LicenseCheckFn
-				LicenseCheckFn = func(_ *cluster.Settings, _ uuid.UUID, _, _ string) error {
+				old := base.CheckEnterpriseEnabled
+				base.CheckEnterpriseEnabled = func(_ *cluster.Settings, _ uuid.UUID, _, _ string) error {
 					return nil
 				}
-				defer func() {
-					LicenseCheckFn = oldLicenseCheck
-				}()
+				defer func() { base.CheckEnterpriseEnabled = old }()
 			}
 
 			if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.enabled = $1`, reportingOn); err != nil {

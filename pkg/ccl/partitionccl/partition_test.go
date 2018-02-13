@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/pkg/errors"
@@ -1318,4 +1320,60 @@ func TestRepartitioning(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRemovePartitioningExpiredLicense(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
+
+	ctx := context.Background()
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: "d",
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a partitioned table and index.
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY) PARTITION BY LIST (a) (
+		PARTITION	p1 VALUES IN (1)
+	)`)
+	sqlDB.Exec(t, `CREATE INDEX i ON t (a) PARTITION BY RANGE (a) (
+		PARTITION p34 VALUES FROM (3) TO (4)
+	)`)
+	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
+	sqlDB.Exec(t, `ALTER PARTITION p34 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
+	sqlDB.Exec(t, `ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
+	sqlDB.Exec(t, `ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+
+	// Remove the enterprise license.
+	defer utilccl.TestingDisableEnterprise()()
+
+	expectLicenseErr := func(q string) {
+		t.Helper()
+		const expErr = "use of partitions requires an enterprise license"
+		if _, err := sqlDB.DB.Exec(q); !testutils.IsError(err, expErr) {
+			t.Fatalf("expected error %q, but got %+v", expErr, err)
+		}
+	}
+
+	// Partitions and zone configs cannot be modified without a valid license.
+	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
+	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
+	expectLicenseErr(`ALTER PARTITION p1 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER PARTITION p34 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+
+	// But they can be removed.
+	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
+	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY NOTHING`)
+	sqlDB.Exec(t, `ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE NULL`)
+	sqlDB.Exec(t, `ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE NULL`)
+
+	// Once removed, they cannot be added back.
+	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
+	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
+	expectLicenseErr(`ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
 }

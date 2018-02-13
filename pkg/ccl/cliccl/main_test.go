@@ -12,11 +12,13 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
 func TestMain(m *testing.M) {
+	defer utilccl.TestingEnableEnterprise()()
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }

@@ -777,7 +777,24 @@ func (p *planner) finalizeInterleave(
 
 // CreatePartitioning constructs the partitioning descriptor for an index that
 // is partitioned into ranges, each addressable by zone configs.
-var CreatePartitioning = func(
+func CreatePartitioning(
+	ctx context.Context,
+	st *cluster.Settings,
+	evalCtx *tree.EvalContext,
+	tableDesc *sqlbase.TableDescriptor,
+	indexDesc *sqlbase.IndexDescriptor,
+	partBy *tree.PartitionBy,
+) (sqlbase.PartitioningDescriptor, error) {
+	if partBy == nil {
+		// No CCL necessary if we're looking at PARTITION BY NOTHING.
+		return sqlbase.PartitioningDescriptor{}, nil
+	}
+	return CreatePartitioningCCL(ctx, st, evalCtx, tableDesc, indexDesc, partBy)
+}
+
+// CreatePartitioningCCL is the public hook point for the CCL-licensed
+// partitioning creation code.
+var CreatePartitioningCCL = func(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
