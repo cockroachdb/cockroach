@@ -1225,7 +1225,6 @@ func (ts *txnState) updateStateAndCleanupOnErr(err error, e *Executor) error {
 		// Note that TransactionAborted is also a retriable error, handled here;
 		// in this case cleanup for the txn has been done for us under the hood.
 		ts.SetState(RestartWait)
-		ts.mu.txn.ResetDeadline()
 	}
 	return err
 }
