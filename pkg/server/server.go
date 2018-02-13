@@ -338,6 +338,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.registry.AddMetricStruct(s.adminMemMetrics)
 
 	s.tsDB = ts.NewDB(s.db, s.cfg.Settings)
+	s.registry.AddMetricStruct(s.tsDB.Metrics())
 	nodeCountFn := func() int64 {
 		return s.nodeLiveness.Metrics().LiveNodes.Value()
 	}
