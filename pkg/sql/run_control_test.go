@@ -182,6 +182,7 @@ func TestCancelParallelQuery(t *testing.T) {
 // various points of execution.
 func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("#22654")
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
 	cancelQuery := fmt.Sprintf("CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s')", queryToCancel)
 

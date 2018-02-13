@@ -807,6 +807,7 @@ func TestBackupRestoreResume(t *testing.T) {
 // work as intended on backup and restore jobs.
 func TestBackupRestoreControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skipf("#22665")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
