@@ -47,7 +47,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 			return &zeroNode{}, nil
 		}
 		// Key does not exist, but we want it to: error out.
-		return nil, fmt.Errorf("table %q does not exist", tn.Table())
+		return nil, sqlbase.NewUndefinedRelationError(tn)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
