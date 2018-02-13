@@ -1591,6 +1591,9 @@ func EncodeInvertedIndexKeys(
 // a list of buffers per path. The encoded values is guaranteed to be lexicographically sortable, but not
 // guaranteed to be round-trippable during decoding.
 func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
+	if val == tree.DNull {
+		return [][]byte{encoding.EncodeNullAscending(inKey)}, nil
+	}
 	switch t := tree.UnwrapDatum(nil, val).(type) {
 	case *tree.DJSON:
 		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
