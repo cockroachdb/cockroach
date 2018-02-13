@@ -574,8 +574,8 @@ func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp)
 	return false
 }
 
-// ResetDeadline resets the deadline.
-func (txn *Txn) ResetDeadline() {
+// resetDeadline resets the deadline.
+func (txn *Txn) resetDeadline() {
 	txn.deadline = nil
 }
 
@@ -1130,6 +1130,7 @@ func (txn *Txn) UpdateStateOnRemoteRetryableErr(ctx context.Context, pErr *roach
 func (txn *Txn) updateStateOnRetryableErrLocked(
 	ctx context.Context, retryErr *roachpb.HandledRetryableTxnError,
 ) {
+	txn.resetDeadline()
 	newTxn := &retryErr.Transaction
 
 	abortErr := txn.mu.Proto.ID != newTxn.ID
@@ -1198,6 +1199,7 @@ func (txn *Txn) SetFixedTimestamp(ctx context.Context, ts hlc.Timestamp) {
 // unfortunately its callers don't currently have that handy.
 func (txn *Txn) GenerateForcedRetryableError(msg string) error {
 	txn.Proto().Restart(txn.UserPriority(), 0 /* upgradePriority */, txn.Proto().Timestamp)
+	txn.resetDeadline()
 	return roachpb.NewHandledRetryableTxnError(
 		msg,
 		txn.ID(),
