@@ -9,9 +9,36 @@ INSERT INTO t VALUES (1, 10), (2, 20), (3, 30)
 statement ok
 SET EXPERIMENTAL_OPT = ON
 
+# ParenSelect
+query II
+(SELECT * FROM test.t)
+----
+1  10
+2  20
+3  30
+
+# Select
+query error pq: ORDER BY not yet supported: SELECT \* FROM test.t ORDER BY t.k
+SELECT * FROM test.t ORDER BY t.k
+
+# SelectClause
 query II
 SELECT * FROM test.t
 ----
 1 10
 2 20
 3 30
+
+# UnionClause
+query error pq: not yet implemented: select statement: \*tree.UnionClause
+SELECT * FROM test.t UNION SELECT * FROM test.t
+
+# Insert
+statement ok
+INSERT INTO t VALUES (4, 40)
+
+statement ok
+SET EXPERIMENTAL_OPT = ALWAYS
+
+query error pq: unexpected statement: \*tree.Insert
+INSERT INTO test (k, v) VALUES (5, 50)
