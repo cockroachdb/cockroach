@@ -779,7 +779,7 @@ testlogic: ## Run SQL Logic Tests.
 testlogic: pkg/sql/logictest/logictest.test
 
 testccllogic: ## Run SQL CCL Logic Tests.
-testccllogic: pkg/ccl/sqlccl/logictestccl/logictestccl.test
+testccllogic: pkg/ccl/logictestccl/logictestccl.test
 
 testlogic testccllogic: TESTS := Test(CCL)?Logic//$(if $(FILES),^$(subst $(space),$$|^,$(FILES))$$)/$(SUBTESTS)
 testlogic testccllogic: TESTFLAGS := -test.v $(if $(FILES),-show-sql)
