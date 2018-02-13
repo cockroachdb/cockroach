@@ -29,20 +29,13 @@ make build TYPE=release-linux-gnu
 # curl -L https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.LATEST -o cockroach-linux-2.6.32-gnu-amd64
 # chmod +x cockroach-linux-2.6.32-gnu-amd64
 
-make bin/workload
+make bin/roachtest bin/workload
 
-testflags=(
-  -v -slow
-  -clusterid "${TC_BUILD_ID}"
-  -cockroach "$PWD/cockroach-linux-2.6.32-gnu-amd64"
-  -workload "$PWD/bin/workload"
-  -artifacts "$artifacts"
-)
-make test \
-  PKG=./pkg/nightly \
-  TESTFLAGS="$(printf "%q " "${testflags[@]}")" \
-  TESTS="${TESTS:-.}" \
-  TESTTIMEOUT=12h
+bin/roachtest run \
+  --cluster-id "${TC_BUILD_ID}" \
+  --cockroach "$PWD/cockroach-linux-2.6.32-gnu-amd64" \
+  --workload "$PWD/bin/workload" \
+  --artifacts "$artifacts"
 
 # Don't upload test results if not running in TeamCity.
 if [[ "$TC_BUILD_ID" ]]; then

@@ -26,7 +26,7 @@ changed_go_pkgs() {
   git diff --name-only origin/master... -- "pkg/**/*.go" \
     | xargs -rn1 dirname \
     | sort -u \
-    | { while read path; do ls "$path"/*.go &>/dev/null && echo -n "./$path "; done; }
+    | { while read path; do if ls "$path"/*.go &>/dev/null; then echo -n "./$path "; fi; done; }
 }
 
 tc_release_branch() {
