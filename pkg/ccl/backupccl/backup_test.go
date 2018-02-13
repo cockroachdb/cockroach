@@ -1791,7 +1791,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	fullBackup, latestBackup := filepath.Join(dir, "full"), filepath.Join(dir, "latest")
 	sqlDB.Exec(t,
-		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s WITH experimental_revision_history`, ts[2]),
+		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s WITH revision_history`, ts[2]),
 		fullBackup,
 	)
 	sqlDB.Exec(t,
@@ -1801,7 +1801,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	fullTableBackup := filepath.Join(dir, "tbl")
 	sqlDB.Exec(t,
-		fmt.Sprintf(`BACKUP data.bank TO $1 AS OF SYSTEM TIME %s WITH experimental_revision_history`, ts[2]),
+		fmt.Sprintf(`BACKUP data.bank TO $1 AS OF SYSTEM TIME %s WITH revision_history`, ts[2]),
 		fullTableBackup,
 	)
 
@@ -1842,12 +1842,12 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 
 	incBackup := filepath.Join(dir, "inc")
 	sqlDB.Exec(t,
-		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH experimental_revision_history`,
+		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH revision_history`,
 		incBackup, fullBackup,
 	)
 	incTableBackup := filepath.Join(dir, "inctbl")
 	sqlDB.Exec(t,
-		`BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH experimental_revision_history`,
+		`BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH revision_history`,
 		incTableBackup, fullTableBackup,
 	)
 
@@ -1864,7 +1864,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// time-travel.
 			sqlDB.Exec(t,
 				fmt.Sprintf(
-					`RESTORE data.* FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%s'`,
+					`RESTORE data.* FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%s'`,
 					timestamp, name,
 				),
 				fullBackup, incBackup,
@@ -1873,7 +1873,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// backups sometimes behave differently.
 			sqlDB.Exec(t,
 				fmt.Sprintf(
-					`RESTORE data.bank FROM $1, $2 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='%stbl'`,
+					`RESTORE data.bank FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%stbl'`,
 					timestamp, name,
 				),
 				fullTableBackup, incTableBackup,
@@ -1911,7 +1911,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		// to times in the middle.
 		sqlDB.Exec(t, `CREATE DATABASE err`)
 		_, err := sqlDB.DB.Exec(
-			fmt.Sprintf(`RESTORE data.* FROM $1 EXPERIMENTAL AS OF SYSTEM TIME %s WITH into_db='err'`, ts[1]),
+			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[1]),
 			latestBackup,
 		)
 		if !testutils.IsError(err, "incompatible RESTORE timestamp") {
@@ -1944,16 +1944,16 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	postGC := tree.TimestampToDecimal(tc.Server(0).Clock().Now()).String()
 
 	lateFullTableBackup := filepath.Join(dir, "tbl-after-gc")
-	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH experimental_revision_history`, lateFullTableBackup)
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH revision_history`, lateFullTableBackup)
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	if _, err := sqlDB.DB.Exec(
-		fmt.Sprintf(`RESTORE data.bank FROM $1 EXPERIMENTAL AS OF SYSTEM TIME %s`, preGC),
+		fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, preGC),
 		lateFullTableBackup,
 	); !testutils.IsError(err, `BACKUP only has revision history from`) {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.DB.Exec(
-		fmt.Sprintf(`RESTORE data.bank FROM $1 EXPERIMENTAL AS OF SYSTEM TIME %s`, postGC),
+		fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, postGC),
 		lateFullTableBackup,
 	); err != nil {
 		t.Fatal(err)
