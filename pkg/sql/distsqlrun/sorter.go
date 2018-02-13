@@ -170,13 +170,13 @@ func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 
-	if ok, err := s.i.Valid(); err != nil {
-		return nil, s.producerMeta(err)
-	} else if !ok {
-		return s.trailingMetadata()
-	}
-
 	for {
+		if ok, err := s.i.Valid(); err != nil {
+			return nil, s.producerMeta(err)
+		} else if !ok {
+			return s.trailingMetadata()
+		}
+
 		row, err := s.i.Row()
 		if err != nil {
 			return nil, s.producerMeta(err)
