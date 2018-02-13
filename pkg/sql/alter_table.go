@@ -192,6 +192,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 				); err != nil {
 					return err
 				}
+				for _, colName := range d.FromCols {
+					col, _, err := n.tableDesc.FindColumnByName(colName)
+					if err != nil {
+						return err
+					}
+					if err := col.CheckCanBeFKRef(); err != nil {
+						return err
+					}
+				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 				err := params.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
 				if err != nil {

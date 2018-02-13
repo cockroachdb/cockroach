@@ -52,7 +52,7 @@ func cannotWriteToComputedColError(col sqlbase.ColumnDescriptor) error {
 
 func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 	for i := range cols {
-		if cols[i].ComputeExpr != nil {
+		if cols[i].IsComputed() {
 			return cannotWriteToComputedColError(cols[i])
 		}
 	}
@@ -78,7 +78,7 @@ func ProcessComputedColumns(
 	haveComputed := false
 	endOfNonComputed := len(cols)
 	for _, col := range tableDesc.Columns {
-		if col.ComputeExpr != nil {
+		if col.IsComputed() {
 			cols = append(cols, col)
 			haveComputed = true
 		}
