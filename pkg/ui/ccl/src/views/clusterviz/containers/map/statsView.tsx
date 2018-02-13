@@ -13,6 +13,7 @@ import { NodeHistory } from "./nodeHistory";
 import * as PathMath from "./pathmath";
 import localityIcon from "!!raw-loader!assets/localityIcon.svg";
 import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
+import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import { trustIcon } from "src/util/trust";
 
 interface StatsViewProps {
@@ -191,20 +192,10 @@ export class StatsView extends React.Component<StatsViewProps> {
     );
   }
 
-  renderLiveCheckmark() {
+  renderLivenessIcon() {
+    // TODO(vilterp): pipe in real liveness data; add other icons
     return (
-      <g>
-        <g transform="translate(5 5)">
-          <circle fill="#54B30E" cx="8" cy="8" r="8"/>
-          <circle cx="8" cy="8" r="8.5" stroke="#FFF"/>
-        </g>
-        <path
-          stroke="#FFF"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="3" d="M8.81 13.284l2.878 2.879L16.84 9.57"
-        />
-      </g>
+      <g dangerouslySetInnerHTML={trustIcon(liveIcon)} />
     );
   }
 
@@ -227,7 +218,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         {this.renderCPUBar()}
         {this.renderQPS()}
         {this.renderLocalityOrNodeIcon()}
-        {this.renderLiveCheckmark()}
+        {this.renderLivenessIcon()}
       </g>
     );
   }
