@@ -1077,18 +1077,6 @@ func (c *indexConstraintCtx) simplifyFilter(filter *Expr, spans LogicalSpans) *E
 	return remainingFilter
 }
 
-// IndexColumnInfo encompasses the information for index columns, needed for
-// index constraints.
-type IndexColumnInfo struct {
-	// VarIdx identifies the indexed var that corresponds to this column.
-	VarIdx    int
-	Typ       types.T
-	Direction encoding.Direction
-	// Nullable should be set to false if this column cannot store NULLs; used
-	// to keep the spans simple, e.g. [ - /5] instead of (/NULL - /5].
-	Nullable bool
-}
-
 // IndexConstraints is used to generate index constraints from a scalar boolean
 // filter expression.
 //
@@ -1154,4 +1142,10 @@ func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.Typ
 	}
 	c := typedExprConvCtx{ivh: ivh}
 	return scalarToTypedExpr(&c, res)
+}
+
+// isIndexColumn returns true if e is an indexed var that corresponds
+// to index column <offset>.
+func (c *indexConstraintCtx) isIndexColumn(e *Expr, index int) bool {
+	return isIndexedVar(e, c.colInfos[index].VarIdx)
 }
