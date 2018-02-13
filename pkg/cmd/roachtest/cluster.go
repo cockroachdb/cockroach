@@ -17,6 +17,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -190,6 +192,69 @@ type testI interface {
 	Failed() bool
 }
 
+type option interface {
+	option()
+}
+
+type nodeSelector interface {
+	option
+	merge(nodeListOption) nodeListOption
+}
+
+type nodeListOption []int
+
+func (n nodeListOption) option() {}
+
+func (n nodeListOption) merge(o nodeListOption) nodeListOption {
+	t := make(nodeListOption, 0, len(n)+len(o))
+	t = append(t, n...)
+	t = append(t, o...)
+	sort.Ints([]int(t))
+	r := t[:1]
+	for i := 1; i < len(t); i++ {
+		if r[len(r)-1] != t[i] {
+			r = append(r, t[i])
+		}
+	}
+	return r
+}
+
+func (n nodeListOption) String() string {
+	if len(n) == 0 {
+		return ""
+	}
+
+	var buf bytes.Buffer
+	buf.WriteByte(':')
+
+	appendRange := func(start, end int) {
+		if buf.Len() > 1 {
+			buf.WriteByte(',')
+		}
+		if start == end {
+			fmt.Fprintf(&buf, "%d", start)
+		} else {
+			fmt.Fprintf(&buf, "%d-%d", start, end)
+		}
+	}
+
+	start, end := -1, -1
+	for _, i := range n {
+		if start != -1 && end == i-1 {
+			end = i
+			continue
+		}
+		if start != -1 {
+			appendRange(start, end)
+		}
+		start, end = i, i
+	}
+	if start != -1 {
+		appendRange(start, end)
+	}
+	return buf.String()
+}
+
 // cluster provides an interface for interacting with a set of machines,
 // starting and stopping a cockroach cluster on a subset of those machines, and
 // running load generators and other operations on the machines.
@@ -198,15 +263,16 @@ type testI interface {
 // between a test and a subtest is current disallowed (see cluster.assertT). A
 // cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name string
-	t    testI
-	l    *logger
+	name  string
+	nodes int
+	t     testI
+	l     *logger
 }
 
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
 // duration. The default lifetime of 12h is too long for some tests and will be
 // too short for others.
-func newCluster(ctx context.Context, t testI, args ...interface{}) *cluster {
+func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *cluster {
 	var l *logger
 	if local {
 		l = stdLogger(t.Name())
@@ -218,13 +284,14 @@ func newCluster(ctx context.Context, t testI, args ...interface{}) *cluster {
 	}
 
 	c := &cluster{
-		name: makeClusterName(t),
-		t:    t,
-		l:    l,
+		name:  makeClusterName(t),
+		nodes: nodes,
+		t:     t,
+		l:     l,
 	}
 	registerCluster(c.name)
 
-	sargs := []string{"roachprod", "create", c.name}
+	sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(nodes)}
 	for _, arg := range args {
 		sargs = append(sargs, fmt.Sprint(arg))
 	}
@@ -234,6 +301,28 @@ func newCluster(ctx context.Context, t testI, args ...interface{}) *cluster {
 		return nil
 	}
 	return c
+}
+
+// All returns a node list containing all of the nodes in the cluster.
+func (c *cluster) All() nodeListOption {
+	return c.Range(1, c.nodes)
+}
+
+// All returns a node list containing the nodes [begin,end].
+func (c *cluster) Range(begin, end int) nodeListOption {
+	if begin < 1 || end > c.nodes {
+		c.t.Fatalf("invalid node range: %d-%d (1-%d)", begin, end, c.nodes)
+	}
+	r := make(nodeListOption, 0, 1+end-begin)
+	for i := begin; i <= end; i++ {
+		r = append(r, i)
+	}
+	return r
+}
+
+// All returns a node list containing only the node i.
+func (c *cluster) Node(i int) nodeListOption {
+	return c.Range(i, i)
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
@@ -276,7 +365,7 @@ func (c *cluster) Put(ctx context.Context, src, dest string) {
 // Start cockroach nodes on a subset of the cluster. The nodes parameter can
 // either be a specific node, empty (to indicate all nodes), or a pair of nodes
 // indicating a range.
-func (c *cluster) Start(ctx context.Context, nodes ...int) {
+func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
@@ -285,7 +374,7 @@ func (c *cluster) Start(ctx context.Context, nodes ...int) {
 	if c.isLocal() {
 		binary = cockroach
 	}
-	err := execCmd(ctx, c.l, "roachprod", "start", "-b", binary, c.selector(nodes...))
+	err := execCmd(ctx, c.l, "roachprod", "start", "-b", binary, c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -293,12 +382,12 @@ func (c *cluster) Start(ctx context.Context, nodes ...int) {
 
 // Stop cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
-func (c *cluster) Stop(ctx context.Context, nodes ...int) {
+func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	err := execCmd(ctx, c.l, "roachprod", "stop", c.selector(nodes...))
+	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -306,12 +395,12 @@ func (c *cluster) Stop(ctx context.Context, nodes ...int) {
 
 // wipe a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
-func (c *cluster) Wipe(ctx context.Context, nodes ...int) {
+func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	err := execCmd(ctx, c.l, "roachprod", "wipe", c.selector(nodes...))
+	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -343,18 +432,14 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 	}
 }
 
-func (c *cluster) selector(nodes ...int) string {
-	switch len(nodes) {
-	case 0:
-		return c.name
-	case 1:
-		return fmt.Sprintf("%s:%d", c.name, nodes[0])
-	case 2:
-		return fmt.Sprintf("%s:%d-%d", c.name, nodes[0], nodes[1])
-	default:
-		c.t.Fatalf("bad nodes specification: %d", nodes)
-		return ""
+func (c *cluster) makeNodes(opts []option) string {
+	var r nodeListOption
+	for _, o := range opts {
+		if s, ok := o.(nodeSelector); ok {
+			r = s.merge(r)
+		}
 	}
+	return c.name + r.String()
 }
 
 func (c *cluster) expand(s string) string {
@@ -373,14 +458,20 @@ func (c *cluster) isLocal() bool {
 }
 
 type monitor struct {
-	c      *cluster
+	t      testI
+	l      *logger
+	nodes  string
 	ctx    context.Context
 	cancel func()
 	g      *errgroup.Group
 }
 
-func newMonitor(ctx context.Context, c *cluster) *monitor {
-	m := &monitor{c: c}
+func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
+	m := &monitor{
+		t:     c.t,
+		l:     c.l,
+		nodes: c.makeNodes(opts),
+	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.g, m.ctx = errgroup.WithContext(m.ctx)
 	return m
@@ -392,19 +483,19 @@ func (m *monitor) Go(fn func(context.Context) error) {
 	})
 }
 
-func (m *monitor) Wait(nodes ...int) {
-	if m.c.t.Failed() {
+func (m *monitor) Wait() {
+	if m.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
 
-	err := m.wait(nodes, "roachprod", "monitor", m.c.selector(nodes...))
+	err := m.wait("roachprod", "monitor", m.nodes)
 	if err != nil {
-		m.c.t.Fatal(err)
+		m.t.Fatal(err)
 	}
 }
 
-func (m *monitor) wait(nodes []int, args ...string) error {
+func (m *monitor) wait(args ...string) error {
 	// It is surprisingly difficult to get the cancelation semantics exactly
 	// right. We need to watch for the "workers" group (m.g) to finish, or for
 	// the monitor command to emit an unexpected node failure, or for the monitor
@@ -459,7 +550,7 @@ func (m *monitor) wait(nodes []int, args ...string) error {
 			// on the error if the monitoring command exits peacefully.
 		}()
 
-		monL, err := m.c.l.childLogger(`MONITOR`)
+		monL, err := m.l.childLogger(`MONITOR`)
 		if err != nil {
 			setErr(err)
 			return
