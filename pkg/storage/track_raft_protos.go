@@ -32,20 +32,6 @@ func funcName(f interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 }
 
-func forCallers(fn func(runtime.Frame) bool) {
-	var pcs [256]uintptr
-	if numCallers := runtime.Callers(1, pcs[:]); numCallers == len(pcs) {
-		panic(fmt.Sprintf("number of callers %d might have exceeded slice size %d", numCallers, len(pcs)))
-	}
-	frames := runtime.CallersFrames(pcs[:])
-	for {
-		f, more := frames.Next()
-		if !fn(f) || !more {
-			return
-		}
-	}
-}
-
 // TrackRaftProtos instruments proto marshaling to track protos which are
 // marshaled downstream of raft. It returns a function that removes the
 // instrumentation and returns the list of downstream-of-raft protos.
@@ -54,26 +40,13 @@ func TrackRaftProtos() func() []reflect.Type {
 	processRaftFunc := funcName((*Replica).processRaftCommand)
 	// We only need to track protos that could cause replica divergence
 	// by being written to disk downstream of raft.
-	marshalWhitelist := []string{
+	whitelist := []string{
 		// Some raft operations trigger gossip, but we don't require
 		// strict consistency there.
 		funcName((*gossip.Gossip).AddInfoProto),
 		// Replica destroyed errors are written to disk, but they are
 		// deliberately per-replica values.
 		funcName((stateloader.StateLoader).SetReplicaDestroyedError),
-	}
-	// We only need to track checksum computations for values that could
-	// cause replica divergence by being written to disk downstream of raft.
-	checksumWhitelist := []string{
-		// Some raft operations trigger gossip, but we don't require
-		// strict consistency there.
-		funcName((*gossip.Gossip).AddInfo),
-		// Replica destroyed errors are written to disk, but they are
-		// deliberately per-replica values.
-		funcName((stateloader.StateLoader).SetReplicaDestroyedError),
-		// HardState is unreplicated, so we don't require strict
-		// consistency on its value.
-		funcName((stateloader.StateLoader).SetHardState),
 	}
 
 	belowRaftProtos := struct {
@@ -108,41 +81,39 @@ func TrackRaftProtos() func() []reflect.Type {
 			return
 		}
 
-		forCallers(func(f runtime.Frame) bool {
-			for _, s := range marshalWhitelist {
+		var pcs [256]uintptr
+		if numCallers := runtime.Callers(0, pcs[:]); numCallers == len(pcs) {
+			panic(fmt.Sprintf("number of callers %d might have exceeded slice size %d", numCallers, len(pcs)))
+		}
+		frames := runtime.CallersFrames(pcs[:])
+		for {
+			f, more := frames.Next()
+
+			whitelisted := false
+			for _, s := range whitelist {
 				if strings.Contains(f.Function, s) {
-					return false
+					whitelisted = true
+					break
 				}
+			}
+			if whitelisted {
+				break
 			}
 
 			if strings.Contains(f.Function, processRaftFunc) {
 				belowRaftProtos.Lock()
 				belowRaftProtos.inner[t] = struct{}{}
 				belowRaftProtos.Unlock()
-				return false
+				break
 			}
-			return true
-		})
-	}
-
-	roachpb.ChecksumInterceptor = func(v *roachpb.Value) {
-		forCallers(func(f runtime.Frame) bool {
-			for _, s := range checksumWhitelist {
-				if strings.Contains(f.Function, s) {
-					return false
-				}
+			if !more {
+				break
 			}
-
-			if strings.Contains(f.Function, processRaftFunc) {
-				panic(fmt.Sprintf("unexpected below raft checksum computation on value %v", v))
-			}
-			return true
-		})
+		}
 	}
 
 	return func() []reflect.Type {
 		protoutil.Interceptor = func(_ protoutil.Message) {}
-		roachpb.ChecksumInterceptor = func(_ *roachpb.Value) {}
 
 		belowRaftProtos.Lock()
 		types := make([]reflect.Type, 0, len(belowRaftProtos.inner))

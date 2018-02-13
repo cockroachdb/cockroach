@@ -195,7 +195,7 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 			}
 		}
 
-		iter, err := engineccl.NewMemSSTIterator(fileContents)
+		iter, err := engineccl.NewMemSSTIterator(fileContents, false)
 		if err != nil {
 			return nil, err
 		}

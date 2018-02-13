@@ -800,6 +800,9 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 
 	// We can't use GetInfoProto here because that method grabs the lock.
 	if i := g.mu.is.getInfo(nodeIDKey); i != nil {
+		if err := i.Value.Verify([]byte(nodeIDKey)); err != nil {
+			return nil, err
+		}
 		nodeDescriptor := &roachpb.NodeDescriptor{}
 		if err := i.Value.GetProto(nodeDescriptor); err != nil {
 			return nil, err
@@ -862,6 +865,9 @@ func (g *Gossip) GetInfo(key string) ([]byte, error) {
 	g.mu.Unlock()
 
 	if i != nil {
+		if err := i.Value.Verify([]byte(key)); err != nil {
+			return nil, err
+		}
 		return i.Value.GetBytes()
 	}
 	return nil, NewKeyNotPresentError(key)
