@@ -58,6 +58,16 @@ var fixturesStoreCSVServerURL = fixturesStoreCmd.PersistentFlags().String(
 	`csv-server`, ``,
 	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
 
+// gcs-bucket-override and gcs-prefix-override are exposed for testing.
+var gcsBucketOverride, gcsPrefixOverride *string
+
+func init() {
+	gcsBucketOverride = fixturesStoreCmd.PersistentFlags().String(`gcs-bucket-override`, ``, ``)
+	gcsPrefixOverride = fixturesStoreCmd.PersistentFlags().String(`gcs-prefix-override`, ``, ``)
+	_ = fixturesStoreCmd.PersistentFlags().MarkHidden(`gcs-bucket-override`)
+	_ = fixturesStoreCmd.PersistentFlags().MarkHidden(`gcs-prefix-override`)
+}
+
 var fixturesLoadDB = fixturesLoadCmd.PersistentFlags().String(
 	`into-db`, `workload`, `SQL database to load fixture into`)
 
@@ -147,6 +157,12 @@ func fixturesStore(cmd *cobra.Command, gen workload.Generator, crdbURI string) e
 		return err
 	}
 	store := useast1bFixtures
+	if len(*gcsBucketOverride) > 0 {
+		store.GCSBucket = *gcsBucketOverride
+	}
+	if len(*gcsPrefixOverride) > 0 {
+		store.GCSPrefix = *gcsPrefixOverride
+	}
 	store.CSVServerURL = *fixturesStoreCSVServerURL
 	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, store, gen)
 	if err != nil {

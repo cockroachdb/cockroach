@@ -304,7 +304,7 @@ func (c *cluster) Stop(ctx context.Context, nodes ...int) {
 	}
 }
 
-// wipe a subset of the nodes in a cluster. See cluster.Start() for a
+// Wipe a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *cluster) Wipe(ctx context.Context, nodes ...int) {
 	if c.t.Failed() {
@@ -312,6 +312,18 @@ func (c *cluster) Wipe(ctx context.Context, nodes ...int) {
 		return
 	}
 	err := execCmd(ctx, c.l, "roachprod", "wipe", c.selector(nodes...))
+	if err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// SSH runs a command on the specified cluster node.
+func (c *cluster) SSH(ctx context.Context, node int, cmd string) {
+	if c.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return
+	}
+	err := execCmd(ctx, c.l, "roachprod", "ssh", c.selector(node), cmd)
 	if err != nil {
 		c.t.Fatal(err)
 	}
