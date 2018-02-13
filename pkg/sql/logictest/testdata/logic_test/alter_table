@@ -171,7 +171,7 @@ t  primary         PRIMARY KEY          a  NULL
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
 
-statement error column "d" does not exist
+statement error pgcode 42703 column "d" does not exist
 ALTER TABLE t DROP d
 
 statement ok
@@ -628,10 +628,10 @@ a     INT  false NULL    {"primary","foo"}
 b     INT  true  NULL    {"foo"}
 c     INT  true  NULL    {}
 
-statement error relation "nonexistent" does not exist
+statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
 
-statement error relation "nonexistent" does not exist
+statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER INDEX nonexistent@noindex SPLIT AT VALUES (42)
 
 user root

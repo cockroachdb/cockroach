@@ -189,7 +189,7 @@ ALTER TABLE d.kv RENAME TO d.kv2
 statement ok
 INSERT INTO d.kv2 (k,v) VALUES ('e', 'f')
 
-statement error relation \"d.kv\" does not exist
+statement error pgcode 42P01 relation \"d.kv\" does not exist
 INSERT INTO d.kv (k,v) VALUES ('g', 'h')
 
 statement ok
@@ -205,7 +205,7 @@ ALTER DATABASE d RENAME TO dnew
 statement ok
 INSERT INTO dnew.kv (k,v) VALUES ('e', 'f')
 
-statement error relation \"d.kv\" does not exist
+statement error pgcode 42P01 relation \"d.kv\" does not exist
 INSERT INTO d.kv (k,v) VALUES ('g', 'h')
 
 statement ok
@@ -243,7 +243,7 @@ INSERT INTO dd.kv (k,v) VALUES ('a', 'b')
 statement ok
 ROLLBACK
 
-statement error relation "dd\.kv" does not exist
+statement error pgcode 42P01 relation "dd\.kv" does not exist
 INSERT INTO dd.kv (k,v) VALUES ('c', 'd')
 
 # Check that on a rollback a table name cannot be used.
@@ -259,5 +259,5 @@ INSERT INTO d.kv2 (k,v) VALUES ('a', 'b')
 statement ok
 ROLLBACK
 
-statement error relation \"d.kv2\" does not exist
+statement error pgcode 42P01 relation \"d.kv2\" does not exist
 INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')

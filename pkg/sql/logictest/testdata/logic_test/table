@@ -127,16 +127,16 @@ f
 statement ok
 SET DATABASE = ""
 
-query error relation "users" does not exist
+query error pgcode 42P01 relation "users" does not exist
 SHOW COLUMNS FROM users
 
-query error relation "test.users" does not exist
+query error pgcode 42P01 relation "test.users" does not exist
 SHOW COLUMNS FROM test.users
 
-query error relation "users" does not exist
+query error pgcode 42P01 relation "users" does not exist
 SHOW INDEXES FROM users
 
-query error relation "test.users" does not exist
+query error pgcode 42P01 relation "test.users" does not exist
 SHOW INDEXES FROM test.users
 
 statement ok

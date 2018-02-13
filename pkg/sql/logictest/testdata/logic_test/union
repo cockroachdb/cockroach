@@ -221,7 +221,7 @@ SELECT 1 INTERSECT SELECT '3'
 query error EXCEPT types int and string cannot be matched
 SELECT 1 EXCEPT SELECT '3'
 
-query error column z does not exist
+query error pgcode 42703 column \"z\" does not exist
 SELECT 1 UNION SELECT 3 ORDER BY z
 
 query error UNION types int\[] and string\[] cannot be matched

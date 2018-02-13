@@ -1,6 +1,6 @@
 # LogicTest: default parallel-stmts distsql
 
-statement error relation "t" does not exist
+statement error pgcode 42P01 relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t
 -----
 
@@ -111,13 +111,13 @@ EXPERIMENTAL SCRUB TABLE test.fk_parent WITH OPTIONS CONSTRAINT (fkey)
 
 # Test AS OF SYSTEM TIME
 
-statement error relation "xz" does not exist
+statement error pgcode 42P01 relation "xz" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS PHYSICAL
 
-statement error relation "xz" does not exist
+statement error pgcode 42P01 relation "xz" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS INDEX ALL
 
-statement error relation "xz" does not exist
+statement error pgcode 42P01 relation "xz" does not exist
 EXPERIMENTAL SCRUB TABLE xz AS OF SYSTEM TIME '2017' WITH OPTIONS CONSTRAINT ALL
 
 # Test scrubbing sequences.

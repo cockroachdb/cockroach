@@ -286,7 +286,7 @@ SELECT xyzw.y FROM test.xyzw@foo WHERE z = 3
 ----
 2
 
-query error relation "test.unknown" does not exist
+query error pgcode 42P01 relation "test.unknown" does not exist
 SELECT z FROM test.unknown@foo WHERE y = 5
 
 query error index "unknown" not found
