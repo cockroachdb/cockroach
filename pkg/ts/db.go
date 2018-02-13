@@ -18,12 +18,14 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -50,8 +52,9 @@ var Resolution10StoreDuration = settings.RegisterDurationSetting(
 
 // DB provides Cockroach's Time Series API.
 type DB struct {
-	db *client.DB
-	st *cluster.Settings
+	db      *client.DB
+	st      *cluster.Settings
+	metrics *TimeSeriesMetrics
 
 	// pruneAgeByResolution maintains a suggested maximum age per resolution; data
 	// which is older than the given threshold for a resolution is considered
@@ -66,8 +69,9 @@ func NewDB(db *client.DB, settings *cluster.Settings) *DB {
 		resolution1ns: func() int64 { return resolution1nsDefaultPruneThreshold.Nanoseconds() },
 	}
 	return &DB{
-		db: db,
-		st: settings,
+		db:                         db,
+		st:                         settings,
+		metrics:                    NewTimeSeriesMetrics(),
 		pruneThresholdByResolution: pruneThresholdByResolution,
 	}
 }
@@ -157,11 +161,20 @@ func (p *poller) poll() {
 // StoreData writes the supplied time series data to the cockroach server.
 // Stored data will be sampled at the supplied resolution.
 func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSeriesData) error {
-	if !TimeseriesStorageEnabled.Get(&db.st.SV) {
-		return nil
+	if TimeseriesStorageEnabled.Get(&db.st.SV) {
+		if err := db.tryStoreData(ctx, r, data); err != nil {
+			db.metrics.WriteErrors.Inc(1)
+			return err
+		}
 	}
+	return nil
+}
 
+func (db *DB) tryStoreData(ctx context.Context, r Resolution, data []tspb.TimeSeriesData) error {
 	var kvs []roachpb.KeyValue
+	var totalSizeOfKvs int64
+	var totalSamples int64
+	sizeOfTimestamp := int64(unsafe.Sizeof(hlc.Timestamp{}))
 
 	// Process data collection: data is converted to internal format, and a key
 	// is generated for each internal message.
@@ -175,10 +188,13 @@ func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSerie
 			if err := value.SetProto(&idata); err != nil {
 				return err
 			}
+			key := MakeDataKey(d.Name, d.Source, r, idata.StartTimestampNanos)
 			kvs = append(kvs, roachpb.KeyValue{
-				Key:   MakeDataKey(d.Name, d.Source, r, idata.StartTimestampNanos),
+				Key:   key,
 				Value: value,
 			})
+			totalSamples += int64(len(idata.Samples))
+			totalSizeOfKvs += int64(len(value.RawBytes)+len(key)) + sizeOfTimestamp
 		}
 	}
 
@@ -193,7 +209,13 @@ func (db *DB) StoreData(ctx context.Context, r Resolution, data []tspb.TimeSerie
 		})
 	}
 
-	return db.db.Run(ctx, b)
+	if err := db.db.Run(ctx, b); err != nil {
+		return err
+	}
+
+	db.metrics.WriteSamples.Inc(totalSamples)
+	db.metrics.WriteBytes.Inc(totalSizeOfKvs)
+	return nil
 }
 
 // computeThresholds returns a map of timestamps for each resolution supported
@@ -216,4 +238,9 @@ func (db *DB) PruneThreshold(r Resolution) int64 {
 		panic(fmt.Sprintf("no prune threshold found for resolution value %v", r))
 	}
 	return threshold()
+}
+
+// Metrics gets the TimeSeriesMetrics structure used by this DB instance.
+func (db *DB) Metrics() *TimeSeriesMetrics {
+	return db.metrics
 }
