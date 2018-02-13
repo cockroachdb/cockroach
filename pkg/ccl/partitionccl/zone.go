@@ -11,13 +11,16 @@ package partitionccl
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // GenerateSubzoneSpans constructs from a TableDescriptor the entries mapping
@@ -58,9 +61,24 @@ import (
 // slice. As space optimizations, all `Key`s and `EndKey`s of `SubzoneSpan` omit
 // the common prefix (the encoded table ID) and if `EndKey` is equal to
 // `Key.PrefixEnd()` it is omitted.
+//
+// TODO(benesch): remove the hasNewSubzones parameter when a statement to clear
+// all subzones at once is introduced.
 func GenerateSubzoneSpans(
-	tableDesc *sqlbase.TableDescriptor, subzones []config.Subzone,
+	st *cluster.Settings,
+	clusterID uuid.UUID,
+	tableDesc *sqlbase.TableDescriptor,
+	subzones []config.Subzone,
+	hasNewSubzones bool,
 ) ([]config.SubzoneSpan, error) {
+	// Removing zone configs does not require a valid license.
+	if hasNewSubzones {
+		org := sql.ClusterOrganization.Get(&st.SV)
+		if err := utilccl.CheckEnterpriseEnabled(st, clusterID, org, "partitions"); err != nil {
+			return nil, err
+		}
+	}
+
 	a := &sqlbase.DatumAlloc{}
 
 	subzoneIndexByIndexID := make(map[sqlbase.IndexID]int32)

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -201,9 +202,9 @@ func createPartitioningImpl(
 	return partDesc, nil
 }
 
-// CreatePartitioning constructs the partitioning descriptor for an index that
+// createPartitioning constructs the partitioning descriptor for an index that
 // is partitioned into ranges, each addressable by zone configs.
-func CreatePartitioning(
+func createPartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
@@ -214,6 +215,11 @@ func CreatePartitioning(
 	if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
 		return sqlbase.PartitioningDescriptor{},
 			errors.New("cluster version does not support partitioning")
+	}
+
+	org := sql.ClusterOrganization.Get(&st.SV)
+	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
+		return sqlbase.PartitioningDescriptor{}, err
 	}
 
 	return createPartitioningImpl(
@@ -422,5 +428,5 @@ func selectPartitionExprsByName(
 }
 
 func init() {
-	sql.CreatePartitioning = CreatePartitioning
+	sql.CreatePartitioningCCL = createPartitioning
 }

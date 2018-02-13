@@ -44,6 +44,15 @@ func TestingEnableEnterprise() func() {
 	}
 }
 
+// TestingDisableEnterprise allows re-enabling the license check in tests.
+func TestingDisableEnterprise() func() {
+	before := testingEnterpriseEnabled
+	testingEnterpriseEnabled = false
+	return func() {
+		testingEnterpriseEnabled = before
+	}
+}
+
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.

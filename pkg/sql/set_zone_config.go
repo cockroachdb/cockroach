@@ -151,8 +151,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
+	hasNewSubzones := yamlConfig != nil && index != nil
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-		targetID, table, zone, params.extendedEvalCtx.ExecCfg)
+		targetID, table, zone, params.extendedEvalCtx.ExecCfg, hasNewSubzones)
 	return err
 }
 
@@ -169,12 +170,15 @@ func writeZoneConfig(
 	table *sqlbase.TableDescriptor,
 	zone config.ZoneConfig,
 	execCfg *ExecutorConfig,
+	hasNewSubzones bool,
 ) (numAffected int, err error) {
 	if len(zone.Subzones) > 0 {
-		if !execCfg.Settings.Version.IsMinSupported(cluster.VersionPartitioning) {
+		st := execCfg.Settings
+		if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
 			return 0, errors.New("cluster version does not support zone configs on indexes or partitions")
 		}
-		zone.SubzoneSpans, err = GenerateSubzoneSpans(table, zone.Subzones)
+		zone.SubzoneSpans, err = GenerateSubzoneSpans(
+			st, execCfg.ClusterID(), table, zone.Subzones, hasNewSubzones)
 		if err != nil {
 			return 0, err
 		}
