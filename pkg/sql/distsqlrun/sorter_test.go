@@ -111,6 +111,60 @@ func TestSorter(t *testing.T) {
 				{v[3], v[3], v[0]},
 			},
 		}, {
+			name: "SortOffset",
+			// No specified input ordering but specified offset and limit.
+			spec: SorterSpec{
+				OutputOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: asc},
+						{ColIdx: 1, Direction: asc},
+						{ColIdx: 2, Direction: asc},
+					}),
+			},
+			post:  PostProcessSpec{Offset: 2, Limit: 2},
+			types: threeIntCols,
+			input: sqlbase.EncDatumRows{
+				{v[3], v[3], v[0]},
+				{v[3], v[4], v[1]},
+				{v[1], v[0], v[4]},
+				{v[0], v[0], v[0]},
+				{v[4], v[4], v[4]},
+				{v[4], v[4], v[5]},
+				{v[3], v[2], v[0]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[3], v[2], v[0]},
+				{v[3], v[3], v[0]},
+			},
+		}, {
+			name: "SortFilterExpr",
+			// No specified input ordering but specified postprocess filter expression.
+			spec: SorterSpec{
+				OutputOrdering: convertToSpecOrdering(
+					sqlbase.ColumnOrdering{
+						{ColIdx: 0, Direction: asc},
+						{ColIdx: 1, Direction: asc},
+						{ColIdx: 2, Direction: asc},
+					}),
+			},
+			post:  PostProcessSpec{Filter: Expression{Expr: "@1 + @2 < 7"}},
+			types: threeIntCols,
+			input: sqlbase.EncDatumRows{
+				{v[3], v[3], v[0]},
+				{v[3], v[4], v[1]},
+				{v[1], v[0], v[4]},
+				{v[0], v[0], v[0]},
+				{v[4], v[4], v[4]},
+				{v[4], v[4], v[5]},
+				{v[3], v[2], v[0]},
+			},
+			expected: sqlbase.EncDatumRows{
+				{v[0], v[0], v[0]},
+				{v[1], v[0], v[4]},
+				{v[3], v[2], v[0]},
+				{v[3], v[3], v[0]},
+			},
+		}, {
 			name: "SortMatchOrderingNoLimit",
 			// Specified match ordering length but no specified limit.
 			spec: SorterSpec{
