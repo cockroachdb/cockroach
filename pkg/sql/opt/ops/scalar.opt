@@ -22,7 +22,7 @@ define Variable {
 
 # Const is a typed scalar constant value. The private field is a tree.Datum
 # value having any datum type that's legal in the expression's context.
-[Scalar]
+[Scalar, ConstValue]
 define Const {
     Value Datum
 }
@@ -30,14 +30,14 @@ define Const {
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
 # value. It is a separate operator to make matching and replacement simpler and
 # more efficient, as patterns can contain (True) expressions.
-[Scalar, Boolean]
+[Scalar, Boolean, ConstValue]
 define True {
 }
 
 # False is the boolean false value that is equivalent to the tree.DBoolFalse
 # datum value. It is a separate operator to make matching and replacement
 # simpler and more efficient, as patterns can contain (False) expressions.
-[Scalar, Boolean]
+[Scalar, Boolean, ConstValue]
 define False {
 }
 
