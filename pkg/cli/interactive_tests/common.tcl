@@ -102,11 +102,7 @@ proc stop_server {argv} {
     # Trigger a normal shutdown.
     system "$argv quit"
     # If after 5 seconds the server hasn't shut down, trigger an error.
-
-    ## Re-enable this once issue #22536 is fixed.
-    # system "for i in `seq 1 5`; do kill -CONT `cat server_pid` 2>/dev/null || exit 0; echo still waiting; sleep 1; done; echo 'server still running?'; exit 0"
-    # Until #22536 is fixed use a violent kill.
-    system "for i in `seq 1 5`; do kill -CONT `cat server_pid` 2>/dev/null || exit 0; echo still waiting; sleep 1; done; echo 'server still running?'; kill -9 `cat server_pid`; exit 0"
+    system "for i in `seq 1 5`; do kill -CONT `cat server_pid` 2>/dev/null || exit 0; echo still waiting; sleep 1; done; echo 'server still running?'; exit 0"
 
     report "END STOP SERVER"
 }
