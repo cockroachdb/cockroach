@@ -37,6 +37,7 @@ const LIGHT_TEXT_BLUE = "#85A7E3";
 const DARK_BLUE = "#152849";
 
 const STATS_BARS_WIDTH_PX = 69;
+const STATS_BAR_OFFSET_PX = 36;
 
 export class StatsView extends React.Component<StatsViewProps> {
   renderCapacityArc() {
@@ -143,8 +144,20 @@ export class StatsView extends React.Component<StatsViewProps> {
         >
           XX%
         </text>
-        <rect x="37" y="-9" width={STATS_BARS_WIDTH_PX} height="10" fill={BACKGROUND_BLUE} />
-        <rect x="37" y="-6" width="40" height="4" fill={MAIN_BLUE} />
+        <rect
+          x={STATS_BAR_OFFSET_PX}
+          y="-9"
+          width={STATS_BARS_WIDTH_PX}
+          height="10"
+          fill={BACKGROUND_BLUE}
+        />
+        <rect
+          x={STATS_BAR_OFFSET_PX}
+          y="-6"
+          width="40"
+          height="4"
+          fill={MAIN_BLUE}
+        />
       </g>
     );
   }
@@ -177,7 +190,7 @@ export class StatsView extends React.Component<StatsViewProps> {
   renderQPSSparkline() {
     // TODO(vilterp): replace this with the real sparkline
     return (
-      <g transform="translate(36 -9)">
+      <g transform={`translate(${STATS_BAR_OFFSET_PX} -9)`}>
         <rect x="0" y="0" width={STATS_BARS_WIDTH_PX} height="10" fill={BACKGROUND_BLUE} />
         <path
           stroke={MAIN_BLUE}
