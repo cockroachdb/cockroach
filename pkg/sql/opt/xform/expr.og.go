@@ -1934,6 +1934,89 @@ var isScalarLookup = [...]bool{
 	false, // PresentOp
 }
 
+var isConstValueLookup = [...]bool{
+	false, // UnknownOp
+
+	false, // SubqueryOp
+	false, // VariableOp
+	true,  // ConstOp
+	true,  // TrueOp
+	true,  // FalseOp
+	false, // PlaceholderOp
+	false, // TupleOp
+	false, // ProjectionsOp
+	false, // AggregationsOp
+	false, // GroupingsOp
+	false, // ExistsOp
+	false, // AndOp
+	false, // OrOp
+	false, // NotOp
+	false, // EqOp
+	false, // LtOp
+	false, // GtOp
+	false, // LeOp
+	false, // GeOp
+	false, // NeOp
+	false, // InOp
+	false, // NotInOp
+	false, // LikeOp
+	false, // NotLikeOp
+	false, // ILikeOp
+	false, // NotILikeOp
+	false, // SimilarToOp
+	false, // NotSimilarToOp
+	false, // RegMatchOp
+	false, // NotRegMatchOp
+	false, // RegIMatchOp
+	false, // NotRegIMatchOp
+	false, // IsOp
+	false, // IsNotOp
+	false, // ContainsOp
+	false, // BitandOp
+	false, // BitorOp
+	false, // BitxorOp
+	false, // PlusOp
+	false, // MinusOp
+	false, // MultOp
+	false, // DivOp
+	false, // FloorDivOp
+	false, // ModOp
+	false, // PowOp
+	false, // ConcatOp
+	false, // LShiftOp
+	false, // RShiftOp
+	false, // FetchValOp
+	false, // FetchTextOp
+	false, // FetchValPathOp
+	false, // FetchTextPathOp
+	false, // UnaryPlusOp
+	false, // UnaryMinusOp
+	false, // UnaryComplementOp
+	false, // FunctionOp
+	false, // ScanOp
+	false, // ValuesOp
+	false, // SelectOp
+	false, // ProjectOp
+	false, // InnerJoinOp
+	false, // LeftJoinOp
+	false, // RightJoinOp
+	false, // FullJoinOp
+	false, // SemiJoinOp
+	false, // AntiJoinOp
+	false, // InnerJoinApplyOp
+	false, // LeftJoinApplyOp
+	false, // RightJoinApplyOp
+	false, // FullJoinApplyOp
+	false, // SemiJoinApplyOp
+	false, // AntiJoinApplyOp
+	false, // GroupByOp
+	false, // UnionOp
+	false, // IntersectOp
+	false, // ExceptOp
+	false, // SortOp
+	false, // PresentOp
+}
+
 var isBooleanLookup = [...]bool{
 	false, // UnknownOp
 
@@ -2600,6 +2683,10 @@ var isEnforcerLookup = [...]bool{
 
 func (ev ExprView) IsScalar() bool {
 	return isScalarLookup[ev.op]
+}
+
+func (ev ExprView) IsConstValue() bool {
+	return isConstValueLookup[ev.op]
 }
 
 func (ev ExprView) IsBoolean() bool {
