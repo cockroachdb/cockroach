@@ -1071,6 +1071,15 @@ func MakeTableDesc(
 			desc.Checks = append(desc.Checks, ck)
 
 		case *tree.ForeignKeyConstraintTableDef:
+			for _, col := range d.FromCols {
+				col, _, err := desc.FindColumnByName(col)
+				if err != nil {
+					return desc, err
+				}
+				if err := col.CheckCanBeFKRef(); err != nil {
+					return desc, err
+				}
+			}
 			if err := resolveFK(ctx, txn, vt, &desc, d, affected, sqlbase.ConstraintValidity_Validated); err != nil {
 				return desc, err
 			}
@@ -1253,7 +1262,7 @@ func validateComputedColumn(
 	dependencies := make(map[string]struct{})
 	// First, check that no column in the expression is a computed column.
 	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c sqlbase.ColumnDescriptor) error {
-		if c.ComputeExpr != nil {
+		if c.IsComputed() {
 			return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
 				"computed columns cannot reference other computed columns")
 		}
