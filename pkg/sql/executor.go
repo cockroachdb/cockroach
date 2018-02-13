@@ -1688,7 +1688,20 @@ func (e *Executor) execStmtInOpenTxn(
 				stmtTimestamp: e.cfg.Clock.PhysicalTime(),
 			}
 		}
-		cm, err := newCopyMachine(session.Ctx(), session.conn, session, s, txnOpt)
+		cm, err := newCopyMachine(
+			session.Ctx(), session.conn,
+			s,
+			txnOpt,
+			&e.cfg,
+			// resetPlanner
+			func(p *planner, txn *client.Txn) {
+				// We're not passing timestamp below; the copyMachine doesn't create
+				// statements that need them.
+				session.resetPlanner(
+					p, txn, time.Time{} /* txnTs */, time.Time{}, /* stmtTs */
+					nil /* reCache */, session.statsCollector())
+			},
+		)
 		if err != nil {
 			return err
 		}
