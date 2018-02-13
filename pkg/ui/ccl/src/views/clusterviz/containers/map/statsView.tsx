@@ -208,15 +208,12 @@ export class StatsView extends React.Component<StatsViewProps> {
     );
   }
 
-  renderLocalityIcon() {
+  renderLocalityOrNodeIcon() {
+    const icon = this.props.isLocality
+      ? <g dangerouslySetInnerHTML={trustIcon(localityIcon)} />
+      : <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} />;
     return (
-      <g dangerouslySetInnerHTML={trustIcon(localityIcon)} transform="translate(14 14)" />
-    );
-  }
-
-  renderNodeIcon() {
-    return (
-      <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
+      <g transform="translate(14 14)">{icon}</g>
     );
   }
 
@@ -229,7 +226,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         {this.renderLabel()}
         {this.renderCPUBar()}
         {this.renderQPS()}
-        {this.props.isLocality ? this.renderLocalityIcon() : this.renderNodeIcon()}
+        {this.renderLocalityOrNodeIcon()}
         {this.renderLiveCheckmark()}
       </g>
     );
