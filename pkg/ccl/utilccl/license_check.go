@@ -11,8 +11,8 @@ package utilccl
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -44,6 +44,15 @@ func TestingEnableEnterprise() func() {
 	}
 }
 
+// TestingDisableEnterprise allows re-enabling the license check in tests.
+func TestingDisableEnterprise() func() {
+	before := testingEnterpriseEnabled
+	testingEnterpriseEnabled = false
+	return func() {
+		testingEnterpriseEnabled = before
+	}
+}
+
 // CheckEnterpriseEnabled returns a non-nil error if the requested enterprise
 // feature is not enabled, including information or a link explaining how to
 // enable it.
@@ -55,8 +64,8 @@ func CheckEnterpriseEnabled(st *cluster.Settings, cluster uuid.UUID, org, featur
 }
 
 func init() {
-	server.LicenseCheckFn = CheckEnterpriseEnabled
-	server.LicenseTypeFn = getLicenseType
+	base.CheckEnterpriseEnabled = CheckEnterpriseEnabled
+	base.LicenseType = getLicenseType
 }
 
 func checkEnterpriseEnabledAt(
