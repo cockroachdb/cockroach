@@ -15,8 +15,7 @@
 package sql
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -197,7 +196,7 @@ func makePredicate(
 			// First, check if the comparison would even be valid.
 			_, found := tree.FindEqualComparisonFunction(uc.leftType, uc.rightType)
 			if !found {
-				return nil, fmt.Errorf(
+				return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"JOIN/USING types %s for left and %s for right cannot be matched for column %s",
 					uc.leftType, uc.rightType, uc.name,
 				)
@@ -331,7 +330,8 @@ func makeUsingColumns(
 	for _, syntaxColName := range usingColNames {
 		colName := string(syntaxColName)
 		if _, ok := seenNames[colName]; ok {
-			return nil, fmt.Errorf("column %q appears more than once in USING clause", colName)
+			return nil, pgerror.NewErrorf(pgerror.CodeDuplicateColumnError,
+				"column %q appears more than once in USING clause", colName)
 		}
 		seenNames[colName] = struct{}{}
 	}
@@ -372,7 +372,8 @@ func pickUsingColumn(
 		}
 	}
 	if idx == invalidColIdx {
-		return idx, nil, fmt.Errorf("column \"%s\" specified in USING clause does not exist in %s table", colName, context)
+		return idx, nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+			"column \"%s\" specified in USING clause does not exist in %s table", colName, context)
 	}
 	return idx, cols[idx].Typ, nil
 }
