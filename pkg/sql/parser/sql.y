@@ -1525,9 +1525,9 @@ restore_stmt:
   {
     $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), Options: $5.kvOptions()}
   }
-| RESTORE targets FROM string_or_placeholder_list EXPERIMENTAL as_of_clause opt_with_options
+| RESTORE targets FROM string_or_placeholder_list as_of_clause opt_with_options
   {
-    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $6.asOfClause(), Options: $7.kvOptions()}
+    $$.val = &tree.Restore{Targets: $2.targetList(), From: $4.exprs(), AsOf: $5.asOfClause(), Options: $6.kvOptions()}
   }
 | RESTORE error // SHOW HELP: RESTORE
 

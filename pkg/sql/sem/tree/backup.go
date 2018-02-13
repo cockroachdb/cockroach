@@ -62,7 +62,7 @@ func (node *Restore) Format(ctx *FmtCtx) {
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(&node.From)
 	if node.AsOf.Expr != nil {
-		ctx.WriteString(" EXPERIMENTAL ")
+		ctx.WriteString(" ")
 		ctx.FormatNode(&node.AsOf)
 	}
 	if node.Options != nil {
