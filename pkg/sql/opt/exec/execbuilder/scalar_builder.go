@@ -85,7 +85,7 @@ func (b *Builder) buildVariable(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 }
 
 func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
-	if isTupleOfConstants(ev) {
+	if xform.MatchesTupleOfConstants(ev) {
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := 0; i < ev.ChildCount(); i++ {
 			child := ev.Child(i)
@@ -152,17 +152,4 @@ func (b *Builder) buildBinary(ctx *buildScalarCtx, ev xform.ExprView) tree.Typed
 		b.buildScalar(ctx, ev.Child(1)),
 		ev.Logical().Scalar.Type,
 	)
-}
-
-func isTupleOfConstants(ev xform.ExprView) bool {
-	if ev.Operator() != opt.TupleOp {
-		return false
-	}
-	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		if child.Operator() != opt.ConstOp {
-			return false
-		}
-	}
-	return true
 }

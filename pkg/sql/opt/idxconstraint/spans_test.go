@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -162,7 +163,8 @@ func TestIntersectSpan(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -313,7 +315,8 @@ func TestMergeSpanSets(t *testing.T) {
 		},
 	}
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -376,7 +379,8 @@ expected: %v
 func TestIsSpanSubset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 
 	rng, _ := randutil.NewPseudoRand()
 	for n := 0; n < 500; n++ {
