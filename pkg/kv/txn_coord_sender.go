@@ -977,9 +977,11 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 	var closer <-chan struct{}
 	{
 		tc.mu.Lock()
-		tc.mu.txnEnd = make(chan struct{})
 		closer = tc.mu.txnEnd
 		tc.mu.Unlock()
+		if closer == nil {
+			return
+		}
 	}
 	// Loop with ticker for periodic heartbeats.
 	for {
@@ -1298,6 +1300,9 @@ func (tc *TxnCoordSender) updateState(
 
 				// Only heartbeat the txn record if we're the root transaction.
 				if tc.typ == client.RootTxn {
+					// Create a channel to stop the heartbeat with the lock held
+					// to avoid a race between the async task and a subsequent commit.
+					tc.mu.txnEnd = make(chan struct{})
 					if err := tc.stopper.RunAsyncTask(
 						ctx, "kv.TxnCoordSender: heartbeat loop", func(ctx context.Context) {
 							tc.heartbeatLoop(ctx)
