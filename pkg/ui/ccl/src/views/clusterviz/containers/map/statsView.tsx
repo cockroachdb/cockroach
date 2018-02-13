@@ -68,10 +68,24 @@ export class StatsView extends React.Component<StatsViewProps> {
         </g>
 
         {/* text inside arc */}
-        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="34" fontWeight="bold" transform="translate(83 8)" textAnchor="end">
+        <text
+          fill="#3A7DE1"
+          fontFamily="Lato-Bold, Lato"
+          fontSize="34"
+          fontWeight="bold"
+          transform="translate(83 8)"
+          textAnchor="end"
+        >
           <tspan x="41.129" y="105">{Math.round(capacityUsedPct)}%</tspan>
         </text>
-        <text fill="#152849" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="bold" letterSpacing="1.333" transform="translate(15 8)">
+        <text
+          fill="#152849"
+          fontFamily="Lato-Bold, Lato"
+          fontSize="12"
+          fontWeight="bold"
+          letterSpacing="1.333"
+          transform="translate(15 8)"
+        >
           <tspan x="41.088" y="124">CAPACITY</tspan>
         </text>
 
@@ -104,10 +118,22 @@ export class StatsView extends React.Component<StatsViewProps> {
   renderCPUBar() {
     return (
       <g>
-        <text fill="#152849" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="bold" transform="translate(15 8)">
+        <text
+          fill="#152849"
+          fontFamily="Lato-Bold, Lato"
+          fontSize="12"
+          fontWeight="bold"
+          transform="translate(15 8)"
+        >
           <tspan x="4.718" y="170">CPU</tspan>
         </text>
-        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="700" transform="translate(15 8)">
+        <text
+          fill="#3A7DE1"
+          fontFamily="Lato-Bold, Lato"
+          fontSize="12"
+          fontWeight="700"
+          transform="translate(15 8)"
+        >
           <tspan x="123" y="170">XX%</tspan>
         </text>
         <path fill="#3A7DE1" d="M56 169h69v10H56z" opacity=".35"/>
@@ -119,18 +145,36 @@ export class StatsView extends React.Component<StatsViewProps> {
   renderQPS() {
     return (
       <g>
-        <text fill="#152849" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="bold" transform="translate(15 8)">
+        <text
+          fill="#152849"
+          fontFamily="Lato-Bold, Lato"
+          fontSize="12"
+          fontWeight="bold"
+          transform="translate(15 8)"
+        >
           <tspan x="5.468" y="189">QPS</tspan>
         </text>
-        <text fill="#3A7DE1" fontFamily="Lato-Bold, Lato" fontSize="12" fontWeight="700" transform="translate(15 8)">
+        <text
+          fill="#3A7DE1"
+          fontFamily="Lato-Bold, Lato"
+          fontSize="12"
+          fontWeight="700"
+          transform="translate(15 8)"
+        >
           <tspan x="123" y="189">XXXX</tspan>
         </text>
+        {/* TODO(vilterp): replace this with the sparkline */}
         <g transform="translate(56 188)">
           <mask fill="#fff">
             <path d="M0 0h69v10H0z"/>
           </mask>
           <path fill="#3A7DE1" opacity=".35" d="M0 0h69v10H0z"/>
-          <path stroke="#3A7DE1" strokeWidth="2" d="M-.838 4.29l5.819 3.355L10.984 9l4.429-3.04 5.311 1.685L26.178 2l5.397 7 5.334-3.04h10.656l6.037-.331L57.625 2l4.402 3.922 7.898-2.683" mask="url(#e)"/>
+          <path
+            stroke="#3A7DE1"
+            strokeWidth="2"
+            d="M-.838 4.29l5.819 3.355L10.984 9l4.429-3.04 5.311 1.685L26.178 2l5.397 7 5.334-3.04h10.656l6.037-.331L57.625 2l4.402 3.922 7.898-2.683"
+            mask="url(#e)"
+          />
         </g>
       </g>
     );
@@ -143,7 +187,12 @@ export class StatsView extends React.Component<StatsViewProps> {
           <circle fill="#54B30E" cx="8" cy="8" r="8"/>
           <circle cx="8" cy="8" r="8.5" stroke="#FFF"/>
         </g>
-        <path stroke="#FFF" strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M8.81 13.284l2.878 2.879L16.84 9.57"/>
+        <path
+          stroke="#FFF"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="3" d="M8.81 13.284l2.878 2.879L16.84 9.57"
+        />
       </g>
     );
   }
@@ -162,7 +211,9 @@ export class StatsView extends React.Component<StatsViewProps> {
 
   render() {
     return (
-      <g fill="none" fillRule="evenodd" transform="translate(-90 -100)">
+      // TODO(vilterp): surprisingly, it doesn't render correctly without the fill: none.
+      // would like to remove this; need to figure out what's going on.
+      <g fill="none" transform="translate(-90 -100)">
         {this.renderCapacityArc()}
         {this.renderLabel()}
         {this.renderCPUBar()}
