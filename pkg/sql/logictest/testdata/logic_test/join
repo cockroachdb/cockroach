@@ -568,16 +568,16 @@ SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS 
  44  44  44  51  51  51
  45  45  45  45  45  45
 
-query error column "y" specified in USING clause does not exist
+query error pgcode 42703 column "y" specified in USING clause does not exist
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(y))
 
-query error column "x" appears more than once in USING clause
+query error pgcode 42701 column "x" appears more than once in USING clause
 SELECT * FROM (onecolumn AS a JOIN onecolumn AS b USING(x, x))
 
 statement ok
 CREATE TABLE othertype (x TEXT)
 
-query error JOIN/USING types.*cannot be matched
+query error pgcode 42804 JOIN/USING types.*cannot be matched
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
 
 query error cannot join columns from the same source name "onecolumn"
