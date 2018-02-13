@@ -164,13 +164,13 @@ test
 query error database "d1" does not exist
 SELECT * FROM d1.v2
 
-query error relation "d2.v2" does not exist
+query error pgcode 42P01 relation "d2.v2" does not exist
 SELECT * FROM d2.v2
 
-query error relation "d2.v3" does not exist
+query error pgcode 42P01 relation "d2.v3" does not exist
 SELECT * FROM d2.v3
 
-query error relation "d2.v4" does not exist
+query error pgcode 42P01 relation "d2.v4" does not exist
 SELECT * FROM d2.v4
 
 query TT

@@ -1,6 +1,6 @@
 # LogicTest: default parallel-stmts distsql
 
-statement error relation "t" does not exist
+statement error pgcode 42P01 relation "t" does not exist
 EXPERIMENTAL SCRUB TABLE t
 -----
 

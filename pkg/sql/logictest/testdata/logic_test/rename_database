@@ -35,7 +35,7 @@ SELECT * FROM kv
 statement ok
 ALTER DATABASE test RENAME TO u
 
-statement error relation "kv" does not exist
+statement error pgcode 42P01 relation "kv" does not exist
 SELECT * FROM kv
 
 statement error database "test" does not exist

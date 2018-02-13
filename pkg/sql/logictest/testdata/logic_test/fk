@@ -18,7 +18,7 @@ CREATE TABLE missing (product STRING REFERENCES productz)
 statement error referenced table "customerz" not found
 CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 
-statement error column "idz" does not exist
+statement error pgcode 42703 column "idz" does not exist
 CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 
 statement ok

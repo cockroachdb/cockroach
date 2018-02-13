@@ -345,7 +345,7 @@ SELECT k, v FROM kv ORDER BY k
 statement ok
 BEGIN
 
-statement error column "z" does not exist
+statement error pgcode 42703 column "z" does not exist
 UPDATE kv SET z = 10 WHERE k = 3 RETURNING NOTHING
 
 statement ok

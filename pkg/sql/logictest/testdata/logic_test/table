@@ -133,7 +133,7 @@ SHOW COLUMNS FROM users
 query error database "foo" does not exist
 SHOW COLUMNS FROM foo.users
 
-query error relation "test.users" does not exist
+query error pgcode 42P01 relation "test.users" does not exist
 SHOW COLUMNS FROM test.users
 
 query error no database specified
@@ -142,7 +142,7 @@ SHOW INDEXES FROM users
 query error database "foo" does not exist
 SHOW INDEXES FROM foo.users
 
-query error relation "test.users" does not exist
+query error pgcode 42P01 relation "test.users" does not exist
 SHOW INDEXES FROM test.users
 
 statement ok

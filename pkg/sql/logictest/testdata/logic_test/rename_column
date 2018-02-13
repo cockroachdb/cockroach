@@ -25,7 +25,7 @@ ALTER TABLE users RENAME COLUMN title TO name
 statement error empty column name
 ALTER TABLE users RENAME COLUMN title TO ""
 
-statement error column "ttle" does not exist
+statement error pgcode 42703 column "ttle" does not exist
 ALTER TABLE users RENAME COLUMN ttle TO species
 
 statement error pgcode 42P01 relation "uses" does not exist

@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -158,10 +157,7 @@ func (p *planner) distinct(
 		}
 
 		if index == -1 {
-			return nil, nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedColumnError,
-				"column %s does not exist", expr,
-			)
+			return nil, nil, sqlbase.NewUndefinedColumnError(expr.String())
 		}
 
 		d.distinctOnColIdxs.Add(index)

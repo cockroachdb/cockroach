@@ -150,6 +150,11 @@ func IsUndefinedRelationError(err error) bool {
 	return errHasCode(err, pgerror.CodeUndefinedTableError)
 }
 
+// NewUndefinedColumnError creates an error that represents a missing database column.
+func NewUndefinedColumnError(name string) error {
+	return pgerror.NewErrorf(pgerror.CodeUndefinedColumnError, "column %q does not exist", name)
+}
+
 // NewDatabaseAlreadyExistsError creates an error for a preexisting database.
 func NewDatabaseAlreadyExistsError(name string) error {
 	return pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError, "database %q already exists", name)

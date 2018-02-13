@@ -138,7 +138,7 @@ test
 statement ok
 CREATE DATABASE b
 
-statement error relation "b.a" does not exist
+statement error pgcode 42P01 relation "b.a" does not exist
 SELECT * FROM b.a
 
 statement ok

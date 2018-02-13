@@ -232,19 +232,19 @@ system    zones             root       SELECT
 system    zones             root       UPDATE
 test      NULL              root       ALL
 
-statement error relation "a.t" does not exist
+statement error pgcode 42P01 relation "a.t" does not exist
 SHOW GRANTS ON a.t
 
-statement error relation "t" does not exist
+statement error pgcode 42P01 relation "t" does not exist
 SHOW GRANTS ON t
 
 statement ok
 SET DATABASE = a
 
-statement error relation "t" does not exist
+statement error pgcode 42P01 relation "t" does not exist
 SHOW GRANTS ON t
 
-statement error relation "a.t" does not exist
+statement error pgcode 42P01 relation "a.t" does not exist
 GRANT ALL ON a.t TO readwrite
 
 statement ok
@@ -517,7 +517,7 @@ GRANT ALL ON a.t@xyz TO readwrite
 statement error pq: no database specified: *
 GRANT ALL ON * TO readwrite
 
-statement error relation "a.tt" does not exist
+statement error pgcode 42P01 relation "a.tt" does not exist
 GRANT ALL ON a.t, a.tt TO readwrite
 
 # '*' doesn't work for databases.
