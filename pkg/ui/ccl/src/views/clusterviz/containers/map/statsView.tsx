@@ -36,6 +36,8 @@ const BACKGROUND_BLUE = "#B8CCEC";
 const LIGHT_TEXT_BLUE = "#85A7E3";
 const DARK_BLUE = "#152849";
 
+const STATS_BARS_WIDTH_PX = 69;
+
 export class StatsView extends React.Component<StatsViewProps> {
   renderCapacityArc() {
     // Compute used percentage.
@@ -123,7 +125,7 @@ export class StatsView extends React.Component<StatsViewProps> {
 
   renderCPUBar() {
     return (
-      <g transform="translate(19 178)">
+      <g>
         <text
           fill={DARK_BLUE}
           fontFamily="Lato-Bold, Lato"
@@ -141,7 +143,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         >
           XX%
         </text>
-        <rect x="37" y="-9" width="69" height="10" fill={BACKGROUND_BLUE} />
+        <rect x="37" y="-9" width={STATS_BARS_WIDTH_PX} height="10" fill={BACKGROUND_BLUE} />
         <rect x="37" y="-6" width="40" height="4" fill={MAIN_BLUE} />
       </g>
     );
@@ -149,14 +151,12 @@ export class StatsView extends React.Component<StatsViewProps> {
 
   renderQPS() {
     return (
-      <g>
+      <g transform="translate(0 19)">
         <text
           fill={DARK_BLUE}
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="bold"
-          x="20"
-          y="197"
         >
           QPS
         </text>
@@ -165,8 +165,7 @@ export class StatsView extends React.Component<StatsViewProps> {
           fontFamily="Lato-Bold, Lato"
           fontSize="12"
           fontWeight="700"
-          x="138"
-          y="197"
+          x="118"
         >
           XXXX
         </text>
@@ -176,15 +175,24 @@ export class StatsView extends React.Component<StatsViewProps> {
   }
 
   renderQPSSparkline() {
-    // TODO(vilterp): replace this with the sparkline
+    // TODO(vilterp): replace this with the real sparkline
     return (
-      <g transform="translate(56 188)">
-        <path fill={BACKGROUND_BLUE} d="M0 0h69v10H0z"/>
+      <g transform="translate(36 -9)">
+        <rect x="0" y="0" width={STATS_BARS_WIDTH_PX} height="10" fill={BACKGROUND_BLUE} />
         <path
           stroke={MAIN_BLUE}
           strokeWidth="2"
           d="M-.838 4.29l5.819 3.355L10.984 9l4.429-3.04 5.311 1.685L26.178 2l5.397 7 5.334-3.04h10.656l6.037-.331L57.625 2l4.402 3.922 7.898-2.683"
         />
+      </g>
+    );
+  }
+
+  renderStatsUnderArc() {
+    return (
+      <g transform="translate(20 178)">
+        {this.renderCPUBar()}
+        {this.renderQPS()}
       </g>
     );
   }
@@ -210,12 +218,11 @@ export class StatsView extends React.Component<StatsViewProps> {
       // TODO(vilterp): surprisingly, it doesn't render correctly without the fill: none.
       // would like to remove this; need to figure out what's going on.
       <g fill="none" transform="translate(-90 -100)">
-        {this.renderCapacityArc()}
         {this.renderLabel()}
-        {this.renderCPUBar()}
-        {this.renderQPS()}
         {this.renderLocalityOrNodeIcon()}
         {this.renderLivenessIcon()}
+        {this.renderCapacityArc()}
+        {this.renderStatsUnderArc()}
       </g>
     );
   }
