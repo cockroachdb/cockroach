@@ -15,12 +15,18 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"database/sql/driver"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
+	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -39,235 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
-
-func TestDumpRow(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		i int,
-		f float,
-		s string,
-		b bytes,
-		d date,
-		t time,
-		ts timestamp,
-		n interval,
-		o bool,
-		e decimal,
-		u uuid,
-		ip inet,
-		j JSON,
-		ary string[],
-		tz timestamptz,
-		e1 decimal(2),
-		e2 decimal(2, 1),
-		s1 string(1),
-		FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, j, ary, tz, e1, e2, s1, rowid),
-		FAMILY fam_1_s (s),
-		FAMILY fam_2_b (b),
-		FAMILY fam_3_e (e)
-	);
-	INSERT INTO d.t VALUES (
-		1,
-		2.3,
-		'striiing',
-		'\x613162326333',
-		'2016-03-26',
-		'01:02:03.456',
-		'2016-01-25 10:10:10',
-		'2h30m30s',
-		true,
-		1.2345,
-		'e9716c74-2638-443d-90ed-ffde7bea7d1d',
-		'192.168.0.1',
-		'{"a":"b"}',
-		ARRAY['hello','world'],
-		'2016-01-25 10:10:10',
-		3.4,
-		4.5,
-		's'
-	);
-	INSERT INTO d.t VALUES (DEFAULT);
-	INSERT INTO d.t (f, e) VALUES (
-		CAST('+Inf' AS FLOAT), CAST('+Inf' AS DECIMAL)
-	), (
-		CAST('-Inf' AS FLOAT), CAST('-Inf' AS DECIMAL)
-	), (
-		CAST('NaN' AS FLOAT), CAST('NaN' AS DECIMAL)
-	);
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expect = `dump d t
-CREATE TABLE t (
-	i INT NULL,
-	f FLOAT NULL,
-	s STRING NULL,
-	b BYTES NULL,
-	d DATE NULL,
-	t TIME NULL,
-	ts TIMESTAMP NULL,
-	n INTERVAL NULL,
-	o BOOL NULL,
-	e DECIMAL NULL,
-	u UUID NULL,
-	ip INET NULL,
-	j JSON NULL,
-	ary STRING[] NULL,
-	tz TIMESTAMP WITH TIME ZONE NULL,
-	e1 DECIMAL(2) NULL,
-	e2 DECIMAL(2,1) NULL,
-	s1 STRING(1) NULL,
-	FAMILY "primary" (i, f, d, t, ts, n, o, u, ip, j, ary, tz, e1, e2, s1, rowid),
-	FAMILY fam_1_s (s),
-	FAMILY fam_2_b (b),
-	FAMILY fam_3_e (e)
-);
-
-INSERT INTO t (i, f, s, b, d, t, ts, n, o, e, u, ip, j, ary, tz, e1, e2, s1) VALUES
-	(1, 2.3, 'striiing', '\x613162326333', '2016-03-26', '01:02:03.456', '2016-01-25 10:10:10+00:00', '2h30m30s', true, 1.2345, 'e9716c74-2638-443d-90ed-ffde7bea7d1d', '192.168.0.1', '{"a": "b"}', ARRAY['hello':::STRING,'world':::STRING], '2016-01-25 10:10:10+00:00', 3, 4.5, 's'),
-	(NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '+Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, '-Inf', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '-Infinity', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
-	(NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'NaN', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
-}
-
-func TestDumpFlags(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-
-	out, err := c.RunWithCapture("dump t f --dump-mode=both")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected := `dump t f --dump-mode=both
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-`
-	if out != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-
-	out, err = c.RunWithCapture("dump t f --dump-mode=schema")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected = `dump t f --dump-mode=schema
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-`
-	if out != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-
-	out, err = c.RunWithCapture("dump t f --dump-mode=data")
-	if err != nil {
-		t.Fatal(err)
-	}
-	expected = `dump t f --dump-mode=data
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-`
-	if out != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-}
-
-func TestDumpMultipleTables(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	c.RunWithArgs([]string{"sql", "-e", "create database t; create table t.f (x int, y int); insert into t.f values (42, 69)"})
-	c.RunWithArgs([]string{"sql", "-e", "create table t.g (x int, y int); insert into t.g values (3, 4)"})
-
-	out, err := c.RunWithCapture("dump t f g")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected := `dump t f g
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-CREATE TABLE g (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-
-INSERT INTO g (x, y) VALUES
-	(3, 4);
-`
-	if out != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-
-	out, err = c.RunWithCapture("dump t")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expected = `dump t
-CREATE TABLE f (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-CREATE TABLE g (
-	x INT NULL,
-	y INT NULL,
-	FAMILY "primary" (x, y, rowid)
-);
-
-INSERT INTO f (x, y) VALUES
-	(42, 69);
-
-INSERT INTO g (x, y) VALUES
-	(3, 4);
-`
-	if out != expected {
-		t.Fatalf("expected %s\ngot: %s", expected, out)
-	}
-}
 
 func dumpSingleTable(w io.Writer, conn *sqlConn, dbName string, tName string) error {
 	mds, ts, err := getDumpMetadata(conn, dbName, []string{tName}, "")
@@ -605,536 +382,167 @@ INSERT INTO t (i, j) VALUES
 	}
 }
 
-// TestDumpIdentifiers tests dumping a table with a semicolon in the table,
-// index, and column names properly escapes.
-func TestDumpIdentifiers(t *testing.T) {
-	defer leaktest.AfterTest(t)()
+var commentRegexp = regexp.MustCompile("#[^\n]*\n")
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.";" (";" int, index (";"));
-	INSERT INTO d.";" VALUES (1);
-`
-
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	const expect = `dump d
-CREATE TABLE ";" (
-	";" INT NULL,
-	INDEX ";_;_idx" (";" ASC),
-	FAMILY "primary" (";", rowid)
-);
-
-INSERT INTO ";" (";") VALUES
-	(1);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
+func stripComments(in string) string {
+	return string(commentRegexp.ReplaceAll([]byte(in), []byte("\n")))
 }
 
-// TestDumpReferenceOrder tests dumping a database with foreign keys does
-// so in correct order.
-func TestDumpReferenceOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
+func testMatches(
+	t *testing.T, params map[string]string, create string, expect string, rewriteBuf *bytes.Buffer,
+) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
-	// Create tables so they would be in incorrect order if sorted alphabetically.
-	const create = `
-CREATE DATABASE d1;
-CREATE DATABASE d2;
-USE d1;
-
--- B -> A
-CREATE TABLE b (i int PRIMARY KEY);
-CREATE TABLE a (i int REFERENCES b);
-INSERT INTO b VALUES (1);
-INSERT INTO a VALUES (1);
-
--- Test multiple tables to make sure transitive deps are sorted correctly.
--- E -> D -> C
--- G -> F -> D -> C
-CREATE TABLE g (i int PRIMARY KEY);
-CREATE TABLE f (i int PRIMARY KEY, g int REFERENCES g);
-CREATE TABLE e (i int PRIMARY KEY);
-CREATE TABLE d (i int PRIMARY KEY, e int REFERENCES e, f int REFERENCES f);
-CREATE TABLE c (i int REFERENCES d);
-INSERT INTO g VALUES (1);
-INSERT INTO f VALUES (1, 1);
-INSERT INTO e VALUES (1);
-INSERT INTO d VALUES (1, 1, 1);
-INSERT INTO c VALUES (1);
-
--- Test a table that uses a sequence to make sure the sequence is dumped first.
-CREATE SEQUENCE s;
-CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT);
-INSERT INTO s_tbl (v) VALUES (10), (11);
-`
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	out, err := c.RunWithCapture("dump d1")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expectDump = `dump d1
-CREATE TABLE b (
-	i INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
-);
-
-CREATE TABLE a (
-	i INT NULL,
-	CONSTRAINT fk_i_ref_b FOREIGN KEY (i) REFERENCES b (i),
-	INDEX a_auto_index_fk_i_ref_b (i ASC),
-	FAMILY "primary" (i, rowid)
-);
-
-CREATE TABLE e (
-	i INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
-);
-
-CREATE TABLE g (
-	i INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
-);
-
-CREATE TABLE f (
-	i INT NOT NULL,
-	g INT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_g_ref_g FOREIGN KEY (g) REFERENCES g (i),
-	INDEX f_auto_index_fk_g_ref_g (g ASC),
-	FAMILY "primary" (i, g)
-);
-
-CREATE TABLE d (
-	i INT NOT NULL,
-	e INT NULL,
-	f INT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e (i),
-	INDEX d_auto_index_fk_e_ref_e (e ASC),
-	CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f (i),
-	INDEX d_auto_index_fk_f_ref_f (f ASC),
-	FAMILY "primary" (i, e, f)
-);
-
-CREATE TABLE c (
-	i INT NULL,
-	CONSTRAINT fk_i_ref_d FOREIGN KEY (i) REFERENCES d (i),
-	INDEX c_auto_index_fk_i_ref_d (i ASC),
-	FAMILY "primary" (i, rowid)
-);
-
-CREATE SEQUENCE s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
-
-CREATE TABLE s_tbl (
-	id INT NOT NULL DEFAULT nextval('s':::STRING),
-	v INT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	FAMILY "primary" (id, v)
-);
-
-INSERT INTO b (i) VALUES
-	(1);
-
-INSERT INTO a (i) VALUES
-	(1);
-
-INSERT INTO e (i) VALUES
-	(1);
-
-INSERT INTO g (i) VALUES
-	(1);
-
-INSERT INTO f (i, g) VALUES
-	(1, 1);
-
-INSERT INTO d (i, e, f) VALUES
-	(1, 1, 1);
-
-INSERT INTO c (i) VALUES
-	(1);
-
-SELECT setval('s', 2);
-
-INSERT INTO s_tbl (id, v) VALUES
-	(1, 10),
-	(2, 11);
-`
-
-	if out != expectDump {
-		t.Fatalf("expected: %s\ngot: %s", expectDump, out)
-	}
-
-	// Remove first line of output ("dump a").
-	dump := strings.SplitN(out, "\n", 2)[1]
-	out, err = c.RunWithCaptureArgs([]string{"sql", "-d", "d2", "-e", dump})
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	// Verify import of dump was successful.
-	const SELECT = `
-SELECT * FROM a;
-SELECT * FROM c;
-`
-	out, err = c.RunWithCaptureArgs([]string{"sql", "-d", "d2", "-e", SELECT})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expect = `sql -d d2 -e 
-SELECT * FROM a;
-SELECT * FROM c;
-
-i
-1
-i
-1
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
-
-	// Ensure dump specifying only some tables works if those tables reference
-	// tables not in the dump.
-
-	out, err = c.RunWithCapture("dump d1 d e")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expectDump2 = `dump d1 d e
-CREATE TABLE e (
-	i INT NOT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
-);
-
-CREATE TABLE d (
-	i INT NOT NULL,
-	e INT NULL,
-	f INT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (i ASC),
-	CONSTRAINT fk_e_ref_e FOREIGN KEY (e) REFERENCES e (i),
-	INDEX d_auto_index_fk_e_ref_e (e ASC),
-	CONSTRAINT fk_f_ref_f FOREIGN KEY (f) REFERENCES f (i),
-	INDEX d_auto_index_fk_f_ref_f (f ASC),
-	FAMILY "primary" (i, e, f)
-);
-
-INSERT INTO e (i) VALUES
-	(1);
-
-INSERT INTO d (i, e, f) VALUES
-	(1, 1, 1);
-`
-
-	if out != expectDump2 {
-		t.Fatalf("expected: %s\ngot: %s", expectDump2, out)
-	}
-}
-
-// TestDumpView verifies dump doesn't attempt to dump data of views.
-func TestDumpView(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE VIEW d.bar AS SELECT 1;
-`
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	const expect = `dump d
-CREATE VIEW bar ("1") AS SELECT 1;
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
-}
-
-func TestDumpSequence(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE SEQUENCE d.bar;
-`
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	out, err := c.RunWithCaptureArgs([]string{"dump", "d"})
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	const expect = `dump d
-CREATE SEQUENCE bar MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
-
-SELECT setval('bar', 0);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
-}
-
-func TestDumpSequenceEscaping(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE "'";
-	CREATE SEQUENCE "'"."'";
-`
-	if out, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	out, err := c.RunWithCaptureArgs([]string{"dump", "'"})
-	if err != nil {
-		t.Fatal(err)
-	} else {
-		t.Log(out)
-	}
-
-	const expect = `dump '
-CREATE SEQUENCE "'" MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
-
-SELECT setval(e'"\'"', 0);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
-}
-
-// TestDumpPrimaryKeyConstraint tests that a primary key with a non-default
-// name works.
-func TestDumpPrimaryKeyConstraint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		i int,
-		CONSTRAINT pk_name PRIMARY KEY (i)
-	);
-	INSERT INTO d.t VALUES (1);
-`
+	db := params["database"]
+	create = fmt.Sprintf("CREATE DATABASE %s; USE %s;\n%s", db, db, create)
+	create = stripComments(create)
 
 	c.RunWithArgs([]string{"sql", "-e", create})
 
-	out, err := c.RunWithCapture("dump d t")
+	// First, check that running the given input and then running dump gives the
+	// expected output.
+	out, err := c.RunWithCapture(params["command"])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	const expect = `dump d t
-CREATE TABLE t (
-	i INT NOT NULL,
-	CONSTRAINT pk_name PRIMARY KEY (i ASC),
-	FAMILY "primary" (i)
-);
+	out = strings.TrimSpace(strings.TrimPrefix(out, params["command"]))
 
-INSERT INTO t (i) VALUES
-	(1);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
+	if strings.TrimSpace(out) != strings.TrimSpace(expect) {
+		if rewriteBuf == nil {
+			t.Fatalf("\nexpected %s\n     got %s", expect, out)
+		} else {
+			rewriteBuf.WriteString(out)
+		}
+	} else if rewriteBuf != nil {
+		rewriteBuf.WriteString(expect)
 	}
 }
 
-// TestDumpReferenceCycle tests dumping in the presence of cycles.
-// This used to crash before with stack overflow due to an infinite loop before:
-// https://github.com/cockroachdb/cockroach/pull/20255
-func TestDumpReferenceCycle(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		PRIMARY KEY (id),
-		FOREIGN KEY (next_id) REFERENCES d.t(id),
-		id INT,
-		next_id INT
-	);
-	INSERT INTO d.t VALUES (
-		1,
-		NULL
-	);
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expect = `dump d t
-CREATE TABLE t (
-	id INT NOT NULL,
-	next_id INT NULL,
-	CONSTRAINT "primary" PRIMARY KEY (id ASC),
-	CONSTRAINT fk_next_id_ref_t FOREIGN KEY (next_id) REFERENCES t (id),
-	INDEX t_auto_index_fk_next_id_ref_t (next_id ASC),
-	FAMILY "primary" (id, next_id)
-);
-
-INSERT INTO t (id, next_id) VALUES
-	(1, NULL);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
+func runTest(
+	t *testing.T, params map[string]string, create string, expect string, rewriteBuf *bytes.Buffer,
+) {
+	t.Run("setup gives expected", func(t *testing.T) {
+		// Check that the expected output is actually what we get.
+		testMatches(t, params, create, expect, rewriteBuf)
+	})
+	if rewriteBuf == nil && params["no-run-expected"] != "true" {
+		t.Run("expected gives expected", func(t *testing.T) {
+			// Check that the expected out, reapplied, gives itself.
+			testMatches(t, params, expect, expect, nil)
+		})
 	}
 }
 
-func TestDumpWithInvertedIndex(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
-
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		a JSON,
-		b JSON,
-		INVERTED INDEX idx (a)
-	);
-
-	CREATE INVERTED INDEX idx2 ON d.t (b);
-
-	INSERT INTO d.t VALUES ('{"a": "b"}', '{"c": "d"}');
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	const expect = `dump d t
-CREATE TABLE t (
-	a JSON NULL,
-	b JSON NULL,
-	INVERTED INDEX idx (a),
-	INVERTED INDEX idx2 (b),
-	FAMILY "primary" (a, b, rowid)
-);
-
-INSERT INTO t (a, b) VALUES
-	('{"a": "b"}', '{"c": "d"}');
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
-	}
+type testFileReader struct {
+	scanner  *bufio.Scanner
+	nextLine string
+	eof      bool
 }
 
-func TestDumpWithComputedColumn(t *testing.T) {
+func newTestFileReader(s *bufio.Scanner) (*testFileReader, error) {
+	if !s.Scan() {
+		return nil, fmt.Errorf("empty scanner")
+	}
+
+	return &testFileReader{
+		nextLine: s.Text(),
+		scanner:  s,
+	}, nil
+}
+
+func (t *testFileReader) peek() string {
+	return t.nextLine
+}
+
+func (t *testFileReader) next() string {
+	old := t.nextLine
+	if t.scanner.Scan() {
+		t.nextLine = t.scanner.Text()
+	} else {
+		t.eof = true
+		t.nextLine = ""
+	}
+	return old
+}
+
+func (t *testFileReader) readParams(buf *bytes.Buffer) map[string]string {
+	params := make(map[string]string)
+	for strings.HasPrefix(t.peek(), "%") {
+		if buf != nil {
+			buf.WriteString(t.peek())
+			buf.WriteByte('\n')
+		}
+		fields := strings.Fields(t.next())
+		// Strip leading '%'.
+		fields = fields[1:]
+		param, value := fields[0], fields[1:]
+
+		params[param] = strings.Join(value, " ")
+	}
+	return params
+}
+
+func (t *testFileReader) readToLinePrefixedWith(prefix string) string {
+	var result bytes.Buffer
+	for !strings.HasPrefix(t.peek(), prefix) && !t.eof {
+		result.WriteString(t.next())
+		result.WriteByte('\n')
+	}
+	return result.String()
+}
+
+// TODO(justin): Convention dictates that this should be a flag, but that's
+// annoying to add since registering a flag in this package pollutes the
+// exposed flags.  We should make a cli_test package to get around this.
+// shouldRewriteResults determines if dump tests should be overwritten in the
+// case of a mismatch.
+const shouldRewriteResults = false
+
+func TestDumpFileTests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{t: t})
-	defer c.cleanup()
+	var rewriteBuf *bytes.Buffer
+	if shouldRewriteResults {
+		rewriteBuf = &bytes.Buffer{}
+	}
 
-	const create = `
-	CREATE DATABASE d;
-	CREATE TABLE d.t (
-		a INT PRIMARY KEY,
-		b INT AS (a + 1) STORED
-	);
-
-	INSERT INTO d.t VALUES (1);
-`
-
-	c.RunWithArgs([]string{"sql", "-e", create})
-
-	out, err := c.RunWithCapture("dump d t")
+	_, fname, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("couldn't get directory")
+	}
+	file := filepath.Join(filepath.Dir(fname), "testdata", "dump_test")
+	f, err := os.Open(file)
 	if err != nil {
 		t.Fatal(err)
 	}
+	scanner := bufio.NewScanner(f)
+	reader, err := newTestFileReader(scanner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for !reader.eof {
+		params := reader.readParams(rewriteBuf)
 
-	const expect = `dump d t
-CREATE TABLE t (
-	a INT NOT NULL,
-	b INT NULL AS (a + 1) STORED,
-	CONSTRAINT "primary" PRIMARY KEY (a ASC),
-	FAMILY "primary" (a, b)
-);
+		setup := reader.readToLinePrefixedWith("----")
+		if rewriteBuf != nil {
+			rewriteBuf.WriteString(setup)
+		}
+		reader.next()
+		if rewriteBuf != nil {
+			rewriteBuf.WriteString("----\n")
+		}
+		expected := reader.readToLinePrefixedWith("%")
 
-INSERT INTO t (a) VALUES
-	(1);
-`
-
-	if out != expect {
-		t.Fatalf("expected: %s\ngot: %s", expect, out)
+		t.Run(params["name"], func(t *testing.T) {
+			runTest(t, params, setup, expected, rewriteBuf)
+		})
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if rewriteBuf != nil {
+		ioutil.WriteFile(file, rewriteBuf.Bytes(), 0644)
 	}
 }
