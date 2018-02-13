@@ -4028,10 +4028,15 @@ func (m *memoExpr) asScan() *scanExpr {
 	return (*scanExpr)(m)
 }
 
-// valuesExpr returns a manufactured result set containing a constant number of rows
+// valuesExpr returns a manufactured result set containing a constant number of rows.
 // specified by the Rows list field. Each row must contain the same set of
-// columns in the same order. The Cols field contains the set of column indexes
-// returned by each row, as a *ColSet.
+// columns in the same order.
+//
+// The Rows field contains a list of Tuples, one for each row. Each tuple has
+// the same length (same with that of Cols).
+//
+// The Cols field contains the set of column indices returned by each row
+// as a *ColList. It is legal for Cols to be empty.
 type valuesExpr memoExpr
 
 func makeValuesExpr(rows opt.ListID, cols opt.PrivateID) valuesExpr {

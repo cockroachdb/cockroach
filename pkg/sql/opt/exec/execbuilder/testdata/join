@@ -39,7 +39,7 @@ exec-explain
 SELECT * FROM t.a, t.b WHERE a.x = b.x
 ----
 filter          0  filter  ·       ·          (x, y, x, z)  ·
- │              0  ·       filter  @1 = @3    ·             ·
+ │              0  ·       filter  x = x      ·             ·
  └── join       1  join    ·       ·          (x, y, x, z)  ·
       │         1  ·       type    cross      ·             ·
       ├── scan  2  scan    ·       ·          (x, y)        ·

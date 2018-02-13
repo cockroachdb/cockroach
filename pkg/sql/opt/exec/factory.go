@@ -17,6 +17,7 @@ package exec
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Factory defines the interface for building an execution plan, which consists
@@ -25,6 +26,9 @@ import (
 // The TypedExprs passed to these functions refer to columns of the input node
 // via IndexedVars.
 type Factory interface {
+	// ConstructValues returns a node that outputs the given rows as results.
+	ConstructValues(rows [][]tree.TypedExpr, colTypes []types.T, colNames []string) (Node, error)
+
 	// ConstructScan returns a node that represents a scan of the given table.
 	// TODO(radu): support list of columns, index, index constraints
 	ConstructScan(table optbase.Table) (Node, error)

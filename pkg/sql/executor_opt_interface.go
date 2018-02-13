@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -51,6 +52,21 @@ func (ee *execEngine) Factory() exec.Factory {
 // Close is part of the exec.Engine interface.
 func (ee *execEngine) Close() {
 	ee.cleanup()
+}
+
+func (ee *execEngine) ConstructValues(
+	rows [][]tree.TypedExpr, colTypes []types.T, colNames []string,
+) (exec.Node, error) {
+	if len(colTypes) != 0 {
+		panic("values with columns not implemented")
+	}
+	values := ee.planner.newContainerValuesNode(sqlbase.ResultColumns{}, len(rows))
+	for range rows {
+		if _, err := values.rows.AddRow(context.TODO(), tree.Datums{}); err != nil {
+			return nil, err
+		}
+	}
+	return values, nil
 }
 
 // ConstructScan is part of the exec.Factory interface.
@@ -89,8 +105,7 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 		source: src,
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
-	f.filter = filter
-	f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	return f, nil
 }
 
@@ -105,7 +120,7 @@ func (ee *execEngine) ConstructProject(
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 	for i, expr := range exprs {
-		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, false /* normalizeToNonNil */)
+		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
 		col := sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
 		// We don't need to pass the render string, it is only used
 		// in planning code.

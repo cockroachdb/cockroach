@@ -1,0 +1,25 @@
+exec-explain
+SELECT 1
+----
+render       0  render  ·         ·                 (column1)  ·
+ │           0  ·       render 0  1                 ·          ·
+ └── values  1  values  ·         ·                 ()         ·
+·            1  ·       size      0 columns, 1 row  ·          ·
+
+exec
+SELECT 1
+----
+1
+
+exec-explain
+SELECT 1 + 2
+----
+render       0  render  ·         ·                 (column1)  ·
+ │           0  ·       render 0  3                 ·          ·
+ └── values  1  values  ·         ·                 ()         ·
+·            1  ·       size      0 columns, 1 row  ·          ·
+
+exec
+SELECT 1 + 2
+----
+3

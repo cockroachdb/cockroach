@@ -65,6 +65,9 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 
 func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	switch ev.Operator() {
+	case opt.ValuesOp:
+		return b.buildValues(ev)
+
 	case opt.ScanOp:
 		return b.buildScan(ev)
 
@@ -80,6 +83,19 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	default:
 		panic(fmt.Sprintf("unsupported relational op %s", ev.Operator()))
 	}
+}
+
+func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
+	cols := *ev.Private().(*opt.ColList)
+	if len(cols) > 0 {
+		return execPlan{}, fmt.Errorf("ValuesOp with columns not implemented")
+	}
+	rows := make([][]tree.TypedExpr, ev.ChildCount())
+	node, err := b.factory.ConstructValues(rows, nil /* colTypes */, nil /* colNames */)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node}, nil
 }
 
 func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
