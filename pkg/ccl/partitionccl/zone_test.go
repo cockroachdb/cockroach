@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 func TestValidIndexPartitionSetShowZones(t *testing.T) {
@@ -262,7 +264,10 @@ func TestGenerateSubzoneSpans(t *testing.T) {
 			if err := test.parse(); err != nil {
 				t.Fatalf("%+v", err)
 			}
-			spans, err := GenerateSubzoneSpans(test.parsed.tableDesc, test.parsed.subzones)
+			clusterID := uuid.MakeV4()
+			hasNewSubzones := false
+			spans, err := GenerateSubzoneSpans(
+				cluster.NoSettings, clusterID, test.parsed.tableDesc, test.parsed.subzones, hasNewSubzones)
 			if err != nil {
 				t.Fatalf("generating subzone spans: %+v", err)
 			}

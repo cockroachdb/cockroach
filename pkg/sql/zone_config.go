@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -142,7 +144,11 @@ func GetZoneConfigInTxn(
 // in the SubzonzeSpans field of config.ZoneConfig. If no CCL hook is installed,
 // it returns an error that directs users to use a CCL binary.
 var GenerateSubzoneSpans = func(
-	*sqlbase.TableDescriptor, []config.Subzone,
+	st *cluster.Settings,
+	clusterID uuid.UUID,
+	tableDesc *sqlbase.TableDescriptor,
+	subzones []config.Subzone,
+	newSubzones bool,
 ) ([]config.SubzoneSpan, error) {
 	return nil, sqlbase.NewCCLRequiredError(errors.New(
 		"setting zone configs on indexes or partitions requires a CCL binary"))
@@ -244,6 +250,7 @@ func deleteRemovedPartitionZoneConfigs(
 	for _, n := range removedNames {
 		zone.DeleteSubzone(uint32(idxDesc.ID), n)
 	}
-	_, err = writeZoneConfig(ctx, txn, tableDesc.ID, tableDesc, zone, execCfg)
+	hasNewSubzones := false
+	_, err = writeZoneConfig(ctx, txn, tableDesc.ID, tableDesc, zone, execCfg, hasNewSubzones)
 	return err
 }
