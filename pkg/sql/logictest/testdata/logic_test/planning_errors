@@ -8,5 +8,5 @@ CREATE TABLE kv(k INT, v INT);
  CREATE INDEX aa ON kv(v);
  SELECT k FROM [SHOW JOBS], kv@{FORCE_INDEX=aa,NO_INDEX_JOIN};
 
-statement error relation "nonexistent" does not exist
+statement error pgcode 42P01 relation "nonexistent" does not exist
 SELECT * FROM [SHOW JOBS], [SHOW CREATE TABLE nonexistent];

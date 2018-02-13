@@ -1,6 +1,6 @@
 # LogicTest: default parallel-stmts
 
-statement error relation "kv" does not exist
+statement error pgcode 42P01 relation "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
 
 statement ok

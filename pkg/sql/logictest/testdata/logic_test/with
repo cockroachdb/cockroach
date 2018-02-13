@@ -60,7 +60,7 @@ WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
 
 # CTEs with DMLs
 
-query error relation "t" does not exist
+query error pgcode 42P01 relation "t" does not exist
 WITH t AS (SELECT * FROM x) INSERT INTO t VALUES (1)
 
 query I rowsort
