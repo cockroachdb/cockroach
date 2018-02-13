@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -423,13 +424,43 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 	return dialOpts, nil
 }
 
+// onlyOnceDialer implements the grpc.WithDialer interface but only
+// allows a single connection attempt. If a reconnection is attempted,
+// redialChan is closed to signal a higher-level retry loop. This
+// ensures that our initial heartbeat (and its version/clusterID
+// validation) occurs on every new connection.
+type onlyOnceDialer struct {
+	syncutil.Mutex
+	dialed     bool
+	closed     bool
+	redialChan chan struct{}
+}
+
+func (ood *onlyOnceDialer) dial(addr string, timeout time.Duration) (net.Conn, error) {
+	ood.Lock()
+	defer ood.Unlock()
+	if !ood.dialed {
+		ood.dialed = true
+		dialer := net.Dialer{
+			Timeout:   timeout,
+			LocalAddr: sourceAddr,
+		}
+		return dialer.Dial("tcp", addr)
+	} else if !ood.closed {
+		ood.closed = true
+		close(ood.redialChan)
+	}
+	return nil, grpcutil.ErrCannotReuseClientConn
+}
+
 // GRPCDialRaw calls grpc.Dial with options appropriate for the context.
 // Unlike GRPCDial, it does not start an RPC heartbeat to validate the
-// connection.
-func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
+// connection. This connection will not be reconnected automatically;
+// the returned channel is closed when a reconnection is attempted.
+func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{}, error) {
 	dialOpts, err := ctx.GRPCDialOptions()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Add a stats handler to measure client network stats.
@@ -440,24 +471,22 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, error) {
 	dialOpts = append(dialOpts,
 		grpc.WithInitialWindowSize(initialWindowSize),
 		grpc.WithInitialConnWindowSize(initialConnWindowSize))
-	dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
-	if sourceAddr != nil {
-		dialOpts = append(dialOpts, grpc.WithDialer(
-			func(addr string, timeout time.Duration) (net.Conn, error) {
-				dialer := net.Dialer{
-					Timeout:   timeout,
-					LocalAddr: sourceAddr,
-				}
-				return dialer.Dial("tcp", addr)
-			},
-		))
+	dialer := onlyOnceDialer{
+		redialChan: make(chan struct{}),
 	}
+	dialOpts = append(dialOpts, grpc.WithDialer(dialer.dial))
+
+	// add testingDialOpts after our dialer because one of our tests
+	// uses a custom dialer (this disables the only-one-connection
+	// behavior and redialChan will never be closed).
+	dialOpts = append(dialOpts, ctx.testingDialOpts...)
 
 	if log.V(1) {
 		log.Infof(ctx.masterCtx, "dialing %s", target)
 	}
-	return grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+	conn, err := grpc.DialContext(ctx.masterCtx, target, dialOpts...)
+	return conn, dialer.redialChan, err
 }
 
 // GRPCDial calls grpc.Dial with options appropriate for the context.
@@ -469,7 +498,8 @@ func (ctx *Context) GRPCDial(target string) *Connection {
 
 	conn := value.(*Connection)
 	conn.initOnce.Do(func() {
-		conn.grpcConn, conn.dialErr = ctx.GRPCDialRaw(target)
+		var redialChan <-chan struct{}
+		conn.grpcConn, redialChan, conn.dialErr = ctx.GRPCDialRaw(target)
 		if ctx.GetLocalInternalServerForAddr(target) != nil {
 			conn.heartbeatResult.Store(heartbeatResult{err: nil, everSucceeded: true})
 			conn.setInitialHeartbeatDone()
@@ -479,7 +509,7 @@ func (ctx *Context) GRPCDial(target string) *Connection {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
 					ctx.Stopper.RunWorker(masterCtx, func(masterCtx context.Context) {
-						err := ctx.runHeartbeat(conn, target)
+						err := ctx.runHeartbeat(conn, target, redialChan)
 						if err != nil && !grpcutil.IsClosedConnection(err) {
 							log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 						}
@@ -505,7 +535,8 @@ func (ctx *Context) NewBreaker() *circuit.Breaker {
 }
 
 // ErrNotConnected is returned by ConnHealth when there is no connection to the
-// host (e.g. GRPCDial was never called for that address).
+// host (e.g. GRPCDial was never called for that address, or a connection has
+// been closed and not reconnected).
 var ErrNotConnected = errors.New("not connected")
 
 // ErrNotHeartbeated is returned by ConnHealth when we have not yet performed
@@ -526,7 +557,9 @@ func (ctx *Context) ConnHealth(target string) error {
 	return ErrNotConnected
 }
 
-func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
+func (ctx *Context) runHeartbeat(
+	conn *Connection, target string, redialChan <-chan struct{},
+) error {
 	maxOffset := ctx.LocalClock.MaxOffset()
 	clusterID := ctx.ClusterID.Get()
 
@@ -546,6 +579,8 @@ func (ctx *Context) runHeartbeat(conn *Connection, target string) error {
 	everSucceeded := false
 	for {
 		select {
+		case <-redialChan:
+			return grpcutil.ErrCannotReuseClientConn
 		case <-ctx.Stopper.ShouldStop():
 			return nil
 		case <-heartbeatTimer.C:
