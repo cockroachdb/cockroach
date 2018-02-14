@@ -130,6 +130,7 @@ func (a *appStats) recordStatement(
 	s.data.Count++
 	if err != nil {
 		s.data.LastErr = err.Error()
+		s.data.LastErrRedacted = log.Redact(err)
 	}
 	if automaticRetryCount == 0 {
 		s.data.FirstAttemptCount++
@@ -301,12 +302,8 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 				stats.Unlock()
 
 				if data.LastErr != "" {
-					// Unfortunately by this point we just have an opaque string and must
-					// assume it could contain anything and is thus not suitable for
-					// inclusion in for diagnostic reporting. If/when we kept the original
-					// error around, we could do some smarter redacting or classification,
-					// or we could do that upstream and keep a "clean" string for
-					// diagnostic reporting, rather than this blunt scrub.
+					// We have a redacted version in lastErrRedacted -- this one is not ok
+					// to report as-in though.
 					data.LastErr = "scrubbed"
 				}
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})

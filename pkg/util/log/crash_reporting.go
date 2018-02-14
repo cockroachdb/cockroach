@@ -259,9 +259,9 @@ func (e *safeError) Error() string {
 	return e.message
 }
 
-// redact returns a redacted version of the supplied item that is safe to use in
+// Redact returns a redacted version of the supplied item that is safe to use in
 // anonymized reporting.
-func redact(r interface{}) string {
+func Redact(r interface{}) string {
 	typAnd := func(i interface{}, text string) string {
 		type stackTracer interface {
 			StackTrace() errors.StackTrace
@@ -305,7 +305,7 @@ func redact(r interface{}) string {
 		case syscall.Errno:
 			return typAnd(t, t.Error())
 		case *os.SyscallError:
-			s := redact(t.Err)
+			s := Redact(t.Err)
 			return typAnd(t, fmt.Sprintf("%s: %s", t.Syscall, s))
 		case *os.PathError:
 			// It hardly matters, but avoid mutating the original.
@@ -347,12 +347,12 @@ func redact(r interface{}) string {
 	case interfaceCauser:
 		cause := c.Cause()
 		if cause != nil {
-			reportable += ": caused by " + redact(c.Cause())
+			reportable += ": caused by " + Redact(c.Cause())
 		}
 	case (interface {
 		Cause() error
 	}):
-		reportable += ": caused by " + redact(c.Cause())
+		reportable += ": caused by " + Redact(c.Cause())
 	}
 	return reportable
 }
@@ -374,7 +374,7 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 
 	redacted := make([]string, 0, len(reportables))
 	for i := range reportables {
-		redacted = append(redacted, redact(reportables[i]))
+		redacted = append(redacted, Redact(reportables[i]))
 	}
 	reportables = nil
 
