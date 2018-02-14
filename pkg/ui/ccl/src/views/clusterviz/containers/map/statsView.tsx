@@ -15,6 +15,8 @@ import localityIcon from "!!raw-loader!assets/localityIcon.svg";
 import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import { trustIcon } from "src/util/trust";
+import { CpuSparkline } from "./cpuSparkline";
+import { QpsSparkline } from "./qpsSparkline";
 
 interface StatsViewProps {
   usableCapacity: number;
@@ -22,6 +24,8 @@ interface StatsViewProps {
   label: string;
   subLabel: string; // shows up under the label
   isLocality: boolean;
+
+  nodes: string[];
 
   nodeHistory?: NodeHistory;
   maxClientActivityRate?: number;
@@ -36,7 +40,6 @@ const BACKGROUND_BLUE = "#B8CCEC";
 const LIGHT_TEXT_BLUE = "#85A7E3";
 const DARK_BLUE = "#152849";
 
-const STATS_BARS_WIDTH_PX = 69;
 const STATS_BAR_OFFSET_PX = 36;
 
 export class StatsView extends React.Component<StatsViewProps> {
@@ -144,20 +147,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         >
           XX%
         </text>
-        <rect
-          x={STATS_BAR_OFFSET_PX}
-          y="-9"
-          width={STATS_BARS_WIDTH_PX}
-          height="10"
-          fill={BACKGROUND_BLUE}
-        />
-        <rect
-          x={STATS_BAR_OFFSET_PX}
-          y="-6"
-          width="40"
-          height="4"
-          fill={MAIN_BLUE}
-        />
+        {this.renderCPUSparkline()}
       </g>
     );
   }
@@ -187,16 +177,18 @@ export class StatsView extends React.Component<StatsViewProps> {
     );
   }
 
-  renderQPSSparkline() {
-    // TODO(vilterp): replace this with the real sparkline
+  renderCPUSparkline() {
     return (
       <g transform={`translate(${STATS_BAR_OFFSET_PX} -9)`}>
-        <rect x="0" y="0" width={STATS_BARS_WIDTH_PX} height="10" fill={BACKGROUND_BLUE} />
-        <path
-          stroke={MAIN_BLUE}
-          strokeWidth="2"
-          d="M-.838 4.29l5.819 3.355L10.984 9l4.429-3.04 5.311 1.685L26.178 2l5.397 7 5.334-3.04h10.656l6.037-.331L57.625 2l4.402 3.922 7.898-2.683"
-        />
+        <CpuSparkline nodes={this.props.nodes} />
+      </g>
+    );
+  }
+
+  renderQPSSparkline() {
+    return (
+      <g transform={`translate(${STATS_BAR_OFFSET_PX} -9)`}>
+        <QpsSparkline nodes={this.props.nodes} />
       </g>
     );
   }
