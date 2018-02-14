@@ -180,7 +180,11 @@ else
 $(error unknown build type $(TYPE))
 endif
 
-override LINKFLAGS += -X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE)
+override LINKFLAGS += \
+	-X github.com/cockroachdb/cockroach/pkg/build.typ=$(BUILD_TYPE) \
+	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
+	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
 
 GO      ?= go
 GOFLAGS ?=
@@ -712,10 +716,6 @@ BUILDINFO = .buildinfo/tag .buildinfo/rev
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
 	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) protobuf
-$(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
-	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
-	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)"
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
