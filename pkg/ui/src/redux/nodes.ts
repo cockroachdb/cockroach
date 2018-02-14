@@ -140,7 +140,7 @@ export function sumNodeStats(
   if (_.isArray(nodeStatuses) && _.isObject(livenessStatusByNodeID)) {
     nodeStatuses.forEach((n) => {
       const status = livenessStatusByNodeID[n.desc.node_id];
-      if (status !== LivenessStatus.DECOMMISSIONING) {
+      if (status !== LivenessStatus.DECOMMISSIONED) {
         result.nodeCounts.total += 1;
       }
       switch (status) {
