@@ -8,11 +8,13 @@ import { AdminUIState } from "src/redux/state";
 import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
 import { Bytes as formatBytes } from "src/util/format";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
+import ClusterVisualization from "src/views/clusterviz/containers/map";
 import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 
 import "./cluster.styl";
 import spinner from "assets/spinner.gif";
+import {RouterState} from "react-router";
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
@@ -177,18 +179,23 @@ const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps)(ClusterSu
 /**
  * Renders the main content of the cluster visualization page.
  */
-class ClusterOverview extends React.Component<{}, {}> {
+class ClusterOverview extends React.Component<RouterState, {}> {
   static title() {
     return "Cluster Overview";
   }
 
   render() {
     return (
-      <div>
+      <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
-        <NodesOverview />
+        {/*<NodesOverview />*/}
+        <div style={{ flexGrow: 1, position: "relative", margin: 24, border: "1px solid #EDEDED", borderRadius: 3 }}>
+          <div style={{ position: "absolute", width: "100%", height: "100%" }}>
+            <ClusterVisualization {...this.props} />
+          </div>
+        </div>
       </div>
     );
   }

@@ -71,9 +71,7 @@ ReactDOM.render(
     <Router history={history}>
       <Route path="/" component={Layout}>
         <IndexRedirect to="overview" />
-        <Route path="overview">
-          <IndexRoute component={ClusterOverview} />
-        </Route>
+        <Route path="overview(/**)" component={ClusterOverview} />
         <Route path="cluster">
           <IndexRedirect to="all/overview" />
           <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
