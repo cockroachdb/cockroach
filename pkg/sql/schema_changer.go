@@ -455,7 +455,7 @@ func (sc *SchemaChanger) exec(
 	// but we're no longer responsible for taking care of that.
 
 	// Run through mutation state machine and backfill.
-	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx, false /* isRollback */)
+	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
 
 	// Purge the mutations if the application of the mutations failed due to
 	// a permanent error. All other errors are transient errors that are
@@ -491,9 +491,7 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 
 	// After this point the schema change has been reversed and any retry
 	// of the schema change will act upon the reversed schema change.
-	if errPurge := sc.runStateMachineAndBackfill(
-		ctx, lease, evalCtx, true, /* isRollback */
-	); errPurge != nil {
+	if errPurge := sc.runStateMachineAndBackfill(ctx, lease, evalCtx); errPurge != nil {
 		// Don't return this error because we do want the caller to know
 		// that an integrity constraint was violated with the original
 		// schema change. The reversed schema change will be
@@ -596,7 +594,8 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // It ensures that all nodes are on the current (pre-update) version of the
 // schema.
 // Returns the updated of the descriptor.
-func (sc *SchemaChanger) done(ctx context.Context, isRollback bool) (*sqlbase.Descriptor, error) {
+func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) {
+	isRollback := false
 	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
 		i := 0
 		for _, mutation := range desc.Mutations {
@@ -605,6 +604,7 @@ func (sc *SchemaChanger) done(ctx context.Context, isRollback bool) (*sqlbase.De
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
+			isRollback = mutation.Rollback
 			desc.MakeMutationComplete(mutation)
 			i++
 		}
@@ -678,7 +678,6 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	ctx context.Context,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	evalCtx *extendedEvalContext,
-	isRollback bool,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
 		fn()
@@ -699,7 +698,7 @@ func (sc *SchemaChanger) runStateMachineAndBackfill(
 	}
 
 	// Mark the mutations as completed.
-	_, err := sc.done(ctx, isRollback)
+	_, err := sc.done(ctx)
 	return err
 }
 
@@ -719,6 +718,12 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				// Only reverse the first set of mutations if they have the
 				// mutation ID we're looking for.
 				break
+			}
+
+			if mutation.Rollback {
+				// Can actually never happen. This prevents a rollback of
+				// an already rolled back mutation.
+				return errors.Errorf("mutation already rolled back: %v", mutation)
 			}
 
 			jobID, err := sc.getJobIDForMutationWithDescriptor(ctx, desc, mutation.MutationID)
@@ -752,6 +757,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			case sqlbase.DescriptorMutation_DROP:
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
 			}
+			desc.Mutations[i].Rollback = true
 		}
 
 		for i := range desc.MutationJobs {
