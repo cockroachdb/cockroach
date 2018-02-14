@@ -1661,6 +1661,9 @@ func (e *Executor) execStmtInOpenTxn(
 	_, independentFromParallelStmts := stmt.AST.(parser.IndependentFromParallelizedPriors)
 	if !(parallelize || independentFromParallelStmts) {
 		if err := session.synchronizeParallelStmts(session.Ctx()); err != nil {
+			if _, isCommit := stmt.AST.(*parser.CommitTransaction); isCommit {
+				txnState.commitSeen = true
+			}
 			return err
 		}
 	}
