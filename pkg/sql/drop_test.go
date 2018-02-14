@@ -37,6 +37,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// Configures the zone config for the tableID to GC data associated
+// with a dropped schema element immediately.
+func cfgGCDataImmediately(sqlDB *gosql.DB, tableID sqlbase.ID) error {
+	// Add a zone config for the table to GC the index data immediately.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableID, buf); err != nil {
+		return err
+	}
+
+	return zoneExists(sqlDB, &cfg, tableID)
+}
+
 // Returns an error if a zone config for the specified table or
 // database ID doesn't match the expected parameter. If expected
 // is nil, then we verify no zone config exists.
@@ -379,6 +396,11 @@ func TestDropIndex(t *testing.T) {
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 
+	// Add a zone config for the table to GC the index data immediately.
+	if err := cfgGCDataImmediately(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	idx, _, err := tableDesc.FindIndexByName("foo")
 	if err != nil {
 		t.Fatal(err)
@@ -397,6 +419,53 @@ func TestDropIndex(t *testing.T) {
 	}
 }
 
+// Test that the index data gets deleted after a DROP INDEX.
+func TestDropIndexGCData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const chunkSize = 200
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+			AsyncExecQuickly:  true,
+			// Always GC immediately.
+			IgnoreGCDeadline: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	numRows := 2*chunkSize + 1
+	if err := tests.CreateKVTable(sqlDB, numRows); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+
+	idx, _, err := tableDesc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSpan := tableDesc.IndexSpan(idx.ID)
+
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		if kvs, err := kvDB.Scan(context.TODO(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
+			return err
+		} else if l := 0; len(kvs) != l {
+			return errors.Errorf("expected %d key value pairs, but got %d", l, len(kvs))
+		}
+		return nil
+	})
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
+	}
+}
+
 func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -405,7 +474,9 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{BackfillChunkSize: chunkSize},
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+		},
 	}
 	s, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
@@ -465,7 +536,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); exists {
 		t.Fatal("zone config for index still exists after dropping index")
 	}
-	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")

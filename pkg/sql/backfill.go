@@ -113,9 +113,6 @@ func (sc *SchemaChanger) runBackfill(
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
-	// Indexes within the Mutations slice for checkpointing.
-	mutationSentinel := -1
-	var droppedIndexMutationIdx int
 
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -135,7 +132,7 @@ func (sc *SchemaChanger) runBackfill(
 		tableDesc.Name, tableDesc.Version, sc.mutationID)
 
 	needColumnBackfill := false
-	for i, m := range tableDesc.Mutations {
+	for _, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
 		}
@@ -158,9 +155,14 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Column:
 				needColumnBackfill = true
 			case *sqlbase.DescriptorMutation_Index:
-				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
-				if droppedIndexMutationIdx == mutationSentinel {
-					droppedIndexMutationIdx = i
+				// Only process indexes that are not marked to be GC-ed.
+				if m.GCDeadline == 0 {
+					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+				} else {
+					// Remove index zone configs. The Data itself will be later gc-ed.
+					if err := sc.removeIndexZoneConfigs(ctx, sc.tableID, []sqlbase.IndexDescriptor{*t.Index}); err != nil {
+						return err
+					}
 				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
@@ -171,9 +173,7 @@ func (sc *SchemaChanger) runBackfill(
 	// First drop indexes, then add/drop columns, and only then add indexes.
 
 	// Drop indexes.
-	if err := sc.truncateIndexes(
-		ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
-	); err != nil {
+	if err := sc.truncateIndexes(ctx, lease, version, droppedIndexDescs); err != nil {
 		return err
 	}
 
@@ -250,7 +250,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
-	mutationIdx int,
 ) error {
 	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
@@ -311,6 +310,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			}
 		}
 	}
+
 	return nil
 }
 

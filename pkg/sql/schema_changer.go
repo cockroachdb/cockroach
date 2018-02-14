@@ -275,7 +275,9 @@ func (sc *SchemaChanger) maybeAddDrop(
 		// This can happen if a change other than the drop originally
 		// scheduled the changer for this table. If that's the case,
 		// we still need to wait for the deadline to expire.
-		if d := table.GCDeadline; d != 0 && timeutil.Since(timeutil.Unix(0, d)) < 0 {
+		if d := table.GCDeadline; d != 0 &&
+			!sc.testingKnobs.IgnoreGCDeadline &&
+			timeutil.Since(timeutil.Unix(0, d)) < 0 {
 			return false, nil
 		}
 		// Do all the hard work of deleting the table data and the table ID.
@@ -309,6 +311,49 @@ func (sc *SchemaChanger) maybeAddDrop(
 	}
 
 	return false, nil
+}
+
+func (sc *SchemaChanger) maybeGCMutations(
+	ctx context.Context,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	table *sqlbase.TableDescriptor,
+) error {
+	if len(table.GCMutations) == 0 {
+		return nil
+	}
+
+	mutation := table.GCMutations[0]
+	if d := mutation.GCDeadline; d != 0 &&
+		!sc.testingKnobs.IgnoreGCDeadline &&
+		timeutil.Since(timeutil.Unix(0, d)) < 0 {
+		return nil
+	}
+
+	idx := mutation.GetIndex()
+	if idx == nil {
+		return errors.Errorf("unexpected mutation to GC: %+v", mutation)
+	}
+	droppedIndexDescs := []sqlbase.IndexDescriptor{*idx}
+	if err := sc.truncateIndexes(ctx, lease, table.Version, droppedIndexDescs); err != nil {
+		return err
+	}
+	_, err := sc.leaseMgr.Publish(
+		ctx,
+		table.ID,
+		func(tbl *sqlbase.TableDescriptor) error {
+			if len(tbl.GCMutations) == 0 {
+				return errDidntUpdateDescriptor
+			}
+			index := table.GCMutations[0].GetIndex()
+			if index == nil || idx.ID != index.ID {
+				return errors.Errorf("unexpected mutation to GC: %+v", table.GCMutations[0])
+			}
+			tbl.GCMutations = tbl.GCMutations[1:]
+			return nil
+		},
+		func(txn *client.Txn) error { return nil },
+	)
+	return err
 }
 
 // Drain old names from the cluster.
@@ -410,6 +455,10 @@ func (sc *SchemaChanger) exec(
 	} else if drop {
 		needRelease = false
 		return nil
+	}
+
+	if err := sc.maybeGCMutations(ctx, &lease, tableDesc); err != nil {
+		return err
 	}
 
 	// Wait for the schema change to propagate to all nodes after this function
@@ -566,6 +615,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 	}, nil); err != nil {
 		return err
 	}
+
 	// wait for the state change to propagate to all leases.
 	return sc.waitToUpdateLeases(ctx, sc.tableID)
 }
@@ -604,10 +654,20 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 				// mutations if they have the mutation ID we're looking for.
 				break
 			}
+
 			isRollback = mutation.Rollback
-			desc.MakeMutationComplete(mutation)
+			if mutation.GCDeadline == 0 {
+				desc.MakeMutationComplete(mutation)
+			} else {
+				// Mark the schema change as done even though the underlying
+				// data needs to be GC-ed. This is appropriate because the
+				// GC interval can be rather long and it would be odd to
+				// see a schema change hang.
+				desc.GCMutations = append(desc.GCMutations, mutation)
+			}
 			i++
 		}
+
 		if i == 0 {
 			// The table descriptor is unchanged. Don't let Publish() increment
 			// the version.
@@ -758,6 +818,10 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 				desc.Mutations[i].Direction = sqlbase.DescriptorMutation_ADD
 			}
 			desc.Mutations[i].Rollback = true
+			// Do not set the gc interval because this schema element was
+			// actually never in use. The underlying data can be deleted
+			// immediately.
+			desc.Mutations[i].GCDeadline = 0
 		}
 
 		for i := range desc.MutationJobs {
@@ -918,6 +982,9 @@ type SchemaChangerTestingKnobs struct {
 
 	// BackfillChunkSize is to be used for all backfill chunked operations.
 	BackfillChunkSize int64
+
+	// IgnoreGCDeadline is used to ignore a non zero GCDeadline on a mutation.
+	IgnoreGCDeadline bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1032,8 +1099,9 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// A schema change execution might fail soon after
 						// unsetting UpVersion, and we still want to process
 						// outstanding mutations. Similar with a table marked for deletion.
-						if table.UpVersion || table.Dropped() || table.Adding() ||
-							table.HasDrainingNames() || len(table.Mutations) > 0 {
+						execSoon := table.Adding() || table.HasDrainingNames() || len(table.Mutations) > 0
+						hasGCMutations := len(table.GCMutations) > 0
+						if table.UpVersion || table.Dropped() || execSoon || hasGCMutations {
 							if log.V(2) {
 								log.Infof(ctx, "%s: queue up pending schema change; table: %d, version: %d",
 									kv.Key, table.ID, table.Version)
@@ -1043,17 +1111,26 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// gossip to renotify us when a schema change has been
 							// completed.
 							schemaChanger.tableID = table.ID
-							if len(table.Mutations) == 0 {
+							if len(table.Mutations) == 0 || table.Dropped() {
 								schemaChanger.mutationID = sqlbase.InvalidMutationID
 							} else {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
+
+							// By default ececute relatively soon.
 							schemaChanger.execAfter = execAfter
-							// If the table is dropped and there's a GCDeadline set, use that
-							// instead of the standard delay.
-							if table.Dropped() && table.GCDeadline != 0 {
-								schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
+							if !table.UpVersion && !s.testingKnobs.IgnoreGCDeadline {
+								// If the table is dropped and there's a
+								// GCDeadline set, use that instead of the
+								// standard delay.
+								if table.Dropped() && table.GCDeadline != 0 {
+									schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
+								} else if !execSoon && hasGCMutations {
+									// Use the GC mutation deadline.
+									schemaChanger.execAfter = timeutil.Unix(0, table.GCMutations[0].GCDeadline)
+								}
 							}
+
 							// Keep track of this schema change.
 							if sc, ok := s.schemaChangers[table.ID]; ok {
 								if sc.mutationID == schemaChanger.mutationID {

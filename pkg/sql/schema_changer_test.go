@@ -646,6 +646,11 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatal(err)
 	}
 
+	// Add a zone config for the table to GC the index data immediately.
+	if err := cfgGCDataImmediately(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	// Run some schema changes with operations.
 
 	// Add column.
@@ -1051,6 +1056,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table to GC the index data immediately.
+	if err := cfgGCDataImmediately(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	// Bulk insert enough rows to exceed the chunk size.
 	inserts := make([]string, maxValue+1)
 	for i := 0; i < maxValue+1; i++ {
@@ -1369,7 +1380,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	currChunk = 0
 	seenSpan = roachpb.Span{}
-	dropIndexSchemaChange(t, sqlDB, kvDB, maxValue, 1)
+	dropIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 }
 
 // Test schema changes are retried and complete properly when the table
@@ -2140,7 +2151,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		{sql: "ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
 		{sql: "ALTER TABLE t.test DROP pi", numKeysPerRow: 2},
 		{sql: "CREATE UNIQUE INDEX foo ON t.test (v)", numKeysPerRow: 3},
-		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 2},
+		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 3},
 	}
 
 	for _, tc := range testCases {

@@ -977,7 +977,7 @@ func (td *tableDeleter) deleteIndex(
 	autoCommit autoCommitOpt,
 	traceKV bool,
 ) (roachpb.Span, error) {
-	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
+	if idx.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
@@ -999,19 +999,25 @@ func (td *tableDeleter) deleteIndexFast(
 	}
 
 	if traceKV {
-		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
+		log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
 	}
-	// TODO(vivekmenezes): adapt index deletion to use the same GC
-	// deadline / ClearRange fast path that table deletion uses.
-	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
-	td.b.Header.MaxSpanRequestKeys = limit
+	// ClearRange cannot be run in a transaction, so create a
+	// non-transactional batch to send the request.
+	b := &client.Batch{}
+	// TODO(tschottdorf): this might need a cluster migration.
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		Span: roachpb.Span{
+			Key:    resume.Key,
+			EndKey: resume.EndKey,
+		},
+	})
+	if err := td.txn.DB().Run(ctx, b); err != nil {
+		return resume, err
+	}
 	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
 		return resume, err
 	}
-	if l := len(td.b.Results); l != 1 {
-		panic(fmt.Sprintf("%d results returned, expected 1", l))
-	}
-	return td.b.Results[0].ResumeSpan, nil
+	return roachpb.Span{}, nil
 }
 
 func (td *tableDeleter) deleteIndexScan(

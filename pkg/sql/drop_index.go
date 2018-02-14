@@ -17,11 +17,14 @@ package sql
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -151,6 +154,38 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
+	// If the index is not interleaved and the ClearRange feature is
+	// enabled in the cluster, use the GCDeadline mechanism to schedule
+	// usage of the more efficient ClearRange pathway. ClearRange will
+	// only work if the entire hierarchy of interleaved tables are
+	// dropped at once, as with ON DELETE CASCADE where the top-level
+	// "root" table is dropped.
+	//
+	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
+	// able to use this faster mechanism.
+	var gcDeadline int64
+	if !idx.IsInterleaved() &&
+		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
+		// Get the zone config applying to this table in order to
+		// set the GC deadline.
+		_, zoneCfg, subZone, err := GetZoneConfigInTxn(
+			ctx, p.txn, uint32(tableDesc.ID), &idx, "",
+		)
+		if err != nil {
+			return err
+		}
+
+		gcTTL := zoneCfg.GC.TTLSeconds
+		if subZone != nil {
+			gcTTL = subZone.Config.GC.TTLSeconds
+		}
+
+		if gcTTL > 0 {
+			gcDeadline = timeutil.Now().UnixNano() +
+				int64(gcTTL)*time.Second.Nanoseconds()
+		}
+	}
+
 	if len(idx.Interleave.Ancestors) > 0 {
 		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 			return err
@@ -166,6 +201,7 @@ func (p *planner) dropIndexByName(
 			return err
 		}
 	}
+
 	for _, ref := range idx.InterleavedBy {
 		if err := p.removeInterleave(ctx, ref); err != nil {
 			return err
@@ -201,7 +237,9 @@ func (p *planner) dropIndexByName(
 	found := false
 	for i := range tableDesc.Indexes {
 		if tableDesc.Indexes[i].ID == idx.ID {
-			if err := tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP); err != nil {
+			if err := tableDesc.AddIndexMutation(
+				tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP, gcDeadline,
+			); err != nil {
 				return err
 			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)

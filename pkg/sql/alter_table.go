@@ -126,7 +126,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
-				if err := n.tableDesc.AddIndexMutation(*idx, sqlbase.DescriptorMutation_ADD); err != nil {
+				if err := n.tableDesc.AddIndexMutation(
+					*idx, sqlbase.DescriptorMutation_ADD, 0,
+				); err != nil {
 					return err
 				}
 			}
@@ -176,7 +178,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return fmt.Errorf("index %q being dropped, try again later", d.Name)
 					}
 				}
-				if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
+				if err := n.tableDesc.AddIndexMutation(
+					idx, sqlbase.DescriptorMutation_ADD, 0); err != nil {
 					return err
 				}
 

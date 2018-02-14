@@ -437,6 +437,13 @@ message DescriptorMutation {
 
   // Indicates that this mutation is a rollback.
   optional bool rollback = 7 [(gogoproto.nullable) = false];
+
+  // The GC deadline is set when an index mutation is a DROP,
+  // based on the current time and the GC TTL in the zone config. It's
+  // the timestamp after which the index will be cleared
+  // from the cluster. In nanoseconds since the epoch.
+  optional int64 gc_deadline = 8 [(gogoproto.nullable) = false,
+           (gogoproto.customname) = "GCDeadline"];
 }
 
 // A TableDescriptor represents a table or view and is stored in a
@@ -515,8 +522,22 @@ message TableDescriptor {
   optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
   optional PrivilegeDescriptor privileges = 13;
-  // Columns or indexes being added or deleted in a FIFO order.
+  // The columns or indexes being added or dropped in a FIFO order.
   repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
+
+  // The schema elements that have been dropped and whose underlying
+  // data needs to be gc-ed. These schema elements have already transitioned
+  // through the drop state machine when they were in the above mutations
+  // list, and can be safely deleted. The names for these schema elements
+  // can be reused. This list is separate because mutations can
+  // lie in this list for a long time (gc deadline) and should not block
+  // the execution of other schema changes on the table.
+  //
+  // TODO(vivek) This is currently only used by the non-interleaved drop
+  // index case. Also use for dropped interleaved indexes and columns.
+  repeated DescriptorMutation gc_mutations = 32 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "GCMutations"];
+
   // The schema update lease. A single goroutine across a cockroach cluster
   // can own it, and will execute pending schema changes for this table.
   // Since the execution of a pending schema change is through transactions,
