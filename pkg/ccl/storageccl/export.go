@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
@@ -106,15 +105,20 @@ func evalExport(
 	defer tracing.FinishSpan(span)
 
 	// If the startTime is zero, then we're doing a full backup and the gc
-	// threshold is irrelevant. Otherwise, make sure startTime is after the gc
-	// threshold. If it's not, the mvcc tombstones could have been deleted and
-	// the resulting RocksDB tombstones compacted, which means we'd miss
-	// deletions in the incremental backup.
+	// threshold is irrelevant for MVCC_Lastest backups. Otherwise, make sure
+	// startTime is after the gc threshold. If it's not, the mvcc tombstones could
+	// have been deleted and the resulting RocksDB tombstones compacted, which
+	// means we'd miss deletions in the incremental backup. For MVCC_All backups
+	// with no start time, they'll only be capturing the *revisions* since the
+	// gc threshold, so noting that in the reply allows the BACKUP to correctly
+	// note the supported time bounds for RESTORE AS OF SYSTEM TIME.
 	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
-	if args.StartTime != (hlc.Timestamp{}) {
+	if !args.StartTime.IsEmpty() {
 		if !gcThreshold.Less(args.StartTime) {
 			return result.Result{}, errors.Errorf("start timestamp %v must be after replica GC threshold %v", args.StartTime, gcThreshold)
 		}
+	} else if args.MVCCFilter == roachpb.MVCCFilter_All {
+		reply.StartTime = gcThreshold
 	}
 
 	if err := exportRequestLimiter.beginLimitedRequest(ctx); err != nil {
