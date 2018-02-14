@@ -182,9 +182,11 @@ export const nodeDisplayNameByIDSelector = createSelector(
   nodeStatusesSelector,
   (nodeStatuses) => {
     const result: {[key: string]: string} = {};
-    nodeStatuses.forEach(ns => {
-      result[ns.desc.node_id] = `${ns.desc.address.address_field} (n${ns.desc.node_id})`;
-    });
+    if (!_.isEmpty(nodeStatuses)) {
+      nodeStatuses.forEach(ns => {
+        result[ns.desc.node_id] = `${ns.desc.address.address_field} (n${ns.desc.node_id})`;
+      });
+    }
     return result;
   },
 );
