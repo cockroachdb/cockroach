@@ -63,7 +63,8 @@ describe("node data selectors", function() {
     });
 
     it("returns empty collection for empty state", function() {
-      assert.deepEqual(nodeDisplayNameByIDSelector(makeNodesState()), {});
+      const store = createAdminUIStore();
+      assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
     });
   });
 });
