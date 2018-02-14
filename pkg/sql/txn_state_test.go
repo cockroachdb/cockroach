@@ -653,10 +653,9 @@ func TestTransitions(t *testing.T) {
 				expFlush: flush,
 				expEv:    txnRestart,
 			},
-			expTxn: &expKVTxn{
 			// We would like to test that the transaction's epoch bumped if the txn
 			// performed any operations, but it's not easy to do the test.
-			},
+			expTxn: &expKVTxn{},
 		},
 		//
 		// Tests starting from the Aborted state.
