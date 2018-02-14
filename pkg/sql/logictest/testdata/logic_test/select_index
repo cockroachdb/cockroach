@@ -956,3 +956,59 @@ SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 2  ABC
 5  ABCD
 3  ABCDEZ
+
+# Test that we generate spans for IS (NOT) DISTICT FROM.
+statement ok
+CREATE TABLE xy (x INT, y INT, INDEX (y))
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
+----
+render           0  render      ·         ·             (x, y)                                   y=CONST
+ │               0  ·           render 0  test.xy.x     ·                                        ·
+ │               0  ·           render 1  test.xy.y     ·                                        ·
+ └── index-join  1  index-join  ·         ·             (x, y, rowid[hidden,omitted])            y=CONST; rowid!=NULL; key(rowid)
+      ├── scan   2  scan        ·         ·             (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
+      │          2  ·           table     xy@xy_y_idx   ·                                        ·
+      │          2  ·           spans     /NULL-/!NULL  ·                                        ·
+      └── scan   2  scan        ·         ·             (x, y, rowid[hidden,omitted])            ·
+·                2  ·           table     xy@primary    ·                                        ·
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
+----
+render           0  render      ·         ·            (x, y)                                   y=CONST
+ │               0  ·           render 0  test.xy.x    ·                                        ·
+ │               0  ·           render 1  test.xy.y    ·                                        ·
+ └── index-join  1  index-join  ·         ·            (x, y, rowid[hidden,omitted])            y=CONST; rowid!=NULL; key(rowid)
+      ├── scan   2  scan        ·         ·            (x[omitted], y[omitted], rowid[hidden])  y=CONST; rowid!=NULL; key(rowid)
+      │          2  ·           table     xy@xy_y_idx  ·                                        ·
+      │          2  ·           spans     /4-/5        ·                                        ·
+      └── scan   2  scan        ·         ·            (x, y, rowid[hidden,omitted])            ·
+·                2  ·           table     xy@primary   ·                                        ·
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
+----
+render           0  render      ·         ·            (x, y)                                   y!=NULL
+ │               0  ·           render 0  test.xy.x    ·                                        ·
+ │               0  ·           render 1  test.xy.y    ·                                        ·
+ └── index-join  1  index-join  ·         ·            (x, y, rowid[hidden,omitted])            y!=NULL; rowid!=NULL; key(y,rowid)
+      ├── scan   2  scan        ·         ·            (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
+      │          2  ·           table     xy@xy_y_idx  ·                                        ·
+      │          2  ·           spans     /!NULL-      ·                                        ·
+      └── scan   2  scan        ·         ·            (x, y, rowid[hidden,omitted])            ·
+·                2  ·           table     xy@primary   ·                                        ·
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM 4
+----
+render           0  render      ·         ·              (x, y)                                   y!=NULL
+ │               0  ·           render 0  test.xy.x      ·                                        ·
+ │               0  ·           render 1  test.xy.y      ·                                        ·
+ └── index-join  1  index-join  ·         ·              (x, y, rowid[hidden,omitted])            y!=NULL; rowid!=NULL; key(y,rowid)
+      ├── scan   2  scan        ·         ·              (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
+      │          2  ·           table     xy@xy_y_idx    ·                                        ·
+      │          2  ·           spans     /!NULL-/4 /5-  ·                                        ·
+      └── scan   2  scan        ·         ·              (x, y, rowid[hidden,omitted])            ·
+·                2  ·           table     xy@primary     ·                                        ·

@@ -463,6 +463,16 @@ func TestEval(t *testing.T) {
 		{`0 IS NOT DISTINCT FROM NULL`, `false`},
 		{`NULL IS NOT DISTINCT FROM NULL`, `true`},
 		{`NULL IS NOT DISTINCT FROM 1`, `false`},
+		{`(1, NULL) IS NOT DISTINCT FROM (1, NULL)`, `true`},
+		{`(1, NULL) IS DISTINCT FROM (1, NULL)`, `false`},
+		{`(NULL, 1) IS NOT DISTINCT FROM (NULL, 1)`, `true`},
+		{`(NULL, 1) IS DISTINCT FROM (NULL, 1)`, `false`},
+		{`(1, NULL) IS NOT DISTINCT FROM (2, NULL)`, `false`},
+		{`(1, NULL) IS DISTINCT FROM (2, NULL)`, `true`},
+		{`(NULL, 1) IS NOT DISTINCT FROM (NULL, 2)`, `false`},
+		{`(NULL, 1) IS DISTINCT FROM (NULL, 2)`, `true`},
+		{`((NULL, NULL), (1, NULL)) IS NOT DISTINCT FROM ((NULL, NULL), (1, NULL))`, `true`},
+		{`((NULL, NULL), (1, NULL)) IS DISTINCT FROM ((NULL, NULL), (1, NULL))`, `false`},
 		// IS expressions.
 		{`0 IS NULL`, `false`},
 		{`0 IS NOT NULL`, `true`},
@@ -1095,9 +1105,11 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
+			t.Logf("Type checked expression: %s", typedExpr)
 			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
+			t.Logf("Normalized expression:   %s", typedExpr)
 			r, err := typedExpr.Eval(ctx)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)

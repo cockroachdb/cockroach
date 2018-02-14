@@ -1737,7 +1737,10 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:  types.FamTuple,
 			RightType: types.FamTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
+				if left == DNull || right == DNull {
+					return MakeDBool(left == DNull && right == DNull), nil
+				}
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
 			},
 		},
 	},
