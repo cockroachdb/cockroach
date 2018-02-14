@@ -403,16 +403,17 @@ func (expr *CoalesceExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExp
 func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	var leftTyped, rightTyped TypedExpr
 	var fn CmpOp
+	var alwaysNull bool
 	var err error
 	if expr.Operator.hasSubOperator() {
-		leftTyped, rightTyped, fn, err = typeCheckComparisonOpWithSubOperator(ctx,
+		leftTyped, rightTyped, fn, alwaysNull, err = typeCheckComparisonOpWithSubOperator(ctx,
 			expr.Operator,
 			expr.SubOperator,
 			expr.Left,
 			expr.Right,
 		)
 	} else {
-		leftTyped, rightTyped, fn, err = typeCheckComparisonOp(ctx,
+		leftTyped, rightTyped, fn, alwaysNull, err = typeCheckComparisonOp(ctx,
 			expr.Operator,
 			expr.Left,
 			expr.Right,
@@ -422,25 +423,14 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedE
 		return nil, err
 	}
 
-	switch expr.Operator {
-	case IsDistinctFrom, IsNotDistinctFrom, In, NotIn:
-		// These operators handle NULL arguments, so they do not result in an
-		// evaluation directly to NULL in the presence of any NULL arguments.
-		//
-		// TODO(pmattis): For IS {UNKNOWN,TRUE,FALSE} we should be requiring that
-		// TypeLeft.TypeEquals(types.Bool). We currently can't distinguish NULL from
-		// UNKNOWN. Is it important to do so?
-	default:
-		// Return NULL if at least one overload is possible and NULL is an argument.
-		if leftTyped.ResolvedType() == types.Null || rightTyped.ResolvedType() == types.Null {
-			return DNull, nil
-		}
+	if alwaysNull {
+		return DNull, nil
 	}
 
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = fn
 	expr.typ = types.Bool
-	return expr, err
+	return expr, nil
 }
 
 var (
@@ -697,11 +687,11 @@ func (expr *AllColumnsSelector) TypeCheck(_ *SemaContext, desired types.T) (Type
 
 // TypeCheck implements the Expr interface.
 func (expr *RangeCond) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	leftTyped, fromTyped, _, err := typeCheckComparisonOp(ctx, GT, expr.Left, expr.From)
+	leftTyped, fromTyped, _, _, err := typeCheckComparisonOp(ctx, GT, expr.Left, expr.From)
 	if err != nil {
 		return nil, err
 	}
-	_, toTyped, _, err := typeCheckComparisonOp(ctx, LT, expr.Left, expr.To)
+	_, toTyped, _, _, err := typeCheckComparisonOp(ctx, LT, expr.Left, expr.To)
 	if err != nil {
 		return nil, err
 	}
@@ -1028,7 +1018,7 @@ const (
 
 func typeCheckComparisonOpWithSubOperator(
 	ctx *SemaContext, op, subOp ComparisonOperator, left, right Expr,
-) (TypedExpr, TypedExpr, CmpOp, error) {
+) (_ TypedExpr, _ TypedExpr, _ CmpOp, alwaysNull bool, _ error) {
 	// Parentheses are semantically unimportant and can be removed/replaced
 	// with its nested expression in our plan. This makes type checking cleaner.
 	left = StripParens(left)
@@ -1051,7 +1041,7 @@ func typeCheckComparisonOpWithSubOperator(
 		typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right, err)
-			return nil, nil, CmpOp{},
+			return nil, nil, CmpOp{}, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 
@@ -1070,8 +1060,8 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if retType == types.Null {
-			return leftTyped, rightTyped, CmpOp{}, nil
+		if leftTyped.ResolvedType() == types.Null || retType == types.Null {
+			return leftTyped, rightTyped, CmpOp{}, true /* alwaysNull */, nil
 		}
 	} else {
 		// If the right expression is not an array constructor, we type the left
@@ -1079,7 +1069,7 @@ func typeCheckComparisonOpWithSubOperator(
 		var err error
 		leftTyped, err = left.TypeCheck(ctx, types.Any)
 		if err != nil {
-			return nil, nil, CmpOp{}, err
+			return nil, nil, CmpOp{}, false, err
 		}
 		cmpTypeLeft = leftTyped.ResolvedType()
 
@@ -1088,7 +1078,7 @@ func typeCheckComparisonOpWithSubOperator(
 			// type is equivalent to the left's type.
 			rightTyped, err = typeCheckAndRequireTupleElems(ctx, tuple, cmpTypeLeft)
 			if err != nil {
-				return nil, nil, CmpOp{}, err
+				return nil, nil, CmpOp{}, false, err
 			}
 		} else {
 			// Try to type the right expression as an array of the left's type.
@@ -1097,13 +1087,13 @@ func typeCheckComparisonOpWithSubOperator(
 			// propagate the left type as a desired type for the result column.
 			rightTyped, err = right.TypeCheck(ctx, types.TArray{Typ: cmpTypeLeft})
 			if err != nil {
-				return nil, nil, CmpOp{}, err
+				return nil, nil, CmpOp{}, false, err
 			}
 		}
 
 		rightReturn := rightTyped.ResolvedType()
 		if cmpTypeLeft == types.Null || rightReturn == types.Null {
-			return leftTyped, rightTyped, CmpOp{}, nil
+			return leftTyped, rightTyped, CmpOp{}, true /* alwaysNull */, nil
 		}
 
 		switch rightUnwrapped := types.UnwrapType(rightReturn).(type) {
@@ -1114,7 +1104,7 @@ func typeCheckComparisonOpWithSubOperator(
 				// Literal tuple contains no elements (subquery tuples always contain
 				// one and only one element since subqueries are asserted to return
 				// one column of results in analyzeExpr in analyze.go).
-				return nil, nil, CmpOp{}, subOpCompError(cmpTypeLeft, rightReturn, subOp, op)
+				return nil, nil, CmpOp{}, false, subOpCompError(cmpTypeLeft, rightReturn, subOp, op)
 			}
 			// Literal tuples were type checked such that all elements have equivalent types.
 			// Subqueries only contain one element from analyzeExpr in analyze.go.
@@ -1123,14 +1113,14 @@ func typeCheckComparisonOpWithSubOperator(
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
 				fmt.Sprintf("op %s <right> requires array, tuple or subquery on right side", op))
-			return nil, nil, CmpOp{}, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
+			return nil, nil, CmpOp{}, false, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 	}
 	fn, ok := ops.lookupImpl(cmpTypeLeft, cmpTypeRight)
 	if !ok {
-		return nil, nil, CmpOp{}, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
+		return nil, nil, CmpOp{}, false, subOpCompError(cmpTypeLeft, rightTyped.ResolvedType(), subOp, op)
 	}
-	return leftTyped, rightTyped, fn, nil
+	return leftTyped, rightTyped, fn, false, nil
 }
 
 func subOpCompError(leftType, rightType types.T, subOp, op ComparisonOperator) *pgerror.Error {
@@ -1158,7 +1148,7 @@ func typeCheckSubqueryWithIn(left, right types.T) error {
 
 func typeCheckComparisonOp(
 	ctx *SemaContext, op ComparisonOperator, left, right Expr,
-) (TypedExpr, TypedExpr, CmpOp, error) {
+) (_ TypedExpr, _ TypedExpr, _ CmpOp, alwaysNull bool, _ error) {
 	foldedOp, foldedLeft, foldedRight, switched, _ := foldComparisonExpr(op, left, right)
 	ops := CmpOps[foldedOp]
 
@@ -1173,14 +1163,14 @@ func typeCheckComparisonOp(
 		typedSubExprs, retType, err := TypeCheckSameTypedExprs(ctx, types.Any, sameTypeExprs...)
 		if err != nil {
 			sigWithErr := fmt.Sprintf(compExprsFmt, left, op, right, err)
-			return nil, nil, CmpOp{},
+			return nil, nil, CmpOp{}, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 
 		fn, ok := ops.lookupImpl(retType, types.FamTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.FamTuple)
-			return nil, nil, CmpOp{},
+			return nil, nil, CmpOp{}, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
 
@@ -1193,22 +1183,23 @@ func typeCheckComparisonOp(
 			rightTuple.types[i] = retType
 		}
 		if switched {
-			return rightTuple, typedLeft, fn, nil
+			return rightTuple, typedLeft, fn, false, nil
 		}
-		return typedLeft, rightTuple, fn, nil
+		return typedLeft, rightTuple, fn, false, nil
+
 	case leftIsTuple && rightIsTuple:
 		fn, ok := ops.lookupImpl(types.FamTuple, types.FamTuple)
 		if !ok {
 			sig := fmt.Sprintf(compSignatureFmt, types.FamTuple, op, types.FamTuple)
-			return nil, nil, CmpOp{},
+			return nil, nil, CmpOp{}, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
 		// Using non-folded left and right to avoid having to swap later.
 		typedLeft, typedRight, err := typeCheckTupleComparison(ctx, op, left.(*Tuple), right.(*Tuple))
 		if err != nil {
-			return nil, nil, CmpOp{}, err
+			return nil, nil, CmpOp{}, false, err
 		}
-		return typedLeft, typedRight, fn, nil
+		return typedLeft, typedRight, fn, false, nil
 	}
 
 	// For comparisons, we do not stimulate the typing of untyped NULL with the
@@ -1216,9 +1207,11 @@ func typeCheckComparisonOp(
 	// defined to return NULL anyways. Should the SQL dialect ever be extended with
 	// comparisons that can return non-NULL on NULL input, the `inBinOp` parameter
 	// may need altering.
-	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, types.Any, ops, false, foldedLeft, foldedRight)
+	typedSubExprs, fns, err := typeCheckOverloadedExprs(
+		ctx, types.Any, ops, true /* inBinOp */, foldedLeft, foldedRight,
+	)
 	if err != nil {
-		return nil, nil, CmpOp{}, err
+		return nil, nil, CmpOp{}, false, err
 	}
 
 	leftExpr, rightExpr := typedSubExprs[0], typedSubExprs[1]
@@ -1230,19 +1223,23 @@ func typeCheckComparisonOp(
 
 	if foldedOp == In {
 		if err := typeCheckSubqueryWithIn(leftReturn, rightReturn); err != nil {
-			return nil, nil, CmpOp{}, err
+			return nil, nil, CmpOp{}, false, err
 		}
 	}
 
-	// Return early if at least one overload is possible and NULL is an argument.
-	// Callers can handle returning NULL, if necessary.
-	if len(fns) > 0 {
-		switch op {
-		case In, NotIn:
-			break
-		default:
-			if leftReturn == types.Null || rightReturn == types.Null {
-				return leftExpr, rightExpr, CmpOp{}, nil
+	// Return early if at least one overload is possible, NULL is an argument,
+	// and none of the overloads accept NULL.
+	if leftReturn == types.Null || rightReturn == types.Null {
+		if len(fns) > 0 {
+			noneAcceptNull := true
+			for _, e := range fns {
+				if e.(CmpOp).nullableArgs {
+					noneAcceptNull = false
+					break
+				}
+			}
+			if noneAcceptNull {
+				return leftExpr, rightExpr, CmpOp{}, true /* alwaysNull */, err
 			}
 		}
 	}
@@ -1253,16 +1250,16 @@ func typeCheckComparisonOp(
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
-			return nil, nil, CmpOp{},
+			return nil, nil, CmpOp{}, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
 		fnsStr := formatCandidates(op.String(), fns)
-		return nil, nil, CmpOp{},
+		return nil, nil, CmpOp{}, false,
 			pgerror.NewErrorf(pgerror.CodeAmbiguousFunctionError,
 				ambiguousCompErrFmt, sig).SetHintf(candidatesHintFmt, fnsStr)
 	}
 
-	return leftExpr, rightExpr, fns[0].(CmpOp), nil
+	return leftExpr, rightExpr, fns[0].(CmpOp), false, nil
 }
 
 type typeCheckExprsState struct {
@@ -1498,7 +1495,7 @@ func typeCheckTupleComparison(
 	for elemIdx := range left.Exprs {
 		leftSubExpr := left.Exprs[elemIdx]
 		rightSubExpr := right.Exprs[elemIdx]
-		leftSubExprTyped, rightSubExprTyped, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
+		leftSubExprTyped, rightSubExprTyped, _, _, err := typeCheckComparisonOp(ctx, op, leftSubExpr, rightSubExpr)
 		if err != nil {
 			exps := Exprs([]Expr{left, right})
 			return nil, nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "tuples %s are not comparable at index %d: %s",
