@@ -40,6 +40,9 @@ message StatementStatistics {
   // LastErr collects the last error encountered.
   optional string last_err = 4 [(gogoproto.nullable) = false];
 
+  // LastErrRedacted collects the last error, redacted for reporting.
+  optional string last_err_redacted = 11 [(gogoproto.nullable) = false];
+
   // NumRows collects the number of rows returned or observed.
   optional NumericStat num_rows = 5 [(gogoproto.nullable) = false];
 
