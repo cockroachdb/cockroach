@@ -873,9 +873,9 @@ func (e *Executor) execParsed(
 //
 // Args:
 // stmtsToExec: A prefix of these will be executed. The remaining ones will be
-// returned as remainingStmts.
+//   returned as remainingStmts.
 // txnPrefix: Set if stmtsToExec corresponds to the start of the current
-// transaction. Used to trap nested BEGINs.
+//   transaction. Used to trap nested BEGINs.
 // autoCommit: If set, the transaction will be committed after running the
 //   statement. If set, stmtsToExec can only contain a single statement.
 //   If set, the transaction state will always be NoTxn when this function
@@ -883,13 +883,13 @@ func (e *Executor) execParsed(
 //   Errors encountered when committing are reported to the caller and are
 //   indistinguishable from errors encountered while running the query.
 // protoTS: If not nil, the transaction proto sets its Orig and Max timestamps
-// to it each retry.
+//   to it each retry.
 //
 // Returns:
 // remainingStmts: all the statements that were not executed.
 // transitionToOpen: specifies if the caller should move from state AutoRetry to
-// state Open. This will be false if the state is not AutoRetry when this
-// returns.
+//   state Open. This will be false if the state is not AutoRetry when this
+//   returns.
 // err: An error that occurred while executing the queries.
 func runWithAutoRetry(
 	e *Executor,
@@ -943,8 +943,8 @@ func runWithAutoRetry(
 
 		// Run some statements.
 		remainingStmts, transitionToOpen, err = runTxnAttempt(
-			e, session, stmtsToExec, pinfo, origState,
-			txnPrefix, asOfSystemTime, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
+			e, session, stmtsToExec, pinfo, origState, txnPrefix, autoCommit,
+			asOfSystemTime, avoidCachedDescriptors, automaticRetryCount, txnState.txnResults)
 
 		// Sanity checks.
 		if err != nil && txnState.TxnIsOpen() {
@@ -967,48 +967,7 @@ func runWithAutoRetry(
 			}
 		}
 
-		// Check if we need to auto-commit. If so, we end the transaction now; the
-		// transaction was only supposed to exist for the statement that we just
-		// ran.
 		if autoCommit {
-			if err == nil {
-				txn := txnState.mu.txn
-				if txn == nil {
-					log.Fatalf(session.Ctx(), "implicit txn returned with no error and yet "+
-						"the kv txn is gone. No state transition should have done that. State: %s",
-						txnState.State())
-				}
-
-				// We were told to autoCommit. The KV txn might already be committed
-				// (planNodes are free to do that when running an implicit transaction,
-				// and some try to do it to take advantage of 1-PC txns). If it is, then
-				// there's nothing to do. If it isn't, then we commit it here.
-				//
-				// NOTE(andrei): It bothers me some that we're peeking at txn to figure
-				// out whether we committed or not, where SQL could already know that -
-				// individual statements could report this back.
-				if txn.IsAborted() {
-					log.Fatalf(session.Ctx(), "#7881: the statement we just ran didn't generate an error "+
-						"but the txn proto is aborted. This should never happen. txn: %+v",
-						txn)
-				}
-
-				if !txn.IsCommitted() {
-					var skipCommit bool
-					if e.cfg.TestingKnobs.BeforeAutoCommit != nil {
-						err = e.cfg.TestingKnobs.BeforeAutoCommit(session.Ctx(), stmtsToExec[0].String())
-						skipCommit = err != nil
-					}
-					if !skipCommit {
-						err = txn.Commit(session.Ctx())
-					}
-					log.Eventf(session.Ctx(), "AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
-					if err != nil {
-						err = txnState.updateStateAndCleanupOnErr(err, e)
-					}
-				}
-			}
-
 			// After autoCommit, unless we're in RestartWait, we leave the transaction
 			// in NoTxn, regardless of whether we executed the query successfully or
 			// we encountered an error.
@@ -1065,14 +1024,16 @@ func runWithAutoRetry(
 //
 // Args:
 // txnPrefix: set if the start of the batch corresponds to the start of the
-// current transaction. Used to trap nested BEGINs.
+//   current transaction. Used to trap nested BEGINs.
+// autoCommit: If set, the transaction will be committed after running the
+//   statement.
 // txnResults: used to push query results.
 //
 // It returns:
 // remainingStmts: all the statements that were not executed.
 // transitionToOpen: specifies if the caller should move from state AutoRetry to
-// state Open. This will be false if the state is not AutoRetry when this
-// returns.
+//   state Open. This will be false if the state is not AutoRetry when this
+//   returns.
 func runTxnAttempt(
 	e *Executor,
 	session *Session,
@@ -1080,6 +1041,7 @@ func runTxnAttempt(
 	pinfo *tree.PlaceholderInfo,
 	origState TxnStateEnum,
 	txnPrefix bool,
+	autoCommit bool,
 	asOfSystemTime bool,
 	avoidCachedDescriptors bool,
 	automaticRetryCount int,
@@ -1128,6 +1090,47 @@ func runTxnAttempt(
 		// If the transaction is done, stop executing more statements.
 		if !txnState.TxnIsOpen() {
 			break
+		}
+	}
+
+	// Check if we need to auto-commit. If so, we end the transaction now; the
+	// transaction was only supposed to exist for the statement that we just
+	// ran. This needs to happen before the txnResults Flush below (#19269).
+	if autoCommit {
+		txn := txnState.mu.txn
+		if txn == nil {
+			log.Fatalf(session.Ctx(), "implicit txn returned with no error and yet "+
+				"the kv txn is gone. No state transition should have done that. State: %s",
+				txnState.State())
+		}
+
+		// We were told to autoCommit. The KV txn might already be committed
+		// (planNodes are free to do that when running an implicit transaction,
+		// and some try to do it to take advantage of 1-PC txns). If it is, then
+		// there's nothing to do. If it isn't, then we commit it here.
+		//
+		// NOTE(andrei): It bothers me some that we're peeking at txn to figure
+		// out whether we committed or not, where SQL could already know that -
+		// individual statements could report this back.
+		if txn.IsAborted() {
+			log.Fatalf(session.Ctx(), "#7881: the statement we just ran didn't generate an error "+
+				"but the txn proto is aborted. This should never happen. txn: %+v",
+				txn)
+		}
+
+		if !txn.IsCommitted() {
+			if filter := e.cfg.TestingKnobs.BeforeAutoCommit; filter != nil {
+				if err := filter(session.Ctx(), stmts[0].String()); err != nil {
+					err = txnState.updateStateAndCleanupOnErr(err, e)
+					return nil, false, err
+				}
+			}
+			err := txn.Commit(session.Ctx())
+			log.Eventf(session.Ctx(), "AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
+			if err != nil {
+				err = txnState.updateStateAndCleanupOnErr(err, e)
+				return nil, false, err
+			}
 		}
 	}
 
