@@ -15,6 +15,7 @@ import localityIcon from "!!raw-loader!assets/localityIcon.svg";
 import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import { trustIcon } from "src/util/trust";
+import { CpuSparkline } from "./cpuSparkline";
 import { QpsSparkline } from "./qpsSparkline";
 
 interface StatsViewProps {
@@ -39,7 +40,6 @@ const BACKGROUND_BLUE = "#B8CCEC";
 const LIGHT_TEXT_BLUE = "#85A7E3";
 const DARK_BLUE = "#152849";
 
-const STATS_BARS_WIDTH_PX = 69;
 const STATS_BAR_OFFSET_PX = 36;
 
 export class StatsView extends React.Component<StatsViewProps> {
@@ -147,20 +147,7 @@ export class StatsView extends React.Component<StatsViewProps> {
         >
           XX%
         </text>
-        <rect
-          x={STATS_BAR_OFFSET_PX}
-          y="-9"
-          width={STATS_BARS_WIDTH_PX}
-          height="10"
-          fill={BACKGROUND_BLUE}
-        />
-        <rect
-          x={STATS_BAR_OFFSET_PX}
-          y="-6"
-          width="40"
-          height="4"
-          fill={MAIN_BLUE}
-        />
+        {this.renderCPUSparkline()}
       </g>
     );
   }
@@ -186,6 +173,14 @@ export class StatsView extends React.Component<StatsViewProps> {
           XXXX
         </text>
         {this.renderQPSSparkline()}
+      </g>
+    );
+  }
+
+  renderCPUSparkline() {
+    return (
+      <g transform={`translate(${STATS_BAR_OFFSET_PX} -9)`}>
+        <CpuSparkline nodes={this.props.nodes} />
       </g>
     );
   }
