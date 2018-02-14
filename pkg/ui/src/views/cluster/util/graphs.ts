@@ -261,7 +261,7 @@ function formatMetricData(
 
   _.each(metrics, (s, idx) => {
     const result = data.results[idx];
-    if (result) {
+    if (result && !_.isEmpty(result.datapoints)) {
       formattedData.push({
         values: result.datapoints,
         key: s.props.title || s.props.name,
