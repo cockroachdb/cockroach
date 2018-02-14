@@ -147,12 +147,18 @@ func generateOperators() []byte {
 	}
 	sort.Strings(opstrs)
 	b := new(bytes.Buffer)
+	seen := map[string]bool{}
 	for _, op := range opstrs {
 		fmt.Fprintf(b, "<table><thead>\n")
 		fmt.Fprintf(b, "<tr><td><code>%s</code></td><td>Return</td></tr>\n", op)
 		fmt.Fprintf(b, "</thead><tbody>\n")
 		for _, v := range ops[op] {
-			fmt.Fprintf(b, "<tr><td>%s</td><td>%s</td></tr>\n", v.String(), linkTypeName(v.ret))
+			s := fmt.Sprintf("<tr><td>%s</td><td>%s</td></tr>\n", v.String(), linkTypeName(v.ret))
+			if seen[s] {
+				continue
+			}
+			seen[s] = true
+			b.WriteString(s)
 		}
 		fmt.Fprintf(b, "</tbody></table>")
 		fmt.Fprintln(b)
