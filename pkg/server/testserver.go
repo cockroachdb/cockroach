@@ -120,6 +120,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.Insecure = params.Insecure
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
+	cfg.Locality = params.Locality
 	if knobs := params.Knobs.Store; knobs != nil {
 		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
