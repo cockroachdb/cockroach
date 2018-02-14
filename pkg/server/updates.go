@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -272,6 +273,37 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	info.Schema = schema
 	info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
 	info.UnimplementedErrors = make(map[string]int64)
+
+	// Read the system.settings table to determine the settings for which we have
+	// explicitly set values -- the in-memory SV has the set and default values
+	// flattened for quick reads, but we'd rather only report the non-defaults.
+	if datums, _, err := (&sql.InternalExecutor{ExecCfg: s.execCfg}).QueryRows(
+		ctx, "read-setting", "SELECT name FROM system.settings",
+	); err != nil {
+		log.Warning(ctx, err)
+	} else {
+		info.AlteredSettings = make(map[string]string, len(datums))
+		for _, row := range datums {
+			name := string(tree.MustBeDString(row[0]))
+			if setting, ok := settings.Lookup(name); ok {
+				// For those settings where the value is non-sensitive, report it.
+				switch setting.(type) {
+				case *settings.IntSetting,
+					*settings.FloatSetting,
+					*settings.ByteSizeSetting,
+					*settings.DurationSetting,
+					*settings.BoolSetting,
+					*settings.EnumSetting:
+					info.AlteredSettings[name] = setting.String(&s.st.SV)
+				default:
+					info.AlteredSettings[name] = "<non-default>"
+				}
+			} else {
+				info.AlteredSettings[name] = "<unknown>"
+			}
+		}
+	}
+
 	s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
 	return &info
 }

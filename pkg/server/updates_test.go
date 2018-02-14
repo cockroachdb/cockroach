@@ -115,6 +115,13 @@ func TestReportUsage(t *testing.T) {
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := db.Exec(`SET CLUSTER SETTING server.time_until_store_dead = '20s'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := db.Exec(
 		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s (%[1]s INT CONSTRAINT %[1]s CHECK (%[1]s > 1))`, elemName),
 	); err != nil {
@@ -274,6 +281,7 @@ func TestReportUsage(t *testing.T) {
 	if expected, actual := 3, len(r.last.UnimplementedErrors); expected != actual {
 		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
 	}
+
 	for _, feat := range []string{"alter table rename constraint", "simple_type const_interval", "#9148"} {
 		if expected, actual := int64(10), r.last.UnimplementedErrors[feat]; expected != actual {
 			t.Fatalf(
@@ -283,8 +291,28 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 10, len(r.last.SqlStats); expected != actual {
-		t.Fatalf("expected %d queries in stats report, got %d", expected, actual)
+	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
+	// plus version, reporting and trace settings are set in startup migrations.
+	if expected, actual := 6, len(r.last.AlteredSettings); expected != actual {
+		t.Fatalf("expected %d changed settings, got %d: %v", expected, actual, r.last.AlteredSettings)
+	}
+	for key, expected := range map[string]string{
+		"cluster.organization":                     "<non-default>",
+		"diagnostics.reporting.enabled":            "true",
+		"diagnostics.reporting.send_crash_reports": "false",
+		"server.time_until_store_dead":             "20s",
+		"trace.debug.enable":                       "false",
+		"version":                                  "<non-default>",
+	} {
+		if got, ok := r.last.AlteredSettings[key]; !ok {
+			t.Fatalf("expected report of altered setting %q", key)
+		} else if got != expected {
+			t.Fatalf("expected reported value of setting %q to be %q not %q", key, expected, got)
+		}
+	}
+
+	if expected, actual := 12, len(r.last.SqlStats); expected != actual {
+		t.Fatalf("expected %d queries in stats report, got %d :\n %v", expected, actual, r.last.SqlStats)
 	}
 
 	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
@@ -305,6 +333,8 @@ func TestReportUsage(t *testing.T) {
 			`INSERT INTO _ VALUES (_)`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+			`SET CLUSTER SETTING _ = _`,
+			`SET CLUSTER SETTING _ = _`, // these are scrubbed to same key.
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
@@ -316,6 +346,9 @@ func TestReportUsage(t *testing.T) {
 			t.Fatalf("missing stats for default app")
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
+				for _, q := range app {
+					t.Log(q.Key.Query, q.Key)
+				}
 				t.Fatalf("expected %d statements in app %q report, got %d: %+v", expected, appName, actual, app)
 			}
 			keys := make(map[string]struct{})
