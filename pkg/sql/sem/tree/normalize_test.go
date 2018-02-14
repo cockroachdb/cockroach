@@ -225,36 +225,38 @@ func TestNormalizeExpr(t *testing.T) {
 		{`j->2 = '"jv"'::JSONB`, `(j->2) = '"jv"'`},
 	}
 	for _, d := range testData {
-		expr, err := parser.ParseExpr(d.expr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		typedExpr, err := expr.TypeCheck(nil, types.Any)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		rOrig := typedExpr.String()
-		ctx := tree.NewTestingEvalContext()
-		defer ctx.Mon.Stop(context.Background())
-		defer ctx.ActiveMemAcc.Close(context.Background())
-		r, err := ctx.NormalizeExpr(typedExpr)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if s := r.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		// Normalizing again should be a no-op.
-		r2, err := ctx.NormalizeExpr(r)
-		if err != nil {
-			t.Fatalf("%s: %v", d.expr, err)
-		}
-		if s := r2.String(); d.expected != s {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
-		// The original expression should be unchanged.
-		if rStr := typedExpr.String(); rOrig != rStr {
-			t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
-		}
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			typedExpr, err := expr.TypeCheck(nil, types.Any)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			rOrig := typedExpr.String()
+			ctx := tree.NewTestingEvalContext()
+			defer ctx.Mon.Stop(context.Background())
+			defer ctx.ActiveMemAcc.Close(context.Background())
+			r, err := ctx.NormalizeExpr(typedExpr)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			if s := r.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+			// Normalizing again should be a no-op.
+			r2, err := ctx.NormalizeExpr(r)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			if s := r2.String(); d.expected != s {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+			// The original expression should be unchanged.
+			if rStr := typedExpr.String(); rOrig != rStr {
+				t.Fatalf("Original expression `%s` changed to `%s`", rOrig, rStr)
+			}
+		})
 	}
 }
