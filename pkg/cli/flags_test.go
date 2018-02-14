@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"strings"
 	"testing"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -79,6 +81,7 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	// Avoid leaking configuration changes after the test ends.
 	defer initCLIDefaults()
 
+	// Check absolute values.
 	f := StartCmd.Flags()
 	args := []string{"--max-sql-memory", "100MB"}
 	if err := f.Parse(args); err != nil {
@@ -88,6 +91,23 @@ func TestSQLMemoryPoolFlagValue(t *testing.T) {
 	const expectedSQLMemSize = 100 * 1000 * 1000
 	if expectedSQLMemSize != serverCfg.SQLMemoryPoolSize {
 		t.Errorf("expected %d, but got %d", expectedSQLMemSize, serverCfg.SQLMemoryPoolSize)
+	}
+
+	args = []string{"--max-sql-memory", ".30"}
+	if err := f.Parse(args); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check fractional values.
+	maxMem, err := server.GetTotalMemory(context.TODO())
+	if err != nil {
+		t.Logf("total memory unknown: %v", err)
+		return
+	}
+	expectedLow := (maxMem * 28) / 100
+	expectedHigh := (maxMem * 32) / 100
+	if serverCfg.SQLMemoryPoolSize < expectedLow || serverCfg.SQLMemoryPoolSize > expectedHigh {
+		t.Errorf("expected %d-%d, but got %d", expectedLow, expectedHigh, serverCfg.SQLMemoryPoolSize)
 	}
 }
 

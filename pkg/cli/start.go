@@ -780,7 +780,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", cacheSizeValue)
 		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
 		if size, err := server.GetTotalMemory(context.Background()); err == nil {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=25%% (%s).",
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
@@ -793,7 +793,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 		fmt.Fprintf(&buf, "Using the default setting for --max-sql-memory (%s).\n", sqlSizeValue)
 		fmt.Fprintf(&buf, "  A significantly larger value is usually needed in production.\n")
 		if size, err := server.GetTotalMemory(context.Background()); err == nil {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=25%% (%s).",
+			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --max-sql-memory=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {
 			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
