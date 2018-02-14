@@ -7,26 +7,24 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
+import moment from "moment";
 
 import { NodeStatus$Properties } from "src/util/proto";
 import { sumNodeStats } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
-import { NodeHistory } from "src/views/clusterviz/containers/map/nodeHistory";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
+import { LongToMoment } from "src/util/convert";
 
 type NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
   liveness: { [id: string]: NodeLivenessStatus };
-
-  nodeHistory?: NodeHistory;
-  maxClientActivityRate: number;
 }
 
 export class NodeView extends React.Component<NodeViewProps> {
@@ -41,11 +39,14 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { node, liveness } = this.props;
     const { capacityUsable, capacityUsed } = sumNodeStats([node], liveness);
 
+    const startTime = LongToMoment(node.started_at);
+    const uptimeText = moment.duration(startTime.diff(moment())).humanize();
+
     return (
-      <g fill="none" transform="translate(-90 -100)">
+      <g transform="translate(-90 -100)">
         <Labels
           label={node.desc.address.address_field}
-          subLabel={""} // TODO(vilterp): uptime
+          subLabel={uptimeText}
         />
         <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
         {this.renderLivenessIcon()}

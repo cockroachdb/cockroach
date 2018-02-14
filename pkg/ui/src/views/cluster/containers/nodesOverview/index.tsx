@@ -13,7 +13,7 @@ import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
-import { NanoToMilli, LongToMoment } from "src/util/convert";
+import { LongToMoment } from "src/util/convert";
 import { Bytes } from "src/util/format";
 import { NodeStatus$Properties, MetricConstants, BytesUsed } from "src/util/proto";
 
@@ -113,7 +113,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             {
               title: "Uptime",
               cell: (ns) => {
-                const startTime = moment(NanoToMilli(ns.started_at.toNumber()));
+                const startTime = LongToMoment(ns.started_at);
                 return moment.duration(startTime.diff(moment())).humanize();
               },
               sort: (ns) => ns.started_at,
