@@ -1017,3 +1017,63 @@ query T
 SELECT ARRAY_POSITIONS(NULL::STRING[], 'A')
 ----
 NULL
+
+query T
+SELECT STRING_TO_ARRAY('axbxc', 'x')
+----
+{"a","b","c"}
+
+query T
+SELECT STRING_TO_ARRAY('~a~~b~c', '~')
+----
+{"","a","","b","c"}
+
+query T
+SELECT STRING_TO_ARRAY('~foo~~bar~baz', '~', 'bar')
+----
+{"","foo","",NULL,"baz"}
+
+query T
+SELECT STRING_TO_ARRAY('xx~^~yy~^~zz', '~^~', 'yy')
+----
+{"xx",NULL,"zz"}
+
+query T
+SELECT STRING_TO_ARRAY('foo', '')
+----
+{"foo"}
+
+query T
+SELECT STRING_TO_ARRAY('', '')
+----
+{}
+
+query T
+SELECT STRING_TO_ARRAY('', 'foo')
+----
+{}
+
+query T
+SELECT STRING_TO_ARRAY('a', NULL)
+----
+{"a"}
+
+query T
+SELECT STRING_TO_ARRAY(NULL, 'a')
+----
+NULL
+
+query T
+SELECT STRING_TO_ARRAY(NULL, 'a', 'b')
+----
+NULL
+
+query T
+SELECT STRING_TO_ARRAY('a', 'foo', NULL)
+----
+{"a"}
+
+query T
+SELECT STRING_TO_ARRAY('foofoofoofoo', 'foo', 'foo')
+----
+{"","","","",""}

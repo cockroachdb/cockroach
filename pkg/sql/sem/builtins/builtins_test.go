@@ -15,9 +15,11 @@
 package builtins
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestCategory(t *testing.T) {
@@ -51,5 +53,59 @@ func TestGenerateUniqueIDOrder(t *testing.T) {
 		if tc <= prev {
 			t.Fatalf("%d > %d", tc, prev)
 		}
+	}
+}
+
+func TestStringToArray(t *testing.T) {
+	// s allows us to have a string pointer literal.
+	s := func(x string) *string { return &x }
+	cases := []struct {
+		input    string
+		sep      *string
+		nullStr  *string
+		expected []*string
+	}{
+		{`abcxdef`, s(`x`), nil, []*string{s(`abc`), s(`def`)}},
+		{`xxx`, s(`x`), nil, []*string{s(``), s(``), s(``), s(``)}},
+		{`xxx`, s(`xx`), nil, []*string{s(``), s(`x`)}},
+		{`abcxdef`, s(``), nil, []*string{s(`abcxdef`)}},
+		{`abcxdef`, s(`abcxdef`), nil, []*string{s(``), s(``)}},
+		{`abcxdef`, s(`x`), s(`abc`), []*string{nil, s(`def`)}},
+		{`abcxdef`, s(`x`), s(`x`), []*string{s(`abc`), s(`def`)}},
+		{`abcxdef`, s(`x`), s(``), []*string{s(`abc`), s(`def`)}},
+		{``, s(`x`), s(``), []*string{}},
+		{``, s(``), s(``), []*string{}},
+		{``, s(`x`), nil, []*string{}},
+		{``, s(``), nil, []*string{}},
+		{`abcxdef`, nil, nil, []*string{s(`a`), s(`b`), s(`c`), s(`x`), s(`d`), s(`e`), s(`f`)}},
+		{`abcxdef`, nil, s(`abc`), []*string{s(`a`), s(`b`), s(`c`), s(`x`), s(`d`), s(`e`), s(`f`)}},
+		{`abcxdef`, nil, s(`x`), []*string{s(`a`), s(`b`), s(`c`), nil, s(`d`), s(`e`), s(`f`)}},
+		{`abcxdef`, nil, s(``), []*string{s(`a`), s(`b`), s(`c`), s(`x`), s(`d`), s(`e`), s(`f`)}},
+		{``, nil, s(``), []*string{}},
+		{``, nil, nil, []*string{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("string_to_array(%q, %q)", tc.input, tc.sep), func(t *testing.T) {
+			result, err := stringToArray(tc.input, tc.sep, tc.nullStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			expectedArray := tree.NewDArray(types.String)
+			for _, s := range tc.expected {
+				datum := tree.DNull
+				if s != nil {
+					datum = tree.NewDString(*s)
+				}
+				if err := expectedArray.Append(datum); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if result.Compare(tree.NewTestingEvalContext(), expectedArray) != 0 {
+				t.Fatalf("expected %v, got %v", tc.expected, result)
+			}
+		})
 	}
 }
