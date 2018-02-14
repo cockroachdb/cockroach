@@ -61,14 +61,10 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
         }
         {
           localityTree.nodes.map((node, i) => {
-            const nodeHistory = this.props.nodeHistories[node.desc.node_id];
-
             return (
               <g transform={`translate(${this.coordsFor(i + childLocalities.length, total, radius)})`}>
                 <NodeView
                   node={node}
-                  nodeHistory={nodeHistory}
-                  maxClientActivityRate={10000}
                   liveness={this.props.liveness}
                 />
               </g>
