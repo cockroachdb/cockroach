@@ -73,7 +73,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             // Node ID column.
             {
               title: "ID",
-              cell: (ns) => ns.desc.node_id,
+              cell: (ns) => `n${ns.desc.node_id}`,
               sort: (ns) => ns.desc.node_id,
             },
             // Node address column - displays the node address, links to the
@@ -187,7 +187,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
             // Node ID column.
             {
               title: "ID",
-              cell: (ns) => ns.desc.node_id,
+              cell: (ns) => `n${ns.desc.node_id}`,
               sort: (ns) => ns.desc.node_id,
             },
             // Node address column - displays the node address, links to the
