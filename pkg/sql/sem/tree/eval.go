@@ -1922,38 +1922,48 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 		LeftType:  typ,
 		RightType: types.FamTuple,
 		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
-			if arg == DNull {
+			vtuple := values.(*DTuple)
+			// If the tuple was sorted during normalization, we can perform an
+			// efficient binary search to find if the arg is in the tuple (as
+			// long as the arg doesn't contain any NULLs).
+			if len(vtuple.D) == 0 {
+				// If the rhs tuple is empty, the result is always false (even if arg is
+				// or contains NULL).
 				return DBoolFalse, nil
 			}
-
-			// If the tuple was sorted during normalization, we can perform
-			// an efficient binary search to find if the arg is in the tuple.
-			vtuple := values.(*DTuple)
-			if vtuple.Sorted {
-				_, found := vtuple.SearchSorted(ctx, arg)
-				if !found && len(vtuple.D) > 0 && vtuple.D[0] == DNull {
-					// If the tuple contained any null elements and no matches are found,
-					// the result of IN will be null. The null element will at the front
-					// if the tuple is sorted because null is less than any non-null value.
-					return DNull, nil
-				}
-				return MakeDBool(DBool(found)), nil
+			if arg == DNull {
+				return DNull, nil
+			}
+			argTuple, argIsTuple := arg.(*DTuple)
+			if vtuple.Sorted() && !(argIsTuple && argTuple.ContainsNull()) {
+				_, result := vtuple.SearchSorted(ctx, arg)
+				return MakeDBool(DBool(result)), nil
 			}
 
-			// If the tuple was not sorted, which happens in cases where it
-			// is not constant across rows, then we must fall back to iterating
-			// through the entire tuple.
 			sawNull := false
-			for _, val := range vtuple.D {
-				if val == DNull {
-					sawNull = true
-				} else if val.Compare(ctx, arg) == 0 {
-					return DBoolTrue, nil
+			if !argIsTuple {
+				for _, val := range vtuple.D {
+					if val == DNull {
+						sawNull = true
+					} else if val.Compare(ctx, arg) == 0 {
+						return DBoolTrue, nil
+					}
+				}
+			} else {
+				for _, val := range vtuple.D {
+					var res Datum
+					if argIsTuple {
+						// Use the EQ function which properly handles NULLs.
+						res = cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ)
+					}
+					if res == DNull {
+						sawNull = true
+					} else if res == DBoolTrue {
+						return DBoolTrue, nil
+					}
 				}
 			}
 			if sawNull {
-				// If the tuple contains any null elements and no matches are found, the
-				// result of IN will be null.
 				return DNull, nil
 			}
 			return DBoolFalse, nil
@@ -3134,6 +3144,10 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
 		case IsNotDistinctFrom:
 			return MakeDBool(left == DNull && right == DNull), nil
+		case In, NotIn:
+			// IN requires specific handling: NULL IN (<empty subquery>) is false,
+			// not NULL.
+			break
 		default:
 			return DNull, nil
 		}
