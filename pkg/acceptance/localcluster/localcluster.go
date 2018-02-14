@@ -119,8 +119,7 @@ func (b *LocalCluster) RestartAsync(ctx context.Context, i int) <-chan error {
 		// this file. That's why we let *every* node do this (you could try to make
 		// only the first one wait, but if that one is 1.0, bad luck).
 		// Short-circuiting the wait in the case that the listening URL file is
-		// written (i.e. isServing closes) makes restarts work with 1.0 servers for
-		// the most part.
+		// written makes restarts work with 1.0 servers for the most part.
 		for {
 			if gossipAddr := b.Nodes[i].AdvertiseAddr(); gossipAddr != "" {
 				return ch
