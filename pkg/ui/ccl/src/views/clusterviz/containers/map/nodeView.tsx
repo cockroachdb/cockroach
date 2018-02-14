@@ -10,7 +10,7 @@ import React from "react";
 import moment from "moment";
 
 import { NodeStatus$Properties } from "src/util/proto";
-import { sumNodeStats } from "src/redux/nodes";
+import { getDisplayName, sumNodeStats } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
@@ -45,7 +45,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     return (
       <g transform="translate(-90 -100)">
         <Labels
-          label={node.desc.address.address_field}
+          label={getDisplayName(node)}
           subLabel={uptimeText}
         />
         <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
