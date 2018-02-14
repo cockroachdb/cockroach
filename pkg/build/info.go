@@ -103,3 +103,10 @@ func GetInfo() Info {
 		Type:         typ,
 	}
 }
+
+// TestingOverrideTag allows tests to override the build tag.
+func TestingOverrideTag(t string) func() {
+	prev := tag
+	tag = t
+	return func() { tag = prev }
+}

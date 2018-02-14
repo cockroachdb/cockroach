@@ -16,7 +16,9 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -73,10 +75,15 @@ communicate with a secure cluster).
 			return opTimeout()
 		}
 
-		// Is it a GRPC-observed context cancellation (i.e. timeout) or a GRPC
-		// connection error?
-		if status.Code(err) == codes.DeadlineExceeded {
+		// Is it a GRPC-observed context cancellation (i.e. timeout), a GRPC
+		// connection error, or a known indication of a too-old server?
+		if code := status.Code(unwrappedErr); code == codes.DeadlineExceeded {
 			return opTimeout()
+		} else if code == codes.Unimplemented &&
+			strings.Contains(unwrappedErr.Error(), "unknown method Decommission") ||
+			strings.Contains(unwrappedErr.Error(), "unknown service cockroach.server.serverpb.Init") {
+			return fmt.Errorf(
+				"incompatible client and server versions (likely server version: v1.0, required: >=v1.1)")
 		} else if grpcutil.IsClosedConnection(unwrappedErr) {
 			return connDropped()
 		}
