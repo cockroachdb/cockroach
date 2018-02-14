@@ -13,7 +13,6 @@ import { Link } from "react-router";
 import { CircleLayout } from "./circleLayout";
 import { renderAsMap } from "./layout";
 import { MapLayout } from "./mapLayout";
-import { NodeHistory } from "./nodeHistory";
 
 import { LivenessStatus } from "src/redux/nodes";
 import { LocalityTier, LocalityTree } from "src/redux/localities";
@@ -24,7 +23,6 @@ import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 const BACK_BUTTON_OFFSET = 26;
 
 interface NodeCanvasProps {
-  nodeHistories: { [id: string]: NodeHistory };
   localityTree: LocalityTree;
   locationTree: LocationTree;
   liveness: { [id: string]: LivenessStatus };
@@ -71,7 +69,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const { nodeHistories, localityTree, locationTree, liveness } = this.props;
+    const { localityTree, locationTree, liveness } = this.props;
     const { viewportSize } = this.state;
 
     if (renderAsMap(locationTree, localityTree)) {
@@ -86,7 +84,6 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     return <CircleLayout
       localityTree={localityTree}
       liveness={liveness}
-      nodeHistories={nodeHistories}
       viewportSize={viewportSize}
     />;
   }
