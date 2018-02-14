@@ -2,7 +2,7 @@
 
 package pgwirebase
 
-import "fmt"
+import "strconv"
 
 const (
 	_ServerErrFieldType_name_0 = "ServerErrFieldSQLStateServerErrFileldDetail"
@@ -14,8 +14,6 @@ const (
 
 var (
 	_ServerErrFieldType_index_0 = [...]uint8{0, 22, 43}
-	_ServerErrFieldType_index_1 = [...]uint8{0, 21}
-	_ServerErrFieldType_index_2 = [...]uint8{0, 19}
 	_ServerErrFieldType_index_3 = [...]uint8{0, 21, 45}
 	_ServerErrFieldType_index_4 = [...]uint8{0, 25, 47}
 )
@@ -36,6 +34,6 @@ func (i ServerErrFieldType) String() string {
 		i -= 82
 		return _ServerErrFieldType_name_4[_ServerErrFieldType_index_4[i]:_ServerErrFieldType_index_4[i+1]]
 	default:
-		return fmt.Sprintf("ServerErrFieldType(%d)", i)
+		return "ServerErrFieldType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }

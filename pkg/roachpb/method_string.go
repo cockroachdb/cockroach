@@ -2,7 +2,7 @@
 
 package roachpb
 
-import "fmt"
+import "strconv"
 
 const _Method_name = "GetPutConditionalPutIncrementDeleteDeleteRangeClearRangeScanReverseScanBeginTransactionEndTransactionAdminSplitAdminMergeAdminTransferLeaseAdminChangeReplicasHeartbeatTxnGCPushTxnQueryTxnDeprecatedRangeLookupResolveIntentResolveIntentRangeNoopMergeTruncateLogRequestLeaseTransferLeaseLeaseInfoComputeChecksumDeprecatedVerifyChecksumCheckConsistencyInitPutWriteBatchExportImportAdminScatterAddSSTableRecomputeStatsRefreshRefreshRange"
 
@@ -10,7 +10,7 @@ var _Method_index = [...]uint16{0, 3, 6, 20, 29, 35, 46, 56, 60, 71, 87, 101, 11
 
 func (i Method) String() string {
 	if i < 0 || i >= Method(len(_Method_index)-1) {
-		return fmt.Sprintf("Method(%d)", i)
+		return "Method(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _Method_name[_Method_index[i]:_Method_index[i+1]]
 }

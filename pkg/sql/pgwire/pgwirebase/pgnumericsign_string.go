@@ -2,16 +2,11 @@
 
 package pgwirebase
 
-import "fmt"
+import "strconv"
 
 const (
 	_PGNumericSign_name_0 = "PGNumericPos"
 	_PGNumericSign_name_1 = "PGNumericNeg"
-)
-
-var (
-	_PGNumericSign_index_0 = [...]uint8{0, 12}
-	_PGNumericSign_index_1 = [...]uint8{0, 12}
 )
 
 func (i PGNumericSign) String() string {
@@ -21,6 +16,6 @@ func (i PGNumericSign) String() string {
 	case i == 16384:
 		return _PGNumericSign_name_1
 	default:
-		return fmt.Sprintf("PGNumericSign(%d)", i)
+		return "PGNumericSign(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 }

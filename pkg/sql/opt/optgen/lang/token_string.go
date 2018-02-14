@@ -2,7 +2,7 @@
 
 package lang
 
-import "fmt"
+import "strconv"
 
 const _Token_name = "ILLEGALERROREOFIDENTSTRINGWHITESPACECOMMENTLPARENRPARENLBRACKETRBRACKETLBRACERBRACEDOLLARCOLONASTERISKEQUALSARROWAMPERSANDCOMMACARETELLIPSESPIPE"
 
@@ -10,7 +10,7 @@ var _Token_index = [...]uint8{0, 7, 12, 15, 20, 26, 36, 43, 49, 55, 63, 71, 77, 
 
 func (i Token) String() string {
 	if i < 0 || i >= Token(len(_Token_index)-1) {
-		return fmt.Sprintf("Token(%d)", i)
+		return "Token(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _Token_name[_Token_index[i]:_Token_index[i+1]]
 }
