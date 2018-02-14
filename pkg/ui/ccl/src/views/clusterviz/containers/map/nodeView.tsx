@@ -14,6 +14,8 @@ import { sumNodeStats } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
+import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
+import deadIcon from "!!raw-loader!assets/livenessIcons/dead.svg";
 import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
@@ -28,16 +30,19 @@ interface NodeViewProps {
 }
 
 export class NodeView extends React.Component<NodeViewProps> {
-  renderLivenessIcon() {
-    // TODO(vilterp): pipe in real liveness data; add icons for other states
-    return (
-      <g dangerouslySetInnerHTML={trustIcon(liveIcon)} />
-    );
+  getLivenessIcon(nodeCounts: { suspect: number, dead: number }) {
+    if (nodeCounts.dead > 0) {
+      return deadIcon;
+    }
+    if (nodeCounts.suspect > 0) {
+      return suspectIcon;
+    }
+    return liveIcon;
   }
 
   render() {
     const { node, liveness } = this.props;
-    const { capacityUsable, capacityUsed } = sumNodeStats([node], liveness);
+    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], liveness);
 
     const startTime = LongToMoment(node.started_at);
     const uptimeText = moment.duration(startTime.diff(moment())).humanize();
@@ -49,7 +54,10 @@ export class NodeView extends React.Component<NodeViewProps> {
           subLabel={uptimeText}
         />
         <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
-        {this.renderLivenessIcon()}
+        <g
+          dangerouslySetInnerHTML={trustIcon(this.getLivenessIcon(nodeCounts))}
+          transform="translate(9, 9)"
+        />
         <CapacityArc
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
