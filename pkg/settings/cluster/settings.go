@@ -80,9 +80,10 @@ type Settings struct {
 // (for example, a CLI subcommand that does not connect to a cluster).
 var NoSettings *Settings // = nil
 
-const keyVersionSetting = "version"
+// KeyVersionSetting is the "version" settings key.
+const KeyVersionSetting = "version"
 
-var version = settings.RegisterStateMachineSetting(keyVersionSetting,
+var version = settings.RegisterStateMachineSetting(KeyVersionSetting,
 	"set the active cluster version in the format '<major>.<minor>'.", // hide optional `-<unstable>`
 	settings.TransformerFn(versionTransformer),
 )
@@ -107,7 +108,7 @@ func (s *Settings) InitializeVersion(cv ClusterVersion) error {
 	}
 	// Note that we don't call `updater.ResetRemaining()`.
 	updater := settings.NewUpdater(&s.SV)
-	if err := updater.Set(keyVersionSetting, string(b), version.Typ()); err != nil {
+	if err := updater.Set(KeyVersionSetting, string(b), version.Typ()); err != nil {
 		return err
 	}
 	s.Version.baseVersion.Store(&cv)
@@ -272,6 +273,8 @@ func (sv *stringedVersion) String() string {
 
 // versionTransformer is the transformer function for the version StateMachine.
 // It has access to the Settings struct via the opaque member of settings.Values.
+// The returned versionStringer must, when printed, only return strings that are
+// safe to include in diagnostics reporting.
 func versionTransformer(
 	sv *settings.Values, curRawProto []byte, versionBump *string,
 ) (newRawProto []byte, versionStringer interface{}, _ error) {

@@ -26,6 +26,7 @@ message DiagnosticReport {
   repeated sql.sqlbase.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
   repeated sql.CollectedStatementStatistics sql_stats = 4 [(gogoproto.nullable) = false];
   map<string, int64> unimplemented_errors = 5;
+  map<string, string> altered_settings = 6;
 }
 
 message NodeInfo {
