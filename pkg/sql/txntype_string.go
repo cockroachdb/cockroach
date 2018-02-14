@@ -2,7 +2,7 @@
 
 package sql
 
-import "fmt"
+import "strconv"
 
 const _txnType_name = "implicitTxnexplicitTxn"
 
@@ -10,7 +10,7 @@ var _txnType_index = [...]uint8{0, 11, 22}
 
 func (i txnType) String() string {
 	if i < 0 || i >= txnType(len(_txnType_index)-1) {
-		return fmt.Sprintf("txnType(%d)", i)
+		return "txnType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _txnType_name[_txnType_index[i]:_txnType_index[i+1]]
 }
