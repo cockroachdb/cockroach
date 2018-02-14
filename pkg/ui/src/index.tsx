@@ -73,7 +73,7 @@ ReactDOM.render(
         <IndexRedirect to="overview" />
 
         { /* overview page */ }
-        <Route path="overview">
+        <Route path="overview(/**)">
           <IndexRoute component={ ClusterOverview } />
         </Route>
 

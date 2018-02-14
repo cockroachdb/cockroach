@@ -34,7 +34,7 @@ interface MapLayoutState {
 export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   gEl: any;
   zoom: d3.behavior.Zoom<any>;
-  maxLatitude = 63;
+  maxLatitude = 80;
 
   constructor(props: MapLayoutProps) {
     super(props);

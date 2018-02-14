@@ -46,6 +46,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
 
   updateViewport = () => {
     this.setState({
+      // TODO(vilterp): the height is wrong
       viewportSize: [this.graphEl.clientWidth, this.graphEl.clientHeight],
     });
   }
@@ -99,7 +100,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
 
     return (
       <div style={{ position: "absolute", left: BACK_BUTTON_OFFSET, bottom: BACK_BUTTON_OFFSET }}>
-        <Link to={ CLUSTERVIZ_ROOT + "/" + generateLocalityRoute(parentLocality) }>
+        <Link to={ "/overview/" + generateLocalityRoute(parentLocality) }>
           Back to { getLocalityLabel(parentLocality) }
         </Link>
       </div>
