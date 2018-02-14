@@ -36,12 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -1916,6 +1918,46 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			t.Errorf("expected 'incompatible RESTORE timestamp' error got %+v", err)
 		}
 	})
+}
+
+func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 10
+	ctx, tc, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+	const dir = "nodelocal:///"
+	preGC := tree.TimestampToDecimal(tc.Server(0).Clock().Now()).String()
+
+	gcr := roachpb.GCRequest{
+		// Bogus span to make it a valid request.
+		Span: roachpb.Span{
+			Key:    keys.MakeTablePrefix(keys.MaxReservedDescID + 1),
+			EndKey: keys.MaxKey,
+		},
+		Threshold: tc.Server(0).Clock().Now(),
+	}
+	if _, err := client.SendWrapped(ctx, tc.Server(0).DistSender(), &gcr); err != nil {
+		t.Fatal(err)
+	}
+
+	postGC := tree.TimestampToDecimal(tc.Server(0).Clock().Now()).String()
+
+	lateFullTableBackup := filepath.Join(dir, "tbl-after-gc")
+	sqlDB.Exec(t, `BACKUP data.bank TO $1 WITH experimental_revision_history`, lateFullTableBackup)
+	sqlDB.Exec(t, `DROP TABLE data.bank`)
+	if _, err := sqlDB.DB.Exec(
+		fmt.Sprintf(`RESTORE data.bank FROM $1 EXPERIMENTAL AS OF SYSTEM TIME %s`, preGC),
+		lateFullTableBackup,
+	); !testutils.IsError(err, `BACKUP only has revision history from`) {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.DB.Exec(
+		fmt.Sprintf(`RESTORE data.bank FROM $1 EXPERIMENTAL AS OF SYSTEM TIME %s`, postGC),
+		lateFullTableBackup,
+	); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {

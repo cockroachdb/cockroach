@@ -688,13 +688,17 @@ func backup(
 				StartTime:  span.start,
 				MVCCFilter: roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
-			res, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
+			rawRes, pErr := client.SendWrappedWith(gCtx, db.GetSender(), header, req)
 			if pErr != nil {
 				return pErr.GoError()
 			}
+			res := rawRes.(*roachpb.ExportResponse)
 
 			mu.Lock()
-			for _, file := range res.(*roachpb.ExportResponse).Files {
+			if backupDesc.RevisionStartTime.Less(res.StartTime) {
+				backupDesc.RevisionStartTime = res.StartTime
+			}
+			for _, file := range res.Files {
 				f := BackupDescriptor_File{
 					Span:        file.Span,
 					Path:        file.Path,
