@@ -29,6 +29,8 @@ func (r Resolution) String() string {
 		return "10s"
 	case resolution1ns:
 		return "1ns"
+	case resolutionInvalid:
+		return "BAD"
 	}
 	return fmt.Sprintf("%d", r)
 }
@@ -41,14 +43,19 @@ const (
 	// resolution1ns stores data with a sample resolution of 1 nanosecond. Used
 	// only for testing.
 	resolution1ns Resolution = 999
+	// resolutionInvalid is an invalid resolution used only for testing. It causes
+	// an error to be thrown in certain methods. It is invalid because its sample
+	// period is not a divisor of its slab period.
+	resolutionInvalid Resolution = 1000
 )
 
 // sampleDurationByResolution is a map used to retrieve the sample duration
 // corresponding to a Resolution value. Sample durations are expressed in
 // nanoseconds.
 var sampleDurationByResolution = map[Resolution]int64{
-	Resolution10s: int64(time.Second * 10),
-	resolution1ns: 1, // 1ns resolution only for tests.
+	Resolution10s:     int64(time.Second * 10),
+	resolution1ns:     1,  // 1ns resolution only for tests.
+	resolutionInvalid: 10, // Invalid resolution.
 }
 
 // slabDurationByResolution is a map used to retrieve the slab duration
@@ -56,8 +63,9 @@ var sampleDurationByResolution = map[Resolution]int64{
 // samples are stored at a single Cockroach key/value. Slab durations are
 // expressed in nanoseconds.
 var slabDurationByResolution = map[Resolution]int64{
-	Resolution10s: int64(time.Hour),
-	resolution1ns: 10, // 1ns resolution only for tests.
+	Resolution10s:     int64(time.Hour),
+	resolution1ns:     10, // 1ns resolution only for tests.
+	resolutionInvalid: 11,
 }
 
 // SampleDuration returns the sample duration corresponding to this resolution
