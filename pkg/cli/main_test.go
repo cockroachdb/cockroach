@@ -18,6 +18,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -29,6 +30,10 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
+	// CLI tests are sensitive to the server version, but test binaries don't have
+	// a version injected. Pretend to be a very up-to-date version.
+	defer build.TestingOverrideTag("v999")()
+
 	serverutils.InitTestServerFactory(server.TestServerFactory)
 	os.Exit(m.Run())
 }
