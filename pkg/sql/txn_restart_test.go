@@ -495,22 +495,22 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 		}, false)
 
 	if err := aborter.QueueStmtForAbortion(
-		"INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp())", 2 /* abortCount */, true, /* willBeRetriedIbid */
+		"INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp()) RETURNING 1", 2 /* abortCount */, true, /* willBeRetriedIbid */
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := aborter.QueueStmtForAbortion(
-		"INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp())", 2 /* abortCount */, true, /* willBeRetriedIbid */
+		"INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp()) RETURNING 1", 2 /* abortCount */, true, /* willBeRetriedIbid */
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := aborter.QueueStmtForAbortion(
-		"INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp())", 2 /* abortCount */, true, /* willBeRetriedIbid */
+		"INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp()) RETURNING 1", 2 /* abortCount */, true, /* willBeRetriedIbid */
 	); err != nil {
 		t.Fatal(err)
 	}
 	if err := aborter.QueueStmtForAbortion(
-		"INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())", 2 /* abortCount */, true, /* willBeRetriedIbid */
+		"INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp()) RETURNING 1", 2 /* abortCount */, true, /* willBeRetriedIbid */
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -530,20 +530,38 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 	// TODO(knz): This test can be made more robust by exposing the
 	// current allocation count in monitor and checking that it has the
 	// same value at the beginning of each retry.
-	if _, err := sqlDB.Exec(`
-INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp());
+	rows, err := sqlDB.Query(`
+INSERT INTO t.test(k, v, t) VALUES (1, 'boulanger', cluster_logical_timestamp()) RETURNING 1;
 BEGIN;
-SELECT * FROM t.test;
-INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp());
-INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp());
+INSERT INTO t.test(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp()) RETURNING 1;
+INSERT INTO t.test(k, v, t) VALUES (3, 'fajita', cluster_logical_timestamp()) RETURNING 1;
 END;
-INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp());
+INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp()) RETURNING 1;
 BEGIN;
-INSERT INTO t.test(k, v, t) VALUES (5, 'josephine', cluster_logical_timestamp());
-INSERT INTO t.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp());
-`); err != nil {
+INSERT INTO t.test(k, v, t) VALUES (5, 'josephine', cluster_logical_timestamp()) RETURNING 1;
+INSERT INTO t.test(k, v, t) VALUES (6, 'laureal', cluster_logical_timestamp()) RETURNING 1;
+`)
+	if err != nil {
 		t.Fatal(err)
 	}
+	defer rows.Close()
+
+	resSets := 0
+	for {
+		for rows.Next() {
+			resSets++
+		}
+		if !rows.NextResultSet() {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if resSets != 6 {
+		t.Fatalf("Expected 6 result sets, got %d", resSets)
+	}
+
 	cleanupFilter()
 
 	checkRestarts(t, magicVals)
@@ -592,7 +610,7 @@ BEGIN;
 	}
 
 	// Continue the txn in a new request, which is not retriable.
-	_, err := sqlDB.Exec("INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
+	_, err = sqlDB.Exec("INSERT INTO t.test(k, v, t) VALUES (4, 'hooly', cluster_logical_timestamp())")
 	if !testutils.IsError(
 		err, "encountered previous write with future timestamp") {
 		t.Errorf("didn't get expected injected error. Got: %v", err)
