@@ -487,8 +487,11 @@ func readCSV(
 							count += int64(len(batch.r))
 						}
 					}
-					const fiftyMiB = 50 << 20
-					if updateFromBytes && (err == io.EOF || bc.n > fiftyMiB) {
+					// progressBytes is the number of read bytes at which to report job progress. A
+					// low value may cause excessive updates in the job table which can lead to
+					// very large rows due to MVCC saving each version.
+					const progressBytes = 100 << 20
+					if updateFromBytes && (err == io.EOF || bc.n > progressBytes) {
 						readBytes += bc.n
 						bc.n = 0
 						if err := progressFn(float32(readBytes) / float32(totalBytes)); err != nil {
