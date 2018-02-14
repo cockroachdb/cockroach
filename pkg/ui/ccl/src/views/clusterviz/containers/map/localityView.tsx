@@ -17,6 +17,7 @@ import { sumNodeStats, LivenessStatus } from "src/redux/nodes";
 import { pluralize } from "src/util/pluralize";
 import { trustIcon } from "src/util/trust";
 import localityIcon from "!!raw-loader!assets/localityIcon.svg";
+import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
@@ -26,6 +27,16 @@ interface LocalityViewProps {
   liveness: { [id: string]: LivenessStatus };
 }
 
+// TODO(vilterp): CSS, I guess.
+const DEAD_COLOR = "#E75263";
+const SUSPECT_COLOR = "#FFAD26";
+
+const LIVENESS_ICON_SPACING = 3;
+const LIVENESS_ICON_RADIUS = 8;
+const LIVENESS_TOTAL_WIDTH = LIVENESS_ICON_RADIUS * 2 + LIVENESS_ICON_SPACING;
+
+// function StatusIcon
+
 class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> {
   onClick = () => {
     const localityTree = this.props.localityTree;
@@ -33,10 +44,44 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
     this.props.router.push(destination);
   }
 
-  renderLivenessIcon() {
-    // TODO(vilterp): aggregate liveness of child nodes; render composite icon
+  renderLivenessIcon(nodeCounts: { healthy: number, suspect: number, dead: number }) {
+    // note: there's also a count of decommissioned nodes; it's ignored here.
+
+    // If all nodes live, render green checkmark.
+    if (nodeCounts.dead === 0 && nodeCounts.suspect === 0) {
+      return (
+        <g dangerouslySetInnerHTML={trustIcon(liveIcon)} />
+      );
+    }
+
+    const pairs: { color: string, count: number }[] = [];
+    if (nodeCounts.suspect > 0) {
+      pairs.push({ color: SUSPECT_COLOR, count: nodeCounts.suspect });
+    }
+    if (nodeCounts.dead > 0) {
+      pairs.push({ color: DEAD_COLOR, count: nodeCounts.dead });
+    }
+
     return (
-      <g />
+      <g transform="translate(12 12)">
+        {pairs.map(({color, count}, idx) => (
+          <g transform={`translate(${LIVENESS_TOTAL_WIDTH * idx * -1} 0)`}>
+            <circle
+              r={LIVENESS_ICON_RADIUS}
+              fill={color}
+            />
+            <text
+              fill="white"
+              textAnchor="middle"
+              fontFamily="Lato-Regular"
+              fontSize="10px"
+              y="3"
+            >
+              {count}
+            </text>
+          </g>
+        ))}
+      </g>
     );
   }
 
@@ -44,7 +89,11 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
     const { tiers } = this.props.localityTree;
 
     const leavesUnderMe = getLeaves(this.props.localityTree);
-    const { capacityUsable, capacityUsed } = sumNodeStats(leavesUnderMe, this.props.liveness);
+    const {
+      capacityUsable,
+      capacityUsed,
+      nodeCounts,
+    } = sumNodeStats(leavesUnderMe, this.props.liveness);
 
     const nodeIds = leavesUnderMe.map((node) => `${node.desc.node_id}`);
 
@@ -59,7 +108,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
           subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
         />
         <g dangerouslySetInnerHTML={trustIcon(localityIcon)} transform="translate(14 14)" />
-        {this.renderLivenessIcon()}
+        {this.renderLivenessIcon(nodeCounts)}
         <CapacityArc
           usableCapacity={capacityUsable}
           usedCapacity={capacityUsed}
