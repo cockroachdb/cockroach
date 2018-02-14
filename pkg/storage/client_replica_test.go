@@ -568,6 +568,7 @@ func TestRangeTransferLease(t *testing.T) {
 	// replica. The check is executed in a retry loop because the lease may not
 	// have been applied yet.
 	checkHasLease := func(t *testing.T, sender *storage.Stores) {
+		t.Helper()
 		testutils.SucceedsSoon(t, func() error {
 			return sendRead(sender).GoError()
 		})
