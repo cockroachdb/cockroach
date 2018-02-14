@@ -9,12 +9,10 @@
 import React from "react";
 import { RouterState } from "react-router";
 
+import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
+import HistoryAccumulator from "src/views/clusterviz/containers/map/historyAccumulator";
 import { parseLocalityRoute } from "src/util/localities";
-
 import "./sim.css";
-
-import { Breadcrumbs } from "ccl/src/views/clusterviz/containers/map/breadcrumbs";
-import HistoryAccumulator from "ccl/src/views/clusterviz/containers/map/historyAccumulator";
 
 export default class ClusterVisualization extends React.Component<RouterState> {
   render() {
