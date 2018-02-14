@@ -18,7 +18,7 @@ import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
 import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
-import { NanoToMilli } from "src/util/convert";
+import { LongToMoment } from "src/util/convert";
 
 type NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
@@ -39,7 +39,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { node, liveness } = this.props;
     const { capacityUsable, capacityUsed } = sumNodeStats([node], liveness);
 
-    const startTime = moment(NanoToMilli(node.started_at.toNumber()));
+    const startTime = LongToMoment(node.started_at);
     const uptimeText = moment.duration(startTime.diff(moment())).humanize();
 
     return (
