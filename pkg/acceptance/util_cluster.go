@@ -147,16 +147,8 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 			for i := 0; i < len(cfg.Nodes); i++ {
 				// TODO(tschottdorf): handle Nodes[i].Stores properly.
 				if cfg.Nodes[i].Version != "" {
-					var err error
 					var nCfg localcluster.NodeConfig
-					nCfg.Binary, err = binfetcher.Download(ctx, binfetcher.Options{
-						Binary:  "cockroach",
-						Dir:     ".localcluster_cache",
-						Version: cfg.Nodes[i].Version,
-					})
-					if err != nil {
-						t.Fatalf("unable to set up binary for v%s: %s", cfg.Nodes[i].Version, err)
-					}
+					nCfg.Binary = GetBinary(ctx, t, cfg.Nodes[i].Version)
 					perNodeCfg[i] = nCfg
 				}
 			}
@@ -216,7 +208,7 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 					// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
 					// to determine whether a cluster has up-replicated. This is relevant for the
 					// version upgrade acceptance test. Just skip the replication check for this case.
-					if testutils.IsError(err, "relation \"crdb_internal.ranges\" does not exist") {
+					if testutils.IsError(err, "(table|relation) \"crdb_internal.ranges\" does not exist") {
 						return nil
 					}
 					t.Fatal(err)
@@ -259,4 +251,18 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 
 	completed = true
 	return c
+}
+
+// GetBinary retrieves a binary for the specified version and returns it.
+func GetBinary(ctx context.Context, t *testing.T, version string) string {
+	t.Helper()
+	bin, err := binfetcher.Download(ctx, binfetcher.Options{
+		Binary:  "cockroach",
+		Dir:     ".localcluster_cache",
+		Version: version,
+	})
+	if err != nil {
+		t.Fatalf("unable to set up binary for v%s: %s", version, err)
+	}
+	return bin
 }
