@@ -428,10 +428,13 @@ func (ds *DistSender) sendSingleRange(
 	// Try to send the call.
 	replicas := NewReplicaSlice(ds.gossip, desc)
 
-	// Rearrange the replicas so that those replicas with long common
-	// prefix of attributes end up first. If there's no prefix, this is a
-	// no-op.
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor())
+	// Rearrange the replicas so that they're ordered in expectation of
+	// request latency.
+	var latencyFn LatencyFunc
+	if ds.rpcContext != nil {
+		latencyFn = ds.rpcContext.RemoteClocks.Latency
+	}
+	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
