@@ -239,7 +239,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a IN (1, 1)`, `a IN (1)`, true},
 		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`, true},
 		{`a IN (1, NULL, 2, NULL)`, `a IN (NULL, 1, 2)`, true},
-		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (NULL, 1, 2)`, true},
+		{`a IN (1, 2) OR a IN (2, 3)`, `a IN (1, 2, 3)`, true},
 
 		{`(a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`, true},
 		{`(a, b) IN ((1, 2), (1, 2))`, `(a, b) IN ((1, 2))`, true},
