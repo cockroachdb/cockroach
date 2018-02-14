@@ -2,7 +2,7 @@
 
 package base
 
-import "fmt"
+import "strconv"
 
 const _TestClusterReplicationMode_name = "ReplicationAutoReplicationManual"
 
@@ -10,7 +10,7 @@ var _TestClusterReplicationMode_index = [...]uint8{0, 15, 32}
 
 func (i TestClusterReplicationMode) String() string {
 	if i < 0 || i >= TestClusterReplicationMode(len(_TestClusterReplicationMode_index)-1) {
-		return fmt.Sprintf("TestClusterReplicationMode(%d)", i)
+		return "TestClusterReplicationMode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _TestClusterReplicationMode_name[_TestClusterReplicationMode_index[i]:_TestClusterReplicationMode_index[i+1]]
 }

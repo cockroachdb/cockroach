@@ -2,7 +2,7 @@
 
 package lang
 
-import "fmt"
+import "strconv"
 
 const _Operator_name = "UnknownOpRootOpDefineSetOpRuleSetOpDefineOpCommentsOpCommentOpTagsOpTagOpDefineFieldsOpDefineFieldOpRuleOpBindOpRefOpMatchOpOpNamesOpOpNameOpMatchAndOpMatchInvokeOpMatchNotOpMatchAnyOpMatchListOpConstructOpConstructListOpListOpStringOp"
 
@@ -10,7 +10,7 @@ var _Operator_index = [...]uint8{0, 9, 15, 26, 35, 43, 53, 62, 68, 73, 87, 100, 
 
 func (i Operator) String() string {
 	if i < 0 || i >= Operator(len(_Operator_index)-1) {
-		return fmt.Sprintf("Operator(%d)", i)
+		return "Operator(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _Operator_name[_Operator_index[i]:_Operator_index[i+1]]
 }

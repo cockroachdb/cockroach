@@ -2,7 +2,7 @@
 
 package sql
 
-import "fmt"
+import "strconv"
 
 const _txnEvent_name = "noEventtxnCommittxnAbortedtxnRestart"
 
@@ -10,7 +10,7 @@ var _txnEvent_index = [...]uint8{0, 7, 16, 26, 36}
 
 func (i txnEvent) String() string {
 	if i < 0 || i >= txnEvent(len(_txnEvent_index)-1) {
-		return fmt.Sprintf("txnEvent(%d)", i)
+		return "txnEvent(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
 	return _txnEvent_name[_txnEvent_index[i]:_txnEvent_index[i+1]]
 }
