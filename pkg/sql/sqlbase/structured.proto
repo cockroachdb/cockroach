@@ -434,6 +434,9 @@ message DescriptorMutation {
   optional uint32 mutation_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "MutationID", (gogoproto.casttype) = "MutationID"];
   reserved 6;
+
+  // Indicates that this mutation is a rollback.
+  optional bool rollback = 7 [(gogoproto.nullable) = false];
 }
 
 // A TableDescriptor represents a table or view and is stored in a
