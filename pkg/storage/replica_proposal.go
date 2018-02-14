@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -380,7 +379,6 @@ func addSSTablePreApply(
 
 		path = ingestPath
 
-		limitBulkIOWrite(ctx, st, len(sst.Data))
 		log.Eventf(ctx, "copying SSTable for ingestion at index %d, term %d: %s", index, term, path)
 
 		// TODO(tschottdorf): remove this once sideloaded storage guarantees its
@@ -398,7 +396,7 @@ func addSSTablePreApply(
 			}
 		}
 
-		if err := fileutil.WriteFileSyncing(path, sst.Data, 0600, sstWriteSyncRate.Get(&st.SV)); err != nil {
+		if err := writeFileSyncing(ctx, path, sst.Data, 0600, st); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
 		copied = true
