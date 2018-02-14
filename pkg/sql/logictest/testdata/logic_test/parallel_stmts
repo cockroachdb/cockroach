@@ -89,8 +89,10 @@ INSERT INTO kv VALUES (5, 6) RETURNING NOTHING
 statement error duplicate key value \(k\)=\(2\) violates unique constraint "primary"
 COMMIT
 
-statement ok
-ROLLBACK
+query T
+SHOW TRANSACTION STATUS
+----
+NoTxn
 
 query II
 SELECT k, v FROM kv ORDER BY k
@@ -141,9 +143,6 @@ UPSERT INTO kv VALUES (3, 10) RETURNING NOTHING
 
 statement error failed to satisfy CHECK constraint \(v < 100\)
 COMMIT
-
-statement ok
-ROLLBACK
 
 query II
 SELECT k, v FROM kv ORDER BY k
@@ -196,9 +195,6 @@ UPDATE kv SET k = 10 WHERE k = 4 RETURNING NOTHING
 statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
 COMMIT
 
-statement ok
-ROLLBACK
-
 query II
 SELECT k, v FROM kv ORDER BY k
 ----
@@ -250,9 +246,6 @@ DELETE FROM kv WHERE k = 3 RETURNING NOTHING
 
 statement error foreign key violation: values \[2\] in columns \[k\] referenced in table \"fk\"
 COMMIT
-
-statement ok
-ROLLBACK
 
 query II
 SELECT k, v FROM kv ORDER BY k
@@ -384,9 +377,6 @@ Open
 
 statement error duplicate key value \(k\)=\(4\) violates unique constraint "primary"
 COMMIT
-
-statement ok
-ROLLBACK
 
 query II
 SELECT k, v FROM kv ORDER BY k
