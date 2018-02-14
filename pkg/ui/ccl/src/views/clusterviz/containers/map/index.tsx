@@ -10,7 +10,7 @@ import React from "react";
 import { RouterState } from "react-router";
 
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
-import HistoryAccumulator from "src/views/clusterviz/containers/map/historyAccumulator";
+import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import { parseLocalityRoute } from "src/util/localities";
 import "./sim.css";
 
@@ -26,7 +26,7 @@ export default class ClusterVisualization extends React.Component<RouterState> {
         flexDirection: "column",
       }}>
         <Breadcrumbs tiers={tiers} />
-        <HistoryAccumulator tiers={tiers} />
+        <NodeCanvasContainer tiers={tiers} />
       </div>
     );
   }

@@ -29,11 +29,10 @@ import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 
 import { NodeCanvas } from "./nodeCanvas";
-import { NodeHistory } from "./nodeHistory";
 
 import spinner from "assets/spinner.gif";
 
-interface HistoryAccumulatorProps {
+interface NodeCanvasContainerProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
   locationTree: LocationTree;
@@ -45,39 +44,18 @@ interface HistoryAccumulatorProps {
   refreshLocations: typeof refreshLocations;
 }
 
-interface HistoryAccumulatorOwnProps {
+interface NodeCanvasContainerOwnProps {
   tiers: LocalityTier[];
 }
 
-class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps> {
-  nodeHistories: { [id: string]: NodeHistory } = {};
-
-  // accumulateHistory parses incoming nodeStatus properties and accumulates
-  // a history for each node.
-  accumulateHistory(props = this.props) {
-    if (!props.dataIsValid) {
-      return;
-    }
-
-    props.nodesSummary.nodeStatuses.map((status) => {
-      const id = status.desc.node_id;
-      if (!this.nodeHistories.hasOwnProperty(id)) {
-        this.nodeHistories[id] = new NodeHistory(status);
-      } else {
-        this.nodeHistories[id].update(status);
-      }
-    });
-  }
-
+class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & NodeCanvasContainerOwnProps & WithRouterProps> {
   componentWillMount() {
-    this.accumulateHistory();
     this.props.refreshNodes();
     this.props.refreshLiveness();
     this.props.refreshLocations();
   }
 
-  componentWillReceiveProps(props: HistoryAccumulatorProps & HistoryAccumulatorOwnProps & WithRouterProps) {
-    this.accumulateHistory(props);
+  componentWillReceiveProps(props: NodeCanvasContainerProps & NodeCanvasContainerOwnProps & WithRouterProps) {
     props.refreshNodes();
     props.refreshLiveness();
     props.refreshLocations();
@@ -96,7 +74,6 @@ class HistoryAccumulator extends React.Component<HistoryAccumulatorProps & Histo
         image={spinner}
       >
         <NodeCanvas
-          nodeHistories={this.nodeHistories}
           localityTree={currentLocality}
           locationTree={this.props.locationTree}
           liveness={this.props.liveness}
@@ -122,7 +99,7 @@ const selectDataIsValid = createSelector(
 );
 
 export default connect(
-  (state: AdminUIState, _ownProps: HistoryAccumulatorOwnProps) => ({
+  (state: AdminUIState, _ownProps: NodeCanvasContainerOwnProps) => ({
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
     locationTree: selectLocationTree(state),
@@ -135,4 +112,4 @@ export default connect(
     refreshLiveness,
     refreshLocations,
   },
-)(withRouter(HistoryAccumulator));
+)(withRouter(NodeCanvasContainer));
