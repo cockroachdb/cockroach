@@ -423,7 +423,7 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedE
 	}
 
 	switch expr.Operator {
-	case IsDistinctFrom, IsNotDistinctFrom:
+	case IsDistinctFrom, IsNotDistinctFrom, In, NotIn:
 		// These operators handle NULL arguments, so they do not result in an
 		// evaluation directly to NULL in the presence of any NULL arguments.
 		//
@@ -1237,8 +1237,13 @@ func typeCheckComparisonOp(
 	// Return early if at least one overload is possible and NULL is an argument.
 	// Callers can handle returning NULL, if necessary.
 	if len(fns) > 0 {
-		if leftReturn == types.Null || rightReturn == types.Null {
-			return leftExpr, rightExpr, CmpOp{}, nil
+		switch op {
+		case In, NotIn:
+			break
+		default:
+			if leftReturn == types.Null || rightReturn == types.Null {
+				return leftExpr, rightExpr, CmpOp{}, nil
+			}
 		}
 	}
 
