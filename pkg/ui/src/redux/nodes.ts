@@ -176,6 +176,19 @@ export function sumNodeStats(
   return result;
 }
 
+// nodeDisplayNameByIDSelector provides a unique, human-readable display name
+// for each node.
+export const nodeDisplayNameByIDSelector = createSelector(
+  nodeStatusesSelector,
+  (nodeStatuses) => {
+    const result: {[key: string]: string} = {};
+    nodeStatuses.forEach(ns => {
+      result[ns.desc.node_id] = `${ns.desc.address.address_field} (n${ns.desc.node_id})`;
+    });
+    return result;
+  },
+);
+
 /**
  * nodesSummarySelector returns a directory object containing a variety of
  * computed information based on the current nodes. This object is easy to
@@ -186,14 +199,16 @@ export const nodesSummarySelector = createSelector(
   nodeIDsSelector,
   nodeStatusByIDSelector,
   nodeSumsSelector,
+  nodeDisplayNameByIDSelector,
   livenessStatusByNodeIDSelector,
   livenessByNodeIDSelector,
-  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, livenessStatusByNodeID, livenessByNodeID) => {
+  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, nodeDisplayNameByID, livenessStatusByNodeID, livenessByNodeID) => {
     return {
       nodeStatuses,
       nodeIDs,
       nodeStatusByID,
       nodeSums,
+      nodeDisplayNameByID,
       livenessStatusByNodeID,
       livenessByNodeID,
     };
