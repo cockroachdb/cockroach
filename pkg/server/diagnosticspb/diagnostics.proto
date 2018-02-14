@@ -19,6 +19,7 @@ option go_package = "diagnosticspb";
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
 import "sql/sqlbase/structured.proto";
+import "roachpb/metadata.proto";
 
 message DiagnosticReport {
   NodeInfo node = 1 [(gogoproto.nullable) = false];
@@ -34,6 +35,7 @@ message NodeInfo {
   int64 bytes = 2;
   int64 key_count = 3;
   int64 range_count = 4;
+  roachpb.Locality locality = 5 [(gogoproto.nullable) = false];
 }
 
 message StoreInfo {
