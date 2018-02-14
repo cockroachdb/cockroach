@@ -103,14 +103,20 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 ) (_ LogicalSpans, ok bool, tight bool) {
 	if op == inOp && isTupleOfConstants(val) {
 		// We assume that the values of the tuple are already ordered and distinct.
-		spans := make(LogicalSpans, len(val.children))
-		for i, v := range val.children {
+		spans := make(LogicalSpans, 0, len(val.children))
+		for _, v := range val.children {
 			datum := v.private.(tree.Datum)
 			if !c.verifyType(offset, datum.ResolvedType()) {
 				return nil, false, false
 			}
-			spans[i].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
-			spans[i].End = spans[i].Start
+			if datum == tree.DNull {
+				// Ignore NULLs - they can't match any values
+				continue
+			}
+			spans = append(spans, LogicalSpan{
+				Start: LogicalKey{Vals: tree.Datums{datum}, Inclusive: true},
+				End:   LogicalKey{Vals: tree.Datums{datum}, Inclusive: true},
+			})
 		}
 		if c.colInfos[offset].Direction == encoding.Descending {
 			// Reverse the order of the spans.
@@ -418,24 +424,32 @@ Outer:
 	}
 
 	// Create a span for each (tuple) value inside the right-hand side tuple.
-	spans := make(LogicalSpans, len(rhs.children))
-	for i, valTuple := range rhs.children {
+	spans := make(LogicalSpans, 0, len(rhs.children))
+TupleLoop:
+	for _, valTuple := range rhs.children {
 		if valTuple.op != tupleOp {
 			return nil, false, false
 		}
 		vals := make(tree.Datums, len(tuplePos))
-		for j, pos := range tuplePos {
+		for i, pos := range tuplePos {
 			val := valTuple.children[pos]
 			if val.op != constOp {
 				return nil, false, false
 			}
-			vals[j] = val.private.(tree.Datum)
-			if !c.verifyType(offset+j, vals[j].ResolvedType()) {
+			datum := val.private.(tree.Datum)
+			if !c.verifyType(offset+i, datum.ResolvedType()) {
 				return nil, false, false
 			}
+			if datum == tree.DNull {
+				// If the tuple contains a NULL, ignore it (it can't match any values).
+				continue TupleLoop
+			}
+			vals[i] = datum
 		}
-		spans[i].Start = LogicalKey{Vals: vals, Inclusive: true}
-		spans[i].End = spans[i].Start
+		spans = append(spans, LogicalSpan{
+			Start: LogicalKey{Vals: vals, Inclusive: true},
+			End:   LogicalKey{Vals: vals, Inclusive: true},
+		})
 	}
 
 	// Sort and de-duplicate the values.
