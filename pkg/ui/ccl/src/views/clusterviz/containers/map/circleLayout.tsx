@@ -12,7 +12,6 @@ import { LocalityTree } from "src/redux/localities";
 import { getChildLocalities } from "src/util/localities";
 
 import { LocalityView } from "./localityView";
-import { NodeHistory } from "./nodeHistory";
 import { NodeView } from "./nodeView";
 import { LivenessStatus } from "src/redux/nodes";
 
@@ -22,7 +21,6 @@ const PADDING = 150;
 interface CircleLayoutProps {
   localityTree: LocalityTree;
   liveness: { [id: string]: LivenessStatus };
-  nodeHistories: { [id: string]: NodeHistory };
   viewportSize: [number, number];
 }
 
