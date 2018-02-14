@@ -657,7 +657,7 @@ func (d ImportDetails_Table) Completed() float32 {
 	}
 	sampling := sum(d.SamplingProgress) * samplingPhaseContribution
 	if len(d.SamplingProgress) == 0 {
-		// SamplingProgress in empty iff we are in the second phase. If so, the
+		// SamplingProgress is empty iff we are in the second phase. If so, the
 		// first phase is implied as fully complete.
 		sampling = samplingPhaseContribution
 	}

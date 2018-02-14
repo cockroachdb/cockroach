@@ -154,6 +154,12 @@ func (l *DistLoader) LoadCSV(
 		csvSpecs[n].Uri[int32(i)] = input
 	}
 
+	for _, rcs := range csvSpecs {
+		// TODO(mjibson): using the actual file sizes here would improve progress
+		// accuracy.
+		rcs.Progress.Contribution = float32(len(rcs.Uri)) / float32(len(from))
+	}
+
 	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
 	for i := range nodes {
 		sstSpecs[i] = distsqlrun.SSTWriterSpec{
@@ -179,14 +185,6 @@ func (l *DistLoader) LoadCSV(
 		if err != nil {
 			return err
 		}
-	}
-
-	if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-		d := details.(*jobs.Payload_Import).Import
-		d.Tables[0].SamplingProgress = make([]float32, len(csvSpecs))
-		return d.Tables[0].Completed()
-	}); err != nil {
-		return err
 	}
 
 	// Add the table keys to the spans.
@@ -379,9 +377,6 @@ func (l *DistLoader) loadCSVSamplingPlan(
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(csvSpecs))
 	for i, rcs := range csvSpecs {
-		// TODO(mjibson): using the actual file sizes here would improve progress
-		// accuracy.
-		rcs.Progress.Contribution = float32(len(rcs.Uri)) / float32(len(from))
 		node := nodes[i]
 		proc := distsqlplan.Processor{
 			Node: node.NodeID,
