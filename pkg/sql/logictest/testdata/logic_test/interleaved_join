@@ -843,3 +843,14 @@ SELECT "URL" FROM [EXPLAIN (DISTSQL)
 ]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzklkFv2j4Yxu__T1G9p_80T8JJoCXSpBzHNLUT2m3KwSVvIVIaI8dMqyq--2RCRwPMD5EPSHArdX72-9i_w_NKtS74Xj1zQ-lPkiQoIkExCUpI0JByQUujZ9w02rhPWmBS_KZ0IKislyvr_p0LmmnDlL6SLW3FlNKktmwqVr94yqpg81WXNRsSVLBVZbU57xs_WXInlM_KvGRLZbi2bohpOV-8X5ktyqpwC393qfjJ_p_Jjx8-G_ft5k8S9LCy6U0mRRaJLBHZkPK1IL2y2zl34z2-3CxUs-jO48CY8nUuqLFqzpTKtTg98g_1WG3Tdvd9izE3qi62WXoPFnUGi_452G6rVa1NwYaLzma5I9EnR9J9Uc3i2CNuX0Jk8e4tRBZ1XiN-e5Bbkd3tRd9ligMyHRn4Xn_Sy_3oRw9OOgfL6xMbRD6f2PICxY6uzy8Q-Xx-RRfoV3x9foHI5_MrvkC_kuvzC0Q-n1_JBfoFWvaUm6WuGz6p2Q1cIC7m3F5Qo1dmxt-Nnm2OaX8-bLhN1yi4se1q1P6Y1O2SG_B0eBQCj0NgGTS3HPpp2ePKon7wKAQeh8AyaO69Kzugo3168J6O_fcde2HZvbPBPp2ECO6HgeB-GAjuh5HggAaCD0ME98NAcD8MBPfDSHBAA8FHIYLfhijqh4Gifhgo6oeRooAGit6FKOqHgaJ-GCjqh5GigAaKjkMUlUE9AdBAUkADSwGNNEU46gphZSGsLYTVhcC-EFYYZFBjkAeVoZetfhrZ6qeRrX4a2gpwZGufsnT4Zn3aUl8a2dqrL_XGka0H5cFra77-708AAAD___vFuJ0=
+
+# Regression test for #22655.
+
+statement ok
+CREATE TABLE a (a string, b string, primary key (a, b))
+
+statement ok
+CREATE TABLE b (a string, b string, primary key (a, b)) interleave in parent a (a, b)
+
+statement ok
+SELECT * FROM a JOIN b ON a.a=b.a AND a.b=b.b WHERE a.a='foo'
