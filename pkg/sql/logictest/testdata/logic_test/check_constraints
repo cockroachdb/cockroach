@@ -229,3 +229,47 @@ t7  CREATE TABLE t7 (
       CONSTRAINT check_y_z1 CHECK ((y + z) = 0),
       CONSTRAINT named_constraint CHECK (z = 1)
     )
+
+# Check that table references are dequalified in their stored representation.
+
+statement error source name "different_table" not found in FROM clause
+CREATE TABLE t8 (
+  a INT,
+  CHECK (different_table.a > 0)
+)
+
+statement error source name "different_database.t8" not found in FROM clause
+CREATE TABLE t8 (
+  a INT,
+  CHECK (different_database.t8.a > 0)
+)
+
+statement ok
+CREATE TABLE t8 (
+  a INT,
+  CHECK (a > 0),
+  CHECK (t8.a > 0),
+  CHECK (test.t8.a > 0)
+)
+
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE t8 (
+      a INT NULL,
+      FAMILY "primary" (a, rowid),
+      CONSTRAINT check_a CHECK (a > 0),
+      CONSTRAINT check_a1 CHECK (a > 0),
+      CONSTRAINT check_a2 CHECK (a > 0)
+    )
+
+statement ok
+CREATE DATABASE test2
+
+statement ok
+CREATE TABLE test2.t (
+  a INT,
+  CHECK (a > 0),
+  CHECK (t.a > 0),
+  CHECK (test2.t.a > 0)
+)

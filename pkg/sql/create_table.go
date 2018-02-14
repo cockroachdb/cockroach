@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -849,12 +850,14 @@ func makeTableDescIfAs(
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
 		}
+
 		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
 		if err != nil {
 			return desc, err
 		}
 		desc.AddColumn(*col)
 	}
+
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
 	// happens to work in gc, but does not work in gccgo.
 	//
@@ -876,6 +879,29 @@ func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.N
 		return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError, errMsg.String())
 	}
 	return nil
+}
+
+func dequalifyColumnRefs(sources sqlbase.MultiSourceInfo, expr tree.Expr) (tree.Expr, error) {
+	return tree.SimpleVisit(
+		expr,
+		func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+			if vBase, ok := expr.(tree.VarName); ok {
+				v, err := vBase.NormalizeVarName()
+				if err != nil {
+					return err, false, nil
+				}
+				if c, ok := v.(*tree.ColumnItem); ok {
+					srcIdx, colIdx, err := findColumn(sources, c)
+					if err != nil {
+						return err, false, nil
+					}
+					col := sources[srcIdx].SourceColumns[colIdx]
+					return nil, false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}
+				}
+			}
+			return nil, true, expr
+		},
+	)
 }
 
 // MakeTableDesc creates a table descriptor from a CreateTable statement.
@@ -952,6 +978,29 @@ func MakeTableDesc(
 		}
 	}
 
+	// Now that we've constructed our columns, we pop into any of our computed
+	// columns so that we can dequalify any column references.
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		*tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+	)
+	sources := sqlbase.MultiSourceInfo{sourceInfo}
+
+	for i, col := range desc.Columns {
+		if col.IsComputed() {
+			expr, err := parser.ParseExpr(*col.ComputeExpr)
+			if err != nil {
+				return desc, err
+			}
+
+			expr, err = dequalifyColumnRefs(sources, expr)
+			if err != nil {
+				return desc, err
+			}
+			serialized := tree.Serialize(expr)
+			desc.Columns[i].ComputeExpr = &serialized
+		}
+	}
+
 	var primaryIndexColumnSet map[string]struct{}
 	for _, def := range n.Defs {
 		switch d := def.(type) {
@@ -1010,7 +1059,6 @@ func MakeTableDesc(
 			if d.Interleave != nil {
 				return desc, pgerror.UnimplementedWithIssueError(9148, "use CREATE INDEX to make interleaved indexes")
 			}
-
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
 
@@ -1077,11 +1125,12 @@ func MakeTableDesc(
 					return desc, err
 				}
 			}
+
 		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx)
+			ck, err := makeCheckConstraint(desc, d, generatedNames, semaCtx, evalCtx, *tableName)
 			if err != nil {
 				return desc, err
 			}
@@ -1386,6 +1435,7 @@ func makeCheckConstraint(
 	inuseNames map[string]struct{},
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	tableName tree.TableName,
 ) (*sqlbase.TableDescriptor_CheckConstraint, error) {
 	name := string(d.Name)
 
@@ -1419,8 +1469,18 @@ func makeCheckConstraint(
 	}
 	sort.Sort(sqlbase.ColumnIDs(colIDs))
 
+	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
+		tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+	)
+	sources := sqlbase.MultiSourceInfo{sourceInfo}
+
+	expr, err = dequalifyColumnRefs(sources, d.Expr)
+	if err != nil {
+		return nil, err
+	}
+
 	return &sqlbase.TableDescriptor_CheckConstraint{
-		Expr:      tree.Serialize(d.Expr),
+		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,
 	}, nil

@@ -181,8 +181,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
+				tableName, err := n.n.Table.Normalize()
+				if err != nil {
+					return err
+				}
 				ck, err := makeCheckConstraint(
-					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext())
+					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), *tableName)
 				if err != nil {
 					return err
 				}
