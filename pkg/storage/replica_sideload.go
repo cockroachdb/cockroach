@@ -16,45 +16,14 @@ package storage
 
 import (
 	"context"
-	"runtime/debug"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
 )
-
-const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
-
-func limitBulkIOWrite(ctx context.Context, st *cluster.Settings, cost int) {
-	// The limiter disallows anything greater than its burst (set to
-	// BulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
-	//
-	// TODO(dan): This obviously means the limiter is no longer accounting for
-	// the full cost. I've tried calling WaitN in a loop to fully cover the
-	// cost, but that doesn't seem to be as smooth in practice (TPCH-10 restores
-	// on azure local disks), I think because the file is written all at once at
-	// the end. This could be fixed by writing the file in chunks, which also
-	// would likely help the overall smoothness, too.
-	if cost > cluster.BulkIOWriteLimiterBurst {
-		cost = cluster.BulkIOWriteLimiterBurst
-	}
-
-	begin := timeutil.Now()
-	if err := st.BulkIOWriteLimiter.WaitN(ctx, cost); err != nil {
-		log.Errorf(ctx, "error rate limiting bulk io write: %+v", err)
-	}
-
-	if d := timeutil.Since(begin); d > bulkIOWriteLimiterLongWait {
-		log.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
-			d, bulkIOWriteLimiterLongWait, debug.Stack())
-	}
-}
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
 

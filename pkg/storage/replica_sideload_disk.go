@@ -24,9 +24,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/pkg/errors"
 )
 
@@ -37,13 +35,6 @@ type diskSideloadStorage struct {
 	dir        string
 	dirCreated bool
 }
-
-// sstWriteSyncRate wraps "kv.bulk_sst.sync_size".
-var sstWriteSyncRate = settings.RegisterByteSizeSetting(
-	"kv.bulk_sst.sync_size",
-	"threshold after which non-Rocks SST writes must fsync (0 disables)",
-	2048<<10,
-)
 
 func newDiskSideloadStorage(
 	st *cluster.Settings, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, baseDir string,
@@ -73,8 +64,6 @@ func (ss *diskSideloadStorage) Dir() string {
 func (ss *diskSideloadStorage) PutIfNotExists(
 	ctx context.Context, index, term uint64, contents []byte,
 ) error {
-	limitBulkIOWrite(ctx, ss.st, len(contents))
-
 	filename := ss.filename(ctx, index, term)
 	if _, err := os.Stat(filename); err == nil {
 		// File exists.
@@ -87,7 +76,7 @@ func (ss *diskSideloadStorage) PutIfNotExists(
 	for {
 		// Use 0644 since that's what RocksDB uses:
 		// https://github.com/facebook/rocksdb/blob/56656e12d67d8a63f1e4c4214da9feeec2bd442b/env/env_posix.cc#L171
-		if err := fileutil.WriteFileSyncing(filename, contents, 0644, sstWriteSyncRate.Get(&ss.st.SV)); err == nil {
+		if err := writeFileSyncing(ctx, filename, contents, 0644, ss.st); err == nil {
 			return nil
 		} else if !os.IsNotExist(err) {
 			return err
