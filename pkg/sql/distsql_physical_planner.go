@@ -813,11 +813,11 @@ func (dsp *DistSQLPlanner) getNodeIDForScan(
 
 	// Determine the node ID for the first range to be scanned.
 	it := planCtx.spanIter
-	scanDirection := kv.Ascending
 	if reverse {
-		scanDirection = kv.Descending
+		it.Seek(planCtx.ctx, spans[len(spans)-1], kv.Descending)
+	} else {
+		it.Seek(planCtx.ctx, spans[0], kv.Ascending)
 	}
-	it.Seek(planCtx.ctx, spans[0], scanDirection)
 	if !it.Valid() {
 		return 0, it.Error()
 	}
