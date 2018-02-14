@@ -1271,7 +1271,9 @@ func simplifyOneOrInExpr(
 
 	case tree.In:
 		ltuple := left.Right.(*tree.DTuple)
-		ltuple.AssertSorted()
+		if !ltuple.Sorted() {
+			return origLeft, origRight
+		}
 
 		switch right.Operator {
 		case tree.EQ:

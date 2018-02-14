@@ -498,9 +498,9 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				// it (e.g. NULL IS NOT b -> false, NULL != b -> NULL). To provide the
 				// same semantics, we catch NULL values with an OR expr. Now the three
 				// cases are:
-				//  a := b:    (a != b) OR (a IS NOT DISTINCT FROM NULL) -> false OR false -> false
-				//  a := !b:   (a != b) OR (a IS NOT DISTINCT FROM NULL) -> true  OR false -> true
-				//  a := NULL: (a != b) OR (a IS NOT DISTINCT FROM NULL) -> NULL  OR true  -> true
+				//  a == b:    (a != b) OR (a IS NULL)  ->  false OR false  ->  false
+				//  a != b:    (a != b) OR (a IS NULL)  ->  true  OR false  ->  true
+				//  a is NULL: (a != b) OR (a IS NULL)  ->  NULL  OR true   ->  true
 				return NewTypedOrExpr(
 					NewTypedComparisonExpr(NE, expr.TypedLeft(), dright),
 					NewTypedComparisonExpr(IsNotDistinctFrom, expr.TypedLeft(), DNull),
@@ -510,9 +510,9 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				// it (e.g. NULL IS b -> false, NULL = b -> NULL). To provide the
 				// same semantics, we catch NULL values with an AND expr. Now the
 				// three cases are:
-				//  a := b:    (a = b) AND (a IS DISTINCT FROM NULL) -> true  AND true  -> true
-				//  a := !b:   (a = b) AND (a IS DISTINCT FROM NULL) -> false AND true  -> false
-				//  a := NULL: (a = b) AND (a IS DISTINCT FROM NULL) -> NULL  AND false -> false
+				//  a == b:    (a = b) AND (a IS NOT NULL)  ->  true  AND true   ->  true
+				//  a != b:    (a = b) AND (a IS NOT NULL)  ->  false AND true   ->  false
+				//  a is NULL: (a = b) AND (a IS NOT NULL)  ->  NULL  AND false  ->  false
 				return NewTypedAndExpr(
 					NewTypedComparisonExpr(EQ, left, dright),
 					NewTypedComparisonExpr(IsDistinctFrom, left, DNull),
