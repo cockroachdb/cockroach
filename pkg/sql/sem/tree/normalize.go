@@ -454,10 +454,6 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			break
 		}
 	case In, NotIn:
-		if expr.TypedLeft() == DNull {
-			return DNull
-		}
-
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
 		tuple, ok := expr.Right.(*DTuple)
@@ -468,6 +464,14 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			// If the tuple only contains NULL values, Normalize will have reduced
 			// it to a single NULL value.
 			if len(tupleCopy.D) == 1 && tupleCopy.D[0] == DNull {
+				return DNull
+			}
+			if len(tupleCopy.D) == 0 {
+				// NULL IN <empty-tuple> is false.
+				return DBoolFalse
+			}
+			if expr.TypedLeft() == DNull {
+				// NULL IN <non-empty-tuple> is NULL.
 				return DNull
 			}
 
