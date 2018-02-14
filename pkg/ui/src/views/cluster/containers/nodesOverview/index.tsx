@@ -315,7 +315,7 @@ const DecommissionedNodesConnected = connect(
     const statuses = partitionedStatuses(state);
     return {
       sortSetting: decommissionedNodesSortSetting.selector(state),
-      status: LivenessStatus.DECOMMISSIONING,
+      status: LivenessStatus.DECOMMISSIONED,
       statuses: statuses.decommissioned,
       nodesSummary: nodesSummarySelector(state),
     };
