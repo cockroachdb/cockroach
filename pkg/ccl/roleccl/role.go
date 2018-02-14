@@ -158,9 +158,10 @@ func grantRolePlanHook(
 	}
 
 	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
+	var rowsAffected int
 	for _, r := range grant.Roles {
 		for _, m := range grant.Members {
-			_, err := internalExecutor.ExecuteStatementInTransaction(
+			affected, err := internalExecutor.ExecuteStatementInTransaction(
 				ctx,
 				"grant-role",
 				p.Txn(),
@@ -170,6 +171,15 @@ func grantRolePlanHook(
 			if err != nil {
 				return nil, err
 			}
+
+			rowsAffected += affected
+		}
+	}
+
+	// We need to bump the table version to trigger a refresh if anything changed.
+	if rowsAffected > 0 {
+		if err := p.BumpRoleMembershipTableVersion(ctx); err != nil {
+			return nil, err
 		}
 	}
 
@@ -236,6 +246,7 @@ func revokeRolePlanHook(
 	}
 
 	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
+	var rowsAffected int
 	for _, r := range revoke.Roles {
 		for _, m := range revoke.Members {
 			if string(r) == sqlbase.AdminRole && string(m) == security.RootUser {
@@ -244,7 +255,7 @@ func revokeRolePlanHook(
 					"user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					security.RootUser, sqlbase.AdminRole)
 			}
-			_, err := internalExecutor.ExecuteStatementInTransaction(
+			affected, err := internalExecutor.ExecuteStatementInTransaction(
 				ctx,
 				"revoke-role",
 				p.Txn(),
@@ -254,6 +265,15 @@ func revokeRolePlanHook(
 			if err != nil {
 				return nil, err
 			}
+
+			rowsAffected += affected
+		}
+	}
+
+	// We need to bump the table version to trigger a refresh if anything changed.
+	if rowsAffected > 0 {
+		if err := p.BumpRoleMembershipTableVersion(ctx); err != nil {
+			return nil, err
 		}
 	}
 
