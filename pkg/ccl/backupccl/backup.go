@@ -58,7 +58,7 @@ const (
 )
 
 const (
-	backupOptRevisionHistory = "experimental_revision_history"
+	backupOptRevisionHistory = "revision_history"
 )
 
 var backupOptionExpectValues = map[string]bool{

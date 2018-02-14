@@ -103,7 +103,7 @@ prepare_stmt ::=
 
 restore_stmt ::=
 	'RESTORE' targets 'FROM' string_or_placeholder_list opt_with_options
-	| 'RESTORE' targets 'FROM' string_or_placeholder_list 'EXPERIMENTAL' as_of_clause opt_with_options
+	| 'RESTORE' targets 'FROM' string_or_placeholder_list as_of_clause opt_with_options
 
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
