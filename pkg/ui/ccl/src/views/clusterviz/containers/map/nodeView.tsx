@@ -43,7 +43,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     const uptimeText = moment.duration(startTime.diff(moment())).humanize();
 
     return (
-      <g fill="none" transform="translate(-90 -100)">
+      <g transform="translate(-90 -100)">
         <Labels
           label={node.desc.address.address_field}
           subLabel={uptimeText}
