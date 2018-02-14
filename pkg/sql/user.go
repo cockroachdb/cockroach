@@ -99,3 +99,9 @@ func existingUserIsRole(
 	isRole := bool(*(values[0]).(*tree.DBool))
 	return isRole, nil
 }
+
+// BumpRoleMembershipTableVersion increases the table version for the role membership table.
+func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
+	tableName := tree.MakeTableName("system", "role_members")
+	return p.bumpTableVersion(ctx, &tableName)
+}
