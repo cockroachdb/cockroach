@@ -11,7 +11,6 @@ import React from "react";
 import { NodeStatus$Properties } from "src/util/proto";
 import { sumNodeStats } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
-import { NodeHistory } from "src/views/clusterviz/containers/map/nodeHistory";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import nodeIcon from "!!raw-loader!assets/nodeIcon.svg";
@@ -24,9 +23,6 @@ type NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 interface NodeViewProps {
   node: NodeStatus$Properties;
   liveness: { [id: string]: NodeLivenessStatus };
-
-  nodeHistory?: NodeHistory;
-  maxClientActivityRate: number;
 }
 
 export class NodeView extends React.Component<NodeViewProps> {
