@@ -130,7 +130,7 @@ func (b *bank) Ops() workload.Operations {
 	// TODO(dan): Move the various queries in the backup/restore tests here.
 	return workload.Operations{
 		Name: `balance transfers`,
-		Fn: func(sqlDB *gosql.DB, reg *workload.WatchRegistry) (func(context.Context) error, error) {
+		Fn: func(sqlDB *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 			rng := rand.New(rand.NewSource(b.seed))
 			updateStmt, err := sqlDB.Prepare(`
 				UPDATE bank
@@ -140,7 +140,7 @@ func (b *bank) Ops() workload.Operations {
 			if err != nil {
 				return nil, err
 			}
-			watches := reg.GetHandle()
+			hists := reg.GetHandle()
 
 			return func(ctx context.Context) error {
 				from := rng.Intn(b.rows)
@@ -151,7 +151,7 @@ func (b *bank) Ops() workload.Operations {
 				amount := rand.Intn(maxTransfer)
 				start := timeutil.Now()
 				_, err := updateStmt.ExecContext(ctx, from, to, amount)
-				watches.Get(`transfer`).Record(timeutil.Since(start))
+				hists.Get(`transfer`).Record(timeutil.Since(start))
 				return err
 			}, nil
 		},

@@ -24,13 +24,20 @@ import (
 )
 
 const (
+	numUnderlyingHistograms = 1
+	sigFigs                 = 1
+	// TODO(dan): It seems these constants could due with some tuning. In
+	// #22605, it was suggested to make them 100 microseconds minimum, 60
+	// seconds maximum, and 3 sigfigs. I'm intentionally waiting on this until
+	// after we're quite sure that the workload versions of `kv` and `tpcc` are
+	// producing the same results as the old tools.
 	minLatency = 100 * time.Microsecond
 	maxLatency = 10 * time.Second
 )
 
-// Watch is a named histogram for use in Operations. It is threadsafe but
-// intended to be thread-local.
-type Watch struct {
+// NamedHistogram is a named histogram for use in Operations. It is threadsafe
+// but intended to be thread-local.
+type NamedHistogram struct {
 	name string
 	mu   struct {
 		syncutil.Mutex
@@ -39,21 +46,26 @@ type Watch struct {
 	}
 }
 
-func newWatch(name string) *Watch {
-	w := &Watch{name: name}
+func newNamedHistogram(name string) *NamedHistogram {
+	w := &NamedHistogram{name: name}
+	// TODO(dan): Does this really need to be a windowed histogram, given that
+	// we're using a window size of 1? I'm intentionally waiting on this until
+	// after we're quite sure that the workload versions of `kv` and `tpcc` are
+	// producing the same results as the old tools.
 	w.mu.hist = hdrhistogram.NewWindowed(
-		1, minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
+		numUnderlyingHistograms, minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
 	return w
 }
 
 // Record saves a new datapoint and should be called once per logical operation.
-func (w *Watch) Record(elapsed time.Duration) {
-	w.mu.Lock()
+func (w *NamedHistogram) Record(elapsed time.Duration) {
 	if elapsed < minLatency {
 		elapsed = minLatency
 	} else if elapsed > maxLatency {
 		elapsed = maxLatency
 	}
+
+	w.mu.Lock()
 	err := w.mu.hist.Current.RecordValue(elapsed.Nanoseconds())
 	w.mu.numOps++
 	w.mu.Unlock()
@@ -65,7 +77,7 @@ func (w *Watch) Record(elapsed time.Duration) {
 
 // tick resets the current histogram to a new "period". The old one's data
 // should be saved via the closure argument.
-func (w *Watch) tick(fn func(numOps int64, h *hdrhistogram.Histogram)) {
+func (w *NamedHistogram) tick(fn func(numOps int64, h *hdrhistogram.Histogram)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	m := w.mu.hist.Merge()
@@ -73,55 +85,58 @@ func (w *Watch) tick(fn func(numOps int64, h *hdrhistogram.Histogram)) {
 	fn(w.mu.numOps, m)
 }
 
-// WatchRegistry is a thread-safe enclosure for a (possibly large) number of
+// HistogramRegistry is a thread-safe enclosure for a (possibly large) number of
 // named histograms. It allows for "tick"ing them periodically to reset the
 // counts and also supports aggregations.
-type WatchRegistry struct {
+type HistogramRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		registered []*Watch
+		registered []*NamedHistogram
 	}
 
 	start      time.Time
 	cumulative map[string]*hdrhistogram.Histogram
-	prevTick   map[string]WatchTick
+	prevTick   map[string]HistogramTick
 }
 
-// NewWatchRegistry returns an initialized WatchRegistry.
-func NewWatchRegistry() *WatchRegistry {
-	return &WatchRegistry{
+// NewHistogramRegistry returns an initialized HistogramRegistry.
+func NewHistogramRegistry() *HistogramRegistry {
+	return &HistogramRegistry{
 		start:      timeutil.Now(),
 		cumulative: make(map[string]*hdrhistogram.Histogram),
-		prevTick:   make(map[string]WatchTick),
+		prevTick:   make(map[string]HistogramTick),
 	}
 }
 
-// GetHandle returns a thread-local handle for creating and registering watches.
-func (w *WatchRegistry) GetHandle() *Watches {
-	watches := &Watches{reg: w}
-	watches.mu.watches = make(map[string]*Watch)
-	return watches
+// GetHandle returns a thread-local handle for creating and registering
+// NamedHistograms.
+func (w *HistogramRegistry) GetHandle() *Histograms {
+	hists := &Histograms{reg: w}
+	hists.mu.hists = make(map[string]*NamedHistogram)
+	return hists
 }
 
-// Tick aggregates all registered watches, grouped by name. It is expected to be
-// called periodially from one goroutine.
-func (w *WatchRegistry) Tick(fn func(WatchTick)) {
+// Tick aggregates all registered histograms, grouped by name. It is expected to
+// be called periodially from one goroutine.
+func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 	w.mu.Lock()
-	registered := append([]*Watch(nil), w.mu.registered...)
+	registered := append([]*NamedHistogram(nil), w.mu.registered...)
 	w.mu.Unlock()
 
 	merged := make(map[string]*hdrhistogram.Histogram)
 	totalOps := make(map[string]int64)
-	for _, watch := range registered {
-		watch.tick(func(numOps int64, h *hdrhistogram.Histogram) {
+	for _, hist := range registered {
+		hist.tick(func(numOps int64, h *hdrhistogram.Histogram) {
 			// TODO(dan): It really seems like we should be able to use
 			// `h.TotalCount()` for the number of operations but for some reason
-			// that doesn't line up in practice. Investigate.
-			totalOps[watch.name] += numOps
-			if m, ok := merged[watch.name]; ok {
+			// that doesn't line up in practice. Investigate. Merge returns the
+			// number of samples that had to be dropped during the merge - we
+			// ignore that value. Perhaps that is the discrepancy.
+			totalOps[hist.name] += numOps
+			if m, ok := merged[hist.name]; ok {
 				m.Merge(h)
 			} else {
-				merged[watch.name] = h
+				merged[hist.name] = h
 			}
 		})
 	}
@@ -130,7 +145,7 @@ func (w *WatchRegistry) Tick(fn func(WatchTick)) {
 	for name, mergedHist := range merged {
 		if _, ok := w.cumulative[name]; !ok {
 			w.cumulative[name] = hdrhistogram.New(
-				minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
+				minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
 		}
 		w.cumulative[name].Merge(mergedHist)
 
@@ -139,7 +154,7 @@ func (w *WatchRegistry) Tick(fn func(WatchTick)) {
 			prevTick.start = w.start
 		}
 		now := timeutil.Now()
-		w.prevTick[name] = WatchTick{
+		w.prevTick[name] = HistogramTick{
 			Name:       name,
 			Hist:       merged[name],
 			Cumulative: w.cumulative[name],
@@ -152,47 +167,47 @@ func (w *WatchRegistry) Tick(fn func(WatchTick)) {
 	}
 }
 
-// Watches is a thread-local handle for creating and registering watches.
-type Watches struct {
-	reg *WatchRegistry
+// Histograms is a thread-local handle for creating and registering
+// NamedHistograms.
+type Histograms struct {
+	reg *HistogramRegistry
 	mu  struct {
 		syncutil.Mutex
-		watches map[string]*Watch
+		hists map[string]*NamedHistogram
 	}
 }
 
-// Get returns a watch with the given name, creating and registering it if
-// necessary. The result is cached, so no need to cache it in the
-// workload.
-func (w *Watches) Get(name string) *Watch {
+// Get returns a NamedHistogram with the given name, creating and registering it
+// if necessary. The result is cached, so no need to cache it in the workload.
+func (w *Histograms) Get(name string) *NamedHistogram {
 	w.mu.Lock()
-	watch, ok := w.mu.watches[name]
+	hist, ok := w.mu.hists[name]
 	if !ok {
-		watch = newWatch(name)
-		w.mu.watches[name] = watch
+		hist = newNamedHistogram(name)
+		w.mu.hists[name] = hist
 	}
 	w.mu.Unlock()
 
 	if !ok {
 		w.reg.mu.Lock()
-		w.reg.mu.registered = append(w.reg.mu.registered, watch)
+		w.reg.mu.registered = append(w.reg.mu.registered, hist)
 		w.reg.mu.Unlock()
 	}
 
-	return watch
+	return hist
 }
 
-// WatchTick is an aggregation of ticking all watches in a WatchRegistry with a
-// given name.
-type WatchTick struct {
-	// Name is the name given to the watches represented by this tick.
+// HistogramTick is an aggregation of ticking all histograms in a
+// HistogramRegistry with a given name.
+type HistogramTick struct {
+	// Name is the name given to the histograms represented by this tick.
 	Name string
 	// Hist is the merged result of the represented histgrams for this tick.
 	Hist *hdrhistogram.Histogram
 	// Cumulative is the merged result of the represented histgrams for all
 	// time.
 	Cumulative *hdrhistogram.Histogram
-	// Ops is the total number of `Record` calls for all represented watches.
+	// Ops is the total number of `Record` calls for all represented histgrams.
 	Ops int64
 	// LastOps is the value of Ops for the last tick.
 	LastOps int64

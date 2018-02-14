@@ -35,7 +35,7 @@ const (
 
 type worker struct {
 	config    *tpcc
-	watches   *workload.Watches
+	hists     *workload.Histograms
 	idx       int
 	db        *gosql.DB
 	warehouse int
@@ -140,7 +140,7 @@ func (w *worker) run(ctx context.Context) error {
 	if _, err := t.run(w.config, w.db, warehouseID); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
-	w.watches.Get(t.name).Record(timeutil.Since(start))
+	w.hists.Get(t.name).Record(timeutil.Since(start))
 
 	if w.config.doWaits {
 		// 5.2.5.4: Think time is taken independently from a negative exponential

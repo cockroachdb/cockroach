@@ -185,11 +185,11 @@ func (m *roachmart) Tables() []workload.Table {
 func (m *roachmart) Ops() workload.Operations {
 	return workload.Operations{
 		Name: `fetch one user's orders`,
-		Fn: func(sqlDB *gosql.DB, reg *workload.WatchRegistry) (func(context.Context) error, error) {
+		Fn: func(sqlDB *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 			const query = `SELECT * FROM orders WHERE user_zone = $1 AND user_email = $2`
 			rng := rand.New(rand.NewSource(m.seed))
 			usersTable := m.Tables()[0]
-			watches := reg.GetHandle()
+			hists := reg.GetHandle()
 
 			return func(ctx context.Context) error {
 				wantLocal := rng.Intn(100) < m.localPercent
@@ -208,9 +208,9 @@ func (m *roachmart) Ops() workload.Operations {
 				start := timeutil.Now()
 				_, err := sqlDB.ExecContext(ctx, query, zone, email)
 				if wantLocal {
-					watches.Get(`local`).Record(timeutil.Since(start))
+					hists.Get(`local`).Record(timeutil.Since(start))
 				} else {
-					watches.Get(`remote`).Record(timeutil.Since(start))
+					hists.Get(`remote`).Record(timeutil.Since(start))
 				}
 				return err
 			}, nil

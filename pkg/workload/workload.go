@@ -139,11 +139,11 @@ type Operations struct {
 	Name string
 	// Fn returns a function to be called once per unit of work to be done.
 	// Various generator tools use this to track progress.
-	Fn func(*gosql.DB, *WatchRegistry) (func(context.Context) error, error)
+	Fn func(*gosql.DB, *HistogramRegistry) (func(context.Context) error, error)
 
-	// ResultHist is the name of the Watch to use for the benchmark formatted
-	// results output at the end of `./workload run`. The empty string will use
-	// the sum of all watches.
+	// ResultHist is the name of the NamedHistogram to use for the benchmark
+	// formatted results output at the end of `./workload run`. The empty string
+	// will use the sum of all histograms.
 	//
 	// TODO(dan): This will go away once more of run.go moves inside Operations.
 	ResultHist string

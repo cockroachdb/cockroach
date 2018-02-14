@@ -121,7 +121,7 @@ func (w *kv) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *kv) Ops() workload.Operations {
-	opFn := func(db *gosql.DB, reg *workload.WatchRegistry) (func(context.Context) error, error) {
+	opFn := func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 		var buf bytes.Buffer
 		buf.WriteString(`SELECT k, v FROM test.kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
@@ -154,7 +154,7 @@ func (w *kv) Ops() workload.Operations {
 
 		op := kvOp{
 			config:    w,
-			watches:   reg.GetHandle(),
+			hists:     reg.GetHandle(),
 			db:        db,
 			readStmt:  readStmt,
 			writeStmt: writeStmt,
@@ -176,7 +176,7 @@ func (w *kv) Ops() workload.Operations {
 
 type kvOp struct {
 	config    *kv
-	watches   *workload.Watches
+	hists     *workload.Histograms
 	db        *gosql.DB
 	readStmt  *gosql.Stmt
 	writeStmt *gosql.Stmt
@@ -196,7 +196,7 @@ func (o *kvOp) run(ctx context.Context) error {
 		}
 		for rows.Next() {
 		}
-		o.watches.Get(`read`).Record(timeutil.Since(start))
+		o.hists.Get(`read`).Record(timeutil.Since(start))
 		return rows.Err()
 	}
 	const argCount = 2
@@ -208,7 +208,7 @@ func (o *kvOp) run(ctx context.Context) error {
 	}
 	start := timeutil.Now()
 	_, err := o.writeStmt.Exec(args...)
-	o.watches.Get(`write`).Record(timeutil.Since(start))
+	o.hists.Get(`write`).Record(timeutil.Since(start))
 	return err
 }
 

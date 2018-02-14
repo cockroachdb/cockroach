@@ -166,12 +166,12 @@ func (w *tpcc) Tables() []workload.Table {
 func (w *tpcc) Ops() workload.Operations {
 	ops := workload.Operations{
 		Name: `tpmC`,
-		Fn: func(db *gosql.DB, reg *workload.WatchRegistry) (func(context.Context) error, error) {
+		Fn: func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 			idx := int(atomic.AddInt64(&w.workers, 1)) - 1
 			warehouse := idx / numWorkersPerWarehouse
 			worker := &worker{
 				config:    w,
-				watches:   reg.GetHandle(),
+				hists:     reg.GetHandle(),
 				idx:       idx,
 				db:        db,
 				warehouse: warehouse,

@@ -282,7 +282,7 @@ func runRun(gen workload.Generator, args []string) error {
 	}
 
 	start := timeutil.Now()
-	reg := workload.NewWatchRegistry()
+	reg := workload.NewHistogramRegistry()
 	workers := make([]*worker, *concurrency)
 
 	errCh := make(chan error)
@@ -327,7 +327,7 @@ func runRun(gen workload.Generator, args []string) error {
 
 		case <-tick:
 			startElapsed := timeutil.Since(start)
-			reg.Tick(func(t workload.WatchTick) {
+			reg.Tick(func(t workload.HistogramTick) {
 				if i%20 == 0 {
 					fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
 				}
@@ -349,7 +349,7 @@ func runRun(gen workload.Generator, args []string) error {
 			const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)
-			printTotalHist := func(t workload.WatchTick) {
+			printTotalHist := func(t workload.HistogramTick) {
 				fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
 					startElapsed.Seconds(), numErr,
 					t.Ops, float64(t.Ops)/startElapsed.Seconds(),
@@ -362,8 +362,8 @@ func runRun(gen workload.Generator, args []string) error {
 				)
 			}
 
-			resultTick := workload.WatchTick{Name: ops.ResultHist}
-			reg.Tick(func(t workload.WatchTick) {
+			resultTick := workload.HistogramTick{Name: ops.ResultHist}
+			reg.Tick(func(t workload.HistogramTick) {
 				printTotalHist(t)
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
 					resultTick.Ops += t.Ops
