@@ -676,39 +676,56 @@ func TestRangeTransferLease(t *testing.T) {
 		}
 	})
 
-	// We have to ensure that replica0 is the raft leader and that replica1 has
-	// caught up to replica0 as draining code doesn't transfer leases to
-	// behind replicas.
-	testutils.SucceedsSoon(t, func() error {
-		r := mtc.getRaftLeader(rangeID)
-		if r == nil {
-			return errors.Errorf("could not find raft leader replica for range %d", rangeID)
-		}
-		desc, err := r.GetReplicaDescriptor()
+	// ensureLeaderAndRaftState is a helper function that blocks until leader is
+	// the raft leader and follower is up to date.
+	ensureLeaderAndRaftState := func(leader *storage.Replica, follower roachpb.ReplicaDescriptor) {
+		leaderDesc, err := leader.GetReplicaDescriptor()
 		if err != nil {
-			return errors.Wrap(err, "could not get replica descriptor")
+			t.Fatal(err)
 		}
-		if desc != replica0Desc {
-			return errors.Errorf("expected replica with id %v to be raft leader, instead got id %v", replica0Desc.ReplicaID, desc.ReplicaID)
-		}
-		return nil
-	})
+		testutils.SucceedsSoon(t, func() error {
+			r := mtc.getRaftLeader(rangeID)
+			if r == nil {
+				return errors.Errorf("could not find raft leader replica for range %d", rangeID)
+			}
+			desc, err := r.GetReplicaDescriptor()
+			if err != nil {
+				return errors.Wrap(err, "could not get replica descriptor")
+			}
+			if desc != leaderDesc {
+				return errors.Errorf(
+					"expected replica with id %v to be raft leader, instead got id %v",
+					leaderDesc.ReplicaID,
+					desc.ReplicaID,
+				)
+			}
+			return nil
+		})
 
-	testutils.SucceedsSoon(t, func() error {
-		status := replica0.RaftStatus()
-		progress, ok := status.Progress[uint64(replica1Desc.ReplicaID)]
-		if !ok {
-			return errors.Errorf("replica1 progress not found in progress map: %v", status.Progress)
-		}
-		if progress.Match < status.Commit {
-			return errors.New("replica1 failed to catch up")
-		}
-		return nil
-	})
+		testutils.SucceedsSoon(t, func() error {
+			status := leader.RaftStatus()
+			progress, ok := status.Progress[uint64(follower.ReplicaID)]
+			if !ok {
+				return errors.Errorf(
+					"replica %v progress not found in progress map: %v",
+					follower.ReplicaID,
+					status.Progress,
+				)
+			}
+			if progress.Match < status.Commit {
+				return errors.Errorf("replica %v failed to catch up", follower.ReplicaID)
+			}
+			return nil
+		})
+	}
 
 	// DrainTransfer verifies that a draining store attempts to transfer away
 	// range leases owned by its replicas.
 	t.Run("DrainTransfer", func(t *testing.T) {
+		// We have to ensure that replica0 is the raft leader and that replica1 has
+		// caught up to replica0 as draining code doesn't transfer leases to
+		// behind replicas.
+		ensureLeaderAndRaftState(replica0, replica1Desc)
 		mtc.stores[0].SetDraining(true)
 
 		// Check that replica0 doesn't serve reads any more.
@@ -744,6 +761,10 @@ func TestRangeTransferLease(t *testing.T) {
 
 		// Wait for extension to be blocked.
 		<-extensionSem
+
+		// Make sure that replica 0 is up to date enough to receive the lease.
+		ensureLeaderAndRaftState(replica1, replica0Desc)
+
 		// Drain node 1 with an extension in progress.
 		go func() {
 			mtc.stores[1].SetDraining(true)
