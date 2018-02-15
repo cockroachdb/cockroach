@@ -1,3 +1,4 @@
+import d3 from "d3";
 import React from "react";
 
 import { SparklineMetricsDataComponent } from "src/views/clusterviz/containers/map/sparkline";
@@ -13,7 +14,7 @@ export function CpuSparkline(props: CpuSparklineProps) {
 
   return (
     <MetricsDataProvider id={key}>
-      <SparklineMetricsDataComponent>
+      <SparklineMetricsDataComponent formatCurrentValue={d3.format(".1%")}>
         <Metric name="cr.node.sys.cpu.sys.percent" sources={props.nodes} nonNegativeRate />
         <Metric name="cr.node.sys.cpu.user.percent" sources={props.nodes} nonNegativeRate />
       </SparklineMetricsDataComponent>
