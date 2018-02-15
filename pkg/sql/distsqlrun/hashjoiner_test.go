@@ -58,7 +58,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_INNER,
+				Type:           sqlbase.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -87,7 +87,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_INNER,
+				Type:           sqlbase.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 3},
@@ -122,7 +122,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_INNER,
+				Type:           sqlbase.InnerJoin,
 				OnExpr:         Expression{Expr: "@4 >= 4"},
 				// Implicit AND @1 = @3 constraint.
 			},
@@ -166,7 +166,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_OUTER,
+				Type:           sqlbase.LeftOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -198,7 +198,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_RIGHT_OUTER,
+				Type:           sqlbase.RightOuterJoin,
 				// Implicit @1 = @4 constraint.
 			},
 			outCols:   []uint32{3, 1, 2},
@@ -230,7 +230,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_FULL_OUTER,
+				Type:           sqlbase.FullOuterJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -262,7 +262,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_INNER,
+				Type:           sqlbase.InnerJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 3, 4},
@@ -290,7 +290,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_OUTER,
+				Type:           sqlbase.LeftOuterJoin,
 				OnExpr:         Expression{Expr: "@3 = 9"},
 			},
 			outCols:   []uint32{0, 1},
@@ -336,7 +336,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_RIGHT_OUTER,
+				Type:           sqlbase.RightOuterJoin,
 				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
 			outCols:   []uint32{0, 1},
@@ -363,7 +363,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_FULL_OUTER,
+				Type:           sqlbase.FullOuterJoin,
 				OnExpr:         Expression{Expr: "@2 > 1"},
 			},
 			outCols:   []uint32{0, 1},
@@ -393,7 +393,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
-				Type:           JoinType_INNER,
+				Type:           sqlbase.InnerJoin,
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
 			outCols:   []uint32{0, 1, 2, 3, 4},
@@ -420,7 +420,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
-				Type:           JoinType_LEFT_OUTER,
+				Type:           sqlbase.LeftOuterJoin,
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
 			outCols:   []uint32{0, 1, 2, 3, 4},
@@ -450,7 +450,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
-				Type:           JoinType_RIGHT_OUTER,
+				Type:           sqlbase.RightOuterJoin,
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
 			outCols:   []uint32{0, 1, 2, 3, 4},
@@ -480,7 +480,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0, 1},
 				RightEqColumns: []uint32{0, 1},
-				Type:           JoinType_FULL_OUTER,
+				Type:           sqlbase.FullOuterJoin,
 				// Implicit @1,@2 = @3,@4 constraint.
 			},
 			outCols:   []uint32{0, 1, 2, 3, 4},
@@ -515,7 +515,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0},
@@ -548,7 +548,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0},
@@ -580,7 +580,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0},
@@ -610,7 +610,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0},
@@ -638,7 +638,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				OnExpr:         Expression{Expr: "@1 > 1"},
 				// Implicit @1 = @3 constraint.
 			},
@@ -668,7 +668,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				OnExpr:         Expression{Expr: "@4 > 4 and @2 + @4 = 8"},
 				// Implicit @1 = @3 constraint.
 			},
@@ -698,7 +698,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
@@ -725,7 +725,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
@@ -755,7 +755,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
@@ -785,7 +785,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1},
@@ -816,7 +816,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				OnExpr:         Expression{Expr: "(@2 + @4) % 2 = 0"},
 				// Implicit @1 = @3 constraint.
 			},
@@ -847,7 +847,7 @@ func TestHashJoiner(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				OnExpr:         Expression{Expr: "(@2 + @4) % 2 = 0"},
 				// Implicit @1 = @3 constraint.
 			},
@@ -1008,7 +1008,7 @@ func TestHashJoinerError(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_SEMI,
+				Type:           sqlbase.LeftSemiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 2},
@@ -1034,7 +1034,7 @@ func TestHashJoinerError(t *testing.T) {
 			spec: HashJoinerSpec{
 				LeftEqColumns:  []uint32{0},
 				RightEqColumns: []uint32{0},
-				Type:           JoinType_LEFT_ANTI,
+				Type:           sqlbase.LeftAntiJoin,
 				// Implicit @1 = @3 constraint.
 			},
 			outCols:   []uint32{0, 1, 2},
@@ -1167,7 +1167,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	spec := HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
-		Type:           JoinType_INNER,
+		Type:           sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
@@ -1271,7 +1271,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	spec := HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
-		Type:           JoinType_INNER,
+		Type:           sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	outCols := []uint32{0}
@@ -1398,7 +1398,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 	spec := &HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
 		RightEqColumns: []uint32{0},
-		Type:           JoinType_INNER,
+		Type:           sqlbase.InnerJoin,
 		// Implicit @1 = @2 constraint.
 	}
 	post := &PostProcessSpec{}

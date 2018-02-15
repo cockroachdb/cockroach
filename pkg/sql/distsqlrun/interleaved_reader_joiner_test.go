@@ -138,7 +138,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 				Spans:    []TableReaderSpan{{Span: cd1.PrimaryIndexSpan()}},
 			},
 		},
-		Type: JoinType_INNER,
+		Type: sqlbase.InnerJoin,
 	}
 
 	copySpec := func(spec InterleavedReaderJoinerSpec) InterleavedReaderJoinerSpec {
@@ -324,7 +324,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		{
 			spec: func() InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
-				spec.Type = JoinType_FULL_OUTER
+				spec.Type = sqlbase.FullOuterJoin
 				return spec
 			}(),
 			post: PostProcessSpec{
@@ -337,7 +337,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			spec: func() InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
-				spec.Type = JoinType_FULL_OUTER
+				spec.Type = sqlbase.FullOuterJoin
 				return spec
 			}(),
 			post: PostProcessSpec{
@@ -350,7 +350,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		{
 			spec: func() InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
-				spec.Type = JoinType_LEFT_OUTER
+				spec.Type = sqlbase.LeftOuterJoin
 				return spec
 			}(),
 			post: PostProcessSpec{
@@ -362,7 +362,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			spec: func() InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
-				spec.Type = JoinType_LEFT_OUTER
+				spec.Type = sqlbase.LeftOuterJoin
 				return spec
 			}(),
 			expected: `[[-1 -101 '-101' NULL NULL] [-1 -1 '-1' NULL NULL] [0 0 '0' NULL NULL] [1 1 '1' 1 1] [3 3 '3' 3 3] [3 103 '103' 3 3] [5 5 '5' 5 5] [31 31 '31' NULL NULL] [31 131 '131' NULL NULL] [32 32 '32' NULL NULL]]`,
@@ -372,7 +372,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 		{
 			spec: func() InterleavedReaderJoinerSpec {
 				spec := pdCd3Spec
-				spec.Type = JoinType_RIGHT_OUTER
+				spec.Type = sqlbase.RightOuterJoin
 				return spec
 			}(),
 			expected: `[[NULL NULL -1 -101 '-101'] [NULL NULL -1 -1 '-1'] [NULL NULL 0 0 '0'] [1 1 1 1 '1'] [3 3 3 3 '3'] [3 3 3 103 '103'] [5 5 5 5 '5'] [NULL NULL 31 31 '31'] [NULL NULL 31 131 '131'] [NULL NULL 32 32 '32']]`,
@@ -381,7 +381,7 @@ func TestInterleavedReaderJoiner(t *testing.T) {
 			spec: func() InterleavedReaderJoinerSpec {
 				spec := copySpec(pdCd3Spec)
 				spec.Tables[0], spec.Tables[1] = spec.Tables[1], spec.Tables[0]
-				spec.Type = JoinType_RIGHT_OUTER
+				spec.Type = sqlbase.RightOuterJoin
 				return spec
 			}(),
 			post: PostProcessSpec{
@@ -481,7 +481,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 						Spans:    []TableReaderSpan{{Span: cd.PrimaryIndexSpan()}},
 					},
 				},
-				Type: JoinType_INNER,
+				Type: sqlbase.InnerJoin,
 			},
 			expected: "unmatched column orderings",
 		},
@@ -495,7 +495,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 						Spans:    []TableReaderSpan{{Span: pd.PrimaryIndexSpan()}},
 					},
 				},
-				Type: JoinType_INNER,
+				Type: sqlbase.InnerJoin,
 			},
 			expected: "interleavedReaderJoiner only reads from two tables in an interleaved hierarchy",
 		},
@@ -514,7 +514,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 						Spans:    []TableReaderSpan{{Span: gcd.PrimaryIndexSpan()}},
 					},
 				},
-				Type: JoinType_INNER,
+				Type: sqlbase.InnerJoin,
 			},
 			expected: "interleavedReaderJoiner only supports joins on the entire interleaved prefix",
 		},
