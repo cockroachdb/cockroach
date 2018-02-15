@@ -17,6 +17,8 @@ package settings
 import (
 	"fmt"
 	"sync/atomic"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const maxSettings = 128
@@ -28,7 +30,9 @@ const maxSettings = 128
 type Values struct {
 	intVals     [maxSettings]int64
 	genericVals [maxSettings]atomic.Value
-	onChange    [maxSettings]func()
+
+	changeMu syncutil.Mutex
+	onChange [maxSettings][]func()
 	// opaque is an arbitrary object that can be set by a higher layer to make it
 	// accessible from certain callbacks (like state machine transformers).
 	opaque interface{}
@@ -77,7 +81,10 @@ func (sv *Values) Opaque() interface{} {
 }
 
 func (sv *Values) settingChanged(slotIdx int) {
-	if fn := sv.onChange[slotIdx]; fn != nil {
+	sv.changeMu.Lock()
+	funcs := sv.onChange[slotIdx]
+	sv.changeMu.Unlock()
+	for _, fn := range funcs {
 		fn()
 	}
 }
@@ -107,10 +114,9 @@ func (sv *Values) setGeneric(slotIdx int, newVal interface{}) {
 //
 // Cannot be called concurrently with setGeneric/setInt64.
 func (sv *Values) setOnChange(slotIdx int, fn func()) {
-	if sv.onChange[slotIdx] != nil {
-		panic("registered multiple on-change callbacks")
-	}
-	sv.onChange[slotIdx] = fn
+	sv.changeMu.Lock()
+	sv.onChange[slotIdx] = append(sv.onChange[slotIdx], fn)
+	sv.changeMu.Unlock()
 }
 
 // Setting is a descriptor for each setting; once it is initialized, it is
@@ -170,8 +176,6 @@ func (i *common) Hide() {
 // SetOnChange installs a callback to be called when a setting's value changes.
 // `fn` should avoid doing long-running or blocking work as it is called on the
 // goroutine which handles all settings updates.
-//
-// Cannot be called while the setting is being changed.
 func (i *common) SetOnChange(sv *Values, fn func()) {
 	sv.setOnChange(i.slotIdx, fn)
 }
