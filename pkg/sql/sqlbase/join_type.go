@@ -14,6 +14,12 @@
 
 package sqlbase
 
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
+
 // Prettier aliases for JoinType values. See the original types for
 // descriptions.
 const (
@@ -26,3 +32,24 @@ const (
 	IntersectAllJoin = JoinType_INTERSECT_ALL
 	ExceptAllJoin    = JoinType_EXCEPT_ALL
 )
+
+// JoinTypeFromAstString takes a join string as found in a SQL
+// statement (e.g. "INNER JOIN") and returns the JoinType.
+func JoinTypeFromAstString(joinStr string) JoinType {
+	switch joinStr {
+	case tree.AstJoin, tree.AstInnerJoin, tree.AstCrossJoin:
+		return InnerJoin
+
+	case tree.AstLeftJoin:
+		return LeftOuterJoin
+
+	case tree.AstRightJoin:
+		return RightOuterJoin
+
+	case tree.AstFullJoin:
+		return FullOuterJoin
+
+	default:
+		panic(fmt.Sprintf("unknown join string %s", joinStr))
+	}
+}
