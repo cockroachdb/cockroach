@@ -15,6 +15,7 @@
 package json
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -22,7 +23,6 @@ import (
 	"strings"
 	"testing"
 
-	"bytes"
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -998,26 +998,27 @@ func TestJSONRemoveKey(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
 		key      string
+		ok       bool
 		expected JSON
 		errMsg   string
 	}{
 		`{}`: {
-			{key: ``, expected: json(`{}`)},
-			{key: `foo`, expected: json(`{}`)},
+			{key: ``, ok: false, expected: json(`{}`)},
+			{key: `foo`, ok: false, expected: json(`{}`)},
 		},
 		`{"foo": 1, "bar": "baz"}`: {
-			{key: ``, expected: json(`{"foo": 1, "bar": "baz"}`)},
-			{key: `foo`, expected: json(`{"bar": "baz"}`)},
-			{key: `bar`, expected: json(`{"foo": 1}`)},
-			{key: `baz`, expected: json(`{"foo": 1, "bar": "baz"}`)},
+			{key: ``, ok: false, expected: json(`{"foo": 1, "bar": "baz"}`)},
+			{key: `foo`, ok: true, expected: json(`{"bar": "baz"}`)},
+			{key: `bar`, ok: true, expected: json(`{"foo": 1}`)},
+			{key: `baz`, ok: false, expected: json(`{"foo": 1, "bar": "baz"}`)},
 		},
 		// Deleting a string key from an array never has any effect.
 		`["a", "b", "c"]`: {
-			{key: ``, expected: json(`["a", "b", "c"]`)},
-			{key: `foo`, expected: json(`["a", "b", "c"]`)},
-			{key: `0`, expected: json(`["a", "b", "c"]`)},
-			{key: `1`, expected: json(`["a", "b", "c"]`)},
-			{key: `-1`, expected: json(`["a", "b", "c"]`)},
+			{key: ``, ok: false, expected: json(`["a", "b", "c"]`)},
+			{key: `foo`, ok: false, expected: json(`["a", "b", "c"]`)},
+			{key: `0`, ok: false, expected: json(`["a", "b", "c"]`)},
+			{key: `1`, ok: false, expected: json(`["a", "b", "c"]`)},
+			{key: `-1`, ok: false, expected: json(`["a", "b", "c"]`)},
 		},
 		`5`:     {{key: `a`, errMsg: "cannot delete from scalar"}},
 		`"b"`:   {{key: `a`, errMsg: "cannot delete from scalar"}},
@@ -1034,7 +1035,7 @@ func TestJSONRemoveKey(t *testing.T) {
 
 		for _, tc := range tests {
 			runDecodedAndEncoded(t, k+`-`+tc.key, left, func(t *testing.T, j JSON) {
-				result, err := j.RemoveKey(tc.key)
+				result, ok, err := j.RemoveKey(tc.key)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
@@ -1045,6 +1046,9 @@ func TestJSONRemoveKey(t *testing.T) {
 				}
 				if err != nil {
 					t.Fatal(err)
+				}
+				if tc.ok != ok {
+					t.Fatalf("expected %t, got %t", tc.ok, ok)
 				}
 				c, err := result.Compare(tc.expected)
 				if err != nil {
@@ -1062,6 +1066,7 @@ func TestJSONRemoveIndex(t *testing.T) {
 	json := jsonTestShorthand
 	cases := map[string][]struct {
 		idx      int
+		ok       bool
 		expected JSON
 		errMsg   string
 	}{
@@ -1069,24 +1074,24 @@ func TestJSONRemoveIndex(t *testing.T) {
 			{idx: 0, errMsg: "cannot delete from object using integer"},
 		},
 		`["a", "b", "c"]`: {
-			{idx: -4, expected: json(`["a", "b", "c"]`)},
-			{idx: -3, expected: json(`["b", "c"]`)},
-			{idx: -2, expected: json(`["a", "c"]`)},
-			{idx: -1, expected: json(`["a", "b"]`)},
-			{idx: 0, expected: json(`["b", "c"]`)},
-			{idx: 1, expected: json(`["a", "c"]`)},
-			{idx: 2, expected: json(`["a", "b"]`)},
-			{idx: 3, expected: json(`["a", "b", "c"]`)},
+			{idx: -4, ok: false, expected: json(`["a", "b", "c"]`)},
+			{idx: -3, ok: true, expected: json(`["b", "c"]`)},
+			{idx: -2, ok: true, expected: json(`["a", "c"]`)},
+			{idx: -1, ok: true, expected: json(`["a", "b"]`)},
+			{idx: 0, ok: true, expected: json(`["b", "c"]`)},
+			{idx: 1, ok: true, expected: json(`["a", "c"]`)},
+			{idx: 2, ok: true, expected: json(`["a", "b"]`)},
+			{idx: 3, ok: false, expected: json(`["a", "b", "c"]`)},
 		},
 		`[{}, {"a":"b"}, {"c":"d"}]`: {
-			{idx: 0, expected: json(`[{"a":"b"},{"c":"d"}]`)},
-			{idx: 1, expected: json(`[{},{"c":"d"}]`)},
-			{idx: 2, expected: json(`[{},{"a":"b"}]`)},
+			{idx: 0, ok: true, expected: json(`[{"a":"b"},{"c":"d"}]`)},
+			{idx: 1, ok: true, expected: json(`[{},{"c":"d"}]`)},
+			{idx: 2, ok: true, expected: json(`[{},{"a":"b"}]`)},
 		},
 		`[]`: {
-			{idx: -1, expected: json(`[]`)},
-			{idx: 0, expected: json(`[]`)},
-			{idx: 1, expected: json(`[]`)},
+			{idx: -1, ok: false, expected: json(`[]`)},
+			{idx: 0, ok: false, expected: json(`[]`)},
+			{idx: 1, ok: false, expected: json(`[]`)},
 		},
 		`5`:     {{idx: 0, errMsg: "cannot delete from scalar"}},
 		`"b"`:   {{idx: 0, errMsg: "cannot delete from scalar"}},
@@ -1103,7 +1108,7 @@ func TestJSONRemoveIndex(t *testing.T) {
 
 		for _, tc := range tests {
 			runDecodedAndEncoded(t, fmt.Sprintf("%s-%d", k, tc.idx), left, func(t *testing.T, j JSON) {
-				result, err := j.RemoveIndex(tc.idx)
+				result, ok, err := j.RemoveIndex(tc.idx)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
@@ -1114,6 +1119,9 @@ func TestJSONRemoveIndex(t *testing.T) {
 				}
 				if err != nil {
 					t.Fatal(err)
+				}
+				if tc.ok != ok {
+					t.Fatalf("expected %t, got %t", tc.ok, ok)
 				}
 				c, err := result.Compare(tc.expected)
 				if err != nil {
@@ -1810,50 +1818,51 @@ func BenchmarkFetchKey(b *testing.B) {
 func TestJSONRemovePath(t *testing.T) {
 	queryTests := map[string][]struct {
 		path     []string
+		ok       bool
 		expected string
 		errMsg   string
 	}{
 		`{"foo": 1}`: {
-			{path: []string{"foa"}, expected: `{"foo": 1}`},
-			{path: []string{"foo"}, expected: `{}`},
-			{path: []string{"foz"}, expected: `{"foo": 1}`},
-			{path: []string{}, expected: `{"foo": 1}`},
-			{path: []string{"bar"}, expected: `{"foo": 1}`},
+			{path: []string{"foa"}, ok: false, expected: `{"foo": 1}`},
+			{path: []string{"foo"}, ok: true, expected: `{}`},
+			{path: []string{"foz"}, ok: false, expected: `{"foo": 1}`},
+			{path: []string{}, ok: false, expected: `{"foo": 1}`},
+			{path: []string{"bar"}, ok: false, expected: `{"foo": 1}`},
 		},
 		`{"foo": {"bar": 1, "baz": 2}}}`: {
-			{path: []string{}, expected: `{"foo": {"bar": 1, "baz": 2}}`},
-			{path: []string{"foo"}, expected: `{}`},
-			{path: []string{"foo", "bar"}, expected: `{"foo": {"baz": 2}}`},
-			{path: []string{"foo", "bar", "gup"}, expected: `{"foo": {"bar": 1, "baz": 2}}`},
-			{path: []string{"foo", "baz"}, expected: `{"foo": {"bar": 1}}`},
+			{path: []string{}, ok: false, expected: `{"foo": {"bar": 1, "baz": 2}}`},
+			{path: []string{"foo"}, ok: true, expected: `{}`},
+			{path: []string{"foo", "bar"}, ok: true, expected: `{"foo": {"baz": 2}}`},
+			{path: []string{"foo", "bar", "gup"}, ok: false, expected: `{"foo": {"bar": 1, "baz": 2}}`},
+			{path: []string{"foo", "baz"}, ok: true, expected: `{"foo": {"bar": 1}}`},
 		},
 		`{"foo": {"bar": 1, "baz": {"gup": 3}}}`: {
-			{path: []string{}, expected: `{"foo": {"bar": 1, "baz": {"gup": 3}}}`},
-			{path: []string{"foo"}, expected: `{}`},
-			{path: []string{"foo", "bar"}, expected: `{"foo": {"baz": {"gup": 3}}}`},
-			{path: []string{"foo", "baz"}, expected: `{"foo": {"bar": 1}}`},
-			{path: []string{"foo", "baz", "gup"}, expected: `{"foo": {"bar": 1, "baz": {}}}`},
+			{path: []string{}, ok: false, expected: `{"foo": {"bar": 1, "baz": {"gup": 3}}}`},
+			{path: []string{"foo"}, ok: true, expected: `{}`},
+			{path: []string{"foo", "bar"}, ok: true, expected: `{"foo": {"baz": {"gup": 3}}}`},
+			{path: []string{"foo", "baz"}, ok: true, expected: `{"foo": {"bar": 1}}`},
+			{path: []string{"foo", "baz", "gup"}, ok: true, expected: `{"foo": {"bar": 1, "baz": {}}}`},
 		},
 		`{"foo": [1, 2, {"bar": 3}]}`: {
-			{path: []string{}, expected: `{"foo": [1, 2, {"bar": 3}]}`},
-			{path: []string{`foo`}, expected: `{}`},
-			{path: []string{`foo`, `0`}, expected: `{"foo": [2, {"bar": 3}]}`},
-			{path: []string{`foo`, `1`}, expected: `{"foo": [1, {"bar": 3}]}`},
-			{path: []string{`foo`, `2`}, expected: `{"foo": [1, 2]}`},
-			{path: []string{`foo`, `2`, `bar`}, expected: `{"foo": [1, 2, {}]}`},
-			{path: []string{`foo`, `-3`}, expected: `{"foo": [2, {"bar": 3}]}`},
-			{path: []string{`foo`, `-2`}, expected: `{"foo": [1, {"bar": 3}]}`},
-			{path: []string{`foo`, `-1`}, expected: `{"foo": [1, 2]}`},
-			{path: []string{`foo`, `-1`, `bar`}, expected: `{"foo": [1, 2, {}]}`},
+			{path: []string{}, ok: false, expected: `{"foo": [1, 2, {"bar": 3}]}`},
+			{path: []string{`foo`}, ok: true, expected: `{}`},
+			{path: []string{`foo`, `0`}, ok: true, expected: `{"foo": [2, {"bar": 3}]}`},
+			{path: []string{`foo`, `1`}, ok: true, expected: `{"foo": [1, {"bar": 3}]}`},
+			{path: []string{`foo`, `2`}, ok: true, expected: `{"foo": [1, 2]}`},
+			{path: []string{`foo`, `2`, `bar`}, ok: true, expected: `{"foo": [1, 2, {}]}`},
+			{path: []string{`foo`, `-3`}, ok: true, expected: `{"foo": [2, {"bar": 3}]}`},
+			{path: []string{`foo`, `-2`}, ok: true, expected: `{"foo": [1, {"bar": 3}]}`},
+			{path: []string{`foo`, `-1`}, ok: true, expected: `{"foo": [1, 2]}`},
+			{path: []string{`foo`, `-1`, `bar`}, ok: true, expected: `{"foo": [1, 2, {}]}`},
 		},
 		`[[1]]`: {
-			{path: []string{"0", "0"}, expected: `[[]]`},
+			{path: []string{"0", "0"}, ok: true, expected: `[[]]`},
 		},
 		`[1]`: {
-			{path: []string{"foo"}, expected: `[1]`},
-			{path: []string{""}, expected: `[1]`},
-			{path: []string{"0"}, expected: `[]`},
-			{path: []string{"0", "0"}, expected: `[1]`},
+			{path: []string{"foo"}, ok: false, expected: `[1]`},
+			{path: []string{""}, ok: false, expected: `[1]`},
+			{path: []string{"0"}, ok: true, expected: `[]`},
+			{path: []string{"0", "0"}, ok: false, expected: `[1]`},
 		},
 		`1`: {
 			{path: []string{"foo"}, errMsg: "cannot delete path in scalar"},
@@ -1868,7 +1877,7 @@ func TestJSONRemovePath(t *testing.T) {
 
 		for _, tc := range tests {
 			t.Run(fmt.Sprintf("%s #- %v", k, tc.path), func(t *testing.T) {
-				result, err := left.RemovePath(tc.path)
+				result, ok, err := left.RemovePath(tc.path)
 				if tc.errMsg != "" {
 					if err == nil {
 						t.Fatal("expected error")
@@ -1879,6 +1888,9 @@ func TestJSONRemovePath(t *testing.T) {
 				}
 				if err != nil {
 					t.Fatal(err)
+				}
+				if tc.ok != ok {
+					t.Fatalf("expected %t, got %t", tc.ok, ok)
 				}
 				cmp, err := result.Compare(jsonTestShorthand(tc.expected))
 				if err != nil {

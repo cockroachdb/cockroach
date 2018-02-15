@@ -814,7 +814,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.String,
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				j, err := left.(*DJSON).JSON.RemoveKey(string(MustBeDString(right)))
+				j, _, err := left.(*DJSON).JSON.RemoveKey(string(MustBeDString(right)))
 				if err != nil {
 					return nil, err
 				}
@@ -826,7 +826,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.JSON,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				j, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
+				j, _, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
 				if err != nil {
 					return nil, err
 				}
