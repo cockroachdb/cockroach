@@ -64,6 +64,17 @@ var ClusterOrganization = settings.RegisterStringSetting(
 	"",
 )
 
+// ClusterSecret is a cluster specific secret. This setting is hidden.
+var ClusterSecret = func() *settings.StringSetting {
+	s := settings.RegisterStringSetting(
+		"cluster.secret",
+		"cluster specific secret",
+		"",
+	)
+	s.Hide()
+	return s
+}()
+
 var errNoTransactionInProgress = errors.New("there is no transaction in progress")
 var errTransactionInProgress = errors.New("there is already a transaction in progress")
 
