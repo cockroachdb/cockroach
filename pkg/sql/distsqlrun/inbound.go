@@ -62,20 +62,25 @@ func processInboundStreamHelper(
 	var finalErr error
 	draining := false
 	var sd StreamDecoder
+
+	doneChan := make(chan struct{})
+	defer func() { close(doneChan) }()
+
+	// Listen for cancellation while blocking on Recv()s.
+	go func() {
+		select {
+		case <-f.Ctx.Done():
+			sendCancelSignalToStreamProducer(ctx, stream)
+		case <-doneChan:
+		}
+	}()
+
 	for {
 		var msg *ProducerMessage
 		if firstMsg != nil {
 			msg = firstMsg
 			firstMsg = nil
 		} else {
-			// Check for context cancellation before recv()ing the next message.
-			select {
-			case <-f.Ctx.Done():
-				// This will error out the FlowStream(), and also cancel
-				// the flow context on the producer.
-				return sqlbase.NewQueryCanceledError()
-			default:
-			}
 			var err error
 			msg, err = stream.Recv()
 			if err != nil {
@@ -83,6 +88,12 @@ func processInboundStreamHelper(
 					// Communication error.
 					return errors.Wrap(
 						err, log.MakeMessage(ctx, "communication error", nil /* args */))
+				}
+				// The stream has closed and the flow context is canceled. This
+				// indicates that we canceled the producer, so return the appropriate
+				// cancellation error.
+				if f.Ctx.Err() != nil {
+					return sqlbase.NewQueryCanceledError()
 				}
 				// End of the stream.
 				return finalErr
@@ -152,5 +163,13 @@ func processInboundStreamHelper(
 func sendDrainSignalToStreamProducer(ctx context.Context, stream DistSQL_FlowStreamServer) error {
 	log.VEvent(ctx, 1, "sending drain signal to producer")
 	sig := ConsumerSignal{DrainRequest: &DrainRequest{}}
+	return stream.Send(&sig)
+}
+
+// sendCancelSignalToProducer is called when the consumer is canceled and wants
+// the producer to cancel itself as well.
+func sendCancelSignalToStreamProducer(ctx context.Context, stream DistSQL_FlowStreamServer) error {
+	log.VEvent(ctx, 1, "sending cancel signal to producer")
+	sig := ConsumerSignal{CancelRequest: &CancelRequest{}}
 	return stream.Send(&sig)
 }

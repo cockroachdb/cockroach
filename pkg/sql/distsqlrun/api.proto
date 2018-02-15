@@ -74,9 +74,17 @@ message ConsumerSignal {
 
   // Consumer->Producer handshake messages. See message definition.
   optional ConsumerHandshake handshake = 3;
+
+  // The consumer is canceled, and is asking the producer to cancel itself as
+  // well. The consumer will no longer send anything to the producer, but it
+  // does require the RPC stream to be closed.
+  optional CancelRequest cancel_request = 4;
 }
 
 message DrainRequest {
+}
+
+message CancelRequest {
 }
 
 // ConsumerHandshake is the first one or two message sent in the

@@ -185,7 +185,10 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		if log.V(2) {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
-		m.stream, err = client.FlowStream(context.TODO())
+		// We want to explicitly cancel FlowStreams through a CancelRequest, not
+		// implicitly through contexts. As a result, we give the gRPC client a
+		// background context to ensure that it can never be canceled.
+		m.stream, err = client.FlowStream(context.Background())
 		if err != nil {
 			if log.V(1) {
 				log.Infof(ctx, "FlowStream error: %s", err)
@@ -255,18 +258,15 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 				// Stop work from proceeding in this flow. This also causes FlowStream
 				// RPCs that have this node as consumer to return errors.
 				m.flowCtxCancel()
-				// The consumer either doesn't care any more (it returned from the
-				// FlowStream RPC with an error if the outbox established the stream or
-				// it canceled the client context if the consumer established the
-				// stream through a RunSyncFlow RPC), or there was a communication error
-				// and the stream is dead. In any case, the stream has been closed and
-				// the consumer will not consume more rows from this outbox. Make sure
-				// the stream is not used any more.
-				m.stream = nil
+				// If the consumer is closed and no longer listening to this stream,
+				// make sure that the stream is no longer used.
+				if drainSignal.signalType == consumerClosed {
+					m.stream = nil
+				}
 				return drainSignal.err
 			}
 			drainCh = nil
-			if drainSignal.drainRequested {
+			if drainSignal.signalType == drainRequest {
 				// Enter draining mode.
 				draining = true
 				m.RowChannel.ConsumerDone()
@@ -282,14 +282,23 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 // drainSignal is a signal received from the consumer telling the producer that
 // it doesn't need any more rows and optionally asking the producer to drain.
 type drainSignal struct {
-	// drainRequested, if set, means that the consumer is interested in the
-	// trailing metadata that the producer might have. If not set, the producer
-	// should close immediately (the consumer is probably gone by now).
-	drainRequested bool
+	// signalType indicates the type of signal received from the consumer. It can
+	// indicate that the consumer has closed (i.e., returned an RPC error), the
+	// consumer is requesting the outbox to cancel, or the consumer is requesting
+	// the outbox to drain.
+	signalType consumerSignalType
 	// err, if set, is either the error that the consumer returned when closing
 	// the FlowStream RPC or a communication error.
 	err error
 }
+
+type consumerSignalType int
+
+const (
+	drainRequest consumerSignalType = iota
+	cancelRequest
+	consumerClosed
+)
 
 // listenForDrainSignalFromConsumer returns a channel that will be pinged once the
 // consumer has closed its send-side of the stream, or has sent a drain signal.
@@ -303,9 +312,9 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 
 	stream := m.stream
 	if err := m.flowCtx.stopper.RunAsyncTask(ctx, "drain", func(ctx context.Context) {
-		sendDrainSignal := func(drainRequested bool, err error) bool {
+		sendDrainSignal := func(signalType consumerSignalType, err error) bool {
 			select {
-			case ch <- drainSignal{drainRequested: drainRequested, err: err}:
+			case ch <- drainSignal{signalType: signalType, err: err}:
 				return true
 			case <-ctx.Done():
 				// Listening for consumer signals has been canceled. This generally
@@ -316,7 +325,7 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 				// randomly selected; the other was also available), so we have to
 				// notify it. Thus, we attempt sending again.
 				select {
-				case ch <- drainSignal{drainRequested: drainRequested, err: err}:
+				case ch <- drainSignal{signalType: signalType, err: err}:
 					return true
 				default:
 					return false
@@ -327,18 +336,21 @@ func (m *outbox) listenForDrainSignalFromConsumer(ctx context.Context) (<-chan d
 		for {
 			signal, err := stream.Recv()
 			if err == io.EOF {
-				sendDrainSignal(false, nil)
+				sendDrainSignal(consumerClosed, nil)
 				return
 			}
 			if err != nil {
-				sendDrainSignal(false, err)
+				sendDrainSignal(consumerClosed, err)
 				return
 			}
 			switch {
 			case signal.DrainRequest != nil:
-				if !sendDrainSignal(true, nil) {
+				if !sendDrainSignal(drainRequest, nil) {
 					return
 				}
+			case signal.CancelRequest != nil:
+				sendDrainSignal(cancelRequest, sqlbase.NewQueryCanceledError())
+				return
 			case signal.SetupFlowRequest != nil:
 				log.Fatalf(ctx, "Unexpected SetupFlowRequest. "+
 					"This SyncFlow specific message should have been handled in RunSyncFlow.")
