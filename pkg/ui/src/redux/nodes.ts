@@ -176,7 +176,7 @@ export function sumNodeStats(
           result.nodeCounts.dead++;
           break;
       }
-      if (status !== LivenessStatus.DEAD) {
+      if (status !== LivenessStatus.DEAD && status !== LivenessStatus.DECOMMISSIONED) {
         result.capacityUsed += n.metrics[MetricConstants.usedCapacity];
         result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
         result.capacityTotal += n.metrics[MetricConstants.capacity];
