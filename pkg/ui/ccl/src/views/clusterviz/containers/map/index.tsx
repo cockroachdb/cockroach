@@ -35,7 +35,7 @@ export default class ClusterVisualization extends React.Component<RouterState> {
         <div style={{
           flex: "none",
           backgroundColor: "white",
-          boxShadow: "0px 4px 5px 0px lightgrey",
+          boxShadow: "0 0 4px 0 rgba(0, 0, 0, 0.2)",
           // height: 70,
           zIndex: 5,
           // display: "flex",
