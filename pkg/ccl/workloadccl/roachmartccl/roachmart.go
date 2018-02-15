@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
@@ -181,13 +182,14 @@ func (m *roachmart) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (m *roachmart) Ops() []workload.Operation {
-	op := workload.Operation{
+func (m *roachmart) Ops() workload.Operations {
+	return workload.Operations{
 		Name: `fetch one user's orders`,
-		Fn: func(sqlDB *gosql.DB) (func(context.Context) error, error) {
+		Fn: func(sqlDB *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 			const query = `SELECT * FROM orders WHERE user_zone = $1 AND user_email = $2`
 			rng := rand.New(rand.NewSource(m.seed))
 			usersTable := m.Tables()[0]
+			hists := reg.GetHandle()
 
 			return func(ctx context.Context) error {
 				wantLocal := rng.Intn(100) < m.localPercent
@@ -203,10 +205,15 @@ func (m *roachmart) Ops() []workload.Operation {
 						break
 					}
 				}
+				start := timeutil.Now()
 				_, err := sqlDB.ExecContext(ctx, query, zone, email)
+				if wantLocal {
+					hists.Get(`local`).Record(timeutil.Since(start))
+				} else {
+					hists.Get(`remote`).Record(timeutil.Since(start))
+				}
 				return err
 			}, nil
 		},
 	}
-	return []workload.Operation{op}
 }

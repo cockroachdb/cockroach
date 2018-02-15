@@ -163,15 +163,26 @@ func (w *tpcc) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *tpcc) Ops() []workload.Operation {
-	return []workload.Operation{{
+func (w *tpcc) Ops() workload.Operations {
+	ops := workload.Operations{
 		Name: `tpmC`,
-		Fn: func(db *gosql.DB) (func(context.Context) error, error) {
+		Fn: func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 			idx := int(atomic.AddInt64(&w.workers, 1)) - 1
 			warehouse := idx / numWorkersPerWarehouse
-			worker := &worker{config: w, idx: idx, db: db, warehouse: warehouse}
-			fn := func(_ context.Context) error { return worker.run() }
-			return fn, nil
+			worker := &worker{
+				config:    w,
+				hists:     reg.GetHandle(),
+				idx:       idx,
+				db:        db,
+				warehouse: warehouse,
+			}
+			return worker.run, nil
 		},
-	}}
+	}
+	if w.doWaits {
+		// TODO(dan): doWaits is currently our catch-all for "run this to spec".
+		// It should probably be renamed to match.
+		ops.ResultHist = `newOrder`
+	}
+	return ops
 }

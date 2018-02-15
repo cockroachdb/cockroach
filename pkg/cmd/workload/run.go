@@ -32,14 +32,12 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"github.com/codahale/hdrhistogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/tylertreat/hdrhistogram-writer"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
@@ -126,38 +124,9 @@ func init() {
 // numOps keeps a global count of successful operations.
 var numOps uint64
 
-const (
-	minLatency = 100 * time.Microsecond
-	maxLatency = 10 * time.Second
-)
-
-func clampLatency(d, min, max time.Duration) time.Duration {
-	if d < min {
-		return min
-	}
-	if d > max {
-		return max
-	}
-	return d
-}
-
 type worker struct {
-	db      *gosql.DB
-	op      func(context.Context) error
-	latency struct {
-		syncutil.Mutex
-		*hdrhistogram.WindowedHistogram
-	}
-}
-
-func newWorker(db *gosql.DB, op func(context.Context) error) *worker {
-	w := &worker{
-		db: db,
-		op: op,
-	}
-	w.latency.WindowedHistogram = hdrhistogram.NewWindowed(1,
-		minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
-	return w
+	db *gosql.DB
+	op func(context.Context) error
 }
 
 // run is an infinite loop in which the worker continuously attempts to
@@ -175,17 +144,11 @@ func (w *worker) run(
 			}
 		}
 
-		start := timeutil.Now()
 		if err := w.op(ctx); err != nil {
 			errCh <- err
 			continue
 		}
-		elapsed := clampLatency(timeutil.Since(start), minLatency, maxLatency)
-		w.latency.Lock()
-		if err := w.latency.Current.RecordValue(elapsed.Nanoseconds()); err != nil {
-			log.Fatal(ctx, err)
-		}
-		w.latency.Unlock()
+
 		v := atomic.AddUint64(&numOps, 1)
 		if *maxOps > 0 && v >= *maxOps {
 			return
@@ -310,30 +273,27 @@ func runRun(gen workload.Generator, args []string) error {
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
 	}
 
-	var op *workload.Operation
+	var ops workload.Operations
 	if o, ok := gen.(workload.Opser); ok {
-		if ops := o.Ops(); len(ops) == 1 {
-			op = &ops[0]
-		}
+		ops = o.Ops()
 	}
-	if op == nil {
-		return errors.Errorf(`only generators with one operation are currently supported`)
+	if ops.Fn == nil {
+		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
 
-	lastNow := timeutil.Now()
-	start := lastNow
-	var lastOps uint64
+	start := timeutil.Now()
+	reg := workload.NewHistogramRegistry()
 	workers := make([]*worker, *concurrency)
 
 	errCh := make(chan error)
 	var wg sync.WaitGroup
 	for i := range workers {
 		wg.Add(1)
-		opFn, err := op.Fn(db)
+		opFn, err := ops.Fn(db, reg)
 		if err != nil {
 			return err
 		}
-		workers[i] = newWorker(db, opFn)
+		workers[i] = &worker{db: db, op: opFn}
 		go workers[i].run(ctx, errCh, &wg, limiter)
 	}
 
@@ -354,30 +314,6 @@ func runRun(gen workload.Generator, args []string) error {
 		}()
 	}
 
-	defer func() {
-		// Output results that mimic Go's built-in benchmark format.
-		benchmarkName := strings.Join([]string{
-			"BenchmarkWorkload",
-			fmt.Sprintf("generator=%s", gen.Meta().Name),
-			fmt.Sprintf("concurrency=%d", *concurrency),
-			fmt.Sprintf("duration=%s", *duration),
-		}, "/")
-		if f, ok := gen.(workload.Flagser); ok {
-			// NB: This visits in a deterministic order.
-			f.Flags().Visit(func(f *pflag.Flag) {
-				benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
-			})
-		}
-
-		result := testing.BenchmarkResult{
-			N: int(numOps),
-			T: timeutil.Since(start),
-		}
-		fmt.Printf("%s\t%s\n", benchmarkName, result)
-	}()
-
-	cumLatency := hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), 1)
-
 	for i := 0; ; {
 		select {
 		case err := <-errCh:
@@ -390,77 +326,85 @@ func runRun(gen workload.Generator, args []string) error {
 			os.Exit(1)
 
 		case <-tick:
-			var h *hdrhistogram.Histogram
-			for _, w := range workers {
-				w.latency.Lock()
-				m := w.latency.Merge()
-				w.latency.Rotate()
-				w.latency.Unlock()
-				if h == nil {
-					h = m
-				} else {
-					h.Merge(m)
+			startElapsed := timeutil.Since(start)
+			reg.Tick(func(t workload.HistogramTick) {
+				if i%20 == 0 {
+					fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
 				}
-			}
-
-			cumLatency.Merge(h)
-			p50 := h.ValueAtQuantile(50)
-			p95 := h.ValueAtQuantile(95)
-			p99 := h.ValueAtQuantile(99)
-			pMax := h.ValueAtQuantile(100)
-
-			now := timeutil.Now()
-			elapsed := now.Sub(lastNow)
-			ops := atomic.LoadUint64(&numOps)
-			if i%20 == 0 {
-				fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
-			}
-			i++
-			fmt.Printf("%8s %8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f\n",
-				time.Duration(timeutil.Since(start).Seconds()+0.5)*time.Second,
-				numErr,
-				float64(ops-lastOps)/elapsed.Seconds(),
-				float64(ops)/timeutil.Since(start).Seconds(),
-				time.Duration(p50).Seconds()*1000,
-				time.Duration(p95).Seconds()*1000,
-				time.Duration(p99).Seconds()*1000,
-				time.Duration(pMax).Seconds()*1000)
-			lastOps = ops
-			lastNow = now
+				i++
+				fmt.Printf("%8s %8d %14.1f %14.1f %8.1f %8.1f %8.1f %8.1f %s\n",
+					time.Duration(startElapsed.Seconds()+0.5)*time.Second,
+					numErr,
+					float64(t.Ops-t.LastOps)/t.Elapsed.Seconds(),
+					float64(t.Ops)/startElapsed.Seconds(),
+					time.Duration(t.Hist.ValueAtQuantile(50)).Seconds()*1000,
+					time.Duration(t.Hist.ValueAtQuantile(95)).Seconds()*1000,
+					time.Duration(t.Hist.ValueAtQuantile(99)).Seconds()*1000,
+					time.Duration(t.Hist.ValueAtQuantile(100)).Seconds()*1000,
+					t.Name,
+				)
+			})
 
 		case <-done:
-			for _, w := range workers {
-				w.latency.Lock()
-				m := w.latency.Merge()
-				w.latency.Rotate()
-				w.latency.Unlock()
-				cumLatency.Merge(m)
+			const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
+			fmt.Println(totalHeader + `__total`)
+			startElapsed := timeutil.Since(start)
+			printTotalHist := func(t workload.HistogramTick) {
+				fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
+					startElapsed.Seconds(), numErr,
+					t.Ops, float64(t.Ops)/startElapsed.Seconds(),
+					time.Duration(t.Cumulative.Mean()).Seconds()*1000,
+					time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
+					time.Duration(t.Cumulative.ValueAtQuantile(95)).Seconds()*1000,
+					time.Duration(t.Cumulative.ValueAtQuantile(99)).Seconds()*1000,
+					time.Duration(t.Cumulative.ValueAtQuantile(100)).Seconds()*1000,
+					t.Name,
+				)
 			}
 
-			avg := cumLatency.Mean()
-			p50 := cumLatency.ValueAtQuantile(50)
-			p95 := cumLatency.ValueAtQuantile(95)
-			p99 := cumLatency.ValueAtQuantile(99)
-			pMax := cumLatency.ValueAtQuantile(100)
+			resultTick := workload.HistogramTick{Name: ops.ResultHist}
+			reg.Tick(func(t workload.HistogramTick) {
+				printTotalHist(t)
+				if ops.ResultHist == `` || ops.ResultHist == t.Name {
+					resultTick.Ops += t.Ops
+					if resultTick.Cumulative == nil {
+						resultTick.Cumulative = t.Cumulative
+					} else {
+						resultTick.Cumulative.Merge(t.Cumulative)
+					}
+				}
+			})
 
-			ops := atomic.LoadUint64(&numOps)
-			elapsed := timeutil.Since(start).Seconds()
-			fmt.Println("\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
-			fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n\n",
-				timeutil.Since(start).Seconds(), numErr,
-				ops, float64(ops)/elapsed,
-				time.Duration(avg).Seconds()*1000,
-				time.Duration(p50).Seconds()*1000,
-				time.Duration(p95).Seconds()*1000,
-				time.Duration(p99).Seconds()*1000,
-				time.Duration(pMax).Seconds()*1000)
+			fmt.Println(totalHeader + `__result`)
+			printTotalHist(resultTick)
+
+			// Output results that mimic Go's built-in benchmark format.
+			benchmarkName := strings.Join([]string{
+				"BenchmarkWorkload",
+				fmt.Sprintf("generator=%s", gen.Meta().Name),
+				fmt.Sprintf("concurrency=%d", *concurrency),
+			}, "/")
+			if *duration != time.Duration(0) {
+				benchmarkName += `/duration=` + duration.String()
+			}
+			if f, ok := gen.(workload.Flagser); ok {
+				// NB: This visits in a deterministic order.
+				f.Flags().Visit(func(f *pflag.Flag) {
+					benchmarkName += fmt.Sprintf(`/%s=%s`, f.Name, f.Value)
+				})
+			}
+			result := testing.BenchmarkResult{N: int(resultTick.Ops), T: startElapsed}
+			fmt.Printf("\n%s\t%s\n", benchmarkName, result)
+
 			if *histFile == "-" {
-				if err := histwriter.WriteDistribution(cumLatency, nil, 1, os.Stdout); err != nil {
+				if err := histwriter.WriteDistribution(
+					resultTick.Cumulative, nil, 1, os.Stdout,
+				); err != nil {
 					fmt.Printf("failed to write histogram to stdout: %v\n", err)
 				}
 			} else if *histFile != "" {
 				if err := histwriter.WriteDistributionFile(
-					cumLatency, nil, 1, *histFile,
+					resultTick.Cumulative, nil, 1, *histFile,
 				); err != nil {
 					fmt.Printf("failed to write histogram file: %v\n", err)
 				}
