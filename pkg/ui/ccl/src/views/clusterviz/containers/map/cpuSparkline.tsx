@@ -15,8 +15,8 @@ export function CpuSparkline(props: CpuSparklineProps) {
   return (
     <MetricsDataProvider id={key}>
       <SparklineMetricsDataComponent formatCurrentValue={d3.format(".1%")}>
-        <Metric name="cr.node.sys.cpu.sys.percent" sources={props.nodes} nonNegativeRate />
-        <Metric name="cr.node.sys.cpu.user.percent" sources={props.nodes} nonNegativeRate />
+        <Metric name="cr.node.sys.cpu.sys.percent" sources={props.nodes} />
+        <Metric name="cr.node.sys.cpu.user.percent" sources={props.nodes} />
       </SparklineMetricsDataComponent>
     </MetricsDataProvider>
   );
