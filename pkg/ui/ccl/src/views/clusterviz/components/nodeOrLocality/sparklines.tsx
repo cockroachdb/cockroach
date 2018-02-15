@@ -10,7 +10,7 @@ import React from "react";
 
 import { CpuSparkline } from "src/views/clusterviz/containers/map/cpuSparkline";
 import { QpsSparkline } from "src/views/clusterviz/containers/map/qpsSparkline";
-import { DARK_BLUE, MAIN_BLUE } from "src/views/shared/colors";
+import { DARK_BLUE } from "src/views/shared/colors";
 
 const SPARKLINE_OFFSET_PX = 36;
 
@@ -31,15 +31,6 @@ export class Sparklines extends React.Component<SparklinesProps> {
         >
           CPU
         </text>
-        <text
-          fill={MAIN_BLUE}
-          fontFamily="Lato-Bold, Lato"
-          fontSize="12"
-          fontWeight="700"
-          x="124"
-        >
-          XX%
-        </text>
         {this.renderCPUSparkline()}
       </g>
     );
@@ -55,15 +46,6 @@ export class Sparklines extends React.Component<SparklinesProps> {
           fontWeight="bold"
         >
           QPS
-        </text>
-        <text
-          fill={MAIN_BLUE}
-          fontFamily="Lato-Bold, Lato"
-          fontSize="12"
-          fontWeight="700"
-          x="118"
-        >
-          XXXX
         </text>
         {this.renderQPSSparkline()}
       </g>

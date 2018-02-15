@@ -10,7 +10,8 @@ interface SparklineConfig {
   width: number;
   height: number;
   backgroundColor: string;
-  lineColor: string;
+  foregroundColor: string;
+  formatCurrentValue: (value: number) => string;
 }
 
 interface Datapoint {
@@ -23,7 +24,7 @@ interface SparklineChartProps {
 }
 
 function sparklineChart(config: SparklineConfig) {
-  const { width, height, backgroundColor, lineColor } = config;
+  const { width, height, backgroundColor, foregroundColor, formatCurrentValue } = config;
   const margin = {
     left: 1,
     top: 1,
@@ -66,17 +67,39 @@ function sparklineChart(config: SparklineConfig) {
       .enter()
       .append("path")
       .attr("fill", "none")
-      .attr("stroke", lineColor);
+      .attr("stroke", foregroundColor);
 
     line
       .attr("d", drawPath);
+
+    const lastDatapoint = results && results.length ? results[results.length - 1].value : 0;
+
+    const text = sel.selectAll("text")
+      .data([lastDatapoint]);
+
+    text.enter()
+      .append("text")
+      .attr("x", width + 13)
+      .attr("y", height - margin.bottom)
+      .attr("text-anchor", "left")
+      .attr("fill", foregroundColor)
+      .attr("font-family", "Lato-Bold, Lato")
+      .attr("font-size", 12)
+      .attr("font-weight", 700);
+
+    text
+      .text(formatCurrentValue);
   };
 }
 
-export class SparklineMetricsDataComponent extends React.Component<MetricsDataComponentProps> {
+interface SparklineMetricsDataComponentProps {
+  formatCurrentValue: (value: number) => string;
+}
+
+export class SparklineMetricsDataComponent extends React.Component<MetricsDataComponentProps & SparklineMetricsDataComponentProps> {
   chart: React.ComponentClass<SparklineChartProps>;
 
-  constructor(props: MetricsDataComponentProps) {
+  constructor(props: MetricsDataComponentProps & SparklineMetricsDataComponentProps) {
     super(props);
 
     this.chart = createChartComponent(
@@ -86,6 +109,7 @@ export class SparklineMetricsDataComponent extends React.Component<MetricsDataCo
         height: 10,
         backgroundColor: BACKGROUND_BLUE,
         foregroundColor: MAIN_BLUE,
+        formatCurrentValue: this.props.formatCurrentValue,
       }),
     );
   }
