@@ -135,27 +135,17 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 }
 
 func joinTypeDetail(joinType sqlbase.JoinType) string {
-	// Use JoinType.String() but replace _ with space and
-	// append JOIN where appropriate.
-	var buf bytes.Buffer
-	buf.WriteString("Type: ")
-	for _, c := range joinType.String() {
-		if c == '_' {
-			buf.WriteByte(' ')
-		} else {
-			buf.WriteRune(c)
-		}
+	typeStr := strings.Replace(joinType.String(), "_", " ", -1)
+	if joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin {
+		return fmt.Sprintf("Type: %s", typeStr)
 	}
-	if joinType != sqlbase.IntersectAllJoin && joinType != sqlbase.ExceptAllJoin {
-		buf.WriteString(" JOIN")
-	}
-	return buf.String()
+	return fmt.Sprintf("Type: %s JOIN", typeStr)
 }
 
 // summary implements the diagramCellType interface.
 func (hj *HashJoinerSpec) summary() (string, []string) {
 	name := "HashJoiner"
-	if isSetOpJoin(joinType(hj.Type)) {
+	if isSetOpJoin(hj.Type) {
 		name = "HashSetOp"
 	}
 
@@ -202,7 +192,7 @@ func orderedJoinDetails(
 // summary implements the diagramCellType interface.
 func (mj *MergeJoinerSpec) summary() (string, []string) {
 	name := "MergeJoiner"
-	if isSetOpJoin(joinType(mj.Type)) {
+	if isSetOpJoin(mj.Type) {
 		name = "MergeSetOp"
 	}
 	return name, orderedJoinDetails(mj.Type, mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)

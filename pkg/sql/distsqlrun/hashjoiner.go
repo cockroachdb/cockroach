@@ -505,7 +505,7 @@ func (h *hashJoiner) probeRow(
 		// If the ON condition failed, renderedRow is nil.
 		if renderedRow != nil {
 			probeMatched = true
-			shouldEmit := h.joinType != leftAntiJoin && h.joinType != exceptAllJoin
+			shouldEmit := h.joinType != sqlbase.LeftAntiJoin && h.joinType != sqlbase.ExceptAllJoin
 			if shouldMark(h.storedSide, h.joinType) {
 				// Matched rows are marked on the stored side for 2 reasons.
 				// 1: For outer joins, anti joins, and EXCEPT ALL to iterate through
@@ -519,11 +519,11 @@ func (h *hashJoiner) probeRow(
 				// TODO(peter): figure out a way to reduce this special casing below.
 				if i.IsMarked(ctx) {
 					switch h.joinType {
-					case leftSemiJoin:
+					case sqlbase.LeftSemiJoin:
 						shouldEmit = false
-					case intersectAllJoin:
+					case sqlbase.IntersectAllJoin:
 						shouldEmit = false
-					case exceptAllJoin:
+					case sqlbase.ExceptAllJoin:
 						// We want to mark a stored row if possible, so move on to the
 						// next match. Reset probeMatched in case we don't find any more
 						// matches and want to emit this row.
@@ -538,7 +538,7 @@ func (h *hashJoiner) probeRow(
 				consumerStatus, err := h.out.EmitRow(ctx, renderedRow)
 				if err != nil || consumerStatus != NeedMoreRows {
 					return true, nil
-				} else if h.joinType == intersectAllJoin {
+				} else if h.joinType == sqlbase.IntersectAllJoin {
 					// We found a match, so we are done with this row.
 					return false, nil
 				}
@@ -683,15 +683,15 @@ func (h *hashJoiner) receiveRow(
 }
 
 // Some types of joins need to mark rows that matched.
-func shouldMark(storedSide joinSide, joinType joinType) bool {
+func shouldMark(storedSide joinSide, joinType sqlbase.JoinType) bool {
 	switch {
-	case joinType == leftSemiJoin && storedSide == leftSide:
+	case joinType == sqlbase.LeftSemiJoin && storedSide == leftSide:
 		return true
-	case joinType == leftAntiJoin && storedSide == leftSide:
+	case joinType == sqlbase.LeftAntiJoin && storedSide == leftSide:
 		return true
-	case joinType == exceptAllJoin:
+	case joinType == sqlbase.ExceptAllJoin:
 		return true
-	case joinType == intersectAllJoin:
+	case joinType == sqlbase.IntersectAllJoin:
 		return true
 	case shouldEmitUnmatchedRow(storedSide, joinType):
 		return true
@@ -703,11 +703,11 @@ func shouldMark(storedSide joinSide, joinType joinType) bool {
 // Some types of joins only need to know of the existence of a matching row in
 // the storedSide, depending on the storedSide, and don't need to know all the
 // rows. These can 'short circuit' to avoid iterating through them all.
-func shouldShortCircuit(storedSide joinSide, joinType joinType) bool {
+func shouldShortCircuit(storedSide joinSide, joinType sqlbase.JoinType) bool {
 	switch joinType {
-	case leftSemiJoin:
+	case sqlbase.LeftSemiJoin:
 		return storedSide == rightSide
-	case exceptAllJoin:
+	case sqlbase.ExceptAllJoin:
 		return true
 	default:
 		return false
