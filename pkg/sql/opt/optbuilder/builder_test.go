@@ -133,9 +133,8 @@ func TestBuilder(t *testing.T) {
 					}
 
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := newScalarBuilder(o.Factory(), &iVarHelper)
-
-					group, err := buildScalar(b, typedExpr)
+					b := NewScalar(ctx, o.Factory())
+					group, err := b.Build(typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
@@ -169,32 +168,4 @@ func TestBuilder(t *testing.T) {
 			})
 		})
 	}
-}
-
-// newScalarBuilder constructs a Builder to be used for building scalar
-// expressions.
-func newScalarBuilder(factory opt.Factory, ivh *tree.IndexedVarHelper) *Builder {
-	b := &Builder{factory: factory, colMap: make([]columnProps, 1)}
-
-	b.semaCtx.IVarHelper = ivh
-	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
-
-	return b
-}
-
-// buildScalar is a wrapper for Builder.buildScalar which catches panics and
-// converts those containing builderErrors back to errors.
-func buildScalar(b *Builder, typedExpr tree.TypedExpr) (group opt.GroupID, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if bldErr, ok := r.(builderError); ok {
-				err = bldErr
-			} else {
-				panic(r)
-			}
-		}
-	}()
-
-	group = b.buildScalar(typedExpr, &scope{builder: b})
-	return group, err
 }

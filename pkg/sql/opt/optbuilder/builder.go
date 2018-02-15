@@ -1175,3 +1175,40 @@ func isAggregate(def *tree.FunctionDefinition) bool {
 func groupingError(colName string) error {
 	return errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", colName)
 }
+
+// ScalarBuilder is a specialized variant of Builder that can be used to create
+// a scalar from a TypedExpr. This is used to build scalar expressions for
+// testing index constraints. It is also used temporarily to interface with the
+// old planning code.
+type ScalarBuilder Builder
+
+// NewScalar creates a new ScalarBuilder structure initialized with the given
+// Context and Factory.
+func NewScalar(ctx context.Context, factory opt.Factory) *ScalarBuilder {
+	return &ScalarBuilder{
+		factory: factory,
+		colMap:  make([]columnProps, 1),
+		ctx:     ctx,
+	}
+}
+
+// Build a memo structure from a TypedExpr: the root group represents a scalar
+// expression equivalent to expr.
+func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root opt.GroupID, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate builder errors without adding
+			// lots of checks for `if err != nil` throughout the code. This is
+			// only possible because the code does not update shared state and does
+			// not manipulate locks.
+			if bldErr, ok := r.(builderError); ok {
+				err = bldErr
+			} else {
+				panic(r)
+			}
+		}
+	}()
+	bld := (*Builder)(sb)
+
+	return bld.buildScalar(expr, &scope{builder: bld}), nil
+}
