@@ -101,6 +101,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
         style={{ cursor: "pointer" }}
         transform="translate(-90 -100)"
       >
+        <rect width={180} height={210} opacity={0} />
         <Labels
           label={getLocalityLabel(tiers)}
           subLabel={`${leavesUnderMe.length} ${pluralize(leavesUnderMe.length, "Node", "Nodes")}`}
