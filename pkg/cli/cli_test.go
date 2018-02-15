@@ -1495,19 +1495,19 @@ func Example_user() {
 	// user set foo_
 	// CREATE USER 1
 	// user set ,foo
-	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username ",foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set f,oo
-	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "f,oo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foo,
-	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "foo," invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set 0foo
-	// pq: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foo0
 	// CREATE USER 1
 	// user set f0oo
 	// CREATE USER 1
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof
-	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// pq: username "foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoof" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 	// user set foofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoofoo
 	// CREATE USER 1
 	// user set Ομηρος
@@ -1565,7 +1565,7 @@ func Example_cert() {
 	// cert create-client foo
 	// cert create-client Ομηρος
 	// cert create-client 0foo
-	// failed to generate client certificate and key: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits or underscores, and must not exceed 63 characters
+	// failed to generate client certificate and key: username "0foo" invalid; usernames are case insensitive, must start with a letter or underscore, may contain letters, digits, dashes, or underscores, and must not exceed 63 characters
 }
 
 // TestFlagUsage is a basic test to make sure the fragile
