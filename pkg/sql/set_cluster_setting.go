@@ -130,11 +130,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		EventLogSetClusterSetting,
 		0, /* no target */
 		int32(params.extendedEvalCtx.NodeID),
-		struct {
-			SettingName string
-			Value       string
-			User        string
-		}{n.name, reportedValue, params.SessionData().User},
+		EventLogSetClusterSettingDetail{n.name, reportedValue, params.SessionData().User},
 	)
 }
 
