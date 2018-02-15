@@ -19,6 +19,8 @@ import { LocalityTier, LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
+import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
+import { trustIcon } from "src/util/trust";
 
 const BACK_BUTTON_OFFSET = 26;
 
@@ -99,9 +101,28 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     const parentLocality = tiers.slice(0, tiers.length - 1);
 
     return (
-      <div style={{ position: "absolute", left: BACK_BUTTON_OFFSET, bottom: BACK_BUTTON_OFFSET }}>
-        <Link to={ "/overview/" + generateLocalityRoute(parentLocality) }>
-          Back to { getLocalityLabel(parentLocality) }
+      <div
+        style={{
+          position: "absolute",
+          left: BACK_BUTTON_OFFSET,
+          bottom: BACK_BUTTON_OFFSET,
+          backgroundColor: "white",
+          border: "1px solid #EDEDED",
+          borderRadius: 3,
+          padding: 12,
+          boxShadow: "0px 0px 4px 0px rgba(0, 0, 0, 0.2)",
+          letterSpacing: 0.5,
+        }}
+      >
+        <Link
+          to={ "/overview/" + generateLocalityRoute(parentLocality) }
+          style={{ textDecoration: "none", color: "#595f6c" }}
+        >
+          <span dangerouslySetInnerHTML={trustIcon(arrowUpIcon)} style={{ position: "relative", top: 1 }} />
+          Up to{" "}
+          <span style={{ textTransform: "uppercase" }}>
+            { getLocalityLabel(parentLocality) }
+          </span>
         </Link>
       </div>
     );
