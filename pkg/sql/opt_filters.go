@@ -741,7 +741,7 @@ func (p *planner) addJoinFilter(
 	onAndExprs := splitAndExpr(p.EvalContext(), n.pred.onCond, nil /* exprs */)
 
 	// Step 1: for inner joins, incorporate the filter into the ON condition.
-	if n.joinType == joinTypeInner {
+	if n.joinType == sqlbase.InnerJoin {
 		// Split the filter into conjunctions and append them to onAndExprs.
 		onAndExprs = splitAndExpr(p.EvalContext(), extraFilter, onAndExprs)
 		extraFilter = nil
@@ -759,14 +759,14 @@ func (p *planner) addJoinFilter(
 	// Step 3: expand the ON condition, in the hope that new inferred
 	// constraints can be pushed down. This is not useful for FULL OUTER
 	// joins, where nothing can be pushed down.
-	if n.joinType != joinTypeFullOuter {
+	if n.joinType != sqlbase.FullOuterJoin {
 		onCond = expandOnCond(n, onCond, p.EvalContext())
 	}
 
 	// Step 4: propagate the filter and ON conditions as allowed by the join type.
 	var propagateLeft, propagateRight, filterRemainder tree.TypedExpr
 	switch n.joinType {
-	case joinTypeInner:
+	case sqlbase.InnerJoin:
 		// We transform:
 		//   SELECT * FROM
 		//          l JOIN r ON (onLeft AND onRight AND onCombined)
@@ -779,7 +779,7 @@ func (p *planner) addJoinFilter(
 		//          ON (onCombined AND filterCombined)
 		propagateLeft, propagateRight, onCond = splitJoinFilter(n, numLeft, onCond)
 
-	case joinTypeLeftOuter:
+	case sqlbase.LeftOuterJoin:
 		// We transform:
 		//   SELECT * FROM
 		//          l LEFT OUTER JOIN r ON (onLeft AND onRight AND onCombined)
@@ -814,7 +814,7 @@ func (p *planner) addJoinFilter(
 		//   SELECT * FROM l LEFT JOIN r USING (a) WHERE a = 1
 		propagateRight = mergeConj(propagateRight, remapLeftEqColConstraints(n, propagateLeft))
 
-	case joinTypeRightOuter:
+	case sqlbase.RightOuterJoin:
 		// We transform:
 		//   SELECT * FROM
 		//          l RIGHT OUTER JOIN r ON (onLeft AND onRight AND onCombined)
@@ -840,7 +840,7 @@ func (p *planner) addJoinFilter(
 		// In this case, we can push down l.a = 1 to the left side.
 		propagateLeft = mergeConj(propagateLeft, remapRightEqColConstraints(n, propagateRight))
 
-	case joinTypeFullOuter:
+	case sqlbase.FullOuterJoin:
 		// Not much we can do for full outer joins.
 		filterRemainder = extraFilter
 	}

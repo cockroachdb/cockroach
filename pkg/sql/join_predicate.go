@@ -25,7 +25,7 @@ import (
 
 // joinPredicate implements the predicate logic for joins.
 type joinPredicate struct {
-	joinType joinType
+	joinType sqlbase.JoinType
 
 	// numLeft/RightCols are the number of columns in the left and right
 	// operands.
@@ -129,7 +129,7 @@ func (p *joinPredicate) tryAddEqualityFilter(
 // makePredicate constructs a joinPredicate object for joins. The join condition
 // includes equality between usingColumns.
 func makePredicate(
-	typ joinType, left, right *sqlbase.DataSourceInfo, usingColumns []usingColumn,
+	joinType sqlbase.JoinType, left, right *sqlbase.DataSourceInfo, usingColumns []usingColumn,
 ) (*joinPredicate, error) {
 	// Prepare the metadata for the result columns.
 	// The structure of the join data source results is like this:
@@ -167,7 +167,7 @@ func makePredicate(
 	}
 
 	pred := &joinPredicate{
-		joinType:     typ,
+		joinType:     joinType,
 		numLeftCols:  len(left.SourceColumns),
 		numRightCols: len(right.SourceColumns),
 		info: &sqlbase.DataSourceInfo{

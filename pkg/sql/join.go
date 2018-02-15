@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,7 +29,7 @@ import (
 // joinNode is a planNode whose rows are the result of an inner or
 // left/right outer join.
 type joinNode struct {
-	joinType joinType
+	joinType sqlbase.JoinType
 
 	// The data sources.
 	left  planDataSource
@@ -57,15 +55,6 @@ type joinNode struct {
 	run joinRun
 }
 
-type joinType int
-
-const (
-	joinTypeInner joinType = iota
-	joinTypeLeftOuter
-	joinTypeRightOuter
-	joinTypeFullOuter
-)
-
 // makeJoinPredicate builds a joinPredicate from a join condition. Also returns
 // any USING or NATURAL JOIN columns (these need to be merged into one column
 // after the join).
@@ -73,7 +62,7 @@ func (p *planner) makeJoinPredicate(
 	ctx context.Context,
 	left *sqlbase.DataSourceInfo,
 	right *sqlbase.DataSourceInfo,
-	typ joinType,
+	joinType sqlbase.JoinType,
 	cond tree.JoinCond,
 ) (*joinPredicate, []usingColumn, error) {
 	switch cond.(type) {
@@ -93,14 +82,14 @@ func (p *planner) makeJoinPredicate(
 		if err != nil {
 			return nil, nil, err
 		}
-		pred, err := makePredicate(typ, left, right, usingColumns)
+		pred, err := makePredicate(joinType, left, right, usingColumns)
 		if err != nil {
 			return nil, nil, err
 		}
 		return pred, usingColumns, nil
 
 	case nil, *tree.OnJoinCond:
-		pred, err := makePredicate(typ, left, right, nil /* usingColumns */)
+		pred, err := makePredicate(joinType, left, right, nil /* usingColumns */)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -162,25 +151,11 @@ func (p *planner) makeJoinNode(
 // joinNode (in the case of outer natural joins).
 func (p *planner) makeJoin(
 	ctx context.Context,
-	astJoinType string,
+	joinType sqlbase.JoinType,
 	left planDataSource,
 	right planDataSource,
 	cond tree.JoinCond,
 ) (planDataSource, error) {
-	var typ joinType
-	switch astJoinType {
-	case "JOIN", "INNER JOIN", "CROSS JOIN":
-		typ = joinTypeInner
-	case "LEFT JOIN":
-		typ = joinTypeLeftOuter
-	case "RIGHT JOIN":
-		typ = joinTypeRightOuter
-	case "FULL JOIN":
-		typ = joinTypeFullOuter
-	default:
-		return planDataSource{}, errors.Errorf("unsupported JOIN type %T", astJoinType)
-	}
-
 	// Check that the same table name is not used on both sides.
 	for _, alias := range right.info.SourceAliases {
 		if _, ok := left.info.SourceAliases.SrcIdx(alias.Name); ok {
@@ -197,7 +172,7 @@ func (p *planner) makeJoin(
 		}
 	}
 
-	pred, usingColumns, err := p.makeJoinPredicate(ctx, left.info, right.info, typ, cond)
+	pred, usingColumns, err := p.makeJoinPredicate(ctx, left.info, right.info, joinType, cond)
 	if err != nil {
 		return planDataSource{}, err
 	}
@@ -290,12 +265,12 @@ func (p *planner) makeJoin(
 		leftHidden.Add(leftCol)
 		rightHidden.Add(rightCol)
 		var expr tree.TypedExpr
-		if n.joinType == joinTypeInner || n.joinType == joinTypeLeftOuter {
+		if n.joinType == sqlbase.InnerJoin || n.joinType == sqlbase.LeftOuterJoin {
 			// The merged column is the same with the corresponding column from the
 			// left side.
 			expr = r.ivarHelper.IndexedVar(leftCol)
 			remapped[leftCol] = i
-		} else if n.joinType == joinTypeRightOuter &&
+		} else if n.joinType == sqlbase.RightOuterJoin &&
 			!sqlbase.DatumTypeHasCompositeKeyEncoding(left.info.SourceColumns[leftCol].Typ) {
 			// The merged column is the same with the corresponding column from the
 			// right side.
@@ -419,13 +394,13 @@ func (n *joinNode) startExec(params runParams) error {
 
 	// If needed, pre-allocate left and right rows of NULL tuples for when the
 	// join predicate fails to match.
-	if n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter {
+	if n.joinType == sqlbase.LeftOuterJoin || n.joinType == sqlbase.FullOuterJoin {
 		n.run.emptyRight = make(tree.Datums, len(planColumns(n.right.plan)))
 		for i := range n.run.emptyRight {
 			n.run.emptyRight[i] = tree.DNull
 		}
 	}
-	if n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter {
+	if n.joinType == sqlbase.RightOuterJoin || n.joinType == sqlbase.FullOuterJoin {
 		n.run.emptyLeft = make(tree.Datums, len(planColumns(n.left.plan)))
 		for i := range n.run.emptyLeft {
 			n.run.emptyLeft[i] = tree.DNull
@@ -459,7 +434,7 @@ func (n *joinNode) hashJoinStart(params runParams) error {
 
 		scratch = encoding[:0]
 	}
-	if n.joinType == joinTypeFullOuter || n.joinType == joinTypeRightOuter {
+	if n.joinType == sqlbase.FullOuterJoin || n.joinType == sqlbase.RightOuterJoin {
 		return n.run.buckets.InitSeen(ctx, &n.run.bucketsMemAcc)
 	}
 	return nil
@@ -478,8 +453,8 @@ func (n *joinNode) Next(params runParams) (res bool, err error) {
 		return false, nil
 	}
 
-	wantUnmatchedLeft := n.joinType == joinTypeLeftOuter || n.joinType == joinTypeFullOuter
-	wantUnmatchedRight := n.joinType == joinTypeRightOuter || n.joinType == joinTypeFullOuter
+	wantUnmatchedLeft := n.joinType == sqlbase.LeftOuterJoin || n.joinType == sqlbase.FullOuterJoin
+	wantUnmatchedRight := n.joinType == sqlbase.RightOuterJoin || n.joinType == sqlbase.FullOuterJoin
 
 	if len(n.run.buckets.Buckets()) == 0 {
 		if !wantUnmatchedLeft {
@@ -803,7 +778,7 @@ func (n *joinNode) joinOrdering() physicalProps {
 	}
 
 	// TODO(arjun): Support order propagation for other JOIN types.
-	if n.joinType != joinTypeInner {
+	if n.joinType != sqlbase.InnerJoin {
 		return info
 	}
 
