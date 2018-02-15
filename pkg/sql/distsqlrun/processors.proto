@@ -26,6 +26,7 @@ import "roachpb/data.proto";
 import "roachpb/errors.proto";
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/encoded_datum.proto";
+import "sql/sqlbase/join_type.proto";
 import "sql/distsqlrun/data.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
@@ -251,30 +252,6 @@ message DistinctSpec {
   repeated uint32 distinct_columns = 2;
 }
 
-enum JoinType {
-  INNER = 0;
-  LEFT_OUTER = 1;
-  RIGHT_OUTER = 2;
-  FULL_OUTER = 3;
-  LEFT_SEMI = 4;
-  LEFT_ANTI = 5;
-
-  // INTERSECT_ALL is a special JoinType that is only used for INTERSECT ALL and
-  // INTERSECT operations. It only allows equality columns to be output, and
-  // does not allow ON conditions. It returns every row from the left side that
-  // has a match on the right side, but does not allow multiple rows from the
-  // left side to match the same row on the right.
-  INTERSECT_ALL = 6;
-
-  // EXCEPT_ALL is a special JoinType that is only used for EXCEPT ALL and
-  // EXCEPT operations. It only allows equality columns to be output, and
-  // does not allow ON conditions. It matches every row on the left side with
-  // at most one row on the right side, and does not allow multiple rows from
-  // the left to match the same row on the right. It returns every row from the
-  // left side that, after row matching, does not have a match on the right side.
-  EXCEPT_ALL = 7;
-}
-
 // MergeJoinerSpec is the specification for a merge join processor. The processor
 // has two inputs and one output. The inputs must have the same ordering on the
 // columns that have equality constraints. For example:
@@ -306,7 +283,7 @@ message MergeJoinerSpec {
   // columns in the right stream.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
-  optional JoinType type = 6 [(gogoproto.nullable) = false];
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 
   // NullEquality indicates that NULL = NULL should be considered true.
   // This allows OUTER JOINs to consider NULL values meaningfully. An
@@ -350,7 +327,7 @@ message HashJoinerSpec {
   // Having "ON" expression implies no merged columns.
   optional Expression on_expr = 5 [(gogoproto.nullable) = false];
 
-  optional JoinType type = 6 [(gogoproto.nullable) = false];
+  optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
 
   // DEPRECATED
   //
@@ -728,5 +705,5 @@ message InterleavedReaderJoinerSpec {
   // columns in the right table.
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
-  optional JoinType type = 5 [(gogoproto.nullable) = false];
+  optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
 }

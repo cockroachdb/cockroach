@@ -773,27 +773,27 @@ func joinSpans(n *joinNode, parentSpans []spanPartition) ([]spanPartition, error
 	return joinSpans, nil
 }
 
-func distsqlJoinType(joinType joinType) distsqlrun.JoinType {
+func distsqlJoinType(joinType joinType) sqlbase.JoinType {
 	switch joinType {
 	case joinTypeInner:
-		return distsqlrun.JoinType_INNER
+		return sqlbase.InnerJoin
 	case joinTypeLeftOuter:
-		return distsqlrun.JoinType_LEFT_OUTER
+		return sqlbase.LeftOuterJoin
 	case joinTypeRightOuter:
-		return distsqlrun.JoinType_RIGHT_OUTER
+		return sqlbase.RightOuterJoin
 	case joinTypeFullOuter:
-		return distsqlrun.JoinType_FULL_OUTER
+		return sqlbase.FullOuterJoin
 	}
 
 	panic(fmt.Sprintf("invalid join type %d", joinType))
 }
 
-func distsqlSetOpJoinType(setOpType tree.UnionType) distsqlrun.JoinType {
+func distsqlSetOpJoinType(setOpType tree.UnionType) sqlbase.JoinType {
 	switch setOpType {
 	case tree.ExceptOp:
-		return distsqlrun.JoinType_EXCEPT_ALL
+		return sqlbase.ExceptAllJoin
 	case tree.IntersectOp:
-		return distsqlrun.JoinType_INTERSECT_ALL
+		return sqlbase.IntersectAllJoin
 	default:
 		panic(fmt.Sprintf("set op type %v unsupported by joins", setOpType))
 	}
