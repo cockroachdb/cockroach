@@ -130,6 +130,7 @@ func MakeServer(
 			// Begin logging messages if we exceed our planned memory usage by
 			// more than double.
 			queryMemoryMax*2,
+			db.st,
 		),
 		resultMemMonitor: mon.MakeUnlimitedMonitor(
 			context.Background(),
@@ -138,6 +139,7 @@ func MakeServer(
 			nil,
 			nil,
 			math.MaxInt64,
+			db.st,
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,

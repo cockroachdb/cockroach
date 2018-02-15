@@ -354,6 +354,7 @@ func MakeUnlimitedMonitor(
 	curCount *metric.Gauge,
 	maxHist *metric.Histogram,
 	noteworthy int64,
+	settings *cluster.Settings,
 ) BytesMonitor {
 	if log.V(2) {
 		log.InfofDepth(ctx, 1, "%s: starting unlimited monitor", name)
@@ -368,6 +369,7 @@ func MakeUnlimitedMonitor(
 		maxBytesHist:         maxHist,
 		poolAllocationSize:   DefaultPoolAllocationSize,
 		reserved:             MakeStandaloneBudget(math.MaxInt64),
+		settings:             settings,
 	}
 }
 

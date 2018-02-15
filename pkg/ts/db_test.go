@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
@@ -67,6 +68,7 @@ type testModel struct {
 // newTestModel creates a new testModel instance. The Start() method must
 // be called before using it.
 func newTestModel(t *testing.T) testModel {
+	st := cluster.MakeTestingClusterSettings()
 	workerMonitor := mon.MakeUnlimitedMonitor(
 		context.Background(),
 		"timeseries-test-worker",
@@ -74,6 +76,7 @@ func newTestModel(t *testing.T) testModel {
 		nil,
 		nil,
 		math.MaxInt64,
+		st,
 	)
 	resultMonitor := mon.MakeUnlimitedMonitor(
 		context.Background(),
@@ -82,6 +85,7 @@ func newTestModel(t *testing.T) testModel {
 		nil,
 		nil,
 		math.MaxInt64,
+		st,
 	)
 	return testModel{
 		t:                 t,

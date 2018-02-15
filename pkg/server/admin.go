@@ -94,6 +94,7 @@ func newAdminServer(s *Server, ie *sql.InternalExecutor) *adminServer {
 		nil,
 		nil,
 		noteworthyAdminMemoryUsageBytes,
+		s.ClusterSettings(),
 	)
 	return server
 }
