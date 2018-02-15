@@ -491,6 +491,11 @@ type Replica struct {
 		// Note that there are two replicaStateLoaders, in raftMu and mu,
 		// depending on which lock is being held.
 		stateLoader stateloader.StateLoader
+
+		// draining specifies whether this replica is draining. Raft leadership
+		// transfers due to a lease change will be attempted even if the target does
+		// not have all the log entries.
+		draining bool
 	}
 
 	unreachablesMu struct {
