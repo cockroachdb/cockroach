@@ -56,7 +56,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
     return (
       <div>
         <section className="section parent-link">
-          <Link to="/cluster/nodes">&lt; Back to Node List</Link>
+          <Link to="/nodes">&lt; Back to Node List</Link>
         </section>
         <div className="section section--heading">
           <h2>{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
@@ -135,7 +135,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
               <SummaryValue title="Build" value={node.build_info.tag} />
               <SummaryValue
                 title="Logs"
-                value={<Link to={`/cluster/nodes/${node.desc.node_id}/logs`}>View Logs</Link>}
+                value={<Link to={`/node/${node.desc.node_id}/logs`}>View Logs</Link>}
                 classModifier="link"
               />
             </SummaryBar>
