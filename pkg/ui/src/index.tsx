@@ -51,6 +51,7 @@ import Certificates from "src/views/reports/containers/certificates";
 import Range from "src/views/reports/containers/range";
 import CommandQueue from "src/views/reports/containers/commandQueue";
 import Debug from "src/views/reports/containers/debug";
+import ReduxDebug from "src/views/reports/containers/redux";
 import NotFound from "src/views/app/components/NotFound";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -128,7 +129,10 @@ ReactDOM.render(
         </Route>
 
         { /* debug pages */ }
-        <Route path="debug" component={ Debug } />
+        <Route path="debug">
+          <IndexRoute component={Debug} />
+          <Route path="redux" component={ReduxDebug} />
+        </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />

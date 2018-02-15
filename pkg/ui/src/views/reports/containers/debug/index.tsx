@@ -214,6 +214,14 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
+      <DebugTable heading="UI Debugging">
+        <DebugTableRow title="Redux State">
+          <DebugTableLink
+            name="Export the Redux State of the UI"
+            url="#/debug/redux"
+          />
+        </DebugTableRow>
+      </DebugTable>
       <LicenseType />
     </div>
   );
