@@ -399,6 +399,7 @@ func (mm *BytesMonitor) doStop(ctx context.Context, check bool) {
 			ctx, &mm.settings.SV,
 			fmt.Sprintf("%s: unexpected %d leftover bytes", mm.name, mm.mu.curAllocated),
 			reportables)
+		mm.releaseBytes(ctx, mm.mu.curAllocated)
 	}
 
 	mm.releaseBudget(ctx)
