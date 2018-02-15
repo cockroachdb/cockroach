@@ -88,6 +88,13 @@ const (
 	EventLogSetClusterSetting EventLogType = "set_cluster_setting"
 )
 
+// EventLogSetClusterSettingDetail is the json details for a settings change.
+type EventLogSetClusterSettingDetail struct {
+	SettingName string
+	Value       string
+	User        string
+}
+
 // An EventLogger exposes methods used to record events to the event table.
 type EventLogger struct {
 	InternalExecutor
