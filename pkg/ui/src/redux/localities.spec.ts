@@ -19,6 +19,7 @@ function makeStateWithLocalities(localities: LocalityTier[][]) {
         inFlight: false,
         valid: true,
       },
+      liveness: {},
     },
   };
 }
