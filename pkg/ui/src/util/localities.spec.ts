@@ -62,7 +62,7 @@ describe("generateLocalityRoute", function() {
     it("returns an empty string", function() {
       const route = generateLocalityRoute([]);
 
-      assert.equal(route, "");
+      assert.equal(route, "/");
     });
   });
 
@@ -73,7 +73,7 @@ describe("generateLocalityRoute", function() {
 
       const route = generateLocalityRoute([{ key, value }]);
 
-      assert.equal(route, key + "=" + value);
+      assert.equal(route, "/" + key + "=" + value);
     });
   });
 
@@ -85,7 +85,7 @@ describe("generateLocalityRoute", function() {
         { key: "datacenter", value: "us-east-1b" },
       ];
 
-      const expectedRoute = tiers
+      const expectedRoute = "/" + tiers
         .map(({ key, value }) => key + "=" + value)
         .join("/");
 
