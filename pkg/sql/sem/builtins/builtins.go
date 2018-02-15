@@ -1684,7 +1684,7 @@ CockroachDB supports the following flags:
 			ReturnType: tree.FixedReturnType(types.JSON),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				path := darrayToStringSlice(*tree.MustBeDArray(args[1]))
-				s, err := tree.MustBeDJSON(args[0]).JSON.RemovePath(path)
+				s, _, err := tree.MustBeDJSON(args[0]).JSON.RemovePath(path)
 				if err != nil {
 					return nil, err
 				}
