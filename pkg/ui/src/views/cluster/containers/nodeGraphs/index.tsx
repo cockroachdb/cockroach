@@ -119,9 +119,9 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
   setClusterPath(nodeID: string, dashboardName: string) {
     if (!_.isString(nodeID) || nodeID === "") {
-      this.context.router.push(`/cluster/all/${dashboardName}`);
+      this.context.router.push(`/metrics/${dashboardName}/cluster`);
     } else {
-      this.context.router.push(`/cluster/node/${nodeID}/${dashboardName}`);
+      this.context.router.push(`/metrics/${dashboardName}/node/${nodeID}`);
     }
   }
 

@@ -39,7 +39,7 @@ function ClusterNodeTotals (props: ClusterSummaryProps) {
   return (
     <SummaryStat
       title={
-        <span>Total Nodes <Link to="/cluster/nodes">View nodes list</Link></span>
+        <span>Total Nodes <Link to="/nodes">View nodes list</Link></span>
       }
       value={nodeCounts.total}
     >

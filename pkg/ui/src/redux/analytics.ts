@@ -21,6 +21,11 @@ const defaultRedactions = [
         match: new RegExp("/databases/database/.*/table/.*"),
         replace: "/databases/database/[db]/table/[tbl]",
     },
+    // The new URL for a database page.
+    {
+        match: new RegExp("/database/.*/table/.*"),
+        replace: "/database/[db]/table/[tbl]",
+    },
 ];
 
 /**
