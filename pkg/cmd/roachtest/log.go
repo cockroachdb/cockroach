@@ -39,7 +39,12 @@ type logger struct {
 // test.
 func newLogger(name, filename string, stdout, stderr io.Writer) (*logger, error) {
 	filename = fmt.Sprintf("%s.log", fileutil.EscapeFilename(filename))
-	f, err := os.Create(filepath.Join(artifacts, filename))
+	path := filepath.Join(artifacts, filename)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, err
+	}
+
+	f, err := os.Create(path)
 	if err != nil {
 		return nil, err
 	}
