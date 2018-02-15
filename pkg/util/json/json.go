@@ -88,15 +88,18 @@ type JSON interface {
 	// and tries to access the given index.
 	FetchValKeyOrIdx(key string) (JSON, error)
 
-	// RemoveKey implements the `-` operator for strings.
-	RemoveKey(key string) (JSON, error)
+	// RemoveKey implements the `-` operator for strings, returning JSON after removal,
+	// whether removal is valid and error message.
+	RemoveKey(key string) (JSON, bool, error)
 
-	// RemoveIndex implements the `-` operator for ints.
-	RemoveIndex(idx int) (JSON, error)
+	// RemoveIndex implements the `-` operator for ints, returning JSON after removal,
+	// whether removal is valid and error message.
+	RemoveIndex(idx int) (JSON, bool, error)
 
-	// RemovePath and doRemovePath implement the `#-` operator for strings.
-	RemovePath(path []string) (JSON, error)
-	doRemovePath(path []string) (JSON, error)
+	// RemovePath and doRemovePath implement the `#-` operator for strings, returning JSON after removal,
+	// whether removal is valid and error message.
+	RemovePath(path []string) (JSON, bool, error)
+	doRemovePath(path []string) (JSON, bool, error)
 
 	// Concat implements the `||` operator.
 	Concat(other JSON) (JSON, error)
@@ -1069,14 +1072,14 @@ func (jsonNumber) FetchValKeyOrIdx(string) (JSON, error) { return nil, nil }
 var errCannotDeleteFromScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from scalar")
 var errCannotDeleteFromObject = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete from object using integer index")
 
-func (j jsonArray) RemoveKey(key string) (JSON, error) {
-	return j, nil
+func (j jsonArray) RemoveKey(key string) (JSON, bool, error) {
+	return j, false, nil
 }
 
-func (j jsonObject) RemoveKey(key string) (JSON, error) {
+func (j jsonObject) RemoveKey(key string) (JSON, bool, error) {
 	idx, ok := findPairIndexByKey(j, key)
 	if !ok {
-		return j, nil
+		return j, false, nil
 	}
 
 	newVal := make([]jsonKeyValuePair, len(j)-1)
@@ -1086,21 +1089,21 @@ func (j jsonObject) RemoveKey(key string) (JSON, error) {
 	for i, elem := range j[idx+1:] {
 		newVal[idx+i] = elem
 	}
-	return jsonObject(newVal), nil
+	return jsonObject(newVal), true, nil
 }
 
-func (jsonNull) RemoveKey(string) (JSON, error)   { return nil, errCannotDeleteFromScalar }
-func (jsonTrue) RemoveKey(string) (JSON, error)   { return nil, errCannotDeleteFromScalar }
-func (jsonFalse) RemoveKey(string) (JSON, error)  { return nil, errCannotDeleteFromScalar }
-func (jsonString) RemoveKey(string) (JSON, error) { return nil, errCannotDeleteFromScalar }
-func (jsonNumber) RemoveKey(string) (JSON, error) { return nil, errCannotDeleteFromScalar }
+func (jsonNull) RemoveKey(string) (JSON, bool, error)   { return nil, false, errCannotDeleteFromScalar }
+func (jsonTrue) RemoveKey(string) (JSON, bool, error)   { return nil, false, errCannotDeleteFromScalar }
+func (jsonFalse) RemoveKey(string) (JSON, bool, error)  { return nil, false, errCannotDeleteFromScalar }
+func (jsonString) RemoveKey(string) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
+func (jsonNumber) RemoveKey(string) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
 
-func (j jsonArray) RemoveIndex(idx int) (JSON, error) {
+func (j jsonArray) RemoveIndex(idx int) (JSON, bool, error) {
 	if idx < 0 {
 		idx = len(j) + idx
 	}
 	if idx < 0 || idx >= len(j) {
-		return j, nil
+		return j, false, nil
 	}
 	result := make(jsonArray, len(j)-1)
 	for i := 0; i < idx; i++ {
@@ -1109,18 +1112,18 @@ func (j jsonArray) RemoveIndex(idx int) (JSON, error) {
 	for i := idx + 1; i < len(j); i++ {
 		result[i-1] = j[i]
 	}
-	return result, nil
+	return result, true, nil
 }
 
-func (j jsonObject) RemoveIndex(int) (JSON, error) {
-	return nil, errCannotDeleteFromObject
+func (j jsonObject) RemoveIndex(int) (JSON, bool, error) {
+	return nil, false, errCannotDeleteFromObject
 }
 
-func (jsonNull) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFromScalar }
-func (jsonTrue) RemoveIndex(int) (JSON, error)   { return nil, errCannotDeleteFromScalar }
-func (jsonFalse) RemoveIndex(int) (JSON, error)  { return nil, errCannotDeleteFromScalar }
-func (jsonString) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
-func (jsonNumber) RemoveIndex(int) (JSON, error) { return nil, errCannotDeleteFromScalar }
+func (jsonNull) RemoveIndex(int) (JSON, bool, error)   { return nil, false, errCannotDeleteFromScalar }
+func (jsonTrue) RemoveIndex(int) (JSON, bool, error)   { return nil, false, errCannotDeleteFromScalar }
+func (jsonFalse) RemoveIndex(int) (JSON, bool, error)  { return nil, false, errCannotDeleteFromScalar }
+func (jsonString) RemoveIndex(int) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
+func (jsonNumber) RemoveIndex(int) (JSON, bool, error) { return nil, false, errCannotDeleteFromScalar }
 
 var errInvalidConcat = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "invalid concatenation of jsonb objects")
 
@@ -1426,17 +1429,27 @@ func Pretty(j JSON) (string, error) {
 
 var errCannotDeletePathInScalar = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "cannot delete path in scalar")
 
-func (j jsonArray) RemovePath(path []string) (JSON, error)  { return j.doRemovePath(path) }
-func (j jsonObject) RemovePath(path []string) (JSON, error) { return j.doRemovePath(path) }
-func (jsonNull) RemovePath([]string) (JSON, error)          { return nil, errCannotDeletePathInScalar }
-func (jsonTrue) RemovePath([]string) (JSON, error)          { return nil, errCannotDeletePathInScalar }
-func (jsonFalse) RemovePath([]string) (JSON, error)         { return nil, errCannotDeletePathInScalar }
-func (jsonString) RemovePath([]string) (JSON, error)        { return nil, errCannotDeletePathInScalar }
-func (jsonNumber) RemovePath([]string) (JSON, error)        { return nil, errCannotDeletePathInScalar }
+func (j jsonArray) RemovePath(path []string) (JSON, bool, error)  { return j.doRemovePath(path) }
+func (j jsonObject) RemovePath(path []string) (JSON, bool, error) { return j.doRemovePath(path) }
+func (jsonNull) RemovePath([]string) (JSON, bool, error) {
+	return nil, false, errCannotDeletePathInScalar
+}
+func (jsonTrue) RemovePath([]string) (JSON, bool, error) {
+	return nil, false, errCannotDeletePathInScalar
+}
+func (jsonFalse) RemovePath([]string) (JSON, bool, error) {
+	return nil, false, errCannotDeletePathInScalar
+}
+func (jsonString) RemovePath([]string) (JSON, bool, error) {
+	return nil, false, errCannotDeletePathInScalar
+}
+func (jsonNumber) RemovePath([]string) (JSON, bool, error) {
+	return nil, false, errCannotDeletePathInScalar
+}
 
-func (j jsonArray) doRemovePath(path []string) (JSON, error) {
+func (j jsonArray) doRemovePath(path []string) (JSON, bool, error) {
 	if len(path) == 0 {
-		return j, nil
+		return j, false, nil
 	}
 	// In path-deletion we have to attempt to parse numbers (this is different
 	// from the `-` operator, where strings just never match on arrays).
@@ -1444,56 +1457,68 @@ func (j jsonArray) doRemovePath(path []string) (JSON, error) {
 	if err != nil {
 		// If we couldn't parse the key as an integer, the array couldn't
 		// have had it (note that we don't propagate the error here).
-		return j, nil
+		return j, false, nil
 	}
 	if len(path) == 1 {
 		return j.RemoveIndex(idx)
 	}
 
 	if idx < -len(j) || idx >= len(j) {
-		return j, nil
+		return j, false, nil
 	}
-	result := make(jsonArray, len(j))
 	if idx < 0 {
 		idx += len(j)
 	}
+	newVal, ok, err := j[idx].doRemovePath(path[1:])
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return j, false, nil
+	}
+
+	result := make(jsonArray, len(j))
 	for i := range j {
 		result[i] = j[i]
 	}
-	if result[idx], err = result[idx].doRemovePath(path[1:]); err != nil {
-		return nil, err
-	}
-	return result, nil
+	result[idx] = newVal
+
+	return result, true, nil
 }
 
-func (j jsonObject) doRemovePath(path []string) (JSON, error) {
+func (j jsonObject) doRemovePath(path []string) (JSON, bool, error) {
 	if len(path) == 0 {
-		return j, nil
+		return j, false, nil
 	}
 	if len(path) == 1 {
 		return j.RemoveKey(path[0])
 	}
 	idx, ok := findPairIndexByKey(j, path[0])
 	if !ok {
-		return j, nil
+		return j, false, nil
+	}
+
+	newVal, ok, err := j[idx].v.doRemovePath(path[1:])
+	if err != nil {
+		return nil, false, err
+	}
+	if !ok {
+		return j, false, nil
 	}
 
 	result := make(jsonObject, len(j))
 	for i := range j {
 		result[i] = j[i]
 	}
+	result[idx].v = newVal
 
-	var err error
-	if result[idx].v, err = result[idx].v.doRemovePath(path[1:]); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return result, true, nil
 }
 
 // When we hit a scalar, we stop. #- only errors if there's a scalar at the
 // very top level.
-func (j jsonNull) doRemovePath([]string) (JSON, error)   { return j, nil }
-func (j jsonTrue) doRemovePath([]string) (JSON, error)   { return j, nil }
-func (j jsonFalse) doRemovePath([]string) (JSON, error)  { return j, nil }
-func (j jsonString) doRemovePath([]string) (JSON, error) { return j, nil }
-func (j jsonNumber) doRemovePath([]string) (JSON, error) { return j, nil }
+func (j jsonNull) doRemovePath([]string) (JSON, bool, error)   { return j, false, nil }
+func (j jsonTrue) doRemovePath([]string) (JSON, bool, error)   { return j, false, nil }
+func (j jsonFalse) doRemovePath([]string) (JSON, bool, error)  { return j, false, nil }
+func (j jsonString) doRemovePath([]string) (JSON, bool, error) { return j, false, nil }
+func (j jsonNumber) doRemovePath([]string) (JSON, bool, error) { return j, false, nil }
