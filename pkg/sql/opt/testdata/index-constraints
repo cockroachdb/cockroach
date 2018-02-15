@@ -352,6 +352,13 @@ semtree-normalize,build-scalar,index-constraints vars=(int) index=(@1 desc)
 [/4 - /4]
 [/1 - /1]
 
+build-scalar,normalize,index-constraints vars=(int) index=(@1)
+@1 IN (1, 2, 3, NULL)
+----
+[/1 - /1]
+[/2 - /2]
+[/3 - /3]
+
 build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 IN (1, 2, 3)
 ----
@@ -779,6 +786,27 @@ build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/7/8 - /7/8]
 [/9/10 - /9/10]
 Remaining filter: (@1 + 5, @1, @1 + @2, @2) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
+
+# Test that we properly handle NULLs inside IN tuples.
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) IN ((1, 2), (3, NULL))
+----
+[/1/2 - /1/2]
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) IN ((3, NULL))
+----
+
+build-scalar,normalize,index-constraints vars=(int, int) index=(@1, @2)
+(@1, @2) IN ((1, 2), (NULL, 4))
+----
+[/1/2 - /1/2]
+
+build-scalar,normalize,index-constraints vars=(int, int, int) index=(@1, @2, @3)
+(@1, @2, @3) IN ((1, 2, 3), (4, 5, 6), (NULL, 8, 9))
+----
+[/1/2/3 - /1/2/3]
+[/4/5/6 - /4/5/6]
 
 # Verify that we sort and de-duplicate if we "project" the tuples;
 # in this case the expression becomes:
