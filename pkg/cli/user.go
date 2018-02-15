@@ -43,6 +43,12 @@ func runGetUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer conn.Close()
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v2.0-alpha.20180116"); err != nil {
+		return err
+	}
 	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`SELECT * FROM system.users WHERE username=$1 AND "isRole" = false`, args[0]))
 }
@@ -89,6 +95,12 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer conn.Close()
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v1.1-alpha.20170622"); err != nil {
+		return err
+	}
 	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`DROP USER $1`, args[0]))
 }
@@ -130,6 +142,13 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer conn.Close()
+
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v1.2-alpha.20171113"); err != nil {
+		return err
+	}
 
 	if err := runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(`CREATE USER IF NOT EXISTS $1`, args[0])); err != nil {

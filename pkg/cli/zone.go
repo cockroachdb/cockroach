@@ -85,6 +85,13 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+		return err
+	}
+
 	vals, err := conn.QueryRow(fmt.Sprintf(
 		`SELECT cli_specifier, config_yaml FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`, &zs), nil)
 	if err != nil {
@@ -126,6 +133,13 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+		return err
+	}
+
 	specifiers, err := queryZoneSpecifiers(conn)
 	if err != nil {
 		return err
@@ -155,16 +169,23 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	zs, err := config.ParseCLIZoneSpecifier(args[0])
-	if err != nil {
-		return err
-	}
-
 	conn, err := getPasswordAndMakeSQLClient()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
+
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+		return err
+	}
+
+	zs, err := config.ParseCLIZoneSpecifier(args[0])
+	if err != nil {
+		return err
+	}
 
 	return runQueryAndFormatResults(conn, os.Stdout,
 		makeQuery(fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL`, &zs)))
@@ -230,6 +251,13 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	defer conn.Close()
+
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">=v1.2-alpha.20171026"); err != nil {
+		return err
+	}
 
 	zs, err := config.ParseCLIZoneSpecifier(args[0])
 	if err != nil {

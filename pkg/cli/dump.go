@@ -55,6 +55,13 @@ func runDump(cmd *cobra.Command, args []string) error {
 	}
 	defer conn.Close()
 
+	// NOTE: We too aggressively broke backwards compatibility in this command.
+	// Future changes should maintain compatibility with the last two released
+	// versions of CockroachDB.
+	if err := conn.requireServerVersion(">v2.0-alpha.20180212"); err != nil {
+		return err
+	}
+
 	dbName := args[0]
 	var tableNames []string
 	if len(args) > 1 {

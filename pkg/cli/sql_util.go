@@ -94,6 +94,60 @@ func (c *sqlConn) ensureConn() error {
 	return nil
 }
 
+func (c *sqlConn) getServerMetadata() (version, clusterID string, err error) {
+	// Retrieve the node ID and server build info.
+	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
+	if err == driver.ErrBadConn {
+		return "", "", err
+	}
+	if err != nil {
+		return "", "", err
+	}
+	defer func() { _ = rows.Close() }()
+
+	// Read the node_build_info table as an array of strings.
+	rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
+	if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
+		return "", "", errors.New("incorrect data while retrieving the server version")
+	}
+
+	// Extract the version fields from the query results.
+	var v10fields [5]string
+	for _, row := range rowVals {
+		switch row[1] {
+		case "ClusterID":
+			clusterID = row[2]
+		case "Version":
+			version = row[2]
+		case "Build":
+			c.serverBuild = row[2]
+		case "Organization":
+			c.clusterOrganization = row[2]
+
+			// Fields for v1.0 compatibility.
+		case "Distribution":
+			v10fields[0] = row[2]
+		case "Tag":
+			v10fields[1] = row[2]
+		case "Platform":
+			v10fields[2] = row[2]
+		case "Time":
+			v10fields[3] = row[2]
+		case "GoVersion":
+			v10fields[4] = row[2]
+		}
+	}
+
+	if version == "" {
+		// The "Version" field was not present, this indicates a v1.0
+		// CockroachDB. Use that below.
+		version = "v1.0-" + v10fields[1]
+		c.serverBuild = fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
+			v10fields[0], version, v10fields[2], v10fields[3], v10fields[4])
+	}
+	return version, clusterID, nil
+}
+
 // checkServerMetadata reports the server version and cluster ID
 // upon the initial connection or if either has changed since
 // the last connection, based on the last known values in the sqlConn
@@ -105,61 +159,10 @@ func (c *sqlConn) checkServerMetadata() error {
 		return nil
 	}
 
-	newServerVersion := ""
-	newClusterID := ""
-
-	// Retrieve the node ID and server build info.
-	rows, err := c.Query("SELECT * FROM crdb_internal.node_build_info", nil)
-	if err == driver.ErrBadConn {
-		return err
-	}
+	newServerVersion, newClusterID, err := c.getServerMetadata()
 	if err != nil {
-		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %v\n", err)
-	} else {
-		defer func() { _ = rows.Close() }()
-
-		// Read the node_build_info table as an array of strings.
-		rowVals, err := getAllRowStrings(rows, true /* showMoreChars */)
-		if err != nil || len(rowVals) == 0 || len(rowVals[0]) != 3 {
-			fmt.Fprintln(stderr, "warning: incorrect data while retrieving the server version")
-			// It is not an error that the server version cannot be retrieved.
-			return nil
-		}
-
-		// Extract the version fields from the query results.
-		var v10fields [5]string
-		for _, row := range rowVals {
-			switch row[1] {
-			case "ClusterID":
-				newClusterID = row[2]
-			case "Version":
-				newServerVersion = row[2]
-			case "Build":
-				c.serverBuild = row[2]
-			case "Organization":
-				c.clusterOrganization = row[2]
-
-				// Fields for v1.0 compatibility.
-			case "Distribution":
-				v10fields[0] = row[2]
-			case "Tag":
-				v10fields[1] = row[2]
-			case "Platform":
-				v10fields[2] = row[2]
-			case "Time":
-				v10fields[3] = row[2]
-			case "GoVersion":
-				v10fields[4] = row[2]
-			}
-		}
-
-		if newServerVersion == "" {
-			// The "Version" field was not present, this indicates a v1.0
-			// CockroachDB. Use that below.
-			newServerVersion = "v1.0-" + v10fields[1]
-			c.serverBuild = fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
-				v10fields[0], newServerVersion, v10fields[2], v10fields[3], v10fields[4])
-		}
+		// It is not an error that the server version cannot be retrieved.
+		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %s\n", err)
 	}
 
 	// Report the server version only if it the revision has been
@@ -209,6 +212,28 @@ func (c *sqlConn) checkServerMetadata() error {
 		}
 	}
 
+	return nil
+}
+
+// requireServerVersion returns an error if the version of the connected server
+// does not match the constraints in constraintString.
+func (c *sqlConn) requireServerVersion(constraintString string) error {
+	versionString, _, err := c.getServerMetadata()
+	if err != nil {
+		return err
+	}
+	constraints, err := version.NewConstraint(constraintString)
+	if err != nil {
+		return err
+	}
+	vers, err := version.NewVersion(versionString)
+	if err != nil {
+		return fmt.Errorf("unable to parse server version %q", c.serverVersion)
+	}
+	if !constraints.Check(vers) {
+		return fmt.Errorf("incompatible client and server versions (detected server version: %s, required: %s)",
+			vers, constraints)
+	}
 	return nil
 }
 
