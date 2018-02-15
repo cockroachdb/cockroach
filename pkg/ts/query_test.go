@@ -23,13 +23,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/gogo/protobuf/proto"
-	"github.com/pkg/errors"
 )
 
 // dataSample is a basic data type that represents a single time series sample:
@@ -1313,6 +1315,7 @@ func TestQueryWorkerMemoryConstraint(t *testing.T) {
 		nil,
 		1,
 		math.MaxInt64,
+		cluster.MakeTestingClusterSettings(),
 	)
 	tm.workerMemMonitor = &adjustedMon
 	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})
@@ -1422,6 +1425,7 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 		nil,
 		100,
 		100,
+		cluster.MakeTestingClusterSettings(),
 	)
 	tm.workerMemMonitor = &limitedMon
 	tm.workerMemMonitor.Start(context.TODO(), unlimitedMon, mon.BoundAccount{})

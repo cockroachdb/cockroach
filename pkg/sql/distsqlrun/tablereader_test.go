@@ -120,7 +120,7 @@ func TestTableReader(t *testing.T) {
 					ts := c.spec
 					ts.Table = *td
 
-					evalCtx := tree.MakeTestingEvalContext()
+					evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 					defer evalCtx.Stop(context.Background())
 					flowCtx := FlowCtx{
 						Ctx:      context.Background(),
@@ -199,13 +199,14 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 	kvDB := tc.Server(0).DB()
 	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := tree.MakeTestingEvalContext()
+	st := tc.Server(0).ClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),
 		EvalCtx:  evalCtx,
-		Settings: tc.Server(0).ClusterSettings(),
+		Settings: st,
 		txn:      client.NewTxn(tc.Server(0).DB(), nodeID, client.RootTxn),
 		nodeID:   nodeID,
 	}
@@ -292,7 +293,7 @@ func BenchmarkTableReader(b *testing.B) {
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
-	evalCtx := tree.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	flowCtx := FlowCtx{
 		Ctx:      context.Background(),

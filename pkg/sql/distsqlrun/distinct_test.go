@@ -137,11 +137,12 @@ func TestDistinct(t *testing.T) {
 			in := NewRowBuffer(twoIntCols, c.input, RowBufferArgs{})
 			out := &RowBuffer{}
 
-			evalCtx := tree.MakeTestingEvalContext()
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Ctx:      context.Background(),
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings: st,
 				EvalCtx:  evalCtx,
 			}
 
@@ -175,12 +176,13 @@ func BenchmarkDistinct(b *testing.B) {
 	const numRows = 1000
 
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	flowCtx := &FlowCtx{
 		Ctx:      ctx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 	spec := &DistinctSpec{

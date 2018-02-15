@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -197,7 +198,7 @@ func TestIndexKey(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		evalCtx := tree.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
@@ -363,7 +364,8 @@ func TestArrayEncoding(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if d.Compare(tree.NewTestingEvalContext(), &test.datum) != 0 {
+			evalContext := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			if d.Compare(evalContext, &test.datum) != 0 {
 				t.Fatalf("expected %v to decode to %s, got %s", enc, test.datum.String(), d.String())
 			}
 		})
@@ -1482,7 +1484,7 @@ func TestDecodeTableValue(t *testing.T) {
 			} else if err != nil {
 				return
 			}
-			if tc.in.Compare(tree.NewTestingEvalContext(), d) != 0 {
+			if tc.in.Compare(tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings()), d) != 0 {
 				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
 			}
 		})

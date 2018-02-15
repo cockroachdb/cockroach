@@ -698,11 +698,12 @@ func TestMergeJoiner(t *testing.T) {
 			leftInput := NewRowBuffer(c.leftTypes, c.leftInput, RowBufferArgs{})
 			rightInput := NewRowBuffer(c.rightTypes, c.rightInput, RowBufferArgs{})
 			out := &RowBuffer{}
-			evalCtx := tree.MakeTestingEvalContext()
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Ctx:      context.Background(),
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings: st,
 				EvalCtx:  evalCtx,
 			}
 
@@ -805,11 +806,12 @@ func TestConsumerClosed(t *testing.T) {
 			out := &RowBuffer{}
 			out.ConsumerDone()
 
-			evalCtx := tree.MakeTestingEvalContext()
+			st := cluster.MakeTestingClusterSettings()
+			evalCtx := tree.MakeTestingEvalContext(st)
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Ctx:      context.Background(),
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings: st,
 				EvalCtx:  evalCtx,
 			}
 			post := PostProcessSpec{Projection: true, OutputColumns: outCols}
@@ -829,11 +831,12 @@ func TestConsumerClosed(t *testing.T) {
 
 func BenchmarkMergeJoiner(b *testing.B) {
 	ctx := context.Background()
-	evalCtx := tree.MakeTestingEvalContext()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 	flowCtx := &FlowCtx{
 		Ctx:      ctx,
-		Settings: cluster.MakeTestingClusterSettings(),
+		Settings: st,
 		EvalCtx:  evalCtx,
 	}
 

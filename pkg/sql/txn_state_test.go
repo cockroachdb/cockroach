@@ -26,6 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -71,6 +72,7 @@ func makeTestContext() testContext {
 			nil,  /* maxHist */
 			-1,   /* increment */
 			1000, /* noteworthy */
+			cluster.MakeTestingClusterSettings(),
 		),
 		tracer: tracing.NewTracer(),
 		ctx:    context.TODO(),
@@ -103,6 +105,7 @@ func (tc *testContext) createOpenState(
 		nil,  /* maxHist */
 		-1,   /* increment */
 		1000, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
 	)
 	txnStateMon.Start(tc.ctx, &tc.mon, mon.BoundAccount{})
 
@@ -159,6 +162,7 @@ func (tc *testContext) createNoTxnState() (State, *txnState2) {
 		nil,  /* maxHist */
 		-1,   /* increment */
 		1000, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
 	)
 	ts := txnState2{mon: &txnStateMon}
 	return stateNoTxn{}, &ts

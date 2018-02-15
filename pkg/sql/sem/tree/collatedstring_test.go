@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -40,7 +41,7 @@ func TestCastToCollatedString(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			evalCtx := NewTestingEvalContext()
+			evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 			defer evalCtx.Stop(context.Background())
 			val, err := typedexpr.Eval(evalCtx)
 			if err != nil {

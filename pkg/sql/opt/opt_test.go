@@ -81,6 +81,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -134,7 +135,8 @@ func TestOpt(t *testing.T) {
 				var colInfos []IndexColumnInfo
 				var invertedIndex bool
 				var typedExpr tree.TypedExpr
-				evalCtx := tree.MakeTestingEvalContext()
+				st := cluster.MakeTestingClusterSettings()
+				evalCtx := tree.MakeTestingEvalContext(st)
 
 				for _, arg := range d.CmdArgs {
 					key := arg

@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -77,7 +78,7 @@ func benchmarkLike(b *testing.B, ctx *EvalContext, caseInsensitive bool) {
 }
 
 func BenchmarkLikeWithCache(b *testing.B) {
-	ctx := NewTestingEvalContext()
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	ctx.ReCache = NewRegexpCache(len(benchmarkLikePatterns))
 	defer ctx.Mon.Stop(context.Background())
 
@@ -85,14 +86,14 @@ func BenchmarkLikeWithCache(b *testing.B) {
 }
 
 func BenchmarkLikeWithoutCache(b *testing.B) {
-	evalCtx := NewTestingEvalContext()
+	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	benchmarkLike(b, evalCtx, false)
 }
 
 func BenchmarkILikeWithCache(b *testing.B) {
-	ctx := NewTestingEvalContext()
+	ctx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	ctx.ReCache = NewRegexpCache(len(benchmarkLikePatterns))
 	defer ctx.Mon.Stop(context.Background())
 
@@ -100,7 +101,7 @@ func BenchmarkILikeWithCache(b *testing.B) {
 }
 
 func BenchmarkILikeWithoutCache(b *testing.B) {
-	evalCtx := NewTestingEvalContext()
+	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
 	benchmarkLike(b, evalCtx, true)

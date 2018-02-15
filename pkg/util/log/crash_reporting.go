@@ -63,6 +63,13 @@ var (
 		true,
 	)
 
+	// PanicOnAssertions wraps "debug.panic_on_failed_assertions"
+	PanicOnAssertions = settings.RegisterBoolSetting(
+		"debug.panic_on_failed_assertions",
+		"panic when an assertion fails rather than reporting",
+		false,
+	)
+
 	// startTime records when the process started so that crash reports can
 	// include the server's uptime as an extra tag.
 	startTime = timeutil.Now()
@@ -439,4 +446,21 @@ func SendCrashReport(
 	case <-time.After(10 * time.Second):
 		Shout(ctx, Severity_ERROR, "Time out trying to submit crash report")
 	}
+}
+
+// ReportOrPanic either reports an error to sentry, if run from a release
+// binary, or panics, if triggered in tests. This is intended to be used for
+// failing assertions which are recoverable but serious enough to report and to
+// cause tests to fail.
+//
+// Like SendCrashReport, the format string should not contain any sensitive
+// data, and unsafe reportables will be redacted before reporting.
+func ReportOrPanic(
+	ctx context.Context, sv *settings.Values, format string, reportables []interface{},
+) {
+	if !build.IsRelease() || PanicOnAssertions.Get(sv) {
+		panic(fmt.Sprintf(format, reportables...))
+	}
+	Warningf(ctx, format, reportables...)
+	SendCrashReport(ctx, sv, 0 /* depth */, format, reportables)
 }

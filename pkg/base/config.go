@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -440,7 +441,11 @@ type TempStorageConfig struct {
 // If parentDir is not specified and the specified store is in-memory,
 // then the temp storage will also be in-memory.
 func TempStorageConfigFromEnv(
-	ctx context.Context, firstStore StoreSpec, parentDir string, maxSizeBytes int64,
+	ctx context.Context,
+	st *cluster.Settings,
+	firstStore StoreSpec,
+	parentDir string,
+	maxSizeBytes int64,
 ) TempStorageConfig {
 	inMem := parentDir == "" && firstStore.InMemory
 	var monitor mon.BytesMonitor
@@ -452,6 +457,7 @@ func TempStorageConfigFromEnv(
 			nil,             /* maxHist */
 			1024*1024,       /* increment */
 			maxSizeBytes/10, /* noteworthy */
+			st,
 		)
 		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	} else {
@@ -462,6 +468,7 @@ func TempStorageConfigFromEnv(
 			nil,             /* maxHist */
 			64*1024*1024,    /* increment */
 			maxSizeBytes/10, /* noteworthy */
+			st,
 		)
 		monitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(maxSizeBytes))
 	}

@@ -19,6 +19,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 )
 
@@ -88,11 +89,12 @@ lo}`, coltypes.String, Datums{NewDString(`hel`), NewDString(`lo`)}},
 					t.Fatal(err)
 				}
 			}
-			actual, err := ParseDArrayFromString(NewTestingEvalContext(), td.str, td.typ)
+			evalContext := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+			actual, err := ParseDArrayFromString(evalContext, td.str, td.typ)
 			if err != nil {
 				t.Fatalf("ARRAY %s: got error %s, expected %s", td.str, err.Error(), expected)
 			}
-			if actual.Compare(NewTestingEvalContext(), expected) != 0 {
+			if actual.Compare(evalContext, expected) != 0 {
 				t.Fatalf("ARRAY %s: got %s, expected %s", td.str, actual, expected)
 			}
 		})
@@ -137,7 +139,8 @@ func TestParseArrayRandomParseArray(t *testing.T) {
 		}
 		buf.WriteByte('}')
 
-		parsed, err := ParseDArrayFromString(NewTestingEvalContext(), buf.String(), coltypes.String)
+		parsed, err := ParseDArrayFromString(
+			NewTestingEvalContext(cluster.MakeTestingClusterSettings()), buf.String(), coltypes.String)
 		if err != nil {
 			t.Fatalf(`got error: "%s" for elem "%s"`, err, buf.String())
 		}
@@ -177,7 +180,8 @@ func TestParseArrayError(t *testing.T) {
 	}
 	for _, td := range testData {
 		t.Run(td.str, func(t *testing.T) {
-			_, err := ParseDArrayFromString(NewTestingEvalContext(), td.str, td.typ)
+			_, err := ParseDArrayFromString(
+				NewTestingEvalContext(cluster.MakeTestingClusterSettings()), td.str, td.typ)
 			if err == nil {
 				t.Fatalf("expected %#v to error with message %#v", td.str, td.expectedError)
 			}
