@@ -1030,7 +1030,7 @@ render     0  render  ·         ·            (x, y)                         x!
 ·          1  ·       table     xy@xy_idx    ·                              ·
 ·          1  ·       spans     /1-/2 /2-/3  ·                              ·
 
-query II
+query II rowsort
 SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 ----
 1  NULL
