@@ -1145,7 +1145,7 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 
 // TestIntervalSklMaxEncodedSize ensures that we do not enter an infinite page
 // rotation loop for ranges that are too large to fit in a single page. Instead,
-// we detect this scenerio early and panic.
+// we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
 	ts := makeTS(200, 0)
 	val := makeVal(ts, "1")

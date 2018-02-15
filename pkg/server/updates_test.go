@@ -302,7 +302,7 @@ func TestReportUsage(t *testing.T) {
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "20s",
 		"trace.debug.enable":                       "false",
-		"version":                                  "1.1-12",
+		"version":                                  "1.1-13",
 	} {
 		if got, ok := r.last.AlteredSettings[key]; !ok {
 			t.Fatalf("expected report of altered setting %q", key)
