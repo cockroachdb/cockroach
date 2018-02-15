@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -96,11 +97,14 @@ func TestReportUsage(t *testing.T) {
 	defer stubURL(&reportingURL, r.url)()
 	defer r.Close()
 
+	st := cluster.MakeTestingClusterSettings()
+
 	params := base.TestServerArgs{
 		StoreSpecs: []base.StoreSpec{
 			base.DefaultTestStoreSpec,
 			base.DefaultTestStoreSpec,
 		},
+		Settings: st,
 	}
 	s, db, _ := serverutils.StartServer(t, params)
 	ts := s.(*TestServer)
@@ -291,9 +295,10 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	// 3 + 3 = 6: set 3 initially and org is set mid-test for 3 altered settings,
-	// plus version, reporting and trace settings are set in startup migrations.
-	if expected, actual := 6, len(r.last.AlteredSettings); expected != actual {
+	// 3 + 4 = 7: set 3 initially and org is set mid-test for 3 altered settings,
+	// plus version, reporting, trace and secret settings are set in startup
+	// migrations.
+	if expected, actual := 7, len(r.last.AlteredSettings); expected != actual {
 		t.Fatalf("expected %d changed settings, got %d: %v", expected, actual, r.last.AlteredSettings)
 	}
 	for key, expected := range map[string]string{
@@ -303,6 +308,7 @@ func TestReportUsage(t *testing.T) {
 		"server.time_until_store_dead":             "20s",
 		"trace.debug.enable":                       "false",
 		"version":                                  "1.1-13",
+		"cluster.secret":                           "<non-default>",
 	} {
 		if got, ok := r.last.AlteredSettings[key]; !ok {
 			t.Fatalf("expected report of altered setting %q", key)
@@ -324,6 +330,7 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
 	}
 
+	clusterSecret := sql.ClusterSecret.Get(&st.SV)
 	for appName, expectedStatements := range map[string][]string{
 		"": {
 			`CREATE DATABASE _`,
@@ -342,8 +349,8 @@ func TestReportUsage(t *testing.T) {
 			`SET CLUSTER SETTING _ = _`,
 		},
 	} {
-		if app, ok := bucketByApp[sql.HashAppName(appName)]; !ok {
-			t.Fatalf("missing stats for default app")
+		if app, ok := bucketByApp[sql.HashForReporting(clusterSecret, appName)]; !ok {
+			t.Fatalf("missing stats for app %q %+v", appName, bucketByApp)
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
 				for _, q := range app {

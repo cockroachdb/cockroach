@@ -184,6 +184,11 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		name:   "add default system.jobs zone config",
 		workFn: addDefaultSystemJobsZoneConfig,
 	},
+	{
+		// Introduced in v2.0.
+		name:   "initialize cluster.secret",
+		workFn: initializeClusterSecret,
+	},
 }
 
 // migrationDescriptor describes a single migration hook that's used to modify
@@ -531,6 +536,10 @@ func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 
 func disableNetTrace(ctx context.Context, r runner) error {
 	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING trace.debug.enable = false`)
+}
+
+func initializeClusterSecret(ctx context.Context, r runner) error {
+	return runStmtAsRootWithRetry(ctx, r, `SET CLUSTER SETTING cluster.secret = gen_random_uuid()::STRING`)
 }
 
 func populateVersionSetting(ctx context.Context, r runner) error {
