@@ -136,7 +136,10 @@ func NewTestCatalog() *TestCatalog {
 
 // FindTable is part of the optbase.Catalog interface.
 func (c *TestCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	return c.tables[name.Table()], nil
+	if table, ok := c.tables[name.Table()]; ok {
+		return table, nil
+	}
+	return nil, fmt.Errorf("table %q not found", name.String())
 }
 
 // Table returns the test table that was previously added with the given name.

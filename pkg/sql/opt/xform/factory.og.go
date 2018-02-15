@@ -1147,6 +1147,23 @@ func (_f *factory) ConstructFunction(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
 }
 
+// ConstructCoalesce constructs an expression for the Coalesce operator.
+func (_f *factory) ConstructCoalesce(
+	args opt.ListID,
+) opt.GroupID {
+	_coalesceExpr := makeCoalesceExpr(args)
+	_group := _f.mem.lookupGroupByFingerprint(_coalesceExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_coalesceExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_coalesceExpr)))
+}
+
 // ConstructScan constructs an expression for the Scan operator.
 // Scan returns a result set containing every row in the specified table. Rows
 // and columns are not expected to have any particular ordering. The private
@@ -1545,7 +1562,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [77]dynConstructLookupFunc
+var dynConstructLookup [78]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1831,6 +1848,11 @@ func init() {
 	// FunctionOp
 	dynConstructLookup[opt.FunctionOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructFunction(f.InternList(children), private)
+	}
+
+	// CoalesceOp
+	dynConstructLookup[opt.CoalesceOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructCoalesce(f.InternList(children))
 	}
 
 	// ScanOp

@@ -356,3 +356,8 @@ define Function {
     Args ExprList
     Def  FuncDef
 }
+
+[Scalar]
+define Coalesce {
+    Args ExprList
+}

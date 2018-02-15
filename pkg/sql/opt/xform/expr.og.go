@@ -301,6 +301,12 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0 + int(functionExpr.args().Length)
 	},
 
+	// CoalesceOp
+	func(ev ExprView) int {
+		coalesceExpr := (*coalesceExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(coalesceExpr.args().Length)
+	},
+
 	// ScanOp
 	func(ev ExprView) int {
 		return 0
@@ -1129,6 +1135,17 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
+	// CoalesceOp
+	func(ev ExprView, n int) opt.GroupID {
+		coalesceExpr := (*coalesceExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		default:
+			list := ev.mem.lookupList(coalesceExpr.args())
+			return list[n-0]
+		}
+	},
+
 	// ScanOp
 	func(ev ExprView, n int) opt.GroupID {
 		panic("child index out of range")
@@ -1737,6 +1754,11 @@ var privateLookup = [...]privateLookupFunc{
 		return functionExpr.def()
 	},
 
+	// CoalesceOp
+	func(ev ExprView) opt.PrivateID {
+		return 0
+	},
+
 	// ScanOp
 	func(ev ExprView) opt.PrivateID {
 		scanExpr := (*scanExpr)(ev.mem.lookupExpr(ev.loc))
@@ -1910,6 +1932,7 @@ var isScalarLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	true,  // FunctionOp
+	true,  // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2076,6 +2099,7 @@ var isBooleanLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2159,6 +2183,7 @@ var isComparisonLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2242,6 +2267,7 @@ var isBinaryLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2325,6 +2351,7 @@ var isUnaryLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2408,6 +2435,7 @@ var isRelationalLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	true,  // ScanOp
 	true,  // ValuesOp
 	true,  // SelectOp
@@ -2491,6 +2519,7 @@ var isJoinLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2574,6 +2603,7 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2657,6 +2687,7 @@ var isEnforcerLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // CoalesceOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -4088,6 +4119,27 @@ func (m *memoExpr) asFunction() *functionExpr {
 		return nil
 	}
 	return (*functionExpr)(m)
+}
+
+type coalesceExpr memoExpr
+
+func makeCoalesceExpr(args opt.ListID) coalesceExpr {
+	return coalesceExpr{op: opt.CoalesceOp, state: exprState{args.Offset, args.Length}}
+}
+
+func (e *coalesceExpr) args() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *coalesceExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asCoalesce() *coalesceExpr {
+	if m.op != opt.CoalesceOp {
+		return nil
+	}
+	return (*coalesceExpr)(m)
 }
 
 // scanExpr returns a result set containing every row in the specified table. Rows
