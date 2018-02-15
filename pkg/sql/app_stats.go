@@ -17,10 +17,10 @@ package sql
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"hash/fnv"
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -281,12 +281,13 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 	var ret []roachpb.CollectedStatementStatistics
 	vt := e.cfg.VirtualSchemas
 	e.sqlStats.Lock()
+	salt := ClusterSecret.Get(&e.cfg.Settings.SV)
 	for appName, a := range e.sqlStats.apps {
 		if cap(ret) == 0 {
-			// guesitmate that we'll need apps*(queries-per-app).
+			// guesstimate that we'll need apps*(queries-per-app).
 			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(e.sqlStats.apps))
 		}
-		hashedApp := HashAppName(appName)
+		hashedApp := HashForReporting(salt, appName)
 		a.Lock()
 		for q, stats := range a.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
@@ -315,14 +316,18 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 	return ret
 }
 
-// HashAppName 1-way hashes an application names for use in stat reporting.
-func HashAppName(appName string) string {
-	hash := fnv.New64a()
+// HashForReporting 1-way hashes values for use in stat reporting. The salt
+// should be the cluster.secret setting.
+func HashForReporting(salt, appName string) string {
+	hash := sha256.New()
 
+	if _, err := hash.Write([]byte(salt)); err != nil {
+		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+	}
 	if _, err := hash.Write([]byte(appName)); err != nil {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 	}
-	return strconv.Itoa(int(hash.Sum64()))
+	return hex.EncodeToString(hash.Sum(nil)[:4])
 }
 
 // ResetStatementStats resets the executor's collected statement statistics.
