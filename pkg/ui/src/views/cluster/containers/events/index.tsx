@@ -95,7 +95,7 @@ export class EventBoxUnconnected extends React.Component<EventBoxProps, {}> {
             return <EventRow event={e} key={i} />;
           })}
           <tr>
-            <td className="events__more-link" colSpan={2}><Link to="/cluster/events">View all events</Link></td>
+            <td className="events__more-link" colSpan={2}><Link to="/events">View all events</Link></td>
           </tr>
         </tbody>
       </table>
@@ -135,7 +135,7 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         // page, when it should link back to the dashboard previously visible.
       }
       <section className="section parent-link">
-        <Link to="/cluster">&lt; Back to Cluster</Link>
+        <Link to="/">&lt; Back to Cluster</Link>
       </section>
       <section className="section section--heading">
         <h2>Events</h2>

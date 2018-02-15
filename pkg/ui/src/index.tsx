@@ -17,7 +17,7 @@ protobuf.configure();
 import React from "react";
 import * as ReactDOM from "react-dom";
 import { Provider } from "react-redux";
-import { Router, Route, IndexRoute, IndexRedirect } from "react-router";
+import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
 
 import {
   tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr,
@@ -71,36 +71,70 @@ ReactDOM.render(
     <Router history={history}>
       <Route path="/" component={Layout}>
         <IndexRedirect to="overview" />
+
+        { /* overview page */ }
         <Route path="overview">
-          <IndexRoute component={ClusterOverview} />
+          <IndexRoute component={ ClusterOverview } />
         </Route>
-        <Route path="cluster">
-          <IndexRedirect to="all/overview" />
-          <Route path={`all/:${dashboardNameAttr}`} component={NodeGraphs} />
-          <Route path={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` } component={NodeGraphs} />
-          <Route path="nodes">
-            <IndexRoute component={NodesOverview} />
-            <Route path={`:${nodeIDAttr}`}>
-              <IndexRoute component={NodeOverview} />
-              <Route path="logs" component={ NodeLogs } />
+
+        { /* time series metrics */ }
+        <Route path="metrics">
+          <IndexRedirect to="overview/cluster" />
+          <Route path={ `:${dashboardNameAttr}` }>
+            <IndexRedirect to="cluster" />
+            <Route path="cluster" component={ NodeGraphs } />
+            <Route path="node">
+              <IndexRedirect to={ `/metrics/:${dashboardNameAttr}/cluster` } />
+              <Route path={ `:${nodeIDAttr}` } component={ NodeGraphs } />
             </Route>
           </Route>
-          <Route path="events" component={ EventPage } />
         </Route>
+
+        { /* node details */ }
+        <Route path="nodes">
+          <IndexRoute component={ NodesOverview } />
+        </Route>
+        <Route path="node">
+          <IndexRedirect to="/nodes" />
+          <Route path={ `:${nodeIDAttr}` }>
+            <IndexRoute component={ NodeOverview } />
+            <Route path="logs" component={ NodeLogs } />
+          </Route>
+        </Route>
+
+        { /* events & jobs */ }
+        <Route path="events" component={ EventPage } />
+        <Route path="jobs" component={ JobsPage } />
+
+        { /* databases */ }
         <Route path="databases">
           <IndexRedirect to="tables" />
           <Route path="tables" component={ DatabaseTablesList } />
           <Route path="grants" component={ DatabaseGrantsList } />
-          <Route path={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` } component={ TableDetails } />
+          <Redirect
+            from={ `database/:${databaseNameAttr}/table/:${tableNameAttr}` }
+            to={ `/database/:${databaseNameAttr}/table/:${tableNameAttr}` }
+          />
         </Route>
-        <Route path="jobs" component={ JobsPage } />
+        <Route path="database">
+          <IndexRedirect to="/databases" />
+          <Route path={ `:${databaseNameAttr}` }>
+            <IndexRedirect to="/databases" />
+            <Route path="table">
+              <IndexRedirect to="/databases" />
+              <Route path={ `:${tableNameAttr}` } component={ TableDetails } />
+            </Route>
+          </Route>
+        </Route>
+
+        { /* debug pages */ }
+        <Route path="debug" component={ Debug } />
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
           <Route path="ranges" component={ RaftRanges } />
           <Route path="messages/all" component={ RaftMessages } />
           <Route path={`messages/node/:${nodeIDAttr}`} component={ RaftMessages } />
         </Route>
-        <Route path="debug" component={ Debug } />
         <Route path="reports">
           <Route path="problemranges" component={ ProblemRanges }>
             <Route path={`:${nodeIDAttr}`} component={ ProblemRanges }/>
@@ -112,7 +146,32 @@ ReactDOM.render(
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
         </Route>
+
+        { /* old route redirects */ }
+        <Route path="cluster">
+          <IndexRedirect to="/metrics/overview/cluster" />
+          <Redirect
+            from={`all/:${dashboardNameAttr}`}
+            to={ `/metrics/:${dashboardNameAttr}/cluster` }
+          />
+          <Redirect
+            from={ `node/:${nodeIDAttr}/:${dashboardNameAttr}` }
+            to={ `/metrics/:${dashboardNameAttr}/node/:${nodeIDAttr}` }
+          />
+          <Route path="nodes">
+            <IndexRedirect to="/nodes" />
+            <Route path={`:${nodeIDAttr}`}>
+              <IndexRedirect to={ `/node/:${nodeIDAttr}` } />
+              <Redirect from="logs" to={ `/node/:${nodeIDAttr}/logs` } />
+            </Route>
+          </Route>
+          <Redirect from="events" to="/events" />
+        </Route>
+
+        { /* temporary clusterviz location */ }
         { visualizationRoutes() }
+
+        { /* 404 */ }
         <Route path="*" component={ NotFound } />
       </Route>
     </Router>
