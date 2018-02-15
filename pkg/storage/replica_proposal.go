@@ -420,7 +420,7 @@ func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachp
 		// Only the raft leader can attempt a leadership transfer.
 		if status := raftGroup.Status(); status.RaftState == raft.StateLeader {
 			// Only attempt this if the target has all the log entries.
-			if pr, ok := status.Progress[uint64(target)]; ok && pr.Match == r.mu.lastIndex {
+			if pr, ok := status.Progress[uint64(target)]; (ok && pr.Match == r.mu.lastIndex) || r.mu.draining {
 				log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", target)
 				r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 				raftGroup.TransferLeader(uint64(target))

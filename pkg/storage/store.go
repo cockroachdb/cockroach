@@ -926,6 +926,8 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 	return s.cfg.AmbientCtx.AnnotateCtx(ctx)
 }
 
+const raftLeadershipTransferWait = 5 * time.Second
+
 // SetDraining (when called with 'true') causes incoming lease transfers to be
 // rejected, prevents all of the Store's Replicas from acquiring or extending
 // range leases, and attempts to transfer away any leases owned.
@@ -933,6 +935,12 @@ func (s *Store) AnnotateCtx(ctx context.Context) context.Context {
 func (s *Store) SetDraining(drain bool) {
 	s.draining.Store(drain)
 	if !drain {
+		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+			r.mu.Lock()
+			r.mu.draining = false
+			r.mu.Unlock()
+			return true
+		})
 		return
 	}
 
@@ -948,6 +956,11 @@ func (s *Store) SetDraining(drain bool) {
 			r.AnnotateCtx(ctx), "storage.Store: draining replica", sem, true, /* wait */
 			func(ctx context.Context) {
 				defer wg.Done()
+
+				r.mu.Lock()
+				r.mu.draining = true
+				r.mu.Unlock()
+
 				var drainingLease roachpb.Lease
 				for {
 					var llHandle *leaseRequestHandle
@@ -976,14 +989,40 @@ func (s *Store) SetDraining(drain bool) {
 							log.Errorf(ctx, "could not get zone config for key %s when draining: %s", desc.StartKey, err)
 						}
 					}
-					if _, err := s.replicateQueue.transferLease(
+					transferred, err := s.replicateQueue.transferLease(
 						ctx,
 						r,
 						desc,
 						zone,
 						transferLeaseOptions{},
-					); log.V(1) && err != nil {
-						log.Errorf(ctx, "error transferring lease when draining: %s", err)
+					)
+					if transferred {
+						if log.V(1) {
+							log.Infof(ctx, "transferred lease %s for replica %s", drainingLease, desc)
+						}
+						if err := retry.ForDuration(raftLeadershipTransferWait, func() error {
+							status := r.RaftStatus()
+							if status.RaftState == raft.StateFollower && status.Lead != 0 {
+								return nil
+							}
+							return errors.Errorf("raft state: %s, lead: %d", status.RaftState, status.Lead)
+						}); err != nil {
+							log.Errorf(
+								ctx,
+								"unable to ensure raft leadership transfer (unavailability may ensue): %s",
+								err,
+							)
+						}
+					} else if log.V(1) {
+						// Note that a nil error means that there were no suitable
+						// candidates.
+						log.Errorf(
+							ctx,
+							"did not transfer lease %s for replica %s when draining: %s",
+							drainingLease,
+							desc,
+							err,
+						)
 					}
 				}
 			}); err != nil {
