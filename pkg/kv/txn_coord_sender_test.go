@@ -1333,42 +1333,51 @@ func checkTxnMetrics(
 	commits, commits1PC, abandons, aborts, restarts int64,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		testcases := []struct {
-			name string
-			a, e int64
-		}{
-			{"commits", metrics.Commits.Count(), commits},
-			{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
-			{"abandons", metrics.Abandons.Count(), abandons},
-			{"aborts", metrics.Aborts.Count(), aborts},
-			{"durations", metrics.Durations.TotalCount(),
-				commits + abandons + aborts},
-		}
-
-		for _, tc := range testcases {
-			if tc.a != tc.e {
-				return errors.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
-			}
-		}
-
-		// Handle restarts separately, because that's a histogram. Though the
-		// histogram is approximate, we're recording so few distinct values
-		// that we should be okay.
-		dist := metrics.Restarts.Snapshot().Distribution()
-		var actualRestarts int64
-		for _, b := range dist {
-			if b.From == b.To {
-				actualRestarts += b.From * b.Count
-			} else {
-				t.Fatalf("unexpected value in histogram: %d-%d", b.From, b.To)
-			}
-		}
-		if a, e := actualRestarts, restarts; a != e {
-			return errors.Errorf("%s: actual restarts %d != expected %d", name, a, e)
-		}
-
-		return nil
+		return checkTxnMetricsOnce(t, metrics, name, commits, commits1PC, abandons, aborts, restarts)
 	})
+}
+
+func checkTxnMetricsOnce(
+	t *testing.T,
+	metrics TxnMetrics,
+	name string,
+	commits, commits1PC, abandons, aborts, restarts int64,
+) error {
+	testcases := []struct {
+		name string
+		a, e int64
+	}{
+		{"commits", metrics.Commits.Count(), commits},
+		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
+		{"abandons", metrics.Abandons.Count(), abandons},
+		{"aborts", metrics.Aborts.Count(), aborts},
+		{"durations", metrics.Durations.TotalCount(),
+			commits + abandons + aborts},
+	}
+
+	for _, tc := range testcases {
+		if tc.a != tc.e {
+			return errors.Errorf("%s: actual %s %d != expected %d", name, tc.name, tc.a, tc.e)
+		}
+	}
+
+	// Handle restarts separately, because that's a histogram. Though the
+	// histogram is approximate, we're recording so few distinct values
+	// that we should be okay.
+	dist := metrics.Restarts.Snapshot().Distribution()
+	var actualRestarts int64
+	for _, b := range dist {
+		if b.From == b.To {
+			actualRestarts += b.From * b.Count
+		} else {
+			t.Fatalf("unexpected value in histogram: %d-%d", b.From, b.To)
+		}
+	}
+	if a, e := actualRestarts, restarts; a != e {
+		return errors.Errorf("%s: actual restarts %d != expected %d", name, a, e)
+	}
+
+	return nil
 }
 
 // setupMetricsTest sets the txn coord sender factory's metrics to
@@ -1460,10 +1469,14 @@ func TestTxnAbandonCount(t *testing.T) {
 	value := []byte("value")
 	manual := s.Manual
 
+	ctx := context.Background()
+
 	var count int
 	doneErr := errors.New("retry on abandoned successful; exiting")
+
 	db, tc := createNonCancelableDB(s.DB)
-	if err := db.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		count++
 		if count == 2 {
 			return doneErr
@@ -1478,9 +1491,24 @@ func TestTxnAbandonCount(t *testing.T) {
 			return err
 		}
 
-		manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
-
-		checkTxnMetrics(t, metrics, "abandon txn", 0, 0, 1, 0, 0)
+		testutils.SucceedsSoon(t, func() error {
+			// Note that we must bump the clock before every attempt (not just once)
+			// because otherwise there is a race in which we bump, a heartbeat happens
+			// at the new timestamp, and the transaction never expires.
+			manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
+			err := checkTxnMetricsOnce(
+				t, metrics, "abandon txn", 0, 0, 1 /* abandons */, 0, 0,
+			)
+			if err == nil {
+				return nil
+			}
+			// There's another race here: if (*TxnCoordSender).heartbeat sees the expired txn, it will
+			// asynchronously call tryAsyncAbort, which may beat the parent heartbeat loop's stats taking.
+			// In that case, we see an aborted txn.
+			return checkTxnMetricsOnce(
+				t, metrics, "abandon txn", 0, 0, 0, 1 /* aborts */, 0,
+			)
+		})
 
 		return nil
 	}); err != doneErr {
