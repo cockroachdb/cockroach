@@ -134,29 +134,22 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	return "JoinReader", details
 }
 
-func joinTypeDetail(joinType JoinType) string {
-	var typeStr string
-	switch joinType {
-	case JoinType_INNER:
-		typeStr = "INNER JOIN"
-	case JoinType_LEFT_OUTER:
-		typeStr = "LEFT OUTER JOIN"
-	case JoinType_RIGHT_OUTER:
-		typeStr = "RIGHT OUTER JOIN"
-	case JoinType_FULL_OUTER:
-		typeStr = "FULL OUTER JOIN"
-	case JoinType_LEFT_SEMI:
-		typeStr = "LEFT SEMI JOIN"
-	case JoinType_LEFT_ANTI:
-		typeStr = "LEFT ANTI JOIN"
-	case JoinType_INTERSECT_ALL:
-		typeStr = "INTERSECT ALL"
-	case JoinType_EXCEPT_ALL:
-		typeStr = "EXCEPT ALL"
-	default:
-		panic(fmt.Sprintf("Unsupported join type: %s", JoinType_name[int32(joinType)]))
+func joinTypeDetail(joinType sqlbase.JoinType) string {
+	// Use JoinType.String() but replace _ with space and
+	// append JOIN where appropriate.
+	var buf bytes.Buffer
+	buf.WriteString("Type: ")
+	for _, c := range joinType.String() {
+		if c == '_' {
+			buf.WriteByte(' ')
+		} else {
+			buf.WriteRune(c)
+		}
 	}
-	return fmt.Sprintf("Type: %s", typeStr)
+	if joinType != sqlbase.IntersectAllJoin && joinType != sqlbase.ExceptAllJoin {
+		buf.WriteString(" JOIN")
+	}
+	return buf.String()
 }
 
 // summary implements the diagramCellType interface.
@@ -168,7 +161,7 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 
 	details := make([]string, 0, 4)
 
-	if hj.Type != JoinType_INNER {
+	if hj.Type != sqlbase.InnerJoin {
 		details = append(details, joinTypeDetail(hj.Type))
 	}
 	if len(hj.LeftEqColumns) > 0 {
@@ -187,10 +180,12 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return name, details
 }
 
-func orderedJoinDetails(joinType JoinType, left, right Ordering, onExpr Expression) []string {
+func orderedJoinDetails(
+	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
+) []string {
 	details := make([]string, 0, 3)
 
-	if joinType != JoinType_INNER {
+	if joinType != sqlbase.InnerJoin {
 		details = append(details, joinTypeDetail(joinType))
 	}
 	details = append(details, fmt.Sprintf(
