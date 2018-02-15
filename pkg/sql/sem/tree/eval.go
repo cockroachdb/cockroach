@@ -2038,12 +2038,8 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 			} else {
 				// The left-hand side is a tuple, e.g. `(1, 2) IN ((1, 2), (3, 4))`.
 				for _, val := range vtuple.D {
-					var res Datum
-					if argIsTuple {
-						// Use the EQ function which properly handles NULLs.
-						res = cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ)
-					}
-					if res == DNull {
+					// Use the EQ function which properly handles NULLs.
+					if res := cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ); res == DNull {
 						sawNull = true
 					} else if res == DBoolTrue {
 						return DBoolTrue, nil
