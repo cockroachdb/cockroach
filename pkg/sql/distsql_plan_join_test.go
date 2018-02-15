@@ -304,7 +304,7 @@ func TestUseInterleavedJoin(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					join.joinType = joinTypeInner
+					join.joinType = sqlbase.InnerJoin
 
 					if err := setTestEqCols(join, colNames); err != nil {
 						t.Fatal(err)
