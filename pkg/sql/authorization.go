@@ -61,6 +61,13 @@ func CheckPrivilegeForUser(
 func (p *planner) CheckPrivilege(
 	ctx context.Context, descriptor sqlbase.DescriptorProto, privilege privilege.Kind,
 ) error {
+	// Test whether the object is being audited, and if so, record an
+	// audit event. We place this check here to increase the likelihood
+	// it will not be forgotten if features are added that access
+	// descriptors (since every use of descriptors presumably need a
+	// permission check).
+	p.maybeAudit(descriptor, privilege)
+
 	user := p.SessionData().User
 	privs := descriptor.GetPrivileges()
 

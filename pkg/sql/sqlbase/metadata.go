@@ -47,6 +47,7 @@ type DescriptorProto interface {
 	TypeName() string
 	GetName() string
 	SetName(string)
+	GetAuditMode() TableDescriptor_AuditMode
 }
 
 // WrapDescriptor fills in a Descriptor.

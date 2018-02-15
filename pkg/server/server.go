@@ -507,6 +507,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.gossip,
 			s.stopper,
 			sqlExecutorTestingKnobs.DistSQLPlannerKnobs),
+		ExecLogger:  log.NewSecondaryLogger(nil, "sql-exec", true /*enableGc*/, false /*forceSyncWrites*/),
+		AuditLogger: log.NewSecondaryLogger(s.cfg.SQLAuditLogDirName, "sql-audit", true /*enableGc*/, true /*forceSyncWrites*/),
 	}
 
 	if sqlSchemaChangerTestingKnobs := s.cfg.TestingKnobs.SQLSchemaChanger; sqlSchemaChangerTestingKnobs != nil {

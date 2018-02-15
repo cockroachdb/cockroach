@@ -165,6 +165,13 @@ If left unspecified, defaults to 128MiB.
 `,
 	}
 
+	SQLAuditLogDirName = FlagInfo{
+		Name: "sql-audit-dir",
+		Description: `
+If non-empty, create a SQL audit log in this drectory.
+`,
+	}
+
 	SQLTempStorage = FlagInfo{
 		Name: "max-disk-temp-storage",
 		Description: `

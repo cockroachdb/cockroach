@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -89,6 +90,9 @@ type planner struct {
 	// sessionDataMutator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
 	sessionDataMutator sessionDataMutator
+
+	// execCfg is used to access the server configuration for the Executor.
+	execCfg *ExecutorConfig
 
 	preparedStatements preparedStatementsAccessor
 
@@ -157,8 +161,6 @@ type planner struct {
 	alloc sqlbase.DatumAlloc
 }
 
-var emptyPlanner planner
-
 // noteworthyInternalMemoryUsageBytes is the minimum size tracked by each
 // internal SQL pool before the pool starts explicitly logging overall usage
 // growth in the log.
@@ -207,7 +209,7 @@ func newInternalPlanner(
 			applicationName: "crdb-internal",
 			database:        "",
 		},
-		settings:       nil,
+		settings:       execCfg.Settings,
 		curTxnReadOnly: &s.TxnState.readOnly,
 	}
 	s.mon = mon.MakeUnlimitedMonitor(ctx,
@@ -350,7 +352,7 @@ func (p *planner) QueryRow(
 // queryRows executes a SQL query string where multiple result rows are returned.
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
-) ([]tree.Datums, sqlbase.ResultColumns, error) {
+) (rows []tree.Datums, cols sqlbase.ResultColumns, err error) {
 	// makeInternalPlan() clobbers p.curplan and the placeholder info
 	// map, so we have to save/restore them here.
 	defer func(psave planTop, pisave tree.PlaceholderInfo) {
@@ -358,11 +360,14 @@ func (p *planner) queryRows(
 		p.curPlan = psave
 	}(p.curPlan, p.semaCtx.Placeholders)
 
+	startTime := timeutil.Now()
 	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
+		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
 		return nil, nil, err
 	}
-	cols := planColumns(p.curPlan.plan)
+	cols = planColumns(p.curPlan.plan)
 	defer p.curPlan.close(ctx)
+	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", len(rows), err, startTime) }()
 
 	params := runParams{
 		ctx:             ctx,
@@ -372,7 +377,6 @@ func (p *planner) queryRows(
 	if err := p.curPlan.start(params); err != nil {
 		return nil, nil, err
 	}
-	var rows []tree.Datums
 	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
 		if values != nil {
 			valCopy := append(tree.Datums(nil), values...)
@@ -387,7 +391,9 @@ func (p *planner) queryRows(
 
 // exec executes a SQL query string and returns the number of rows
 // affected.
-func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (int, error) {
+func (p *planner) exec(
+	ctx context.Context, sql string, args ...interface{},
+) (numRows int, err error) {
 	// makeInternalPlan() clobbers p.curplan and the placeholder info
 	// map, so we have to save/restore them here.
 	defer func(psave planTop, pisave tree.PlaceholderInfo) {
@@ -395,10 +401,13 @@ func (p *planner) exec(ctx context.Context, sql string, args ...interface{}) (in
 		p.curPlan = psave
 	}(p.curPlan, p.semaCtx.Placeholders)
 
+	startTime := timeutil.Now()
 	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
+		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
 		return 0, err
 	}
 	defer p.curPlan.close(ctx)
+	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", numRows, err, startTime) }()
 
 	params := runParams{
 		ctx:             ctx,
