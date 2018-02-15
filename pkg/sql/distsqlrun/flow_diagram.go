@@ -153,7 +153,7 @@ func joinTypeDetail(joinType sqlbase.JoinType) string {
 // summary implements the diagramCellType interface.
 func (hj *HashJoinerSpec) summary() (string, []string) {
 	name := "HashJoiner"
-	if isSetOpJoin(joinType(hj.Type)) {
+	if isSetOpJoin(hj.Type) {
 		name = "HashSetOp"
 	}
 
@@ -200,7 +200,7 @@ func orderedJoinDetails(
 // summary implements the diagramCellType interface.
 func (mj *MergeJoinerSpec) summary() (string, []string) {
 	name := "MergeJoiner"
-	if isSetOpJoin(joinType(mj.Type)) {
+	if isSetOpJoin(mj.Type) {
 		name = "MergeSetOp"
 	}
 	return name, orderedJoinDetails(mj.Type, mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)
