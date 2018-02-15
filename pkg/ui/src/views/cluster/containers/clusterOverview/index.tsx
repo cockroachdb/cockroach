@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import d3 from "d3";
 import React from "react";
+import { RouterState } from "react-router";
 import { connect } from "react-redux";
 import { createSelector } from "reselect";
 
@@ -11,10 +12,8 @@ import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import ClusterVisualization from "src/views/clusterviz/containers/map";
 import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
-
-import "./cluster.styl";
 import spinner from "assets/spinner.gif";
-import {RouterState} from "react-router";
+import "./cluster.styl";
 
 // tslint:disable-next-line:variable-name
 const CapacityChart = createChartComponent("svg", capacityChart());
@@ -190,10 +189,9 @@ class ClusterOverview extends React.Component<RouterState, {}> {
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
-        {/*<NodesOverview />*/}
-        <div style={{ flexGrow: 1, position: "relative", margin: 24, border: "1px solid #EDEDED", borderRadius: 3 }}>
+        <div style={{ flexGrow: 1, position: "relative", margin: 24, border: "1px solid #EDEDED", borderRadius: 3, backgroundColor: "white" }}>
           <div style={{ position: "absolute", width: "100%", height: "100%" }}>
-            <ClusterVisualization {...this.props} />
+            { this.props.children }
           </div>
         </div>
       </div>

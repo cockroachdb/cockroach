@@ -13,10 +13,11 @@ import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
 import { parseLocalityRoute } from "src/util/localities";
 import "./sim.css";
 
-export default class ClusterVisualization extends React.Component<RouterState & { router: InjectedRouter }> {
+export default class NodeList extends React.Component<RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
     this.props.router.push(`/overview/${opt.value}`);
   }
@@ -31,10 +32,11 @@ export default class ClusterVisualization extends React.Component<RouterState & 
     return (
       <div style={{
         width: "100%",
-        height: "100%",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
+        background: "white",
+        paddingBottom: 24,
       }}>
         <div style={{
           flex: "none",
@@ -46,15 +48,13 @@ export default class ClusterVisualization extends React.Component<RouterState & 
           <div style={{ float: "left" }}>
             <Dropdown
               title="View"
-              selected="map"
+              selected="list"
               options={options}
               onChange={this.handleMapTableToggle}
             />
           </div>
-          <div style={{ float: "right" }}><TimeScaleDropdown /></div>
-          <div style={{ textAlign: "center", paddingTop: 13 }}><Breadcrumbs tiers={tiers} /></div>
         </div>
-        <NodeCanvasContainer tiers={tiers} />
+        <NodesOverview />
       </div>
     );
   }
