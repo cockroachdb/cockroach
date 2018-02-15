@@ -1137,3 +1137,350 @@ project
       │         ├── variable: kv.k [type=int]
       │         └── variable: kv.w [type=int]
       └── variable: kv.v [type=int]
+
+# Check all the different types of scalar expressions as group by columns
+build
+SELECT b1.b AND abc.c AND b2.b FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
+----
+project
+ ├── columns: column10:bool:null:10
+ ├── group-by
+ │    ├── columns: bools.b:bool:null:3 column9:bool:null:9
+ │    ├── inner-join
+ │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    ├── inner-join
+ │    │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    └── true [type=bool]
+ │    │    ├── scan
+ │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    └── true [type=bool]
+ │    ├── groupings
+ │    │    ├── and [type=bool]
+ │    │    │    ├── variable: bools.b [type=bool]
+ │    │    │    └── variable: abc.c [type=bool]
+ │    │    └── variable: bools.b [type=bool]
+ │    └── aggregations
+ └── projections
+      └── and [type=bool]
+           ├── and [type=bool]
+           │    ├── variable: bools.b [type=bool]
+           │    └── variable: abc.c [type=bool]
+           └── variable: bools.b [type=bool]
+
+build
+SELECT b1.b AND abc.c AND abc.c FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
+----
+error: column "abc.c" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT b1.b OR abc.c OR b2.b FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
+----
+project
+ ├── columns: column10:bool:null:10
+ ├── group-by
+ │    ├── columns: bools.b:bool:null:3 column9:bool:null:9
+ │    ├── inner-join
+ │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    ├── inner-join
+ │    │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    └── true [type=bool]
+ │    │    ├── scan
+ │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    └── true [type=bool]
+ │    ├── groupings
+ │    │    ├── or [type=bool]
+ │    │    │    ├── variable: bools.b [type=bool]
+ │    │    │    └── variable: abc.c [type=bool]
+ │    │    └── variable: bools.b [type=bool]
+ │    └── aggregations
+ └── projections
+      └── or [type=bool]
+           ├── or [type=bool]
+           │    ├── variable: bools.b [type=bool]
+           │    └── variable: abc.c [type=bool]
+           └── variable: bools.b [type=bool]
+
+build
+SELECT b1.b OR abc.c OR abc.c FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
+----
+error: column "abc.c" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT k % w % v FROM kv GROUP BY k % w, v
+----
+project
+ ├── columns: column6:int:null:6
+ ├── group-by
+ │    ├── columns: kv.v:int:null:2 column5:int:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── groupings
+ │    │    ├── mod [type=int]
+ │    │    │    ├── variable: kv.k [type=int]
+ │    │    │    └── variable: kv.w [type=int]
+ │    │    └── variable: kv.v [type=int]
+ │    └── aggregations
+ └── projections
+      └── mod [type=int]
+           ├── mod [type=int]
+           │    ├── variable: kv.k [type=int]
+           │    └── variable: kv.w [type=int]
+           └── variable: kv.v [type=int]
+
+build
+SELECT CONCAT(CONCAT(s, a), a) FROM kv, abc GROUP BY CONCAT(s, a), a
+----
+project
+ ├── columns: column10:string:null:10
+ ├── group-by
+ │    ├── columns: abc.a:string:null:5 column9:string:null:9
+ │    ├── inner-join
+ │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── scan
+ │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    └── true [type=bool]
+ │    ├── groupings
+ │    │    ├── function: concat [type=NULL]
+ │    │    │    ├── variable: kv.s [type=string]
+ │    │    │    └── variable: abc.a [type=string]
+ │    │    └── variable: abc.a [type=string]
+ │    └── aggregations
+ └── projections
+      └── function: concat [type=NULL]
+           ├── function: concat [type=NULL]
+           │    ├── variable: kv.s [type=string]
+           │    └── variable: abc.a [type=string]
+           └── variable: abc.a [type=string]
+
+build
+SELECT CONCAT(CONCAT(s, a), s) FROM kv, abc GROUP BY CONCAT(s, a), a
+----
+error: column "kv.s" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT k < w AND v != 5 FROM kv GROUP BY k < w, v
+----
+project
+ ├── columns: column6:bool:null:6
+ ├── group-by
+ │    ├── columns: kv.v:int:null:2 column5:bool:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── groupings
+ │    │    ├── lt [type=bool]
+ │    │    │    ├── variable: kv.k [type=int]
+ │    │    │    └── variable: kv.w [type=int]
+ │    │    └── variable: kv.v [type=int]
+ │    └── aggregations
+ └── projections
+      └── and [type=bool]
+           ├── lt [type=bool]
+           │    ├── variable: kv.k [type=int]
+           │    └── variable: kv.w [type=int]
+           └── ne [type=bool]
+                ├── variable: kv.v [type=int]
+                └── const: 5 [type=int]
+
+build
+SELECT k < w AND k < v FROM kv GROUP BY k < w, v
+----
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+
+exec-ddl
+CREATE TABLE foo (bar JSON, baz JSON)
+----
+table foo
+  bar jsonb NULL
+  baz jsonb NULL
+  rowid int NOT NULL (hidden)
+
+build
+SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
+----
+project
+ ├── columns: column8:bool:null:8
+ ├── group-by
+ │    ├── columns: foo.baz:jsonb:null:5 column7:bool:null:7
+ │    ├── inner-join
+ │    │    ├── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3 foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    ├── scan
+ │    │    │    └── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    └── true [type=bool]
+ │    ├── groupings
+ │    │    ├── contains [type=bool]
+ │    │    │    ├── variable: foo.bar [type=jsonb]
+ │    │    │    └── variable: foo.baz [type=jsonb]
+ │    │    └── variable: foo.baz [type=jsonb]
+ │    └── aggregations
+ └── projections
+      └── and [type=bool]
+           ├── contains [type=bool]
+           │    ├── variable: foo.bar [type=jsonb]
+           │    └── variable: foo.baz [type=jsonb]
+           └── contains [type=bool]
+                ├── variable: foo.baz [type=jsonb]
+                └── variable: foo.baz [type=jsonb]
+
+build
+SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
+----
+error: column "foo.bar" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT b.baz <@ a.bar AND b.baz <@ b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
+----
+project
+ ├── columns: column8:bool:null:8
+ ├── group-by
+ │    ├── columns: foo.baz:jsonb:null:5 column7:bool:null:7
+ │    ├── inner-join
+ │    │    ├── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3 foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    ├── scan
+ │    │    │    └── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    └── true [type=bool]
+ │    ├── groupings
+ │    │    ├── contains [type=bool]
+ │    │    │    ├── variable: foo.bar [type=jsonb]
+ │    │    │    └── variable: foo.baz [type=jsonb]
+ │    │    └── variable: foo.baz [type=jsonb]
+ │    └── aggregations
+ └── projections
+      └── and [type=bool]
+           ├── contains [type=bool]
+           │    ├── variable: foo.bar [type=jsonb]
+           │    └── variable: foo.baz [type=jsonb]
+           └── contains [type=bool]
+                ├── variable: foo.baz [type=jsonb]
+                └── variable: foo.baz [type=jsonb]
+
+exec-ddl
+CREATE TABLE times (t time PRIMARY KEY)
+----
+table times
+  t time NOT NULL
+
+build
+SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) FROM times a, times b
+  GROUP BY date_trunc('second', a.t), date_trunc('minute', b.t)
+----
+project
+ ├── columns: column5:interval:null:5
+ ├── group-by
+ │    ├── columns: column3:interval:null:3 column4:interval:null:4
+ │    ├── inner-join
+ │    │    ├── columns: times.t:time:1 times.t:time:2
+ │    │    ├── scan
+ │    │    │    └── columns: times.t:time:1
+ │    │    ├── scan
+ │    │    │    └── columns: times.t:time:2
+ │    │    └── true [type=bool]
+ │    ├── groupings
+ │    │    ├── function: date_trunc [type=NULL]
+ │    │    │    ├── const: 'second' [type=string]
+ │    │    │    └── variable: times.t [type=time]
+ │    │    └── function: date_trunc [type=NULL]
+ │    │         ├── const: 'minute' [type=string]
+ │    │         └── variable: times.t [type=time]
+ │    └── aggregations
+ └── projections
+      └── minus [type=NULL]
+           ├── function: date_trunc [type=NULL]
+           │    ├── const: 'second' [type=string]
+           │    └── variable: times.t [type=time]
+           └── function: date_trunc [type=NULL]
+                ├── const: 'minute' [type=string]
+                └── variable: times.t [type=time]
+
+build
+SELECT NOT b FROM bools GROUP BY NOT b
+----
+group-by
+ ├── columns: column3:bool:null:3
+ ├── scan
+ │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ ├── groupings
+ │    └── not [type=bool]
+ │         └── variable: bools.b [type=bool]
+ └── aggregations
+
+build
+SELECT b FROM bools GROUP BY NOT b
+----
+error: column "bools.b" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT NOT b FROM bools GROUP BY b
+----
+project
+ ├── columns: column3:bool:null:3
+ ├── group-by
+ │    ├── columns: bools.b:bool:null:1
+ │    ├── scan
+ │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    ├── groupings
+ │    │    └── variable: bools.b [type=bool]
+ │    └── aggregations
+ └── projections
+      └── not [type=bool]
+           └── variable: bools.b [type=bool]
+
+build
+SELECT +k * (-w) FROM kv GROUP BY +k, -w
+----
+project
+ ├── columns: column7:int:null:7
+ ├── group-by
+ │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── groupings
+ │    │    ├── unary-plus [type=int]
+ │    │    │    └── variable: kv.k [type=int]
+ │    │    └── unary-minus [type=int]
+ │    │         └── variable: kv.w [type=int]
+ │    └── aggregations
+ └── projections
+      └── mult [type=int]
+           ├── unary-plus [type=int]
+           │    └── variable: kv.k [type=int]
+           └── unary-minus [type=int]
+                └── variable: kv.w [type=int]
+
+build
+SELECT k * (-w) FROM kv GROUP BY +k, -w
+----
+error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT +k * (-w) FROM kv GROUP BY k, w
+----
+project
+ ├── columns: column5:int:null:5
+ ├── group-by
+ │    ├── columns: kv.k:int:null:1 kv.w:int:null:3
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── groupings
+ │    │    ├── variable: kv.k [type=int]
+ │    │    └── variable: kv.w [type=int]
+ │    └── aggregations
+ └── projections
+      └── mult [type=int]
+           ├── unary-plus [type=int]
+           │    └── variable: kv.k [type=int]
+           └── unary-minus [type=int]
+                └── variable: kv.w [type=int]
