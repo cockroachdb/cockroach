@@ -64,6 +64,12 @@ func repoRoot() string {
 	return root.Dir
 }
 
+// SourceBinary returns the path of the cockroach binary that was built with the
+// local source.
+func SourceBinary() string {
+	return filepath.Join(repoRoot(), "cockroach")
+}
+
 const listeningURLFile = "cockroachdb-url"
 
 // IsUnavailableError returns true iff the error corresponds to a GRPC
@@ -134,7 +140,7 @@ func (s *seqGen) Next() int32 {
 // New creates a Cluster with the given configuration.
 func New(cfg ClusterConfig) *Cluster {
 	if cfg.Binary == "" {
-		cfg.Binary = filepath.Join(repoRoot(), "cockroach")
+		cfg.Binary = SourceBinary()
 	}
 	return &Cluster{
 		Cfg:     cfg,
@@ -309,6 +315,12 @@ func (c *Cluster) makeNode(ctx context.Context, nodeIdx int, cfg NodeConfig) (*N
 	return n, ch
 }
 
+// ReplaceBinary replaces the binary that will be used for the specified node
+// after its next restart.
+func (c *Cluster) ReplaceBinary(nodeIdx int, bin string) {
+	c.Nodes[nodeIdx].Cfg.ExtraArgs[0] = bin
+}
+
 // waitForFullReplication waits for the cluster to be fully replicated.
 func (c *Cluster) waitForFullReplication() {
 	for i := 1; true; i++ {
@@ -333,7 +345,7 @@ func (c *Cluster) isReplicated() (bool, string) {
 		// Versions <= 1.1 do not contain the crdb_internal table, which is what's used
 		// to determine whether a cluster has up-replicated. This is relevant for the
 		// version upgrade acceptance test. Just skip the replication check for this case.
-		if testutils.IsError(err, "relation \"crdb_internal.ranges\" does not exist") {
+		if testutils.IsError(err, "(table|relation) \"crdb_internal.ranges\" does not exist") {
 			return true, ""
 		}
 		log.Fatal(context.Background(), err)
@@ -610,10 +622,8 @@ func (n *Node) StartAsync(ctx context.Context, joins ...string) <-chan error {
 		return ch
 	}
 
-	isServing := make(chan struct{})
 	go func() {
 		n.waitUntilLive()
-		close(isServing)
 		ch <- nil
 	}()
 
@@ -691,11 +701,13 @@ func (n *Node) waitUntilLive() {
 		}
 		n.Unlock()
 		if pid == 0 {
-			return // process already quit
+			log.Info(ctx, "process already quit")
+			return
 		}
 
 		urlBytes, err := ioutil.ReadFile(n.listeningURLFile())
 		if err != nil {
+			log.Info(ctx, err)
 			continue
 		}
 
