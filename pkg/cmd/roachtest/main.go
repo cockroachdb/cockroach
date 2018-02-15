@@ -57,13 +57,15 @@ func main() {
 	runCmd.Flags().IntVarP(
 		&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 	runCmd.Flags().StringVar(
-		&artifacts, "artifacts", "", "path to artifacts directory")
-	runCmd.Flags().StringVar(
-		&cockroach, "cockroach", "", "path to cockroach binary to use")
-	runCmd.Flags().StringVar(
-		&workload, "workload", "", "path to workload binary to use")
+		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
 	runCmd.Flags().StringVar(
 		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
+	runCmd.Flags().StringVar(
+		&cockroach, "cockroach", "", "path to cockroach binary to use")
+	runCmd.Flags().StringVarP(
+		&username, "user", "u", username, "username to run under, detect if blank")
+	runCmd.Flags().StringVar(
+		&workload, "workload", "", "path to workload binary to use")
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
