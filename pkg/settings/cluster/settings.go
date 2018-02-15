@@ -16,7 +16,6 @@ package cluster
 
 import (
 	"context"
-	"math"
 	"sync/atomic"
 
 	"golang.org/x/time/rate"
@@ -92,7 +91,11 @@ var version = settings.RegisterStateMachineSetting(KeyVersionSetting,
 var BulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
-	math.MaxInt64,
+	// Recommended hardware is local SSDs, i.e. >300MB/s IO capacity. Limiting
+	// to some number less than that ensures we don't starve more critical
+	// traffic. See #22733 and cockroachdb/docs#2533.
+	//TODO(dt, mjibson): Tune this, as high as possible on recommended hardware.
+	250<<20,
 )
 
 // BulkIOWriteLimiterBurst is the burst for the BulkIOWriteLimiter cluster setting.
