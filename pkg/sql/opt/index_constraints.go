@@ -103,14 +103,20 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 ) (_ LogicalSpans, ok bool, tight bool) {
 	if op == inOp && isTupleOfConstants(val) {
 		// We assume that the values of the tuple are already ordered and distinct.
-		spans := make(LogicalSpans, len(val.children))
-		for i, v := range val.children {
+		spans := make(LogicalSpans, 0, len(val.children))
+		for _, v := range val.children {
 			datum := v.private.(tree.Datum)
 			if !c.verifyType(offset, datum.ResolvedType()) {
 				return nil, false, false
 			}
-			spans[i].Start = LogicalKey{Vals: tree.Datums{datum}, Inclusive: true}
-			spans[i].End = spans[i].Start
+			if datum == tree.DNull {
+				// Ignore NULLs - they can't match any values
+				continue
+			}
+			spans = append(spans, LogicalSpan{
+				Start: LogicalKey{Vals: tree.Datums{datum}, Inclusive: true},
+				End:   LogicalKey{Vals: tree.Datums{datum}, Inclusive: true},
+			})
 		}
 		if c.colInfos[offset].Direction == encoding.Descending {
 			// Reverse the order of the spans.
@@ -403,39 +409,52 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 	// in the left-hand tuple; tuplePos[i] is the position of column <offset+i> in
 	// the tuple.
 	var tuplePos []int
-Outer:
 	for i := offset; i < len(c.colInfos); i++ {
+		found := false
 		for j := range lhs.children {
 			if c.isIndexColumn(lhs.children[j], i) {
 				tuplePos = append(tuplePos, j)
-				continue Outer
+				found = true
+				break
 			}
 		}
-		break
+		if !found {
+			break
+		}
 	}
 	if len(tuplePos) == 0 {
 		return nil, false, false
 	}
 
 	// Create a span for each (tuple) value inside the right-hand side tuple.
-	spans := make(LogicalSpans, len(rhs.children))
-	for i, valTuple := range rhs.children {
+	spans := make(LogicalSpans, 0, len(rhs.children))
+	for _, valTuple := range rhs.children {
 		if valTuple.op != tupleOp {
 			return nil, false, false
 		}
 		vals := make(tree.Datums, len(tuplePos))
-		for j, pos := range tuplePos {
+		for i, pos := range tuplePos {
 			val := valTuple.children[pos]
 			if val.op != constOp {
 				return nil, false, false
 			}
-			vals[j] = val.private.(tree.Datum)
-			if !c.verifyType(offset+j, vals[j].ResolvedType()) {
+			datum := val.private.(tree.Datum)
+			if !c.verifyType(offset+i, datum.ResolvedType()) {
 				return nil, false, false
 			}
+			vals[i] = datum
 		}
-		spans[i].Start = LogicalKey{Vals: vals, Inclusive: true}
-		spans[i].End = spans[i].Start
+		containsNull := false
+		for _, d := range vals {
+			containsNull = containsNull || (d == tree.DNull)
+		}
+		// If the tuple contains a NULL, ignore it (it can't match any values).
+		if !containsNull {
+			spans = append(spans, LogicalSpan{
+				Start: LogicalKey{Vals: vals, Inclusive: true},
+				End:   LogicalKey{Vals: vals, Inclusive: true},
+			})
+		}
 	}
 
 	// Sort and de-duplicate the values.

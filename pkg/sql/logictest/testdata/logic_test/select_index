@@ -1012,3 +1012,41 @@ render           0  render      ·         ·              (x, y)               
       │          2  ·           spans     /!NULL-/4 /5-  ·                                        ·
       └── scan   2  scan        ·         ·              (x, y, rowid[hidden,omitted])            ·
 ·                2  ·           table     xy@primary     ·                                        ·
+
+# Regression tests for #22670.
+statement ok
+CREATE INDEX xy_idx ON xy (x, y)
+
+statement ok
+INSERT INTO xy VALUES (NULL, NULL), (1, NULL), (NULL, 1), (1, 1)
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE x IN (NULL, 1, 2)
+----
+render     0  render  ·         ·            (x, y)                         x!=NULL
+ │         0  ·       render 0  test.xy.x    ·                              ·
+ │         0  ·       render 1  test.xy.y    ·                              ·
+ └── scan  1  scan    ·         ·            (x, y, rowid[hidden,omitted])  x!=NULL; rowid!=NULL; weak-key(x,y,rowid)
+·          1  ·       table     xy@xy_idx    ·                              ·
+·          1  ·       spans     /1-/2 /2-/3  ·                              ·
+
+query II
+SELECT * FROM xy WHERE x IN (NULL, 1, 2)
+----
+1  NULL
+1  1
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
+----
+render     0  render  ·         ·                    (x, y)                         x=CONST; y!=NULL
+ │         0  ·       render 0  test.xy.x            ·                              ·
+ │         0  ·       render 1  test.xy.y            ·                              ·
+ └── scan  1  scan    ·         ·                    (x, y, rowid[hidden,omitted])  x=CONST; y!=NULL; rowid!=NULL; key(y,rowid)
+·          1  ·       table     xy@xy_idx            ·                              ·
+·          1  ·       spans     /1/1-/1/2 /1/2-/1/3  ·                              ·
+
+query II
+SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
+----
+1  1
