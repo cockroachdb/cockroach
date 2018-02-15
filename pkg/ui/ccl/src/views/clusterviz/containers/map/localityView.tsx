@@ -38,7 +38,7 @@ const LIVENESS_TOTAL_WIDTH = LIVENESS_ICON_RADIUS * 2 + LIVENESS_ICON_SPACING;
 class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> {
   onClick = () => {
     const localityTree = this.props.localityTree;
-    const destination = "/overview/" + generateLocalityRoute(localityTree.tiers);
+    const destination = CLUSTERVIZ_ROOT + generateLocalityRoute(localityTree.tiers);
     this.props.router.push(destination);
   }
 
