@@ -1,3 +1,4 @@
+import d3 from "d3";
 import React from "react";
 
 import { SparklineMetricsDataComponent } from "src/views/clusterviz/containers/map/sparkline";
@@ -13,7 +14,7 @@ export function QpsSparkline(props: QpsSparklineProps) {
 
   return (
     <MetricsDataProvider id={key}>
-      <SparklineMetricsDataComponent>
+      <SparklineMetricsDataComponent formatCurrentValue={d3.format(".1f")}>
         <Metric name="cr.node.sql.select.count" sources={props.nodes} nonNegativeRate />
         <Metric name="cr.node.sql.insert.count" sources={props.nodes} nonNegativeRate />
         <Metric name="cr.node.sql.update.count" sources={props.nodes} nonNegativeRate />
