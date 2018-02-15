@@ -86,6 +86,7 @@ type PlanHookState interface {
 		ctx context.Context, namesE tree.Exprs, ifExists bool, isRole bool, opName string,
 	) (*DropUserNode, error)
 	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
+	BumpRoleMembershipTableVersion(ctx context.Context) error
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
