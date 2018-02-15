@@ -23,12 +23,12 @@ import (
 func init() {
 	runRoachmart := func(t *test, partition bool) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, "--geo", "--nodes", "9")
+		c := newCluster(ctx, t, 9, "--geo")
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "<cockroach>")
 		c.Put(ctx, workload, "<workload>")
-		c.Start(ctx, 1, 9)
+		c.Start(ctx)
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {

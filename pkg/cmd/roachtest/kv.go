@@ -24,14 +24,14 @@ import (
 func init() {
 	runKV := func(t *test, percent, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, "-n", nodes+1)
+		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "<cockroach>")
 		c.Put(ctx, workload, "<workload>")
-		c.Start(ctx, 1, nodes)
+		c.Start(ctx, c.Range(1, nodes))
 
-		m := newMonitor(ctx, c)
+		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency=384")
 			duration := " --duration=" + ifLocal("10s", "10m")
@@ -43,7 +43,7 @@ func init() {
 			c.Run(ctx, nodes+1, cmd)
 			return nil
 		})
-		m.Wait(1, nodes)
+		m.Wait()
 	}
 
 	for _, p := range []int{0, 95} {
@@ -61,14 +61,14 @@ func init() {
 func init() {
 	runSplits := func(t *test, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, "-n", nodes+1)
+		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "<cockroach>")
 		c.Put(ctx, workload, "<workload>")
-		c.Start(ctx, 1, nodes)
+		c.Start(ctx, c.Range(1, nodes))
 
-		m := newMonitor(ctx, c)
+		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency=384")
 			splits := " --splits=" + ifLocal("2000", "500000")
@@ -80,7 +80,7 @@ func init() {
 			c.Run(ctx, nodes+1, cmd)
 			return nil
 		})
-		m.Wait(1, nodes)
+		m.Wait()
 	}
 
 	tests.Add("splits/nodes=3", func(t *test) {
@@ -91,7 +91,7 @@ func init() {
 func init() {
 	runScalability := func(t *test, percent, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, "-n", nodes+1, "--local-ssd", "--machine-type", "n1-highcpu-8")
+		c := newCluster(ctx, t, nodes+1, "--local-ssd", "--machine-type", "n1-highcpu-8")
 		defer c.Destroy(ctx)
 
 		if !local {
@@ -114,10 +114,10 @@ func init() {
 
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
-			c.Wipe(ctx, 1, nodes)
-			c.Start(ctx, 1, nodes)
+			c.Wipe(ctx, c.Range(1, nodes))
+			c.Start(ctx, c.Range(1, nodes))
 
-			m := newMonitor(ctx, c)
+			m := newMonitor(ctx, c, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf("<workload> run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
@@ -126,7 +126,7 @@ func init() {
 				c.Run(ctx, nodes+1, cmd)
 				return nil
 			})
-			m.Wait(1, nodes)
+			m.Wait()
 		}
 	}
 
