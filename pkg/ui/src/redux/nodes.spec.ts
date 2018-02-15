@@ -1,6 +1,8 @@
 import { assert } from "chai";
 
-import { nodeDisplayNameByIDSelector } from "./nodes";
+import { NodeStatus$Properties } from "src/util/proto";
+
+import { nodeDisplayNameByIDSelector, selectCommissionedNodeStatuses, LivenessStatus } from "./nodes";
 import { nodesReducerObj  } from "./apiReducers";
 import { createAdminUIStore } from "./state";
 
@@ -65,6 +67,61 @@ describe("node data selectors", function() {
     it("returns empty collection for empty state", function() {
       const store = createAdminUIStore();
       assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
+    });
+  });
+});
+
+describe("selectCommissionedNodeStatuses", function() {
+  const nodeStatuses: NodeStatus$Properties[] = [
+    {
+      desc: {
+        node_id: 1,
+      },
+    },
+  ];
+
+  function makeStateForLiveness(livenessStatuses: { [id: string]: LivenessStatus }) {
+    return {
+      cachedData: {
+        nodes: {
+          data: nodeStatuses,
+          inFlight: false,
+          valid: true,
+        },
+        liveness: {
+          data: {
+            statuses: livenessStatuses,
+          },
+          inFlight: false,
+          valid: true,
+        },
+      },
+    };
+  }
+
+  it("selects all nodes when liveness status missing", function() {
+    const state = makeStateForLiveness({});
+
+    const result = selectCommissionedNodeStatuses(state);
+
+    assert.deepEqual(result, nodeStatuses);
+  });
+
+  const testCases: [string, LivenessStatus, NodeStatus$Properties[]][] = [
+    ["excludes decommissioned nodes", LivenessStatus.DECOMMISSIONED, []],
+    ["includes decommissioning nodes", LivenessStatus.DECOMMISSIONING, nodeStatuses],
+    ["includes live nodes", LivenessStatus.LIVE, nodeStatuses],
+    ["includes unavailable nodes", LivenessStatus.UNAVAILABLE, nodeStatuses],
+    ["includes dead nodes", LivenessStatus.DEAD, nodeStatuses],
+  ];
+
+  testCases.forEach(([name, status, expected]) => {
+    it(name, function() {
+      const state = makeStateForLiveness({ "1": status });
+
+      const result = selectCommissionedNodeStatuses(state);
+
+      assert.deepEqual(result, expected);
     });
   });
 });
