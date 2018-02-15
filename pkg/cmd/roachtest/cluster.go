@@ -91,12 +91,12 @@ func initBinaries() {
 	var err error
 	cockroach, err = findBinary(cockroach, "cockroach")
 	if err != nil {
-		fmt.Fprint(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	workload, err = findBinary(workload, "workload")
 	if err != nil {
-		fmt.Fprint(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
@@ -393,7 +393,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	}
 }
 
-// wipe a subset of the nodes in a cluster. See cluster.Start() for a
+// Wipe a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
 func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
