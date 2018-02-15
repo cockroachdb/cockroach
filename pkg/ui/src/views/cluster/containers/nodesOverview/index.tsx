@@ -98,7 +98,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 return (
                   <div className="sort-table__unbounded-column">
                     <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
-                    <Link to={`/cluster/nodes/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
+                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
               },
@@ -145,7 +145,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
             // Logs - a link to the logs data for this node.
             {
               title: "Logs",
-              cell: (ns) => <Link to={`/cluster/nodes/${ns.desc.node_id}/logs`}>Logs</Link>,
+              cell: (ns) => <Link to={`/node/${ns.desc.node_id}/logs`}>Logs</Link>,
               className: "expand-link",
             },
           ]} />
@@ -205,7 +205,7 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
                         "'server.time_until_store_dead'"
                       }
                     />
-                    <Link to={`/cluster/nodes/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
+                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
                   </div>
                 );
               },
@@ -390,7 +390,7 @@ function NodesPage() {
   return (
     <div>
       <section className="section parent-link">
-        <Link to="/cluster">&lt; Back to Cluster</Link>
+        <Link to="/">&lt; Back to Cluster</Link>
       </section>
       <NodesMainConnected />
     </div>

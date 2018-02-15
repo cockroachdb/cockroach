@@ -104,8 +104,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     },
   );
 
-  static title() {
-    return "Cluster Overview";
+  static title({ params }: { params: { [name: string]: any } }) {
+    const dashboard = params[dashboardNameAttr];
+
+    if (dashboard in dashboards) {
+      return dashboards[dashboard].label + " Dashboard";
+    }
+
+    return "Cluster Metrics";
   }
 
   refresh(props = this.props) {
@@ -119,9 +125,9 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
 
   setClusterPath(nodeID: string, dashboardName: string) {
     if (!_.isString(nodeID) || nodeID === "") {
-      this.context.router.push(`/cluster/all/${dashboardName}`);
+      this.context.router.push(`/metrics/${dashboardName}/cluster`);
     } else {
-      this.context.router.push(`/cluster/node/${nodeID}/${dashboardName}`);
+      this.context.router.push(`/metrics/${dashboardName}/node/${nodeID}`);
     }
   }
 

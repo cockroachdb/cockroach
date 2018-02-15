@@ -148,7 +148,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
         nodeIDIndex[id] = i + 1;
         columns.push((
           <th key={i}>
-            <Link className="debug-link" to={"/cluster/nodes/" + id}>Node {id}</Link>
+            <Link className="debug-link" to={"/nodes/" + id}>Node {id}</Link>
           </th>
         ));
       });

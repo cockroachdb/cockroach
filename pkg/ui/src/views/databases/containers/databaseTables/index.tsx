@@ -72,7 +72,7 @@ class DatabaseSummaryTables extends DatabaseSummaryBase {
                         cell: (tableInfo) => {
                           return (
                             <div className="sort-table__unbounded-column">
-                              <Link to={`/databases/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
+                              <Link to={`/database/${dbID}/table/${tableInfo.name}`}>{tableInfo.name}</Link>
                             </div>
                           );
                         },

@@ -50,7 +50,7 @@ export default class extends React.Component<{}, {}> {
     return <nav className="navigation-bar">
       <ul className="navigation-bar__list">
         <IconLink to="/overview" icon={homeIcon} title="Overview" />
-        <IconLink to="/cluster" icon={metricsIcon} title="Cluster" />
+        <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
         <IconLink to="/databases" icon={databasesIcon} title="Databases"/>
         <IconLink to="/jobs" icon={jobsIcon} title="Jobs"/>
       </ul>
