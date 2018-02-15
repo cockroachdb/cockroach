@@ -454,10 +454,6 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			break
 		}
 	case In, NotIn:
-		if expr.TypedLeft() == DNull {
-			return DNull
-		}
-
 		// If the right tuple in an In or NotIn comparison expression is constant, it can
 		// be normalized.
 		tuple, ok := expr.Right.(*DTuple)
@@ -470,6 +466,14 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			if len(tupleCopy.D) == 1 && tupleCopy.D[0] == DNull {
 				return DNull
 			}
+			if len(tupleCopy.D) == 0 {
+				// NULL IN <empty-tuple> is false.
+				return DBoolFalse
+			}
+			if expr.TypedLeft() == DNull {
+				// NULL IN <non-empty-tuple> is NULL.
+				return DNull
+			}
 
 			exprCopy := *expr
 			expr = &exprCopy
@@ -479,44 +483,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 		left := expr.TypedLeft()
 		right := expr.TypedRight()
 
-		if v.isConst(right) {
-			var dright Datum
-			dright, v.err = right.Eval(v.ctx)
-			if v.err != nil {
-				return expr
-			}
-			if dright == DNull {
-				return NewTypedComparisonExpr(expr.Operator, left, DNull)
-			}
-			switch expr.Operator {
-			case IsDistinctFrom:
-				// IS NOT exprs handle NULL and return a bool while NE exprs propagate
-				// it (e.g. NULL IS NOT b -> false, NULL != b -> NULL). To provide the
-				// same semantics, we catch NULL values with an OR expr. Now the three
-				// cases are:
-				//  a := b:    (a != b) OR (a IS NOT DISTINCT FROM NULL) -> false OR false -> false
-				//  a := !b:   (a != b) OR (a IS NOT DISTINCT FROM NULL) -> true  OR false -> true
-				//  a := NULL: (a != b) OR (a IS NOT DISTINCT FROM NULL) -> NULL  OR true  -> true
-				return NewTypedOrExpr(
-					NewTypedComparisonExpr(NE, expr.TypedLeft(), dright),
-					NewTypedComparisonExpr(IsNotDistinctFrom, expr.TypedLeft(), DNull),
-				)
-			case IsNotDistinctFrom:
-				// IS exprs handle NULL and return a bool while EQ exprs propagate
-				// it (e.g. NULL IS b -> false, NULL = b -> NULL). To provide the
-				// same semantics, we catch NULL values with an AND expr. Now the
-				// three cases are:
-				//  a := b:    (a = b) AND (a IS DISTINCT FROM NULL) -> true  AND true  -> true
-				//  a := !b:   (a = b) AND (a IS DISTINCT FROM NULL) -> false AND true  -> false
-				//  a := NULL: (a = b) AND (a IS DISTINCT FROM NULL) -> NULL  AND false -> false
-				return NewTypedAndExpr(
-					NewTypedComparisonExpr(EQ, left, dright),
-					NewTypedComparisonExpr(IsDistinctFrom, left, DNull),
-				)
-			}
-		}
-
-		if v.isConst(left) {
+		if v.isConst(left) && !v.isConst(right) {
 			// Switch operand order so that constant expression is on the right.
 			// This helps support index selection rules.
 			return NewTypedComparisonExpr(expr.Operator, right, left)

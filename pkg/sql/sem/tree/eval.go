@@ -1480,6 +1480,10 @@ type CmpOp struct {
 	fn func(*EvalContext, Datum, Datum) (Datum, error)
 
 	types TypeList
+	// If nullableArgs is false, the operator returns NULL
+	// whenever either argument is NULL.
+	nullableArgs bool
+	isPreferred  bool
 }
 
 func (op CmpOp) params() TypeList {
@@ -1496,8 +1500,8 @@ func (op CmpOp) returnType() ReturnTyper {
 	return cmpOpReturnType
 }
 
-func (CmpOp) preferred() bool {
-	return false
+func (op CmpOp) preferred() bool {
+	return op.isPreferred
 }
 
 func init() {
@@ -1535,23 +1539,27 @@ func (o cmpOpOverload) lookupImpl(left, right types.T) (CmpOp, bool) {
 }
 
 func makeCmpOpOverload(
-	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b types.T,
+	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b types.T, nullableArgs bool,
 ) CmpOp {
 	return CmpOp{
-		LeftType:  a,
-		RightType: b,
-		fn:        fn,
+		LeftType:     a,
+		RightType:    b,
+		fn:           fn,
+		nullableArgs: nullableArgs,
 	}
 }
 
 func makeEqFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarEQFn, a, b)
+	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* nullableArgs */)
 }
 func makeLtFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLTFn, a, b)
+	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* nullableArgs */)
 }
 func makeLeFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLEFn, a, b)
+	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* nullableArgs */)
+}
+func makeIsFn(a, b types.T) CmpOp {
+	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* nullableArgs */)
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
@@ -1679,6 +1687,60 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			RightType: types.FamTuple,
 			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
+			},
+		},
+	},
+
+	IsNotDistinctFrom: {
+		CmpOp{
+			LeftType:     types.Null,
+			RightType:    types.Null,
+			fn:           cmpOpScalarIsFn,
+			nullableArgs: true,
+			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
+			isPreferred: true,
+		},
+		// Single-type comparisons.
+		makeIsFn(types.Bool, types.Bool),
+		makeIsFn(types.Bytes, types.Bytes),
+		makeIsFn(types.Date, types.Date),
+		makeIsFn(types.Decimal, types.Decimal),
+		makeIsFn(types.FamCollatedString, types.FamCollatedString),
+		makeIsFn(types.Float, types.Float),
+		makeIsFn(types.INet, types.INet),
+		makeIsFn(types.Int, types.Int),
+		makeIsFn(types.Interval, types.Interval),
+		makeIsFn(types.JSON, types.JSON),
+		makeIsFn(types.Oid, types.Oid),
+		makeIsFn(types.String, types.String),
+		makeIsFn(types.Time, types.Time),
+		makeIsFn(types.Timestamp, types.Timestamp),
+		makeIsFn(types.TimestampTZ, types.TimestampTZ),
+		makeIsFn(types.UUID, types.UUID),
+
+		// Mixed-type comparisons.
+		makeIsFn(types.Date, types.Timestamp),
+		makeIsFn(types.Date, types.TimestampTZ),
+		makeIsFn(types.Decimal, types.Float),
+		makeIsFn(types.Decimal, types.Int),
+		makeIsFn(types.Float, types.Decimal),
+		makeIsFn(types.Float, types.Int),
+		makeIsFn(types.Int, types.Decimal),
+		makeIsFn(types.Int, types.Float),
+		makeIsFn(types.Timestamp, types.Date),
+		makeIsFn(types.Timestamp, types.TimestampTZ),
+		makeIsFn(types.TimestampTZ, types.Date),
+		makeIsFn(types.TimestampTZ, types.Timestamp),
+
+		// Tuple comparison.
+		CmpOp{
+			LeftType:  types.FamTuple,
+			RightType: types.FamTuple,
+			fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
+				if left == DNull || right == DNull {
+					return MakeDBool(left == DNull && right == DNull), nil
+				}
+				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), IsNotDistinctFrom), nil
 			},
 		},
 	},
@@ -1844,7 +1906,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	switch op {
-	case EQ:
+	case EQ, IsNotDistinctFrom:
 		return MakeDBool(cmp == 0)
 	case LT:
 		return MakeDBool(cmp < 0)
@@ -1860,8 +1922,14 @@ func cmpOpScalarFn(ctx *EvalContext, left, right Datum, op ComparisonOperator) D
 	// be handled differently during SQL comparison evaluation than they should when
 	// ordering Datum values.
 	if left == DNull || right == DNull {
-		// If either Datum is NULL, the result of the comparison is NULL.
-		return DNull
+		switch op {
+		case IsNotDistinctFrom:
+			return MakeDBool((left == DNull) == (right == DNull))
+
+		default:
+			// If either Datum is NULL, the result of the comparison is NULL.
+			return DNull
+		}
 	}
 	cmp := left.Compare(ctx, right)
 	return boolFromCmp(cmp, op)
@@ -1876,6 +1944,9 @@ func cmpOpScalarLTFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 func cmpOpScalarLEFn(ctx *EvalContext, left, right Datum) (Datum, error) {
 	return cmpOpScalarFn(ctx, left, right, LE), nil
 }
+func cmpOpScalarIsFn(ctx *EvalContext, left, right Datum) (Datum, error) {
+	return cmpOpScalarFn(ctx, left, right, IsNotDistinctFrom), nil
+}
 
 func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) Datum {
 	cmp := 0
@@ -1885,26 +1956,34 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 		// Like with cmpOpScalarFn, check for values that need to be handled
 		// differently than when ordering Datums.
 		if leftElem == DNull || rightElem == DNull {
-			if op == EQ {
+			switch op {
+			case EQ:
 				// If either Datum is NULL and the op is EQ, we continue the
 				// comparison and the result is only NULL if the other (non-NULL)
 				// elements are equal. This is because NULL is thought of as "unknown",
 				// so a NULL equality comparison does not prevent the equality from
 				// being proven false, but does prevent it from being proven true.
 				sawNull = true
-				continue
-			} else {
-				// If either Datum is NULL and the op is not EQ, we short-circuit
-				// the evaluation and the result of the comparison is NULL. This is
-				// because NULL is thought of as "unknown" and tuple inequality is
-				// defined lexicographically, so once a NULL comparison is seen,
-				// the result of the entire tuple comparison is unknown.
+
+			case IsNotDistinctFrom:
+				// For IS NOT DISTINCT FROM, NULLs are "equal".
+				if leftElem != DNull || rightElem != DNull {
+					return DBoolFalse
+				}
+
+			default:
+				// If either Datum is NULL and the op is not EQ or IS NOT DISTINCT FROM,
+				// we short-circuit the evaluation and the result of the comparison is
+				// NULL. This is because NULL is thought of as "unknown" and tuple
+				// inequality is defined lexicographically, so once a NULL comparison is
+				// seen, the result of the entire tuple comparison is unknown.
 				return DNull
 			}
-		}
-		cmp = leftElem.Compare(ctx, rightElem)
-		if cmp != 0 {
-			break
+		} else {
+			cmp = leftElem.Compare(ctx, rightElem)
+			if cmp != 0 {
+				break
+			}
 		}
 	}
 	b := boolFromCmp(cmp, op)
@@ -1922,42 +2001,61 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 		LeftType:  typ,
 		RightType: types.FamTuple,
 		fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
-			if arg == DNull {
+			vtuple := values.(*DTuple)
+			// If the tuple was sorted during normalization, we can perform an
+			// efficient binary search to find if the arg is in the tuple (as
+			// long as the arg doesn't contain any NULLs).
+			if len(vtuple.D) == 0 {
+				// If the rhs tuple is empty, the result is always false (even if arg is
+				// or contains NULL).
 				return DBoolFalse, nil
 			}
-
-			// If the tuple was sorted during normalization, we can perform
-			// an efficient binary search to find if the arg is in the tuple.
-			vtuple := values.(*DTuple)
-			if vtuple.Sorted {
-				_, found := vtuple.SearchSorted(ctx, arg)
-				if !found && len(vtuple.D) > 0 && vtuple.D[0] == DNull {
-					// If the tuple contained any null elements and no matches are found,
-					// the result of IN will be null. The null element will at the front
-					// if the tuple is sorted because null is less than any non-null value.
-					return DNull, nil
-				}
-				return MakeDBool(DBool(found)), nil
+			if arg == DNull {
+				return DNull, nil
+			}
+			argTuple, argIsTuple := arg.(*DTuple)
+			if vtuple.Sorted() && !(argIsTuple && argTuple.ContainsNull()) {
+				// The right-hand tuple is already sorted and contains no NULLs, and the
+				// left side is not NULL (e.g. `NULL IN (1, 2)`) or a tuple that
+				// contains NULL (e.g. `(1, NULL) IN ((1, 2), (3, 4))`).
+				//
+				// We can use binary search to make a determination in this case. This
+				// is the common case when tuples don't contain NULLs.
+				_, result := vtuple.SearchSorted(ctx, arg)
+				return MakeDBool(DBool(result)), nil
 			}
 
-			// If the tuple was not sorted, which happens in cases where it
-			// is not constant across rows, then we must fall back to iterating
-			// through the entire tuple.
 			sawNull := false
-			for _, val := range vtuple.D {
-				if val == DNull {
-					sawNull = true
-				} else if val.Compare(ctx, arg) == 0 {
-					return DBoolTrue, nil
+			if !argIsTuple {
+				// The left-hand side is not a tuple, e.g. `1 IN (1, 2)`.
+				for _, val := range vtuple.D {
+					if val == DNull {
+						sawNull = true
+					} else if val.Compare(ctx, arg) == 0 {
+						return DBoolTrue, nil
+					}
+				}
+			} else {
+				// The left-hand side is a tuple, e.g. `(1, 2) IN ((1, 2), (3, 4))`.
+				for _, val := range vtuple.D {
+					var res Datum
+					if argIsTuple {
+						// Use the EQ function which properly handles NULLs.
+						res = cmpOpTupleFn(ctx, *argTuple, *val.(*DTuple), EQ)
+					}
+					if res == DNull {
+						sawNull = true
+					} else if res == DBoolTrue {
+						return DBoolTrue, nil
+					}
 				}
 			}
 			if sawNull {
-				// If the tuple contains any null elements and no matches are found, the
-				// result of IN will be null.
 				return DNull, nil
 			}
 			return DBoolFalse, nil
 		},
+		nullableArgs: true,
 	}
 }
 
@@ -3128,17 +3226,6 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return nil, err
 	}
 
-	if left == DNull || right == DNull {
-		switch expr.Operator {
-		case IsDistinctFrom:
-			return MakeDBool(!DBool(left == DNull && right == DNull)), nil
-		case IsNotDistinctFrom:
-			return MakeDBool(left == DNull && right == DNull), nil
-		default:
-			return DNull, nil
-		}
-	}
-
 	op := expr.Operator
 	if op.hasSubOperator() {
 		var datums Datums
@@ -3154,6 +3241,9 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
+	if !expr.fn.nullableArgs && (newLeft == DNull || newRight == DNull) {
+		return DNull, nil
+	}
 	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
 	if err != nil {
 		return nil, err
@@ -3623,17 +3713,10 @@ func foldComparisonExpr(
 		// NotRegIMatch(left, right) is implemented as !RegIMatch(left, right)
 		return RegIMatch, left, right, false, true
 	case IsDistinctFrom:
-		// IsDistinctFrom(left, right) is implemented as !EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS DISTINCT FROM is needed
-		// before this expression fold.
-		return EQ, left, right, false, true
-	case IsNotDistinctFrom:
-		// IsNotDistinctFrom(left, right) is implemented as EQ(left, right)
-		//
-		// Note the special handling of NULLs and IS NOT DISTINCT FROM is needed
-		// before this expression fold.
-		return EQ, left, right, false, false
+		// IsDistinctFrom(left, right) is implemented as !IsNotDistinctFrom(left, right)
+		// Note: this seems backwards, but IS NOT DISTINCT FROM is an extended
+		// version of IS and IS DISTINCT FROM is an extended version of IS NOT.
+		return IsNotDistinctFrom, left, right, false, true
 	}
 	return op, left, right, false, false
 }
