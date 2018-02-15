@@ -463,6 +463,16 @@ func TestEval(t *testing.T) {
 		{`0 IS NOT DISTINCT FROM NULL`, `false`},
 		{`NULL IS NOT DISTINCT FROM NULL`, `true`},
 		{`NULL IS NOT DISTINCT FROM 1`, `false`},
+		{`(1, NULL) IS NOT DISTINCT FROM (1, NULL)`, `true`},
+		{`(1, NULL) IS DISTINCT FROM (1, NULL)`, `false`},
+		{`(NULL, 1) IS NOT DISTINCT FROM (NULL, 1)`, `true`},
+		{`(NULL, 1) IS DISTINCT FROM (NULL, 1)`, `false`},
+		{`(1, NULL) IS NOT DISTINCT FROM (2, NULL)`, `false`},
+		{`(1, NULL) IS DISTINCT FROM (2, NULL)`, `true`},
+		{`(NULL, 1) IS NOT DISTINCT FROM (NULL, 2)`, `false`},
+		{`(NULL, 1) IS DISTINCT FROM (NULL, 2)`, `true`},
+		{`((NULL, NULL), (1, NULL)) IS NOT DISTINCT FROM ((NULL, NULL), (1, NULL))`, `true`},
+		{`((NULL, NULL), (1, NULL)) IS DISTINCT FROM ((NULL, NULL), (1, NULL))`, `false`},
 		// IS expressions.
 		{`0 IS NULL`, `false`},
 		{`0 IS NOT NULL`, `true`},
@@ -626,8 +636,22 @@ func TestEval(t *testing.T) {
 		{`'12:00:00'::time IN ('12:00:00'::time)`, `true`},
 		{`'2010-09-28 12:00:00.1'::timestamp IN ('2010-09-28 12:00:00.1'::timestamp)`, `true`},
 		{`'34h'::interval IN ('34h'::interval)`, `true`},
-		{`(1,2) IN ((0+1,1+1), (3,4), (5,6))`, `true`},
+		{`(1, 2) IN ((0+1, 1+1), (3, 4), (5, 6))`, `true`},
 		{`(1, 2) IN ((2, 1), (3, 4))`, `false`},
+		{`1 IN (1, 2, NULL)`, `true`},
+		{`NULL IN (1, 2, NULL)`, `NULL`},
+		{`(1, 2) IN ((NULL, 2), (1, NULL), (1, 2))`, `true`},
+		{`(1, 2) IN ((1, NULL), (NULL, 2))`, `NULL`},
+		{`(1, NULL) IN ((1, NULL), (NULL, 2), (3, 4))`, `NULL`},
+		{`(1, NULL) IN ((NULL, 2), (3, 4))`, `NULL`},
+		{`(1, NULL) IN ((3, 4))`, `false`},
+		{`(NULL, 2) IN ((1, NULL), (NULL, 2), (3, 4))`, `NULL`},
+		{`(NULL, 2) IN ((1, NULL), (3, 4))`, `NULL`},
+		{`(NULL, 2) IN ((3, 4))`, `false`},
+		{`(NULL, NULL) IN ((NULL, NULL), (1, NULL), (NULL, 2), (3, 4))`, `NULL`},
+		{`(NULL, NULL) IN ((1, NULL), (NULL, 2), (3, 4))`, `NULL`},
+		{`(NULL, NULL) IN ((NULL, 2), (3, 4))`, `NULL`},
+		{`(NULL, NULL) IN ((3, 4))`, `NULL`},
 		// ANY, SOME, and ALL expressions.
 		{`1   = ANY ARRAY[]`, `false`},
 		{`1   = ANY (ARRAY[2, 3, 4])`, `false`},
@@ -1081,9 +1105,11 @@ func TestEval(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
+			t.Logf("Type checked expression: %s", typedExpr)
 			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
+			t.Logf("Normalized expression:   %s", typedExpr)
 			r, err := typedExpr.Eval(ctx)
 			if err != nil {
 				t.Fatalf("%s: %v", d.expr, err)

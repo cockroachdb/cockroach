@@ -239,7 +239,7 @@ func TestSimplifyExpr(t *testing.T) {
 		{`a IN (1, 1)`, `a IN (1)`, true},
 		{`a IN (2, 3, 1)`, `a IN (1, 2, 3)`, true},
 		{`a IN (1, NULL, 2, NULL)`, `a IN (NULL, 1, 2)`, true},
-		{`a IN (1, NULL) OR a IN (2, NULL)`, `a IN (NULL, 1, 2)`, true},
+		{`a IN (1, 2) OR a IN (2, 3)`, `a IN (1, 2, 3)`, true},
 
 		{`(a, b) IN ((1, 2))`, `(a, b) IN ((1, 2))`, true},
 		{`(a, b) IN ((1, 2), (1, 2))`, `(a, b) IN ((1, 2))`, true},
@@ -265,10 +265,6 @@ func TestSimplifyExpr(t *testing.T) {
 
 		{`c IS NULL`, `c IS NULL`, true},
 		{`c IS NOT NULL`, `c IS NOT NULL`, true},
-		{`c IS TRUE`, `c = true`, true},
-		{`c IS NOT TRUE`, `(c < true) OR (c IS NULL)`, true},
-		{`c IS FALSE`, `c = false`, true},
-		{`c IS NOT FALSE`, `(c > false) OR (c IS NULL)`, true},
 		{`c IS UNKNOWN`, `c IS NULL`, true},
 		{`c IS NOT UNKNOWN`, `c IS NOT NULL`, true},
 		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`, true},
@@ -341,8 +337,6 @@ func TestSimplifyNotExpr(t *testing.T) {
 		{`NOT i !~ 'foo'`, `true`, false, false},
 		{`NOT i ~* 'foo'`, `true`, false, false},
 		{`NOT i !~* 'foo'`, `true`, false, false},
-		{`NOT a IS DISTINCT FROM 1`, `a = 1`, true, false},
-		{`NOT a IS NOT DISTINCT FROM 1`, `(a != 1) OR (a IS NULL)`, true, false},
 		{`NOT a IS NULL`, `a IS NOT NULL`, true, true},
 		{`NOT a IS NOT NULL`, `a IS NULL`, true, true},
 		{`NOT (a != 1 AND b != 1)`, `(a = 1) OR (b = 1)`, true, true},

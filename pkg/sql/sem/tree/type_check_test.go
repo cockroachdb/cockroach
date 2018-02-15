@@ -117,18 +117,20 @@ func TestTypeCheck(t *testing.T) {
 		{`'-Inf'::decimal`, `'-Infinity':::DECIMAL::DECIMAL`},
 	}
 	for _, d := range testData {
-		expr, err := parser.ParseExpr(d.expr)
-		if err != nil {
-			t.Errorf("%s: %v", d.expr, err)
-			continue
-		}
-		ctx := tree.MakeSemaContext(false)
-		typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
-		if err != nil {
-			t.Errorf("%s: unexpected error %s", d.expr, err)
-		} else if s := tree.Serialize(typeChecked); s != d.expected {
-			t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-		}
+		t.Run(d.expr, func(t *testing.T) {
+			expr, err := parser.ParseExpr(d.expr)
+			if err != nil {
+				t.Fatalf("%s: %v", d.expr, err)
+			}
+			ctx := tree.MakeSemaContext(false)
+			typeChecked, err := tree.TypeCheck(expr, &ctx, types.Any)
+			if err != nil {
+				t.Fatalf("%s: unexpected error %s", d.expr, err)
+			}
+			if s := tree.Serialize(typeChecked); s != d.expected {
+				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+			}
+		})
 	}
 }
 
