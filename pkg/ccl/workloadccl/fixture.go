@@ -38,8 +38,8 @@ const (
 	fixtureGCSURIScheme = `gs`
 )
 
-// FixtureStore describes a storage place for fixtures.
-type FixtureStore struct {
+// FixtureConfig describes a storage place for fixtures.
+type FixtureConfig struct {
 	// GCSBucket is a Google Cloud Storage bucket.
 	GCSBucket string
 
@@ -54,7 +54,7 @@ type FixtureStore struct {
 	CSVServerURL string
 }
 
-func (s FixtureStore) objectPathToURI(folder string) string {
+func (s FixtureConfig) objectPathToURI(folder string) string {
 	return (&url.URL{
 		Scheme: fixtureGCSURIScheme,
 		Host:   s.GCSBucket,
@@ -65,7 +65,7 @@ func (s FixtureStore) objectPathToURI(folder string) string {
 // Fixture describes pre-computed data for a Generator, allowing quick
 // initialization of large clusters.
 type Fixture struct {
-	Store     FixtureStore
+	Config    FixtureConfig
 	Generator workload.Generator
 	Tables    []FixtureTable
 }
@@ -99,10 +99,10 @@ func serializeOptions(gen workload.Generator) string {
 	return buf.String()
 }
 
-func generatorToGCSFolder(store FixtureStore, gen workload.Generator) string {
+func generatorToGCSFolder(config FixtureConfig, gen workload.Generator) string {
 	meta := gen.Meta()
 	return filepath.Join(
-		store.GCSPrefix,
+		config.GCSPrefix,
 		meta.Name,
 		fmt.Sprintf(`version=%s,%s`, meta.Version, serializeOptions(gen)),
 	)
@@ -111,11 +111,11 @@ func generatorToGCSFolder(store FixtureStore, gen workload.Generator) string {
 // GetFixture returns a handle for pre-computed Generator data stored on GCS. It
 // is expected that the generator will have had Configure called on it.
 func GetFixture(
-	ctx context.Context, gcs *storage.Client, store FixtureStore, gen workload.Generator,
+	ctx context.Context, gcs *storage.Client, config FixtureConfig, gen workload.Generator,
 ) (Fixture, error) {
-	b := gcs.Bucket(store.GCSBucket)
+	b := gcs.Bucket(config.GCSBucket)
 
-	fixtureFolder := generatorToGCSFolder(store, gen)
+	fixtureFolder := generatorToGCSFolder(config, gen)
 	_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
 	if err == iterator.Done {
 		return Fixture{}, errors.Errorf(`fixture not found: %s`, fixtureFolder)
@@ -123,7 +123,7 @@ func GetFixture(
 		return Fixture{}, err
 	}
 
-	fixture := Fixture{Store: store, Generator: gen}
+	fixture := Fixture{Config: config, Generator: gen}
 	for _, table := range gen.Tables() {
 		tableFolder := filepath.Join(fixtureFolder, table.Name)
 		_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
@@ -134,7 +134,7 @@ func GetFixture(
 		}
 		fixture.Tables = append(fixture.Tables, FixtureTable{
 			TableName: table.Name,
-			BackupURI: store.objectPathToURI(tableFolder),
+			BackupURI: config.objectPathToURI(tableFolder),
 		})
 	}
 	return fixture, nil
@@ -143,7 +143,7 @@ func GetFixture(
 type groupCSVWriter struct {
 	sem            chan struct{}
 	gcs            *storage.Client
-	store          FixtureStore
+	config         FixtureConfig
 	folder         string
 	chunkSizeBytes int64
 
@@ -179,7 +179,7 @@ func (c *groupCSVWriter) groupWriteCSVs(
 		path := path.Join(c.folder, table.Name, fmt.Sprintf(`%09d.csv`, rowStart))
 		const maxAttempts = 3
 		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			w := c.gcs.Bucket(c.store.GCSBucket).Object(path).NewWriter(ctx)
+			w := c.gcs.Bucket(c.config.GCSBucket).Object(path).NewWriter(ctx)
 			var err error
 			rowIdx, err = workload.WriteCSVRows(ctx, w, table, rowStart, rowEnd, c.chunkSizeBytes)
 			closeErr := w.Close()
@@ -190,7 +190,7 @@ func (c *groupCSVWriter) groupWriteCSVs(
 				return closeErr
 			}
 
-			pathsCh <- c.store.objectPathToURI(path)
+			pathsCh <- c.config.objectPathToURI(path)
 			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, w.Attrs().Size)
 			d := timeutil.Since(c.start)
 			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
@@ -302,22 +302,22 @@ func MakeFixture(
 	ctx context.Context,
 	sqlDB *gosql.DB,
 	gcs *storage.Client,
-	store FixtureStore,
+	config FixtureConfig,
 	gen workload.Generator,
 ) (Fixture, error) {
 	const writeCSVChunkSize = 64 * 1 << 20 // 64 MB
 
-	fixtureFolder := generatorToGCSFolder(store, gen)
-	if _, err := GetFixture(ctx, gcs, store, gen); err == nil {
+	fixtureFolder := generatorToGCSFolder(config, gen)
+	if _, err := GetFixture(ctx, gcs, config, gen); err == nil {
 		return Fixture{}, errors.Errorf(
-			`fixture %s already exists`, store.objectPathToURI(fixtureFolder))
+			`fixture %s already exists`, config.objectPathToURI(fixtureFolder))
 	}
 
 	writeCSVConcurrency := runtime.NumCPU()
 	c := &groupCSVWriter{
 		sem:            make(chan struct{}, writeCSVConcurrency),
 		gcs:            gcs,
-		store:          store,
+		config:         config,
 		folder:         fixtureFolder,
 		chunkSizeBytes: writeCSVChunkSize,
 		start:          timeutil.Now(),
@@ -330,11 +330,11 @@ func MakeFixture(
 
 		g.Go(func() error {
 			defer close(tableCSVPathsCh)
-			if len(store.CSVServerURL) == 0 {
+			if len(config.CSVServerURL) == 0 {
 				startRow, endRow := 0, table.InitialRowCount
 				return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
 			}
-			paths := csvServerPaths(store.CSVServerURL, gen, table, writeCSVChunkSize)
+			paths := csvServerPaths(config.CSVServerURL, gen, table, writeCSVChunkSize)
 			for _, path := range paths {
 				tableCSVPathsCh <- path
 			}
@@ -342,7 +342,7 @@ func MakeFixture(
 		})
 		g.Go(func() error {
 			params := []interface{}{
-				store.objectPathToURI(filepath.Join(fixtureFolder, table.Name)),
+				config.objectPathToURI(filepath.Join(fixtureFolder, table.Name)),
 			}
 			// NB: it's fine to loop over this channel without selecting
 			// ctx.Done because a context cancel will cause the above goroutine
@@ -379,7 +379,7 @@ func MakeFixture(
 	}
 
 	// TODO(dan): Clean up the CSVs.
-	return GetFixture(ctx, gcs, store, gen)
+	return GetFixture(ctx, gcs, config, gen)
 }
 
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
@@ -402,12 +402,12 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 	return nil
 }
 
-// ListFixtures returns the object paths to all fixtures stored in a FixtureStore.
-func ListFixtures(ctx context.Context, gcs *storage.Client, store FixtureStore) ([]string, error) {
-	b := gcs.Bucket(store.GCSBucket)
+// ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.
+func ListFixtures(ctx context.Context, gcs *storage.Client, config FixtureConfig) ([]string, error) {
+	b := gcs.Bucket(config.GCSBucket)
 
 	var fixtures []string
-	gensPrefix := store.GCSPrefix + `/`
+	gensPrefix := config.GCSPrefix + `/`
 	for genIter := b.Objects(ctx, &storage.Query{Prefix: gensPrefix, Delimiter: `/`}); ; {
 		gen, err := genIter.Next()
 		if err == iterator.Done {

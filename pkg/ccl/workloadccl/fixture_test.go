@@ -94,16 +94,16 @@ func TestFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
-	store := FixtureStore{
+	config := FixtureConfig{
 		GCSBucket: gcsBucket,
 		GCSPrefix: fmt.Sprintf(`TestFixture-%d`, timeutil.Now().UnixNano()),
 	}
 
-	if _, err := GetFixture(ctx, gcs, store, gen); !testutils.IsError(err, `fixture not found`) {
+	if _, err := GetFixture(ctx, gcs, config, gen); !testutils.IsError(err, `fixture not found`) {
 		t.Fatalf(`expected "fixture not found" error but got: %+v`, err)
 	}
 
-	fixtures, err := ListFixtures(ctx, gcs, store)
+	fixtures, err := ListFixtures(ctx, gcs, config)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
@@ -111,17 +111,17 @@ func TestFixture(t *testing.T) {
 		t.Errorf(`expected no fixtures but got: %+v`, fixtures)
 	}
 
-	fixture, err := MakeFixture(ctx, sqlDB.DB, gcs, store, gen)
+	fixture, err := MakeFixture(ctx, sqlDB.DB, gcs, config, gen)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}
 
-	_, err = MakeFixture(ctx, sqlDB.DB, gcs, store, gen)
+	_, err = MakeFixture(ctx, sqlDB.DB, gcs, config, gen)
 	if !testutils.IsError(err, `already exists`) {
 		t.Fatalf(`expected 'already exists' error got: %+v`, err)
 	}
 
-	fixtures, err = ListFixtures(ctx, gcs, store)
+	fixtures, err = ListFixtures(ctx, gcs, config)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
 	}

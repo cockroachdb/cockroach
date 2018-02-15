@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-var useast1bFixtures = workloadccl.FixtureStore{
+var useast1bFixtures = workloadccl.FixtureConfig{
 	// TODO(dan): Keep fixtures in more than one region to better support
 	// geo-distributed clusters.
 	GCSBucket: `cockroach-fixtures`,
@@ -44,8 +44,8 @@ var fixturesListCmd = &cobra.Command{
 	Short: `List all fixtures stored on GCS`,
 	RunE:  fixturesList,
 }
-var fixturesStoreCmd = &cobra.Command{
-	Use:   `store`,
+var fixturesMakeCmd = &cobra.Command{
+	Use:   `make`,
 	Short: `Regenerate and store a fixture on GCS`,
 }
 var fixturesLoadCmd = &cobra.Command{
@@ -54,7 +54,7 @@ var fixturesLoadCmd = &cobra.Command{
 		`An enterprise license is required.`,
 }
 
-var fixturesStoreCSVServerURL = fixturesStoreCmd.PersistentFlags().String(
+var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
 	`csv-server`, ``,
 	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
 
@@ -62,10 +62,10 @@ var fixturesStoreCSVServerURL = fixturesStoreCmd.PersistentFlags().String(
 var gcsBucketOverride, gcsPrefixOverride *string
 
 func init() {
-	gcsBucketOverride = fixturesStoreCmd.PersistentFlags().String(`gcs-bucket-override`, ``, ``)
-	gcsPrefixOverride = fixturesStoreCmd.PersistentFlags().String(`gcs-prefix-override`, ``, ``)
-	_ = fixturesStoreCmd.PersistentFlags().MarkHidden(`gcs-bucket-override`)
-	_ = fixturesStoreCmd.PersistentFlags().MarkHidden(`gcs-prefix-override`)
+	gcsBucketOverride = fixturesMakeCmd.PersistentFlags().String(`gcs-bucket-override`, ``, ``)
+	gcsPrefixOverride = fixturesMakeCmd.PersistentFlags().String(`gcs-prefix-override`, ``, ``)
+	_ = fixturesMakeCmd.PersistentFlags().MarkHidden(`gcs-bucket-override`)
+	_ = fixturesMakeCmd.PersistentFlags().MarkHidden(`gcs-prefix-override`)
 }
 
 var fixturesLoadDB = fixturesLoadCmd.PersistentFlags().String(
@@ -93,19 +93,19 @@ func init() {
 			genFlags = f.Flags().FlagSet
 		}
 
-		genStoreCmd := &cobra.Command{
+		genMakeCmd := &cobra.Command{
 			Use:  meta.Name + ` [CRDB URI]`,
 			Args: cobra.RangeArgs(0, 1),
 		}
-		genStoreCmd.Flags().AddFlagSet(genFlags)
-		genStoreCmd.RunE = func(cmd *cobra.Command, args []string) error {
+		genMakeCmd.Flags().AddFlagSet(genFlags)
+		genMakeCmd.RunE = func(cmd *cobra.Command, args []string) error {
 			crdb := crdbDefaultURI
 			if len(args) > 0 {
 				crdb = args[0]
 			}
-			return fixturesStore(cmd, gen, crdb)
+			return fixturesMake(cmd, gen, crdb)
 		}
-		fixturesStoreCmd.AddCommand(genStoreCmd)
+		fixturesMakeCmd.AddCommand(genMakeCmd)
 
 		genLoadCmd := &cobra.Command{
 			Use:  meta.Name + ` [CRDB URI]`,
@@ -122,7 +122,7 @@ func init() {
 		fixturesLoadCmd.AddCommand(genLoadCmd)
 	}
 	fixturesCmd.AddCommand(fixturesListCmd)
-	fixturesCmd.AddCommand(fixturesStoreCmd)
+	fixturesCmd.AddCommand(fixturesMakeCmd)
 	fixturesCmd.AddCommand(fixturesLoadCmd)
 	rootCmd.AddCommand(fixturesCmd)
 }
@@ -144,7 +144,7 @@ func fixturesList(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func fixturesStore(cmd *cobra.Command, gen workload.Generator, crdbURI string) error {
+func fixturesMake(cmd *cobra.Command, gen workload.Generator, crdbURI string) error {
 	ctx := context.Background()
 	gcs, err := getStorage(ctx)
 	if err != nil {
@@ -156,15 +156,15 @@ func fixturesStore(cmd *cobra.Command, gen workload.Generator, crdbURI string) e
 	if err != nil {
 		return err
 	}
-	store := useast1bFixtures
+	config := useast1bFixtures
 	if len(*gcsBucketOverride) > 0 {
-		store.GCSBucket = *gcsBucketOverride
+		config.GCSBucket = *gcsBucketOverride
 	}
 	if len(*gcsPrefixOverride) > 0 {
-		store.GCSPrefix = *gcsPrefixOverride
+		config.GCSPrefix = *gcsPrefixOverride
 	}
-	store.CSVServerURL = *fixturesStoreCSVServerURL
-	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, store, gen)
+	config.CSVServerURL = *fixturesMakeCSVServerURL
+	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, config, gen)
 	if err != nil {
 		return err
 	}
