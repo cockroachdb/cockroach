@@ -23,14 +23,14 @@ import (
 func init() {
 	runTPCC := func(t *test, warehouses, nodes int, extra string) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, "-n", nodes+1)
+		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "<cockroach>")
 		c.Put(ctx, workload, "<workload>")
-		c.Start(ctx, 1, nodes)
+		c.Start(ctx, c.Range(1, nodes))
 
-		m := newMonitor(ctx, c)
+		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
@@ -40,7 +40,7 @@ func init() {
 			c.Run(ctx, nodes+1, cmd)
 			return nil
 		})
-		m.Wait(1, nodes)
+		m.Wait()
 	}
 
 	tests.Add("tpcc/w=1/nodes=3", func(t *test) {

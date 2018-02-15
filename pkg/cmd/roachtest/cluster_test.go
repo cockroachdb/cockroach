@@ -24,12 +24,41 @@ import (
 	"github.com/pkg/errors"
 )
 
+func TestClusterNodes(t *testing.T) {
+	c := &cluster{nodes: 10}
+	opts := func(opts ...option) []option {
+		return opts
+	}
+	testCases := []struct {
+		opts     []option
+		expected string
+	}{
+		{opts(), ""},
+		{opts(c.All()), ":1-10"},
+		{opts(c.Range(1, 2)), ":1-2"},
+		{opts(c.Range(2, 5)), ":2-5"},
+		{opts(c.All(), c.Range(2, 5)), ":1-10"},
+		{opts(c.Range(2, 5), c.Range(7, 9)), ":2-5,7-9"},
+		{opts(c.Range(2, 5), c.Range(6, 8)), ":2-8"},
+		{opts(c.Node(2), c.Node(4), c.Node(6)), ":2,4,6"},
+		{opts(c.Node(2), c.Node(3), c.Node(4)), ":2-4"},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			nodes := c.makeNodes(tc.opts)
+			if tc.expected != nodes {
+				t.Fatalf("expected %s, but found %s", tc.expected, nodes)
+			}
+		})
+	}
+}
+
 func TestClusterMonitor(t *testing.T) {
 	t.Run(`success`, func(t *testing.T) {
 		c := &cluster{t: t, l: stdLogger(t.Name())}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(context.Context) error { return nil })
-		if err := m.wait(nil, `sleep`, `100`); err != nil {
+		if err := m.wait(`sleep`, `100`); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -43,7 +72,7 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := m.wait(nil, `echo`, "1: 100\n1: dead")
+		err := m.wait(`echo`, "1: 100\n1: dead")
 		expectedErr := `dead`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
@@ -61,7 +90,7 @@ func TestClusterMonitor(t *testing.T) {
 			return ctx.Err()
 		})
 
-		err := m.wait(nil, `sleep`, `100`)
+		err := m.wait(`sleep`, `100`)
 		expectedErr := `worker-fail`
 		if !testutils.IsError(err, expectedErr) {
 			t.Errorf(`expected %s err got: %+v`, expectedErr, err)
