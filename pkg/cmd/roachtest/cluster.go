@@ -46,6 +46,7 @@ var (
 	cockroach string
 	workload  string
 	clusterID string
+	username  = os.Getenv("ROACHPROD_USER")
 )
 
 func ifLocal(trueVal, falseVal string) string {
@@ -60,7 +61,8 @@ func findBinary(binary, defValue string) (string, error) {
 		binary = defValue
 	}
 
-	if _, err := os.Stat(binary); err == nil {
+	// Check to see if binary exists and is a regular file and executable.
+	if fi, err := os.Stat(binary); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
 		return filepath.Abs(binary)
 	}
 
@@ -166,7 +168,6 @@ func makeClusterName(t testI) string {
 
 	// TODO(peter): Add an option to use an existing cluster.
 
-	username := os.Getenv("ROACHPROD_USER")
 	if username == "" {
 		usr, err := user.Current()
 		if err != nil {
