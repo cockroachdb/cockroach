@@ -2475,11 +2475,11 @@ var_list:
 iso_level:
   READ UNCOMMITTED
   {
-    $$.val = tree.SnapshotIsolation
+    $$.val = tree.SerializableIsolation
   }
 | READ COMMITTED
   {
-    $$.val = tree.SnapshotIsolation
+    $$.val = tree.SerializableIsolation
   }
 | SNAPSHOT
   {
