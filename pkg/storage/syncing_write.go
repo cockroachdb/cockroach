@@ -25,11 +25,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"golang.org/x/time/rate"
 )
+
+// bulkIOWriteBurst is the burst for the BulkIOWriteLimiter.
+const bulkIOWriteBurst = 2 * 1024 * 1024 // 2MB
 
 const bulkIOWriteLimiterLongWait = 500 * time.Millisecond
 
-func limitBulkIOWrite(ctx context.Context, st *cluster.Settings, cost int) {
+func limitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) {
 	// The limiter disallows anything greater than its burst (set to
 	// BulkIOWriteLimiterBurst), so cap the batch size if it would overflow.
 	//
@@ -38,12 +42,12 @@ func limitBulkIOWrite(ctx context.Context, st *cluster.Settings, cost int) {
 	// that didn't seem to be as smooth in practice (NB [dt]: that was when this
 	// limit was done before writing the whole file, rather than on individual
 	// chunks).
-	if cost > cluster.BulkIOWriteLimiterBurst {
-		cost = cluster.BulkIOWriteLimiterBurst
+	if cost > bulkIOWriteBurst {
+		cost = bulkIOWriteBurst
 	}
 
 	begin := timeutil.Now()
-	if err := st.BulkIOWriteLimiter.WaitN(ctx, cost); err != nil {
+	if err := limiter.WaitN(ctx, cost); err != nil {
 		log.Errorf(ctx, "error rate limiting bulk io write: %+v", err)
 	}
 
@@ -57,22 +61,28 @@ func limitBulkIOWrite(ctx context.Context, st *cluster.Settings, cost int) {
 var sstWriteSyncRate = settings.RegisterByteSizeSetting(
 	"kv.bulk_sst.sync_size",
 	"threshold after which non-Rocks SST writes must fsync (0 disables)",
-	cluster.BulkIOWriteLimiterBurst,
+	bulkIOWriteBurst,
 )
 
 // writeFileSyncing is essentially ioutil.WriteFile -- writes data to a file
 // named by filename -- but with rate limiting and periodic fsyncing controlled
-// by settings. Periodic fsync provides smooths out disk IO, as mentioned in
-// #20352 and #20279, and provides back-pressure, along with the explicit rate
-// limiting. If the file does not exist, WriteFile creates it with permissions
-// perm; otherwise WriteFile truncates it before writing.
+// by settings and the passed limiter (should be the store's limiter). Periodic
+// fsync provides smooths out disk IO, as mentioned in #20352 and #20279, and
+// provides back-pressure, along with the explicit rate limiting. If the file
+// does not exist, WriteFile creates it with permissions perm; otherwise
+// WriteFile truncates it before writing.
 func writeFileSyncing(
-	ctx context.Context, filename string, data []byte, perm os.FileMode, settings *cluster.Settings,
+	ctx context.Context,
+	filename string,
+	data []byte,
+	perm os.FileMode,
+	settings *cluster.Settings,
+	limiter *rate.Limiter,
 ) error {
 	chunkSize := sstWriteSyncRate.Get(&settings.SV)
 	sync := true
 	if chunkSize == 0 {
-		chunkSize = cluster.BulkIOWriteLimiterBurst
+		chunkSize = bulkIOWriteBurst
 		sync = false
 	}
 
@@ -89,7 +99,7 @@ func writeFileSyncing(
 		chunk := data[i:end]
 
 		// rate limit
-		limitBulkIOWrite(ctx, settings, len(chunk))
+		limitBulkIOWrite(ctx, limiter, len(chunk))
 
 		var wrote int
 		wrote, err = f.Write(chunk)
