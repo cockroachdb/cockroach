@@ -19,6 +19,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -35,8 +36,9 @@ func TestRowContainer(t *testing.T) {
 				for i := range resCol {
 					resCol[i] = ResultColumn{Typ: types.Int}
 				}
+				st := cluster.MakeTestingClusterSettings()
 				m := mon.MakeUnlimitedMonitor(
-					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,
+					context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 				)
 				rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(resCol), 0)
 				row := make(tree.Datums, numCols)
@@ -80,7 +82,8 @@ func TestRowContainerAtOutOfRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64)
+	st := cluster.MakeTestingClusterSettings()
+	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
 	resCols := ResultColumns{ResultColumn{Typ: types.Int}}
@@ -106,7 +109,8 @@ func TestRowContainerZeroCols(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64)
+	st := cluster.MakeTestingClusterSettings()
+	m := mon.MakeUnlimitedMonitor(ctx, "test", mon.MemoryResource, nil, nil, math.MaxInt64, st)
 	defer m.Stop(ctx)
 
 	rc := NewRowContainer(m.MakeBoundAccount(), ColTypeInfoFromResCols(nil), 0)
@@ -134,8 +138,9 @@ func BenchmarkRowContainerAt(b *testing.B) {
 	const numCols = 3
 	const numRows = 1024
 
+	st := cluster.MakeTestingClusterSettings()
 	m := mon.MakeUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,
+		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 	)
 	defer m.Stop(context.Background())
 

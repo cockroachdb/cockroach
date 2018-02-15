@@ -51,6 +51,7 @@ func (s *Session) StartUnlimitedMonitor() {
 		s.memMetrics.CurBytesCount,
 		s.memMetrics.MaxBytesHist,
 		math.MaxInt64,
+		s.execCfg.Settings,
 	)
 	s.deriveAndStartMonitors()
 }

@@ -36,7 +36,8 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	ctx := context.Background()
 	rng, _ := randutil.NewPseudoRand()
 
-	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
 	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
@@ -54,7 +55,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	}
 
 	m := mon.MakeUnlimitedMonitor(
-		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64,
+		context.Background(), "test", mon.MemoryResource, nil, nil, math.MaxInt64, st,
 	)
 	defer m.Stop(ctx)
 
