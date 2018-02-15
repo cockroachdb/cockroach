@@ -224,6 +224,9 @@ type Factory interface {
 	// ConstructFunction constructs an expression for the Function operator.
 	ConstructFunction(args ListID, def PrivateID) GroupID
 
+	// ConstructCoalesce constructs an expression for the Coalesce operator.
+	ConstructCoalesce(args ListID) GroupID
+
 	// ------------------------------------------------------------
 	// Relational Operators
 	// ------------------------------------------------------------
