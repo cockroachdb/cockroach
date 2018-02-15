@@ -43,6 +43,7 @@ const livenessesSelector = (state: AdminUIState) => state.cachedData.liveness.da
  */
 type NodeStatusState = Pick<AdminUIState, "cachedData", "nodes">;
 export const nodeStatusesSelector = (state: NodeStatusState) => state.cachedData.nodes.data;
+
 /*
  * selectNodeRequestStatus returns the current status of the node status request.
  */
@@ -78,6 +79,22 @@ export function selectLivenessRequestStatus(state: AdminUIState) {
 export const livenessStatusByNodeIDSelector = createSelector(
   livenessesSelector,
   (livenesses) => livenesses ? (livenesses.statuses || {}) : {},
+);
+
+/*
+ * selectCommissionedNodeStatuses returns the node statuses for nodes that have
+ * not been decommissioned.
+ */
+export const selectCommissionedNodeStatuses = createSelector(
+  nodeStatusesSelector,
+  livenessStatusByNodeIDSelector,
+  (nodeStatuses, livenessStatuses) => {
+    return _.filter(nodeStatuses, (node) => {
+      const livenessStatus = livenessStatuses[`${node.desc.node_id}`];
+
+      return _.isNil(livenessStatus) || livenessStatus !== LivenessStatus.DECOMMISSIONED;
+    });
+  },
 );
 
 /**

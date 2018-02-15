@@ -1,7 +1,7 @@
 import _ from "lodash";
 import { createSelector } from "reselect";
 
-import { nodeStatusesSelector } from "src/redux/nodes";
+import { selectCommissionedNodeStatuses } from "src/redux/nodes";
 import { NodeStatus$Properties } from "src/util/proto";
 
 function buildLocalityTree(nodes: NodeStatus$Properties[] = [], depth = 0): LocalityTree {
@@ -34,7 +34,7 @@ function buildLocalityTree(nodes: NodeStatus$Properties[] = [], depth = 0): Loca
 }
 
 export const selectLocalityTree = createSelector(
-  nodeStatusesSelector,
+  selectCommissionedNodeStatuses,
   buildLocalityTree,
 );
 
