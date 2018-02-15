@@ -72,7 +72,10 @@ export function getEventDescription(e: Event$Properties): string {
     case eventTypes.NODE_RESTART:
       return `Node Rejoined: Node ${targetId} rejoined the cluster`;
     case eventTypes.SET_CLUSTER_SETTING:
-      return `Cluster Setting Changed: User ${info.User} set ${info.SettingName} to ${info.Value}`;
+      if (info.Value && info.Value.length > 0) {
+        return `Cluster Setting Changed: User ${info.User} set ${info.SettingName} to ${info.Value}`;
+      }
+      return `Cluster Setting Changed: User ${info.User} changed ${info.SettingName}`;
     default:
       return `Unknown Event Type: ${e.event_type}, content: ${JSON.stringify(info, null, 2)}`;
   }
