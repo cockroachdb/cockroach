@@ -37,7 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -246,6 +248,14 @@ func (s *Server) maybeReportDiagnostics(
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
 
+// safeToReportSettings are the names of settings which we want reported with
+// their values, regardless of their type -- usually only numeric/duraion/bool
+// settings are reported to avoid including potentially sensitive info that may
+// appear in strings or byte/proto/statemachine settings.
+var safeToReportSettings = map[string]struct{}{
+	cluster.KeyVersionSetting: {},
+}
+
 func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
 	n := s.node.recorder.GetStatusSummary(ctx)
@@ -272,6 +282,42 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	info.Schema = schema
 	info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
 	info.UnimplementedErrors = make(map[string]int64)
+
+	// Read the system.settings table to determine the settings for which we have
+	// explicitly set values -- the in-memory SV has the set and default values
+	// flattened for quick reads, but we'd rather only report the non-defaults.
+	if datums, _, err := (&sql.InternalExecutor{ExecCfg: s.execCfg}).QueryRows(
+		ctx, "read-setting", "SELECT name FROM system.settings",
+	); err != nil {
+		log.Warning(ctx, err)
+	} else {
+		info.AlteredSettings = make(map[string]string, len(datums))
+		for _, row := range datums {
+			name := string(tree.MustBeDString(row[0]))
+			if setting, ok := settings.Lookup(name); ok {
+				// For whitelisted settings always report it.
+				if _, ok := safeToReportSettings[name]; ok {
+					info.AlteredSettings[name] = setting.String(&s.st.SV)
+				} else {
+					// for settings with types that can't be sensitive, report values.
+					switch setting.(type) {
+					case *settings.IntSetting,
+						*settings.FloatSetting,
+						*settings.ByteSizeSetting,
+						*settings.DurationSetting,
+						*settings.BoolSetting,
+						*settings.EnumSetting:
+						info.AlteredSettings[name] = setting.String(&s.st.SV)
+					default:
+						info.AlteredSettings[name] = "<non-default>"
+					}
+				}
+			} else {
+				info.AlteredSettings[name] = "<unknown>"
+			}
+		}
+	}
+
 	s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
 	return &info
 }
