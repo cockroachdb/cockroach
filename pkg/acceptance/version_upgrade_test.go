@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/acceptance/localcluster"
+	clusterversion "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -146,7 +147,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		}
 	}()
 
-	bumps := []string{"1.0", "1.1", "1.1-2"}
+	bumps := []string{"1.0", "1.1", clusterversion.BinaryServerVersion.String()}
 
 	for i, bump := range bumps {
 		func() {
