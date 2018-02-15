@@ -747,7 +747,7 @@ func TestAdminAPIEvents(t *testing.T) {
 		"CREATE TABLE api_test.tbl3 (a INT)",
 		"DROP TABLE api_test.tbl1",
 		"DROP TABLE api_test.tbl2",
-		"SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;",
+		"SET CLUSTER SETTING cluster.organization = 'somestring';",
 	}
 	for _, q := range setupQueries {
 		res, err := ts.sqlExecutor.ExecuteStatementsBuffered(session, q, nil, 1)
@@ -827,7 +827,9 @@ func TestAdminAPIEvents(t *testing.T) {
 					}
 				}
 
-				if e.TargetID == 0 && e.EventType != string(sql.EventLogSetClusterSetting) {
+				isSettingChange := e.EventType == string(sql.EventLogSetClusterSetting)
+
+				if e.TargetID == 0 && !isSettingChange {
 					t.Errorf("%d: missing/empty TargetID", i)
 				}
 				if e.ReportingID == 0 {
@@ -835,6 +837,9 @@ func TestAdminAPIEvents(t *testing.T) {
 				}
 				if len(e.Info) == 0 {
 					t.Errorf("%d: missing/empty Info", i)
+				}
+				if isSettingChange && strings.Contains(e.Info, "somestring") {
+					t.Errorf("%d: un-redacted 'somestring' in Info", i)
 				}
 				if len(e.UniqueID) == 0 {
 					t.Errorf("%d: missing/empty UniqueID", i)

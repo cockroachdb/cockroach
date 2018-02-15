@@ -745,10 +745,10 @@ func (s *adminServer) Events(
 			return nil, err
 		}
 		if event.EventType == string(sql.EventLogSetClusterSetting) {
-			if s.getUser(req) != security.RootUser {
-				// TODO(dt): unpack and selectively redact the setting value.
-				event.Info = ""
-			}
+
+			// TODO: `if s.getUser(req) != security.RootUser` when we have auth.
+
+			event.Info = redactSettingsChange(event.Info)
 		}
 		if err := scanner.ScanIndex(row, 5, &event.UniqueID); err != nil {
 			return nil, err
@@ -757,6 +757,20 @@ func (s *adminServer) Events(
 		resp.Events = append(resp.Events, event)
 	}
 	return &resp, nil
+}
+
+// make a best-effort attempt at redacting the setting value.
+func redactSettingsChange(info string) string {
+	var s sql.EventLogSetClusterSettingDetail
+	if err := json.Unmarshal([]byte(info), &s); err != nil {
+		return ""
+	}
+	s.Value = "<hidden>"
+	ret, err := json.Marshal(s)
+	if err != nil {
+		return ""
+	}
+	return string(ret)
 }
 
 // RangeLog is an endpoint that returns the latest range log entries.
