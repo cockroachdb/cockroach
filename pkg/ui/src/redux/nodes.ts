@@ -176,6 +176,10 @@ export function sumNodeStats(
   return result;
 }
 
+export function getDisplayName(node: NodeStatus$Properties) {
+  return `${node.desc.address.address_field} (n${node.desc.node_id})`;
+}
+
 // nodeDisplayNameByIDSelector provides a unique, human-readable display name
 // for each node.
 export const nodeDisplayNameByIDSelector = createSelector(
@@ -184,7 +188,7 @@ export const nodeDisplayNameByIDSelector = createSelector(
     const result: {[key: string]: string} = {};
     if (!_.isEmpty(nodeStatuses)) {
       nodeStatuses.forEach(ns => {
-        result[ns.desc.node_id] = `${ns.desc.address.address_field} (n${ns.desc.node_id})`;
+        result[ns.desc.node_id] = getDisplayName(ns);
       });
     }
     return result;
