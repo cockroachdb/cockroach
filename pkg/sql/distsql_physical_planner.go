@@ -1654,7 +1654,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
 	var leftEqCols, rightEqCols []uint32
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
-	joinType := distsqlJoinType(n.joinType)
+	joinType := n.joinType
 
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes

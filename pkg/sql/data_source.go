@@ -66,7 +66,7 @@ func (p *planner) getSources(
 		if err != nil {
 			return planDataSource{}, err
 		}
-		return p.makeJoin(ctx, "CROSS JOIN", left, right, nil)
+		return p.makeJoin(ctx, sqlbase.InnerJoin, left, right, nil)
 	}
 }
 
@@ -209,7 +209,7 @@ func (p *planner) getDataSource(
 		if err != nil {
 			return right, err
 		}
-		return p.makeJoin(ctx, t.Join, left, right, t.Cond)
+		return p.makeJoin(ctx, sqlbase.JoinTypeFromAstString(t.Join), left, right, t.Cond)
 
 	case *tree.StatementSource:
 		plan, err := p.newPlan(ctx, t.Statement, nil /* desiredTypes */)
