@@ -24,7 +24,7 @@ export function parseLocalityRoute(route: string): LocalityTier[] {
  * locality from the locality tiers.
  */
 export function generateLocalityRoute(tiers: LocalityTier[]): string {
-  return tiers.map(({ key, value }) => key + "=" + value).join("/");
+  return "/" + tiers.map(({ key, value }) => key + "=" + value).join("/");
 }
 
 /*

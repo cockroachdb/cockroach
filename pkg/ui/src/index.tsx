@@ -25,6 +25,7 @@ import {
 
 import "src/redux/analytics";
 import { store, history } from "src/redux/state";
+import visualizationRoutes from "src/routes/visualization";
 
 import Layout from "src/views/app/containers/layout";
 
@@ -33,7 +34,6 @@ import TableDetails from "src/views/databases/containers/tableDetails";
 
 import JobsPage from "src/views/jobs";
 
-import ClusterOverview from "src/views/cluster/containers/clusterOverview";
 import NodesOverview from "src/views/cluster/containers/nodesOverview";
 import NodeOverview from "src/views/cluster/containers/nodeOverview";
 import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
@@ -55,8 +55,6 @@ import NotFound from "src/views/app/components/NotFound";
 
 import { alertDataSync } from "src/redux/alerts";
 
-import visualizationRoutes from "src/routes/visualization";
-
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
 // redactions list in src/redux/analytics.ts.
@@ -73,9 +71,7 @@ ReactDOM.render(
         <IndexRedirect to="overview" />
 
         { /* overview page */ }
-        <Route path="overview">
-          <IndexRoute component={ ClusterOverview } />
-        </Route>
+        { visualizationRoutes() }
 
         { /* time series metrics */ }
         <Route path="metrics">
@@ -167,9 +163,6 @@ ReactDOM.render(
           </Route>
           <Redirect from="events" to="/events" />
         </Route>
-
-        { /* temporary clusterviz location */ }
-        { visualizationRoutes() }
 
         { /* 404 */ }
         <Route path="*" component={ NotFound } />
