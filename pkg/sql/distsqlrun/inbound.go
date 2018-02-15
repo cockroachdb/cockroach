@@ -62,22 +62,41 @@ func processInboundStreamHelper(
 	var finalErr error
 	draining := false
 	var sd StreamDecoder
+
+	msgChan := make(chan *ProducerMessage, 1)
+	errChan := make(chan error, 1)
+	doneChan := make(chan bool, 1)
+	defer func() { doneChan <- true }()
+
+	go func() {
+		for {
+			if done := <-doneChan; done {
+				return
+			}
+			prodMsg, err := stream.Recv()
+			msgChan <- prodMsg
+			errChan <- err
+		}
+	}()
+
 	for {
 		var msg *ProducerMessage
 		if firstMsg != nil {
 			msg = firstMsg
 			firstMsg = nil
 		} else {
-			// Check for context cancellation before recv()ing the next message.
+			doneChan <- false
+
+			// Check for context cancellation while recv()ing the next message.
 			select {
 			case <-f.Ctx.Done():
 				// This will error out the FlowStream(), and also cancel
 				// the flow context on the producer.
 				return sqlbase.NewQueryCanceledError()
-			default:
+			case msg = <-msgChan:
 			}
-			var err error
-			msg, err = stream.Recv()
+
+			err := <-errChan
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
