@@ -1545,9 +1545,15 @@ func TestTxnReadAfterAbandon(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
-
-		checkTxnMetrics(t, metrics, "abandon txn", 0, 0, 1, 0, 0)
+		testutils.SucceedsSoon(t, func() error {
+			// See #22762 for very similar code and an explanation.
+			manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
+			err := checkTxnMetricsOnce(t, metrics, "abandon txn", 0, 0, 1 /* abandons */, 0, 0)
+			if err == nil {
+				return nil
+			}
+			return checkTxnMetricsOnce(t, metrics, "abort txn", 0, 0, 0, 1 /* aborts */, 0)
+		})
 
 		_, err := txn.Get(ctx, key)
 		if !testutils.IsError(err, "txn aborted") {
