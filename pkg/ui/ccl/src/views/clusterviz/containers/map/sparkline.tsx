@@ -4,6 +4,7 @@ import React from "react";
 import { NanoToMilli } from "src/util/convert";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import createChartComponent from "src/views/shared/util/d3-react";
+import { BACKGROUND_BLUE, MAIN_BLUE } from "src/views/shared/colors";
 
 interface SparklineConfig {
   width: number;
@@ -80,12 +81,11 @@ export class SparklineMetricsDataComponent extends React.Component<MetricsDataCo
 
     this.chart = createChartComponent(
       "g",
-      // TODO(couchand): dedupe this with the constants in statsView
       sparklineChart({
         width: 69,
         height: 10,
-        backgroundColor: "#B8CCEC",
-        lineColor: "#3A7DE1",
+        backgroundColor: BACKGROUND_BLUE,
+        foregroundColor: MAIN_BLUE,
       }),
     );
   }
