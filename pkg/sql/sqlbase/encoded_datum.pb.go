@@ -6,6 +6,7 @@ Package sqlbase is a generated protocol buffer package.
 
 It is generated from these files:
 	sql/sqlbase/encoded_datum.proto
+	sql/sqlbase/join_type.proto
 	sql/sqlbase/privilege.proto
 	sql/sqlbase/structured.proto
 

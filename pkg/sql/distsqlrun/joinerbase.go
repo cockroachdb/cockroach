@@ -46,7 +46,7 @@ func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
 	leftTypes []sqlbase.ColumnType,
 	rightTypes []sqlbase.ColumnType,
-	jType JoinType,
+	jType sqlbase.JoinType,
 	onExpr Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,

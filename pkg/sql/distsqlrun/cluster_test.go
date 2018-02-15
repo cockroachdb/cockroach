@@ -384,7 +384,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 		RightOrdering: Ordering{
 			Columns: []Ordering_Column{{ColIdx: 0, Direction: Ordering_Column_ASC}},
 		},
-		Type: JoinType_INNER,
+		Type: sqlbase.InnerJoin,
 	}
 
 	txnProto := roachpb.MakeTransaction(
