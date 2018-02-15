@@ -16,6 +16,7 @@ package client
 
 import (
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // RangeLookup is used to look up RangeDescriptors - a RangeDescriptor is a
@@ -165,63 +167,95 @@ func RangeLookup(
 	prefetchNum int64,
 	prefetchReverse bool,
 ) (rs, preRs []roachpb.RangeDescriptor, err error) {
-	// Determine the "Range Metadata Key" for the provided key.
-	rkey, err := addrForDir(prefetchReverse)(key)
-	if err != nil {
-		return nil, nil, err
+	// RangeLookup scans can span multiple ranges, as discussed above.
+	// Traditionally, in order to see a fully-consistent snapshot of multiple
+	// ranges, a scan needs to operate in a Txn with a fixed timestamp. Without
+	// this, the scan may read results from different ranges at different times,
+	// resulting in an inconsistent view. This is why DistSender returns
+	// OpRequiresTxnError for consistent scans outside of Txns that span
+	// multiple ranges.
+	//
+	// For RangeLookups, a consistent but outdated result is just as useless as
+	// an inconsistent result. Because of this, we allow both inconsistent scans
+	// and consistent scans outside of Txns for RangeLookups, and attempt to
+	// reconcile any inconsistencies due to races, rescanning if this is not
+	// possible.
+	//
+	// The retry options are set to be very aggressive because we should only
+	// need to retry if a scan races with a split which is writing its new
+	// RangeDescriptors across two different meta2 ranges. Because these meta2
+	// writes are transactional, performing the entire scan again immediately
+	// will not run into the same race.
+	opts := retry.Options{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     500 * time.Millisecond,
+		Multiplier:     2,
 	}
 
-	descs, intentDescs, err := lookupRangeFwdScan(ctx, sender, rkey, rc, prefetchNum, prefetchReverse)
-	if err != nil {
-		return nil, nil, err
-	}
-	if prefetchReverse {
-		descs, intentDescs, err = lookupRangeRevScan(ctx, sender, rkey, rc, prefetchNum,
-			prefetchReverse, descs, intentDescs)
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		// Determine the "Range Metadata Key" for the provided key.
+		rkey, err := addrForDir(prefetchReverse)(key)
 		if err != nil {
 			return nil, nil, err
 		}
-	}
 
-	desiredDesc := containsForDir(prefetchReverse, rkey)
-	var matchingRanges []roachpb.RangeDescriptor
-	var prefetchedRanges []roachpb.RangeDescriptor
-	for _, desc := range descs {
-		if desiredDesc(desc) {
-			if len(matchingRanges) == 0 {
-				matchingRanges = append(matchingRanges, desc)
-			} else {
-				if rc == roachpb.CONSISTENT {
-					matchingRanges = append(matchingRanges, desc)
-					log.Fatalf(ctx, "range lookup of key %s found two matching committed ranges: %v",
-						key, matchingRanges)
-				}
-
-				// Since we support scanning inconsistently, it's possible that
-				// we pick up both the pre- and post-split descriptor for a
-				// range. In this case, we can detect the newer version of the
-				// descriptor by selecting the smaller range.
-				if desc.EndKey.Less(matchingRanges[0].EndKey) {
-					matchingRanges[0] = desc
-				}
+		descs, intentDescs, err := lookupRangeFwdScan(ctx, sender, rkey, rc, prefetchNum, prefetchReverse)
+		if err != nil {
+			return nil, nil, err
+		}
+		if prefetchReverse {
+			descs, intentDescs, err = lookupRangeRevScan(ctx, sender, rkey, rc, prefetchNum,
+				prefetchReverse, descs, intentDescs)
+			if err != nil {
+				return nil, nil, err
 			}
-		} else {
-			// If this is not the desired descriptor, it must be a prefetched
-			// descriptor.
-			prefetchedRanges = append(prefetchedRanges, desc)
 		}
-	}
-	for _, desc := range intentDescs {
-		if desiredDesc(desc) {
-			matchingRanges = append(matchingRanges, desc)
-			// We only want up to one intent descriptor.
-			break
+
+		desiredDesc := containsForDir(prefetchReverse, rkey)
+		var matchingRanges []roachpb.RangeDescriptor
+		var prefetchedRanges []roachpb.RangeDescriptor
+		for _, desc := range descs {
+			if desiredDesc(desc) {
+				if len(matchingRanges) == 0 {
+					matchingRanges = append(matchingRanges, desc)
+				} else {
+					// Since we support scanning non-transactionally, it's possible
+					// that we pick up both the pre- and post-split descriptor for a
+					// range. In this case, we can detect the newer version of the
+					// descriptor by selecting the smaller range. This is possible
+					// by simply looking at the descriptors' EndKeys, which can never
+					// be the same or the two options would have been stored at the
+					// same key.
+					if desc.EndKey.Less(matchingRanges[0].EndKey) {
+						matchingRanges[0] = desc
+					}
+				}
+			} else {
+				// If this is not the desired descriptor, it must be a prefetched
+				// descriptor.
+				prefetchedRanges = append(prefetchedRanges, desc)
+			}
 		}
+		for _, desc := range intentDescs {
+			if desiredDesc(desc) {
+				matchingRanges = append(matchingRanges, desc)
+				// We only want up to one intent descriptor.
+				break
+			}
+		}
+		if len(matchingRanges) > 0 {
+			return matchingRanges, prefetchedRanges, nil
+		}
+
+		log.Warningf(ctx, "range lookup of key %s found only non-matching ranges %v; retrying",
+			key, prefetchedRanges)
 	}
-	if len(matchingRanges) == 0 {
-		log.Fatalf(ctx, "range lookup of key %s found only non-matching ranges", key)
+
+	ctxErr := ctx.Err()
+	if ctxErr == nil {
+		log.Fatalf(ctx, "retry loop broke before context expired")
 	}
-	return matchingRanges, prefetchedRanges, nil
+	return nil, nil, ctxErr
 }
 
 func lookupRangeFwdScan(
@@ -279,7 +313,7 @@ func lookupRangeFwdScan(
 		Span: bounds.AsRawSpanWithNoLocals(),
 		// NOTE (subtle): we want the scan to return intents as well as values
 		// when scanning inconsistently. The reason is because it's not clear
-		// whether the intent or the previous value point to the correct
+		// whether the intent or the previous value points to the correct
 		// location of the Range. It gets even more complicated when there are
 		// split-related intents or a txn record co-located with a replica
 		// involved in the split. Since we cannot know the correct answer, we
@@ -290,8 +324,17 @@ func lookupRangeFwdScan(
 		// same descriptor. In other words, both the current live descriptor and
 		// a potentially valid descriptor from observed intents could be
 		// returned.
+		//
+		// We don't need to set this when rc == roachpb.READ_UNCOMMITTED
+		// because all read_uncommitted requests will return intents, which
+		// is why this option is now deprecated.
+		//
+		// TODO(nvanbenschoten): remove in version 2.1.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
+	if !TestingIsRangeLookup(ba) {
+		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
+	}
 
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
@@ -357,8 +400,12 @@ func lookupRangeRevScan(
 	ba.MaxSpanRequestKeys = maxKeys
 	ba.Add(&roachpb.ReverseScanRequest{
 		Span: revBounds.AsRawSpanWithNoLocals(),
+		// See explanation above in lookupRangeFwdScan.
 		DeprecatedReturnIntents: rc == roachpb.INCONSISTENT,
 	})
+	if !TestingIsRangeLookup(ba) {
+		log.Fatalf(ctx, "BatchRequest %v not detectable as RangeLookup", ba)
+	}
 
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
@@ -403,7 +450,7 @@ func lookupRangeRevScan(
 // lies within the bounds of that range. But notice that the range descriptor
 // containing `d` lies in range 2. This means that no matching RangeDescriptors
 // will be found on range 1 and returned from the first RangeLookup. In fact, a
-// RangeLookup for any key between ['c','d') will create this scenerio.
+// RangeLookup for any key between ['c','d') will create this scenario.
 //
 // Our solution (RangeLookup) is to deprecate RangeLookupRequest and instead use
 // a ScanRequest over the entire MetaScanBounds. DistSender will properly scan
@@ -514,6 +561,18 @@ func TestingIsRangeLookup(ba roachpb.BatchRequest) bool {
 	return false
 }
 
+// These spans bounds the start and end keys of the spans returned from
+// MetaScanBounds and MetaReverseScanBounds. Next is called on each span's
+// EndKey to make it end-inclusive so that ContainsKey works as expected.
+var rangeLookupStartKeyBounds = roachpb.Span{
+	Key:    keys.Meta1Prefix,
+	EndKey: keys.Meta2KeyMax.Next(),
+}
+var rangeLookupEndKeyBounds = roachpb.Span{
+	Key:    keys.Meta1Prefix.Next(),
+	EndKey: keys.SystemPrefix.Next(),
+}
+
 // TestingIsRangeLookupRequest returns if the provided Request looks like a single
 // RangeLookup scan. It can return false positives and should only be used in
 // tests.
@@ -525,5 +584,6 @@ func TestingIsRangeLookupRequest(req roachpb.Request) bool {
 		return false
 	}
 	s := req.Header()
-	return s.Key.Compare(keys.Meta2KeyMax) <= 0 && s.EndKey.Compare(keys.MetaMax) <= 0
+	return rangeLookupStartKeyBounds.ContainsKey(s.Key) &&
+		rangeLookupEndKeyBounds.ContainsKey(s.EndKey)
 }

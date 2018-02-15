@@ -687,7 +687,7 @@ DELETE FROM t.test3;
 								// could lead to a deadlock where a retry is blocked trying to push
 								// the previous incarnation of the meta record.
 								//
-								// In real scenerios (not injected test errors), a TransactionAbortedError
+								// In real scenarios (not injected test errors), a TransactionAbortedError
 								// will never be seen unless the txn record is actually aborted, so
 								// this isn't a concern. We are simply trying to mirror that behavior
 								// here.
