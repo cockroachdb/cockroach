@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -282,6 +283,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 		nil,           /* maxHist */
 		-1,            /* increment: use default block size */
 		math.MaxInt64, /* noteworthy */
+		cluster.MakeTestingClusterSettings(),
 	)
 	memMon.Start(context.TODO(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	defer memMon.Stop(context.TODO())

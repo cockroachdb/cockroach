@@ -33,17 +33,18 @@ func CreateTestTableDescriptor(
 	schema string,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
+	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
 	if err != nil {
 		return sqlbase.TableDescriptor{}, err
 	}
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
-	evalCtx := tree.MakeTestingEvalContext()
+	evalCtx := tree.MakeTestingEvalContext(st)
 	return MakeTableDesc(
 		ctx,
 		nil, /* txn */
 		nil, /* vt */
-		cluster.MakeTestingClusterSettings(),
+		st,
 		stmt.(*tree.CreateTable),
 		parentID, id,
 		hlc.Timestamp{}, /* creationTime */
@@ -55,9 +56,9 @@ func CreateTestTableDescriptor(
 	)
 }
 
-func makeTestingExtendedEvalContext() extendedEvalContext {
+func makeTestingExtendedEvalContext(st *cluster.Settings) extendedEvalContext {
 	return extendedEvalContext{
-		EvalContext: tree.MakeTestingEvalContext(),
+		EvalContext: tree.MakeTestingEvalContext(st),
 	}
 }
 

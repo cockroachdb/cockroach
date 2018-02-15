@@ -23,6 +23,7 @@ import (
 
 	"github.com/lib/pq/oid"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -91,7 +92,8 @@ func TestWriteBinaryArray(t *testing.T) {
 	// Regression test for #20372. Ensure that writing twice to the same
 	// writeBuffer is equivalent to writing to two different writeBuffers and
 	// then concatenating the result.
-	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(), "{1}", coltypes.Int)
+	st := cluster.MakeTestingClusterSettings()
+	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", coltypes.Int)
 
 	writeBuf1 := newWriteBuffer(nil /* bytecount */)
 	writeBuf1.writeTextDatum(context.Background(), ary, time.UTC)
@@ -130,7 +132,7 @@ func TestIntArrayRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evalCtx := tree.NewTestingEvalContext()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	if got.Compare(evalCtx, d) != 0 {
 		t.Fatalf("expected %s, got %s", d, got)
@@ -343,7 +345,7 @@ func BenchmarkDecodeBinaryDecimal(b *testing.B) {
 		b.StartTimer()
 		got, err := pgwirebase.DecodeOidDatum(oid.T_numeric, pgwirebase.FormatBinary, bytes)
 		b.StopTimer()
-		evalCtx := tree.NewTestingEvalContext()
+		evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(context.Background())
 		if err != nil {
 			b.Fatal(err)

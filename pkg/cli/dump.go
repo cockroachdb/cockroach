@@ -24,13 +24,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"golang.org/x/sync/errgroup"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 )
 
 // dumpCmd dumps SQL tables.
@@ -519,7 +519,8 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 							if err != nil {
 								return err
 							}
-							d, err = tree.ParseDArrayFromString(tree.NewTestingEvalContext(), string(t), elemType)
+							d, err = tree.ParseDArrayFromString(
+								tree.NewTestingEvalContext(serverCfg.Settings), string(t), elemType)
 							if err != nil {
 								return err
 							}
