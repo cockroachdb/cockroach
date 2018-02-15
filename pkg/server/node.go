@@ -462,10 +462,18 @@ func (n *Node) IsDraining() bool {
 
 // SetDraining sets the draining mode on all of the node's underlying stores.
 func (n *Node) SetDraining(drain bool) error {
-	return n.stores.VisitStores(func(s *storage.Store) error {
+	if err := n.stores.VisitStores(func(s *storage.Store) error {
 		s.SetDraining(drain)
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	// If the node is draining, wait a grace period for raft leadership transfers
+	// to complete.
+	if drain {
+		time.Sleep(5 * time.Second)
+	}
+	return nil
 }
 
 // initStores initializes the Stores map from ID to Store. Stores are
