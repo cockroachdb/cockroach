@@ -698,3 +698,22 @@ SELECT * from default_err_test ORDER BY foo
 bar
 baz
 foo
+
+# Verify that auditing can be enabled by root, and cannot be disabled by non-root.
+
+statement ok
+CREATE TABLE audit(x INT); ALTER TABLE audit EXPERIMENTAL_AUDIT SET READ WRITE;
+
+# The user must be able to issue ALTER for this test to be meaningful.
+statement ok
+GRANT CREATE ON audit TO testuser
+
+user testuser
+
+# Check the user can indeed change the table
+statement ok
+ALTER TABLE audit ADD COLUMN y INT
+
+# But not the audit settings.
+statement error change auditing settings on a table
+ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF;

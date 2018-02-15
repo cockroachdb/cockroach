@@ -15,6 +15,7 @@
 package tree
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -29,6 +30,23 @@ type PlaceholderTypes map[string]types.T
 
 // QueryArguments relates placeholder names to their provided query argument.
 type QueryArguments map[string]TypedExpr
+
+var emptyQueryArgumentStr = "{}"
+
+func (qa *QueryArguments) String() string {
+	if len(*qa) == 0 {
+		return emptyQueryArgumentStr
+	}
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	sep := ""
+	for k, v := range *qa {
+		fmt.Fprintf(&buf, "%s$%s:%q", sep, k, v)
+		sep = ", "
+	}
+	buf.WriteByte('}')
+	return buf.String()
+}
 
 // PlaceholderInfo defines the interface to SQL placeholders.
 type PlaceholderInfo struct {

@@ -107,6 +107,9 @@ func (u *sqlSymUnion) strVal() *tree.StrVal {
     }
     return nil
 }
+func (u *sqlSymUnion) auditMode() tree.AuditMode {
+    return u.val.(tree.AuditMode)
+}
 func (u *sqlSymUnion) bool() bool {
     return u.val.(bool)
 }
@@ -465,6 +468,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str>   ELSE ENCODING END ESCAPE EXCEPT
 %token <str>   EXISTS EXECUTE EXPERIMENTAL EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
+%token <str>   EXPERIMENTAL_AUDIT
 %token <str>   EXPLAIN EXTRACT EXTRACT_DURATION
 
 %token <str>   FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH FILTER
@@ -921,6 +925,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.TargetList> on_privilege_target_clause
 %type <tree.NameList>       for_grantee_clause
 %type <privilege.List> privileges
+%type <tree.AuditMode> audit_mode
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
@@ -1407,12 +1412,22 @@ alter_table_cmd:
       DropBehavior: $4.dropBehavior(),
     }
   }
+// ALTER TABLE <name> EXPERIMENTAL_AUDIT SET <mode>
+| EXPERIMENTAL_AUDIT SET audit_mode
+  {
+    /* SKIP DOC */
+    $$.val = &tree.AlterTableSetAudit{Mode: $3.auditMode()}
+  }
 | partition_by
   {
     $$.val = &tree.AlterTablePartitionBy{
       PartitionBy: $1.partitionBy(),
     }
   }
+
+audit_mode:
+  READ WRITE { $$.val = tree.AuditModeReadWrite }
+| OFF        { $$.val = tree.AuditModeDisable }
 
 alter_index_cmds:
   alter_index_cmd
@@ -7367,6 +7382,7 @@ unreserved_keyword:
 | ENCODING
 | EXECUTE
 | EXPERIMENTAL
+| EXPERIMENTAL_AUDIT
 | EXPERIMENTAL_FINGERPRINTS
 | EXPERIMENTAL_REPLICA
 | EXPLAIN
