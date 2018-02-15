@@ -104,8 +104,14 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
     },
   );
 
-  static title() {
-    return "Cluster Overview";
+  static title({ params }: { params: { [name: string]: any } }) {
+    const dashboard = params[dashboardNameAttr];
+
+    if (dashboard in dashboards) {
+      return dashboards[dashboard].label + " Dashboard";
+    }
+
+    return "Cluster Metrics";
   }
 
   refresh(props = this.props) {
