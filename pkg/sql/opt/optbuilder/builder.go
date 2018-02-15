@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -230,20 +231,11 @@ func (b *Builder) buildTable(
 		out, outScope = b.buildTable(source.Expr, inScope)
 
 		// Overwrite output properties with any alias information.
-		if source.As.Alias != "" {
-			if n := len(source.As.Cols); n > 0 && n != len(outScope.cols) {
-				panic(errorf("rename specified %d columns, but table contains %d", n, len(outScope.cols)))
-			}
-
-			for i := range outScope.cols {
-				outScope.cols[i].table = optbase.TableName(source.As.Alias)
-				if i < len(source.As.Cols) {
-					outScope.cols[i].name = optbase.ColumnName(source.As.Cols[i])
-				}
-			}
-		}
-
+		b.renameSource(source.As, outScope)
 		return out, outScope
+
+	case *tree.JoinTableExpr:
+		return b.buildJoin(source, inScope)
 
 	case *tree.NormalizableTableName:
 		tn, err := source.Normalize()
@@ -265,6 +257,39 @@ func (b *Builder) buildTable(
 
 	default:
 		panic(errorf("not yet implemented: table expr: %T", texpr))
+	}
+}
+
+// renameSource applies an AS clause to the columns in scope.
+func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
+	var tableAlias tree.Name
+	colAlias := as.Cols
+
+	if as.Alias != "" {
+		// TODO(rytaft): Handle anonymous tables such as set-generating
+		// functions with just one column.
+
+		// If an alias was specified, use that.
+		tableAlias = as.Alias
+		for i := range scope.cols {
+			scope.cols[i].table = optbase.TableName(tableAlias)
+		}
+	}
+
+	if len(colAlias) > 0 {
+		// The column aliases can only refer to explicit columns.
+		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
+			if colIdx >= len(scope.cols) {
+				panic(errorf(
+					"source %q has %d columns available but %d columns specified",
+					tableAlias, aliasIdx, len(colAlias)))
+			}
+			if scope.cols[colIdx].hidden {
+				continue
+			}
+			scope.cols[colIdx].name = optbase.ColumnName(colAlias[aliasIdx])
+			aliasIdx++
+		}
 	}
 }
 
@@ -863,6 +888,12 @@ func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
 	return false
 }
 
+// buildHaving builds a set of memo groups that represent the given HAVING
+// clause. inScope contains the name bindings that are visible for this HAVING
+// clause (e.g., passed in from an enclosing statement).
+//
+// The return value corresponds to the top-level memo group ID for this
+// HAVING clause.
 func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
 	out := b.buildScalar(inScope.resolveType(having, types.Bool), inScope)
 	if len(inScope.groupby.varsUsed) > 0 {
@@ -871,6 +902,362 @@ func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
 		panic(groupingError(col.String()))
 	}
 	return out
+}
+
+// buildJoin builds a set of memo groups that represent the given join table
+// expression.
+//
+// See Builder.buildStmt above for a description of the remaining input and
+// return values.
+func (b *Builder) buildJoin(
+	join *tree.JoinTableExpr, inScope *scope,
+) (out opt.GroupID, outScope *scope) {
+	left, leftScope := b.buildTable(join.Left, inScope)
+	right, rightScope := b.buildTable(join.Right, inScope)
+
+	// Check that the same table name is not used on both sides.
+	leftTables := make(map[string]struct{})
+	for _, leftCol := range leftScope.cols {
+		leftTables[string(leftCol.table)] = exists
+	}
+
+	for _, rightCol := range rightScope.cols {
+		t := rightCol.table
+		if t == "" {
+			// Allow joins of sources that define columns with no
+			// associated table name. At worst, the USING/NATURAL
+			// detection code or expression analysis for ON will detect an
+			// ambiguity later.
+			continue
+		}
+		if _, ok := leftTables[string(t)]; ok {
+			panic(errorf("cannot join columns from the same source name %q (missing AS clause)", t))
+		}
+	}
+
+	joinType := getJoinType(join.Join)
+
+	switch cond := join.Cond.(type) {
+	case tree.NaturalJoinCond, *tree.UsingJoinCond:
+		var usingColNames tree.NameList
+
+		switch t := cond.(type) {
+		case tree.NaturalJoinCond:
+			usingColNames = commonColumns(leftScope, rightScope)
+		case *tree.UsingJoinCond:
+			usingColNames = t.Cols
+		}
+
+		return b.buildUsingJoin(joinType, usingColNames, left, right, leftScope, rightScope, inScope)
+
+	case *tree.OnJoinCond, nil:
+		// Append columns added by the children, as they are visible to the filter.
+		outScope = inScope.push()
+		outScope.appendColumns(leftScope)
+		outScope.appendColumns(rightScope)
+
+		var filter opt.GroupID
+		if on, ok := cond.(*tree.OnJoinCond); ok {
+			filter = b.buildScalar(outScope.resolveType(on.Expr, types.Bool), outScope)
+		} else {
+			filter = b.factory.ConstructTrue()
+		}
+
+		return b.constructJoin(joinType, left, right, filter), outScope
+
+	default:
+		panic(fmt.Sprintf("unsupported join condition %#v", cond))
+	}
+}
+
+// commonColumns returns the names of columns common on the
+// left and right sides, for use by NATURAL JOIN.
+func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
+	for _, leftCol := range leftScope.cols {
+		if leftCol.hidden {
+			continue
+		}
+		for _, rightCol := range rightScope.cols {
+			if rightCol.hidden {
+				continue
+			}
+
+			if leftCol.name == rightCol.name {
+				common = append(common, tree.Name(leftCol.name))
+				break
+			}
+		}
+	}
+
+	return common
+}
+
+// buildUsingJoin builds a set of memo groups that represent the given join
+// table expression with the given `USING` column names. It is used for both
+// USING and NATURAL joins.
+//
+// joinType    The join type (inner, left, right or outer)
+// names       The list of `USING` column names
+// left        The memo group ID of the left table
+// right       The memo group ID of the right table
+// leftScope   The outScope from the left table
+// rightScope  The outScope from the right table
+//
+// See Builder.buildStmt above for a description of the remaining input and
+// return values.
+func (b *Builder) buildUsingJoin(
+	joinType joinType,
+	names tree.NameList,
+	left, right opt.GroupID,
+	leftScope, rightScope, inScope *scope,
+) (out opt.GroupID, outScope *scope) {
+	// Build the join predicate.
+	mergedCols, filter, outScope := b.buildUsingJoinPredicate(
+		joinType, leftScope.cols, rightScope.cols, names, inScope,
+	)
+
+	out = b.constructJoin(joinType, left, right, filter)
+
+	if len(mergedCols) > 0 {
+		// Wrap in a projection to include the merged columns.
+		projections := make([]opt.GroupID, 0, len(outScope.cols))
+		for _, col := range outScope.cols {
+			if mergedCol, ok := mergedCols[col.index]; ok {
+				projections = append(projections, mergedCol)
+			} else {
+				v := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+				projections = append(projections, v)
+			}
+		}
+
+		p := b.constructList(opt.ProjectionsOp, projections, outScope.cols)
+		out = b.factory.ConstructProject(out, p)
+	}
+
+	return out, outScope
+}
+
+// buildUsingJoinPredicate builds a set of memo groups that represent the join
+// conditions for a USING join or natural join. It finds the columns in the
+// left and right relations that match the columns provided in the names
+// parameter, and creates equality predicate(s) with those columns. It also
+// ensures that there is a single output column for each name in `names`
+// (other columns with the same name are hidden).
+//
+// -- Merged columns --
+//
+// With NATURAL JOIN or JOIN USING (a,b,c,...), SQL allows us to refer to the
+// columns a,b,c directly; these columns have the following semantics:
+//   a = IFNULL(left.a, right.a)
+//   b = IFNULL(left.b, right.b)
+//   c = IFNULL(left.c, right.c)
+//   ...
+//
+// Furthermore, a star has to resolve the columns in the following order:
+// merged columns, non-equality columns from the left table, non-equality
+// columns from the right table. To perform this rearrangement, we use a
+// projection on top of the join. Note that the original columns must
+// still be accessible via left.a, right.a (they will just be hidden).
+//
+// For inner or left outer joins, a is always the same as left.a.
+//
+// For right outer joins, a is always equal to right.a; but for some types
+// (like collated strings), this doesn't mean it is the same as right.a. In
+// this case we must still use the IFNULL construct.
+//
+// Example:
+//
+//  left has columns (a,b,x)
+//  right has columns (a,b,y)
+//
+//  - SELECT * FROM left JOIN right USING(a,b)
+//
+//  join has columns:
+//    1: left.a
+//    2: left.b
+//    3: left.x
+//    4: right.a
+//    5: right.b
+//    6: right.y
+//
+//  projection has columns and corresponding variable expressions:
+//    1: a aka left.a        @1
+//    2: b aka left.b        @2
+//    3: left.x              @3
+//    4: right.a (hidden)    @4
+//    5: right.b (hidden)    @5
+//    6: right.y             @6
+//
+// If the join was a FULL OUTER JOIN, the columns would be:
+//    1: a                   IFNULL(@1,@4)
+//    2: b                   IFNULL(@2,@5)
+//    3: left.a (hidden)     @1
+//    4: left.b (hidden)     @2
+//    5: left.x              @3
+//    6: right.a (hidden)    @4
+//    7: right.b (hidden)    @5
+//    8: right.y             @6
+//
+// If new merged columns are created (as in the FULL OUTER JOIN example above),
+// the return value mergedCols contains a mapping from the column index to the
+// memo group ID of the IFNULL expression.
+//
+// See Builder.buildStmt above for a description of the remaining input and
+// return values.
+func (b *Builder) buildUsingJoinPredicate(
+	joinType joinType,
+	leftCols []columnProps,
+	rightCols []columnProps,
+	names tree.NameList,
+	inScope *scope,
+) (mergedCols map[opt.ColumnIndex]opt.GroupID, out opt.GroupID, outScope *scope) {
+	joined := make(map[optbase.ColumnName]*columnProps, len(names))
+	conditions := make([]opt.GroupID, 0, len(names))
+	mergedCols = make(map[opt.ColumnIndex]opt.GroupID)
+	outScope = inScope.push()
+
+	for _, n := range names {
+		name := optbase.ColumnName(n)
+		if _, ok := joined[name]; ok {
+			panic(errorf("column %q appears more than once in USING clause", name))
+		}
+
+		// For every adjacent pair of tables, add an equality predicate.
+		leftCol := findUsingColumn(leftCols, name, "left")
+		rightCol := findUsingColumn(rightCols, name, "right")
+
+		if !leftCol.typ.Equivalent(rightCol.typ) {
+			// First, check if the comparison would even be valid.
+			if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
+				panic(errorf(
+					"JOIN/USING types %s for left and %s for right cannot be matched for column %s",
+					leftCol.typ, rightCol.typ, leftCol.name,
+				))
+			}
+		}
+
+		// Construct the predicate.
+		leftVar := b.factory.ConstructVariable(b.factory.InternPrivate(leftCol.index))
+		rightVar := b.factory.ConstructVariable(b.factory.InternPrivate(rightCol.index))
+		eq := b.factory.ConstructEq(leftVar, rightVar)
+		conditions = append(conditions, eq)
+
+		// Add the merged column to the scope, constructing a new column if needed.
+		if joinType == joinTypeInner || joinType == joinTypeLeftOuter {
+			// The merged column is the same as the corresponding column from the
+			// left side.
+			outScope.cols = append(outScope.cols, *leftCol)
+		} else if joinType == joinTypeRightOuter &&
+			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
+			// The merged column is the same as the corresponding column from the
+			// right side.
+			outScope.cols = append(outScope.cols, *rightCol)
+		} else {
+			// Construct a new merged column to represent IFNULL(left, right).
+			col := b.synthesizeColumn(outScope, string(leftCol.name), leftCol.typ)
+			merged := b.factory.ConstructCoalesce(b.factory.InternList([]opt.GroupID{leftVar, rightVar}))
+			mergedCols[col.index] = merged
+		}
+
+		joined[name] = &outScope.cols[len(outScope.cols)-1]
+	}
+
+	// Hide other columns that have the same name as the merged columns.
+	hideMatchingColumns(leftCols, joined, outScope)
+	hideMatchingColumns(rightCols, joined, outScope)
+
+	return mergedCols, b.constructFilter(conditions), outScope
+}
+
+// hideMatchingColumns iterates through each of the columns in cols and
+// performs one of the following actions:
+// (1) If the column is equal to one of the columns in `joined`, it is skipped
+//     since it was one of the merged columns already added to the scope.
+// (2) If the column has the same name as one of the columns in `joined` but is
+//     not equal, it is marked as hidden and added to the scope.
+// (3) All other columns are added to the scope without modification.
+func hideMatchingColumns(
+	cols []columnProps, joined map[optbase.ColumnName]*columnProps, scope *scope,
+) {
+	for _, col := range cols {
+		if foundCol, ok := joined[col.name]; ok {
+			// Hide other columns with the same name.
+			if col == *foundCol {
+				continue
+			}
+			col.hidden = true
+		}
+		scope.cols = append(scope.cols, col)
+	}
+}
+
+// constructFilter builds a set of memo groups that represent the given
+// list of filter conditions. It returns the top-level memo group ID for the
+// filter.
+func (b *Builder) constructFilter(conditions []opt.GroupID) opt.GroupID {
+	switch len(conditions) {
+	case 0:
+		return b.factory.ConstructTrue()
+	case 1:
+		return conditions[0]
+	default:
+		return b.factory.ConstructAnd(b.factory.InternList(conditions))
+	}
+}
+
+type joinType int
+
+const (
+	joinTypeInner joinType = iota
+	joinTypeLeftOuter
+	joinTypeRightOuter
+	joinTypeFullOuter
+)
+
+func getJoinType(astJoinType string) joinType {
+	switch astJoinType {
+	case "JOIN", "INNER JOIN", "CROSS JOIN":
+		return joinTypeInner
+	case "LEFT JOIN":
+		return joinTypeLeftOuter
+	case "RIGHT JOIN":
+		return joinTypeRightOuter
+	case "FULL JOIN":
+		return joinTypeFullOuter
+	default:
+		panic(errorf("unsupported JOIN type %T", astJoinType))
+	}
+}
+
+func (b *Builder) constructJoin(joinType joinType, left, right, filter opt.GroupID) opt.GroupID {
+	switch joinType {
+	case joinTypeInner:
+		return b.factory.ConstructInnerJoin(left, right, filter)
+	case joinTypeLeftOuter:
+		return b.factory.ConstructLeftJoin(left, right, filter)
+	case joinTypeRightOuter:
+		return b.factory.ConstructRightJoin(left, right, filter)
+	case joinTypeFullOuter:
+		return b.factory.ConstructFullJoin(left, right, filter)
+	default:
+		panic(fmt.Errorf("unsupported JOIN type %d", joinType))
+	}
+}
+
+// findUsingColumn finds the column in cols that has the given name. If the
+// column exists it is returned. Otherwise, an error is thrown.
+//
+// context is a string ("left" or "right") used to indicate in the error
+// message whether the name is missing from the left or right side of the join.
+func findUsingColumn(cols []columnProps, name optbase.ColumnName, context string) *columnProps {
+	for i := range cols {
+		col := &cols[i]
+		if !col.hidden && col.name == name {
+			return col
+		}
+	}
+
+	panic(errorf("column \"%s\" specified in USING clause does not exist in %s table", name, context))
 }
 
 // buildProjectionList builds a set of memo groups that represent the given
@@ -895,16 +1282,8 @@ func (b *Builder) buildProjectionList(
 
 	projections = make([]opt.GroupID, 0, len(selects))
 	for _, e := range selects {
-		end := len(outScope.cols)
 		subset := b.buildProjection(e.Expr, string(e.As), inScope, outScope)
 		projections = append(projections, subset...)
-
-		// Update the name of the column if there is an alias defined.
-		if e.As != "" {
-			for i := range outScope.cols[end:] {
-				outScope.cols[i].name = optbase.ColumnName(e.As)
-			}
-		}
 	}
 
 	// Don't add an unnecessary "pass through" project expression.
@@ -983,14 +1362,14 @@ func (b *Builder) buildScalarProjection(
 	// NB: The case statements are sorted lexicographically.
 	switch t := texpr.(type) {
 	case *columnProps:
-		return b.buildVariableProjection(b.colMap[t.index], inScope, outScope)
+		return b.buildVariableProjection(t, label, inScope, outScope)
 
 	case *tree.FuncExpr:
 		out, col := b.buildFunction(t, label, inScope)
 		if col != nil {
 			// Function was mapped to a column reference, such as in the case
 			// of an aggregate.
-			outScope.cols = append(outScope.cols, b.colMap[col.index])
+			outScope.cols = append(outScope.cols, *col)
 		} else {
 			out = b.buildDefaultScalarProjection(texpr, out, label, inScope, outScope)
 		}
@@ -1007,7 +1386,8 @@ func (b *Builder) buildScalarProjection(
 }
 
 // buildVariableProjection builds a memo group that represents the given
-// column.
+// column. label contains an optional alias for the column (e.g., if specified
+// with the AS keyword).
 //
 // The return value corresponds to the top-level memo group ID for this scalar
 // expression.
@@ -1016,12 +1396,23 @@ func (b *Builder) buildScalarProjection(
 // (outScope is passed as a parameter here rather than a return value because
 // the newly bound variables are appended to a growing list to be returned by
 // buildProjectionList).
-func (b *Builder) buildVariableProjection(col columnProps, inScope, outScope *scope) opt.GroupID {
+func (b *Builder) buildVariableProjection(
+	col *columnProps, label string, inScope, outScope *scope,
+) opt.GroupID {
 	if inScope.inGroupingContext() && !inScope.groupby.groupingsScope.hasColumn(col.index) {
 		panic(groupingError(col.String()))
 	}
 	out := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
-	outScope.cols = append(outScope.cols, col)
+	outScope.cols = append(outScope.cols, *col)
+
+	// Update the column name with the alias if it exists, and mark the column
+	// as a visible member of an anonymous table.
+	col = &outScope.cols[len(outScope.cols)-1]
+	if label != "" {
+		col.name = optbase.ColumnName(label)
+	}
+	col.table = ""
+	col.hidden = false
 	return out
 }
 
@@ -1096,7 +1487,7 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 	}
 
 	colIndex := b.factory.Metadata().AddColumn(label, typ)
-	col := columnProps{typ: typ, index: colIndex}
+	col := columnProps{name: optbase.ColumnName(label), typ: typ, index: colIndex}
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)
 	return &scope.cols[len(scope.cols)-1]
@@ -1127,6 +1518,20 @@ func (b *Builder) constructList(
 	panic(fmt.Sprintf("unexpected operator: %s", op))
 }
 
+// buildDistinct builds a set of memo groups that represent a DISTINCT
+// expression.
+//
+// in        contains the memo group ID of the input expression.
+// distinct  is true if this is a DISTINCT expression. If distinct is false,
+//           we just return `in`.
+// byCols    is the set of columns in the DISTINCT expression. Since
+//           DISTINCT is equivalent to GROUP BY without any aggregations,
+//           byCols are essentially the grouping columns.
+// inScope   contains the name bindings that are visible for this DISTINCT
+//           expression (e.g., passed in from an enclosing statement).
+//
+// The return value corresponds to the top-level memo group ID for this
+// DISTINCT expression.
 func (b *Builder) buildDistinct(
 	in opt.GroupID, distinct bool, byCols []columnProps, inScope *scope,
 ) opt.GroupID {
