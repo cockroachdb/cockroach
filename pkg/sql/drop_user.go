@@ -144,7 +144,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 		)
 	}
 
-	numDeleted := 0
+	var numUsersDeleted, numRoleMembershipsDeleted int
 	for normalizedUsername := range userNames {
 		// We don't specifically check whether it's a user or role, we should never reach
 		// this point anyway, the "privileges exist" check will fail first.
@@ -171,10 +171,10 @@ func (n *DropUserNode) startExec(params runParams) error {
 		if rowsAffected == 0 && !n.ifExists {
 			return errors.Errorf("%s %s does not exist", entryType, normalizedUsername)
 		}
-		numDeleted += rowsAffected
+		numUsersDeleted += rowsAffected
 
 		// Drop all role memberships involving the user/role.
-		_, err = internalExecutor.ExecuteStatementInTransaction(
+		rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,
@@ -184,9 +184,19 @@ func (n *DropUserNode) startExec(params runParams) error {
 		if err != nil {
 			return err
 		}
+
+		numRoleMembershipsDeleted += rowsAffected
 	}
 
-	n.run.numDeleted = numDeleted
+	if numRoleMembershipsDeleted > 0 {
+		// Some role memberships have been deleted, bump role_members table version to
+		// force a refresh of role membership.
+		if err := params.p.BumpRoleMembershipTableVersion(params.ctx); err != nil {
+			return err
+		}
+	}
+
+	n.run.numDeleted = numUsersDeleted
 
 	return nil
 }

@@ -398,6 +398,17 @@ func (p *planner) getTableDesc(
 	return p.Tables().getTableVersion(ctx, p.txn, p.getVirtualTabler(), tn)
 }
 
+// bumpTableVersion loads the table descriptor for 'table', calls UpVersion and persists it.
+func (p *planner) bumpTableVersion(ctx context.Context, tn *tree.TableName) error {
+	tableDesc, err := MustGetTableOrViewDesc(
+		ctx, p.txn, p.getVirtualTabler(), tn, false /*allowAdding*/)
+	if err != nil {
+		return err
+	}
+
+	return p.saveNonmutationAndNotify(ctx, tableDesc)
+}
+
 func (p *planner) getPlanForDesc(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
