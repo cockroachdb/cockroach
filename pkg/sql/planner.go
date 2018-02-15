@@ -216,7 +216,7 @@ func newInternalPlanner(
 		"internal-root",
 		mon.MemoryResource,
 		memMetrics.CurBytesCount, memMetrics.MaxBytesHist,
-		noteworthyInternalMemoryUsageBytes)
+		noteworthyInternalMemoryUsageBytes, execCfg.Settings)
 
 	s.sessionMon = mon.MakeMonitor("internal-session",
 		mon.MemoryResource,
