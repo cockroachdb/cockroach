@@ -25,6 +25,7 @@ import (
 	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -319,6 +320,7 @@ func addSSTablePreApply(
 	sideloaded sideloadStorage,
 	term, index uint64,
 	sst storagebase.ReplicatedEvalResult_AddSSTable,
+	limiter *rate.Limiter,
 ) bool {
 	checksum := util.CRC32(sst.Data)
 
@@ -396,7 +398,7 @@ func addSSTablePreApply(
 			}
 		}
 
-		if err := writeFileSyncing(ctx, path, sst.Data, 0600, st); err != nil {
+		if err := writeFileSyncing(ctx, path, sst.Data, 0600, st, limiter); err != nil {
 			log.Fatalf(ctx, "while ingesting %s: %s", path, err)
 		}
 		copied = true

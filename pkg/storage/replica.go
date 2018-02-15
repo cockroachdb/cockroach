@@ -927,7 +927,11 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	}
 	var err error
 	if r.raftMu.sideloaded, err = newDiskSideloadStorage(
-		r.store.cfg.Settings, r.mu.state.Desc.RangeID, replicaID, r.store.Engine().GetAuxiliaryDir(),
+		r.store.cfg.Settings,
+		r.mu.state.Desc.RangeID,
+		replicaID,
+		r.store.Engine().GetAuxiliaryDir(),
+		r.store.bulkIOWriteLimiter,
 	); err != nil {
 		return errors.Wrap(err, "while initializing sideloaded storage")
 	}
@@ -4676,6 +4680,7 @@ func (r *Replica) processRaftCommand(
 				term,
 				raftIndex,
 				*raftCmd.ReplicatedEvalResult.AddSSTable,
+				r.store.bulkIOWriteLimiter,
 			)
 			r.store.metrics.AddSSTableApplications.Inc(1)
 			if copied {

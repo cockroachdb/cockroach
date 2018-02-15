@@ -120,6 +120,13 @@ var enablePreVote = envutil.EnvOrDefaultBool(
 var enableTickQuiesced = envutil.EnvOrDefaultBool(
 	"COCKROACH_ENABLE_TICK_QUIESCED", true)
 
+// bulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
+var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
+	"kv.bulk_io_write.max_rate",
+	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
+	math.MaxInt64,
+)
+
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
@@ -365,6 +372,7 @@ type Store struct {
 	metrics            *StoreMetrics
 	intentResolver     *intentResolver
 	raftEntryCache     *raftEntryCache
+	bulkIOWriteLimiter *rate.Limiter
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -867,6 +875,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.metrics.registry.AddMetricStruct(s.compactor.Metrics)
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
+
+	s.bulkIOWriteLimiter = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
+	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.bulkIOWriteLimiter.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
+	})
 
 	if s.cfg.Gossip != nil {
 		// Add range scanner and configure with queues.

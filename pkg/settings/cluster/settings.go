@@ -16,10 +16,7 @@ package cluster
 
 import (
 	"context"
-	"math"
 	"sync/atomic"
-
-	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -69,9 +66,8 @@ type Settings struct {
 
 	Version ExposedClusterVersion
 
-	Tracer             *tracing.Tracer
-	BulkIOWriteLimiter *rate.Limiter
-	ExternalIODir      string
+	Tracer        *tracing.Tracer
+	ExternalIODir string
 
 	Initialized bool
 }
@@ -87,16 +83,6 @@ var version = settings.RegisterStateMachineSetting(KeyVersionSetting,
 	"set the active cluster version in the format '<major>.<minor>'.", // hide optional `-<unstable>`
 	settings.TransformerFn(versionTransformer),
 )
-
-// BulkIOWriteLimit is defined here because it is used by BulkIOWriteLimiter.
-var BulkIOWriteLimit = settings.RegisterByteSizeSetting(
-	"kv.bulk_io_write.max_rate",
-	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
-	math.MaxInt64,
-)
-
-// BulkIOWriteLimiterBurst is the burst for the BulkIOWriteLimiter cluster setting.
-const BulkIOWriteLimiterBurst = 2 * 1024 * 1024 // 2MB
 
 // InitializeVersion initializes the Version field of this setting. Before this
 // method has been called, usage of the Version field is illegal and leads to a
@@ -237,14 +223,6 @@ func MakeClusterSettings(minVersion, serverVersion roachpb.Version) *Settings {
 			s.Version.cb(newV)
 		}
 		s.Version.baseVersion.Store(&newV)
-	})
-
-	// TODO(dan): This limiting should be per-store and shared between any
-	// operations that need lots of disk throughput.
-	s.BulkIOWriteLimiter = rate.NewLimiter(rate.Limit(BulkIOWriteLimit.Get(sv)), BulkIOWriteLimiterBurst)
-
-	BulkIOWriteLimit.SetOnChange(sv, func() {
-		s.BulkIOWriteLimiter.SetLimit(rate.Limit(BulkIOWriteLimit.Get(sv)))
 	})
 
 	s.Initialized = true
