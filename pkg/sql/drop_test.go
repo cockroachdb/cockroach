@@ -18,6 +18,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
+	"time"
 
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -157,11 +158,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	tableSpan := tbDesc.TableSpan()
-	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := 6; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
+	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 
 	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
 		`database "t" is not empty`) {
@@ -173,11 +170,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 
 	// Data is not deleted.
-	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := 6; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
+	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 
 	if err := descExists(sqlDB, true, tbDesc.ID); err != nil {
 		t.Fatal(err)
@@ -259,9 +252,26 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	}
 	tbDesc := desc.GetTable()
 
-	// Add a zone config for both the table and database.
+	tableSpan := tbDesc.TableSpan()
+	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
+		`database "t" is not empty`) {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
+		t.Fatal(err)
+	}
+
+	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Push a new zone config for both the table and database with TTL=0
+	// so the data is deleted immediately.
 	cfg := config.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately.
+	cfg.GC.TTLSeconds = 0
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -270,29 +280,6 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := zoneExists(sqlDB, &cfg, tbDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	tableSpan := tbDesc.TableSpan()
-	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := 6; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
-
-	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
-		`database "t" is not empty`) {
-		t.Fatal(err)
-	}
-
-	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,11 +292,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	})
 
 	// Data is deleted.
-	if kvs, err := kvDB.Scan(ctx, tableSpan.Key, tableSpan.EndKey, 0); err != nil {
-		t.Fatal(err)
-	} else if l := 0; len(kvs) != l {
-		t.Fatalf("expected %d key value pairs, but got %d", l, len(kvs))
-	}
+	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 }
 
 // Tests that SHOW TABLES works correctly when a database is recreated
@@ -618,24 +601,27 @@ func TestDropTableDeleteData(t *testing.T) {
 		t.Fatalf("Name entry %q does not exist", nameKey)
 	}
 
-	// Add a zone config for the table.
+	tableSpan := tableDesc.TableSpan()
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Data still exists.
+	if err := descExists(sqlDB, true, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
+
+	// Push a new zone config for the table with TTL=0 so the data
+	// is deleted immediately.
 	cfg := config.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately.
+	cfg.GC.TTLSeconds = 0
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := zoneExists(sqlDB, &cfg, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	tableSpan := tableDesc.TableSpan()
-	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
 

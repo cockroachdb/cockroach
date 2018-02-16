@@ -51,7 +51,7 @@ var (
 	MinSchemaChangeLeaseDuration = time.Minute
 )
 
-// This is a delay [0.1 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
+// This is a delay [0.9 * asyncSchemaChangeDelay, 1.1 * asyncSchemaChangeDelay)
 // added to an attempt to run a schema change via the asynchronous path.
 // This delay allows the synchronous path to execute the schema change
 // in all likelihood. We'd like the synchronous path to execute
@@ -68,6 +68,11 @@ var (
 // attempting to become the job coordinator.
 const asyncSchemaChangeDelay = 30 * time.Second
 
+// This is the delay [0.9 * asyncSchemaChangeGCDelay, 1.1 * asyncSchemaChangeGCDelay)
+// added to an attempt to run a schema change via the asynchronous path
+// for GC-ing of dropped schema change data.
+const asyncSchemaChangeGCDelay = 10 * time.Minute
+
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
 	tableID    sqlbase.ID
@@ -77,7 +82,9 @@ type SchemaChanger struct {
 	leaseMgr   *LeaseManager
 	// The SchemaChangeManager can attempt to execute this schema
 	// changer after this time.
-	execAfter      time.Time
+	execAfter time.Time
+	// This schema change is responsible for GC-ing drop schema change data.
+	forGC          bool
 	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
@@ -289,8 +296,26 @@ func (sc *SchemaChanger) maybeAddDrop(
 		// This can happen if a change other than the drop originally
 		// scheduled the changer for this table. If that's the case,
 		// we still need to wait for the deadline to expire.
-		if d := table.GCDeadline; d != 0 && timeutil.Since(timeutil.Unix(0, d)) < 0 {
-			return false, nil
+		if table.DropTime != 0 {
+			wait := true
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				wait = true
+				_, zoneCfg, _, err := GetZoneConfigInTxn(
+					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "",
+				)
+				if err != nil {
+					return err
+				}
+				deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+				wait = timeutil.Since(timeutil.Unix(0, deadline)) < 0
+				return nil
+			}); err != nil {
+				return false, err
+			}
+			if wait {
+				return false, errors.Errorf("still not hit TTL deadline: %s",
+					timeutil.Unix(0, table.DropTime))
+			}
 		}
 		// Do all the hard work of deleting the table data and the table ID.
 		if err := truncateTableInChunks(ctx, table, sc.db, false /* traceKV */); err != nil {
@@ -998,9 +1023,11 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		for {
 			// A jitter is added to reduce contention between nodes
 			// attempting to run the schema change.
-			delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.1 + rand.Float64()))
+			delay := time.Duration(float64(asyncSchemaChangeDelay) * (0.9 + 0.2*rand.Float64()))
+			gcDelay := time.Duration(float64(asyncSchemaChangeGCDelay) * (0.9 + 0.2*rand.Float64()))
 			if s.testingKnobs.AsyncExecQuickly {
 				delay = 20 * time.Millisecond
+				gcDelay = 20 * time.Millisecond
 			}
 			select {
 			case <-gossipUpdateC:
@@ -1024,7 +1051,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				}
 
 				execAfter := timeutil.Now().Add(delay)
+				execGCAfter := timeutil.Now().Add(gcDelay)
+				resetTimer := false
 				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
+					resetTimer = true
 					// Attempt to unmarshal config into a table/database descriptor.
 					var descriptor sqlbase.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
@@ -1057,16 +1087,18 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// gossip to renotify us when a schema change has been
 							// completed.
 							schemaChanger.tableID = table.ID
-							if len(table.Mutations) == 0 {
+							schemaChanger.forGC = false
+							if len(table.Mutations) == 0 || table.Dropped() {
 								schemaChanger.mutationID = sqlbase.InvalidMutationID
 							} else {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
 							schemaChanger.execAfter = execAfter
-							// If the table is dropped and there's a GCDeadline set, use that
-							// instead of the standard delay.
-							if table.Dropped() && table.GCDeadline != 0 {
-								schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
+							// If the table is dropped and there's a DropTime set, use that
+							// to generate an extended delay instead of the standard delay.
+							if !table.UpVersion && table.Dropped() && table.DropTime != 0 {
+								schemaChanger.forGC = true
+								schemaChanger.execAfter = execGCAfter
 							}
 							// Keep track of this schema change.
 							if sc, ok := s.schemaChangers[table.ID]; ok {
@@ -1082,7 +1114,10 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						// Ignore.
 					}
 				})
-				timer = s.newTimer()
+
+				if resetTimer {
+					timer = s.newTimer()
+				}
 
 			case <-timer.C:
 				if s.testingKnobs.AsyncExecNotification != nil &&
@@ -1100,7 +1135,11 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 						// Advance the execAfter time so that this schema
 						// changer doesn't get called again for a while.
-						sc.execAfter = timeutil.Now().Add(delay)
+						if sc.forGC {
+							sc.execAfter = timeutil.Now().Add(gcDelay)
+						} else {
+							sc.execAfter = timeutil.Now().Add(delay)
+						}
 						s.schemaChangers[tableID] = sc
 
 						if err != nil {
