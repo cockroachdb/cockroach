@@ -40,6 +40,7 @@ func main() {
 	` + strings.Join(allTests(), "\n\t") + `
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
+			initBinaries()
 			os.Exit(tests.Run(args))
 			return nil
 		},
