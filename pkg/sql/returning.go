@@ -105,7 +105,7 @@ func (rh *returningHelper) cookResultRow(rowVals tree.Datums) (tree.Datums, erro
 	rh.curSourceRow = rowVals
 	resRow := make(tree.Datums, len(rh.exprs))
 	for i, e := range rh.exprs {
-		rh.p.extendedEvalCtx.IVarHelper = &rh.ivarHelper
+		rh.p.extendedEvalCtx.IVarContainer = rh
 		d, err := e.Eval(rh.p.EvalContext())
 		if err != nil {
 			return nil, err
