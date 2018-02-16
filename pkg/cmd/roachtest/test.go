@@ -18,6 +18,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"runtime"
@@ -32,7 +33,7 @@ import (
 )
 
 var (
-	tests       = registry(make(map[string]*test))
+	tests       = &registry{m: make(map[string]*test), out: os.Stdout}
 	parallelism = 10
 	dryrun      = false
 )
@@ -46,17 +47,20 @@ func allTests() []string {
 	return r
 }
 
-type registry map[string]*test
+type registry struct {
+	m   map[string]*test
+	out io.Writer
+}
 
-func (r registry) Add(name string, fn func(*test)) {
-	if _, ok := r[name]; ok {
+func (r *registry) Add(name string, fn func(*test)) {
+	if _, ok := r.m[name]; ok {
 		fmt.Fprintf(os.Stderr, "test %s already registered\n", name)
 		os.Exit(1)
 	}
-	r[name] = &test{name: name, fn: fn}
+	r.m[name] = &test{name: name, fn: fn}
 }
 
-func (r registry) List(filter []string) []*test {
+func (r *registry) List(filter []string) []*test {
 	if len(filter) == 0 {
 		filter = []string{"."}
 	}
@@ -66,7 +70,7 @@ func (r registry) List(filter []string) []*test {
 	}
 
 	var results []*test
-	for _, t := range r {
+	for _, t := range r.m {
 		var matched bool
 		for _, r := range re {
 			if r.MatchString(t.name) {
@@ -85,9 +89,7 @@ func (r registry) List(filter []string) []*test {
 	return results
 }
 
-func (r registry) Run(filter []string) int {
-	initBinaries()
-
+func (r *registry) Run(filter []string) int {
 	tests := r.List(filter)
 	wg := &sync.WaitGroup{}
 	wg.Add(len(tests))
@@ -107,8 +109,8 @@ func (r registry) Run(filter []string) int {
 		sem := make(chan struct{}, parallelism)
 		for _, t := range tests {
 			sem <- struct{}{}
-			fmt.Printf("=== RUN   %s\n", t.name)
-			t.run(func(failed bool) {
+			fmt.Fprintf(r.out, "=== RUN   %s\n", t.name)
+			t.run(r.out, func(failed bool) {
 				if failed {
 					atomic.AddInt32(&fail, 1)
 				} else {
@@ -126,10 +128,10 @@ func (r registry) Run(filter []string) int {
 	wg.Wait()
 
 	if fail > 0 {
-		fmt.Println("FAIL")
+		fmt.Fprintln(r.out, "FAIL")
 		return 1
 	}
-	fmt.Println("PASS")
+	fmt.Fprintln(r.out, "PASS")
 	return 0
 }
 
@@ -215,7 +217,7 @@ func (t *test) Failed() bool {
 	return failed
 }
 
-func (t *test) run(done func(failed bool)) {
+func (t *test) run(out io.Writer, done func(failed bool)) {
 	callerName := func() string {
 		// Make room for the skip PC.
 		var pc [2]uintptr
@@ -246,9 +248,9 @@ func (t *test) run(done func(failed bool)) {
 			if !dryrun {
 				dstr := fmt.Sprintf("%.2fs", duration.Seconds())
 				if t.Failed() {
-					fmt.Printf("--- FAIL: %s (%s)\n%s", t.name, dstr, t.mu.output)
+					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.name, dstr, t.mu.output)
 				} else {
-					fmt.Printf("--- PASS: %s (%s)\n", t.name, dstr)
+					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.name, dstr)
 				}
 			}
 
