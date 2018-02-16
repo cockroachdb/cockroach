@@ -478,7 +478,13 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 
 		safeErr := AnonymizeStatementsForReporting("executing", ex.curStmt.String(), recovered)
 
+		log.ReportPanic(ctx, &ex.server.cfg.Settings.SV, safeErr, 1 /* depth */)
+
 		// Propagate the (sanitized) panic further.
+		// NOTE(andrei): It used to be that we sanitized the panic and then a higher
+		// layer was in charge of doing the log.ReportPanic() call. Now that the
+		// call is above, it's unclear whether we should propagate the original
+		// panic or safeErr. I'm propagating safeErr to be on the safe side.
 		panic(safeErr)
 	}
 	ex.close(ctx, normalClose)
