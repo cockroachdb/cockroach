@@ -28,11 +28,13 @@ func init() {
 
 		c.Put(ctx, cockroach, "<cockroach>")
 		c.Put(ctx, workload, "<workload>")
+		t.Status("starting csv servers")
 		for node := 1; node <= nodes; node++ {
 			c.Run(ctx, node, `<workload> csv-server --port=8081 &> /dev/null < /dev/null &`)
 		}
 		c.Start(ctx, c.Range(1, nodes))
 
+		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			cmd := fmt.Sprintf(

@@ -55,10 +55,12 @@ func init() {
 			defer l.close()
 			c.RunL(ctx, l, nodes[i].i, args...)
 		}
+		t.Status("initializing workload")
 		roachmartRun(ctx, 0, "<workload>", "init", "roachmart")
 
 		duration := " --duration=" + ifLocal("10s", "10m")
 
+		t.Status("running workload")
 		m := newMonitor(ctx, c)
 		for i := range nodes {
 			i := i

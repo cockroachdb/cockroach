@@ -262,10 +262,11 @@ func (n nodeListOption) String() string {
 // between a test and a subtest is current disallowed (see cluster.assertT). A
 // cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name  string
-	nodes int
-	t     testI
-	l     *logger
+	name   string
+	nodes  int
+	status func(...interface{})
+	t      testI
+	l      *logger
 }
 
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
@@ -278,18 +279,24 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 	}
 
 	c := &cluster{
-		name:  makeClusterName(t),
-		nodes: nodes,
-		t:     t,
-		l:     l,
+		name:   makeClusterName(t),
+		nodes:  nodes,
+		status: func(...interface{}) {},
+		t:      t,
+		l:      l,
 	}
 	registerCluster(c.name)
+
+	if impl, ok := t.(*test); ok {
+		c.status = impl.Status
+	}
 
 	sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(nodes)}
 	for _, arg := range args {
 		sargs = append(sargs, fmt.Sprint(arg))
 	}
 
+	c.status("creating cluster")
 	if err := execCmd(ctx, l, sargs...); err != nil {
 		t.Fatal(err)
 		return nil
@@ -323,9 +330,11 @@ func (c *cluster) Destroy(ctx context.Context) {
 	if !c.isLocal() {
 		// TODO(peter): Figure out how to retrieve local logs. One option would be
 		// to stop the cluster and mv ~/local to wherever we want it.
+		c.status("retrieving logs")
 		_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
-			filepath.Join(artifacts, c.t.Name()))
+			filepath.Join(artifacts, c.t.Name(), "logs"))
 	}
+	c.status("destroying cluster")
 	if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
 		c.l.errorf("%s", err)
 	}
@@ -350,6 +359,7 @@ func (c *cluster) Put(ctx context.Context, src, dest string) {
 			return
 		}
 	}
+	c.status("uploading binary")
 	err := execCmd(ctx, c.l, "roachprod", "put", c.name, src, c.expand(dest))
 	if err != nil {
 		c.t.Fatal(err)
@@ -368,6 +378,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if c.isLocal() {
 		binary = cockroach
 	}
+	c.status("starting cluster")
 	err := execCmd(ctx, c.l, "roachprod", "start", "-b", binary, c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
@@ -381,6 +392,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+	c.status("stopping cluster")
 	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
@@ -394,6 +406,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+	c.status("wiping cluster")
 	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
