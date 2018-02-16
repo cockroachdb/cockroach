@@ -878,7 +878,7 @@ render     0  render  ·         ·                     (a, b, c, d)            
 ·          1  ·       table     abcd@abcd             ·                                    ·
 ·          1  ·       spans     /1/NULL/1-/1/NULL/10  ·                                    ·
 
-query IIII 
+query IIII
 SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
 1  NULL  1  NULL
@@ -957,7 +957,7 @@ SELECT k, v FROM str WHERE v SIMILAR TO 'ABC_*'
 5  ABCD
 3  ABCDEZ
 
-# Test that we generate spans for IS (NOT) DISTICT FROM.
+# Test that we generate spans for IS (NOT) DISTINCT FROM.
 statement ok
 CREATE TABLE xy (x INT, y INT, INDEX (y))
 
@@ -1030,7 +1030,7 @@ render     0  render  ·         ·            (x, y)                         x!
 ·          1  ·       table     xy@xy_idx    ·                              ·
 ·          1  ·       spans     /1-/2 /2-/3  ·                              ·
 
-query II
+query II rowsort
 SELECT * FROM xy WHERE x IN (NULL, 1, 2)
 ----
 1  NULL
