@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/lib/pq/oid"
 )
@@ -48,8 +49,9 @@ type PreparedStatement struct {
 	// Types contains the final types of the placeholders, after type checking.
 	// These may differ from the types in TypeHints, if a user provides an
 	// imprecise type hint like sending an int for an oid comparison.
-	Types       tree.PlaceholderTypes
-	Columns     sqlbase.ResultColumns
+	Types   tree.PlaceholderTypes
+	Columns sqlbase.ResultColumns
+	// !!! remove this later
 	portalNames map[string]struct{}
 
 	// InTypes represents the inferred types for placeholder, using protocol
@@ -60,6 +62,7 @@ type PreparedStatement struct {
 }
 
 func (p *PreparedStatement) close(ctx context.Context) {
+	log.Infof(ctx, "!!! PS.Close: %p", p)
 	p.memAcc.Close(ctx)
 }
 
@@ -243,6 +246,7 @@ func (ex *connExecutor) newPreparedPortal(
 }
 
 func (p *PreparedPortal) close(ctx context.Context) {
+	log.Infof(ctx, "!!! PreparedPortal.Close: %p", p)
 	p.memAcc.Close(ctx)
 }
 

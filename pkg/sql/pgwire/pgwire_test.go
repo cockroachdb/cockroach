@@ -571,10 +571,13 @@ INSERT INTO d.kv (k,v) VALUES ($1, $2);
 			t.Fatalf("err = %v", err)
 		}
 
+		log.Infof(context.TODO(), "!!! test about to rollback")
 		if err := tx.Rollback(); err != nil {
 			t.Fatal(err)
 		}
+		log.Infof(context.TODO(), "!!! test about to rollback... done")
 	}
+	log.Infof(context.TODO(), "!!! test done")
 }
 
 type preparedQueryTest struct {
@@ -1259,14 +1262,14 @@ func TestPGPreparedExec(t *testing.T) {
 				baseTest.RowsAffectedErr("no RowsAffected available after the empty statement"),
 			},
 		},
-		// Any number of empty statements are permitted with a single statement
-		// anywhere.
-		{
-			"; ; SET DATABASE = system; ;",
-			[]preparedExecTest{
-				baseTest,
-			},
-		},
+		// // Any number of empty statements are permitted with a single statement
+		// // anywhere.
+		// {
+		//   "; ; SET DATABASE = system; ;",
+		//   []preparedExecTest{
+		//     baseTest,
+		//   },
+		// },
 	}
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
