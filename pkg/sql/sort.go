@@ -378,14 +378,20 @@ func (p *planner) rewriteIndexOrderings(
 			}
 
 		case tree.OrderByIndex:
-			tn, err := p.QualifyWithDatabase(ctx, &o.Table)
+			tn, err := o.Table.Normalize()
 			if err != nil {
 				return nil, err
 			}
-			desc, err := p.getTableDesc(ctx, tn)
+			desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
 			if err != nil {
 				return nil, err
 			}
+
+			// Force the name to be fully qualified so that the column references
+			// below only match against real tables in the FROM clause.
+			tn.ExplicitCatalog = true
+			tn.ExplicitSchema = true
+
 			var idxDesc *sqlbase.IndexDescriptor
 			if o.Index == "" || string(o.Index) == desc.PrimaryIndex.Name {
 				// ORDER BY PRIMARY KEY / ORDER BY INDEX t@primary
@@ -418,7 +424,7 @@ func (p *planner) rewriteIndexOrderings(
 			for k, colName := range idxDesc.ColumnNames {
 				newOrderBy = append(newOrderBy, &tree.Order{
 					OrderType: tree.OrderByColumn,
-					Expr:      &tree.ColumnItem{TableName: *tn, ColumnName: tree.Name(colName)},
+					Expr:      tree.NewColumnItem(tn, tree.Name(colName)),
 					Direction: chooseDirection(o.Direction == tree.Descending, idxDesc.ColumnDirections[k]),
 				})
 			}

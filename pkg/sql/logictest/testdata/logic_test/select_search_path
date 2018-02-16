@@ -3,10 +3,11 @@
 # Test that pg_catalog tables are accessible without qualifying table/view
 # names.
 
+# There's no table with default values in the default test database.
 query I
 SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
 ----
-1
+0
 
 query I
 SELECT COUNT(DISTINCT(1)) FROM pg_attribute
@@ -55,10 +56,11 @@ SELECT COUNT(*) FROM numbers
 query error pq: relation "words" does not exist
 SELECT COUNT(*) FROM words
 
+# There's no table with default values in t1.
 query I
 SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
 ----
-1
+0
 
 query I
 SELECT COUNT(DISTINCT(1)) FROM pg_attribute
@@ -94,10 +96,11 @@ SELECT COUNT(*) FROM words
 ----
 0
 
+# There's no table with default values in t2.
 query I
 SELECT COUNT(DISTINCT(1)) FROM pg_attrdef
 ----
-1
+0
 
 query I
 SELECT COUNT(DISTINCT(1)) FROM pg_attribute

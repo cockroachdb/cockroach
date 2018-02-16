@@ -159,10 +159,10 @@ func Load(
 			affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
-			// are present here.
+			// are present here. Ditto for the schema accessor.
 			var txn *client.Txn
-			desc, err := sql.MakeTableDesc(ctx, txn, sql.NilVirtualTabler, st, s, dbDesc.ID,
-				0 /* table ID */, ts, privs, affected, dbDesc.Name, nil, &evalCtx)
+			desc, err := sql.MakeTableDesc(ctx, txn, nil /* vt */, st, s, dbDesc.ID,
+				0 /* table ID */, ts, privs, affected, nil, &evalCtx)
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}

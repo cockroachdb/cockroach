@@ -2315,7 +2315,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.c.b_a_id" as it violates a NOT NULL constraint
+statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
 DELETE FROM a WHERE id = 'delete-me';
 
 # Clean up after the test.
@@ -2664,7 +2664,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.c.b_a_id" as it violates a NOT NULL constraint
+statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.
@@ -3189,7 +3189,7 @@ INSERT INTO c VALUES
 
 # Cascade the delete in a to the SET DEFAULT in b to the CASCADE in c which
 # should violate the NOT NULL in c.b_a_id.
-statement error pq: cannot cascade a null value into "test.c.b_a_id" as it violates a NOT NULL constraint
+statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
 DELETE FROM a WHERE id = 'delete-me';
 
 # Clean up after the test.
@@ -3678,7 +3678,7 @@ INSERT INTO c VALUES
  ,('c4-b2', 'untouched')
 ;
 
-statement error pq: cannot cascade a null value into "test.c.b_a_id" as it violates a NOT NULL constraint
+statement error pq: cannot cascade a null value into "test.public.c.b_a_id" as it violates a NOT NULL constraint
 UPDATE a SET id = 'updated' WHERE id = 'original';
 
 # Clean up after the test.

@@ -343,17 +343,6 @@ func TestAdminAPIDatabaseDoesNotExist(t *testing.T) {
 	}
 }
 
-func TestAdminAPIDatabaseVirtual(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	const errPattern = `\\"information_schema\\" is a virtual schema`
-	if err := getAdminJSONProto(s, "databases/information_schema", nil); !testutils.IsError(err, errPattern) {
-		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
-	}
-}
-
 func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -374,7 +363,7 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 
 	const fakename = "i_do_not_exist"
 	const badDBPath = "databases/" + fakename + "/tables/foo"
-	const dbErrPattern = `database \\"` + fakename + `\\" does not exist`
+	const dbErrPattern = `relation \\"` + fakename + `.foo\\" does not exist`
 	if err := getAdminJSONProto(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, dbErrPattern)
 	}
@@ -383,19 +372,6 @@ func TestAdminAPITableDoesNotExist(t *testing.T) {
 	const tableErrPattern = `relation \\"system.` + fakename + `\\" does not exist`
 	if err := getAdminJSONProto(s, badTablePath, nil); !testutils.IsError(err, tableErrPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, tableErrPattern)
-	}
-}
-
-func TestAdminAPITableVirtual(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-
-	const virtual = "information_schema"
-	const badDBPath = "databases/" + virtual + "/tables/tables"
-	const dbErrPattern = `\\"` + virtual + `\\" is a virtual schema`
-	if err := getAdminJSONProto(s, badDBPath, nil); !testutils.IsError(err, dbErrPattern) {
-		t.Fatalf("unexpected error: %v\nexpected: %s", err, dbErrPattern)
 	}
 }
 

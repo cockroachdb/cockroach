@@ -43,25 +43,25 @@ SET CLUSTER SETTING sql.distsql.merge_joins.enabled = true;
 query TITTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-render               0  render  ·               ·                  (a, b)                          a!=NULL; b!=NULL
- │                   0  ·       render 0        a                  ·                               ·
- │                   0  ·       render 1        b                  ·                               ·
- └── join            1  join    ·               ·                  (a, b, a[omitted], b[omitted])  a=a; b=b; a!=NULL; b!=NULL
-      │              1  ·       type            inner              ·                               ·
-      │              1  ·       equality        (a, b) = (a, b)    ·                               ·
-      │              1  ·       mergeJoinOrder  +"(a=a)",+"(b=b)"  ·                               ·
-      ├── render     2  render  ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
-      │    │         2  ·       render 0        test.data.a        ·                               ·
-      │    │         2  ·       render 1        test.data.b        ·                               ·
-      │    └── scan  3  scan    ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
-      │              3  ·       table           data@primary       ·                               ·
-      │              3  ·       spans           ALL                ·                               ·
-      └── render     2  render  ·               ·                  (a, b)                          a!=NULL; b!=NULL; +a,+b
-           │         2  ·       render 0        data2.a            ·                               ·
-           │         2  ·       render 1        data2.b            ·                               ·
-           └── scan  3  scan    ·               ·                  (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
-·                    3  ·       table           data@primary       ·                               ·
-·                    3  ·       spans           ALL                ·                               ·
+render               0  render  ·               ·                   (a, b)                          a!=NULL; b!=NULL
+ │                   0  ·       render 0        a                   ·                               ·
+ │                   0  ·       render 1        b                   ·                               ·
+ └── join            1  join    ·               ·                   (a, b, a[omitted], b[omitted])  a=a; b=b; a!=NULL; b!=NULL
+      │              1  ·       type            inner               ·                               ·
+      │              1  ·       equality        (a, b) = (a, b)     ·                               ·
+      │              1  ·       mergeJoinOrder  +"(a=a)",+"(b=b)"   ·                               ·
+      ├── render     2  render  ·               ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
+      │    │         2  ·       render 0        test.public.data.a  ·                               ·
+      │    │         2  ·       render 1        test.public.data.b  ·                               ·
+      │    └── scan  3  scan    ·               ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+      │              3  ·       table           data@primary        ·                               ·
+      │              3  ·       spans           ALL                 ·                               ·
+      └── render     2  render  ·               ·                   (a, b)                          a!=NULL; b!=NULL; +a,+b
+           │         2  ·       render 0        data2.a             ·                               ·
+           │         2  ·       render 1        data2.b             ·                               ·
+           └── scan  3  scan    ·               ·                   (a, b, c[omitted], d[omitted])  a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b
+·                    3  ·       table           data@primary        ·                               ·
+·                    3  ·       spans           ALL                 ·                               ·
 
 
 # ORDER BY on the mergeJoinOrder columns should not require a SORT node

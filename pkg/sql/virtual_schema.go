@@ -49,7 +49,7 @@ type virtualSchema struct {
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
 	schema   string
-	populate func(ctx context.Context, p *planner, prefix string, addRow func(...tree.Datum) error) error
+	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -83,14 +83,6 @@ type virtualSchemaEntry struct {
 	orderedTableNames []string
 }
 
-func (e virtualSchemaEntry) tableNames(explicitSchema bool) tree.TableNames {
-	var res tree.TableNames
-	for _, tableName := range e.orderedTableNames {
-		res = append(res, tree.MakeTableName(tree.Name(e.desc.Name), tree.Name(tableName)))
-	}
-	return res
-}
-
 type virtualTableEntry struct {
 	tableDef virtualSchemaTable
 	desc     *sqlbase.TableDescriptor
@@ -113,10 +105,20 @@ func (e virtualTableEntry) getPlanInfo(
 		})
 	}
 
-	constructor := func(ctx context.Context, p *planner, prefix string) (planNode, error) {
+	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
+		var dbDesc *DatabaseDescriptor
+		if dbName != "" {
+			var err error
+			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(dbName,
+				DatabaseLookupFlags{ctx: ctx, txn: p.Txn(), required: true})
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		v := p.newContainerValuesNode(columns, 0)
 
-		err := e.tableDef.populate(ctx, p, prefix, func(datums ...tree.Datum) error {
+		if err := e.tableDef.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
 			if r, c := len(datums), len(v.columns); r != c {
 				log.Fatalf(ctx, "datum row count and column count differ: %d vs %d", r, c)
 			}
@@ -134,8 +136,7 @@ func (e virtualTableEntry) getPlanInfo(
 			}
 			_, err := v.rows.AddRow(ctx, datums)
 			return err
-		})
-		if err != nil {
+		}); err != nil {
 			v.Close(ctx)
 			return nil, err
 		}
@@ -230,15 +231,19 @@ func initVirtualTableDesc(
 		hlc.Timestamp{}, /* creationTime */
 		emptyPrivileges,
 		nil, /* affected */
-		"",  /* sessionDB */
 		nil, /* semaCtx */
 		nil, /* evalCtx */
 	)
 }
 
-// entries is part of the VirtualTabler interface.
+// getEntries is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getEntries() map[string]virtualSchemaEntry {
 	return vs.entries
+}
+
+// getSchemaNames is part of the VirtualTabler interface.
+func (vs *VirtualSchemaHolder) getSchemaNames() []string {
+	return vs.orderedNames
 }
 
 // getVirtualSchemaEntry retrieves a virtual schema entry given a database name.
@@ -248,36 +253,14 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchema
 	return e, ok
 }
 
-// getVirtualDatabaseDesc checks if the provided name matches a virtual database,
-// and if so, returns that database's descriptor.
-func (vs *VirtualSchemaHolder) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	if e, ok := vs.getVirtualSchemaEntry(name); ok {
-		return e.desc
-	}
-	return nil
-}
-
-// isVirtualDatabase checks if the provided name corresponds to a virtual database.
-// isVirtualDatabase is part of the VirtualTabler interface.
-func (vs *VirtualSchemaHolder) isVirtualDatabase(name string) bool {
-	_, ok := vs.getVirtualSchemaEntry(name)
-	return ok
-}
-
-// IsVirtualDatabase checks if the provided name corresponds to a virtual database,
-// exposing this information on the Executor object itself.
-func (e *Executor) IsVirtualDatabase(name string) bool {
-	return e.cfg.VirtualSchemas.isVirtualDatabase(name)
-}
-
 // getVirtualTableEntry checks if the provided name matches a virtual database/table
 // pair. The function will return the table's virtual table entry if the name matches
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
-	if db, ok := vs.getVirtualSchemaEntry(string(tn.SchemaName)); ok {
-		if t, ok := db.tables[string(tn.TableName)]; ok {
+	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
+		if t, ok := db.tables[tn.Table()]; ok {
 			return t, nil
 		}
 		return virtualTableEntry{}, sqlbase.NewUndefinedRelationError(tn)
@@ -288,11 +271,10 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
-	getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error)
-	isVirtualDatabase(name string) bool
 	getEntries() map[string]virtualSchemaEntry
+	getSchemaNames() []string
 }
 
 // getVirtualTableDesc checks if the provided name matches a virtual database/table
@@ -312,35 +294,4 @@ func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 // a Virtual Descriptor.
 func isVirtualDescriptor(desc sqlbase.DescriptorProto) bool {
 	return desc.GetID() == keys.VirtualDescriptorID
-}
-
-// NilVirtualTabler implements VirtualTabler that returns nil.
-var NilVirtualTabler nilVirtualTabler
-
-type nilVirtualTabler struct{}
-
-var _ VirtualTabler = nilVirtualTabler{}
-
-func (nilVirtualTabler) getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error) {
-	return nil, nil
-}
-
-func (nilVirtualTabler) getVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	return nil
-}
-
-func (nilVirtualTabler) getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool) {
-	return virtualSchemaEntry{}, false
-}
-
-func (nilVirtualTabler) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
-	return virtualTableEntry{}, nil
-}
-
-func (nilVirtualTabler) isVirtualDatabase(name string) bool {
-	return false
-}
-
-func (nilVirtualTabler) getEntries() map[string]virtualSchemaEntry {
-	return nil
 }

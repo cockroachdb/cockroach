@@ -38,20 +38,22 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
-	tn, err := n.Table.NormalizeWithDatabaseName(p.SessionData().Database)
+	tn, err := n.Table.Normalize()
 	if err != nil {
 		return nil, err
 	}
 
-	tableDesc, err := getTableDesc(ctx, p.txn, p.getVirtualTabler(), tn)
+	var tableDesc *TableDescriptor
+	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+		tableDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireTableDesc)
+	})
 	if err != nil {
 		return nil, err
 	}
 	if tableDesc == nil {
-		if n.IfExists {
-			return &zeroNode{}, nil
-		}
-		return nil, sqlbase.NewUndefinedRelationError(tn)
+		return &zeroNode{}, nil
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
@@ -91,7 +93,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// If the new column has a DEFAULT expression that uses a sequence, add references between
 			// its descriptor and this column descriptor.
 			if d.HasDefaultExpr() {
-				changedSeqDescs, err := maybeAddSequenceDependencies(n.tableDesc, col, expr, params.EvalContext())
+				var changedSeqDescs []*TableDescriptor
+				// DDL statements use uncached descriptors, and can view newly added things.
+				// TODO(vivek): check if the cache can be used.
+				params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+					changedSeqDescs, err = maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
+				})
 				if err != nil {
 					return err
 				}
@@ -185,7 +192,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				ck, err := makeCheckConstraint(
+				ck, err := makeCheckConstraint(params.ctx,
 					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), *tableName)
 				if err != nil {
 					return err
@@ -195,9 +202,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 
 			case *tree.ForeignKeyConstraintTableDef:
-				if _, err := d.Table.NormalizeWithDatabaseName(
-					params.SessionData().Database,
-				); err != nil {
+				if _, err := d.Table.Normalize(); err != nil {
 					return err
 				}
 				for _, colName := range d.FromCols {
@@ -210,7 +215,16 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
-				err := params.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+
+				// If there are any FKs, we will need to update the table descriptor of the
+				// depended-on table (to register this table against its DependedOnBy field).
+				// This descriptor must be looked up uncached, and we'll allow FK dependencies
+				// on tables that were just added. See the comment at the start of
+				// the global-scope resolveFK().
+				// TODO(vivek): check if the cache can be used.
+				params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+					err = params.p.resolveFK(params.ctx, n.tableDesc, d, affected, sqlbase.ConstraintValidity_Unvalidated)
+				})
 				if err != nil {
 					return err
 				}
@@ -635,8 +649,15 @@ func applyColumnMutation(
 			}
 			s := tree.Serialize(t.Default)
 			col.DefaultExpr = &s
+
 			// Add references to the sequence descriptors this column is now using.
-			changedSeqDescs, err := maybeAddSequenceDependencies(tableDesc, col, expr, params.EvalContext())
+
+			// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+			// TODO(vivek): check if the cache can be used.
+			var changedSeqDescs []*TableDescriptor
+			params.p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+				changedSeqDescs, err = maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
+			})
 			if err != nil {
 				return err
 			}

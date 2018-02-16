@@ -66,7 +66,7 @@ func newSQLForeignKeyCheckOperation(
 // runs in the distSQL execution engine.
 func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
-	checkQuery, err := createFKCheckQuery(o.tableName.Schema(), o.tableDesc, o.constraint, o.asOf)
+	checkQuery, err := createFKCheckQuery(o.tableName.Catalog(), o.tableDesc, o.constraint, o.asOf)
 	if err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func (o *sqlForeignKeyCheckOperation) Next(params runParams) (tree.Datums, error
 		// TODO(joey): Add the job UUID once the SCRUB command uses jobs.
 		tree.DNull, /* job_uuid */
 		tree.NewDString(scrub.ForeignKeyConstraintViolation),
-		tree.NewDString(o.tableName.Schema()),
+		tree.NewDString(o.tableName.Catalog()),
 		tree.NewDString(o.tableName.Table()),
 		tree.NewDString(primaryKeyDatums.String()),
 		tree.MakeDTimestamp(params.extendedEvalCtx.GetStmtTimestamp(), time.Nanosecond),
