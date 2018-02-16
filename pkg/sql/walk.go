@@ -177,16 +177,16 @@ func (v *planVisitor) visit(plan planNode) {
 		if v.observer.attr != nil {
 			jType := ""
 			switch n.joinType {
-			case joinTypeInner:
+			case sqlbase.InnerJoin:
 				jType = "inner"
 				if len(n.pred.leftColNames) == 0 && n.pred.onCond == nil {
 					jType = "cross"
 				}
-			case joinTypeLeftOuter:
+			case sqlbase.LeftOuterJoin:
 				jType = "left outer"
-			case joinTypeRightOuter:
+			case sqlbase.RightOuterJoin:
 				jType = "right outer"
-			case joinTypeFullOuter:
+			case sqlbase.FullOuterJoin:
 				jType = "full outer"
 			}
 			v.observer.attr(name, "type", jType)

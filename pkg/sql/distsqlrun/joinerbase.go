@@ -25,7 +25,7 @@ import (
 type joinerBase struct {
 	processorBase
 
-	joinType    joinType
+	joinType    sqlbase.JoinType
 	onCond      exprHelper
 	emptyLeft   sqlbase.EncDatumRow
 	emptyRight  sqlbase.EncDatumRow
@@ -46,7 +46,7 @@ func (jb *joinerBase) init(
 	flowCtx *FlowCtx,
 	leftTypes []sqlbase.ColumnType,
 	rightTypes []sqlbase.ColumnType,
-	jType JoinType,
+	jType sqlbase.JoinType,
 	onExpr Expression,
 	leftEqColumns []uint32,
 	rightEqColumns []uint32,
@@ -54,7 +54,7 @@ func (jb *joinerBase) init(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) error {
-	jb.joinType = joinType(jType)
+	jb.joinType = jType
 
 	numLeftCols, numRightCols := len(leftTypes), len(rightTypes)
 	if post != nil {
@@ -150,17 +150,17 @@ func (jb *joinerBase) renderUnmatchedRow(
 	return jb.combinedRow
 }
 
-func shouldIncludeRightColsInOutput(joinType joinType) bool {
+func shouldIncludeRightColsInOutput(joinType sqlbase.JoinType) bool {
 	switch joinType {
-	case leftSemiJoin, leftAntiJoin, intersectAllJoin, exceptAllJoin:
+	case sqlbase.LeftSemiJoin, sqlbase.LeftAntiJoin, sqlbase.IntersectAllJoin, sqlbase.ExceptAllJoin:
 		return false
 	default:
 		return true
 	}
 }
 
-func isSetOpJoin(joinType joinType) bool {
-	return joinType == intersectAllJoin || joinType == exceptAllJoin
+func isSetOpJoin(joinType sqlbase.JoinType) bool {
+	return joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin
 }
 
 func isValidSetOpJoin(onExpr Expression, numLeftCols int, numRightCols int, numEqCols int) error {
@@ -179,19 +179,19 @@ func isValidSetOpJoin(onExpr Expression, numLeftCols int, numRightCols int, numE
 // NULLs for the columns of the other stream). This happens in FULL OUTER joins
 // and LEFT or RIGHT OUTER joins and ANTI joins (depending on which stream is
 // stored).
-func shouldEmitUnmatchedRow(side joinSide, joinType joinType) bool {
+func shouldEmitUnmatchedRow(side joinSide, joinType sqlbase.JoinType) bool {
 	switch joinType {
-	case leftSemiJoin, innerJoin, intersectAllJoin:
+	case sqlbase.LeftSemiJoin, sqlbase.InnerJoin, sqlbase.IntersectAllJoin:
 		return false
-	case rightOuter:
+	case sqlbase.RightOuterJoin:
 		return side == rightSide
-	case leftOuter:
+	case sqlbase.LeftOuterJoin:
 		return side == leftSide
-	case leftAntiJoin:
+	case sqlbase.LeftAntiJoin:
 		return side == leftSide
-	case exceptAllJoin:
+	case sqlbase.ExceptAllJoin:
 		return side == leftSide
-	case fullOuter:
+	case sqlbase.FullOuterJoin:
 		return true
 	default:
 		return true

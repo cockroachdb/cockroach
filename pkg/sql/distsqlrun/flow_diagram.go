@@ -134,41 +134,24 @@ func (jr *JoinReaderSpec) summary() (string, []string) {
 	return "JoinReader", details
 }
 
-func joinTypeDetail(joinType JoinType) string {
-	var typeStr string
-	switch joinType {
-	case JoinType_INNER:
-		typeStr = "INNER JOIN"
-	case JoinType_LEFT_OUTER:
-		typeStr = "LEFT OUTER JOIN"
-	case JoinType_RIGHT_OUTER:
-		typeStr = "RIGHT OUTER JOIN"
-	case JoinType_FULL_OUTER:
-		typeStr = "FULL OUTER JOIN"
-	case JoinType_LEFT_SEMI:
-		typeStr = "LEFT SEMI JOIN"
-	case JoinType_LEFT_ANTI:
-		typeStr = "LEFT ANTI JOIN"
-	case JoinType_INTERSECT_ALL:
-		typeStr = "INTERSECT ALL"
-	case JoinType_EXCEPT_ALL:
-		typeStr = "EXCEPT ALL"
-	default:
-		panic(fmt.Sprintf("Unsupported join type: %s", JoinType_name[int32(joinType)]))
+func joinTypeDetail(joinType sqlbase.JoinType) string {
+	typeStr := strings.Replace(joinType.String(), "_", " ", -1)
+	if joinType == sqlbase.IntersectAllJoin || joinType == sqlbase.ExceptAllJoin {
+		return fmt.Sprintf("Type: %s", typeStr)
 	}
-	return fmt.Sprintf("Type: %s", typeStr)
+	return fmt.Sprintf("Type: %s JOIN", typeStr)
 }
 
 // summary implements the diagramCellType interface.
 func (hj *HashJoinerSpec) summary() (string, []string) {
 	name := "HashJoiner"
-	if isSetOpJoin(joinType(hj.Type)) {
+	if isSetOpJoin(hj.Type) {
 		name = "HashSetOp"
 	}
 
 	details := make([]string, 0, 4)
 
-	if hj.Type != JoinType_INNER {
+	if hj.Type != sqlbase.InnerJoin {
 		details = append(details, joinTypeDetail(hj.Type))
 	}
 	if len(hj.LeftEqColumns) > 0 {
@@ -187,10 +170,12 @@ func (hj *HashJoinerSpec) summary() (string, []string) {
 	return name, details
 }
 
-func orderedJoinDetails(joinType JoinType, left, right Ordering, onExpr Expression) []string {
+func orderedJoinDetails(
+	joinType sqlbase.JoinType, left, right Ordering, onExpr Expression,
+) []string {
 	details := make([]string, 0, 3)
 
-	if joinType != JoinType_INNER {
+	if joinType != sqlbase.InnerJoin {
 		details = append(details, joinTypeDetail(joinType))
 	}
 	details = append(details, fmt.Sprintf(
@@ -207,7 +192,7 @@ func orderedJoinDetails(joinType JoinType, left, right Ordering, onExpr Expressi
 // summary implements the diagramCellType interface.
 func (mj *MergeJoinerSpec) summary() (string, []string) {
 	name := "MergeJoiner"
-	if isSetOpJoin(joinType(mj.Type)) {
+	if isSetOpJoin(mj.Type) {
 		name = "MergeSetOp"
 	}
 	return name, orderedJoinDetails(mj.Type, mj.LeftOrdering, mj.RightOrdering, mj.OnExpr)

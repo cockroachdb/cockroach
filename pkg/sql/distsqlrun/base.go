@@ -30,19 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-type joinType int
-
-const (
-	innerJoin joinType = iota
-	leftOuter
-	rightOuter
-	fullOuter
-	leftSemiJoin
-	leftAntiJoin
-	intersectAllJoin
-	exceptAllJoin
-)
-
 const rowChannelBufSize = 16
 
 type columns []uint32
