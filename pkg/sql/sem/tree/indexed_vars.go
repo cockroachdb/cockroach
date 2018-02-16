@@ -75,10 +75,10 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, er
 
 // Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
-	if ctx.IVarHelper.container == nil || ctx.IVarHelper.container == unboundContainer {
+	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
 		panic("indexed var must be bound to a container before evaluation")
 	}
-	return ctx.IVarHelper.container.IndexedVarEval(v.Idx, ctx)
+	return ctx.IVarContainer.IndexedVarEval(v.Idx, ctx)
 }
 
 // ResolvedType is part of the TypedExpr interface.

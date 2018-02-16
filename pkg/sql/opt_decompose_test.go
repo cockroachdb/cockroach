@@ -68,7 +68,7 @@ func makeSelectNode(t *testing.T, p *planner) *renderNode {
 	}
 	numColumns := len(sel.sourceInfo[0].SourceColumns)
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, numColumns)
-	p.extendedEvalCtx.IVarHelper = &sel.ivarHelper
+	p.extendedEvalCtx.IVarContainer = sel
 	sel.run.curSourceRow = make(tree.Datums, numColumns)
 	return sel
 }
@@ -84,7 +84,7 @@ func parseAndNormalizeExpr(t *testing.T, p *planner, sql string, sel *renderNode
 	if expr, _, _, err = p.resolveNamesForRender(expr, sel); err != nil {
 		t.Fatalf("%s: %v", sql, err)
 	}
-	p.semaCtx.IVarContainer = p.extendedEvalCtx.IVarHelper.Container()
+	p.semaCtx.IVarContainer = p.extendedEvalCtx.IVarContainer
 	typedExpr, err := tree.TypeCheck(expr, &p.semaCtx, types.Any)
 	if err != nil {
 		t.Fatalf("%s: %v", sql, err)
@@ -299,7 +299,7 @@ func TestSimplifyExpr(t *testing.T) {
 			// We need to manually close this memory account because we're doing the
 			// evals ourselves here.
 			defer p.extendedEvalCtx.ActiveMemAcc.Close(context.Background())
-			p.extendedEvalCtx.IVarHelper = &sel.ivarHelper
+			p.extendedEvalCtx.IVarContainer = sel
 			expr := parseAndNormalizeExpr(t, p, d.expr, sel)
 			expr, equiv := SimplifyExpr(p.EvalContext(), expr)
 			if s := expr.String(); d.expected != s {

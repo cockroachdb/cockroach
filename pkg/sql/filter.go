@@ -57,9 +57,9 @@ func (f *filterNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 
-		params.extendedEvalCtx.PushIVarHelper(&f.ivarHelper)
+		params.extendedEvalCtx.PushIVarContainer(f)
 		passesFilter, err := sqlbase.RunFilter(f.filter, params.EvalContext())
-		params.extendedEvalCtx.PopIVarHelper()
+		params.extendedEvalCtx.PopIVarContainer()
 		if err != nil {
 			return false, err
 		}
