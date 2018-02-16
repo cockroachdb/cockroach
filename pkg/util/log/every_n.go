@@ -44,6 +44,10 @@ func (e *EveryN) ShouldLog() bool {
 }
 
 func (e *EveryN) shouldLog(now time.Time) bool {
+	if VDepth(2 /* level */, 2 /* depth */) {
+		// Always log when high verbosity is desired.
+		return true
+	}
 	var shouldLog bool
 	e.Lock()
 	if now.Sub(e.lastLog) >= e.N {
