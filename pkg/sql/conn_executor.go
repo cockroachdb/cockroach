@@ -20,7 +20,6 @@ import (
 	"io"
 	"math"
 	"strconv"
-	"sync"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -279,29 +278,18 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 
 // Start starts the Server's background processing.
 func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	gossipUpdateC := s.cfg.Gossip.RegisterSystemConfigChannel()
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		first := true
 		for {
 			select {
 			case <-gossipUpdateC:
 				sysCfg, _ := s.cfg.Gossip.GetSystemConfig()
 				s.dbCache.updateSystemConfig(sysCfg)
-				if first {
-					first = false
-					wg.Done()
-				}
 			case <-stopper.ShouldStop():
 				return
 			}
 		}
 	})
-	// Wait for the databaseCache to be initialized. RegisterSystemConfigChannel()
-	// fires immediately.
-	wg.Wait()
 }
 
 func (s *Server) recordUnimplementedFeature(feature string) {
