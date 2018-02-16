@@ -24,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -84,23 +85,39 @@ func (r registry) List(filter []string) []*test {
 	return results
 }
 
-func (r registry) Run(filter []string) {
+func (r registry) Run(filter []string) int {
 	initBinaries()
 
 	tests := r.List(filter)
 	wg := &sync.WaitGroup{}
 	wg.Add(len(tests))
 
+	var pass, fail int32
 	go func() {
 		sem := make(chan struct{}, parallelism)
 		for _, t := range tests {
 			sem <- struct{}{}
 			fmt.Printf("=== RUN   %s\n", t.name)
-			t.run(wg, sem)
+			t.run(func(failed bool) {
+				if failed {
+					atomic.AddInt32(&fail, 1)
+				} else {
+					atomic.AddInt32(&pass, 1)
+				}
+				wg.Done()
+				<-sem
+			})
 		}
 	}()
 
 	wg.Wait()
+
+	if fail > 0 {
+		fmt.Println("FAIL")
+		return 1
+	}
+	fmt.Println("PASS")
+	return 0
 }
 
 type test struct {
@@ -185,7 +202,7 @@ func (t *test) Failed() bool {
 	return failed
 }
 
-func (t *test) run(wg *sync.WaitGroup, sem chan struct{}) {
+func (t *test) run(done func(failed bool)) {
 	callerName := func() string {
 		// Make room for the skip PC.
 		var pc [2]uintptr
@@ -222,8 +239,7 @@ func (t *test) run(wg *sync.WaitGroup, sem chan struct{}) {
 				}
 			}
 
-			wg.Done()
-			<-sem
+			done(t.Failed())
 		}()
 
 		t.start = timeutil.Now()
