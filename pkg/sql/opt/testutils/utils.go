@@ -45,14 +45,14 @@ func ParseTypes(colStrs []string) ([]types.T, error) {
 
 // ParseScalarExpr parses a scalar expression and converts it to a
 // tree.TypedExpr.
-func ParseScalarExpr(sql string, ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
+func ParseScalarExpr(sql string, ivc tree.IndexedVarContainer) (tree.TypedExpr, error) {
 	expr, err := parser.ParseExpr(sql)
 	if err != nil {
 		return nil, err
 	}
 
 	sema := tree.MakeSemaContext(false /* privileged */)
-	sema.IVarHelper = ivh
+	sema.IVarContainer = ivc
 
 	return expr.TypeCheck(&sema, types.Any)
 }
