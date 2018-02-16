@@ -47,8 +47,9 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   updateViewport = () => {
+    const rect = this.graphEl.getBoundingClientRect();
     this.setState({
-      viewportSize: [this.graphEl.clientWidth, this.graphEl.clientHeight],
+      viewportSize: [rect.width, rect.height],
     });
   }
 
