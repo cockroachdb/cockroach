@@ -189,7 +189,7 @@ CREATE TABLE crdb_internal.tables (
   state                    STRING NOT NULL,
   sc_lease_node_id         INT,
   sc_lease_expiration_time TIMESTAMP,
-  gc_deadline              TIMESTAMP,
+  drop_time                TIMESTAMP,
   audit_mode               STRING NOT NULL
 );
 `,
@@ -229,10 +229,10 @@ CREATE TABLE crdb_internal.tables (
 					timeutil.Unix(0, table.Lease.ExpirationTime), time.Nanosecond,
 				)
 			}
-			gcDeadlineDatum := tree.DNull
-			if table.GCDeadline != 0 {
-				gcDeadlineDatum = tree.MakeDTimestamp(
-					timeutil.Unix(0, table.GCDeadline), time.Nanosecond,
+			dropTimeDatum := tree.DNull
+			if table.DropTime != 0 {
+				dropTimeDatum = tree.MakeDTimestamp(
+					timeutil.Unix(0, table.DropTime), time.Nanosecond,
 				)
 			}
 			if err := addRow(
@@ -247,7 +247,7 @@ CREATE TABLE crdb_internal.tables (
 				tree.NewDString(table.State.String()),
 				leaseNodeDatum,
 				leaseExpDatum,
-				gcDeadlineDatum,
+				dropTimeDatum,
 				tree.NewDString(table.AuditMode.String()),
 			); err != nil {
 				return err
