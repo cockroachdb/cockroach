@@ -1767,7 +1767,7 @@ func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor,
 			}
 		}
 	}
-	return ColumnDescriptor{}, false, fmt.Errorf("column %q does not exist", name)
+	return ColumnDescriptor{}, false, NewUndefinedColumnError(string(name))
 }
 
 // UpdateColumnDescriptor updates an existing column descriptor.
@@ -1785,7 +1785,7 @@ func (desc *TableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
 		}
 	}
 
-	panic(fmt.Sprintf("column %q does not exist", column.Name))
+	panic(NewUndefinedColumnError(column.Name))
 }
 
 // FindActiveColumnByName finds an active column with the specified name.
@@ -1795,7 +1795,7 @@ func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescript
 			return c, nil
 		}
 	}
-	return ColumnDescriptor{}, fmt.Errorf("column %q does not exist", name)
+	return ColumnDescriptor{}, NewUndefinedColumnError(name)
 }
 
 // FindColumnByID finds the column with specified ID.

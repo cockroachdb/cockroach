@@ -45,7 +45,7 @@ SELECT 'pg_constraint'::REGCLASS, 'pg_catalog.pg_constraint'::REGCLASS
 ----
 pg_constraint  pg_constraint
 
-query error relation "foo.pg_constraint" does not exist
+query error pgcode 42P01 relation "foo.pg_constraint" does not exist
 SELECT 'foo.pg_constraint'::REGCLASS
 
 query TITTTTT
@@ -141,7 +141,7 @@ numeric  numeric
 query error type 'foo.' does not exist
 SELECT 'foo.'::REGTYPE
 
-query error relation "blah" does not exist
+query error pgcode 42P01 relation "blah" does not exist
 SELECT 'blah'::REGCLASS
 
 query error unknown function: blah\(\)
@@ -192,7 +192,7 @@ hascase
 statement ok
 CREATE TABLE "quotedCase" (id INT PRIMARY KEY)
 
-query error relation "quotedcase" does not exist
+query error pgcode 42P01 relation "quotedcase" does not exist
 SELECT relname from pg_class where oid='quotedCase'::regclass
 
 query T
@@ -228,7 +228,7 @@ SET DATABASE = otherdb
 
 user testuser
 
-query error relation "a" does not exist
+query error pgcode 42P01 relation "a" does not exist
 SELECT 'a'::regclass
 
 user root
@@ -266,7 +266,7 @@ SET DATABASE = thirddb
 # still exists in another database, the query does fail (regclass
 # does not automatically search in other dbs, even for the root user).
 
-query error relation "a" does not exist
+query error pgcode 42P01 relation "a" does not exist
 SELECT relname, relnatts FROM pg_class WHERE oid='a'::regclass
 
 statement ok

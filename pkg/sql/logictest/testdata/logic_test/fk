@@ -12,13 +12,13 @@ CREATE TABLE products (sku STRING PRIMARY KEY, upc STRING UNIQUE, vendor STRING)
 statement ok
 INSERT INTO products VALUES ('VP-W9QH-W44L', '867072000006', 'Dave'), ('780', '885155001450', 'iRobot')
 
-statement error relation "productz" does not exist
+statement error pgcode 42P01 relation "productz" does not exist
 CREATE TABLE missing (product STRING REFERENCES productz)
 
-statement error relation "customerz" does not exist
+statement error pgcode 42P01 relation "customerz" does not exist
 CREATE TABLE missing_with_col (customer INT REFERENCES customerz (id))
 
-statement error column "idz" does not exist
+statement error pgcode 42703 column "idz" does not exist
 CREATE TABLE missing_col (customer INT REFERENCES customers (idz))
 
 statement ok
