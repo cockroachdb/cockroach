@@ -118,7 +118,9 @@ func ProcessComputedColumns(
 
 	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	for i, col := range computedCols {
-		expr, _, _, err := resolveNames(exprs[i], sqlbase.MultiSourceInfo{sourceInfo}, ivarHelper, evalCtx.SessionData.SearchPath)
+		expr, _, _, err := resolveNames(exprs[i],
+			sqlbase.MakeMultiSourceInfo(sourceInfo),
+			ivarHelper, evalCtx.SessionData.SearchPath)
 		if err != nil {
 			return nil, nil, nil, err
 		}

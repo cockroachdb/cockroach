@@ -63,7 +63,7 @@ import (
 // is implemented as follows:
 //
 // - DataSourceInfo provides column metadata for exactly one data source;
-// - MultiSourceInfo is an array of one or more DataSourceInfo
+// - MultiSourceInfo contains an array of one or more DataSourceInfo
 // - the index in IndexedVars points to one of the columns in the
 //   logical concatenation of all items in the MultiSourceInfo;
 // - IndexedVarResolver (select_name_resolution.go) is tasked with
@@ -186,21 +186,13 @@ type SourceAliases []SourceAlias
 // source (and whether we found one).
 func (s SourceAliases) SrcIdx(name tree.TableName) (srcIdx int, found bool) {
 	for i := range s {
-		if s[i].Name.SchemaName == name.SchemaName && s[i].Name.TableName == name.TableName {
+		if s[i].Name.CatalogName == name.CatalogName &&
+			s[i].Name.SchemaName == name.SchemaName &&
+			s[i].Name.TableName == name.TableName {
 			return i, true
 		}
 	}
 	return -1, false
-}
-
-// ColumnSet looks up a source by name and returns the column set (and
-// whether we found the name).
-func (s SourceAliases) ColumnSet(name tree.TableName) (_ util.FastIntSet, found bool) {
-	idx, ok := s.SrcIdx(name)
-	if !ok {
-		return util.FastIntSet{}, false
-	}
-	return s[idx].ColumnSet, true
 }
 
 // AnonymousTable is the empty table name, used when a data source
@@ -220,14 +212,39 @@ func FillColumnRange(firstIdx, lastIdx int) util.FastIntSet {
 // NewSourceInfoForSingleTable creates a simple DataSourceInfo
 // which maps the same tableAlias to all columns.
 func NewSourceInfoForSingleTable(tn tree.TableName, columns ResultColumns) *DataSourceInfo {
+	if tn.TableName != "" && tn.SchemaName != "" {
+		// When we're not looking at an unqualified table, we make sure that
+		// the table name in the data source struct is fully qualified. This
+		// ensures that queries like this are valid:
+		//
+		// select "".information_schema.schemata.schema_name from  "".information_schema.schemata
+		tn.ExplicitCatalog = true
+		tn.ExplicitSchema = true
+	}
 	return &DataSourceInfo{
 		SourceColumns: columns,
 		SourceAliases: SourceAliases{{Name: tn, ColumnSet: FillColumnRange(0, len(columns)-1)}},
 	}
 }
 
-// MultiSourceInfo is an array of one or more DataSourceInfo.
+// MultiSourceInfo is a list of *DataSourceInfo.
 type MultiSourceInfo []*DataSourceInfo
+
+// MakeMultiSourceInfo constructs a MultiSourceInfo for the
+// given DataSourceInfos.
+func MakeMultiSourceInfo(args ...*DataSourceInfo) MultiSourceInfo {
+	return MultiSourceInfo(args)
+}
+
+func (m MultiSourceInfo) String() string {
+	var buf bytes.Buffer
+	for _, ds := range m {
+		buf.WriteString("<ds>\n")
+		buf.WriteString(ds.String())
+		buf.WriteString("</ds>\n")
+	}
+	return buf.String()
+}
 
 // findTableAlias returns the first table alias providing the column
 // index given as argument. The index must be valid.
@@ -248,7 +265,15 @@ type varFormatter struct {
 // Format implements the NodeFormatter interface.
 func (c *varFormatter) Format(ctx *tree.FmtCtx) {
 	if ctx.HasFlags(tree.FmtShowTableAliases) && c.TableName.TableName != "" {
+		// This logic is different from (*TableName).Format() with
+		// FmtAlwaysQualify, because FmtShowTableAliases only wants to
+		// prefixes the table names for vars in expressions, not table
+		// names in sub-queries.
 		if c.TableName.SchemaName != "" {
+			if c.TableName.CatalogName != "" {
+				ctx.FormatNode(&c.TableName.CatalogName)
+				ctx.WriteByte('.')
+			}
 			ctx.FormatNode(&c.TableName.SchemaName)
 			ctx.WriteByte('.')
 		}

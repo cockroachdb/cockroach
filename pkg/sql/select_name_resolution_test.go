@@ -34,7 +34,7 @@ func testInitDummySelectNode(p *planner, desc *sqlbase.TableDescriptor) *renderN
 	testName := tree.MakeTableName("test", tree.Name(desc.Name))
 	cols := planColumns(scan)
 	sel.source.info = sqlbase.NewSourceInfoForSingleTable(testName, cols)
-	sel.sourceInfo = sqlbase.MultiSourceInfo{sel.source.info}
+	sel.sourceInfo = sqlbase.MakeMultiSourceInfo(sel.source.info)
 	sel.ivarHelper = tree.MakeIndexedVarHelper(sel, len(cols))
 
 	return sel

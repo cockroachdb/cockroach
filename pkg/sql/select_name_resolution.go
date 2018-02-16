@@ -18,6 +18,7 @@
 package sql
 
 import (
+	"context"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -33,6 +34,7 @@ type nameResolutionVisitor struct {
 	sources    sqlbase.MultiSourceInfo
 	iVarHelper tree.IndexedVarHelper
 	searchPath sessiondata.SearchPath
+	resolver   sqlbase.ColumnResolver
 
 	// foundDependentVars is set to true during the analysis if an
 	// expression was found which can change values between rows of the
@@ -76,7 +78,7 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
 		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
 		//
-		_, exprs, err := expandStar(v.sources[0], t, v.iVarHelper)
+		_, exprs, err := expandStar(context.TODO(), v.sources, t, v.iVarHelper)
 		if err != nil {
 			v.err = err
 			return false, expr
@@ -111,11 +113,15 @@ func (v *nameResolutionVisitor) VisitPre(expr tree.Expr) (recurse bool, newNode 
 		return v.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		srcIdx, colIdx, err := findColumn(v.sources, t)
+		v.resolver.ResolverState.ForUpdateOrDelete = t.ForUpdateOrDelete
+		_, err := t.Resolve(context.TODO(), &v.resolver)
 		if err != nil {
 			v.err = err
 			return false, expr
 		}
+
+		srcIdx := v.resolver.ResolverState.SrcIdx
+		colIdx := v.resolver.ResolverState.ColIdx
 		ivar := v.iVarHelper.IndexedVar(v.sources[srcIdx].ColOffset + colIdx)
 		v.foundDependentVars = true
 		return true, ivar
@@ -223,6 +229,9 @@ func (p *planner) resolveNames(
 		iVarHelper:         ivarHelper,
 		searchPath:         p.SessionData().SearchPath,
 		foundDependentVars: false,
+		resolver: sqlbase.ColumnResolver{
+			Sources: sources,
+		},
 	}
 	return resolveNamesUsingVisitor(expr, v)
 }
@@ -239,6 +248,9 @@ func resolveNames(
 		iVarHelper:         ivarHelper,
 		searchPath:         searchPath,
 		foundDependentVars: false,
+		resolver: sqlbase.ColumnResolver{
+			Sources: sources,
+		},
 	}
 	return resolveNamesUsingVisitor(expr, v)
 }

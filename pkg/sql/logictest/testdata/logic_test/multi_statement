@@ -52,7 +52,7 @@ a b
 c d
 g h
 
-statement error pq: database "x" does not exist
+statement error pq: relation "x.y" does not exist
 BEGIN; INSERT INTO x.y(a) VALUES (1); END
 
 statement error pq: current transaction is aborted, commands ignored until end of transaction block

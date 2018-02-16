@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -64,6 +63,7 @@ var wrappedPlanHooks []wrappedPlanHookFn
 // interface as we find we need them, to avoid churn in the planHookFn sig and
 // the hooks that implement it.
 type PlanHookState interface {
+	SchemaResolver
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
 	ExecCfg() *ExecutorConfig
@@ -74,7 +74,6 @@ type PlanHookState interface {
 	TypeAsStringOpts(
 		opts tree.KVOptions, valuelessOpts map[string]bool,
 	) (func() (map[string]string, error), error)
-	Txn() *client.Txn
 	User() string
 	AuthorizationAccessor
 	// The role create/drop call into OSS code to reuse plan nodes.

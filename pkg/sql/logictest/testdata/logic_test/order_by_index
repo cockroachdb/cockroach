@@ -136,16 +136,16 @@ nosort               0  nosort  ·               ·                  (k)        
 ·                    3  ·       spans           ALL                ·                               ·
 
 # Check the extended syntax cannot be used in case of renames.
-statement error source name "kv" not found in FROM clause
+statement error no data source matches prefix: test.public.kv
 SELECT * FROM kv AS a, kv AS b ORDER BY PRIMARY KEY kv
 
 # The INDEX/PRIMARY syntax can only be used when the data source
 # is a real table, not an alias.
 #
-statement error source name "kv" not found in FROM clause
+statement error no data source matches prefix: test.public.kv
 SELECT k FROM (SELECT @1, @1 FROM generate_series(1,10)) AS kv(k,v) ORDER BY PRIMARY KEY kv
 
-statement error source name "kv" not found in FROM clause
+statement error no data source matches prefix: test.public.kv
 CREATE TABLE unrelated(x INT); SELECT * FROM unrelated ORDER BY PRIMARY KEY kv
 
 # Check that prepare doesn't crash on ORDER BY PK clauses #17312

@@ -77,10 +77,10 @@ foo1 foo2 c
 
 # Verify we can't resolve columns using overridden table or colum names.
 
-query error source name "abc" not found in FROM clause
+query error no data source matches prefix: abc
 SELECT abc.foo1 FROM abc AS foo (foo1)
 
-query error source name "abc" not found in FROM clause
+query error no data source matches prefix: abc
 SELECT abc.b FROM abc AS foo (foo1)
 
 query error column name "foo.a" not found
@@ -112,7 +112,7 @@ foo1 foo2
 statement ok
 SELECT rowid, foo.rowid FROM ab AS foo (foo1, foo2)
 
-query error source name "ab" not found in FROM clause
+query error no data source matches prefix: ab
 SELECT ab.rowid FROM ab AS foo (foo1)
 
 query error source "foo" has 2 columns available but 3 columns specified

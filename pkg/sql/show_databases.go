@@ -26,6 +26,6 @@ import (
 //          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
 func (p *planner) ShowDatabases(ctx context.Context, n *tree.ShowDatabases) (planNode, error) {
 	return p.delegateQuery(ctx, "SHOW DATABASES",
-		`SELECT SCHEMA_NAME AS "Database" FROM information_schema.schemata ORDER BY "Database"`,
+		`SELECT DISTINCT catalog_name AS "Database" FROM "".information_schema.schemata ORDER BY 1`,
 		nil, nil)
 }

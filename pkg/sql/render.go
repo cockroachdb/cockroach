@@ -427,7 +427,7 @@ func (p *planner) insertRender(
 	}
 	render.ivarHelper = tree.MakeIndexedVarHelper(render, len(src.info.SourceColumns))
 	if err := p.initTargets(ctx, render,
-		tree.SelectExprs{tree.SelectExpr{Expr: &tree.AllColumnsSelector{}}},
+		tree.SelectExprs{tree.SelectExpr{Expr: tree.StarExpr()}},
 		nil /*desiredTypes*/); err != nil {
 		return nil, err
 	}
@@ -771,7 +771,7 @@ func (r *renderNode) colIdxByRenderAlias(
 			return 0, err
 		}
 
-		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Table() == "" {
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Parts[0] == "" {
 			// Look for an output column that matches the name. This
 			// handles cases like:
 			//

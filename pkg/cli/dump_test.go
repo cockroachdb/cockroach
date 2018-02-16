@@ -600,7 +600,7 @@ INSERT INTO t (i, j) VALUES
 
 	if out, err := c.RunWithCaptureArgs([]string{"dump", "d", "t", "--as-of", "2000-01-01 00:00:00"}); err != nil {
 		t.Fatal(err)
-	} else if !strings.Contains(out, "relation d.t does not exist") {
+	} else if !strings.Contains(out, `relation d.public.t does not exist`) {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }

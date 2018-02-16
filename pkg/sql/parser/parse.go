@@ -101,7 +101,7 @@ func ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
 }
 
 // ParseTableName parses a table name.
-func ParseTableName(sql string) (*tree.NormalizableTableName, error) {
+func ParseTableName(sql string) (*tree.TableName, error) {
 	stmt, err := ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", sql))
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func ParseTableName(sql string) (*tree.NormalizableTableName, error) {
 		return nil, pgerror.NewErrorf(
 			pgerror.CodeInternalError, "expected an ALTER TABLE statement, but found %T", stmt)
 	}
-	return &rename.Name, nil
+	return rename.Name.Normalize()
 }
 
 // parseExprs parses one or more sql expressions.

@@ -88,7 +88,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	ctx := context.TODO()
 
 	// Acquire a lease.
-	lease, err := changer.AcquireLease(ctx)
+	lease, err := changer.AcquireLease(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Acquiring another lease will fail.
-	if _, err := changer.AcquireLease(ctx); !testutils.IsError(
+	if _, err := changer.AcquireLease(ctx, nil); !testutils.IsError(
 		err, "an outstanding schema change lease exists",
 	) {
 		t.Fatal(err)
@@ -126,12 +126,12 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Releasing an old lease fails.
-	if err := changer.ReleaseLease(ctx, oldLease); err == nil {
+	if err := changer.ReleaseLease(ctx, oldLease, nil); err == nil {
 		t.Fatal("releasing a old lease succeeded")
 	}
 
 	// Release lease.
-	if err := changer.ReleaseLease(ctx, lease); err != nil {
+	if err := changer.ReleaseLease(ctx, lease, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -141,7 +141,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// acquiring the lease succeeds
-	lease, err = changer.AcquireLease(ctx)
+	lease, err = changer.AcquireLease(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -475,7 +475,7 @@ func runSchemaChangeWithOperations(
 	// Grabbing a schema change lease on the table will fail, disallowing
 	// another schema change from being simultaneously executed.
 	sc := sql.NewSchemaChangerForTesting(tableDesc.ID, 0, 0, *kvDB, nil, jobRegistry, execCfg)
-	if l, err := sc.AcquireLease(ctx); err == nil {
+	if l, err := sc.AcquireLease(ctx, nil); err == nil {
 		t.Fatalf("schema change lease acquisition on table %d succeeded: %v", tableDesc.ID, l)
 	}
 
@@ -1727,7 +1727,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
 
-		// Verify that t.test has the expected data. Read the table data while
+		// Verify that t.public.test has the expected data. Read the table data while
 		// ensuring that the correct table lease is in use.
 		var err error
 		rows, err = sqlDB.Query(`SELECT * from t.test`)
@@ -2597,9 +2597,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 
 	// Check that SQL thinks the table is empty.
 	if err := checkTableKeyCount(ctx, kvDB, 0, 0); err != nil {
-		t.Fatal(err)
-	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 

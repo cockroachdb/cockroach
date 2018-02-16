@@ -165,11 +165,36 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	}
 }
 
-func resolveZone(
-	ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier, sessionDB string,
-) (sqlbase.ID, error) {
+// resolveTableForZone ensures that the table part of the zone
+// specifier is resolved (or resolvable) and, if the zone specifier
+// points to an index, that the index name is expanded to a valid
+// table.
+// Returns res = nil if the zone specifier is not for a table or index.
+func (p *planner) resolveTableForZone(
+	ctx context.Context, zs *tree.ZoneSpecifier,
+) (res *sqlbase.TableDescriptor, err error) {
+	if zs.TargetsIndex() {
+		_, res, err = expandIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
+	} else if zs.TargetsTable() {
+		tn, err := zs.TableOrIndex.Table.Normalize()
+		if err != nil {
+			return nil, err
+		}
+		res, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, err
+}
+
+// resolveZone resolves a zone specifier to a zone ID.  If the zone
+// specifier points to a table, index or partition, the table part
+// must be properly normalized already. It is the caller's
+// responsibility to do this using e.g .resolveTableForZone().
+func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
 	errMissingKey := errors.New("missing key")
-	id, err := config.ResolveZoneSpecifier(zs, sessionDB,
+	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
 			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(sqlbase.ID(parentID), name))
 			if err != nil {
@@ -195,30 +220,30 @@ func resolveZone(
 }
 
 func resolveSubzone(
-	ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier, targetID sqlbase.ID,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, string, error) {
+	ctx context.Context,
+	txn *client.Txn,
+	zs *tree.ZoneSpecifier,
+	targetID sqlbase.ID,
+	table *sqlbase.TableDescriptor,
+) (*sqlbase.IndexDescriptor, string, error) {
 	if !zs.TargetsTable() {
-		return nil, nil, "", nil
-	}
-	table, err := sqlbase.GetTableDescFromID(ctx, txn, targetID)
-	if err != nil {
-		return nil, nil, "", err
+		return nil, "", nil
 	}
 	if indexName := string(zs.TableOrIndex.Index); indexName != "" {
 		index, _, err := table.FindIndexByName(indexName)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, "", err
 		}
-		return table, &index, "", nil
+		return &index, "", nil
 	} else if partitionName := string(zs.Partition); partitionName != "" {
 		_, index, err := table.FindNonDropPartitionByName(partitionName)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, "", err
 		}
 		zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
-		return table, index, partitionName, nil
+		return index, partitionName, nil
 	}
-	return table, nil, "", nil
+	return nil, "", nil
 }
 
 func deleteRemovedPartitionZoneConfigs(

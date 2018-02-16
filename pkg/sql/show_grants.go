@@ -22,16 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// checkTableExists checks if the table exists by using the security.RootUser.
-func checkTableExists(ctx context.Context, p *planner, tn *tree.TableName) error {
-	if _, err := MustGetTableOrViewDesc(ctx, p.txn, p.getVirtualTabler(), tn, true /*allowAdding*/); err != nil {
-		return sqlbase.NewUndefinedRelationError(tn)
-	}
-	return nil
-}
 
 // ShowGrants returns grant details for the specified objects and users.
 // Privileges: None.
@@ -41,9 +32,9 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 	var params []string
 	var initCheck func(context.Context) error
 
-	const dbPrivQuery = `SELECT TABLE_SCHEMA AS "Database", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" ` +
+	const dbPrivQuery = `SELECT table_catalog AS "Database", table_schema as "Schema", grantee AS "User", privilege_type AS "Privileges" ` +
 		`FROM "".information_schema.schema_privileges`
-	const tablePrivQuery = `SELECT TABLE_SCHEMA AS "Database", TABLE_NAME AS "Table", GRANTEE AS "User", PRIVILEGE_TYPE AS "Privileges" ` +
+	const tablePrivQuery = `SELECT table_catalog as "Database", table_schema AS "Schema", table_name AS "Table", grantee AS "User", privilege_type AS "Privileges" ` +
 		`FROM "".information_schema.table_privileges`
 
 	var source bytes.Buffer
@@ -91,25 +82,27 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 				if err != nil {
 					return nil, err
 				}
-				tables, err := expandTableGlob(ctx, p.txn, p.getVirtualTabler(),
-					p.SessionData().Database, tableGlob)
+				var tables tree.TableNames
+				// We avoid the cache so that we can observe the grants taking
+				// a lease, like other SHOW commands. We also use
+				// allowAdding=true so we can look at the grants of a table
+				// added in the same transaction.
+				//
+				// TODO(vivek): check if the cache can be used.
+				p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
+					tables, err = expandTableGlob(ctx, p, tableGlob)
+				})
 				if err != nil {
 					return nil, err
 				}
 				allTables = append(allTables, tables...)
 			}
 
-			initCheck = func(ctx context.Context) error {
-				for i := range allTables {
-					if err := checkTableExists(ctx, p, &allTables[i]); err != nil {
-						return err
-					}
-				}
-				return nil
-			}
+			initCheck = func(ctx context.Context) error { return nil }
 
 			for i := range allTables {
-				params = append(params, fmt.Sprintf("(%s,%s)",
+				params = append(params, fmt.Sprintf("(%s,%s,%s)",
+					lex.EscapeSQLString(allTables[i].Catalog()),
 					lex.EscapeSQLString(allTables[i].Schema()),
 					lex.EscapeSQLString(allTables[i].Table())))
 			}
@@ -120,16 +113,20 @@ func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode,
 				// the result columns must still be defined.
 				cond.WriteString(`WHERE false`)
 			} else {
-				fmt.Fprintf(&cond, `WHERE ("Database", "Table") IN (%s)`, strings.Join(params, ","))
+				fmt.Fprintf(&cond, `WHERE ("Database", "Schema", "Table") IN (%s)`, strings.Join(params, ","))
 			}
 		} else {
-			// No target: also look at databases.
+			// No target: only look at tables and schemas in the current database.
 			source.WriteString(` UNION ALL ` +
-				`SELECT "Database", NULL::STRING AS "Table", "User", "Privileges" FROM (`)
+				`SELECT "Database", "Schema", NULL::STRING AS "Table", "User", "Privileges" FROM (`)
 			source.WriteString(dbPrivQuery)
 			source.WriteByte(')')
-			// Specify the WHERE clause for grantees.
-			cond.WriteString(`WHERE true`)
+			// If the current database is set, restrict the command to it.
+			if p.CurrentDatabase() != "" {
+				fmt.Fprintf(&cond, ` WHERE "Database" = %s`, lex.EscapeSQLString(p.CurrentDatabase()))
+			} else {
+				cond.WriteString(`WHERE true`)
+			}
 		}
 	}
 

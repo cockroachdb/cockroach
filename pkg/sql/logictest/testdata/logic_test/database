@@ -17,9 +17,6 @@ SHOW DATABASES
 ----
 Database
 a
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 
@@ -79,9 +76,6 @@ b4
 b5
 b6
 c
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 
@@ -104,7 +98,7 @@ DROP DATABASE b RESTRICT
 statement ok
 DROP DATABASE b CASCADE
 
-statement error database "b" does not exist
+statement error relation "b.a" does not exist
 SELECT * FROM b.a
 
 statement error database "b" does not exist
@@ -129,9 +123,6 @@ SHOW DATABASES
 Database
 a
 c
-crdb_internal
-information_schema
-pg_catalog
 system
 test
 

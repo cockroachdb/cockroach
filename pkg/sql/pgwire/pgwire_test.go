@@ -715,19 +715,19 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("isRole", "BOOL", false, false, "{}"),
 		},
 		"SHOW DATABASES": {
-			baseTest.Results("crdb_internal").Results("d").Results("information_schema").Results("pg_catalog").Results("system"),
+			baseTest.Results("d").Results("system"),
 		},
 		"SHOW GRANTS ON system.users": {
-			baseTest.Results("system", "users", sqlbase.AdminRole, "DELETE").
-				Results("system", "users", sqlbase.AdminRole, "GRANT").
-				Results("system", "users", sqlbase.AdminRole, "INSERT").
-				Results("system", "users", sqlbase.AdminRole, "SELECT").
-				Results("system", "users", sqlbase.AdminRole, "UPDATE").
-				Results("system", "users", security.RootUser, "DELETE").
-				Results("system", "users", security.RootUser, "GRANT").
-				Results("system", "users", security.RootUser, "INSERT").
-				Results("system", "users", security.RootUser, "SELECT").
-				Results("system", "users", security.RootUser, "UPDATE"),
+			baseTest.Results("system", "public", "users", sqlbase.AdminRole, "DELETE").
+				Results("system", "public", "users", sqlbase.AdminRole, "GRANT").
+				Results("system", "public", "users", sqlbase.AdminRole, "INSERT").
+				Results("system", "public", "users", sqlbase.AdminRole, "SELECT").
+				Results("system", "public", "users", sqlbase.AdminRole, "UPDATE").
+				Results("system", "public", "users", security.RootUser, "DELETE").
+				Results("system", "public", "users", security.RootUser, "GRANT").
+				Results("system", "public", "users", security.RootUser, "INSERT").
+				Results("system", "public", "users", security.RootUser, "SELECT").
+				Results("system", "public", "users", security.RootUser, "UPDATE"),
 		},
 		"SHOW INDEXES FROM system.users": {
 			baseTest.Results("users", "primary", true, 1, "username", "ASC", false, false),

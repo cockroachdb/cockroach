@@ -730,12 +730,23 @@ CREATE TABLE t.foo (v INT);
 	}
 
 	if _, err := sqlDB.Exec(`
+SELECT * FROM t.foo;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	prev := atomic.LoadInt32(&fooAcquiredCount)
+	if prev == 0 {
+		t.Fatal("plain SELECT did not get lease; got 0, expected > 0")
+	}
+
+	if _, err := sqlDB.Exec(`
 SELECT EXISTS(SELECT * FROM t.foo);
 `); err != nil {
 		t.Fatal(err)
 	}
 
-	if atomic.LoadInt32(&fooAcquiredCount) == 0 {
+	if atomic.LoadInt32(&fooAcquiredCount) == prev {
 		t.Fatalf("subquery has not acquired a lease")
 	}
 

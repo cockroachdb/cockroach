@@ -167,8 +167,8 @@ func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member string,
 ) (map[string]bool, error) {
 	// Lookup table version.
-	tableName := tree.MakeTableName("system", "role_members")
-	tableDesc, err := p.getTableDesc(ctx, &tableName)
+	tableDesc, _, err := p.PhysicalSchemaAccessor().GetObjectDesc(&roleMembersTableName,
+		p.ObjectLookupFlags(ctx, true /*required*/))
 	if err != nil {
 		return nil, err
 	}

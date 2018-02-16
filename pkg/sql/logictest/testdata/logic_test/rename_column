@@ -28,7 +28,7 @@ ALTER TABLE users RENAME COLUMN title TO ""
 statement error column "ttle" does not exist
 ALTER TABLE users RENAME COLUMN ttle TO species
 
-statement error table "uses" does not exist
+statement error relation "uses" does not exist
 ALTER TABLE uses RENAME COLUMN title TO species
 
 statement ok

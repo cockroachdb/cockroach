@@ -435,7 +435,7 @@ func (s LeaseStore) getForExpiration(
 		}
 		tableDesc := desc.GetTable()
 		if tableDesc == nil {
-			return errors.Errorf("id %d is not a table", id)
+			return sqlbase.ErrDescriptorNotFound
 		}
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
 			return errors.Errorf("internal error: unable to read table= (%d, %s)", id, expiration)

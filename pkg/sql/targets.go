@@ -17,10 +17,10 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 const autoGenerateRenderOutputName = ""
@@ -68,7 +68,7 @@ func (p *planner) computeRenderAllowingStars(
 		return nil, nil, false, err
 	}
 
-	if hasStar, cols, typedExprs, err := checkRenderStar(target, info, ivarHelper); err != nil {
+	if hasStar, cols, typedExprs, err := checkRenderStar(ctx, target, info, ivarHelper); err != nil {
 		return nil, nil, false, err
 	} else if hasStar {
 		return cols, typedExprs, hasStar, nil
@@ -153,7 +153,10 @@ func symbolicExprStr(expr tree.Expr) string {
 // name to one of the tables in the query and then expand the "*" into a list
 // of columns. A sqlbase.ResultColumns and Expr pair is returned for each column.
 func checkRenderStar(
-	target tree.SelectExpr, info sqlbase.MultiSourceInfo, ivarHelper tree.IndexedVarHelper,
+	ctx context.Context,
+	target tree.SelectExpr,
+	info sqlbase.MultiSourceInfo,
+	ivarHelper tree.IndexedVarHelper,
 ) (isStar bool, columns sqlbase.ResultColumns, exprs []tree.TypedExpr, err error) {
 	v, ok := target.Expr.(tree.VarName)
 	if !ok {
@@ -163,10 +166,11 @@ func checkRenderStar(
 	switch v.(type) {
 	case tree.UnqualifiedStar, *tree.AllColumnsSelector:
 		if target.As != "" {
-			return false, nil, nil, errors.Errorf("\"%s\" cannot be aliased", v)
+			return false, nil, nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"%q cannot be aliased", tree.ErrString(v))
 		}
 
-		columns, exprs, err = expandStar(info[0], v, ivarHelper)
+		columns, exprs, err = expandStar(ctx, info, v, ivarHelper)
 		return true, columns, exprs, err
 	default:
 		return false, nil, nil, nil

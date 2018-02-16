@@ -49,7 +49,7 @@ FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  ALTER TABLE test.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT foo UNIQUE (b)  root  succeeded  1  ·
 
 statement error duplicate constraint name: "foo"
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
@@ -88,8 +88,8 @@ FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE  ROLL BACK ALTER TABLE test.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
-SCHEMA CHANGE  ALTER TABLE test.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.10  duplicate key value (c)=(1) violates unique constraint "bar"
+SCHEMA CHANGE  ROLL BACK ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.10  duplicate key value (c)=(1) violates unique constraint "bar"
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -198,7 +198,7 @@ FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.t@foo CASCADE root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -296,7 +296,7 @@ FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.t@t_f_idx  root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  succeeded  1  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f

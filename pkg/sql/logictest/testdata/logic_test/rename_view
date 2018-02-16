@@ -33,11 +33,9 @@ v
 statement error pgcode 42809 "kv" is not a view
 ALTER VIEW kv RENAME TO new_kv
 
-statement error pgcode 42809 "v" is not a table
-ALTER TABLE v RENAME TO new_v
-
+# We allow ALTER TABLE for renaming views.
 statement ok
-ALTER VIEW v RENAME TO new_v
+ALTER TABLE v RENAME TO new_v
 
 statement error pgcode 42P01 relation "v" does not exist
 SELECT * FROM v
@@ -55,16 +53,16 @@ kv
 new_v
 
 # check the name in the descriptor, which is used by SHOW GRANTS, is also changed
-query TTTT
+query TTTTT
 SHOW GRANTS ON new_v
 ----
-test  new_v  admin  ALL
-test  new_v  root   ALL
+test  public new_v  admin  ALL
+test  public new_v  root   ALL
 
-statement error empty table name
+statement error invalid table name: ""
 ALTER VIEW "" RENAME TO foo
 
-statement error empty table name
+statement error invalid table name: ""
 ALTER VIEW new_v RENAME TO ""
 
 statement ok
@@ -167,14 +165,14 @@ SELECT * FROM test2.v2
 statement ok
 CREATE VIEW v3 AS SELECT COUNT(*) FROM test2.v AS v JOIN test2.v2 AS v2 ON v.k > v2.c1
 
-statement error cannot rename relation "test2.v" because view "test.v3" depends on it
+statement error cannot rename relation "test2.public.v" because view "test.public.v3" depends on it
 ALTER VIEW test2.v RENAME TO test2.v3
 
-statement error cannot rename relation "test2.v2" because view "test.v3" depends on it
+statement error cannot rename relation "test2.public.v2" because view "test.public.v3" depends on it
 ALTER VIEW test2.v2 RENAME TO v4
 
 statement ok
 ALTER VIEW v3 RENAME TO v4
 
-statement error cannot rename relation "test2.v2" because view "test.v4" depends on it
+statement error cannot rename relation "test2.public.v2" because view "test.public.v4" depends on it
 ALTER VIEW test2.v2 RENAME TO v5
