@@ -142,7 +142,8 @@ import (
 // whenever it sees fit; however the connExecutor influences communication in
 // the following ways:
 //
-// a) The connExecutor calls clientComm.flush(), informing the implementer that
+// !!! still true?
+// a) The connExecutor calls clientComm.Flush(), informing the implementer that
 // all the previous results can be delivered to the client at will.
 //
 // b) When deciding whether an automatic retry can be performed for a
@@ -938,6 +939,9 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			if _, ok := ex.machine.CurState().(stateNoTxn); ok {
 				return nil
 			}
+		case Flush:
+			// Closing the res will flush the connection's buffer.
+			res = ex.clientComm.CreateFlushResult(pos)
 		default:
 			panic(fmt.Sprintf("unsupported command type: %T", cmd))
 		}
@@ -992,6 +996,10 @@ func (ex *connExecutor) run(ctx context.Context) error {
 		case advanceOne:
 			ex.stmtBuf.advanceOne(ex.Ctx())
 		case skipBatch:
+			// !!! explain that some drivers need this
+			if err := ex.clientComm.Flush(pos); err != nil {
+				return err
+			}
 			if err := ex.stmtBuf.seekToNextBatch(ex.Ctx()); err != nil {
 				return err
 			}
@@ -1288,7 +1296,7 @@ func (ex *connExecutor) execPrepare(
 	inTypes := make([]oid.Oid, 0, len(ps.TypeHints))
 	if len(ps.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
 		return retErr(
-			pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+			pgwirebase.NewProtocolViolationErrorf(
 				"more than %d arguments to prepared statement: %d",
 				pgwirebase.MaxPreparedStatementArgs, len(ps.TypeHints)))
 	}
@@ -1361,8 +1369,7 @@ func (ex *connExecutor) execBind(
 	qArgFormatCodes := bindCmd.ArgFormatCodes
 
 	if len(qArgFormatCodes) != 1 && len(qArgFormatCodes) != int(numQArgs) {
-		return retErr(pgerror.NewErrorf(
-			pgerror.CodeProtocolViolationError,
+		return retErr(pgwirebase.NewProtocolViolationErrorf(
 			"wrong number of format codes specified: %d for %d arguments",
 			len(qArgFormatCodes), numQArgs))
 	}
@@ -1377,8 +1384,7 @@ func (ex *connExecutor) execBind(
 
 	if len(bindCmd.Args) != int(numQArgs) {
 		return retErr(
-			pgerror.NewErrorf(
-				pgerror.CodeProtocolViolationError,
+			pgwirebase.NewProtocolViolationErrorf(
 				"expected %d arguments, got %d", numQArgs, len(bindCmd.Args)))
 	}
 	qargs := tree.QueryArguments{}
@@ -1391,9 +1397,12 @@ func (ex *connExecutor) execBind(
 		} else {
 			d, err := pgwirebase.DecodeOidDatum(t, qArgFormatCodes[i], arg)
 			if err != nil {
-				return retErr(pgerror.NewErrorf(
-					pgerror.CodeProtocolViolationError,
-					"error in argument for $%d: %s", i+1, err.Error()))
+				if _, ok := err.(*pgerror.Error); ok {
+					return retErr(err)
+				} else {
+					return retErr(pgwirebase.NewProtocolViolationErrorf(
+						"error in argument for $%d: %s", i+1, err.Error()))
+				}
 			}
 			qargs[k] = d
 		}
@@ -1401,8 +1410,7 @@ func (ex *connExecutor) execBind(
 
 	numCols := len(ps.Columns)
 	if numCols != 0 && (len(bindCmd.OutFormats) > 1) && (len(bindCmd.OutFormats) != numCols) {
-		return retErr(pgerror.NewErrorf(
-			pgerror.CodeProtocolViolationError,
+		return retErr(pgwirebase.NewProtocolViolationErrorf(
 			"expected 0, 1, or %d for number of format codes, got %d",
 			numCols, len(bindCmd.OutFormats)))
 	}

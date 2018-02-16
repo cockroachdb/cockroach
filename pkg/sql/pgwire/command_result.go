@@ -37,6 +37,7 @@ const (
 	parseComplete
 	emptyQueryResponse
 	readyForQuery
+	flush
 	// Some commands, like Describe, don't need a completion message.
 	noCompletionMsg
 )
@@ -152,10 +153,13 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.conn.bufferCloseComplete()
 	case readyForQuery:
 		r.conn.bufferReadyForQuery(byte(t))
-		_ /* err */ = r.conn.flush(r.pos)
-		// The error has been saved on conn.err.
+		// The error is saved on conn.err.
+		_ /* err */ = r.conn.Flush(r.pos)
 	case emptyQueryResponse:
 		r.conn.bufferEmptyQueryResponse()
+	case flush:
+		// The error is saved on conn.err.
+		_ /* err */ = r.conn.Flush(r.pos)
 	case noCompletionMsg:
 		// nothing to do
 	default:

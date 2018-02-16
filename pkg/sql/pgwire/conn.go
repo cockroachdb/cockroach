@@ -342,7 +342,7 @@ Loop:
 
 		case pgwirebase.ClientMsgFlush:
 			c.doingExtendedQueryMessage = true
-			// TODO(andrei): flush something
+			err = c.handleFlush(ctx)
 
 		case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
 			// We're supposed to ignore these messages, per the protocol spec. This
@@ -489,8 +489,7 @@ func (c *conn) handleParse(ctx context.Context, buf *pgwirebase.ReadBuffer) erro
 		}
 		v, ok := types.OidToType[t]
 		if !ok {
-			err := pgerror.NewErrorf(
-				pgerror.CodeProtocolViolationError, "unknown oid type: %v", t)
+			err := pgwirebase.NewProtocolViolationErrorf("unknown oid type: %v", t)
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 		}
 		sqlTypeHints[strconv.Itoa(i+1)] = v
@@ -702,6 +701,10 @@ func (c *conn) handleExecute(ctx context.Context, buf *pgwirebase.ReadBuffer) er
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	return c.stmtBuf.Push(ctx, sql.ExecPortal{Name: portalName, Limit: int(limit)})
+}
+
+func (c *conn) handleFlush(ctx context.Context) error {
+	return c.stmtBuf.Push(ctx, sql.Flush{})
 }
 
 // BeginCopyIn is part of the pgwirebase.Conn interface.
@@ -1004,13 +1007,15 @@ func (c *conn) writeRowDescription(
 	return c.msgBuilder.finishMsg(w)
 }
 
+// !!! say that it's part of the interface
+//
 // flush writes the contents of the buffer to the network connection.
 //
 // Note that this method does nothing for updating the writer's state about what
 // results have and haven't been flushed. The caller is expected to do that.
 //
 // In case conn.err is set, this is a no-op - the previous err is returned.
-func (c *conn) flush(pos sql.CmdPos) error {
+func (c *conn) Flush(pos sql.CmdPos) error {
 	// Check that there were no previous network errors. If there were, we'd
 	// probably also fail the write below, but this check is here to make
 	// absolutely sure that we don't send some results after we previously had
@@ -1036,7 +1041,7 @@ func (c *conn) maybeFlush(pos sql.CmdPos) (bool, error) {
 	if c.writerState.buf.Len() <= connResultsBufferSizeBytes {
 		return false, nil
 	}
-	return true, c.flush(pos)
+	return true, c.Flush(pos)
 }
 
 // LockCommunication is part of the ClientComm interface.
@@ -1104,6 +1109,12 @@ func (c *conn) CreateStatementResult(
 // CreateSyncResult is part of the sql.ClientComm interface.
 func (c *conn) CreateSyncResult(pos sql.CmdPos) sql.SyncResult {
 	res := c.makeMiscResult(pos, readyForQuery)
+	return &res
+}
+
+// CreateFlushResult is part of the sql.ClientComm interface.
+func (c *conn) CreateFlushResult(pos sql.CmdPos) sql.FlushResult {
+	res := c.makeMiscResult(pos, flush)
 	return &res
 }
 

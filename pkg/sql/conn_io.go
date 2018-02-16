@@ -246,6 +246,13 @@ func (ExecPortal) command() {}
 
 var _ Command = ExecPortal{}
 
+type Flush struct{}
+
+// command implements the Command interface.
+func (Flush) command() {}
+
+var _ Command = Flush{}
+
 // CopyIn is the command for execution of the Copy-in pgwire subprotocol.
 type CopyIn struct {
 	Stmt *tree.CopyFrom
@@ -499,6 +506,7 @@ type ClientComm interface {
 	CreateBindResult(pos CmdPos) BindResult
 	CreateDeleteResult(pos CmdPos) DeleteResult
 	CreateSyncResult(pos CmdPos) SyncResult
+	CreateFlushResult(pos CmdPos) FlushResult
 	// CreateErrorResult creates a result on which only errors can be communicated
 	// to the client.
 	CreateErrorResult(pos CmdPos) ErrorResult
@@ -516,6 +524,8 @@ type ClientComm interface {
 	// communication can be unlocked (i.e. results can be delivered to the client
 	// again).
 	LockCommunication() ClientLock
+
+	Flush(pos CmdPos) error
 
 	// !!!
 	// // FlushResults tells the implementation that all the results produced so far
@@ -673,6 +683,10 @@ type DeleteResult interface {
 // readyForQuery message will be generated and all buffered data will be
 // flushed.
 type SyncResult interface {
+	ResultBase
+}
+
+type FlushResult interface {
 	ResultBase
 }
 
