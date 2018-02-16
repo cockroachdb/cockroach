@@ -253,7 +253,16 @@ func doLocalCSVTransform(
 	group, gCtx = errgroup.WithContext(ctx)
 	group.Go(func() error {
 		defer close(contentCh)
-		return makeSSTs(gCtx, store.NewIterator(), sstMaxSize, contentCh, walltime, kvCount, writeProgressFn)
+		var progFn func(writtenKVs int) error
+		if writeProgressFn != nil {
+			progFn = func(writtenKVs int) error {
+				return writeProgressFn(float32(writtenKVs) / float32(kvCount))
+			}
+		}
+		it := store.NewIterator()
+		it.Rewind()
+		defer it.Close()
+		return makeSSTs(gCtx, it, sstMaxSize, contentCh, walltime, nil, progFn)
 	})
 	group.Go(func() error {
 		var err error
@@ -674,6 +683,7 @@ type sstContent struct {
 	data []byte
 	size int64
 	span roachpb.Span
+	more bool
 }
 
 const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can happen when a primary or unique index has duplicate keys"
@@ -699,31 +709,26 @@ func writeRocksDB(
 }
 
 // makeSSTs creates SST files in memory of size maxSize and sent on
-// contentCh. progressFn, if not nil, is periodically invoked with the
-// percentage of KVs that have been written to SSTs and sent on contentCh.
+// contentCh. progressFn, if not nil, is periodically invoked with the number
+// of KVs that have been written to SSTs and sent on contentCh. endKey,
+// if not nil, will stop processing at the specified key.
 func makeSSTs(
 	ctx context.Context,
 	it engine.SortedDiskMapIterator,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
 	walltime int64,
-	totalKVs int64,
-	progressFn func(float32) error,
+	endKey roachpb.Key,
+	progressFn func(int) error,
 ) error {
-	defer it.Close()
-
-	if totalKVs == 0 {
-		return nil
-	}
-
 	sst, err := engine.MakeRocksDBSstFileWriter()
 	if err != nil {
 		return err
 	}
 	defer sst.Close()
 
-	var writtenKVs int64
-	writeSST := func(key, endKey roachpb.Key) error {
+	var writtenKVs int
+	writeSST := func(key, endKey roachpb.Key, more bool) error {
 		data, err := sst.Finish()
 		if err != nil {
 			return err
@@ -735,6 +740,7 @@ func makeSSTs(
 				Key:    key,
 				EndKey: endKey,
 			},
+			more: more,
 		}
 		select {
 		case contentCh <- sc:
@@ -743,7 +749,7 @@ func makeSSTs(
 		}
 		sst.Close()
 		if progressFn != nil {
-			if err := progressFn(float32(writtenKVs) / float32(totalKVs)); err != nil {
+			if err := progressFn(writtenKVs); err != nil {
 				return err
 			}
 		}
@@ -759,11 +765,11 @@ func makeSSTs(
 	// filled up with only some of the KVs from the column families being added.
 	var firstKey, lastKey roachpb.Key
 
-	it.Rewind()
 	if ok, err := it.Valid(); err != nil {
 		return err
 	} else if !ok {
-		return errors.New("could not get first key")
+		// Empty file.
+		return nil
 	}
 	firstKey = it.Key()
 
@@ -773,13 +779,25 @@ func makeSSTs(
 		} else if !ok {
 			break
 		}
+
+		// Check this before setting kv.Key.Key because it is used below in the
+		// final writeSST invocation.
+		if endKey != nil && endKey.Compare(it.UnsafeKey()) <= 0 {
+			// If we are at the end, break the loop and return the data. There is no
+			// need to back up one key, because the iterator is pointing at the start
+			// of the next block already, and Next won't be called until after the key
+			// has been extracted again during the next call to this function.
+			break
+		}
+
 		writtenKVs++
 
-		kv.Key.Key = it.UnsafeKey()
+		kv.Key.Key = it.Key()
 		kv.Value = it.UnsafeValue()
+
 		if lastKey != nil {
 			if kv.Key.Key.Compare(lastKey) >= 0 {
-				if err := writeSST(firstKey, lastKey); err != nil {
+				if err := writeSST(firstKey, lastKey, true); err != nil {
 					return err
 				}
 				firstKey = it.Key()
@@ -806,7 +824,16 @@ func makeSSTs(
 		}
 	}
 	if sst.DataSize > 0 {
-		if err := writeSST(firstKey, kv.Key.Key.Next()); err != nil {
+		// Although we don't need to avoid row splitting here because there aren't any
+		// more keys to read, we do still want to produce the same kind of lastKey
+		// argument for the span as in the case above. lastKey <= the most recent
+		// sst.Add call, but since we call PrefixEnd below, it will be guaranteed
+		// to be > the most recent added key.
+		lastKey, err = keys.EnsureSafeSplitKey(kv.Key.Key)
+		if err != nil {
+			return err
+		}
+		if err := writeSST(firstKey, lastKey.PrefixEnd(), false); err != nil {
 			return err
 		}
 	}
@@ -1506,167 +1533,125 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		iter.Rewind()
 		maxSize := storageccl.MaxImportBatchSize(sp.settings)
 		for i, span := range sp.spec.Spans {
+			specSpan := roachpb.Span{
+				EndKey: span.End,
+			}
 			// Since we sampled the CSVs, it is possible for an SST to end up larger
 			// than the max raft command size. Split them up into correctly sized chunks.
-			for chunk := 0; ; chunk++ {
-				data, firstKey, lastKeyInclusive, more, err := extractSSTSpan(iter, span.End, sp.spec.WalltimeNanos, maxSize)
-				if err != nil {
-					return err
-				}
-				// Empty span.
-				if data == nil {
-					break
-				}
-				lastKeyExclusive := roachpb.Key(lastKeyInclusive).Next()
-
-				var checksum []byte
-				name := span.Name
-				if chunk > 0 {
-					name = fmt.Sprintf("%d-%s", chunk, name)
-				}
-
-				if sp.spec.Destination == "" {
-					end := span.End
-					if more {
-						end = lastKeyExclusive
-					}
-					if err := sp.db.AdminSplit(ctx, end, end); err != nil {
-						return err
+			contentCh := make(chan sstContent)
+			group, gCtx := errgroup.WithContext(ctx)
+			group.Go(func() error {
+				defer close(contentCh)
+				return makeSSTs(gCtx, iter, maxSize, contentCh, sp.spec.WalltimeNanos, span.End, nil)
+			})
+			group.Go(func() error {
+				chunk := -1
+				for sst := range contentCh {
+					chunk++
+					if chunk == 0 {
+						specSpan.Key = sst.span.Key
 					}
 
-					log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
-					scatterReq := &roachpb.AdminScatterRequest{
-						Span: roachpb.Span{
-							Key:    end,
-							EndKey: roachpb.Key(end).Next(),
-						},
+					var checksum []byte
+					name := span.Name
+					if chunk > 0 {
+						name = fmt.Sprintf("%d-%s", chunk, name)
 					}
-					if _, pErr := client.SendWrapped(ctx, sp.db.GetSender(), scatterReq); pErr != nil {
-						// TODO(dan): Unfortunately, Scatter is still too unreliable to
-						// fail the IMPORT when Scatter fails. I'm uncomfortable that
-						// this could break entirely and not start failing the tests,
-						// but on the bright side, it doesn't affect correctness, only
-						// throughput.
-						log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
+
+					if sp.spec.Destination == "" {
+						end := span.End
+						if sst.more {
+							end = sst.span.EndKey
+						}
+						if err := sp.db.AdminSplit(gCtx, end, end); err != nil {
+							return err
+						}
+
+						log.VEventf(gCtx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
+						scatterReq := &roachpb.AdminScatterRequest{
+							Span: roachpb.Span{
+								Key:    end,
+								EndKey: roachpb.Key(end).Next(),
+							},
+						}
+						if _, pErr := client.SendWrapped(gCtx, sp.db.GetSender(), scatterReq); pErr != nil {
+							// TODO(dan): Unfortunately, Scatter is still too unreliable to
+							// fail the IMPORT when Scatter fails. I'm uncomfortable that
+							// this could break entirely and not start failing the tests,
+							// but on the bright side, it doesn't affect correctness, only
+							// throughput.
+							log.Errorf(gCtx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
+						}
+						if err := storageccl.AddSSTable(gCtx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
+							return err
+						}
+					} else {
+						checksum, err = storageccl.SHA512ChecksumData(sst.data)
+						if err != nil {
+							return err
+						}
+						conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
+						if err != nil {
+							return err
+						}
+						es, err := storageccl.MakeExportStorage(gCtx, conf, sp.settings)
+						if err != nil {
+							return err
+						}
+						err = es.WriteFile(gCtx, name, bytes.NewReader(sst.data))
+						es.Close()
+						if err != nil {
+							return err
+						}
 					}
-					if err := storageccl.AddSSTable(ctx, sp.db, firstKey, lastKeyExclusive, data); err != nil {
-						return err
+
+					row := sqlbase.EncDatumRow{
+						sqlbase.DatumToEncDatum(
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+							tree.NewDString(name),
+						),
+						sqlbase.DatumToEncDatum(
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+							tree.NewDInt(tree.DInt(len(sst.data))),
+						),
+						sqlbase.DatumToEncDatum(
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							tree.NewDBytes(tree.DBytes(checksum)),
+						),
+						sqlbase.DatumToEncDatum(
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							tree.NewDBytes(tree.DBytes(sst.span.Key)),
+						),
+						sqlbase.DatumToEncDatum(
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							tree.NewDBytes(tree.DBytes(sst.span.EndKey)),
+						),
 					}
-				} else {
-					checksum, err = storageccl.SHA512ChecksumData(data)
+					cs, err := sp.out.EmitRow(gCtx, row)
 					if err != nil {
 						return err
 					}
-					conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
-					if err != nil {
-						return err
-					}
-					es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
-					if err != nil {
-						return err
-					}
-					err = es.WriteFile(ctx, name, bytes.NewReader(data))
-					es.Close()
-					if err != nil {
-						return err
+					if cs != distsqlrun.NeedMoreRows {
+						return errors.New("unexpected closure of consumer")
 					}
 				}
+				return nil
+			})
+			if err := group.Wait(); err != nil {
+				return err
+			}
 
-				if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
-					d := details.(*jobs.Payload_Import).Import
-					d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
-					return d.Tables[0].Completed()
-				}); err != nil {
-					return err
-				}
-
-				row := sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
-						tree.NewDString(name),
-					),
-					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-						tree.NewDInt(tree.DInt(len(data))),
-					),
-					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-						tree.NewDBytes(tree.DBytes(checksum)),
-					),
-					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-						tree.NewDBytes(tree.DBytes(firstKey)),
-					),
-					sqlbase.DatumToEncDatum(
-						sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
-						tree.NewDBytes(tree.DBytes(lastKeyExclusive)),
-					),
-				}
-				cs, err := sp.out.EmitRow(ctx, row)
-				if err != nil {
-					return err
-				}
-				if cs != distsqlrun.NeedMoreRows {
-					return errors.New("unexpected closure of consumer")
-				}
-				if !more {
-					break
-				}
+			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.Details) float32 {
+				d := details.(*jobs.Payload_Import).Import
+				d.Tables[0].WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
+				return d.Tables[0].Completed()
+			}); err != nil {
+				return err
 			}
 		}
 		return nil
 	}()
 	distsqlrun.DrainAndClose(ctx, sp.output, err, sp.input)
-}
-
-// extractSSTSpan creates an SST from the iterator, excluding keys >= end.
-func extractSSTSpan(
-	iter engine.SortedDiskMapIterator, end []byte, walltimeNanos int64, maxSize int64,
-) (data, firstKey, lastKey []byte, more bool, err error) {
-	sst, err := engine.MakeRocksDBSstFileWriter()
-	if err != nil {
-		return nil, nil, nil, false, err
-	}
-	defer sst.Close()
-	var kv engine.MVCCKeyValue
-	kv.Key.Timestamp.WallTime = walltimeNanos
-	any := false
-	for {
-		if ok, err := iter.Valid(); err != nil {
-			return nil, nil, nil, false, err
-		} else if !ok {
-			break
-		}
-		kv.Key.Key = iter.UnsafeKey()
-		if kv.Key.Key.Compare(end) >= 0 {
-			// If we are at the end, break the loop and return the data. There is no
-			// need to back up one key, because the iterator is pointing at the start
-			// of the next block already, and Next won't be called until after the key
-			// has been extracted again during the next call to this function.
-			break
-		}
-		kv.Value = iter.UnsafeValue()
-		if firstKey == nil {
-			firstKey = iter.Key()
-		}
-		any = true
-		if err := sst.Add(kv); err != nil {
-			return nil, nil, nil, false, errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
-		}
-		lastKey = append(lastKey[:0], kv.Key.Key...)
-
-		iter.Next()
-
-		if sst.DataSize > maxSize {
-			more = true
-			break
-		}
-	}
-	if !any {
-		return nil, nil, nil, false, nil
-	}
-	data, err = sst.Finish()
-	return data, firstKey, lastKey, more, err
 }
 
 type importResumer struct {
