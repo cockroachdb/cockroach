@@ -249,7 +249,7 @@ func (s *Server) maybeReportDiagnostics(
 }
 
 // safeToReportSettings are the names of settings which we want reported with
-// their values, regardless of their type -- usually only numeric/duraion/bool
+// their values, regardless of their type -- usually only numeric/duration/bool
 // settings are reported to avoid including potentially sensitive info that may
 // appear in strings or byte/proto/statemachine settings.
 var safeToReportSettings = map[string]struct{}{

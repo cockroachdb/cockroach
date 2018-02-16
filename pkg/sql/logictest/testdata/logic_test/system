@@ -418,8 +418,12 @@ GRANT ALL ON system.lease TO testuser
 # NB: the "order by" is necessary or this test is flaky under DistSQL.
 # This is somewhat surprising.
 query T
-select name from system.settings where name != 'sql.defaults.distsql' order by name
+SELECT name
+FROM system.settings
+WHERE name != 'sql.defaults.distsql'
+ORDER BY name
 ----
+cluster.secret
 diagnostics.reporting.enabled
 trace.debug.enable
 version
@@ -428,7 +432,10 @@ statement ok
 INSERT INTO system.settings (name, value) VALUES ('somesetting', 'somevalue')
 
 query TT
-select name, value from system.settings where name != 'version' AND name != 'sql.defaults.distsql' order by name
+SELECT name, value
+FROM system.settings
+WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret')
+ORDER BY name
 ----
 diagnostics.reporting.enabled  true
 somesetting                    somevalue
