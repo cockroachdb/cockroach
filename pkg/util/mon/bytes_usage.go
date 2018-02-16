@@ -226,6 +226,11 @@ type BytesMonitor struct {
 	settings *cluster.Settings
 }
 
+// !!!
+func (mon *BytesMonitor) Debug() string {
+	return fmt.Sprintf("curAllocated: %d maxAllocated: %d", mon.mu.curAllocated, mon.mu.maxAllocated)
+}
+
 // maxAllocatedButUnusedBlocks determines the maximum difference between the
 // amount of bytes used by a monitor and the amount of bytes reserved at the
 // upstream pool before the monitor relinquishes the bytes back to the pool.

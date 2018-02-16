@@ -375,13 +375,13 @@ func (s *Server) ServeConn(
 		mon.MemoryResource,
 		memMetrics.CurBytesCount,
 		memMetrics.MaxBytesHist,
-		-1, math.MaxInt64)
+		-1, math.MaxInt64, s.cfg.Settings)
 	sessionRootMon.Start(ctx, s.pool, reserved)
 	sessionMon := mon.MakeMonitor("session",
 		mon.MemoryResource,
 		memMetrics.SessionCurBytesCount,
 		memMetrics.SessionMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes)
+		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 	sessionMon.Start(ctx, &sessionRootMon, mon.BoundAccount{})
 
 	// We merely prepare the txn monitor here. It is started in
@@ -390,7 +390,7 @@ func (s *Server) ServeConn(
 		mon.MemoryResource,
 		memMetrics.TxnCurBytesCount,
 		memMetrics.TxnMaxBytesHist,
-		-1 /* increment */, noteworthyMemoryUsageBytes)
+		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 
 	settings := &s.cfg.Settings.SV
 	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(settings))
@@ -410,8 +410,10 @@ func (s *Server) ServeConn(
 			SequenceState: sessiondata.NewSequenceState(),
 			RemoteAddr:    args.RemoteAddr,
 		},
-		prepStmts: make(map[string]*PreparedStatement),
-		portals:   make(map[string]*PreparedPortal),
+		prepStmtsNamespace: prepStmtNamespace{
+			prepStmts: make(map[string]*PreparedStatement),
+			portals:   make(map[string]*PreparedPortal),
+		},
 		state: txnState2{
 			mon:           &txnMon,
 			txnAbortCount: s.StatementCounters.TxnAbortCount,
@@ -522,9 +524,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 
 	ex.extraTxnState.reset(ctx, txnAborted, ex.server.dbCache)
 
-	ex.closeAllPortals(ctx)
-	for _, stmt := range ex.prepStmts {
-		stmt.close(ctx)
+	if closeType == normalClose {
+		// Close all statements and prepared portals by first unifying the namespaces
+		// and the closing what remains.
+		ex.commitPrepStmtNamespace(ctx)
+		ex.prepStmtsNamespace.closeDelta(ctx, prepStmtNamespace{})
 	}
 
 	if ex.state.tracing.Enabled() {
@@ -602,11 +606,16 @@ type connExecutor struct {
 	// running on this connection.
 	parallelizeQueue ParallelizeQueue
 
-	// prepStmts contains the prepared statements currently available on the
-	// session.
-	prepStmts map[string]*PreparedStatement
-	// portals contains the portals currently available on the session.
-	portals map[string]*PreparedPortal
+	// !!!
+	prepStmtsNamespace              prepStmtNamespace
+	prepStmtsNamespaceAtTxnStartPos prepStmtNamespace
+
+	// !!!
+	// // prepStmts contains the prepared statements currently available on the
+	// // session.
+	// prepStmts map[string]*PreparedStatement
+	// // portals contains the portals currently available on the session.
+	// portals map[string]*PreparedPortal
 
 	// mon tracks memory usage for SQL activity within this session. It
 	// is not directly used, but rather indirectly used via sessionMon
@@ -669,6 +678,50 @@ type connExecutor struct {
 	// curStmt is the statement that's currently being prepared or executed, if
 	// any. This is printed by high-level panic recovery.
 	curStmt tree.Statement
+}
+
+type prepStmtNamespace struct {
+	// prepStmts contains the prepared statements currently available on the
+	// session.
+	prepStmts map[string]*PreparedStatement
+	// portals contains the portals currently available on the session.
+	portals map[string]*PreparedPortal
+}
+
+// Deallocate prepared statements that aren't part of base.
+func (ns *prepStmtNamespace) closeDelta(ctx context.Context, base prepStmtNamespace) {
+	for name, ps := range ns.prepStmts {
+		bps, ok := base.prepStmts[name]
+		// If the prepared statement didn't exist before (including if a statement
+		// with the same name existed, but it was different), close it.
+		if !ok || bps != ps {
+			ps.close(ctx)
+		}
+	}
+	for name, p := range ns.portals {
+		bp, ok := base.portals[name]
+		// If the prepared statement didn't exist before (including if a statement
+		// with the same name existed, but it was different), close it.
+		if !ok || bp != p {
+			p.close(ctx)
+		}
+	}
+	// Destroy the namespace since at least part of it is invalid. The caller is
+	// not supposed to use the namespace until it gets reassigned.
+	*ns = prepStmtNamespace{}
+}
+
+func (ns *prepStmtNamespace) copy() prepStmtNamespace {
+	var cpy prepStmtNamespace
+	cpy.prepStmts = make(map[string]*PreparedStatement)
+	for name, ps := range ns.prepStmts {
+		cpy.prepStmts[name] = ps
+	}
+	cpy.portals = make(map[string]*PreparedPortal)
+	for name, p := range ns.portals {
+		cpy.portals[name] = p
+	}
+	return cpy
 }
 
 // transactionState groups state that's specific to a SQL transaction. They all
@@ -764,7 +817,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			// ExecPortal is handled like ExecStmt, except that the placeholder info
 			// is taken from the portal.
 
-			portal, ok := ex.portals[tcmd.Name]
+			portal, ok := ex.prepStmtsNamespace.portals[tcmd.Name]
 			if !ok {
 				err := pgerror.NewErrorf(
 					pgerror.CodeInvalidCursorNameError, "unknown portal %q", tcmd.Name)
@@ -928,6 +981,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				return err
 			}
 		case rewind:
+			ex.rewindPrepStmtNamespace(ex.Ctx())
 			advInfo.rewCap.rewindAndUnlock(ex.Ctx())
 		case stayInPlace:
 			// Nothing to do. The same statement will be executed again.
@@ -935,7 +989,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			log.Fatalf(ex.Ctx(), "unexpected advance code: %s", advInfo.code)
 		}
 
-		if err := ex.updateTxnStartPosMaybe(cmd, pos, advInfo); err != nil {
+		if err := ex.updateTxnStartPosMaybe(ex.Ctx(), cmd, pos, advInfo); err != nil {
 			return err
 		}
 	}
@@ -1020,7 +1074,7 @@ func (ex *connExecutor) execCopyIn(
 // updateTxnStartPosMaybe checks whether the ex.txnStartPos should be advanced,
 // based on the advInfo produced by running cmd at position pos.
 func (ex *connExecutor) updateTxnStartPosMaybe(
-	cmd Command, pos CmdPos, advInfo advanceInfo,
+	ctx context.Context, cmd Command, pos CmdPos, advInfo advanceInfo,
 ) error {
 	// txnStartPos is only maintained while in stateOpen.
 	if _, ok := ex.machine.CurState().(stateOpen); !ok {
@@ -1058,48 +1112,99 @@ func (ex *connExecutor) updateTxnStartPosMaybe(
 		// 3: ExecutePortal
 		// 4: Sync
 		//
-		// This code ensures that txnStartPos ends up at position 5: running
-		// ExecutePortal will set it to 4, and then this code here will set it to 5.
-		//
-		// Note that we don't bump the txnStartPos when preparing statements or
-		// portals. So, for example, preparing a SET TRANSACTION... statement will
-		// mean that the respective statement loses its magic that it would have had
-		// if it was executed without being prepared. This is because preparing
-		// statements has non-transactional effects: the statement name is
-		// overwritten (particularly the unnamed statement). If we were to bump
-		// txnStartPos on PrepareStmt commands, the following sequence would result
-		// in incorrect execution:
-		// 1.  BEGIN
-		// 2.  PrepareStmt SET TRANSACTION ... (unnamed prepared stmt)
-		// 3.  BindStmt
-		// 4.  ExecutePortal
-		// 5.  PrepareStmt SELECT 1
-		// 6.  BindStmt
-		// 7.  ExecutePortal
-		// 8.  PrepareStmt SELECT 2
-		// 9.  BindStmt
-		// 10. ExecutePortal -> retriable error
-		//
-		// If this code would bump txnStartPos on PrepareStmt/BindStmt commands,
-		// then txnStartPos would end up being 7. When command 10 gets a retriable
-		// error, we'd rewind to 7, but now the unnamed portal erroneously referes
-		// to SELECT 2 instead of SELECT 1. That's why we force PrepareStmt commands
-		// to be executed again (and so we rewind to 2), even if it means that a
-		// Sync in between 4 and 5 would preclude us from doing automatic retries in
-		// this case.
+		// We can blindly advance the txnStartPos for most commands that don't run
+		// statements.
+
+		if advInfo.code != advanceOne {
+			panic(fmt.Sprintf("unexpected advanceCode: %s", advInfo.code))
+		}
+
+		var canAdvance bool
 		_, inOpen := ex.machine.CurState().(stateOpen)
 		if inOpen && (ex.txnStartPos == pos) {
-			if _, isSync := cmd.(Sync); isSync {
+			switch tcmd := cmd.(type) {
+			case ExecStmt:
+				canAdvance = ex.stmtDoesntNeedRetry(tcmd.Stmt)
+			case ExecPortal:
+				portal := ex.prepStmtsNamespace.portals[tcmd.Name]
+				canAdvance = ex.stmtDoesntNeedRetry(portal.Stmt.Statement)
+			case CopyIn:
+			case PrepareStmt:
+				canAdvance = true
+			case DescribeStmt:
+				canAdvance = true
+			case BindStmt:
+				canAdvance = true
+			case DeletePreparedStmt:
+				canAdvance = true
+			case SendError:
+				canAdvance = true
+			case Sync:
+				canAdvance = true
+			case DrainRequest:
 				ex.setTxnStartPos(ex.Ctx(), pos+1)
-				return nil
+			default:
+				panic(fmt.Sprintf("unsupported cmd: %T", cmd))
 			}
-			if tcmd, ok := cmd.(ExecStmt); ok {
-				if ex.stmtDoesntNeedRetry(tcmd.Stmt) {
-					ex.setTxnStartPos(ex.Ctx(), pos+1)
-				}
+			if canAdvance {
+				ex.setTxnStartPos(ex.Ctx(), pos+1)
 			}
 		}
 	}
+	// !!!
+	// else {
+	//   // See if we can advance the rewind point even if this is not the point
+	//   // where the transaction started. We can do that after running a special
+	//   // statement (e.g. SET TRANSACTION or SAVEPOINT) or when we just ran a Sync
+	//   // command. The idea with the Sync command is that we don't want the
+	//   // following sequence to disable retries for what comes after the sequence:
+	//   // 1: PrepareStmt BEGIN
+	//   // 2: BindStmt
+	//   // 3: ExecutePortal
+	//   // 4: Sync
+	//   //
+	//   // This code ensures that txnStartPos ends up at position 5: running
+	//   // ExecutePortal will set it to 4, and then this code here will set it to 5.
+	//   //
+	//   // Note that we don't bump the txnStartPos when preparing statements or
+	//   // portals. So, for example, preparing a SET TRANSACTION... statement will
+	//   // mean that the respective statement loses its magic that it would have had
+	//   // if it was executed without being prepared. This is because preparing
+	//   // statements has non-transactional effects: the statement name is
+	//   // overwritten (particularly the unnamed statement). If we were to bump
+	//   // txnStartPos on PrepareStmt commands, the following sequence would result
+	//   // in incorrect execution:
+	//   // 1.  BEGIN
+	//   // 2.  PrepareStmt SET TRANSACTION ... (unnamed prepared stmt)
+	//   // 3.  BindStmt
+	//   // 4.  ExecutePortal
+	//   // 5.  PrepareStmt SELECT 1
+	//   // 6.  BindStmt
+	//   // 7.  ExecutePortal
+	//   // 8.  PrepareStmt SELECT 2
+	//   // 9.  BindStmt
+	//   // 10. ExecutePortal -> retriable error
+	//   //
+	//   // If this code would bump txnStartPos on PrepareStmt/BindStmt commands,
+	//   // then txnStartPos would end up being 7. When command 10 gets a retriable
+	//   // error, we'd rewind to 7, but now the unnamed portal erroneously referes
+	//   // to SELECT 2 instead of SELECT 1. That's why we force PrepareStmt commands
+	//   // to be executed again (and so we rewind to 2), even if it means that a
+	//   // Sync in between 4 and 5 would preclude us from doing automatic retries in
+	//   // this case.
+	//   _, inOpen := ex.machine.CurState().(stateOpen)
+	//   if inOpen && (ex.txnStartPos == pos) {
+	//     if _, isSync := cmd.(Sync); isSync {
+	//       ex.setTxnStartPos(ex.Ctx(), pos+1)
+	//       return nil
+	//     }
+	//     if tcmd, ok := cmd.(ExecStmt); ok {
+	//       if ex.stmtDoesntNeedRetry(tcmd.Stmt) {
+	//         ex.setTxnStartPos(ex.Ctx(), pos+1)
+	//       }
+	//     }
+	//   }
+	// }
 	return nil
 }
 
@@ -1207,13 +1312,13 @@ func (ex *connExecutor) execBind(
 	portalName := bindCmd.PortalName
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {
-		if _, ok := ex.portals[portalName]; ok {
+		if _, ok := ex.prepStmtsNamespace.portals[portalName]; ok {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeDuplicateCursorError, "portal %q already exists", portalName))
 		}
 	}
 
-	ps, ok := ex.prepStmts[bindCmd.PreparedStatementName]
+	ps, ok := ex.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
 		return retErr(pgerror.NewErrorf(
 			pgerror.CodeInvalidSQLStatementNameError,
@@ -1298,7 +1403,7 @@ func (ex *connExecutor) execDelPrepStmt(
 ) (fsm.Event, fsm.EventPayload) {
 	switch delCmd.Type {
 	case pgwirebase.PrepareStatement:
-		ps, ok := ex.prepStmts[delCmd.Name]
+		ps, ok := ex.prepStmtsNamespace.prepStmts[delCmd.Name]
 		if !ok {
 			// The spec says "It is not an error to issue Close against a nonexistent
 			// statement or portal name.". See
@@ -1306,36 +1411,29 @@ func (ex *connExecutor) execDelPrepStmt(
 			break
 		}
 
-		if ex.portals != nil {
+		if ex.prepStmtsNamespace.portals != nil {
 			for portalName := range ps.portalNames {
-				if portal, ok := ex.portals[portalName]; ok {
-					delete(ex.portals, portalName)
-					portal.close(ctx)
-				}
+				delete(ex.prepStmtsNamespace.portals, portalName)
+				// if portal, ok := ex.prepStmtsNamespace.portals[portalName]; ok {
+				//   delete(ex.prepStmtsNamespace.portals, portalName)
+				//   // !!! portal.close(ctx)
+				// }
 			}
 		}
-		ps.close(ctx)
-		delete(ex.prepStmts, delCmd.Name)
+		// !!! ps.close(ctx)
+		delete(ex.prepStmtsNamespace.prepStmts, delCmd.Name)
 	case pgwirebase.PreparePortal:
-		portal, ok := ex.portals[delCmd.Name]
+		portal, ok := ex.prepStmtsNamespace.portals[delCmd.Name]
 		if !ok {
 			break
 		}
 		delete(portal.Stmt.portalNames, delCmd.Name)
-		delete(ex.portals, delCmd.Name)
-		portal.close(ctx)
+		delete(ex.prepStmtsNamespace.portals, delCmd.Name)
+		// !!! portal.close(ctx)
 	default:
 		panic(fmt.Sprintf("unknown del type: %s", delCmd.Type))
 	}
 	return nil, nil
-}
-
-func (ex *connExecutor) closeAllPortals(ctx context.Context) {
-	for portalName, portal := range ex.portals {
-		delete(portal.Stmt.portalNames, portalName)
-		delete(ex.portals, portalName)
-		portal.close(ctx)
-	}
 }
 
 func (ex *connExecutor) execDescribe(
@@ -1348,7 +1446,7 @@ func (ex *connExecutor) execDescribe(
 
 	switch descCmd.Type {
 	case pgwirebase.PrepareStatement:
-		ps, ok := ex.prepStmts[descCmd.Name]
+		ps, ok := ex.prepStmtsNamespace.prepStmts[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeInvalidSQLStatementNameError,
@@ -1363,7 +1461,7 @@ func (ex *connExecutor) execDescribe(
 			res.SetPrepStmtOutput(ctx, ps.Columns)
 		}
 	case pgwirebase.PreparePortal:
-		portal, ok := ex.portals[descCmd.Name]
+		portal, ok := ex.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
 			return retErr(pgerror.NewErrorf(
 				pgerror.CodeInvalidCursorNameError, "unknown portal %q", descCmd.Name))
@@ -1583,6 +1681,18 @@ func (ex *connExecutor) setTxnStartPos(ctx context.Context, pos CmdPos) {
 	}
 	ex.txnStartPos = pos
 	ex.stmtBuf.ltrim(ctx, pos)
+	ex.commitPrepStmtNamespace(ctx)
+	ex.prepStmtsNamespaceAtTxnStartPos = ex.prepStmtsNamespace.copy()
+}
+
+func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) {
+	ex.prepStmtsNamespace.closeDelta(ctx, ex.prepStmtsNamespaceAtTxnStartPos)
+	ex.prepStmtsNamespace = ex.prepStmtsNamespaceAtTxnStartPos.copy()
+}
+
+func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) {
+	ex.prepStmtsNamespaceAtTxnStartPos.closeDelta(ctx, ex.prepStmtsNamespace)
+	ex.prepStmtsNamespaceAtTxnStartPos = ex.prepStmtsNamespace.copy()
 }
 
 // getRewindTxnCapability checks whether rewinding to the position previously
@@ -1960,7 +2070,7 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	case *tree.Prepare:
 		name := s.Name.String()
-		if _, ok := ex.prepStmts[name]; ok {
+		if _, ok := ex.prepStmtsNamespace.prepStmts[name]; ok {
 			err := pgerror.NewErrorf(
 				pgerror.CodeDuplicatePreparedStatementError,
 				"prepared statement %q already exists", name,
@@ -1980,7 +2090,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
 		// continue execution below.
 		name := s.Name.String()
-		ps, ok := ex.prepStmts[name]
+		ps, ok := ex.prepStmtsNamespace.prepStmts[name]
 		if !ok {
 			err := pgerror.NewErrorf(
 				pgerror.CodeInvalidSQLStatementNameError,
@@ -2236,7 +2346,7 @@ var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
 
 // Get is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
-	s, ok := ps.ex.prepStmts[name]
+	s, ok := ps.ex.prepStmtsNamespace.prepStmts[name]
 	return s, ok
 }
 
@@ -2246,29 +2356,31 @@ func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool 
 	if !ok {
 		return false
 	}
-	if ps.ex.portals != nil {
+	if ps.ex.prepStmtsNamespace.portals != nil {
 		for portalName := range stmt.portalNames {
-			if portal, ok := ps.ex.portals[portalName]; ok {
-				delete(ps.ex.portals, portalName)
-				portal.close(ctx)
-			}
+			delete(ps.ex.prepStmtsNamespace.portals, portalName)
+			// if portal, ok := ps.ex.prepStmtsNamespace.portals[portalName]; ok {
+			//   delete(ps.ex.prepStmtsNamespace.portals, portalName)
+			//   // !!! portal.close(ctx)
+			// }
 		}
 	}
-	stmt.close(ctx)
-	delete(ps.ex.prepStmts, name)
+	// !!! stmt.close(ctx)
+	delete(ps.ex.prepStmtsNamespace.prepStmts, name)
 	return true
 }
 
 // DeleteAll is part of the preparedStatementsAccessor interface.
 func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
-	for _, stmt := range ps.ex.prepStmts {
-		stmt.close(ctx)
-	}
-	for _, portal := range ps.ex.portals {
-		portal.close(ctx)
-	}
-	ps.ex.prepStmts = make(map[string]*PreparedStatement)
-	ps.ex.portals = make(map[string]*PreparedPortal)
+	// !!!
+	// for _, stmt := range ps.ex.prepStmtsNamespace.prepStmts {
+	//   stmt.close(ctx)
+	// }
+	// for _, portal := range ps.ex.prepStmtsNamespace.portals {
+	//   portal.close(ctx)
+	// }
+	ps.ex.prepStmtsNamespace.prepStmts = make(map[string]*PreparedStatement)
+	ps.ex.prepStmtsNamespace.portals = make(map[string]*PreparedPortal)
 }
 
 func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
@@ -2890,12 +3002,13 @@ func (ex *connExecutor) addPreparedStmt(
 		return nil, err
 	}
 
-	if prevStmt, ok := ex.prepStmts[name]; ok {
-		prevStmt.close(ctx)
-	}
+	// !!!
+	// if prevStmt, ok := ex.prepStmtsNamespace.prepStmts[name]; ok {
+	//   prevStmt.close(ctx)
+	// }
 
 	prepared.memAcc.Grow(ctx, int64(len(name)))
-	ex.prepStmts[name] = prepared
+	ex.prepStmtsNamespace.prepStmts[name] = prepared
 	return prepared, nil
 }
 
@@ -2913,11 +3026,12 @@ func (ex *connExecutor) addPortal(
 
 	stmt.portalNames[name] = struct{}{}
 
-	if prevPortal, ok := ex.portals[name]; ok {
-		prevPortal.close(ctx)
-	}
+	// !!!
+	// if prevPortal, ok := ex.prepStmtsNamespace.portals[name]; ok {
+	//   prevPortal.close(ctx)
+	// }
 
-	ex.portals[name] = portal
+	ex.prepStmtsNamespace.portals[name] = portal
 	return portal, nil
 }
 
