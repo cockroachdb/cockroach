@@ -43,7 +43,7 @@ func main() {
 			if local {
 				parallelism = 1
 			}
-			tests.Run(args)
+			os.Exit(tests.Run(args))
 			return nil
 		},
 	}
