@@ -143,16 +143,16 @@ d2
 system
 test
 
-query error relation "d1.v2" does not exist
+query error pgcode 42P01 relation "d1.v2" does not exist
 SELECT * FROM d1.v2
 
-query error relation "d2.v2" does not exist
+query error pgcode 42P01 relation "d2.v2" does not exist
 SELECT * FROM d2.v2
 
-query error relation "d2.v3" does not exist
+query error pgcode 42P01 relation "d2.v3" does not exist
 SELECT * FROM d2.v3
 
-query error relation "d2.v4" does not exist
+query error pgcode 42P01 relation "d2.v4" does not exist
 SELECT * FROM d2.v4
 
 query TT
@@ -168,7 +168,7 @@ SHOW DATABASES
 system
 test
 
-query error relation "d2.v1" does not exist
+query error pgcode 42P01 relation "d2.v1" does not exist
 SELECT * FROM d2.v1
 
 ## drop a database containing tables with foreign key constraints, e.g. #8497
@@ -199,7 +199,7 @@ SHOW DATABASES
 system
 test
 
-query error relation "constraint_db.t1" does not exist
+query error pgcode 42P01 relation "constraint_db.t1" does not exist
 SELECT * FROM constraint_db.t1
 
 # Check that the default option is CASCADE, but that safe_updates blocks it

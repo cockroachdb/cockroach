@@ -17,7 +17,7 @@ VALUES (1), (1), (2), (3) ORDER BY 1 DESC LIMIT 3
 2
 1
 
-query error column z does not exist
+query error pgcode 42703 column \"z\" does not exist
 VALUES (1), (1), (2), (3) ORDER BY z
 
 # subqueries can be evaluated in VALUES

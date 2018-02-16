@@ -190,10 +190,7 @@ func (p *planner) orderBy(
 		}
 
 		if index == -1 {
-			return nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedColumnError,
-				"column %s does not exist", expr,
-			)
+			return nil, sqlbase.NewUndefinedColumnError(expr.String())
 		}
 		ordering = append(ordering,
 			sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})

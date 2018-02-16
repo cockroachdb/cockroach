@@ -43,7 +43,7 @@ SELECT * FROM kv
 5 11
 7 15
 
-statement error column "m" does not exist
+statement error pgcode 42703 column "m" does not exist
 UPDATE kv SET m = 9 WHERE k IN (1, 3)
 
 statement error unimplemented at or near "k"
