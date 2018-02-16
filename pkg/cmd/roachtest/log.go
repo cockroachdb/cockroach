@@ -21,8 +21,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 )
 
 // logger logs to a file in artifacts and stdio simultaneously. This makes it
@@ -37,9 +35,16 @@ type logger struct {
 
 // TODO(peter): put all of the logs for a test in a directory named by the
 // test.
-func newLogger(name, filename string, stdout, stderr io.Writer) (*logger, error) {
-	filename = fmt.Sprintf("%s.log", fileutil.EscapeFilename(filename))
-	path := filepath.Join(artifacts, filename)
+func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger, error) {
+	if artifacts == "" {
+		// Log to stdout/stderr if there is no artifacts directory.
+		return &logger{
+			stdout: os.Stdout,
+			stderr: os.Stderr,
+		}, nil
+	}
+
+	path := filepath.Join(artifacts, name, filename)
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return nil, err
 	}
@@ -48,25 +53,33 @@ func newLogger(name, filename string, stdout, stderr io.Writer) (*logger, error)
 	if err != nil {
 		return nil, err
 	}
-	p := []byte(name + ": ")
+
+	newWriter := func(w io.Writer) io.Writer {
+		if w == nil {
+			return f
+		}
+		if prefix != "" {
+			w = &prefixWriter{out: w, prefix: []byte(prefix)}
+		}
+		return io.MultiWriter(f, w)
+	}
 
 	return &logger{
 		name:   name,
 		file:   f,
-		stdout: io.MultiWriter(f, &prefixWriter{out: stdout, prefix: p}),
-		stderr: io.MultiWriter(f, &prefixWriter{out: stderr, prefix: p}),
+		stdout: newWriter(stdout),
+		stderr: newWriter(stderr),
 	}, nil
 }
 
 func rootLogger(name string) (*logger, error) {
-	return newLogger(name, name, os.Stdout, os.Stderr)
-}
-
-func stdLogger(name string) *logger {
-	return &logger{
-		stdout: os.Stdout,
-		stderr: os.Stderr,
+	var stdout, stderr io.Writer
+	// Log to stdout/stderr if we're not running tests in parallel.
+	if parallelism == 1 {
+		stdout = os.Stdout
+		stderr = os.Stderr
 	}
+	return newLogger(name, "log", "" /* prefix */, stdout, stderr)
 }
 
 func (l *logger) close() {
@@ -84,9 +97,7 @@ func (l *logger) childLogger(name string) (*logger, error) {
 			stderr: &prefixWriter{out: l.stderr, prefix: p},
 		}, nil
 	}
-
-	filename := l.name + "_" + name
-	return newLogger(name, filename, l.stdout, l.stderr)
+	return newLogger(l.name, name, name+": " /* prefix */, l.stdout, l.stderr)
 }
 
 func (l *logger) printf(f string, args ...interface{}) {

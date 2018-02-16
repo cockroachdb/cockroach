@@ -30,10 +30,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -274,14 +272,9 @@ type cluster struct {
 // duration. The default lifetime of 12h is too long for some tests and will be
 // too short for others.
 func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *cluster {
-	var l *logger
-	if local {
-		l = stdLogger(t.Name())
-	} else {
-		var err error
-		if l, err = rootLogger(t.Name()); err != nil {
-			t.Fatal(err)
-		}
+	l, err := rootLogger(t.Name())
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	c := &cluster{
@@ -331,7 +324,7 @@ func (c *cluster) Destroy(ctx context.Context) {
 		// TODO(peter): Figure out how to retrieve local logs. One option would be
 		// to stop the cluster and mv ~/local to wherever we want it.
 		_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
-			filepath.Join(artifacts, fileutil.EscapeFilename(c.t.Name())))
+			filepath.Join(artifacts, c.t.Name()))
 	}
 	if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
 		c.l.errorf("%s", err)
@@ -559,11 +552,7 @@ func (m *monitor) wait(args ...string) error {
 		defer monL.close()
 
 		cmd := exec.CommandContext(m.ctx, args[0], args[1:]...)
-		if testing.Verbose() {
-			cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
-		} else {
-			cmd.Stdout = pipeW
-		}
+		cmd.Stdout = io.MultiWriter(pipeW, monL.stdout)
 		cmd.Stderr = monL.stderr
 		if err := cmd.Run(); err != nil {
 			if err != context.Canceled && !strings.Contains(err.Error(), "killed") {

@@ -40,9 +40,6 @@ func main() {
 	` + strings.Join(allTests(), "\n\t") + `
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			if local {
-				parallelism = 1
-			}
 			os.Exit(tests.Run(args))
 			return nil
 		},
