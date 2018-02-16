@@ -128,8 +128,7 @@ type Builder struct {
 func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
 	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
 
-	ivarHelper := tree.MakeIndexedVarHelper(b, 0)
-	b.semaCtx.IVarHelper = &ivarHelper
+	b.semaCtx.IVarContainer = b
 	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
 
 	return b

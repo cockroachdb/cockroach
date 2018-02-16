@@ -127,7 +127,7 @@ func TestBuilder(t *testing.T) {
 					return exprView.String()
 
 				case "build-scalar":
-					typedExpr, err := testutils.ParseScalarExpr(d.Input, &iVarHelper)
+					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
