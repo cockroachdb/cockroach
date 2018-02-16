@@ -287,7 +287,10 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 			// guesstimate that we'll need apps*(queries-per-app).
 			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(e.sqlStats.apps))
 		}
-		hashedApp := HashForReporting(salt, appName)
+		hashedApp, err := HashForReporting(salt, appName)
+		if err != nil {
+			hashedApp = "unknown"
+		}
 		a.Lock()
 		for q, stats := range a.stmts {
 			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
@@ -318,7 +321,10 @@ func (e *Executor) GetScrubbedStmtStats() []roachpb.CollectedStatementStatistics
 
 // HashForReporting 1-way hashes values for use in stat reporting. The salt
 // should be the cluster.secret setting.
-func HashForReporting(salt, appName string) string {
+func HashForReporting(salt, appName string) (string, error) {
+	if len(salt) == 0 {
+		return "", errors.Errorf("no salt provided")
+	}
 	hash := sha256.New()
 
 	if _, err := hash.Write([]byte(salt)); err != nil {
@@ -327,7 +333,7 @@ func HashForReporting(salt, appName string) string {
 	if _, err := hash.Write([]byte(appName)); err != nil {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 	}
-	return hex.EncodeToString(hash.Sum(nil)[:4])
+	return hex.EncodeToString(hash.Sum(nil)[:4]), nil
 }
 
 // ResetStatementStats resets the executor's collected statement statistics.
