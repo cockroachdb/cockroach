@@ -222,7 +222,7 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 					Type: coltypes.NewFloat(0 /* prec */, false /* precSpecified */),
 				}
 			}
-			ctx := &tree.SemaContext{IVarHelper: h}
+			ctx := &tree.SemaContext{IVarContainer: h.Container()}
 			return expr.TypeCheck(ctx, types.Any)
 		},
 	},

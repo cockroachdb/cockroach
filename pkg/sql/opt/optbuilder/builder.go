@@ -128,8 +128,7 @@ type Builder struct {
 func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
 	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
 
-	ivarHelper := tree.MakeIndexedVarHelper(b, 0)
-	b.semaCtx.IVarHelper = &ivarHelper
+	b.semaCtx.IVarContainer = b
 	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
 
 	return b
@@ -1146,9 +1145,8 @@ func (b *Builder) buildDistinct(
 	return b.factory.ConstructGroupBy(in, groupingList, aggList)
 }
 
-// Builder implements the IndexedVarContainer interface so it can be
-// used as the container inside an IndexedVarHelper (specifically
-// Builder.semaCtx.IVarHelper). This allows tree.TypeCheck to determine the
+// Builder implements the IndexedVarContainer interface so it can be used as the
+// IVarContainer in Builder.semaCtx. This allows tree.TypeCheck to determine the
 // correct type for any IndexedVars in Builder.stmt. These types are maintained
 // inside the Builder.colMap.
 var _ tree.IndexedVarContainer = &Builder{}

@@ -64,14 +64,14 @@ func (p *planner) analyzeExpr(
 
 	// Type check.
 	var typedExpr tree.TypedExpr
-	p.semaCtx.IVarHelper = &iVarHelper
+	p.semaCtx.IVarContainer = iVarHelper.Container()
 	if requireType {
 		typedExpr, err = tree.TypeCheckAndRequire(resolved, &p.semaCtx,
 			expectedType, typingContext)
 	} else {
 		typedExpr, err = tree.TypeCheck(resolved, &p.semaCtx, expectedType)
 	}
-	p.semaCtx.IVarHelper = nil
+	p.semaCtx.IVarContainer = nil
 	if err != nil {
 		return nil, err
 	}

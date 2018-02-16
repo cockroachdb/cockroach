@@ -285,9 +285,9 @@ func (p *planner) makeJoin(
 				},
 			}
 			var err error
-			p.semaCtx.IVarHelper = &r.ivarHelper
+			p.semaCtx.IVarContainer = r.ivarHelper.Container()
 			expr, err = c.TypeCheck(&p.semaCtx, types.Any)
-			p.semaCtx.IVarHelper = nil
+			p.semaCtx.IVarContainer = nil
 			if err != nil {
 				return planDataSource{}, err
 			}
