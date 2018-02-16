@@ -109,7 +109,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		}
 	}
 
-	joinType := distsqlJoinType(n.joinType)
+	joinType := n.joinType
 
 	post, joinToStreamColMap := joinOutColumns(n, plans[0], plans[1])
 	onExpr := remapOnExpr(planCtx.EvalContext(), n, plans[0], plans[1])
@@ -798,27 +798,12 @@ func joinSpans(n *joinNode, parentSpans []spanPartition) ([]spanPartition, error
 	return joinSpans, nil
 }
 
-func distsqlJoinType(joinType joinType) distsqlrun.JoinType {
-	switch joinType {
-	case joinTypeInner:
-		return distsqlrun.JoinType_INNER
-	case joinTypeLeftOuter:
-		return distsqlrun.JoinType_LEFT_OUTER
-	case joinTypeRightOuter:
-		return distsqlrun.JoinType_RIGHT_OUTER
-	case joinTypeFullOuter:
-		return distsqlrun.JoinType_FULL_OUTER
-	}
-
-	panic(fmt.Sprintf("invalid join type %d", joinType))
-}
-
-func distsqlSetOpJoinType(setOpType tree.UnionType) distsqlrun.JoinType {
+func distsqlSetOpJoinType(setOpType tree.UnionType) sqlbase.JoinType {
 	switch setOpType {
 	case tree.ExceptOp:
-		return distsqlrun.JoinType_EXCEPT_ALL
+		return sqlbase.ExceptAllJoin
 	case tree.IntersectOp:
-		return distsqlrun.JoinType_INTERSECT_ALL
+		return sqlbase.IntersectAllJoin
 	default:
 		panic(fmt.Sprintf("set op type %v unsupported by joins", setOpType))
 	}

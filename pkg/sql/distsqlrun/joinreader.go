@@ -108,7 +108,7 @@ func newJoinReader(
 			flowCtx,
 			input.OutputTypes(),
 			jr.desc.ColumnTypes(),
-			JoinType_INNER,
+			sqlbase.InnerJoin,
 			spec.OnExpr,
 			jr.lookupCols,
 			indexCols,

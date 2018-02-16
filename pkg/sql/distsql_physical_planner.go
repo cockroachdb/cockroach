@@ -1648,7 +1648,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// fill in the processor spec. See descriptions for HashJoinerSpec.
 	var leftEqCols, rightEqCols []uint32
 	var leftMergeOrd, rightMergeOrd distsqlrun.Ordering
-	joinType := distsqlJoinType(n.joinType)
+	joinType := n.joinType
 
 	// Figure out the left and right types.
 	leftTypes := leftPlan.ResultTypes
@@ -1806,7 +1806,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 // string, or returns false and an explanation behind why the lookup join
 // could not be used.
 func verifyLookupJoin(
-	rightEqCols []uint32, n *joinNode, joinType distsqlrun.JoinType,
+	rightEqCols []uint32, n *joinNode, joinType sqlbase.JoinType,
 ) (bool, *scanNode, string) {
 	lookupJoinScan, ok := n.right.plan.(*scanNode)
 	if !ok {
@@ -1817,7 +1817,7 @@ func verifyLookupJoin(
 		return false, nil, "lookup joins can only perform lookups through the primary index"
 	}
 
-	if joinType != distsqlrun.JoinType_INNER {
+	if joinType != sqlbase.InnerJoin {
 		return false, nil, "lookup joins are only supported for inner joins"
 	}
 

@@ -195,7 +195,7 @@ func (ee *execEngine) ConstructInnerJoin(
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
 	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, joinTypeInner, nil, /* cond */
+		context.TODO(), leftSrc.info, rightSrc.info, sqlbase.InnerJoin, nil, /* cond */
 	)
 	if err != nil {
 		return nil, err

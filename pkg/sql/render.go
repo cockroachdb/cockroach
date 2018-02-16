@@ -579,8 +579,9 @@ func (p *planner) rewriteSRFs(
 	}
 
 	if !isUnarySource(r.source) {
-		// The FROM clause specifies something. Replace with a cross-join.
-		src, err = p.makeJoin(ctx, "CROSS JOIN", r.source, src, nil)
+		// The FROM clause specifies something. Replace with a cross-join (which is
+		// an inner join without a condition).
+		src, err = p.makeJoin(ctx, sqlbase.InnerJoin, r.source, src, nil)
 		if err != nil {
 			return target, err
 		}
