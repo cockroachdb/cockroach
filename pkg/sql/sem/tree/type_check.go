@@ -34,7 +34,8 @@ type SemaContext struct {
 	// Placeholders relates placeholder names to their type and, later, value.
 	Placeholders PlaceholderInfo
 
-	IVarHelper *IndexedVarHelper
+	// IVarContainer is used to resolve the types of IndexedVars.
+	IVarContainer IndexedVarContainer
 
 	// Location references the *Location on the current Session.
 	Location **time.Location

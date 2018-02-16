@@ -69,7 +69,7 @@ func processExpression(exprSpec Expression, h *tree.IndexedVarHelper) (tree.Type
 	}
 
 	// Convert to a fully typed expression.
-	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarHelper: h}, types.Any)
+	typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{IVarContainer: h.Container()}, types.Any)
 	if err != nil {
 		return nil, errors.Wrap(err, expr.String())
 	}
