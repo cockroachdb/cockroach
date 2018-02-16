@@ -96,7 +96,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	evalCtx.IVarHelper = &IndexedVarHelper{container: c}
+	evalCtx.IVarContainer = c
 	d, err := typedExpr.Eval(evalCtx)
 	if err != nil {
 		t.Fatal(err)

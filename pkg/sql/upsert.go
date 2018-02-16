@@ -194,8 +194,8 @@ func (uh *upsertHelper) eval(insertRow tree.Datums, existingRow tree.Datums) (tr
 
 	var err error
 	ret := make([]tree.Datum, len(uh.evalExprs))
-	uh.p.extendedEvalCtx.PushIVarHelper(uh.ivarHelper)
-	defer func() { uh.p.extendedEvalCtx.PopIVarHelper() }()
+	uh.p.extendedEvalCtx.PushIVarContainer(uh.ivarHelper.Container())
+	defer func() { uh.p.extendedEvalCtx.PopIVarContainer() }()
 	for i, evalExpr := range uh.evalExprs {
 		ret[i], err = evalExpr.Eval(uh.p.EvalContext())
 		if err != nil {
@@ -213,8 +213,8 @@ func (uh *upsertHelper) evalComputedCols(
 	updatedRow tree.Datums, appendTo tree.Datums,
 ) (tree.Datums, error) {
 	uh.ccIvarContainer.curSourceRow = updatedRow
-	uh.p.EvalContext().IVarHelper = uh.ccIvarHelper
-	defer func() { uh.p.EvalContext().IVarHelper = nil }()
+	uh.p.EvalContext().IVarContainer = uh.ccIvarContainer
+	defer func() { uh.p.EvalContext().IVarContainer = nil }()
 	for i := range uh.computeExprs {
 		res, err := uh.computeExprs[i].Eval(uh.p.EvalContext())
 		if err != nil {
@@ -231,8 +231,8 @@ func (uh *upsertHelper) shouldUpdate(insertRow tree.Datums, existingRow tree.Dat
 	uh.curSourceRow = existingRow
 	uh.curExcludedRow = insertRow
 
-	uh.p.extendedEvalCtx.PushIVarHelper(uh.ivarHelper)
-	defer func() { uh.p.extendedEvalCtx.PopIVarHelper() }()
+	uh.p.extendedEvalCtx.PushIVarContainer(uh.ivarHelper.Container())
+	defer func() { uh.p.extendedEvalCtx.PopIVarContainer() }()
 	return sqlbase.RunFilter(uh.whereExpr, uh.p.EvalContext())
 }
 
