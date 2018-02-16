@@ -271,6 +271,29 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
+	`experimental_force_lookup_join`: {
+		Set: func(
+			_ context.Context, m sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			s, err := getSingleBool("experimental_force_lookup_join", evalCtx, values)
+			if err != nil {
+				return err
+			}
+			m.SetLookupJoinEnabled(bool(*s))
+
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData.LookupJoinEnabled)
+		},
+		Reset: func(m sessionDataMutator) error {
+			m.SetLookupJoinEnabled(false)
+			return nil
+		},
+	},
+
+	// CockroachDB extension.
 	`experimental_opt`: {
 		Set: func(
 			_ context.Context, m sessionDataMutator,
