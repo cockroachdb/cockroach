@@ -796,7 +796,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 	// We might still be able to read/write in the table inside this transaction
 	// until the schema changer runs, but we shouldn't be able to ALTER it.
 	if _, err := tx.Exec(`ALTER TABLE t.kv ADD COLUMN w CHAR`); !testutils.IsError(err,
-		`table "kv" is being dropped`) {
+		`relation "t.kv" does not exist`) {
 		t.Fatalf("different error than expected: %v", err)
 	}
 
@@ -899,7 +899,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 
 	// Check that DROP TABLE with the same name returns a proper error.
-	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `table "t" is being dropped`) {
+	if _, err := db.Exec(`DROP TABLE test.t`); !testutils.IsError(err, `relation "test.t" does not exist`) {
 		t.Fatal(err)
 	}
 }

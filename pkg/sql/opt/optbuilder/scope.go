@@ -15,6 +15,8 @@
 package optbuilder
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
@@ -260,6 +262,83 @@ func (s *scope) endAggFunc() (refScope *scope) {
 // Builder.buildScalar to construct a "variable" memo expression.
 var _ tree.Visitor = &scope{}
 
+// ColumnSourceMeta implements the tree.ColumnSourceMeta interface.
+func (*scope) ColumnSourceMeta() {}
+
+// ColumnSourceMeta implements the tree.ColumnSourceMeta interface.
+func (*columnProps) ColumnSourceMeta() {}
+
+// ColumnResolutionResult implements the tree.ColumnResolutionResult interface.
+func (*columnProps) ColumnResolutionResult() {}
+
+// FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
+func (s *scope) FindSourceProvidingColumn(
+	_ context.Context, colNameName tree.Name,
+) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
+	colName := optbase.ColumnName(colNameName)
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			if col.matches("", colName) {
+				// TODO(whomever): source names in a FROM clause also have a
+				// catalog/schema prefix and it matters.
+				return tree.NewUnqualifiedTableName(tree.Name(col.table)), col, int(col.index), nil
+			}
+		}
+	}
+	return nil, nil, -1, fmt.Errorf("unknown column %s", colName)
+}
+
+// FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
+func (s *scope) FindSourceMatchingName(
+	_ context.Context, tn tree.TableName,
+) (
+	res tree.NumResolutionResults,
+	prefix *tree.TableName,
+	srcMeta tree.ColumnSourceMeta,
+	err error,
+) {
+	tblName := optbase.TableName(tn.Table())
+	for ; s != nil; s = s.parent {
+		for i := range s.cols {
+			col := &s.cols[i]
+			// TODO(whomever): this improperly disregards the catalog/schema prefix.
+			if col.table == tblName {
+				// TODO(whomever): this improperly fails to recognize when a source table
+				// is ambiguous, e.g. SELECT kv.k FROM db1.kv, db2.kv
+				return tree.ExactlyOne, tree.NewUnqualifiedTableName(tree.Name(col.table)), s, nil
+			}
+		}
+	}
+	return tree.NoResults, nil, nil, nil
+}
+
+// Resolve is part of the tree.ColumnItemResolver interface.
+func (s *scope) Resolve(
+	_ context.Context,
+	prefix *tree.TableName,
+	srcMeta tree.ColumnSourceMeta,
+	colHint int,
+	colNameName tree.Name,
+) (tree.ColumnResolutionResult, error) {
+	if colHint >= 0 {
+		// Column was found by FindSourceProvidingColumn above.
+		return srcMeta.(*columnProps), nil
+	}
+	// Otherwise, a table is known but not the column yet.
+	inScope := srcMeta.(*scope)
+	tblName := optbase.TableName(prefix.Table())
+	colName := optbase.ColumnName(colNameName)
+	for i := range inScope.cols {
+		col := &s.cols[i]
+		if col.matches(tblName, colName) {
+			return col, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unknown column %s", columnProps{name: colName, table: tblName})
+}
+
 // VisitPre is part of the Visitor interface.
 //
 // NB: This code is adapted from sql/select_name_resolution.go and
@@ -274,24 +353,11 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		tblName := optbase.TableName(t.TableName.Table())
-		colName := optbase.ColumnName(t.ColumnName)
-
-		for curr := s; curr != nil; curr = curr.parent {
-			for i := range curr.cols {
-				col := &curr.cols[i]
-				if col.matches(tblName, colName) {
-					if tblName == "" && col.table != "" {
-						// TODO(andy): why is this necessary??
-						t.TableName.TableName = tree.Name(col.table)
-						t.TableName.ExplicitSchema = false
-					}
-					return false, col
-				}
-			}
+		colI, err := t.Resolve(context.TODO(), s)
+		if err != nil {
+			panic(err)
 		}
-
-		panic(errorf("unknown column %s", columnProps{name: colName, table: tblName}))
+		return false, colI.(*columnProps)
 
 	case *tree.FuncExpr:
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)

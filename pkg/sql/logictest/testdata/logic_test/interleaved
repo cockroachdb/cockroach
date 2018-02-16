@@ -322,11 +322,11 @@ CREATE DATABASE other; CREATE TABLE other.foo(x INT PRIMARY KEY);
 query TT
 SHOW CREATE TABLE interdb
 ----
-interdb                               CREATE TABLE interdb (
-                                      x INT NOT NULL,
-                                      CONSTRAINT "primary" PRIMARY KEY (x ASC),
-                                      FAMILY "primary" (x)
-) INTERLEAVE IN PARENT other.foo (x)
+interdb                                      CREATE TABLE interdb (
+                                             x INT NOT NULL,
+                                             CONSTRAINT "primary" PRIMARY KEY (x ASC),
+                                             FAMILY "primary" (x)
+) INTERLEAVE IN PARENT other.public.foo (x)
 
 statement ok
 CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);

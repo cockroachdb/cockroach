@@ -650,13 +650,22 @@ GRANT ALL ON DATABASE db2 TO newgroup
 
 user testuser
 
-query TTT colnames
+query TTTT colnames
 SHOW GRANTS ON DATABASE db2
 ----
-Database   User       Privileges
-db2        admin      ALL
-db2        newgroup   ALL
-db2        root       ALL
+Database  Schema              User      Privileges
+db2       crdb_internal       admin     ALL
+db2       crdb_internal       newgroup  ALL
+db2       crdb_internal       root      ALL
+db2       information_schema  admin     ALL
+db2       information_schema  newgroup  ALL
+db2       information_schema  root      ALL
+db2       pg_catalog          admin     ALL
+db2       pg_catalog          newgroup  ALL
+db2       pg_catalog          root      ALL
+db2       public              admin     ALL
+db2       public              newgroup  ALL
+db2       public              root      ALL
 
 statement ok
 CREATE TABLE db2.foo (k int);
@@ -689,7 +698,7 @@ SELECT * FROM system.role_members
 role      member    isAdmin
 admin     root      true
 
-statement error cannot drop user or role newgroup: grants still exist on db2, db2.foo
+statement error cannot drop user or role newgroup: grants still exist on db2, db2.public.foo
 DROP ROLE newgroup
 
 statement ok

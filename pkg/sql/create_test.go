@@ -425,7 +425,7 @@ SELECT * FROM t.kv%d
 		// This select should not see any data.
 		if _, err := tx.Query(fmt.Sprintf(
 			`SELECT * FROM t.kv%d`, i,
-		)); !testutils.IsError(err, fmt.Sprintf("id %d is not a table", 52+i)) {
+		)); !testutils.IsError(err, fmt.Sprintf("relation \"t.kv%d\" does not exist", i)) {
 			t.Fatalf("err = %v", err)
 		}
 

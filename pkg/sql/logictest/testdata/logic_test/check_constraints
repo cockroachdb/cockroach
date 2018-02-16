@@ -232,13 +232,13 @@ t7  CREATE TABLE t7 (
 
 # Check that table references are dequalified in their stored representation.
 
-statement error source name "different_table" not found in FROM clause
+statement error no data source matches prefix: different_table
 CREATE TABLE t8 (
   a INT,
   CHECK (different_table.a > 0)
 )
 
-statement error source name "different_database.t8" not found in FROM clause
+statement error no data source matches prefix: different_database.t8
 CREATE TABLE t8 (
   a INT,
   CHECK (different_database.t8.a > 0)

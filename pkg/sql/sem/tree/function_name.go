@@ -17,6 +17,7 @@ package tree
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
 
@@ -58,9 +59,10 @@ func (fn *ResolvableFunctionReference) Resolve(
 		fn.FunctionReference = fd
 		return fd, nil
 	default:
-		panic(fmt.Sprintf("unsupported function name: %+v (%T)",
+		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
+			"programming error: unknown function name type: %+v (%T)",
 			fn.FunctionReference, fn.FunctionReference,
-		))
+		)
 	}
 }
 

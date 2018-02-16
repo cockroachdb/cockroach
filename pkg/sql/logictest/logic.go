@@ -715,6 +715,9 @@ type logicTest struct {
 	varMap map[string]string
 
 	rewriteResTestBuf bytes.Buffer
+
+	curPath   string
+	curLineNo int
 }
 
 func (t *logicTest) traceStart(filename string) {
@@ -1125,6 +1128,7 @@ func (t *logicTest) processSubtest(
 
 	repeat := 1
 	for s.Scan() {
+		t.curPath, t.curLineNo = path, s.line+subtest.lineLineIndexIntoFile
 		if *maxErrs > 0 && t.failures >= *maxErrs {
 			return errors.Errorf("%s:%d: too many errors encountered, skipping the rest of the input",
 				path, s.line+subtest.lineLineIndexIntoFile,
@@ -2121,8 +2125,10 @@ func (t *logicTest) Fatal(args ...interface{}) {
 	}
 	log.Error(context.Background(), args...)
 	if t.subtestT != nil {
+		t.subtestT.Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
 		t.subtestT.Fatal(args...)
 	} else {
+		t.t.Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
 		t.t.Fatal(args...)
 	}
 }

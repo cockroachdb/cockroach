@@ -178,27 +178,27 @@ x y
 query TT
 SHOW CREATE VIEW v1
 ----
-v1 CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.t
+v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v2
 ----
-v2 CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.t
+v2  CREATE VIEW v2 (x, y) AS SELECT a, b FROM test.public.t
 
 query TT
 SHOW CREATE VIEW v6
 ----
-v6 CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.v1
+v6  CREATE VIEW v6 (x, y) AS SELECT a, b FROM test.public.v1
 
 query TT
 SHOW CREATE VIEW v7
 ----
-v7 CREATE VIEW v7 (x, y) AS SELECT a, b FROM test.v1 ORDER BY a DESC LIMIT 2
+v7  CREATE VIEW v7 (x, y) AS SELECT a, b FROM test.public.v1 ORDER BY a DESC LIMIT 2
 
 query TT
 SHOW CREATE VIEW test2.v1
 ----
-test2.v1 CREATE VIEW v1 (x, y) AS SELECT x, y FROM test.v2
+test2.public.v1  CREATE VIEW v1 (x, y) AS SELECT x, y FROM test.public.v2
 
 statement ok
 GRANT SELECT ON t TO testuser
@@ -247,7 +247,7 @@ SELECT * FROM v6
 query TT
 SHOW CREATE VIEW v1
 ----
-v1 CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.t
+v1  CREATE VIEW v1 (a, b) AS SELECT a, b FROM test.public.t
 
 user root
 
@@ -283,7 +283,7 @@ DROP VIEW t
 statement error cannot drop relation "v1" because view "v6" depends on it
 DROP VIEW v1
 
-statement error cannot drop relation "v2" because view "test2.v1" depends on it
+statement error cannot drop relation "v2" because view "test2.public.v1" depends on it
 DROP VIEW v2
 
 statement ok

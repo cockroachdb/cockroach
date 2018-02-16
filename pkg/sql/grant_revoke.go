@@ -70,12 +70,18 @@ func (p *planner) changePrivileges(
 		}
 	}
 
-	descriptors, err := getDescriptorsFromTargetList(
-		ctx, p.txn, p.getVirtualTabler(), p.SessionData().Database, targets)
+	var descriptors []sqlbase.DescriptorProto
+	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
+	// TODO(vivek): check if the cache can be used.
+	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+		descriptors, err = getDescriptorsFromTargetList(ctx, p, targets)
+	})
 	if err != nil {
 		return nil, err
 	}
 
+	// First, update the descriptors. We want to catch all errors before
+	// we update them in KV below.
 	for _, descriptor := range descriptors {
 		if err := p.CheckPrivilege(ctx, descriptor, privilege.GRANT); err != nil {
 			return nil, err
@@ -90,6 +96,7 @@ func (p *planner) changePrivileges(
 			if err := d.Validate(); err != nil {
 				return nil, err
 			}
+
 		case *sqlbase.TableDescriptor:
 			if err := d.Validate(ctx, p.txn); err != nil {
 				return nil, err

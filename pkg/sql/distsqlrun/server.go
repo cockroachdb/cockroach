@@ -527,6 +527,11 @@ func (ep *dummyEvalPlanner) ParseQualifiedTableName(
 	return nil, errEvalPlanner
 }
 
+// Implements the tree.EvalDatabase interface.
+func (ep *dummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
+	return errEvalPlanner
+}
+
 // Implements the tree.EvalPlanner interface.
 func (ep *dummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
 	return nil, errEvalPlanner
@@ -548,6 +553,11 @@ func (so *dummySequenceOperators) ParseQualifiedTableName(
 	ctx context.Context, sql string,
 ) (*tree.TableName, error) {
 	return nil, errSequenceOperators
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *dummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
+	return errEvalPlanner
 }
 
 // Implements the tree.SequenceOperators interface.

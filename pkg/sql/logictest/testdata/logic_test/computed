@@ -362,14 +362,12 @@ CREATE TABLE y (
   r INT AS ((SELECT 1)) STORED
 )
 
-# TODO(justin): better error message needed here.
-statement error source name "x" not found in FROM clause
+statement error no data source matches prefix: x
 CREATE TABLE y (
   r INT AS (x.a) STORED
 )
 
-# TODO(justin): better error message needed here.
-statement error source name "x" not found in FROM clause
+statement error no data source matches prefix: x
 CREATE TABLE y (
   q INT,
   r INT AS (x.q) STORED
