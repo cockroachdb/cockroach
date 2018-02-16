@@ -1468,42 +1468,6 @@ COMMIT;
 	}
 }
 
-// Test that if as part of a transaction A we receive a retryable error intended
-// for a different transaction B, we don't retry transaction A.
-func TestRetryableErrorForWrongTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	bogusTxnID := "deadb33f-baaa-aaaa-aaaa-aaaaaaaaaaad"
-
-	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test (k TEXT PRIMARY KEY, v TEXT);
-INSERT INTO t.test (k, v) VALUES ('test_key', 'test_val');
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// We're going to use FORCE_RETRY() to generate an error for a different
-	// transaction than the one we initiate.
-	_, err = tx.Exec(`SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL, $1)`, bogusTxnID)
-	if isRetryableErr(err) {
-		t.Fatalf("expected non-retryable error, got: %s", err)
-	}
-	if !testutils.IsError(err, "pq: retryable error from another txn.* forced by crdb_internal.force_retry()") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if err := tx.Rollback(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // Test that retryable errors are handled properly through DistSQL.
 func TestDistSQLRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()

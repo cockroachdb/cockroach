@@ -2377,32 +2377,6 @@ CockroachDB supports the following flags:
 			Category: categorySystemInfo,
 			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
 		},
-		tree.Builtin{
-			Types: tree.ArgTypes{
-				{"val", types.Interval},
-				{"txnID", types.String}},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Impure:     true,
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				minDuration := args[0].(*tree.DInterval).Duration
-				txnID := args[1].(*tree.DString)
-				elapsed := duration.Duration{
-					Nanos: int64(ctx.StmtTimestamp.Sub(ctx.TxnTimestamp)),
-				}
-				if elapsed.Compare(minDuration) < 0 {
-					uuid, err := uuid.FromString(string(*txnID))
-					if err != nil {
-						return nil, err
-					}
-					err = ctx.Txn.GenerateForcedRetryableError("forced by crdb_internal.force_retry()")
-					err.(*roachpb.HandledRetryableTxnError).TxnID = uuid
-					return nil, err
-				}
-				return tree.DZero, nil
-			},
-			Category: categorySystemInfo,
-			Info:     "This function is used only by CockroachDB's developers for testing purposes.",
-		},
 	},
 
 	// Identity function which is marked as impure to avoid constant folding.
