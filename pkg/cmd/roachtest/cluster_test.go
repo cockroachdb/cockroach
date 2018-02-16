@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -54,8 +55,9 @@ func TestClusterNodes(t *testing.T) {
 }
 
 func TestClusterMonitor(t *testing.T) {
+	logger := &logger{stdout: os.Stdout, stderr: os.Stderr}
 	t.Run(`success`, func(t *testing.T) {
-		c := &cluster{t: t, l: stdLogger(t.Name())}
+		c := &cluster{t: t, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(context.Context) error { return nil })
 		if err := m.wait(`sleep`, `100`); err != nil {
@@ -64,7 +66,7 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`dead`, func(t *testing.T) {
-		c := &cluster{t: t, l: stdLogger(t.Name())}
+		c := &cluster{t: t, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
@@ -80,7 +82,7 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`worker-fail`, func(t *testing.T) {
-		c := &cluster{t: t, l: stdLogger(t.Name())}
+		c := &cluster{t: t, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(context.Context) error {
 			return errors.New(`worker-fail`)
