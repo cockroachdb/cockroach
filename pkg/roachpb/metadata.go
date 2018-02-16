@@ -59,6 +59,29 @@ func (r ReplicaID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
 
+// Equals returns whether the Attributes lists are equivalent, meaning that
+// they contain the same attributes regardless of ordering.
+func (a Attributes) Equals(b Attributes) bool {
+	// This is O(n^2), but Attribute lists should never be long enough for that
+	// to matter, and allocating memory every time this is called would be worse.
+	if len(a.Attrs) != len(b.Attrs) {
+		return false
+	}
+	for _, aAttr := range a.Attrs {
+		var found bool
+		for _, bAttr := range b.Attrs {
+			if aAttr == bAttr {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
 // IsSubset returns whether attributes list a is a subset of
 // attributes list b.
 func (a Attributes) IsSubset(b Attributes) bool {
@@ -321,6 +344,22 @@ func (l Locality) String() string {
 // value interface.
 func (Locality) Type() string {
 	return "Locality"
+}
+
+// Equals returns whether the two Localities are equivalent.
+//
+// Because Locality Tiers are hierarchically ordered, if two Localities contain
+// the same Tiers in different orders, they are not considered equal.
+func (l Locality) Equals(r Locality) bool {
+	if len(l.Tiers) != len(r.Tiers) {
+		return false
+	}
+	for i := range l.Tiers {
+		if l.Tiers[i] != r.Tiers[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // MaxDiversityScore is the largest possible diversity score, indicating that
