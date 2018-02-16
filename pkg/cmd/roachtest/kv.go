@@ -31,6 +31,7 @@ func init() {
 		c.Put(ctx, workload, "<workload>")
 		c.Start(ctx, c.Range(1, nodes))
 
+		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency=384")
@@ -68,6 +69,7 @@ func init() {
 		c.Put(ctx, workload, "<workload>")
 		c.Start(ctx, c.Range(1, nodes))
 
+		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			concurrency := ifLocal("", " --concurrency=384")
@@ -117,6 +119,7 @@ func init() {
 			c.Wipe(ctx, c.Range(1, nodes))
 			c.Start(ctx, c.Range(1, nodes))
 
+			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
 				cmd := fmt.Sprintf("<workload> run kv --init --read-percent=%d "+

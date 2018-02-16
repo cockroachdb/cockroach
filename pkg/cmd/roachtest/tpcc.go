@@ -30,6 +30,7 @@ func init() {
 		c.Put(ctx, workload, "<workload>")
 		c.Start(ctx, c.Range(1, nodes))
 
+		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration=" + ifLocal("10s", "10m")

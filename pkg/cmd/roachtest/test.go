@@ -104,35 +104,89 @@ func (r *registry) Run(filter []string) int {
 		parallelism = len(tests)
 	}
 
+	var running struct {
+		syncutil.Mutex
+		m map[*test]struct{}
+	}
+	running.m = make(map[*test]struct{})
+
 	var pass, fail int32
 	go func() {
 		sem := make(chan struct{}, parallelism)
-		for _, t := range tests {
+		for i := range tests {
+			t := tests[i]
 			sem <- struct{}{}
 			fmt.Fprintf(r.out, "=== RUN   %s\n", t.name)
+			t.Status("starting")
+			running.Lock()
+			running.m[t] = struct{}{}
+			running.Unlock()
 			t.run(r.out, func(failed bool) {
 				if failed {
 					atomic.AddInt32(&fail, 1)
 				} else {
 					atomic.AddInt32(&pass, 1)
 				}
+				running.Lock()
+				delete(running.m, t)
+				running.Unlock()
 				wg.Done()
 				<-sem
 			})
 		}
 	}()
 
-	// TODO(peter): While tests are running, if we're not logging to
-	// stdout/stderr (i.e. parallelism > 1), then periodically display test
-	// progress.
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
 
-	if fail > 0 {
-		fmt.Fprintln(r.out, "FAIL")
-		return 1
+	// If we're running with parallelism > 1, periodically output test status to
+	// give an indication of progress.
+	var tick <-chan time.Time
+	if parallelism > 1 {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		tick = ticker.C
 	}
-	fmt.Fprintln(r.out, "PASS")
-	return 0
+
+	for i := 1; ; i++ {
+		select {
+		case <-done:
+			if fail > 0 {
+				fmt.Fprintln(r.out, "FAIL")
+				return 1
+			}
+			fmt.Fprintln(r.out, "PASS")
+			return 0
+
+		case <-tick:
+			running.Lock()
+			runningTests := make([]*test, 0, len(running.m))
+			for t := range running.m {
+				runningTests = append(runningTests, t)
+			}
+			sort.Slice(runningTests, func(i, j int) bool {
+				return runningTests[i].name < runningTests[j].name
+			})
+			var buf bytes.Buffer
+			for _, t := range runningTests {
+				t.mu.Lock()
+				done := t.mu.done
+				status := t.mu.status
+				statusTime := t.mu.statusTime
+				t.mu.Unlock()
+				if !done {
+					duration := timeutil.Now().Sub(statusTime)
+					fmt.Fprintf(&buf, "[%4d] %s: %s (%s)\n", i, t.name, status,
+						time.Duration(duration.Seconds()+0.5)*time.Second)
+				}
+			}
+			fmt.Fprint(r.out, buf.String())
+			running.Unlock()
+		}
+	}
 }
 
 type test struct {
@@ -142,13 +196,23 @@ type test struct {
 	start  time.Time
 	mu     struct {
 		syncutil.RWMutex
-		failed bool
-		output []byte
+		done       bool
+		failed     bool
+		status     string
+		statusTime time.Time
+		output     []byte
 	}
 }
 
 func (t *test) Name() string {
 	return t.name
+}
+
+func (t *test) Status(args ...interface{}) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.status = fmt.Sprint(args...)
+	t.mu.statusTime = timeutil.Now()
 }
 
 func (t *test) Fatal(args ...interface{}) {
@@ -230,11 +294,6 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 		return frame.Function
 	}
 
-	t = &test{
-		name: t.name,
-		fn:   t.fn,
-	}
-
 	go func() {
 		t.runner = callerName()
 
@@ -244,6 +303,10 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			if err := recover(); err != nil {
 				t.Fatal(err)
 			}
+
+			t.mu.Lock()
+			t.mu.done = true
+			t.mu.Unlock()
 
 			if !dryrun {
 				dstr := fmt.Sprintf("%.2fs", duration.Seconds())
