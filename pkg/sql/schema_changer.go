@@ -289,8 +289,22 @@ func (sc *SchemaChanger) maybeAddDrop(
 		// This can happen if a change other than the drop originally
 		// scheduled the changer for this table. If that's the case,
 		// we still need to wait for the deadline to expire.
-		if d := table.GCDeadline; d != 0 && timeutil.Since(timeutil.Unix(0, d)) < 0 {
-			return false, nil
+		if table.DropTime != 0 {
+			wait := true
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				wait = true
+				_, zoneCfg, _, err := GetZoneConfigInTxn(
+					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "",
+				)
+				if err != nil {
+					return err
+				}
+				deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+				wait = timeutil.Since(timeutil.Unix(0, deadline)) < 0
+				return nil
+			}); err != nil || wait {
+				return false, err
+			}
 		}
 		// Do all the hard work of deleting the table data and the table ID.
 		if err := truncateTableInChunks(ctx, table, sc.db, false /* traceKV */); err != nil {
@@ -1057,16 +1071,29 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							// gossip to renotify us when a schema change has been
 							// completed.
 							schemaChanger.tableID = table.ID
-							if len(table.Mutations) == 0 {
+							if len(table.Mutations) == 0 || table.Dropped() {
 								schemaChanger.mutationID = sqlbase.InvalidMutationID
 							} else {
 								schemaChanger.mutationID = table.Mutations[0].MutationID
 							}
 							schemaChanger.execAfter = execAfter
-							// If the table is dropped and there's a GCDeadline set, use that
-							// instead of the standard delay.
-							if table.Dropped() && table.GCDeadline != 0 {
-								schemaChanger.execAfter = timeutil.Unix(0, table.GCDeadline)
+							// If the table is dropped and there's a DropTime set, use that
+							// to generate an extended delay instead of the standard delay.
+							if !table.UpVersion && table.Dropped() && table.DropTime != 0 {
+								c, found, err := ZoneConfigHook(cfg, uint32(table.ID), nil)
+								if err != nil {
+									log.Errorf(ctx, "cannot read zone config for ID: %d, err: %s",
+										table.ID, err)
+								}
+								if found {
+									deadline := table.DropTime + int64(c.GC.TTLSeconds)*time.Second.Nanoseconds()
+									schemaChanger.execAfter = timeutil.Unix(0, deadline)
+								} else {
+									if log.V(2) {
+										log.Infof(ctx, "cannot find zone config for ID: %d",
+											table.ID)
+									}
+								}
 							}
 							// Keep track of this schema change.
 							if sc, ok := s.schemaChangers[table.ID]; ok {
