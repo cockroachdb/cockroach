@@ -92,6 +92,16 @@ func (r registry) Run(filter []string) int {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(tests))
 
+	// We can't run local tests in parallel as there is only 1 "local" cluster.
+	if local {
+		parallelism = 1
+	}
+	// Limit the parallelism to the number of tests. The primary effect this has
+	// is that we'll log to stdout/stderr if only one test is being run.
+	if parallelism > len(tests) {
+		parallelism = len(tests)
+	}
+
 	var pass, fail int32
 	go func() {
 		sem := make(chan struct{}, parallelism)
@@ -110,6 +120,9 @@ func (r registry) Run(filter []string) int {
 		}
 	}()
 
+	// TODO(peter): While tests are running, if we're not logging to
+	// stdout/stderr (i.e. parallelism > 1), then periodically display test
+	// progress.
 	wg.Wait()
 
 	if fail > 0 {
@@ -208,7 +221,7 @@ func (t *test) run(done func(failed bool)) {
 		var pc [2]uintptr
 		n := runtime.Callers(2, pc[:]) // skip + runtime.Callers + callerName
 		if n == 0 {
-			panic("testing: zero callers found")
+			panic("zero callers found")
 		}
 		frames := runtime.CallersFrames(pc[:n])
 		frame, _ := frames.Next()
