@@ -209,7 +209,7 @@ if len(base) == 0:
     exit(1)
 commonParent = base[0]
 if firstCommit != commonParent:
-    print("warning: %s is not an ancestor of %s!" % (options.from_commit, options.until_commit), file=sys.stderr) 
+    print("warning: %s is not an ancestor of %s!" % (options.from_commit, options.until_commit), file=sys.stderr)
     print(file=sys.stderr)
     ageindays = int((firstCommit.committed_date - commonParent.committed_date)/86400)
     prevlen = sum((1 for x in repo.iter_commits(commonParent.hexsha + '...' + firstCommit.hexsha)))
@@ -378,33 +378,35 @@ print("toc: false")
 print("summary: Additions and changes in CockroachDB version", current_version, "since version", previous_version)
 print("---")
 print()
+print("## Month Day, Year")
+print()
 
 ## Print the release notes sign-up and Downloads section.
 if not hidedownloads:
     print("""Get future release notes emailed to you:
 
-    <div class="hubspot-install-form install-form-1 clearfix">
-        <script>
-            hbspt.forms.create({
-                css: '',
-                cssClass: 'install-form',
-                portalId: '1753393',
-                formId: '39686297-81d2-45e7-a73f-55a596a8d5ff',
-                formInstanceId: 1,
-                target: '.install-form-1'
-            });
-        </script>
-    </div>""")
+<div class="hubspot-install-form install-form-1 clearfix">
+    <script>
+        hbspt.forms.create({
+            css: '',
+            cssClass: 'install-form',
+            portalId: '1753393',
+            formId: '39686297-81d2-45e7-a73f-55a596a8d5ff',
+            formInstanceId: 1,
+            target: '.install-form-1'
+        });
+    </script>
+</div>""")
     print()
 
     print("""### Downloads
 
-    <div id="os-tabs" class="clearfix">
-        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
-        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
-        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
-        <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
-    </div>""")
+<div id="os-tabs" class="clearfix">
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.darwin-10.9-amd64.tgz"><button id="mac" data-eventcategory="mac-binary-release-notes">Mac</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.linux-amd64.tgz"><button id="linux" data-eventcategory="linux-binary-release-notes">Linux</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.windows-6.2-amd64.zip"><button id="windows" data-eventcategory="windows-binary-release-notes">Windows</button></a>
+    <a href="https://binaries.cockroachdb.com/cockroach-""" + current_version + """.src.tgz"><button id="source" data-eventcategory="source-release-notes">Source</button></a>
+</div>""")
     print()
 
 seenshas = set()
