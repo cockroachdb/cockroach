@@ -15,19 +15,140 @@
 package idxconstraint
 
 import (
+	"bytes"
+	"context"
 	"flag"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
+
+func TestIndexConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	paths, err := filepath.Glob(*testDataGlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
+	}
+
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			ctx := context.Background()
+			catalog := testutils.NewTestCatalog()
+
+			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+				var varTypes []types.T
+				var colInfos []IndexColumnInfo
+				var iVarHelper tree.IndexedVarHelper
+				var invertedIndex bool
+				st := cluster.MakeTestingClusterSettings()
+				evalCtx := tree.MakeTestingEvalContext(st)
+
+				for _, arg := range d.CmdArgs {
+					key := arg
+					val := ""
+					if pos := strings.Index(key, "="); pos >= 0 {
+						key = arg[:pos]
+						val = arg[pos+1:]
+					}
+					if len(val) > 2 && val[0] == '(' && val[len(val)-1] == ')' {
+						val = val[1 : len(val)-1]
+					}
+					vals := strings.Split(val, ",")
+					switch key {
+					case "vars":
+						varTypes, err = testutils.ParseTypes(vals)
+						if err != nil {
+							d.Fatalf(t, "%v", err)
+						}
+
+						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+
+					case "index", "inverted-index":
+						if varTypes == nil {
+							d.Fatalf(t, "vars must precede index")
+						}
+						var err error
+						colInfos, err = parseIndexColumns(varTypes, vals)
+						if err != nil {
+							d.Fatalf(t, "%v", err)
+						}
+						if key == "inverted-index" {
+							if len(colInfos) > 1 {
+								d.Fatalf(t, "inverted index must be on a single column")
+							}
+							invertedIndex = true
+						}
+
+					default:
+						d.Fatalf(t, "unknown argument: %s", key)
+					}
+				}
+
+				switch d.Cmd {
+				case "index-constraints":
+					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
+					if err != nil {
+						d.Fatalf(t, "%v", err)
+					}
+
+					varNames := make([]string, len(varTypes))
+					for i := range varNames {
+						varNames[i] = fmt.Sprintf("@%d", i+1)
+					}
+					o := xform.NewOptimizer(catalog, xform.OptimizeAll)
+					b := optbuilder.NewScalar(ctx, o.Factory(), varNames, varTypes)
+					group, err := b.Build(typedExpr)
+					if err != nil {
+						return fmt.Sprintf("error: %v\n", err)
+					}
+					ev := o.Optimize(group, &opt.PhysicalProps{})
+
+					var ic IndexConstraints
+					ic.Init(ev, colInfos, invertedIndex, &evalCtx)
+					spans, ok := ic.Spans()
+
+					var buf bytes.Buffer
+					if !ok {
+						spans = LogicalSpans{MakeFullSpan()}
+					}
+					for _, sp := range spans {
+						fmt.Fprintf(&buf, "%s\n", sp)
+					}
+					//remainingFilter := ic.RemainingFilter(&iVarHelper)
+					//if remainingFilter != nil {
+					//	fmt.Fprintf(&buf, "Remaining filter: %s\n", remainingFilter)
+					//}
+					return buf.String()
+
+				default:
+					d.Fatalf(t, "unsupported command: %s", d.Cmd)
+					return ""
+				}
+			})
+		})
+	}
+}
 
 //func BenchmarkIndexConstraints(b *testing.B) {
 //	testCases := []struct {
@@ -119,7 +240,7 @@ func parseIndexColumns(indexVarTypes []types.T, colStrs []string) ([]IndexColumn
 			return nil, fmt.Errorf("invalid index var @%d", idx)
 		}
 		res[i].VarIdx = opt.ColumnIndex(idx)
-		res[i].Typ = indexVarTypes[res[i].VarIdx]
+		res[i].Typ = indexVarTypes[res[i].VarIdx-1]
 		res[i].Direction = encoding.Ascending
 		res[i].Nullable = true
 		fields = fields[1:]
