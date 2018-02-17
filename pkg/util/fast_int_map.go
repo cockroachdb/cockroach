@@ -23,9 +23,9 @@ import (
 	"golang.org/x/tools/container/intsets"
 )
 
-// FastIntMap is a replacement for map[int]int which is more efficient when the
-// values are small. It can be passed by value (but Copy must be used for
-// independent modification of copies).
+// FastIntMap is a replacement for map[int]int which is more efficient when both
+// keys and values are small. It can be passed by value (but Copy must be used
+// for independent modification of copies).
 type FastIntMap struct {
 	small [numWords]uint64
 	large map[int]int
