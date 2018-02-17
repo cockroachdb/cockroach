@@ -27,8 +27,8 @@ func init() {
 		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
@@ -65,8 +65,8 @@ func init() {
 		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
@@ -96,7 +96,7 @@ func init() {
 		c := newCluster(ctx, t, nodes+1, "--local-ssd", "--machine-type", "n1-highcpu-8")
 		defer c.Destroy(ctx)
 
-		if !local {
+		if !c.isLocal() {
 			var wg sync.WaitGroup
 			wg.Add(nodes)
 			for i := 1; i <= 6; i++ {
@@ -111,8 +111,8 @@ func init() {
 			wg.Wait()
 		}
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {

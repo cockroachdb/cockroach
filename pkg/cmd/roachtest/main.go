@@ -16,6 +16,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 
@@ -40,6 +41,10 @@ func main() {
 	` + strings.Join(allTests(), "\n\t") + `
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
+			if clusterName != "" && local {
+				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
+			}
+
 			initBinaries()
 			os.Exit(tests.Run(args))
 			return nil
@@ -56,6 +61,8 @@ func main() {
 		&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 	runCmd.Flags().StringVar(
 		&artifacts, "artifacts", "artifacts", "path to artifacts directory")
+	runCmd.Flags().StringVarP(
+		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
 	runCmd.Flags().StringVar(
 		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
 	runCmd.Flags().StringVar(
