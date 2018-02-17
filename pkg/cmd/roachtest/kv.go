@@ -27,8 +27,8 @@ func init() {
 		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "<cockroach>")
-		c.Put(ctx, workload, "<workload>")
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
@@ -37,7 +37,7 @@ func init() {
 			concurrency := ifLocal("", " --concurrency=384")
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"<workload> run kv --init --read-percent=%d --splits=1000"+
+				"./workload run kv --init --read-percent=%d --splits=1000"+
 					concurrency+duration+
 					" {pgurl:1-%d}",
 				percent, nodes)
@@ -65,8 +65,8 @@ func init() {
 		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "<cockroach>")
-		c.Put(ctx, workload, "<workload>")
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
@@ -75,7 +75,7 @@ func init() {
 			concurrency := ifLocal("", " --concurrency=384")
 			splits := " --splits=" + ifLocal("2000", "500000")
 			cmd := fmt.Sprintf(
-				"<workload> run kv --init --max-ops=1"+
+				"./workload run kv --init --max-ops=1"+
 					concurrency+splits+
 					" {pgurl:1-%d}",
 				nodes)
@@ -111,8 +111,8 @@ func init() {
 			wg.Wait()
 		}
 
-		c.Put(ctx, cockroach, "<cockroach>")
-		c.Put(ctx, workload, "<workload>")
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
 
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
@@ -122,7 +122,7 @@ func init() {
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
 			m.Go(func(ctx context.Context) error {
-				cmd := fmt.Sprintf("<workload> run kv --init --read-percent=%d "+
+				cmd := fmt.Sprintf("./workload run kv --init --read-percent=%d "+
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
 					" {pgurl:1-%d}",
 					percent, nodes)

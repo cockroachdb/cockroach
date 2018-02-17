@@ -352,15 +352,8 @@ func (c *cluster) Put(ctx context.Context, src, dest string) {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if c.isLocal() {
-		switch dest {
-		case "<cockroach>", "<workload>":
-			// We don't have to put binaries for local clusters.
-			return
-		}
-	}
 	c.status("uploading binary")
-	err := execCmd(ctx, c.l, "roachprod", "put", c.name, src, c.expand(dest))
+	err := execCmd(ctx, c.l, "roachprod", "put", c.name, src, dest)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -374,12 +367,8 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	binary := "./cockroach"
-	if c.isLocal() {
-		binary = cockroach
-	}
 	c.status("starting cluster")
-	err := execCmd(ctx, c.l, "roachprod", "start", "-b", binary, c.makeNodes(opts))
+	err := execCmd(ctx, c.l, "roachprod", "start", c.makeNodes(opts))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -429,9 +418,6 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	for i := range args {
-		args[i] = c.expand(args[i])
-	}
 	err := execCmd(ctx, l,
 		append([]string{"roachprod", "ssh", fmt.Sprintf("%s:%d", c.name, node), "--"}, args...)...)
 	if err != nil {
@@ -447,17 +433,6 @@ func (c *cluster) makeNodes(opts []option) string {
 		}
 	}
 	return c.name + r.String()
-}
-
-func (c *cluster) expand(s string) string {
-	if c.isLocal() {
-		s = strings.Replace(s, "<cockroach>", cockroach, -1)
-		s = strings.Replace(s, "<workload>", workload, -1)
-	} else {
-		s = strings.Replace(s, "<cockroach>", "./cockroach", -1)
-		s = strings.Replace(s, "<workload>", "./workload", -1)
-	}
-	return s
 }
 
 func (c *cluster) isLocal() bool {
