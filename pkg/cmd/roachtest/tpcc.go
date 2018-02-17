@@ -26,8 +26,8 @@ func init() {
 		c := newCluster(ctx, t, nodes+1)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "<cockroach>")
-		c.Put(ctx, workload, "<workload>")
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
@@ -35,7 +35,7 @@ func init() {
 		m.Go(func(ctx context.Context) error {
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"<workload> run tpcc --init --warehouses=%d"+
+				"./workload run tpcc --init --warehouses=%d"+
 					extra+duration+" {pgurl:1-%d}",
 				warehouses, nodes)
 			c.Run(ctx, nodes+1, cmd)

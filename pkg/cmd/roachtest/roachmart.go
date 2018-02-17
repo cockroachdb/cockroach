@@ -26,8 +26,8 @@ func init() {
 		c := newCluster(ctx, t, 9, "--geo")
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "<cockroach>")
-		c.Put(ctx, workload, "<workload>")
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
 		c.Start(ctx)
 
 		// TODO(benesch): avoid hardcoding this list.
@@ -56,7 +56,7 @@ func init() {
 			c.RunL(ctx, l, nodes[i].i, args...)
 		}
 		t.Status("initializing workload")
-		roachmartRun(ctx, 0, "<workload>", "init", "roachmart")
+		roachmartRun(ctx, 0, "./workload", "init", "roachmart")
 
 		duration := " --duration=" + ifLocal("10s", "10m")
 
@@ -65,7 +65,7 @@ func init() {
 		for i := range nodes {
 			i := i
 			m.Go(func(ctx context.Context) error {
-				roachmartRun(ctx, i, "<workload>", "run", "roachmart", duration)
+				roachmartRun(ctx, i, "./workload", "run", "roachmart", duration)
 				return nil
 			})
 		}

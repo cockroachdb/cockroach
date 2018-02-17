@@ -26,11 +26,11 @@ func init() {
 		c := newCluster(ctx, t, nodes)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "<cockroach>")
-		c.Put(ctx, workload, "<workload>")
+		c.Put(ctx, cockroach, "./cockroach")
+		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
 		for node := 1; node <= nodes; node++ {
-			c.Run(ctx, node, `<workload> csv-server --port=8081 &> /dev/null < /dev/null &`)
+			c.Run(ctx, node, `./workload csv-server --port=8081 &> /dev/null < /dev/null &`)
 		}
 		c.Start(ctx, c.Range(1, nodes))
 
@@ -38,7 +38,7 @@ func init() {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			cmd := fmt.Sprintf(
-				`<workload> fixtures store tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
+				`./workload fixtures store tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
 					`--gcs-bucket-override=cockroachdb-backup-testing --gcs-prefix-override=%s`,
 				warehouses, c.name)
 			c.Run(ctx, 1, cmd)
