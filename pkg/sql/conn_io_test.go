@@ -81,7 +81,7 @@ func TestStmtBuf(t *testing.T) {
 	// same statement.
 	expPos := CmdPos(0)
 	for i := 0; i < 2; i++ {
-		cmd, pos, err := buf.curCmd(ctx)
+		cmd, pos, err := buf.curCmd()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,9 +91,9 @@ func TestStmtBuf(t *testing.T) {
 		assertStmt(t, cmd, "SELECT 1")
 	}
 
-	buf.advanceOne(ctx)
+	buf.advanceOne()
 	expPos++
-	cmd, pos, err := buf.curCmd(ctx)
+	cmd, pos, err := buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,9 +102,9 @@ func TestStmtBuf(t *testing.T) {
 	}
 	assertStmt(t, cmd, "SELECT 2")
 
-	buf.advanceOne(ctx)
+	buf.advanceOne()
 	expPos++
-	cmd, pos, err = buf.curCmd(ctx)
+	cmd, pos, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,9 +113,9 @@ func TestStmtBuf(t *testing.T) {
 	}
 	assertStmt(t, cmd, "SELECT 3")
 
-	buf.advanceOne(ctx)
+	buf.advanceOne()
 	expPos++
-	cmd, pos, err = buf.curCmd(ctx)
+	cmd, pos, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestStmtBuf(t *testing.T) {
 	// Now rewind.
 	expPos = 1
 	buf.rewind(ctx, expPos)
-	cmd, pos, err = buf.curCmd(ctx)
+	cmd, pos, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestStmtBufSignal(t *testing.T) {
 	}()
 
 	expPos := CmdPos(0)
-	cmd, pos, err := buf.curCmd(ctx)
+	cmd, pos, err := buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,8 +177,8 @@ func TestStmtBufLtrim(t *testing.T) {
 		mustPush(ctx, t, buf, ExecStmt{Stmt: stmt})
 	}
 	// Advance the cursor so that we can trim.
-	buf.advanceOne(ctx)
-	buf.advanceOne(ctx)
+	buf.advanceOne()
+	buf.advanceOne()
 	trimPos := CmdPos(2)
 	buf.ltrim(ctx, trimPos)
 	if l := len(buf.mu.data); l != 3 {
@@ -203,7 +203,7 @@ func TestStmtBufClose(t *testing.T) {
 	mustPush(ctx, t, buf, ExecStmt{Stmt: stmt})
 	buf.Close()
 
-	_, _, err = buf.curCmd(ctx)
+	_, _, err = buf.curCmd()
 	if err != io.EOF {
 		t.Fatalf("expected EOF, got: %v", err)
 	}
@@ -213,14 +213,13 @@ func TestStmtBufClose(t *testing.T) {
 func TestStmtBufCloseUnblocksReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	ctx := context.TODO()
 	buf := NewStmtBuf()
 
 	go func() {
 		buf.Close()
 	}()
 
-	_, _, err := buf.curCmd(ctx)
+	_, _, err := buf.curCmd()
 	if err != io.EOF {
 		t.Fatalf("expected EOF, got: %v", err)
 	}
@@ -242,21 +241,21 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 	mustPush(ctx, t, buf, PrepareStmt{Name: "p1"})
 	mustPush(ctx, t, buf, PrepareStmt{Name: "p2"})
 
-	cmd, _, err := buf.curCmd(ctx)
+	cmd, _, err := buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertStmt(t, cmd, "SELECT 1")
 
-	buf.advanceOne(ctx)
-	cmd, _, err = buf.curCmd(ctx)
+	buf.advanceOne()
+	cmd, _, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertPrepareStmt(t, cmd, "p1")
 
-	buf.advanceOne(ctx)
-	cmd, _, err = buf.curCmd(ctx)
+	buf.advanceOne()
+	cmd, _, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +263,7 @@ func TestStmtBufPreparedStmt(t *testing.T) {
 
 	// Rewind to the first prepared stmt.
 	buf.rewind(ctx, CmdPos(1))
-	cmd, _, err = buf.curCmd(ctx)
+	cmd, _, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,10 +300,10 @@ func TestStmtBufBatching(t *testing.T) {
 	mustPush(ctx, t, buf, ExecStmt{Stmt: s1})
 
 	// Go to 2nd batch.
-	if err := buf.seekToNextBatch(ctx); err != nil {
+	if err := buf.seekToNextBatch(); err != nil {
 		t.Fatal(err)
 	}
-	_, pos, err := buf.curCmd(ctx)
+	_, pos, err := buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,10 +312,10 @@ func TestStmtBufBatching(t *testing.T) {
 	}
 
 	// Go to 3rd batch.
-	if err := buf.seekToNextBatch(ctx); err != nil {
+	if err := buf.seekToNextBatch(); err != nil {
 		t.Fatal(err)
 	}
-	_, pos, err = buf.curCmd(ctx)
+	_, pos, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,10 +330,10 @@ func TestStmtBufBatching(t *testing.T) {
 	}()
 
 	// Go to 4th batch.
-	if err := buf.seekToNextBatch(ctx); err != nil {
+	if err := buf.seekToNextBatch(); err != nil {
 		t.Fatal(err)
 	}
-	_, pos, err = buf.curCmd(ctx)
+	_, pos, err = buf.curCmd()
 	if err != nil {
 		t.Fatal(err)
 	}

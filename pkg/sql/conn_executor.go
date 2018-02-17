@@ -802,7 +802,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			return err
 		}
 
-		cmd, pos, err := ex.stmtBuf.curCmd(ex.Ctx())
+		cmd, pos, err := ex.stmtBuf.curCmd()
 		if err != nil {
 			if err == io.EOF {
 				return nil
@@ -939,7 +939,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 		// If an event was generated, feed it to the state machine.
 		if ev != nil {
 			var err error
-			advInfo, err = ex.txnStateTransitionsApplyWrapper(ctx, ev, payload, res, pos)
+			advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
 			if err != nil {
 				return err
 			}
@@ -975,7 +975,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 		// Move the cursor according to what the state transition told us to do.
 		switch advInfo.code {
 		case advanceOne:
-			ex.stmtBuf.advanceOne(ex.Ctx())
+			ex.stmtBuf.advanceOne()
 		case skipBatch:
 			// We'll flush whatever results we have to the network. The last one must
 			// be an error. This flush may seem unnecessary, as we generally only
@@ -987,7 +987,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			if err := ex.clientComm.Flush(pos); err != nil {
 				return err
 			}
-			if err := ex.stmtBuf.seekToNextBatch(ex.Ctx()); err != nil {
+			if err := ex.stmtBuf.seekToNextBatch(); err != nil {
 				return err
 			}
 		case rewind:
@@ -996,7 +996,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 		case stayInPlace:
 			// Nothing to do. The same statement will be executed again.
 		default:
-			log.Fatalf(ex.Ctx(), "unexpected advance code: %s", advInfo.code)
+			panic(fmt.Sprintf("unexpected advance code: %s", advInfo.code))
 		}
 
 		if err := ex.updateTxnRewindPosMaybe(ex.Ctx(), cmd, pos, advInfo); err != nil {
@@ -1035,7 +1035,7 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 		default:
 			return errors.Errorf("unexpected advance code when starting a txn: %s", advInfo.code)
 		}
-		ex.setTxnRewindPos(ex.Ctx(), nextPos)
+		ex.setTxnRewindPos(ctx, nextPos)
 	} else {
 		// See if we can advance the rewind point even if this is not the point
 		// where the transaction started. We can do that after running a special
@@ -1075,16 +1075,30 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			case Sync:
 				canAdvance = true
 			case DrainRequest:
-				ex.setTxnRewindPos(ex.Ctx(), pos+1)
+				ex.setTxnRewindPos(ctx, pos+1)
 			default:
 				panic(fmt.Sprintf("unsupported cmd: %T", cmd))
 			}
 			if canAdvance {
-				ex.setTxnRewindPos(ex.Ctx(), pos+1)
+				ex.setTxnRewindPos(ctx, pos+1)
 			}
 		}
 	}
 	return nil
+}
+
+// setTxnRewindPos updates the position to which future rewinds will refer.
+//
+// All statements with lower position in stmtBuf (if any) are removed, as we
+// won't ever need them again.
+func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
+	if pos <= ex.extraTxnState.txnRewindPos {
+		panic(fmt.Sprintf("can only move the  txnRewindPos forward. "+
+			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos))
+	}
+	ex.extraTxnState.txnRewindPos = pos
+	ex.stmtBuf.ltrim(ctx, pos)
+	ex.commitPrepStmtNamespace(ctx)
 }
 
 // stmtDoesntNeedRetry returns true if the given statement does not need to be
@@ -1351,7 +1365,7 @@ func (ex *connExecutor) execCopyIn(
 			// state machine, but the copyMachine manages its own transactions without
 			// going through the state machine.
 			ex.state.sqlTimestamp = txnTS
-			ex.resetPlanner(p, txn, stmtTS)
+			ex.resetPlanner(ctx, p, txn, stmtTS)
 		},
 	)
 	if err != nil {
@@ -1386,7 +1400,7 @@ func (ex *connExecutor) addPreparedStmt(
 	}
 
 	// Prepare the query. This completes the typing of placeholders.
-	prepared, err := ex.Prepare(ctx, stmt, placeholderHints)
+	prepared, err := ex.prepare(ctx, stmt, placeholderHints)
 	if err != nil {
 		return nil, err
 	}
@@ -1719,20 +1733,6 @@ func (ex *connExecutor) addActiveQuery(
 	}
 }
 
-// setTxnRewindPos updates the position to which future rewinds will refer.
-//
-// All statements with lower position in stmtBuf (if any) are removed, as we
-// won't ever need them again.
-func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
-	if pos <= ex.extraTxnState.txnRewindPos {
-		log.Fatalf(ctx, "can only move the  txnRewindPos forward."+
-			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos)
-	}
-	ex.extraTxnState.txnRewindPos = pos
-	ex.stmtBuf.ltrim(ctx, pos)
-	ex.commitPrepStmtNamespace(ctx)
-}
-
 // commitPrepStmtNamespace deallocates everything in
 // prepStmtsNamespaceAtTxnRewindPos that's not part of prepStmtsNamespace.
 func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) {
@@ -1780,8 +1780,8 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	_, retriable := err.(*roachpb.HandledRetryableTxnError)
 	if retriable {
 		if _, inOpen := ex.machine.CurState().(stateOpen); !inOpen {
-			log.Fatalf(ex.Ctx(), "retriable error in unexpected state: %#v",
-				ex.machine.CurState())
+			panic(fmt.Sprintf("retriable error in unexpected state: %#v",
+				ex.machine.CurState()))
 		}
 	}
 	if retriable {
@@ -1816,10 +1816,6 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 // Args:
 // stmt: The statement that we just ran.
 func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statement) error {
-	_, inOpen := ex.machine.CurState().(stateOpen)
-	if !inOpen {
-		log.Fatalf(ctx, "handleAutoCommit called in state: %#v", ex.machine.CurState())
-	}
 	txn := ex.state.mu.txn
 	if txn.IsCommitted() {
 		return nil
@@ -1834,10 +1830,7 @@ func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statemen
 		err = txn.Commit(ctx)
 	}
 	log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 // synchronizeParallelStmts waits for all statements in the parallelizeQueue to
@@ -1991,15 +1984,8 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				iso, pri, ex.readWriteModeWithSessionDefault(s.Modes.ReadWriteMode),
 				ex.server.cfg.Clock.PhysicalTime(),
 				ex.transitionCtx)
-	case *tree.CommitTransaction:
-		goto statementNeedsExplicitTxn
-	case *tree.ReleaseSavepoint:
-		goto statementNeedsExplicitTxn
-	case *tree.RollbackTransaction:
-		goto statementNeedsExplicitTxn
-	case *tree.SetTransaction:
-		goto statementNeedsExplicitTxn
-	case *tree.Savepoint:
+	case *tree.CommitTransaction, *tree.ReleaseSavepoint,
+		*tree.RollbackTransaction, *tree.SetTransaction, *tree.Savepoint:
 		goto statementNeedsExplicitTxn
 	default:
 		mode := tree.ReadWrite
@@ -2022,8 +2008,10 @@ statementNeedsExplicitTxn:
 // current transaction.
 // It handles statements that affect the transaction state (BEGIN, COMMIT)
 // directly and delegates everything else to the execution engines.
-// It binds placeholders.
 // Results and query execution errors are written to res.
+//
+// This method does not handle "auto commit" - committing implicit transactions.
+// That's done at a higher level.
 //
 // If an error is returned, the connection is supposed to be consider done.
 // Query execution errors are not returned explicitly; they're incorporated in
@@ -2118,6 +2106,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		return eventTxnRestart{}, nil, nil
 
 	case *tree.Prepare:
+		// This is handling the SQL statement "PREPARE". See execPrepare for
+		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
 		if _, ok := ex.prepStmtsNamespace.prepStmts[name]; ok {
 			err := pgerror.NewErrorf(
@@ -2159,8 +2149,11 @@ func (ex *connExecutor) execStmtInOpenState(
 		res.ResetStmtType(ps.Statement)
 	}
 
+	// For regular statements (the ones that get to this point), we don't return
+	// any event unless an an error happens.
+
 	var p *planner
-	stmtTs := ex.server.cfg.Clock.PhysicalTime()
+	stmtTS := ex.server.cfg.Clock.PhysicalTime()
 	// Only run statements asynchronously through the parallelize queue if the
 	// statements are parallelized and we're in a transaction. Parallelized
 	// statements outside of a transaction are run synchronously with mocked
@@ -2169,11 +2162,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	runInParallel := parallelize && !os.ImplicitTxn.Get()
 	if runInParallel {
 		// Create a new planner since we're executing in parallel.
-		p = ex.newPlanner(ex.state.mu.txn, stmtTs)
+		p = ex.newPlanner(ctx, ex.state.mu.txn, stmtTS)
 	} else {
 		// We're not executing in parallel; we'll use the cached planner.
 		p = &ex.planner
-		ex.resetPlanner(p, ex.state.mu.txn, stmtTs)
+		ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 	}
 
 	if os.ImplicitTxn.Get() {
@@ -2210,7 +2203,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	if runInParallel {
 		// We're passing unregisterFun to the parallel execution.
 		res.SetFinishedCallback(nil)
-		cols, err := ex.execStmtInParallel(ex.Ctx(), stmt, p, unregisterFun)
+		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFun)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -2232,6 +2225,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}
 
+	// No event was generated.
 	return nil, nil, nil
 }
 
@@ -2241,16 +2235,12 @@ func (ex *connExecutor) execStmtInOpenState(
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	if _, inOpen := ex.machine.CurState().(stateOpen); !inOpen {
-		log.Fatalf(ctx, "commitSQLTransaction called in state: %#v", ex.machine.CurState())
-	}
-
 	commitType := commit
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
 		commitType = release
 	}
 
-	if err := ex.state.mu.txn.Commit(ex.Ctx()); err != nil {
+	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
 
@@ -2266,12 +2256,6 @@ func (ex *connExecutor) commitSQLTransaction(
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
 // rolled-back and an event is produced.
 func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, fsm.EventPayload) {
-	_, inOpen := ex.machine.CurState().(stateOpen)
-	_, inRestartWait := ex.machine.CurState().(stateRestartWait)
-	if !inOpen && !inRestartWait {
-		log.Fatalf(ctx,
-			"rollbackSQLTransaction called on txn in wrong state: %#v", ex.machine.CurState())
-	}
 	if err := ex.state.mu.txn.Rollback(ctx); err != nil {
 		log.Warningf(ctx, "txn rollback failed: %s", err)
 	}
@@ -2285,11 +2269,11 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // p is the planner that the EvalCtx will link to. Note that the planner also
 // needs to have a reference to an evalCtx, so the caller will have to set that
 // up.
-// stmtTs is the timestamp that the statement_timestamp() SQL builtin will
+// stmtTS is the timestamp that the statement_timestamp() SQL builtin will
 // return for statements executed with this evalCtx. Since generally each
 // statement is supposed to have a different timestamp, the evalCtx generally
 // shouldn't be reused across statements.
-func (ex *connExecutor) evalCtx(p *planner, stmtTs time.Time) extendedEvalContext {
+func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContext {
 	txn := ex.state.mu.txn
 	var clusterTimestamp hlc.Timestamp
 	// txn can be nil if we're setting this context up for preparing a statement
@@ -2304,7 +2288,7 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTs time.Time) extendedEvalContex
 		EvalContext: tree.EvalContext{
 			Planner:       p,
 			Sequence:      p,
-			StmtTimestamp: stmtTs,
+			StmtTimestamp: stmtTS,
 
 			Txn:              txn,
 			SessionData:      &ex.sessionData,
@@ -2339,15 +2323,14 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTs time.Time) extendedEvalContex
 // getTransactionState retrieves a text representation of the given state.
 func (ex *connExecutor) getTransactionState() string {
 	state := ex.machine.CurState()
-	if os, ok := state.(stateOpen); ok {
-		if os.ImplicitTxn.Get() {
-			// If the statement reading the state is in an implicit transaction, then
-			// we want to tell NoTxn to the client.
-			state = stateNoTxn{}
-		}
+	if ex.implicitTxn() {
+		// If the statement reading the state is in an implicit transaction, then we
+		// want to tell NoTxn to the client.
+		state = stateNoTxn{}
 	}
 	return state.(fmt.Stringer).String()
 }
+
 func (ex *connExecutor) implicitTxn() bool {
 	state := ex.machine.CurState()
 	os, ok := state.(stateOpen)
@@ -2359,25 +2342,25 @@ func (ex *connExecutor) implicitTxn() bool {
 // should only be used to execute one statement.
 //
 // txn can be nil.
-func (ex *connExecutor) newPlanner(txn *client.Txn, stmtTs time.Time) *planner {
+func (ex *connExecutor) newPlanner(ctx context.Context, txn *client.Txn, stmtTS time.Time) *planner {
 	p := &planner{execCfg: ex.server.cfg}
-	ex.resetPlanner(p, txn, stmtTs)
+	ex.resetPlanner(ctx, p, txn, stmtTS)
 	return p
 }
 
 // resetPlanner re-initializes a planner so it can can be used for planning a
 // query in the context of this session.
-func (ex *connExecutor) resetPlanner(p *planner, txn *client.Txn, stmtTs time.Time) {
+func (ex *connExecutor) resetPlanner(ctx context.Context, p *planner, txn *client.Txn, stmtTS time.Time) {
 	p.statsCollector = ex.newStatsCollector()
 	p.txn = txn
 	p.stmt = nil
-	p.cancelChecker = sqlbase.NewCancelChecker(ex.Ctx())
+	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
 	p.semaCtx = tree.MakeSemaContext(ex.sessionData.User == security.RootUser)
 	p.semaCtx.Location = &ex.sessionData.Location
 	p.semaCtx.SearchPath = ex.sessionData.SearchPath
 
-	p.extendedEvalCtx = ex.evalCtx(p, stmtTs)
+	p.extendedEvalCtx = ex.evalCtx(p, stmtTS)
 	p.extendedEvalCtx.ClusterID = ex.server.cfg.ClusterID()
 	p.extendedEvalCtx.NodeID = ex.server.cfg.NodeID.Get()
 	p.extendedEvalCtx.ReCache = ex.server.reCache
@@ -2387,44 +2370,6 @@ func (ex *connExecutor) resetPlanner(p *planner, txn *client.Txn, stmtTs time.Ti
 	p.autoCommit = false
 	p.isPreparing = false
 	p.asOfSystemTime = false
-}
-
-// connExPrepStmtsAccessor is an implementation of preparedStatementsAccessor
-// that gives access to a connExecutor's prepared statements.
-type connExPrepStmtsAccessor struct {
-	ex *connExecutor
-}
-
-var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
-
-// Get is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
-	s, ok := ps.ex.prepStmtsNamespace.prepStmts[name]
-	return s.PreparedStatement, ok
-}
-
-// Delete is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
-	_, ok := ps.Get(name)
-	if !ok {
-		return false
-	}
-	ps.ex.deletePreparedStmt(ctx, name)
-	return true
-}
-
-// DeleteAll is part of the preparedStatementsAccessor interface.
-func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
-	ps.ex.prepStmtsNamespace = prepStmtNamespace{
-		prepStmts: make(map[string]prepStmtEntry),
-		portals:   make(map[string]portalEntry),
-	}
-}
-
-func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
-	return connExPrepStmtsAccessor{
-		ex: ex,
-	}
 }
 
 // execStmtInParallel executes a query asynchronously: the query will wait for
@@ -2803,10 +2748,6 @@ func (ex *connExecutor) execStmtInAbortedState(
 func (ex *connExecutor) execStmtInCommitWaitState(
 	stmt Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
-	if _, ok := ex.machine.CurState().(stateCommitWait); !ok {
-		panic(fmt.Sprintf("execStmtInCommitWaitState called in state: %s",
-			ex.machine.CurState()))
-	}
 	ex.server.StatementCounters.incrementCount(stmt.AST)
 	switch stmt.AST.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
@@ -2830,15 +2771,15 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 // Any returned error indicates an unrecoverable error for the session;
 // execution on this connection should be interrupted.
 func (ex *connExecutor) txnStateTransitionsApplyWrapper(
-	ctx context.Context, ev fsm.Event, payload fsm.EventPayload, res ResultBase, pos CmdPos,
+	ev fsm.Event, payload fsm.EventPayload, res ResultBase, pos CmdPos,
 ) (advanceInfo, error) {
 
 	var implicitTxn bool
-	if so, ok := ex.machine.CurState().(stateOpen); ok {
-		implicitTxn = so.ImplicitTxn.Get()
+	if os, ok := ex.machine.CurState().(stateOpen); ok {
+		implicitTxn = os.ImplicitTxn.Get()
 	}
 
-	err := ex.machine.ApplyWithPayload(ctx, ev, payload)
+	err := ex.machine.ApplyWithPayload(ex.Ctx(), ev, payload)
 	if err != nil {
 		if _, ok := err.(fsm.TransitionNotFoundError); ok {
 			panic(err)
@@ -2855,9 +2796,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	// Handle transaction events which cause updates to txnState.
 	switch advInfo.txnEvent {
 	case noEvent:
-		break
 	case txnStart:
-		break
 	case txnCommit:
 		// If we have schema changers to run, release leases early so that schema
 		// changers can run.
@@ -2867,7 +2806,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// TODO(andrei): figure out how session tracing should interact with schema
 		// changes.
 		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
-			ctx, ex.server.cfg,
+			ex.Ctx(), ex.server.cfg,
 		); schemaChangeErr != nil {
 			// We got a schema change error. We'll return it to the client as the
 			// result of the current statement - which is either the DDL statement or
@@ -2883,9 +2822,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
 		}
 		fallthrough
-	case txnRestart:
-		fallthrough
-	case txnAborted:
+	case txnRestart, txnAborted:
 		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, ex.server.dbCache)
 	default:
 		return advanceInfo{}, errors.Errorf("unexpected event: %v", advInfo.txnEvent)
@@ -2924,14 +2861,14 @@ func (ex *connExecutor) newStatsCollector() sqlStatsCollector {
 	return newSQLStatsCollectorImpl(&ex.server.sqlStats, ex.appStats, ex.phaseTimes)
 }
 
-// Prepare prepares the given statement.
+// prepare prepares the given statement.
 //
 // placeholderHints may contain partial type information for placeholders.
-// Prepare will populate the missing types.
+// prepare will populate the missing types.
 //
 // The PreparedStatement is returned (or nil if there are no results). The
 // returned PreparedStatement needs to be close()d once its no longer in use.
-func (ex *connExecutor) Prepare(
+func (ex *connExecutor) prepare(
 	ctx context.Context,
 	stmt Statement,
 	placeholderHints tree.PlaceholderTypes,
@@ -2963,7 +2900,7 @@ func (ex *connExecutor) Prepare(
 	// plan.
 	if err := func() error {
 		p := &ex.planner
-		ex.resetPlanner(p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTimestamp */)
+		ex.resetPlanner(ctx, p, txn, ex.server.cfg.Clock.PhysicalTime() /* stmtTimestamp */)
 		p.semaCtx.Placeholders.SetTypeHints(placeholderHints)
 		p.extendedEvalCtx.PrepareOnly = true
 		p.extendedEvalCtx.ActiveMemAcc = &prepared.memAcc
@@ -3113,6 +3050,12 @@ func (ex *connExecutor) recordUnimplementedErrorMaybe(err error) {
 	}
 }
 
+func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
+	return connExPrepStmtsAccessor{
+		ex: ex,
+	}
+}
+
 type StatementCounters struct {
 	SelectCount   *metric.Counter
 	TxnBeginCount *metric.Counter
@@ -3169,5 +3112,37 @@ func (sc *StatementCounters) incrementCount(stmt tree.Statement) {
 		} else {
 			sc.MiscCount.Inc(1)
 		}
+	}
+}
+
+// connExPrepStmtsAccessor is an implementation of preparedStatementsAccessor
+// that gives access to a connExecutor's prepared statements.
+type connExPrepStmtsAccessor struct {
+	ex *connExecutor
+}
+
+var _ preparedStatementsAccessor = connExPrepStmtsAccessor{}
+
+// Get is part of the preparedStatementsAccessor interface.
+func (ps connExPrepStmtsAccessor) Get(name string) (*PreparedStatement, bool) {
+	s, ok := ps.ex.prepStmtsNamespace.prepStmts[name]
+	return s.PreparedStatement, ok
+}
+
+// Delete is part of the preparedStatementsAccessor interface.
+func (ps connExPrepStmtsAccessor) Delete(ctx context.Context, name string) bool {
+	_, ok := ps.Get(name)
+	if !ok {
+		return false
+	}
+	ps.ex.deletePreparedStmt(ctx, name)
+	return true
+}
+
+// DeleteAll is part of the preparedStatementsAccessor interface.
+func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
+	ps.ex.prepStmtsNamespace = prepStmtNamespace{
+		prepStmts: make(map[string]prepStmtEntry),
+		portals:   make(map[string]portalEntry),
 	}
 }

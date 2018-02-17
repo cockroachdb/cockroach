@@ -2262,6 +2262,7 @@ func (e *Executor) execStmtInParallel(
 	return cols, nil
 }
 
+// Cfg returns a reference to the ExecutorConfig.
 func (e *Executor) Cfg() *ExecutorConfig {
 	return &e.cfg
 }

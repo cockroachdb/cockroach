@@ -88,7 +88,7 @@ func TestCancelSelectQuery(t *testing.T) {
 
 }
 
-// NOTE(andrei): This test less than great; it verifies only incidental
+// NOTE(andrei): This test is less than great; it verifies only incidental
 // behavior, namely that canceling a query in fact cancels the context of the
 // whole transaction, which causes other parallel queries to also get canceled.
 // It also relies on the insertNode to notice a cancelation, although there's no

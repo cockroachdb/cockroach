@@ -148,11 +148,11 @@ func TestConn(t *testing.T) {
 	// can only be called when there is something in the buffer. Since the buffer
 	// is filled concurrently with this code, we call CurCmd to ensure that
 	// there's something in there.
-	if _, err := rd.CurCmd(ctx); err != nil {
+	if _, err := rd.CurCmd(); err != nil {
 		t.Fatal(err)
 	}
 	// Skip all the remaining messages in the batch.
-	if err := rd.SeekToNextBatch(ctx); err != nil {
+	if err := rd.SeekToNextBatch(); err != nil {
 		t.Fatal(err)
 	}
 	// We got to the COMMIT that pgx pushed to match the BEGIN it generated for
@@ -179,13 +179,13 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 	rd := sql.MakeStmtBufReader(c.stmtBuf)
 
 	for {
-		cmd, err := rd.CurCmd(ctx)
+		cmd, err := rd.CurCmd()
 		if err != nil {
 			return err
 		}
 
 		if _, ok := cmd.(sql.Sync); ok {
-			rd.AdvanceOne(ctx)
+			rd.AdvanceOne()
 			continue
 		}
 
@@ -200,7 +200,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 		if err := execQuery(ctx, query, s, c); err != nil {
 			return err
 		}
-		rd.AdvanceOne(ctx)
+		rd.AdvanceOne()
 	}
 }
 
@@ -357,11 +357,11 @@ const (
 func expectExecStmt(
 	ctx context.Context, t *testing.T, expSQL string, rd *sql.StmtBufReader, c *conn, typ executeType,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	es, ok := cmd.(sql.ExecStmt)
 	if !ok {
@@ -392,11 +392,11 @@ func expectExecStmt(
 func expectPrepareStmt(
 	ctx context.Context, t *testing.T, expName string, expSQL string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	pr, ok := cmd.(sql.PrepareStmt)
 	if !ok {
@@ -424,11 +424,11 @@ func expectDescribeStmt(
 	rd *sql.StmtBufReader,
 	c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	desc, ok := cmd.(sql.DescribeStmt)
 	if !ok {
@@ -451,11 +451,11 @@ func expectDescribeStmt(
 func expectBindStmt(
 	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	bd, ok := cmd.(sql.BindStmt)
 	if !ok {
@@ -472,11 +472,11 @@ func expectBindStmt(
 }
 
 func expectSync(ctx context.Context, t *testing.T, rd *sql.StmtBufReader) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	_, ok := cmd.(sql.Sync)
 	if !ok {
@@ -487,11 +487,11 @@ func expectSync(ctx context.Context, t *testing.T, rd *sql.StmtBufReader) {
 func expectExecPortal(
 	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	ep, ok := cmd.(sql.ExecPortal)
 	if !ok {
@@ -510,11 +510,11 @@ func expectExecPortal(
 func expectSendError(
 	ctx context.Context, t *testing.T, pgErrCode string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	se, ok := cmd.(sql.SendError)
 	if !ok {

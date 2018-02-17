@@ -61,10 +61,7 @@ const (
 // (the buffer is not involved in this).
 // The buffer internally maintains a cursor representing the reader's position.
 // The reader has to manually move the cursor using advanceOne(),
-// seekToNextBatch() and rewind(). To support querying the buffer to ask if the
-// consumer is idle (through the ConsumerIdle() method), the contract is that
-// the consumer only advances the cursor after it is done producing results for
-// the previous command.
+// seekToNextBatch() and rewind().
 // In practice, the writer is a module responsible for communicating with a SQL
 // client (i.e. pgwire.conn) and the reader is a connExecutor.
 //
@@ -331,7 +328,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 //
 // If the buffer has previously been Close()d, or is closed while this is
 // blocked, io.EOF is returned.
-func (buf *StmtBuf) curCmd(ctx context.Context) (Command, CmdPos, error) {
+func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	for {
@@ -355,14 +352,6 @@ func (buf *StmtBuf) curCmd(ctx context.Context) (Command, CmdPos, error) {
 		buf.mu.cond.Wait()
 		buf.mu.readerBlocked = false
 	}
-}
-
-// ConsumerIdle returns true if the consumer is currently blocked waiting for a
-// command to be pushed into the buffer. See top comments about contract.
-func (buf *StmtBuf) ConsumerIdle() bool {
-	buf.mu.Lock()
-	defer buf.mu.Unlock()
-	return buf.mu.readerBlocked
 }
 
 // translatePosLocked translates an absolute position of a command (counting
@@ -400,14 +389,19 @@ func (buf *StmtBuf) ltrim(ctx context.Context, pos CmdPos) {
 		if buf.mu.startPos == pos {
 			break
 		}
+		buf.mu.data[0] = nil
 		buf.mu.data = buf.mu.data[1:]
 		buf.mu.startPos++
+	}
+	// nil out the whole buffer if
+	if len(buf.mu.data) == 0 {
+		buf.mu.data = nil
 	}
 }
 
 // advanceOne advances the cursor one Command over. The command over which the
 // cursor will be positioned when this returns may not be in the buffer yet.
-func (buf *StmtBuf) advanceOne(ctx context.Context) {
+func (buf *StmtBuf) advanceOne() {
 	buf.mu.Lock()
 	buf.mu.curPos++
 	buf.mu.Unlock()
@@ -424,7 +418,7 @@ func (buf *StmtBuf) advanceOne(ctx context.Context) {
 //
 // It is an error to start seeking when the cursor is positioned on an empty
 // slot.
-func (buf *StmtBuf) seekToNextBatch(ctx context.Context) error {
+func (buf *StmtBuf) seekToNextBatch() error {
 	buf.mu.Lock()
 	curPos := buf.mu.curPos
 	cmdIdx, err := buf.translatePosLocked(curPos)
@@ -440,8 +434,8 @@ func (buf *StmtBuf) seekToNextBatch(ctx context.Context) error {
 
 	var foundSync bool
 	for !foundSync {
-		buf.advanceOne(ctx)
-		_, pos, err := buf.curCmd(ctx)
+		buf.advanceOne()
+		_, pos, err := buf.curCmd()
 		if err != nil {
 			return err
 		}
@@ -537,29 +531,33 @@ type ClientComm interface {
 }
 
 // CommandResult represents the result of a statement. It which needs to be
-// ultimately delivered to the client. The pgwire module implements this.
+// ultimately delivered to the client. pgwire.conn implements this.
 type CommandResult interface {
 	RestrictedCommandResult
+	CommandResultClose
 
 	// SetLimit is used when executing a portal to set a limit on the number of
 	// rows to be returned. We don't currently properly support this feature of
 	// the Postgres protocol; instead, we'll return an error if the number of rows
 	// produced is larger than this limit.
 	SetLimit(n int)
+}
 
-	// Close - see ResultBase.
-	Close(TransactionStatusIndicator)
+type CommandResultErrBase interface {
+	// SetError accumulates an execution error that needs to be reported to the
+	// client. No further calls other than Close() and Discard() are allowed. In
+	// particular, CloseWithErr() is not allowed.
+	SetError(error)
 
-	// CloseWithErr - see ResultBase.
-	CloseWithErr(error)
-
-	// Discard - see ResultBase.
-	Discard()
+	// Err returns the error previously set with SetError(), if any.
+	Err() error
 }
 
 // RestrictedCommandResult is a subset of CommandResult meant to make it clear
 // that its clients don't close the CommandResult.
 type RestrictedCommandResult interface {
+	CommandResultErrBase
+
 	// SetColumns informs the client about the schema of the result. The columns
 	// can be nil.
 	//
@@ -584,14 +582,6 @@ type RestrictedCommandResult interface {
 	// This can be called multiple times, each time overwriting the previous
 	// value. The callback can be nil, in which case nothing will be called.
 	SetFinishedCallback(callback func())
-
-	// SetError accumulates an execution error that needs to be reported to the
-	// client. No further calls other that Err() and Close()/Discard() are allowed
-	// - in particular, CloseWithErr() is not allowed.
-	SetError(error)
-
-	// Err returns the error previously set with SetError(), if any.
-	Err() error
 
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
@@ -662,14 +652,11 @@ type CopyInResult interface {
 // ResultBase is the common interface implemented by all the different command
 // results.
 type ResultBase interface {
-	// SetError accumulates an execution error that needs to be reported to the
-	// client. No further calls other than Close() and Discard() are allowed. In
-	// particular, CloseWithErr() is not allowed.
-	SetError(error)
+	CommandResultErrBase
+	CommandResultClose
+}
 
-	// Err returns the error previously set with SetError(), if any.
-	Err() error
-
+type CommandResultClose interface {
 	// Close marks a result as complete. All results must be eventually closed
 	// through Close()/CloseWithErr()/Discard. No further uses of the CommandResult are
 	// allowed.
