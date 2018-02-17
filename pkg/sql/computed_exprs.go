@@ -114,7 +114,7 @@ func ProcessComputedColumns(
 	)
 
 	semaCtx := tree.MakeSemaContext(false)
-	semaCtx.IVarHelper = &ivarHelper
+	semaCtx.IVarContainer = iv
 
 	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	for i, col := range computedCols {

@@ -187,7 +187,7 @@ func TestOpt(t *testing.T) {
 				getTypedExpr := func() tree.TypedExpr {
 					if typedExpr == nil {
 						var err error
-						typedExpr, err = testutils.ParseScalarExpr(d.Input, &iVarHelper)
+						typedExpr, err = testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
 						if err != nil {
 							d.Fatalf(t, "%v", err)
 						}

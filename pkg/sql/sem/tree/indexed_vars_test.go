@@ -63,7 +63,7 @@ func TestIndexedVars(t *testing.T) {
 	expr := binary(Plus, v0, binary(Mult, v1, v2))
 
 	// Verify the expression evaluates correctly.
-	semaContext := &SemaContext{IVarHelper: &IndexedVarHelper{container: c}}
+	semaContext := &SemaContext{IVarContainer: c}
 	typedExpr, err := expr.TypeCheck(semaContext, types.Any)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestIndexedVars(t *testing.T) {
 	}
 	evalCtx := NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	evalCtx.IVarHelper = semaContext.IVarHelper
+	evalCtx.IVarContainer = c
 	d, err := typedExpr.Eval(evalCtx)
 	if err != nil {
 		t.Fatal(err)

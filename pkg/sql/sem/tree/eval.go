@@ -2287,11 +2287,12 @@ type EvalContext struct {
 	// underlying datum, if available.
 	Placeholders *PlaceholderInfo
 
-	IVarHelper *IndexedVarHelper
-	// iVarHelperStack is used when we swap out IVarHelpers in order to evaluate
-	// an intermediate expression. This keeps track of those which we need to
-	// restore once we finish evaluating it.
-	iVarHelperStack []*IndexedVarHelper
+	// IVarContainer is used to evaluate IndexedVars.
+	IVarContainer IndexedVarContainer
+	// iVarContainerStack is used when we swap out IVarContainers in order to
+	// evaluate an intermediate expression. This keeps track of those which we
+	// need to restore once we finish evaluating it.
+	iVarContainerStack []IndexedVarContainer
 
 	// CtxProvider holds the context in which the expression is evaluated. This
 	// will point to the session, which is itself a provider of contexts.
@@ -2360,19 +2361,19 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 	return ctx
 }
 
-// PushIVarHelper replaces the current IVarHelper with a different one -
-// pushing the current one onto a stack to be replaced later once PopIVarHelper
-// is called.
-func (ctx *EvalContext) PushIVarHelper(i *IndexedVarHelper) {
-	ctx.iVarHelperStack = append(ctx.iVarHelperStack, ctx.IVarHelper)
-	ctx.IVarHelper = i
+// PushIVarContainer replaces the current IVarContainer with a different one -
+// pushing the current one onto a stack to be replaced later once
+// PopIVarContainer is called.
+func (ctx *EvalContext) PushIVarContainer(c IndexedVarContainer) {
+	ctx.iVarContainerStack = append(ctx.iVarContainerStack, ctx.IVarContainer)
+	ctx.IVarContainer = c
 }
 
-// PopIVarHelper discards the current IVarHelper on the EvalContext, replacing
-// it with an older one.
-func (ctx *EvalContext) PopIVarHelper() {
-	ctx.IVarHelper = ctx.iVarHelperStack[len(ctx.iVarHelperStack)-1]
-	ctx.iVarHelperStack = ctx.iVarHelperStack[:len(ctx.iVarHelperStack)-1]
+// PopIVarContainer discards the current IVarContainer on the EvalContext,
+// replacing it with an older one.
+func (ctx *EvalContext) PopIVarContainer() {
+	ctx.IVarContainer = ctx.iVarContainerStack[len(ctx.iVarContainerStack)-1]
+	ctx.iVarContainerStack = ctx.iVarContainerStack[:len(ctx.iVarContainerStack)-1]
 }
 
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext

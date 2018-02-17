@@ -340,8 +340,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 		}
 
 		iv := &rowIndexedVarContainer{newVals, u.tableDesc.Columns, u.tw.ru.FetchColIDtoRowIndex}
-		ivarHelper := tree.MakeIndexedVarHelper(iv, len(newVals))
-		params.EvalContext().IVarHelper = &ivarHelper
+		params.EvalContext().IVarContainer = iv
 
 		for i := range u.computedCols {
 			d, err := u.computeExprs[i].Eval(params.EvalContext())
@@ -352,7 +351,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 		}
 	}
 
-	params.EvalContext().IVarHelper = nil
+	params.EvalContext().IVarContainer = nil
 
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.

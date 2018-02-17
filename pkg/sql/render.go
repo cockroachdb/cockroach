@@ -693,7 +693,7 @@ func (r *renderNode) renderRow(evalCtx *tree.EvalContext) error {
 	}
 	for i, e := range r.render {
 		var err error
-		evalCtx.IVarHelper = &r.ivarHelper
+		evalCtx.IVarContainer = r
 		r.run.row[i], err = e.Eval(evalCtx)
 		if err != nil {
 			return err

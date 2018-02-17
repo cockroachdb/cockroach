@@ -140,8 +140,8 @@ func (c *CheckHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // Check performs the actual checks based on the values stored in the
 // CheckHelper.
 func (c *CheckHelper) Check(ctx *tree.EvalContext) error {
-	ctx.PushIVarHelper(c.ivarHelper)
-	defer func() { ctx.PopIVarHelper() }()
+	ctx.PushIVarContainer(c)
+	defer func() { ctx.PopIVarContainer() }()
 	for _, expr := range c.Exprs {
 		if d, err := expr.Eval(ctx); err != nil {
 			return err

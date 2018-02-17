@@ -555,10 +555,9 @@ func GenerateInsertRow(
 
 	if len(computeExprs) > 0 {
 		// Evaluate any computed columns. Since these obviously can reference other
-		// columns, we need an IVarHelper to be able to resolve column references.
+		// columns, we need an IVarContainer to be able to resolve column references.
 		iv := &rowIndexedVarContainer{rowVals, tableDesc.Columns, insertColIDtoRowIndex}
-		ivarHelper := tree.MakeIndexedVarHelper(iv, len(rowVals))
-		evalCtx.PushIVarHelper(&ivarHelper)
+		evalCtx.PushIVarContainer(iv)
 
 		for i := range computedCols {
 			// Note that even though the row is not fully constructed at this point,
@@ -572,7 +571,7 @@ func GenerateInsertRow(
 			rowVals[insertColIDtoRowIndex[computedCols[i].ID]] = d
 		}
 
-		evalCtx.PopIVarHelper()
+		evalCtx.PopIVarContainer()
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
