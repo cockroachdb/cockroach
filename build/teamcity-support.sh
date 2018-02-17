@@ -37,6 +37,12 @@ tc_start_block() {
   echo "##teamcity[blockOpened name='$1']"
 }
 
+if_tc() {
+  if [[ "${TC_BUILD_ID-}" ]]; then
+    "$@"
+  fi
+}
+
 tc_end_block() {
   echo "##teamcity[blockClosed name='$1']"
 }
