@@ -30,6 +30,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -39,12 +40,13 @@ import (
 )
 
 var (
-	local     bool
-	artifacts string
-	cockroach string
-	workload  string
-	clusterID string
-	username  = os.Getenv("ROACHPROD_USER")
+	local       bool
+	artifacts   string
+	cockroach   string
+	workload    string
+	clusterName string
+	clusterID   string
+	username    = os.Getenv("ROACHPROD_USER")
 )
 
 func ifLocal(trueVal, falseVal string) string {
@@ -101,17 +103,19 @@ func initBinaries() {
 	}
 }
 
-var clusters = map[string]struct{}{}
+var clusters = map[*cluster]struct{}{}
 var clustersMu syncutil.Mutex
 var clustersOnce sync.Once
+var interrupted int32
 
-func registerCluster(clusterName string) {
+func registerCluster(c *cluster) {
 	clustersOnce.Do(func() {
 		go func() {
 			// Shut down test clusters when interrupted (for example CTRL+C).
 			sig := make(chan os.Signal, 1)
 			signal.Notify(sig, os.Interrupt)
 			<-sig
+			atomic.StoreInt32(&interrupted, 1)
 
 			// Fire off a goroutine to destroy all of the clusters.
 			done := make(chan struct{})
@@ -121,13 +125,11 @@ func registerCluster(clusterName string) {
 				var wg sync.WaitGroup
 				clustersMu.Lock()
 				wg.Add(len(clusters))
-				for name := range clusters {
-					go func(name string) {
-						cmd := exec.Command("roachprod", "destroy", name)
-						if err := cmd.Run(); err != nil {
-							fmt.Fprintln(os.Stderr, err)
-						}
-					}(name)
+				for c := range clusters {
+					go func(c *cluster) {
+						defer wg.Done()
+						c.destroy(context.Background())
+					}(c)
 				}
 				clustersMu.Unlock()
 
@@ -144,7 +146,7 @@ func registerCluster(clusterName string) {
 	})
 
 	clustersMu.Lock()
-	clusters[clusterName] = struct{}{}
+	clusters[c] = struct{}{}
 	clustersMu.Unlock()
 }
 
@@ -160,6 +162,9 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 }
 
 func makeClusterName(t testI) string {
+	if clusterName != "" {
+		return clusterName
+	}
 	if local {
 		return "local"
 	}
@@ -273,6 +278,10 @@ type cluster struct {
 // duration. The default lifetime of 12h is too long for some tests and will be
 // too short for others.
 func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *cluster {
+	if atomic.LoadInt32(&interrupted) == 1 {
+		t.Fatal("interrupted")
+	}
+
 	l, err := rootLogger(t.Name())
 	if err != nil {
 		t.Fatal(err)
@@ -285,21 +294,30 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 		t:      t,
 		l:      l,
 	}
-	registerCluster(c.name)
-
 	if impl, ok := t.(*test); ok {
 		c.status = impl.Status
 	}
+	registerCluster(c)
 
-	sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(nodes)}
-	for _, arg := range args {
-		sargs = append(sargs, fmt.Sprint(arg))
-	}
+	if c.name != clusterName {
+		sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(nodes)}
+		for _, arg := range args {
+			sargs = append(sargs, fmt.Sprint(arg))
+		}
 
-	c.status("creating cluster")
-	if err := execCmd(ctx, l, sargs...); err != nil {
-		t.Fatal(err)
-		return nil
+		c.status("creating cluster")
+		if err := execCmd(ctx, l, sargs...); err != nil {
+			t.Fatal(err)
+			return nil
+		}
+	} else {
+		// NB: if the existing cluster is not as large as the desired cluster, the
+		// test will fail when trying to perform various operations such as putting
+		// binaries or starting the cockroach nodes.
+		c.status("wiping cluster")
+		if err := execCmd(ctx, c.l, "roachprod", "wipe", c.name); err != nil {
+			c.l.errorf("%s", err)
+		}
 	}
 	return c
 }
@@ -334,26 +352,40 @@ func (c *cluster) Destroy(ctx context.Context) {
 		_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
 			filepath.Join(artifacts, c.t.Name(), "logs"))
 	}
-	c.status("destroying cluster")
-	if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
-		c.l.errorf("%s", err)
+	c.destroy(ctx)
+}
+
+func (c *cluster) destroy(ctx context.Context) {
+	if c.name != clusterName {
+		c.status("destroying cluster")
+		if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
+			c.l.errorf("%s", err)
+		}
+	} else {
+		c.status("wiping cluster")
+		if err := execCmd(ctx, c.l, "roachprod", "wipe", c.name); err != nil {
+			c.l.errorf("%s", err)
+		}
 	}
 
 	clustersMu.Lock()
-	delete(clusters, c.name)
+	delete(clusters, c)
 	clustersMu.Unlock()
 
 	c.l.close()
 }
 
 // Put a local file to all of the machines in a cluster.
-func (c *cluster) Put(ctx context.Context, src, dest string) {
+func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
+	}
 	c.status("uploading binary")
-	err := execCmd(ctx, c.l, "roachprod", "put", c.name, src, dest)
+	err := execCmd(ctx, c.l, "roachprod", "put", c.makeNodes(opts), src, dest)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -366,6 +398,9 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
 	}
 	c.status("starting cluster")
 	err := execCmd(ctx, c.l, "roachprod", "start", c.makeNodes(opts))
@@ -381,6 +416,9 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
+	}
 	c.status("stopping cluster")
 	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts))
 	if err != nil {
@@ -394,6 +432,9 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
 	}
 	c.status("wiping cluster")
 	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts))
@@ -417,6 +458,9 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
 	}
 	err := execCmd(ctx, l,
 		append([]string{"roachprod", "ssh", fmt.Sprintf("%s:%d", c.name, node), "--"}, args...)...)
