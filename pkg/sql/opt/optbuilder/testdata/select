@@ -60,3 +60,14 @@ SELECT * FROM t.a AS A(X, Y)
 ----
 scan
  └── columns: a.x:int:1 a.y:float:null:2
+
+build
+SELECT @1, @2 FROM t.a
+----
+project
+ ├── columns: column3:int:null:3 column4:float:null:4
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections
+      ├── variable: a.x [type=int]
+      └── variable: a.y [type=float]

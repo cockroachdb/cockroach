@@ -151,6 +151,7 @@ func (s *scope) appendColumns(src *scope) {
 // with columnProps.
 func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr, _ = tree.WalkExpr(s, expr)
+	s.builder.semaCtx.IVarContainer = s
 	texpr, err := tree.TypeCheck(expr, &s.builder.semaCtx, desired)
 	if err != nil {
 		panic(builderError{err})
@@ -414,4 +415,24 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // VisitPost is part of the Visitor interface.
 func (*scope) VisitPost(expr tree.Expr) tree.Expr {
 	return expr
+}
+
+// scope implements the IndexedVarContainer interface so it can be used as
+// semaCtx.IVarContainer. This allows tree.TypeCheck to determine the correct
+// type for any IndexedVars.
+var _ tree.IndexedVarContainer = &scope{}
+
+// IndexedVarEval is part of the IndexedVarContainer interface.
+func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
+	panic("unimplemented: scope.IndexedVarEval")
+}
+
+// IndexedVarResolvedType is part of the IndexedVarContainer interface.
+func (s *scope) IndexedVarResolvedType(idx int) types.T {
+	return s.cols[idx].typ
+}
+
+// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
+func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	panic("unimplemented: scope.IndexedVarNodeFormatter")
 }

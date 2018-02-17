@@ -128,7 +128,6 @@ type Builder struct {
 func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
 	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
 
-	b.semaCtx.IVarContainer = b
 	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
 
 	return b
@@ -356,8 +355,10 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		out, _ = b.buildFunction(t, "", inScope)
 
 	case *tree.IndexedVar:
-		colProps := b.synthesizeColumn(inScope, fmt.Sprintf("@%d", t.Idx+1), t.ResolvedType())
-		out = b.factory.ConstructVariable(b.factory.InternPrivate(colProps.index))
+		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
+			panic(errorf("invalid column ordinal @%d", t.Idx))
+		}
+		out = b.factory.ConstructVariable(b.factory.InternPrivate(inScope.cols[t.Idx].index))
 		// TODO(rytaft): Do we need to update varsUsed here?
 
 	case *tree.NotExpr:
@@ -1145,27 +1146,6 @@ func (b *Builder) buildDistinct(
 	return b.factory.ConstructGroupBy(in, groupingList, aggList)
 }
 
-// Builder implements the IndexedVarContainer interface so it can be used as the
-// IVarContainer in Builder.semaCtx. This allows tree.TypeCheck to determine the
-// correct type for any IndexedVars in Builder.stmt. These types are maintained
-// inside the Builder.colMap.
-var _ tree.IndexedVarContainer = &Builder{}
-
-// IndexedVarEval is part of the IndexedVarContainer interface.
-func (b *Builder) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic("unimplemented: Builder.IndexedVarEval")
-}
-
-// IndexedVarResolvedType is part of the IndexedVarContainer interface.
-func (b *Builder) IndexedVarResolvedType(idx int) types.T {
-	return b.colMap[opt.ColumnIndex(idx)].typ
-}
-
-// IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
-func (b *Builder) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic("unimplemented: Builder.IndexedVarNodeFormatter")
-}
-
 func isAggregate(def *tree.FunctionDefinition) bool {
 	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
 	return ok
@@ -1177,18 +1157,34 @@ func groupingError(colName string) error {
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create
 // a scalar from a TypedExpr. This is used to build scalar expressions for
-// testing index constraints. It is also used temporarily to interface with the
-// old planning code.
-type ScalarBuilder Builder
+// testing. It is also used temporarily to interface with the old planning code.
+//
+// TypedExprs can refer to columns in the current scope using IndexedVars (@1,
+// @2, etc). When we build a scalar, we have to provide information about these
+// columns.
+type ScalarBuilder struct {
+	bld   Builder
+	scope scope
+}
 
-// NewScalar creates a new ScalarBuilder structure initialized with the given
-// Context and Factory.
-func NewScalar(ctx context.Context, factory opt.Factory) *ScalarBuilder {
-	return &ScalarBuilder{
-		factory: factory,
-		colMap:  make([]columnProps, 1),
-		ctx:     ctx,
+// NewScalar creates a new ScalarBuilder. The provided columns are accessible
+// from scalar expressions via IndexedVars.
+// columnNames and columnTypes must have the same length.
+func NewScalar(
+	ctx context.Context, factory opt.Factory, columnNames []string, columnTypes []types.T,
+) *ScalarBuilder {
+	sb := &ScalarBuilder{
+		bld: Builder{
+			factory: factory,
+			colMap:  make([]columnProps, 1),
+			ctx:     ctx,
+		},
 	}
+	sb.scope.builder = &sb.bld
+	for i := range columnNames {
+		sb.bld.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i])
+	}
+	return sb
 }
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
@@ -1207,7 +1203,6 @@ func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root opt.GroupID, err error
 			}
 		}
 	}()
-	bld := (*Builder)(sb)
 
-	return bld.buildScalar(expr, &scope{builder: bld}), nil
+	return sb.bld.buildScalar(expr, &sb.scope), nil
 }
