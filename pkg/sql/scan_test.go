@@ -128,6 +128,10 @@ func testScanBatchQuery(t *testing.T, db *gosql.DB, numSpans, numAs, numBs int, 
 func TestScanBatches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// The test will screw around with KVBatchSize; make sure to restore it at the end.
+	restore := sqlbase.SetKVBatchSize(10)
+	defer restore()
+
 	s, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{UseDatabase: "test"})
 	defer s.Stopper().Stop(context.TODO())
@@ -135,10 +139,6 @@ func TestScanBatches(t *testing.T) {
 	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS test`); err != nil {
 		t.Fatal(err)
 	}
-
-	// The test will screw around with KVBatchSize; make sure to restore it at the end.
-	restore := sqlbase.SetKVBatchSize(10)
-	defer restore()
 
 	numAs := 5
 	numBs := 20
