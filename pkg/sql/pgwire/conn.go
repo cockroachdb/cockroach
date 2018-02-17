@@ -49,21 +49,22 @@ import (
 // conn implements a pgwire network connection (version 3 of the protocol,
 // implemented by Postgres v7.4 and later). conn.serve() reads protocol
 // messages, transforms them into commands that it pushes onto a StmtBuf (where
-// they'll be picked up and executed by the connExecutor). Results are then
-// produced and sent through the conn back to the client.
-// TODO(andrei): Detail results production path.
+// they'll be picked up and executed by the connExecutor).
+// The connExecutor produces results for the commands, which are delivered to
+// the client through the sql.ClientComm interface, implemented by this conn.
 type conn struct {
 	conn net.Conn
 
-	execCfg *sql.ExecutorConfig
-
-	// !!! give guidance on when to use rd versus conn. Also rd gets reset, which
-	// seems weird.
-	rd          bufio.Reader
-	stmtBuf     *sql.StmtBuf
-	readBuf     pgwirebase.ReadBuffer
-	msgBuilder  *writeBuffer
 	sessionArgs sql.SessionArgs
+	execCfg     *sql.ExecutorConfig
+	metrics     *ServerMetrics
+
+	// rd is a buffered reader consuming conn. All reads from conn go through
+	// this.
+	rd bufio.Reader
+
+	// stmtBuf is populated with commands queued for execution by this conn.
+	stmtBuf *sql.StmtBuf
 
 	// err is an error, accessed atomically. It represents any error encountered
 	// while accessing the underlying network connection. This can read via
@@ -71,13 +72,8 @@ type conn struct {
 	// be used.
 	err atomic.Value
 
-	// The logic governing these guys is hairy, and is not sufficiently
-	// specified in documentation. Consult the sources before you modify:
-	// https://github.com/postgres/postgres/blob/master/src/backend/tcop/postgres.c
-	doingExtendedQueryMessage bool
-
-	metrics *ServerMetrics
-
+	// writerState groups together all aspects of the write-side state of the
+	// connection.
 	writerState struct {
 		fi flushInfo
 		// buf contains command results (rows, etc.) until they're flushed to the
@@ -85,6 +81,9 @@ type conn struct {
 		buf    bytes.Buffer
 		tagBuf [64]byte
 	}
+
+	readBuf    pgwirebase.ReadBuffer
+	msgBuilder *writeBuffer
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -265,6 +264,8 @@ func (c *conn) serveImpl(
 
 	var err error
 	var terminateSeen bool
+	var doingExtendedQueryMessage bool
+
 Loop:
 	for {
 		var typ pgwirebase.ClientMessageType
@@ -279,7 +280,7 @@ Loop:
 		}
 		switch typ {
 		case pgwirebase.ClientMsgSync:
-			c.doingExtendedQueryMessage = false
+			doingExtendedQueryMessage = false
 			// We're starting a batch here. If the client continues using the extended
 			// protocol and encounters an error, everything until the next sync
 			// message has to be skipped. See:
@@ -287,7 +288,7 @@ Loop:
 
 			c.stmtBuf.Push(ctx, sql.Sync{})
 		case pgwirebase.ClientMsgSimpleQuery:
-			if c.doingExtendedQueryMessage {
+			if doingExtendedQueryMessage {
 				c.stmtBuf.Push(
 					ctx,
 					sql.SendError{
@@ -306,27 +307,27 @@ Loop:
 			break Loop
 
 		case pgwirebase.ClientMsgParse:
-			c.doingExtendedQueryMessage = true
+			doingExtendedQueryMessage = true
 			err = c.handleParse(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgDescribe:
-			c.doingExtendedQueryMessage = true
+			doingExtendedQueryMessage = true
 			err = c.handleDescribe(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgClose:
-			c.doingExtendedQueryMessage = true
+			doingExtendedQueryMessage = true
 			err = c.handleClose(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgBind:
-			c.doingExtendedQueryMessage = true
+			doingExtendedQueryMessage = true
 			err = c.handleBind(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgExecute:
-			c.doingExtendedQueryMessage = true
+			doingExtendedQueryMessage = true
 			err = c.handleExecute(ctx, &c.readBuf)
 
 		case pgwirebase.ClientMsgFlush:
-			c.doingExtendedQueryMessage = true
+			doingExtendedQueryMessage = true
 			err = c.handleFlush(ctx)
 
 		case pgwirebase.ClientMsgCopyData, pgwirebase.ClientMsgCopyDone, pgwirebase.ClientMsgCopyFail:
@@ -360,7 +361,7 @@ Loop:
 		return writerErr
 	}
 	// TODO(andrei): If we're draining, inform the client somehow. Docs suggest a
-	// NotifyResponse message.
+	// NotifyResponse message. See #22630.
 	if ctxCanceled || draining() {
 		return newAdminShutdownErr(err)
 	}
@@ -412,9 +413,6 @@ func (c *conn) handleSimpleQuery(ctx context.Context, buf *pgwirebase.ReadBuffer
 				return err
 			}
 			copyDone.Wait()
-			// The copyMachine always exits the extended protocol mode, if we were in
-			// it.
-			c.doingExtendedQueryMessage = false
 			return nil
 		}
 
