@@ -5170,7 +5170,8 @@ func (r *Replica) evaluateWriteBatch(
 		batch, br, res, pErr := r.evaluateWriteBatchWithLocalRetries(
 			ctx, idKey, rec, &ms, strippedBa, spans, retryLocally,
 		)
-		if pErr == nil && (ba.Timestamp == br.Timestamp || retryLocally) {
+		if pErr == nil && (ba.Timestamp == br.Timestamp ||
+			(retryLocally && !isEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Writing = true
 			clonedTxn.Status = roachpb.COMMITTED
@@ -5282,7 +5283,7 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 		return false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	if isEndTransactionExceedingDeadline(ba.Header.Timestamp, *etArg) {
+	if isEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
 		return false
 	}
 	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
