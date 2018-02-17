@@ -177,7 +177,7 @@ import (
 // former category: invalid queries, queries that fail constraints at runtime,
 // data unavailability errors, retriable errors (i.e. serializability
 // violations) "internal errors" (e.g. connection problems in the cluster). This
-// category of errors don't represent dramatic events as far as the connExecutor
+// category of errors doesn't represent dramatic events as far as the connExecutor
 // is concerned: they produce "results" for the query to be passed to the client
 // just like more successful queries do and they produce Events for the
 // state machine just like the successful queries (the events in question
@@ -225,7 +225,7 @@ import (
 // pattern of explicitly taking a context as an argument is used.
 
 // Server is the top level singleton for handling SQL connections. It creates
-// connExecutor's to server every incoming connection.
+// connExecutors to server every incoming connection.
 type Server struct {
 	noCopy util.NoCopy
 
@@ -424,18 +424,17 @@ func (s *Server) ServeConn(
 		},
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
-		extraTxnState: transactionState{
-			tables: TableCollection{
-				leaseMgr:          s.cfg.LeaseManager,
-				databaseCache:     s.dbCache.getDatabaseCache(),
-				dbCacheSubscriber: s.dbCache,
-			},
-			schemaChangers: schemaChangerCollection{},
-		},
-		txnStartPos: -1,
-		appStats:    s.sqlStats.getStatsForApplication(args.ApplicationName),
-		planner:     planner{execCfg: s.cfg},
+		appStats:         s.sqlStats.getStatsForApplication(args.ApplicationName),
+		planner:          planner{execCfg: s.cfg},
 	}
+	ex.extraTxnState.tables = TableCollection{
+		leaseMgr:          s.cfg.LeaseManager,
+		databaseCache:     s.dbCache.getDatabaseCache(),
+		dbCacheSubscriber: s.dbCache,
+	}
+	ex.extraTxnState.schemaChangers = schemaChangerCollection{}
+	ex.extraTxnState.txnRewindPos = -1
+
 	ex.mu.ActiveQueries = make(map[uint128.Uint128]*queryMeta)
 	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
@@ -524,7 +523,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 	}
 
-	ex.extraTxnState.reset(ctx, txnAborted, ex.server.dbCache)
+	ex.resetExtraTxnState(ctx, txnAborted, ex.server.dbCache)
 
 	if closeType == normalClose {
 		// Close all statements and prepared portals by first unifying the namespaces
@@ -559,65 +558,6 @@ type connExecutor struct {
 	// for getting access to configuration settings and metrics.
 	server *Server
 
-	// The buffer with incoming statements to execute.
-	stmtBuf *StmtBuf
-	// The interface for communicating statement results to the client.
-	clientComm ClientComm
-	// Finity "the machine" Automaton is the state machine controlling the state
-	// below.
-	machine fsm.Machine
-	// state encapsulates fields related to the ongoing SQL txn. It is mutated as
-	// the machine's ExtendedState.
-	state txnState2
-
-	// extraTxnState groups fields scoped to a SQL txn that are not handled by
-	// ex.state, above. The rule of thumb is that, if the state influences state
-	// transitions, it should live in state, otherwise it can live here.
-	// This is only used in the Open state. extraTxnState is reset whenever a
-	// transaction finishes or gets retried.
-	extraTxnState transactionState
-
-	// txnStartPos is the position within stmtBuf at which the current SQL
-	// transaction started. If we're going to perform an automatic txn retry, this
-	// is the position from which we'll start executing again.
-	// The value is only defined while the connection is in the stateOpen.
-	//
-	// Set via setTxnStartPos().
-	txnStartPos CmdPos
-
-	// sessionData contains the user-configurable connection variables.
-	sessionData sessiondata.SessionData
-	dataMutator sessionDataMutator
-
-	// connCtx is the root context in which all statements from the connection are
-	// running. This generally should not be used directly, but through the Ctx()
-	// method; if we're inside a transaction, Ctx() is going to return a derived
-	// context. See the Context Management comments at the top of the file.
-	connCtx context.Context
-
-	// planner is the "default planner" on a session, to save planner allocations
-	// during serial execution. Since planners are not threadsafe, this is only
-	// safe to use when a statement is not being parallelized. It must be reset
-	// before using.
-	planner planner
-
-	// parallelizeQueue is a queue managing all parallelized SQL statements
-	// running on this connection.
-	parallelizeQueue ParallelizeQueue
-
-	// prepStmtNamespace contains the prepared statements and portals that the
-	// session currently has access to.
-	// prepStmtsNamespaceAtTxnStartPos is a snapshot of the prep stmts/portals
-	// before processing the command at position txnStartPos. Here's the deal:
-	// prepared statements are not transactional, but they do need to interact
-	// properly with automatic retries (i.e. rewinding the command buffer). When
-	// doing a rewind, we need to be able to restore the prep stmts as they were.
-	// We do this by taking a snapshot every time txnStartPos is advanced.
-	// Prepared statements are shared between the two collections, but these
-	// collections are periodically reconciled.
-	prepStmtsNamespace              prepStmtNamespace
-	prepStmtsNamespaceAtTxnStartPos prepStmtNamespace
-
 	// mon tracks memory usage for SQL activity within this session. It
 	// is not directly used, but rather indirectly used via sessionMon
 	// and state.mon. sessionMon tracks session-bound objects like prepared
@@ -635,38 +575,93 @@ type connExecutor struct {
 	// will contribute to.
 	memMetrics *MemoryMetrics
 
+	// The buffer with incoming statements to execute.
+	stmtBuf *StmtBuf
+	// The interface for communicating statement results to the client.
+	clientComm ClientComm
+	// Finity "the machine" Automaton is the state machine controlling the state
+	// below.
+	machine fsm.Machine
+	// state encapsulates fields related to the ongoing SQL txn. It is mutated as
+	// the machine's ExtendedState.
+	state         txnState2
 	transitionCtx transitionCtx
 
+	// extraTxnState groups fields scoped to a SQL txn that are not handled by
+	// ex.state, above. The rule of thumb is that, if the state influences state
+	// transitions, it should live in state, otherwise it can live here.
+	// This is only used in the Open state. extraTxnState is reset whenever a
+	// transaction finishes or gets retried.
+	extraTxnState struct {
+		// tables collects descriptors used by the current transaction.
+		tables TableCollection
+
+		// schemaChangers accumulate schema changes staged for execution. Staging
+		// happens when executing DDL statements. The staged changes are executed once
+		// the transaction that staged them commits (which is once the DDL statement
+		// is done if the statement was executed in an implicit txn).
+		schemaChangers schemaChangerCollection
+
+		// autoRetryCounter keeps track of the which iteration of a transaction
+		// auto-retry we're currently in. It's 0 whenever the transaction state is not
+		// stateOpen.
+		autoRetryCounter int
+
+		// txnRewindPos is the position within stmtBuf to which we'll rewind when
+		// performing automatic retries. This is more or less the position where the
+		// current transaction started.
+		// This field is only defined while in stateOpen.
+		//
+		// Set via setTxnRewindPos().
+		txnRewindPos CmdPos
+
+		// prepStmtsNamespaceAtTxnRewindPos is a snapshot of the prep stmts/portals
+		// (ex.prepStmtsNamespace) before processing the command at position
+		// txnRewindPos.
+		// Here's the deal: prepared statements are not transactional, but they do
+		// need to interact properly with automatic retries (i.e. rewinding the
+		// command buffer). When doing a rewind, we need to be able to restore the
+		// prep stmts as they were. We do this by taking a snapshot every time
+		// txnRewindPos is advanced. Prepared statements are shared between the two
+		// collections, but these collections are periodically reconciled.
+		prepStmtsNamespaceAtTxnRewindPos prepStmtNamespace
+	}
+
+	// sessionData contains the user-configurable connection variables.
+	sessionData sessiondata.SessionData
+	dataMutator sessionDataMutator
 	// appStats tracks per-application SQL usage statistics. It is maintained to
 	// represent statistrics for the application currently identified by
 	// sessiondata.ApplicationName.
 	appStats *appStats
 
-	//
-	// Per-session statistics.
-	//
+	// connCtx is the root context in which all statements from the connection are
+	// running. This generally should not be used directly, but through the Ctx()
+	// method; if we're inside a transaction, Ctx() is going to return a derived
+	// context. See the Context Management comments at the top of the file.
+	connCtx context.Context
 
+	// planner is the "default planner" on a session, to save planner allocations
+	// during serial execution. Since planners are not threadsafe, this is only
+	// safe to use when a statement is not being parallelized. It must be reset
+	// before using.
+	planner planner
 	// phaseTimes tracks session-level phase times. It is copied-by-value
 	// to each planner in session.newPlanner.
 	phaseTimes phaseTimes
+
+	// parallelizeQueue is a queue managing all parallelized SQL statements
+	// running on this connection.
+	parallelizeQueue ParallelizeQueue
+
+	// prepStmtNamespace contains the prepared statements and portals that the
+	// session currently has access to.
+	prepStmtsNamespace prepStmtNamespace
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
 	mu struct {
 		syncutil.RWMutex
-
-		//
-		// Session parameters, user-configurable.
-		//
-
-		// ApplicationName is the name of the application running the current
-		// session. This can be used for logging and per-application statistics.
-		// Change via resetApplicationName().
-		ApplicationName string
-
-		//
-		// State structures for the logical SQL session.
-		//
 
 		// ActiveQueries contains all queries in flight.
 		ActiveQueries map[uint128.Uint128]*queryMeta
@@ -746,30 +741,10 @@ func (ns *prepStmtNamespace) copy() prepStmtNamespace {
 	return cpy
 }
 
-// transactionState groups state that's specific to a SQL transaction. They all
-// need to be reset if that transaction is committed, rolled-back or retried.
-type transactionState struct {
-	// tables collects descriptors used by the current transaction.
-	// TODO(andrei, vivek): I think this TableCollection guy should go away, or at
-	// least only contain tables *mutated* in the current txn. I don't understand
-	// what purpose it serves beyond that.
-	tables TableCollection
-
-	// schemaChangers accumulate schema changes staged for execution. Staging
-	// happens when executing DDL statements. The staged changes are executed once
-	// the transaction that staged them commits (which is once the DDL statement
-	// is done if the statement was executed in an implicit txn).
-	schemaChangers schemaChangerCollection
-
-	// autoRetryCounter keeps track of the which iteration of a transaction
-	// auto-retry we're currently in. It's 0 whenever the transaction state is not
-	// stateOpen.
-	autoRetryCounter int
-}
-
-// reset wipes the transactionState.
-func (ts *transactionState) reset(ctx context.Context, ev txnEvent, dbCacheHolder *databaseCacheHolder) {
-	ts.schemaChangers.reset()
+func (ex *connExecutor) resetExtraTxnState(
+	ctx context.Context, ev txnEvent, dbCacheHolder *databaseCacheHolder,
+) {
+	ex.extraTxnState.schemaChangers.reset()
 
 	var opt releaseOpt
 	if ev == txnCommit {
@@ -777,12 +752,14 @@ func (ts *transactionState) reset(ctx context.Context, ev txnEvent, dbCacheHolde
 	} else {
 		opt = dontBlockForDBCacheUpdate
 	}
-	ts.tables.releaseTables(ctx, opt)
-	ts.tables.databaseCache = dbCacheHolder.getDatabaseCache()
+	ex.extraTxnState.tables.releaseTables(ctx, opt)
+	ex.extraTxnState.tables.databaseCache = dbCacheHolder.getDatabaseCache()
 
-	ts.autoRetryCounter = 0
+	ex.extraTxnState.autoRetryCounter = 0
 }
 
+// Ctx returns the transaction's ctx, if we're inside a transaction, or the
+// session's context otherwise.
 func (ex *connExecutor) Ctx() context.Context {
 	if _, ok := ex.machine.CurState().(stateNoTxn); ok {
 		return ex.connCtx
@@ -805,13 +782,14 @@ func (ex *connExecutor) Ctx() context.Context {
 // execution and generate an error. run() is then supposed to return because the
 // buffer is closed and no further commands can be read.
 //
-// When this returns, the connection to the client needs to be terminated. If it
-// returns with an error, that error may represent a communication error (in
-// which case the connection might already also have an error from the reading
-// side), or some other unexpected failure. Returned errors have not been
-// communicated to the client: it's up to the caller to do that if it wants.
+// When this returns, ex.close() needs to be called and  the connection to the
+// client needs to be terminated. If it returns with an error, that error may
+// represent a communication error (in which case the connection might already
+// also have an error from the reading side), or some other unexpected failure.
+// Returned errors have not been communicated to the client: it's up to the
+// caller to do that if it wants.
 func (ex *connExecutor) run(ctx context.Context) error {
-	defer ex.extraTxnState.reset(ctx, txnAborted, ex.server.dbCache)
+	// !!! defer ex.extraTxnState.reset(ctx, txnAborted, ex.server.dbCache)
 
 	ex.server.cfg.SessionRegistry.register(ex)
 	defer ex.server.cfg.SessionRegistry.deregister(ex)
@@ -904,28 +882,30 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			}
 		case PrepareStmt:
 			ex.curStmt = tcmd.Stmt
-			ev, payload = ex.execPrepare(ex.Ctx(), tcmd)
 			res = ex.clientComm.CreateParseResult(pos)
+			ev, payload = ex.execPrepare(ex.Ctx(), tcmd)
 		case DescribeStmt:
 			descRes := ex.clientComm.CreateDescribeResult(pos)
 			res = descRes
 			ev, payload = ex.execDescribe(ex.Ctx(), tcmd, descRes)
 		case BindStmt:
-			ev, payload = ex.execBind(ex.Ctx(), tcmd)
 			res = ex.clientComm.CreateBindResult(pos)
+			ev, payload = ex.execBind(ex.Ctx(), tcmd)
 		case DeletePreparedStmt:
-			ev, payload = ex.execDelPrepStmt(ex.Ctx(), tcmd)
 			res = ex.clientComm.CreateDeleteResult(pos)
+			ev, payload = ex.execDelPrepStmt(ex.Ctx(), tcmd)
 		case SendError:
+			res = ex.clientComm.CreateErrorResult(pos)
 			ev = eventNonRetriableErr{IsCommit: fsm.False}
 			payload = eventNonRetriableErrPayload{err: tcmd.Err}
-			res = ex.clientComm.CreateErrorResult(pos)
 		case Sync:
 			// Note that the Sync result will flush results to the network connection.
 			res = ex.clientComm.CreateSyncResult(pos)
 			if draining {
 				// If we're draining, check whether this is a good time to finish the
-				// connection.
+				// connection. If we're not inside a transaction, we stop processing
+				// now. If we are inside a transaction, we'll check again the next time
+				// a Sync is processed.
 				if snt, ok := ex.machine.CurState().(stateNoTxn); ok {
 					res.Close(stateToTxnStatusIndicator(snt))
 					return nil
@@ -982,16 +962,9 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				ex.recordUnimplementedErrorMaybe(pe.errorCause())
 			}
 			if res.Err() == nil && ok {
-				if advInfo.code == stayInPlace {
-					return errors.Errorf("unexpected stayInPlace code with err: %s", pe.errorCause())
-				}
 				// Depending on whether the result has the error already or not, we have
 				// to call either Close or CloseWithErr.
-				if res.Err() == nil {
-					res.CloseWithErr(pe.errorCause())
-				} else {
-					res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
-				}
+				res.CloseWithErr(pe.errorCause())
 			} else {
 				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
 			}
@@ -1026,94 +999,19 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			log.Fatalf(ex.Ctx(), "unexpected advance code: %s", advInfo.code)
 		}
 
-		if err := ex.updateTxnStartPosMaybe(ex.Ctx(), cmd, pos, advInfo); err != nil {
+		if err := ex.updateTxnRewindPosMaybe(ex.Ctx(), cmd, pos, advInfo); err != nil {
 			return err
 		}
 	}
 }
 
-// We handle the CopyFrom statement by creating a copyMachine and handing it
-// control over the connection until the copying is done. The contract is that,
-// when this is called, the pgwire.conn is not reading from the network
-// connection any more until this returns. The copyMachine will to the reading
-// and writing up to the CommandComplete message.
-func (ex *connExecutor) execCopyIn(
-	ctx context.Context, cmd CopyIn,
-) (fsm.Event, fsm.EventPayload, error) {
-
-	// When we're done, unblock the network connection.
-	defer cmd.CopyDone.Done()
-
-	state := ex.machine.CurState()
-	_, isNoTxn := state.(stateNoTxn)
-	_, isOpen := state.(stateOpen)
-	if !isNoTxn && !isOpen {
-		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionAbortedError("" /* customMsg */)}
-		return ev, payload, nil
-	}
-
-	// If we're in an explicit txn, then the copying will be done within that
-	// txn. Otherwise, we tell the copyMachine to manage its own transactions.
-	var txnOpt copyTxnOpt
-	if isOpen {
-		txnOpt = copyTxnOpt{
-			txn:           ex.state.mu.txn,
-			txnTimestamp:  ex.state.sqlTimestamp,
-			stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
-		}
-	}
-
-	var monToStop *mon.BytesMonitor
-	defer func() {
-		if monToStop != nil {
-			monToStop.Stop(ctx)
-		}
-	}()
-	if isNoTxn {
-		// HACK: We're reaching inside ex.state and starting the monitor. Normally
-		// that's driven by the state machine, but we're bypassing the state machine
-		// here.
-		ex.state.mon.Start(ctx, &ex.sessionMon, mon.BoundAccount{} /* reserved */)
-		monToStop = ex.state.mon
-	}
-	cm, err := newCopyMachine(
-		ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
-		// resetPlanner
-		func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
-			// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
-			// It is used by resetPlanner. Normally sqlTimestamp is updated by the
-			// state machine, but the copyMachine manages its own transactions without
-			// going through the state machine.
-			ex.state.sqlTimestamp = txnTS
-			ex.resetPlanner(p, txn, stmtTS)
-		},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	if err := cm.run(ctx); err != nil {
-		// TODO(andrei): We don't have a retriable error story for the copy machine.
-		// When running outside of a txn, the copyMachine should probably do retries
-		// internally. When not, it's unclear what we should do. For now, we abort
-		// the txn (if any).
-		// We also don't have a story for distinguishing communication errors (which
-		// should terminate the connection) from query errors. For now, we treat all
-		// errors as query errors.
-		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{err: err}
-		return ev, payload, nil
-	}
-	return nil, nil, nil
-}
-
-// updateTxnStartPosMaybe checks whether the ex.txnStartPos should be advanced,
-// based on the advInfo produced by running cmd at position pos.
-func (ex *connExecutor) updateTxnStartPosMaybe(
+// updateTxnRewindPosMaybe checks whether the ex.extraTxnState.txnRewindPos
+// should be advanced, based on the advInfo produced by running cmd at position
+// pos.
+func (ex *connExecutor) updateTxnRewindPosMaybe(
 	ctx context.Context, cmd Command, pos CmdPos, advInfo advanceInfo,
 ) error {
-	// txnStartPos is only maintained while in stateOpen.
+	// txnRewindPos is only maintained while in stateOpen.
 	if _, ok := ex.machine.CurState().(stateOpen); !ok {
 		return nil
 	}
@@ -1128,29 +1026,27 @@ func (ex *connExecutor) updateTxnStartPosMaybe(
 			// again.
 			nextPos = pos + 1
 		case rewind:
-			if advInfo.rewCap.rewindPos != ex.txnStartPos {
+			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
 				return errors.Errorf("unexpected rewind position: %s when txn start is: %d",
-					advInfo.rewCap.rewindPos, ex.txnStartPos)
+					advInfo.rewCap.rewindPos, ex.extraTxnState.txnRewindPos)
 			}
-			// txnStartPos stays unchanged.
+			// txnRewindPos stays unchanged.
 			return nil
 		default:
 			return errors.Errorf("unexpected advance code when starting a txn: %s", advInfo.code)
 		}
-		ex.setTxnStartPos(ex.Ctx(), nextPos)
+		ex.setTxnRewindPos(ex.Ctx(), nextPos)
 	} else {
 		// See if we can advance the rewind point even if this is not the point
 		// where the transaction started. We can do that after running a special
-		// statement (e.g. SET TRANSACTION or SAVEPOINT) or when we just ran a Sync
-		// command. The idea with the Sync command is that we don't want the
-		// following sequence to disable retries for what comes after the sequence:
+		// statement (e.g. SET TRANSACTION or SAVEPOINT) or after most commands that
+		// don't execute statements.
+		// The idea is that, for example, we don't want the following sequence to
+		// disable retries for what comes after the sequence:
 		// 1: PrepareStmt BEGIN
 		// 2: BindStmt
 		// 3: ExecutePortal
 		// 4: Sync
-		//
-		// We can blindly advance the txnStartPos for most commands that don't run
-		// statements.
 
 		if advInfo.code != advanceOne {
 			panic(fmt.Sprintf("unexpected advanceCode: %s", advInfo.code))
@@ -1158,7 +1054,7 @@ func (ex *connExecutor) updateTxnStartPosMaybe(
 
 		var canAdvance bool
 		_, inOpen := ex.machine.CurState().(stateOpen)
-		if inOpen && (ex.txnStartPos == pos) {
+		if inOpen && (ex.extraTxnState.txnRewindPos == pos) {
 			switch tcmd := cmd.(type) {
 			case ExecStmt:
 				canAdvance = ex.stmtDoesntNeedRetry(tcmd.Stmt)
@@ -1179,12 +1075,12 @@ func (ex *connExecutor) updateTxnStartPosMaybe(
 			case Sync:
 				canAdvance = true
 			case DrainRequest:
-				ex.setTxnStartPos(ex.Ctx(), pos+1)
+				ex.setTxnRewindPos(ex.Ctx(), pos+1)
 			default:
 				panic(fmt.Sprintf("unsupported cmd: %T", cmd))
 			}
 			if canAdvance {
-				ex.setTxnStartPos(ex.Ctx(), pos+1)
+				ex.setTxnRewindPos(ex.Ctx(), pos+1)
 			}
 		}
 	}
@@ -1328,6 +1224,7 @@ func (ex *connExecutor) execBind(
 	numQArgs := uint16(len(ps.InTypes))
 	qArgFormatCodes := bindCmd.ArgFormatCodes
 
+	// If a single code is specified, it is applied to all arguments.
 	if len(qArgFormatCodes) != 1 && len(qArgFormatCodes) != int(numQArgs) {
 		return retErr(pgwirebase.NewProtocolViolationErrorf(
 			"wrong number of format codes specified: %d for %d arguments",
@@ -1369,9 +1266,9 @@ func (ex *connExecutor) execBind(
 	}
 
 	numCols := len(ps.Columns)
-	if numCols != 0 && (len(bindCmd.OutFormats) > 1) && (len(bindCmd.OutFormats) != numCols) {
+	if (len(bindCmd.OutFormats) > 1) && (len(bindCmd.OutFormats) != numCols) {
 		return retErr(pgwirebase.NewProtocolViolationErrorf(
-			"expected 0, 1, or %d for number of format codes, got %d",
+			"expected 1 or %d for number of format codes, got %d",
 			numCols, len(bindCmd.OutFormats)))
 	}
 
@@ -1397,6 +1294,82 @@ func (ex *connExecutor) execBind(
 	}
 
 	return nil, nil
+}
+
+// We handle the CopyFrom statement by creating a copyMachine and handing it
+// control over the connection until the copying is done. The contract is that,
+// when this is called, the pgwire.conn is not reading from the network
+// connection any more until this returns. The copyMachine will to the reading
+// and writing up to the CommandComplete message.
+func (ex *connExecutor) execCopyIn(
+	ctx context.Context, cmd CopyIn,
+) (fsm.Event, fsm.EventPayload, error) {
+
+	// When we're done, unblock the network connection.
+	defer cmd.CopyDone.Done()
+
+	state := ex.machine.CurState()
+	_, isNoTxn := state.(stateNoTxn)
+	_, isOpen := state.(stateOpen)
+	if !isNoTxn && !isOpen {
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{
+			err: sqlbase.NewTransactionAbortedError("" /* customMsg */)}
+		return ev, payload, nil
+	}
+
+	// If we're in an explicit txn, then the copying will be done within that
+	// txn. Otherwise, we tell the copyMachine to manage its own transactions.
+	var txnOpt copyTxnOpt
+	if isOpen {
+		txnOpt = copyTxnOpt{
+			txn:           ex.state.mu.txn,
+			txnTimestamp:  ex.state.sqlTimestamp,
+			stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
+		}
+	}
+
+	var monToStop *mon.BytesMonitor
+	defer func() {
+		if monToStop != nil {
+			monToStop.Stop(ctx)
+		}
+	}()
+	if isNoTxn {
+		// HACK: We're reaching inside ex.state and starting the monitor. Normally
+		// that's driven by the state machine, but we're bypassing the state machine
+		// here.
+		ex.state.mon.Start(ctx, &ex.sessionMon, mon.BoundAccount{} /* reserved */)
+		monToStop = ex.state.mon
+	}
+	cm, err := newCopyMachine(
+		ctx, cmd.Conn, cmd.Stmt, txnOpt, ex.server.cfg,
+		// resetPlanner
+		func(p *planner, txn *client.Txn, txnTS time.Time, stmtTS time.Time) {
+			// HACK: We're reaching inside ex.state and changing sqlTimestamp by hand.
+			// It is used by resetPlanner. Normally sqlTimestamp is updated by the
+			// state machine, but the copyMachine manages its own transactions without
+			// going through the state machine.
+			ex.state.sqlTimestamp = txnTS
+			ex.resetPlanner(p, txn, stmtTS)
+		},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := cm.run(ctx); err != nil {
+		// TODO(andrei): We don't have a retriable error story for the copy machine.
+		// When running outside of a txn, the copyMachine should probably do retries
+		// internally. When not, it's unclear what we should do. For now, we abort
+		// the txn (if any).
+		// We also don't have a story for distinguishing communication errors (which
+		// should terminate the connection) from query errors. For now, we treat all
+		// errors as query errors.
+		ev := eventNonRetriableErr{IsCommit: fsm.False}
+		payload := eventNonRetriableErrPayload{err: err}
+		return ev, payload, nil
+	}
+	return nil, nil, nil
 }
 
 // addPreparedStmt creates a new PreparedStatement with the provided name using
@@ -1462,7 +1435,7 @@ func (ex *connExecutor) deletePreparedStmt(ctx context.Context, name string) {
 	}
 	// If the prepared statement only exists in prepStmtsNamespace, it's up to us
 	// to close it.
-	baseP, inBase := ex.prepStmtsNamespaceAtTxnStartPos.prepStmts[name]
+	baseP, inBase := ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.prepStmts[name]
 	if !inBase || (baseP.PreparedStatement != psEntry.PreparedStatement) {
 		psEntry.close(ctx)
 	}
@@ -1478,7 +1451,7 @@ func (ex *connExecutor) deletePortal(ctx context.Context, name string) {
 		return
 	}
 	// If the portal only exists in prepStmtsNamespace, it's up to us to close it.
-	baseP, inBase := ex.prepStmtsNamespaceAtTxnStartPos.portals[name]
+	baseP, inBase := ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.portals[name]
 	if !inBase || (baseP.PreparedPortal != portalEntry.PreparedPortal) {
 		portalEntry.close(ctx)
 	}
@@ -1494,7 +1467,7 @@ func (ex *connExecutor) execDelPrepStmt(
 		_, ok := ex.prepStmtsNamespace.prepStmts[delCmd.Name]
 		if !ok {
 			// The spec says "It is not an error to issue Close against a nonexistent
-			// statement or portal name.". See
+			// statement or portal name". See
 			// https://www.postgresql.org/docs/current/static/protocol-flow.html.
 			break
 		}
@@ -1637,7 +1610,6 @@ func (ex *connExecutor) execStmt(
 			ev = eventTxnFinish{}
 			payload = eventTxnFinishPayload{commit: true}
 		}
-		return ev, payload, nil
 
 	case stateAborted, stateRestartWait:
 		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
@@ -1698,7 +1670,7 @@ func (ex *connExecutor) runShowTransactionState(
 	res.SetColumns(ctx, sqlbase.ResultColumns{{Name: "TRANSACTION STATUS", Typ: types.String}})
 
 	state := fmt.Sprintf("%s", ex.machine.CurState())
-	return res.AddRow(ex.Ctx(), tree.Datums{tree.NewDString(state)})
+	return res.AddRow(ctx, tree.Datums{tree.NewDString(state)})
 }
 
 // generateQueryID generates a unique ID for a query based on the node's
@@ -1747,34 +1719,36 @@ func (ex *connExecutor) addActiveQuery(
 	}
 }
 
-// setTxnStartPos updates the position to which future rewinds will refer.
+// setTxnRewindPos updates the position to which future rewinds will refer.
 //
 // All statements with lower position in stmtBuf (if any) are removed, as we
 // won't ever need them again.
-func (ex *connExecutor) setTxnStartPos(ctx context.Context, pos CmdPos) {
-	if pos <= ex.txnStartPos {
-		log.Fatalf(ctx, "can only move the  txnStartPos forward."+
-			"Was: %d; new value: %d", ex.txnStartPos, pos)
+func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
+	if pos <= ex.extraTxnState.txnRewindPos {
+		log.Fatalf(ctx, "can only move the  txnRewindPos forward."+
+			"Was: %d; new value: %d", ex.extraTxnState.txnRewindPos, pos)
 	}
-	ex.txnStartPos = pos
+	ex.extraTxnState.txnRewindPos = pos
 	ex.stmtBuf.ltrim(ctx, pos)
 	ex.commitPrepStmtNamespace(ctx)
 }
 
 // commitPrepStmtNamespace deallocates everything in
-// prepStmtsNamespaceAtTxnStartPos that's not part of prepStmtsNamespace.
+// prepStmtsNamespaceAtTxnRewindPos that's not part of prepStmtsNamespace.
 func (ex *connExecutor) commitPrepStmtNamespace(ctx context.Context) {
-	ex.prepStmtsNamespaceAtTxnStartPos.resetTo(ctx, &ex.prepStmtsNamespace)
+	ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos.resetTo(
+		ctx, &ex.prepStmtsNamespace)
 }
 
 // commitPrepStmtNamespace deallocates everything in prepStmtsNamespace that's
-// not part of prepStmtsNamespaceAtTxnStartPos.
+// not part of prepStmtsNamespaceAtTxnRewindPos.
 func (ex *connExecutor) rewindPrepStmtNamespace(ctx context.Context) {
-	ex.prepStmtsNamespace.resetTo(ctx, &ex.prepStmtsNamespaceAtTxnStartPos)
+	ex.prepStmtsNamespace.resetTo(
+		ctx, &ex.extraTxnState.prepStmtsNamespaceAtTxnRewindPos)
 }
 
 // getRewindTxnCapability checks whether rewinding to the position previously
-// set through setTxnStartPos() is possible and, if it is, returns a
+// set through setTxnRewindPos() is possible and, if it is, returns a
 // rewindCapability bound to that position. The returned bool is true if the
 // rewind is possible. If it is, client communication is blocked until the
 // rewindCapability is exercised.
@@ -1783,14 +1757,14 @@ func (ex *connExecutor) getRewindTxnCapability() (rewindCapability, bool) {
 
 	// If we already delivered results at or past the start position, we can't
 	// rewind.
-	if cl.ClientPos() >= ex.txnStartPos {
+	if cl.ClientPos() >= ex.extraTxnState.txnRewindPos {
 		cl.Close()
 		return rewindCapability{}, false
 	}
 	return rewindCapability{
 		cl:        cl,
 		buf:       ex.stmtBuf,
-		rewindPos: ex.txnStartPos,
+		rewindPos: ex.extraTxnState.txnRewindPos,
 	}, true
 }
 
@@ -2912,7 +2886,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case txnRestart:
 		fallthrough
 	case txnAborted:
-		ex.extraTxnState.reset(ex.Ctx(), advInfo.txnEvent, ex.server.dbCache)
+		ex.resetExtraTxnState(ex.Ctx(), advInfo.txnEvent, ex.server.dbCache)
 	default:
 		return advanceInfo{}, errors.Errorf("unexpected event: %v", advInfo.txnEvent)
 	}

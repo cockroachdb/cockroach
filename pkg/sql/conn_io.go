@@ -217,6 +217,9 @@ type BindStmt struct {
 	PreparedStatementName string
 	PortalName            string
 	// OutFormats contains the requested formats for the output columns.
+	// It either contains a bunch of format codes, in which case the number will
+	// need to match the number of output columns of the portal, or contains a single
+	// code, in which case that code will be applied to all columns.
 	OutFormats []pgwirebase.FormatCode
 	// Args are the arguments for the prepared statement.
 	// They are passed in without decoding because decoding requires type
@@ -225,6 +228,9 @@ type BindStmt struct {
 	// A nil element means a tree.DNull argument.
 	Args [][]byte
 	// ArgFormatCodes are the codes to be used to deserialize the Args.
+	// It either contains a bunch of format codes, in which case the number will
+	// need to match the number of arguments for the portal, or contains a single
+	// code, in which case that code will be applied to all arguments.
 	ArgFormatCodes []pgwirebase.FormatCode
 }
 
@@ -525,54 +531,9 @@ type ClientComm interface {
 	// again).
 	LockCommunication() ClientLock
 
+	// Flush delivers all the previous results to the client. The results might
+	// have been buffered, in which case this flushes the buffer.
 	Flush(pos CmdPos) error
-
-	// !!!
-	// // FlushResults tells the implementation that all the results produced so far
-	// // can be delivered to the SQL client. In other words, this is promising that
-	// // the corresponding StmtBuf will not be rewind()ed to positions <= the last
-	// // position passed to createStatementResult().
-	// // FlushResults() is generally called once a transaction ends, as the
-	// // connExecutor no longer needs to be able to rewind past the txn's last
-	// // statement.
-	// //
-	// // An error is returned if the client connection is broken. In this case, no
-	// // further calls can be made on this ClientComm. The caller should interrupt
-	// // any statements running on the respective connection.
-	// //
-	// // The connExecutor's expectation is that, after FlushResults() is called,
-	// // results that are part of future StatementResult's will be buffered (in the
-	// // now empty buffer*) by the implementer until one of the following happens:
-	// // - the buffer overflows
-	// // - FlushResults() is called again
-	// // - the last StatementResult is Close()d and there are no more statements in
-	// // 	 StmtBuf at the moment.
-	// // If the implementer respects this, then it will be guaranteed that, as long
-	// // as a transaction prefix's results fit in said buffer, the connExecutor will
-	// // be able to automatically retry the prefix in case of retriable errors so
-	// // that the client doesn't need to worry about them. As an important special
-	// // case, this means that implicit transactions (i.e. statements executed
-	// // outside of a transaction) are always automatically retried as long as their
-	// // results fit in the implementer's buffer.
-	// //
-	// // TODO(andrei): In the future we might want to add a time component to this
-	// // policy (or make it user configurable), and restrict the guarantees about
-	// // automatic retries to queries that are fast enough.
-	// //
-	// // (*) The implication is that, if the implementer wishes to deliver the
-	// // contents of the buffer to the client concurrently with accepting new
-	// // results after the FlushResults() call, it needs to behave as if the
-	// // buffer's capacity was just expanded: the size of the buffer's contents at
-	// // the moment of the FlushResults() call cannot impact the capacity available
-	// // for future results.
-	// FlushResults() error
-
-	// !!!
-	// // TerminateConn is used by the connExecutor to abruptly terminate the client
-	// // connection in case of unexpected processing errors. The implementer should
-	// // attempt to deliver this error to the client and close the network
-	// // connection.
-	// TerminateConn(err error)
 }
 
 // CommandResult represents the result of a statement. It which needs to be

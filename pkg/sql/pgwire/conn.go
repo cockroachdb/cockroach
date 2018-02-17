@@ -51,7 +51,8 @@ import (
 // messages, transforms them into commands that it pushes onto a StmtBuf (where
 // they'll be picked up and executed by the connExecutor).
 // The connExecutor produces results for the commands, which are delivered to
-// the client through the sql.ClientComm interface, implemented by this conn.
+// the client through the sql.ClientComm interface, implemented by this conn
+// (code is in command_result.go).
 type conn struct {
 	conn net.Conn
 
@@ -634,8 +635,11 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 	var columnFormatCodes []pgwirebase.FormatCode
 	switch numColumnFormatCodes {
 	case 0:
+		// All columns will use the text format.
+		columnFormatCodes = make([]pgwirebase.FormatCode, 1)
+		columnFormatCodes[0] = pgwirebase.FormatText
 	case 1:
-		// Read one code and apply it to every column.
+		// All columns will use the one specficied format.
 		ch, err := buf.GetUint16()
 		if err != nil {
 			return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -983,12 +987,7 @@ func (c *conn) writeRowDescription(
 	return c.msgBuilder.finishMsg(w)
 }
 
-// !!! say that it's part of the interface
-//
-// flush writes the contents of the buffer to the network connection.
-//
-// Note that this method does nothing for updating the writer's state about what
-// results have and haven't been flushed. The caller is expected to do that.
+// Flush is part of the ClientComm interface.
 //
 // In case conn.err is set, this is a no-op - the previous err is returned.
 func (c *conn) Flush(pos sql.CmdPos) error {
