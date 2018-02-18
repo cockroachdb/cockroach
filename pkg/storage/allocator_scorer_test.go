@@ -87,6 +87,22 @@ func TestOnlyValidAndNotFull(t *testing.T) {
 	}
 }
 
+// TestSelectGoodPanic is a basic regression test against a former panic in
+// selectGood when called with just invalid/full stores.
+func TestSelectGoodPanic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cl := candidateList{
+		candidate{
+			valid: false,
+		},
+	}
+	allocRand := makeAllocatorRand(rand.NewSource(0))
+	if good := cl.selectGood(allocRand); good != nil {
+		t.Errorf("cl.selectGood() got %v, want nil", good)
+	}
+}
+
 // TestCandidateSelection tests select{good,bad} and {best,worst}constraints.
 func TestCandidateSelection(t *testing.T) {
 	defer leaktest.AfterTest(t)()

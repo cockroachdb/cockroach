@@ -374,10 +374,10 @@ func (cl candidateList) betterThan(c candidate) candidateList {
 // selectGood randomly chooses a good candidate store from a sorted (by score
 // reversed) candidate list using the provided random generator.
 func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
+	cl = cl.best()
 	if len(cl) == 0 {
 		return nil
 	}
-	cl = cl.best()
 	if len(cl) == 1 {
 		return &cl[0]
 	}
@@ -396,10 +396,10 @@ func (cl candidateList) selectGood(randGen allocatorRand) *candidate {
 // selectBad randomly chooses a bad candidate store from a sorted (by score
 // reversed) candidate list using the provided random generator.
 func (cl candidateList) selectBad(randGen allocatorRand) *candidate {
+	cl = cl.worst()
 	if len(cl) == 0 {
 		return nil
 	}
-	cl = cl.worst()
 	if len(cl) == 1 {
 		return &cl[0]
 	}
