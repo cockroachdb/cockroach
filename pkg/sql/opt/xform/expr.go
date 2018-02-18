@@ -106,6 +106,11 @@ func (ev ExprView) Logical() *LogicalProps {
 	return &ev.mem.lookupGroup(ev.loc.group).logical
 }
 
+// Group returns the memo group containing this expression.
+func (ev ExprView) Group() opt.GroupID {
+	return ev.loc.group
+}
+
 // ChildCount returns the number of expressions that are inputs to this
 // parent expression.
 func (ev ExprView) ChildCount() int {
