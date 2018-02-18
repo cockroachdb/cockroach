@@ -69,6 +69,7 @@ var (
 //     - semtree-normalize
 //
 //       Run TypedExpr normalization before building the memo.
+//
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -167,6 +168,7 @@ func TestIndexConstraints(t *testing.T) {
 					}
 					o := xform.NewOptimizer(catalog, steps)
 					b := optbuilder.NewScalar(ctx, o.Factory(), varNames, varTypes)
+					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)

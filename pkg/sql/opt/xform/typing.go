@@ -42,15 +42,16 @@ var typingFuncMap [opt.NumOperators]typingFunc
 
 func init() {
 	typingFuncMap = [opt.NumOperators]typingFunc{
-		opt.VariableOp:     typeVariable,
-		opt.ConstOp:        typeAsTypedExpr,
-		opt.PlaceholderOp:  typeAsTypedExpr,
-		opt.TupleOp:        typeAsTuple,
-		opt.ProjectionsOp:  typeAsAny,
-		opt.GroupingsOp:    typeAsAny,
-		opt.AggregationsOp: typeAsAny,
-		opt.ExistsOp:       typeAsBool,
-		opt.FunctionOp:     typeFunction,
+		opt.VariableOp:        typeVariable,
+		opt.ConstOp:           typeAsTypedExpr,
+		opt.PlaceholderOp:     typeAsTypedExpr,
+		opt.UnsupportedExprOp: typeAsTypedExpr,
+		opt.TupleOp:           typeAsTuple,
+		opt.ProjectionsOp:     typeAsAny,
+		opt.GroupingsOp:       typeAsAny,
+		opt.AggregationsOp:    typeAsAny,
+		opt.ExistsOp:          typeAsBool,
+		opt.FunctionOp:        typeFunction,
 	}
 
 	for _, op := range opt.BooleanOperators {

@@ -114,6 +114,12 @@ var unaryOpMap = [...]unaryFactoryFunc{
 // See factory.go and memo.go inside the opt/xform package for more details
 // about the memo structure.
 type Builder struct {
+	// AllowUnsupportedExpr is a control knob: if set, when building a scalar, the
+	// builder takes any TypedExpr node that it doesn't recognize and wraps that
+	// expression in an UnsupportedExpr node. This is temporary; it is used for
+	// interfacing with the old planning code.
+	AllowUnsupportedExpr bool
+
 	factory opt.Factory
 	stmt    tree.Statement
 	semaCtx tree.SemaContext
@@ -126,7 +132,12 @@ type Builder struct {
 // New creates a new Builder structure initialized with the given
 // Context, Factory, and parsed SQL statement.
 func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
-	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
+	b := &Builder{
+		factory: factory,
+		stmt:    stmt,
+		colMap:  make([]columnProps, 1),
+		ctx:     ctx,
+	}
 
 	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
 
@@ -401,7 +412,11 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		}
 
 	default:
-		panic(errorf("not yet implemented: scalar expr: %T", scalar))
+		if b.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+		} else {
+			panic(errorf("not yet implemented: scalar expr: %T", scalar))
+		}
 	}
 
 	// If we are in a grouping context and this expression corresponds to
@@ -1136,7 +1151,7 @@ func groupingError(colName string) error {
 // @2, etc). When we build a scalar, we have to provide information about these
 // columns.
 type ScalarBuilder struct {
-	bld   Builder
+	Builder
 	scope scope
 }
 
@@ -1147,15 +1162,15 @@ func NewScalar(
 	ctx context.Context, factory opt.Factory, columnNames []string, columnTypes []types.T,
 ) *ScalarBuilder {
 	sb := &ScalarBuilder{
-		bld: Builder{
+		Builder: Builder{
 			factory: factory,
 			colMap:  make([]columnProps, 1),
 			ctx:     ctx,
 		},
 	}
-	sb.scope.builder = &sb.bld
+	sb.scope.builder = &sb.Builder
 	for i := range columnNames {
-		sb.bld.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i])
+		sb.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i])
 	}
 	return sb
 }
@@ -1177,5 +1192,5 @@ func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root opt.GroupID, err error
 		}
 	}()
 
-	return sb.bld.buildScalar(expr, &sb.scope), nil
+	return sb.buildScalar(expr, &sb.scope), nil
 }
