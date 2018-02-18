@@ -161,5 +161,8 @@ GRANT DROP ON DATABASE privs TO testuser
 
 user testuser
 
+# Wait for gossip to propagate the new version of the table descriptor.
+sleep 250ms
+
 statement ok
 DROP DATABASE privs CASCADE
