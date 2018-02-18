@@ -187,8 +187,10 @@ var multiDCStores = []*roachpb.StoreDescriptor{
 var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	{
 		StoreID: 1,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 1,
+			Attrs:  roachpb.Attributes{Attrs: []string{"odd"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "a"},
@@ -198,8 +200,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 2,
+		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 2,
+			Attrs:  roachpb.Attributes{Attrs: []string{"even"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "a"},
@@ -209,8 +213,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 3,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 3,
+			Attrs:  roachpb.Attributes{Attrs: []string{"odd"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "b"},
@@ -220,8 +226,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 4,
+		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 4,
+			Attrs:  roachpb.Attributes{Attrs: []string{"even"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "b"},
@@ -231,8 +239,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 5,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 5,
+			Attrs:  roachpb.Attributes{Attrs: []string{"odd"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "c"},
@@ -242,8 +252,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 6,
+		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 6,
+			Attrs:  roachpb.Attributes{Attrs: []string{"even"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "c"},
@@ -253,8 +265,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 7,
+		Attrs:   roachpb.Attributes{Attrs: []string{"ssd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 7,
+			Attrs:  roachpb.Attributes{Attrs: []string{"odd"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "d"},
@@ -264,8 +278,10 @@ var multiDiversityDCStores = []*roachpb.StoreDescriptor{
 	},
 	{
 		StoreID: 8,
+		Attrs:   roachpb.Attributes{Attrs: []string{"hdd"}},
 		Node: roachpb.NodeDescriptor{
 			NodeID: 8,
+			Attrs:  roachpb.Attributes{Attrs: []string{"even"}},
 			Locality: roachpb.Locality{
 				Tiers: []roachpb.Tier{
 					{Key: "datacenter", Value: "d"},
@@ -1535,6 +1551,1240 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 		if !found {
 			t.Errorf("%d: expected RebalanceTarget(%v) in %v, but got %d; details: %s",
 				i, c.existing, c.expected, targetStore.StoreID, details)
+		}
+	}
+}
+
+var (
+	threeSpecificLocalities = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "c", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+	}
+
+	twoAndOneLocalities = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 2,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+	}
+
+	threeInOneLocality = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 3,
+		},
+	}
+
+	twoAndOneNodeAttrs = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 2,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Value: "hdd", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+	}
+
+	twoAndOneStoreAttrs = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Value: "odd", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 2,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Value: "even", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+	}
+
+	mixLocalityAndAttrs = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+				{Value: "ssd", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
+				{Value: "odd", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Value: "even", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+	}
+)
+
+func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+	sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+
+	// Given a set of existing replicas for a range, rank which of the remaining
+	// stores from multiDiversityDCStores would be the best addition to the range
+	// purely on the basis of constraint satisfaction and locality diversity.
+	testCases := []struct {
+		constraints []config.Constraints
+		existing    []roachpb.StoreID
+		expected    []roachpb.StoreID
+	}{
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{},
+			[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{7, 8},
+			[]roachpb.StoreID{1, 2, 3, 4, 5, 6},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{3, 4, 5, 6},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{3, 5},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{3, 4},
+			[]roachpb.StoreID{1, 2, 5, 6},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1, 3, 5},
+			[]roachpb.StoreID{2, 4, 6},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{},
+			[]roachpb.StoreID{1, 2, 3, 4},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{3, 4}, // 2 isn't included because its diversity is worse
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{4},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{5},
+			[]roachpb.StoreID{1, 2, 3, 4},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{3, 4, 5},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{2},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{},
+			[]roachpb.StoreID{1, 2, 3, 4, 5, 6, 7, 8},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{2},
+			[]roachpb.StoreID{3, 5, 7},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{3, 4, 5, 6, 7, 8},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{3, 5, 7},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{6, 8},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 3, 6},
+			[]roachpb.StoreID{7, 8},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{},
+			[]roachpb.StoreID{1, 2, 3, 4, 5, 6, 7, 8},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{2},
+			[]roachpb.StoreID{3, 5, 7},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{3, 4, 5, 6, 7, 8},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{3, 5, 7},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{6, 8},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 3, 6},
+			[]roachpb.StoreID{7, 8},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{},
+			[]roachpb.StoreID{1, 2, 3, 4, 6, 8},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{3, 4, 6, 8},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{2},
+			[]roachpb.StoreID{3},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{3},
+			[]roachpb.StoreID{1, 2, 6, 8},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{2, 3},
+			[]roachpb.StoreID{1},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{3},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{6, 8},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{6, 8},
+		},
+	}
+
+	for testIdx, tc := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
+		for i, storeID := range tc.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		rangeInfo := testRangeInfo(existingRepls, firstRange)
+		analyzed := analyzeConstraints(
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, tc.constraints)
+		candidates := allocateCandidates(
+			sl,
+			analyzed,
+			existingRepls,
+			rangeInfo,
+			a.storePool.getLocalities(existingRepls),
+			a.scorerOptions(false),
+		)
+		best := candidates.best()
+		match := true
+		if len(tc.expected) != len(best) {
+			match = false
+		} else {
+			sort.Slice(best, func(i, j int) bool {
+				return best[i].store.StoreID < best[j].store.StoreID
+			})
+			for i := range tc.expected {
+				if tc.expected[i] != best[i].store.StoreID {
+					match = false
+					break
+				}
+			}
+		}
+		if !match {
+			t.Errorf("%d: expected allocateCandidates(%v) = %v, but got %v",
+				testIdx, tc.existing, tc.expected, candidates)
+		}
+	}
+}
+
+func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+
+	// Given a set of existing replicas for a range, rank which of the remaining
+	// stores would be best to remove if we had to remove one purely on the basis
+	// of constraint-matching and locality diversity.
+	testCases := []struct {
+		constraints []config.Constraints
+		existing    []roachpb.StoreID
+		expected    []roachpb.StoreID
+	}{
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1},
+			[]roachpb.StoreID{1},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1, 2},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{1, 3},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1, 3, 5},
+			[]roachpb.StoreID{1, 3, 5},
+		},
+		{
+			threeSpecificLocalities,
+			[]roachpb.StoreID{1, 3, 7},
+			[]roachpb.StoreID{7},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{1, 3},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1, 3, 5},
+			[]roachpb.StoreID{5},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1, 3, 4},
+			[]roachpb.StoreID{3, 4},
+		},
+		{
+			twoAndOneLocalities,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{3},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{2, 3},
+			[]roachpb.StoreID{3},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{3},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{3, 5, 7},
+			[]roachpb.StoreID{3, 5, 7},
+		},
+		{
+			threeInOneLocality,
+			[]roachpb.StoreID{1, 2, 3, 5, 7},
+			[]roachpb.StoreID{3, 5, 7},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 3},
+			[]roachpb.StoreID{1, 3},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 3, 6},
+			[]roachpb.StoreID{1, 3, 6},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 4, 6},
+			[]roachpb.StoreID{4, 6},
+		},
+		{
+			twoAndOneNodeAttrs,
+			[]roachpb.StoreID{1, 2, 6},
+			[]roachpb.StoreID{2},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 3, 6},
+			[]roachpb.StoreID{1, 3, 6},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 4, 6},
+			[]roachpb.StoreID{4, 6},
+		},
+		{
+			twoAndOneStoreAttrs,
+			[]roachpb.StoreID{1, 2, 6},
+			[]roachpb.StoreID{2},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 3, 6},
+			[]roachpb.StoreID{1, 3, 6},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 2, 3},
+			[]roachpb.StoreID{1, 2},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{2, 3, 6},
+			[]roachpb.StoreID{2, 6},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{2, 3, 4},
+			[]roachpb.StoreID{4},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{5, 7},
+			[]roachpb.StoreID{5, 7},
+		},
+		{
+			// TODO(a-robinson): Should we prefer just 5 here for diversity reasons?
+			// We'd have to rework our handling of invalid stores in a handful of
+			// places, including in `candidateList.worst()`, to consider traits beyond
+			// just invalidity.
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{5, 6, 7},
+			[]roachpb.StoreID{5, 7},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 5, 7},
+			[]roachpb.StoreID{5, 7},
+		},
+		{
+			mixLocalityAndAttrs,
+			[]roachpb.StoreID{1, 6, 8},
+			[]roachpb.StoreID{6, 8},
+		},
+	}
+
+	for testIdx, tc := range testCases {
+		sl, _, _ := a.storePool.getStoreListFromIDs(tc.existing, roachpb.RangeID(0), storeFilterNone)
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
+		for i, storeID := range tc.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		rangeInfo := testRangeInfo(existingRepls, firstRange)
+		analyzed := analyzeConstraints(
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, tc.constraints)
+		candidates := removeCandidates(
+			sl,
+			analyzed,
+			rangeInfo,
+			a.storePool.getLocalities(existingRepls),
+			a.scorerOptions(false),
+		)
+		if !expectedStoreIDsMatch(tc.expected, candidates.worst()) {
+			t.Errorf("%d: expected removeCandidates(%v) = %v, but got %v",
+				testIdx, tc.existing, tc.expected, candidates)
+		}
+	}
+}
+
+func expectedStoreIDsMatch(expected []roachpb.StoreID, results candidateList) bool {
+	if len(expected) != len(results) {
+		return false
+	}
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].store.StoreID < results[j].store.StoreID
+	})
+	for i := range expected {
+		if expected[i] != results[i].store.StoreID {
+			return false
+		}
+	}
+	return true
+}
+
+func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(multiDiversityDCStores, t)
+	sl, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+
+	// Given a set of existing replicas for a range, rank which of the remaining
+	// stores would be best to remove if we had to remove one purely on the basis
+	// of constraint-matching and locality diversity.
+	type rebalanceStoreIDs struct {
+		existing   []roachpb.StoreID
+		candidates []roachpb.StoreID
+	}
+	testCases := []struct {
+		constraints  []config.Constraints
+		existing     []roachpb.StoreID
+		expected     []rebalanceStoreIDs
+		validTargets []roachpb.StoreID
+	}{
+		{
+			constraints:  threeSpecificLocalities,
+			existing:     []roachpb.StoreID{1},
+			expected:     []rebalanceStoreIDs{}, // a store must be an improvement to justify rebalancing
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints:  threeSpecificLocalities,
+			existing:     []roachpb.StoreID{1, 3},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints:  threeSpecificLocalities,
+			existing:     []roachpb.StoreID{1, 3, 5},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints: threeSpecificLocalities,
+			existing:    []roachpb.StoreID{1, 2},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4, 5, 6},
+		},
+		{
+			constraints: threeSpecificLocalities,
+			existing:    []roachpb.StoreID{1, 2, 3},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{5, 6},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{5, 6},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 6},
+		},
+		{
+			constraints: threeSpecificLocalities,
+			existing:    []roachpb.StoreID{1, 3, 7},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{5, 6},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 6},
+		},
+		{
+			constraints: threeSpecificLocalities,
+			existing:    []roachpb.StoreID{1, 2, 7},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4, 5, 6},
+		},
+		{
+			constraints: threeSpecificLocalities,
+			existing:    []roachpb.StoreID{1, 7, 8},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+				{
+					existing:   []roachpb.StoreID{8},
+					candidates: []roachpb.StoreID{3, 4, 5, 6},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4, 5, 6},
+		},
+		{
+			constraints:  twoAndOneLocalities,
+			existing:     []roachpb.StoreID{1, 2, 3},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints: twoAndOneLocalities,
+			existing:    []roachpb.StoreID{2, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{1},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{1},
+				},
+			},
+			validTargets: []roachpb.StoreID{1},
+		},
+		{
+			constraints: twoAndOneLocalities,
+			existing:    []roachpb.StoreID{1, 2, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4},
+		},
+		{
+			constraints: twoAndOneLocalities,
+			existing:    []roachpb.StoreID{1, 3, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{2},
+				},
+			},
+			validTargets: []roachpb.StoreID{2},
+		},
+		{
+			constraints: twoAndOneLocalities,
+			existing:    []roachpb.StoreID{1, 5, 6},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4},
+		},
+		{
+			constraints: twoAndOneLocalities,
+			existing:    []roachpb.StoreID{3, 5, 6},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 2},
+		},
+		{
+			constraints: twoAndOneLocalities,
+			existing:    []roachpb.StoreID{1, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{2},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{2},
+				},
+			},
+			validTargets: []roachpb.StoreID{2},
+		},
+		{
+			constraints:  threeInOneLocality,
+			existing:     []roachpb.StoreID{1, 2, 3},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints: threeInOneLocality,
+			existing:    []roachpb.StoreID{1, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{2},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{2},
+				},
+			},
+			validTargets: []roachpb.StoreID{2},
+		},
+		{
+			constraints: threeInOneLocality,
+			existing:    []roachpb.StoreID{3, 4, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 2},
+		},
+		{
+			constraints:  twoAndOneNodeAttrs,
+			existing:     []roachpb.StoreID{1, 4, 5},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints:  twoAndOneNodeAttrs,
+			existing:     []roachpb.StoreID{3, 6, 7},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints: twoAndOneNodeAttrs,
+			existing:    []roachpb.StoreID{1, 2, 3},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			constraints: twoAndOneNodeAttrs,
+			existing:    []roachpb.StoreID{2, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1, 5, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 7},
+		},
+		{
+			constraints: twoAndOneNodeAttrs,
+			existing:    []roachpb.StoreID{2, 4, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{3, 7},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 3, 7},
+		},
+		{
+			constraints: twoAndOneNodeAttrs,
+			existing:    []roachpb.StoreID{1, 3, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{2, 8},
+				},
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{4, 8},
+				},
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{2, 4, 6, 8},
+		},
+		{
+			constraints: twoAndOneNodeAttrs,
+			existing:    []roachpb.StoreID{2, 4, 6},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{3, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 3, 5, 7},
+		},
+		{
+			constraints:  twoAndOneStoreAttrs,
+			existing:     []roachpb.StoreID{1, 4, 5},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints:  twoAndOneStoreAttrs,
+			existing:     []roachpb.StoreID{3, 6, 7},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints: twoAndOneStoreAttrs,
+			existing:    []roachpb.StoreID{1, 2, 3},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			constraints: twoAndOneStoreAttrs,
+			existing:    []roachpb.StoreID{2, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1, 5, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 7},
+		},
+		{
+			constraints: twoAndOneStoreAttrs,
+			existing:    []roachpb.StoreID{2, 4, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{3, 7},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 3, 7},
+		},
+		{
+			constraints: twoAndOneStoreAttrs,
+			existing:    []roachpb.StoreID{1, 3, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{2, 8},
+				},
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{4, 8},
+				},
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{2, 4, 6, 8},
+		},
+		{
+			constraints: twoAndOneStoreAttrs,
+			existing:    []roachpb.StoreID{2, 4, 6},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{3, 7},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{5, 7},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 3, 5, 7},
+		},
+		{
+			constraints:  mixLocalityAndAttrs,
+			existing:     []roachpb.StoreID{1, 3, 6},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints:  mixLocalityAndAttrs,
+			existing:     []roachpb.StoreID{1, 3, 8},
+			expected:     []rebalanceStoreIDs{},
+			validTargets: []roachpb.StoreID{},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 5, 8},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3},
+				},
+			},
+			validTargets: []roachpb.StoreID{3},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 5, 6},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{3, 4, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{3},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 3, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{6, 8},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 2, 3},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{6, 8},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{6, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{6, 8},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{2, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{1},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{1},
+				},
+			},
+			validTargets: []roachpb.StoreID{1},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{5, 6, 7},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{1, 3},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{1, 2, 3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{1, 3},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 3},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{6, 7, 8},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{1, 3},
+				},
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{1, 3},
+				},
+				{
+					existing:   []roachpb.StoreID{8},
+					candidates: []roachpb.StoreID{1, 3},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 3},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 6, 8},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{3},
+				},
+				{
+					existing:   []roachpb.StoreID{8},
+					candidates: []roachpb.StoreID{3},
+				},
+			},
+			validTargets: []roachpb.StoreID{3},
+		},
+		{
+			constraints: mixLocalityAndAttrs,
+			existing:    []roachpb.StoreID{1, 5, 7},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3, 4, 6},
+				},
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{3, 4, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4, 6, 8},
+		},
+	}
+
+	for testIdx, tc := range testCases {
+		existingRepls := make([]roachpb.ReplicaDescriptor, len(tc.existing))
+		for i, storeID := range tc.existing {
+			existingRepls[i] = roachpb.ReplicaDescriptor{
+				NodeID:  roachpb.NodeID(storeID),
+				StoreID: storeID,
+			}
+		}
+		rangeInfo := testRangeInfo(existingRepls, firstRange)
+		analyzed := analyzeConstraints(
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, tc.constraints)
+		results := rebalanceCandidates(
+			context.Background(),
+			sl,
+			analyzed,
+			rangeInfo,
+			a.storePool.getLocalities(existingRepls),
+			a.storePool.getNodeLocalityString,
+			a.scorerOptions(false),
+		)
+		match := true
+		if len(tc.expected) != len(results) {
+			match = false
+		} else {
+			sort.Slice(results, func(i, j int) bool {
+				return results[i].existingCandidates[0].store.StoreID < results[j].existingCandidates[0].store.StoreID
+			})
+			for i := range tc.expected {
+				if !expectedStoreIDsMatch(tc.expected[i].existing, results[i].existingCandidates) ||
+					!expectedStoreIDsMatch(tc.expected[i].candidates, results[i].candidates) {
+					match = false
+					break
+				}
+			}
+		}
+		if !match {
+			t.Errorf("%d: expected rebalanceCandidates(%v) = %v, but got %v",
+				testIdx, tc.existing, tc.expected, results)
+		} else {
+			// Also verify that RebalanceTarget picks out one of the best options as
+			// the final rebalance choice.
+			target, details := a.RebalanceTarget(
+				context.Background(),
+				tc.constraints,
+				nil,
+				rangeInfo,
+				storeFilterThrottled,
+				false)
+			var found bool
+			if target == nil && len(tc.validTargets) == 0 {
+				found = true
+			}
+			for _, storeID := range tc.validTargets {
+				if storeID == target.StoreID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("%d: expected RebalanceTarget(%v) to be in %v, but got %v; details: %s",
+					testIdx, tc.existing, tc.validTargets, target, details)
+			}
 		}
 	}
 }
