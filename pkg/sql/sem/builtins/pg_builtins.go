@@ -16,6 +16,7 @@ package builtins
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/lib/pq/oid"
 
@@ -449,6 +450,25 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 				return tree.MakeDBool(tree.DBool(t != nil)), nil
 			},
 			Info: notUsableInfo,
+		},
+	},
+	"pg_sleep": {
+		tree.Builtin{
+			Types:      tree.ArgTypes{{"seconds", types.Float}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				durationNanos := int64(float64(*args[0].(*tree.DFloat)) * float64(1000000000))
+				dur := time.Duration(durationNanos)
+				select {
+				case <-ctx.Ctx().Done():
+					return nil, ctx.Ctx().Err()
+				case <-time.After(dur):
+					return tree.DBoolTrue, nil
+				}
+			},
+			Info: "pg_sleep makes the current session's process sleep until " +
+				"seconds seconds have elapsed. seconds is a value of type " +
+				"double precision, so fractional-second delays can be specified.",
 		},
 	},
 
