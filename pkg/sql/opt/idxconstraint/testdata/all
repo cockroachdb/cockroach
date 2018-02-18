@@ -1226,11 +1226,10 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 # Remaining filter: (@2 = 2) OR (@2 = 3)
 
 
-# TODO(radu): unsupported CASE
-#index-constraints vars=(int, int, int) index=(@1, @2, @3)
-#@1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
-#----
-#(/1/NULL - /1]
+index-constraints vars=(int, int, int) index=(@1, @2, @3)
+@1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
+----
+(/1/NULL - /1]
 
 # Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
 
