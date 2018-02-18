@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
@@ -51,4 +52,14 @@ func (b *Builder) build(ev xform.ExprView) (exec.Node, error) {
 	}
 	// TODO(radu): plan.outputCols will be used to apply a final projection.
 	return plan.root, err
+}
+
+// BuildScalar converts a scalar expression to a TypedExpr. Variables are mapped
+// according to the IndexedVarHelper.
+func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) tree.TypedExpr {
+	ctx := buildScalarCtx{ivh: *ivh}
+	for i := 0; i < ivh.NumVars(); i++ {
+		ctx.ivarMap.Set(i+1, i)
+	}
+	return b.buildScalar(&ctx, b.ev)
 }

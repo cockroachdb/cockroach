@@ -232,7 +232,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 
 // makeSpansForTupleInequality creates spans for index columns starting at
 // <offset> from a tuple inequality.
-// Assumes that e.Operator() is an inequality and both sides are tuples.
+// Assumes that ev.Operator() is an inequality and both sides are tuples.
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleInequality(
@@ -476,7 +476,7 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 	// Sort and de-duplicate the values.
 	// We don't rely on the sorted order of the right-hand side tuple because it's
 	// only useful if all of the following are met:
-	//  - we use all columns in the tuple, i.e. len(tuplePos) = len(lhs.children).
+	//  - we use all columns in the tuple, i.e. len(tuplePos) = lhs.ChildCount().
 	//  - the columns are in the right order, i.e. tuplePos[i] = i.
 	//  - the columns have the same directions
 	c.sortSpans(offset, spans)
@@ -488,7 +488,7 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 		res = append(res, spans[i])
 	}
 	// The spans are "tight" unless we used just a prefix.
-	tight = len(tuplePos) == rhs.ChildCount()
+	tight = len(tuplePos) == lhs.ChildCount()
 	return res, true, tight
 }
 
@@ -905,25 +905,6 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 	return nil, false, false
 }
 
-//var constTrueExpr = &Expr{
-//	op:          opt.ConstOp,
-//	scalarProps: &scalarProps{typ: types.Bool},
-//	private:     tree.DBoolTrue,
-//}
-//
-//var constFalseExpr = &Expr{
-//	op:          opt.ConstOp,
-//	scalarProps: &scalarProps{typ: types.Bool},
-//	private:     tree.DBoolFalse,
-//}
-//
-//func constBoolExpr(val bool) *Expr {
-//	if val {
-//		return constTrueExpr
-//	}
-//	return constFalseExpr
-//}
-
 // getMaxSimplifyPrefix finds the longest prefix (maxSimplifyPrefix) such that
 // every span has the same first maxSimplifyPrefix values for the start and end
 // key. For example, for:
@@ -973,134 +954,114 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(spans LogicalSpans) int {
 	return maxOffset
 }
 
-//// simplifyFilterImpl is the internal (recursive) implementation of simplifyFilter.
-//// <maxSimplifyPrefix> must be the result of getMaxSimplifyPrefix(spans); see that
-//// function for more information.
-//// Can return true (as a opt.ConstOp).
-////
-//// We use an approach based on spans: we have the generated spans for the entire
-//// filter; for each sub-expression, we use existing code to generate spans for
-//// that sub-expression and see if we can prove that the sub-expression is always
-//// true when the space is restricted to the spans for the entire filter.
-////
-//// The following conditions are (together) sufficient for a sub-expression to be
-//// true:
-////
-////  - the spans generated for this sub-expression are equivalent to the
-////    expression; we call such spans "tight". For example the condition
-////    `@1 >= 1` results in span `[/1 - ]` which is tight: inside this span, the
-////    condition is always true. On the other hand, if we have an index on
-////    @1,@2,@3 and condition `(@1, @3) >= (1, 3)`, the generated span is
-////    `[/1 - ]` which is not tight: we still need to verify the condition on @3
-////    inside this span.
-////
-////  - the spans for the entire filter are completely contained in the (tight)
-////    spans for this sub-expression. In this case, there can be no rows that are
-////    inside the filter span but outside the expression span.
-////
-////    For example: `@1 = 1 AND @2 = 2` with span `[/1/2 - /1/2]`. When looking
-////    at sub-expression `@1 = 1` and its span `[/1 - /1]`, we see that it
-////    contains the filter span `[/1/2 - /1/2]` and thus the condition is always
-////    true inside `[/1/2 - /1/2`].  For `@2 = 2` we have the span `[/2 - /2]`
-////    but this span refers to the second index column (so it's actually
-////    equivalent to a collection of spans `[/?/2 - /?/2]`); the only way we can
-////    compare it against the filter span is if the latter restricts the previous
-////    column to a single value (which it does in this case; this is determined
-////    by getMaxSimplifyPrefix). So `[/1/2 - /1/2]` is contained in the
-////    expression span and we can simplify `@2 = 2` to `true`.
-////
-////    An example where this doesn't work well is with disjunctions:
-////    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
-////    sub-expression is always true inside these spans.
-//func (c *indexConstraintCtx) simplifyFilterImpl(
-//	ev xform.ExprView, spans LogicalSpans, maxSimplifyPrefix int,
-//) *Expr {
-//	// Special handling for AND and OR.
-//	if e.Operator() == opt.OrOp || e.Operator() == opt.AndOp {
-//		// If a child expression is simplified to a const bool of
-//		// shortcircuitValue, then the entire node has the same value;
-//		// false for AND and true for OR.
-//		var shortcircuitValue = (e.Operator() == opt.OrOp)
+// simplifyFilter is the internal (recursive) implementation of simplifyFilter.
+// <maxSimplifyPrefix> must be the result of getMaxSimplifyPrefix(spans); see that
+// function for more information.
+// Can return true (as a opt.ConstOp).
 //
-//		var children []*Expr
-//		for i, child := range e.children {
-//			simplified := c.simplifyFilterImpl(child, spans, maxSimplifyPrefix)
-//			if ok, val := isConstBool(simplified); ok {
-//				if val == shortcircuitValue {
-//					return constBoolExpr(shortcircuitValue)
-//				}
-//				// We can ignore this child (it is true for AND, false for OR).
-//			} else {
-//				if children == nil {
-//					children = make([]*Expr, 0, len(e.children)-i)
-//				}
-//				children = append(children, simplified)
-//			}
-//		}
-//		switch len(children) {
-//		case 0:
-//			// All children simplify to nothing.
-//			return constBoolExpr(!shortcircuitValue)
-//		case 1:
-//			return children[0]
-//		default:
-//			scalarPropsCopy := *e.scalarProps
-//			return &Expr{
-//				op:          e.Operator(),
-//				scalarProps: &scalarPropsCopy,
-//				private:     e.private,
-//				children:    children,
-//			}
-//		}
-//	}
+// We use an approach based on spans: we have the generated spans for the entire
+// filter; for each sub-expression, we use existing code to generate spans for
+// that sub-expression and see if we can prove that the sub-expression is always
+// true when the space is restricted to the spans for the entire filter.
 //
-//	// We try to create tight spans for the expression (as allowed by
-//	// maxSimplifyPrefix), and check if the condition is implied by the final
-//	// spans.
-//	for offset := 0; offset <= maxSimplifyPrefix; offset++ {
-//		if offset > 0 {
-//			if offset == 1 {
-//				// Copy the spans, we are about to modify them.
-//				spans = append(LogicalSpans(nil), spans...)
-//			}
-//			// Chop away the first value in all spans to end up with spans
-//			// for this offset.
-//			for i := range spans {
-//				spans[i].Start.Vals = spans[i].Start.Vals[1:]
-//				spans[i].End.Vals = spans[i].End.Vals[1:]
-//			}
-//		}
-//		var exprSpans LogicalSpans
-//		var ok, tight bool
-//		if c.isInverted {
-//			if offset == 0 {
-//				exprSpans, ok, tight = c.makeInvertedIndexSpansForExpr(e)
-//			}
-//		} else {
-//			exprSpans, ok, tight = c.makeSpansForExpr(offset, e)
-//		}
-//		if ok && tight {
-//			if c.isSpanSubset(offset, spans, exprSpans) {
-//				// The final spans are a subset of the spans for this expression; there
-//				// is no need for a remaining filter for this condition.
-//				return constTrueExpr
-//			}
-//		}
-//	}
+// The following conditions are (together) sufficient for a sub-expression to be
+// true:
 //
-//	return e.deepCopy()
-//}
+//  - the spans generated for this sub-expression are equivalent to the
+//    expression; we call such spans "tight". For example the condition
+//    `@1 >= 1` results in span `[/1 - ]` which is tight: inside this span, the
+//    condition is always true. On the other hand, if we have an index on
+//    @1,@2,@3 and condition `(@1, @3) >= (1, 3)`, the generated span is
+//    `[/1 - ]` which is not tight: we still need to verify the condition on @3
+//    inside this span.
 //
-//// simplifyFilter removes parts of the filter that are satisfied by the spans. It
-//// is best-effort. Returns nil if there is no remaining filter.
-//func (c *indexConstraintCtx) simplifyFilter(filter *Expr, spans LogicalSpans) *Expr {
-//	remainingFilter := c.simplifyFilterImpl(filter, spans, c.getMaxSimplifyPrefix(spans))
-//	if ok, val := isConstBool(remainingFilter); ok && val {
-//		return nil
-//	}
-//	return remainingFilter
-//}
-var _ = (*indexConstraintCtx).getMaxSimplifyPrefix
+//  - the spans for the entire filter are completely contained in the (tight)
+//    spans for this sub-expression. In this case, there can be no rows that are
+//    inside the filter span but outside the expression span.
+//
+//    For example: `@1 = 1 AND @2 = 2` with span `[/1/2 - /1/2]`. When looking
+//    at sub-expression `@1 = 1` and its span `[/1 - /1]`, we see that it
+//    contains the filter span `[/1/2 - /1/2]` and thus the condition is always
+//    true inside `[/1/2 - /1/2`].  For `@2 = 2` we have the span `[/2 - /2]`
+//    but this span refers to the second index column (so it's actually
+//    equivalent to a collection of spans `[/?/2 - /?/2]`); the only way we can
+//    compare it against the filter span is if the latter restricts the previous
+//    column to a single value (which it does in this case; this is determined
+//    by getMaxSimplifyPrefix). So `[/1/2 - /1/2]` is contained in the
+//    expression span and we can simplify `@2 = 2` to `true`.
+//
+//    An example where this doesn't work well is with disjunctions:
+//    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
+//    sub-expression is always true inside these spans.
+func (c *indexConstraintCtx) simplifyFilter(
+	ev xform.ExprView, spans LogicalSpans, maxSimplifyPrefix int,
+) opt.GroupID {
+	// Special handling for AND and OR.
+	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp {
+		newChildren := make([]opt.GroupID, ev.ChildCount())
+		for i := range newChildren {
+			newChildren[i] = c.simplifyFilter(ev.Child(i), spans, maxSimplifyPrefix)
+		}
+
+		// Check if we actually simplified anything.
+		sameAsOriginal := true
+		for i, g := range newChildren {
+			if g != ev.ChildGroup(i) {
+				sameAsOriginal = false
+				break
+			}
+		}
+		if sameAsOriginal {
+			return ev.Group()
+		}
+
+		// Note: if nothing changed, the factory will detect that it's the same
+		// expression and not create a new group. We also rely on rules to simplify
+		// the node (e.g. if children have been simplified to True).
+		switch ev.Operator() {
+		case opt.AndOp:
+			return c.factory.ConstructAnd(c.factory.InternList(newChildren))
+		case opt.OrOp:
+			return c.factory.ConstructOr(c.factory.InternList(newChildren))
+		}
+	}
+
+	// We try to create tight spans for the expression (as allowed by
+	// maxSimplifyPrefix), and check if the condition is implied by the final
+	// spans.
+	for offset := 0; offset <= maxSimplifyPrefix; offset++ {
+		if offset > 0 {
+			if offset == 1 {
+				// Copy the spans, we are about to modify them.
+				spans = append(LogicalSpans(nil), spans...)
+			}
+			// Chop away the first value in all spans to end up with spans
+			// for this offset.
+			for i := range spans {
+				spans[i].Start.Vals = spans[i].Start.Vals[1:]
+				spans[i].End.Vals = spans[i].End.Vals[1:]
+			}
+		}
+		var exprSpans LogicalSpans
+		var ok, tight bool
+		if c.isInverted {
+			if offset == 0 {
+				exprSpans, ok, tight = c.makeInvertedIndexSpansForExpr(ev)
+			}
+		} else {
+			exprSpans, ok, tight = c.makeSpansForExpr(offset, ev)
+		}
+		if ok && tight {
+			if c.isSpanSubset(offset, spans, exprSpans) {
+				// The final spans are a subset of the spans for this expression; there
+				// is no need for a remaining filter for this condition.
+				return c.factory.ConstructTrue()
+			}
+		}
+	}
+
+	return ev.Group()
+}
 
 // IndexConstraints is used to generate index constraints from a scalar boolean
 // filter expression.
@@ -1111,7 +1072,8 @@ var _ = (*indexConstraintCtx).getMaxSimplifyPrefix
 //     ..
 //   }
 //   spans, ok := ic.Spans()
-//   remainingFilter := ic.RemainingFilter(&iVarHelper)
+//   remFilterGroup := ic.RemainingFilter(&iVarHelper)
+//	 remFilter := o.Optimize(remFilterGroup, &opt.PhysicalProps{})
 type IndexConstraints struct {
 	indexConstraintCtx
 
@@ -1124,11 +1086,15 @@ type IndexConstraints struct {
 
 // Init processes the filter and calculates the spans.
 func (ic *IndexConstraints) Init(
-	filter xform.ExprView, colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext,
+	filter xform.ExprView,
+	colInfos []IndexColumnInfo,
+	isInverted bool,
+	evalCtx *tree.EvalContext,
+	factory opt.Factory,
 ) {
 	*ic = IndexConstraints{
 		filter:             filter,
-		indexConstraintCtx: makeIndexConstraintCtx(colInfos, isInverted, evalCtx),
+		indexConstraintCtx: makeIndexConstraintCtx(colInfos, isInverted, evalCtx, factory),
 	}
 	if isInverted {
 		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeInvertedIndexSpansForExpr(ic.filter)
@@ -1146,30 +1112,20 @@ func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
 	return ic.spans, true
 }
 
-//// RemainingFilter calculates a simplified filter that needs to be applied
-//// within the returned Spans.
-//func (ic *IndexConstraints) RemainingFilter(ivh *tree.IndexedVarHelper) tree.TypedExpr {
-//	var res *Expr
-//	if !ic.spansPopulated {
-//		if ok, val := isConstBool(ic.filter); ok && val {
-//			return nil
-//		}
-//		res = ic.filter
-//	} else {
-//		if ic.spansTight || len(ic.spans) == 0 {
-//			// The spans are "tight", or we have a contradiction; there is no remaining filter.
-//			return nil
-//		}
-//		res = ic.simplifyFilter(ic.filter, ic.spans)
-//	}
-//	if res == nil {
-//		return nil
-//	}
-//	c := typedExprConvCtx{ivh: ivh}
-//	return scalarToTypedExpr(&c, res)
-//}
+// RemainingFilter calculates a simplified filter that needs to be applied
+// within the returned Spans.
+func (ic *IndexConstraints) RemainingFilter() opt.GroupID {
+	if !ic.spansPopulated {
+		return ic.filter.Group()
+	}
+	if ic.spansTight || len(ic.spans) == 0 {
+		// The spans are "tight", or we have a contradiction; there is no remaining filter.
+		return ic.factory.ConstructTrue()
+	}
+	return ic.simplifyFilter(ic.filter, ic.spans, ic.getMaxSimplifyPrefix(ic.spans))
+}
 
-// isIndexColumn returns true if e is an indexed var that corresponds
+// isIndexColumn returns true if ev is an indexed var that corresponds
 // to index column <offset>.
 func (c *indexConstraintCtx) isIndexColumn(ev xform.ExprView, index int) bool {
 	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnIndex) == c.colInfos[index].VarIdx
