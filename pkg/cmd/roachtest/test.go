@@ -94,8 +94,14 @@ func (r *registry) Run(filter []string) int {
 	wg := &sync.WaitGroup{}
 	wg.Add(len(tests))
 
-	// We can't run local tests in parallel as there is only 1 "local" cluster.
-	if local {
+	// If we're running against an existing "local" cluster, force the local flag
+	// to true in order to get the "local" test configurations.
+	if clusterName == "local" {
+		local = true
+	}
+	// We can't run tests in parallel on local clusters or on an existing
+	// cluster.
+	if local || clusterName != "" {
 		parallelism = 1
 	}
 	// Limit the parallelism to the number of tests. The primary effect this has

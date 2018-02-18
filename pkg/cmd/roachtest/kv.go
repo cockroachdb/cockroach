@@ -24,17 +24,17 @@ import (
 func init() {
 	runKV := func(t *test, percent, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1)
+		c := newCluster(ctx, t, nodes+1, "--local-ssd")
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency=384")
+			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
 				"./workload run kv --init --read-percent=%d --splits=1000"+
@@ -62,17 +62,17 @@ func init() {
 func init() {
 	runSplits := func(t *test, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1)
+		c := newCluster(ctx, t, nodes+1, "--local-ssd")
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency=384")
+			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			splits := " --splits=" + ifLocal("2000", "500000")
 			cmd := fmt.Sprintf(
 				"./workload run kv --init --max-ops=1"+
@@ -96,7 +96,7 @@ func init() {
 		c := newCluster(ctx, t, nodes+1, "--local-ssd", "--machine-type", "n1-highcpu-8")
 		defer c.Destroy(ctx)
 
-		if !local {
+		if !c.isLocal() {
 			var wg sync.WaitGroup
 			wg.Add(nodes)
 			for i := 1; i <= 6; i++ {
@@ -111,8 +111,8 @@ func init() {
 			wg.Wait()
 		}
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
@@ -126,7 +126,14 @@ func init() {
 					"--splits=1000 --duration=1m "+fmt.Sprintf("--concurrency=%d", i)+
 					" {pgurl:1-%d}",
 					percent, nodes)
-				c.Run(ctx, nodes+1, cmd)
+
+				l, err := c.l.childLogger(fmt.Sprint(i))
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer l.close()
+
+				c.RunL(ctx, l, nodes+1, cmd)
 				return nil
 			})
 			m.Wait()
