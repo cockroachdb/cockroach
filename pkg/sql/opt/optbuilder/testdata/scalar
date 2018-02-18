@@ -231,3 +231,8 @@ build-scalar
 FALSE
 ----
 false [type=bool]
+
+build-scalar vars=(int) allow-unsupported
+CASE WHEN @1 > 5 THEN 1 ELSE -1 END
+----
+unsupported-expr: CASE WHEN @1 > 5 THEN 1 ELSE -1 END [type=int]
