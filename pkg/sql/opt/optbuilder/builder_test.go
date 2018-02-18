@@ -18,7 +18,7 @@ package optbuilder
 // is used for optimizer builder-specific testcases.
 //
 // Each testfile contains testcases of the form
-//   <command>
+//   <command> [<args>]...
 //   <SQL statement or expression>
 //   ----
 //   <expected results>
@@ -40,6 +40,15 @@ package optbuilder
 //    Parses a CREATE TABLE statement, creates a test table, and adds the
 //    table to the catalog.
 //
+// The supported args are:
+//
+//  - vars=(type1,type2,...)
+//
+//    Information about IndexedVar columns.
+//
+//  - allow-unsupported
+//
+//    Allows building unsupported scalar expressions into UnsupportedExprOp.
 
 import (
 	"context"
@@ -84,6 +93,7 @@ func TestBuilder(t *testing.T) {
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
+				var flags Flags
 
 				for _, arg := range d.CmdArgs {
 					key := arg
@@ -105,6 +115,9 @@ func TestBuilder(t *testing.T) {
 
 						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
 
+					case "allow-unsupported":
+						flags.AllowUnsupportedExpr = true
+
 					default:
 						d.Fatalf(t, "unknown argument: %s", key)
 					}
@@ -118,7 +131,7 @@ func TestBuilder(t *testing.T) {
 					}
 
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := New(ctx, o.Factory(), stmt)
+					b := New(ctx, o.Factory(), stmt, flags)
 					root, props, err := b.Build()
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
@@ -137,7 +150,7 @@ func TestBuilder(t *testing.T) {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := NewScalar(ctx, o.Factory(), varNames, varTypes)
+					b := NewScalar(ctx, o.Factory(), varNames, varTypes, flags)
 					group, err := b.Build(typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)

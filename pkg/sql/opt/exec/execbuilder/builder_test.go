@@ -77,7 +77,8 @@ func TestBuild(t *testing.T) {
 
 					// Build and optimize the opt expression tree.
 					o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
-					root, props, err := optbuilder.New(ctx, o.Factory(), stmt).Build()
+					flags := optbuilder.Flags{AllowUnsupportedExpr: true}
+					root, props, err := optbuilder.New(ctx, o.Factory(), stmt, flags).Build()
 					if err != nil {
 						d.Fatalf(t, "BuildOpt: %v", err)
 					}

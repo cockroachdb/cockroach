@@ -153,6 +153,10 @@ const (
 	// of the function as well as a pointer to the builtin overload definition.
 	FunctionOp
 
+	// UnsupportedExprOp is used for interfacing with the old planner code. It can
+	// encapsulate a TypedExpr that is otherwise not supported by the optimizer.
+	UnsupportedExprOp
+
 	// ------------------------------------------------------------
 	// Relational Operators
 	// ------------------------------------------------------------
@@ -246,9 +250,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsgroupingsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsgroupingsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 85, 91, 94, 96, 99, 101, 103, 105, 107, 109, 111, 113, 119, 123, 131, 137, 147, 157, 171, 180, 193, 204, 219, 221, 227, 235, 241, 246, 252, 256, 261, 265, 268, 277, 280, 283, 289, 296, 303, 312, 322, 336, 351, 361, 372, 388, 396, 400, 406, 412, 419, 429, 438, 448, 457, 466, 475, 491, 506, 522, 537, 552, 567, 575, 580, 589, 595, 599, 606}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 85, 91, 94, 96, 99, 101, 103, 105, 107, 109, 111, 113, 119, 123, 131, 137, 147, 157, 171, 180, 193, 204, 219, 221, 227, 235, 241, 246, 252, 256, 261, 265, 268, 277, 280, 283, 289, 296, 303, 312, 322, 336, 351, 361, 372, 388, 396, 412, 416, 422, 428, 435, 445, 454, 464, 473, 482, 491, 507, 522, 538, 553, 568, 583, 591, 596, 605, 611, 615, 622}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -307,6 +311,7 @@ var ScalarOperators = [...]Operator{
 	UnaryMinusOp,
 	UnaryComplementOp,
 	FunctionOp,
+	UnsupportedExprOp,
 }
 
 var ConstValueOperators = [...]Operator{

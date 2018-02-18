@@ -118,15 +118,32 @@ type Builder struct {
 	stmt    tree.Statement
 	semaCtx tree.SemaContext
 	ctx     context.Context
+	flags   Flags
 
 	// Skip index 0 in order to reserve it to indicate the "unknown" column.
 	colMap []columnProps
 }
 
+// Flags are knobs for the builder. The zero value is the default setting
+// for the flags.
+type Flags struct {
+	// AllowUnsupportedExpr: if set, the scalar builder takes any TypedExpr node
+	// that it doesn't recognize and wraps that expression in an UnsupportedExpr
+	// node. This is temporary; it is used for interfacing with the old planning
+	// code.
+	AllowUnsupportedExpr bool
+}
+
 // New creates a new Builder structure initialized with the given
 // Context, Factory, and parsed SQL statement.
-func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
-	b := &Builder{factory: factory, stmt: stmt, colMap: make([]columnProps, 1), ctx: ctx}
+func New(ctx context.Context, factory opt.Factory, stmt tree.Statement, flags Flags) *Builder {
+	b := &Builder{
+		factory: factory,
+		stmt:    stmt,
+		colMap:  make([]columnProps, 1),
+		ctx:     ctx,
+		flags:   flags,
+	}
 
 	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
 
@@ -401,7 +418,11 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		}
 
 	default:
-		panic(errorf("not yet implemented: scalar expr: %T", scalar))
+		if b.flags.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+		} else {
+			panic(errorf("not yet implemented: scalar expr: %T", scalar))
+		}
 	}
 
 	// If we are in a grouping context and this expression corresponds to
@@ -1144,13 +1165,18 @@ type ScalarBuilder struct {
 // from scalar expressions via IndexedVars.
 // columnNames and columnTypes must have the same length.
 func NewScalar(
-	ctx context.Context, factory opt.Factory, columnNames []string, columnTypes []types.T,
+	ctx context.Context,
+	factory opt.Factory,
+	columnNames []string,
+	columnTypes []types.T,
+	flags Flags,
 ) *ScalarBuilder {
 	sb := &ScalarBuilder{
 		bld: Builder{
 			factory: factory,
 			colMap:  make([]columnProps, 1),
 			ctx:     ctx,
+			flags:   flags,
 		},
 	}
 	sb.scope.builder = &sb.bld

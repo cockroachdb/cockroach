@@ -227,6 +227,11 @@ type Factory interface {
 	// of the function as well as a pointer to the builtin overload definition.
 	ConstructFunction(args ListID, def PrivateID) GroupID
 
+	// ConstructUnsupportedExpr constructs an expression for the UnsupportedExpr operator.
+	// UnsupportedExpr is used for interfacing with the old planner code. It can
+	// encapsulate a TypedExpr that is otherwise not supported by the optimizer.
+	ConstructUnsupportedExpr(value PrivateID) GroupID
+
 	// ------------------------------------------------------------
 	// Relational Operators
 	// ------------------------------------------------------------
