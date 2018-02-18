@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
@@ -176,7 +177,7 @@ func TestIndexConstraints(t *testing.T) {
 					ev := o.Optimize(group, &opt.PhysicalProps{})
 
 					var ic IndexConstraints
-					ic.Init(ev, colInfos, invertedIndex, &evalCtx)
+					ic.Init(ev, colInfos, invertedIndex, &evalCtx, o.Factory())
 					spans, ok := ic.Spans()
 
 					var buf bytes.Buffer
@@ -186,10 +187,13 @@ func TestIndexConstraints(t *testing.T) {
 					for _, sp := range spans {
 						fmt.Fprintf(&buf, "%s\n", sp)
 					}
-					//remainingFilter := ic.RemainingFilter(&iVarHelper)
-					//if remainingFilter != nil {
-					//	fmt.Fprintf(&buf, "Remaining filter: %s\n", remainingFilter)
-					//}
+					remainingFilter := ic.RemainingFilter()
+					remEv := o.Optimize(remainingFilter, &opt.PhysicalProps{})
+					if remEv.Operator() != opt.TrueOp {
+						execBld := execbuilder.New(nil /* execFactory */, remEv)
+						expr := execBld.BuildScalar(&iVarHelper)
+						fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
+					}
 					return buf.String()
 
 				default:

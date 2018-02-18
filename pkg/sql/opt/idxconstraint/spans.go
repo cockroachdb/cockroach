@@ -189,10 +189,12 @@ type indexConstraintCtx struct {
 	isInverted bool
 
 	evalCtx *tree.EvalContext
+
+	factory opt.Factory
 }
 
 func makeIndexConstraintCtx(
-	colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext,
+	colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext, factory opt.Factory,
 ) indexConstraintCtx {
 	if isInverted && len(colInfos) > 1 {
 		panic(fmt.Sprintf("inverted index on multiple columns"))
@@ -201,6 +203,7 @@ func makeIndexConstraintCtx(
 		colInfos:   colInfos,
 		isInverted: isInverted,
 		evalCtx:    evalCtx,
+		factory:    factory,
 	}
 }
 
