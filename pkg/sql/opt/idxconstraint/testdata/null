@@ -1,0 +1,63 @@
+index-constraints vars=(int, int) index=(@1, @2)
+@1 IS NULL AND @2 = 2
+----
+[/NULL/2 - /NULL/2]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 IS NULL AND @2 > 2
+----
+[/NULL/3 - /NULL]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 = 1 AND @2 IS NULL
+----
+[/1/NULL - /1/NULL]
+
+index-constraints vars=(int, int) index=(@1, @2)
+@1 >= 1 AND @2 IS NULL
+----
+[/1/NULL - ]
+Remaining filter: @2 IS NULL
+
+index-constraints vars=(int) index=(@1)
+@1 IS NOT DISTINCT FROM NULL
+----
+[/NULL - /NULL]
+
+index-constraints vars=(int) index=(@1)
+@1 IS NOT NULL
+----
+(/NULL - ]
+
+index-constraints vars=(int) index=(@1)
+@1 IS DISTINCT FROM NULL
+----
+(/NULL - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 IS NOT NULL
+----
+[ - /NULL)
+
+index-constraints vars=(int) index=(@1 not null)
+@1 IS NULL
+----
+
+index-constraints vars=(int) index=(@1 not null)
+@1 IS NOT DISTINCT FROM NULL
+----
+
+index-constraints vars=(int) index=(@1 not null)
+@1 IS NOT NULL
+----
+[ - ]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 IS DISTINCT FROM NULL
+----
+[ - ]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 IS NOT NULL
+----
+[ - ]
