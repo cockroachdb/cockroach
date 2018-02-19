@@ -2,10 +2,10 @@
 
 Aborted{RetryIntent:false}
 	handled events:
-		TxnFinish{}
-	missing events:
 		NonRetriableErr{IsCommit:false}
 		NonRetriableErr{IsCommit:true}
+		TxnFinish{}
+	missing events:
 		RetriableErr{CanAutoRetry:false, IsCommit:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
@@ -17,11 +17,11 @@ Aborted{RetryIntent:false}
 		TxnStart{ImplicitTxn:true}
 Aborted{RetryIntent:true}
 	handled events:
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
 		TxnFinish{}
 		TxnStart{ImplicitTxn:false}
 	missing events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
@@ -33,9 +33,9 @@ Aborted{RetryIntent:true}
 CommitWait{}
 	handled events:
 		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
 		TxnFinish{}
 	missing events:
-		NonRetriableErr{IsCommit:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
@@ -47,11 +47,11 @@ CommitWait{}
 		TxnStart{ImplicitTxn:true}
 NoTxn{}
 	handled events:
+		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 	missing events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
@@ -83,11 +83,11 @@ Open{ImplicitTxn:false, RetryIntent:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
 		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		RetryIntentSet{}
 		TxnFinish{}
 		TxnReleased{}
 		TxnRestart{}
 	missing events:
-		RetryIntentSet{}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 Open{ImplicitTxn:true, RetryIntent:false}
@@ -124,10 +124,10 @@ Open{ImplicitTxn:true, RetryIntent:true}
 RestartWait{}
 	handled events:
 		NonRetriableErr{IsCommit:false}
+		NonRetriableErr{IsCommit:true}
 		TxnFinish{}
 		TxnRestart{}
 	missing events:
-		NonRetriableErr{IsCommit:true}
 		RetriableErr{CanAutoRetry:false, IsCommit:false}
 		RetriableErr{CanAutoRetry:false, IsCommit:true}
 		RetriableErr{CanAutoRetry:true, IsCommit:false}
