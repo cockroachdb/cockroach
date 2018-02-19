@@ -1104,9 +1104,10 @@ type IndexConstraints struct {
 
 	filter *Expr
 
-	spansPopulated bool
-	spansTight     bool
-	spans          LogicalSpans
+	spansPopulated    bool
+	spansTight        bool
+	spans             LogicalSpans
+	consolidatedSpans LogicalSpans
 }
 
 // Init processes the filter and calculates the spans.
@@ -1122,15 +1123,33 @@ func (ic *IndexConstraints) Init(
 	} else {
 		ic.spans, ic.spansPopulated, ic.spansTight = ic.makeSpansForExpr(0 /* offset */, ic.filter)
 	}
+	// Note: we only consolidate spans at the end; consolidating partial results
+	// can lead to worse spans, for example:
+	//   a IN (1, 2) AND b = 4
+	//
+	// We want this to be:
+	//   [/1/4 - /1/4]
+	//   [/2/4 - /2/4]
+	//
+	// If we eagerly consolidate the spans for a, we would get loose spans:
+	//   [/1/4 - /2/4]
+	//
+	// We also want to remember the original spans because the filter
+	// simplification code works better with them. For example:
+	//   @1 = 1 AND @2 IN (1, 2)
+	// The filter simplification code is able to simplify both expressions
+	// if we have the spans [/1/1 - /1/1], [/1/2 - /1/2] but not if
+	// we have [/1/1 - /1/2].
+	ic.consolidatedSpans = ic.consolidateSpans(0 /* offset */, ic.spans)
 }
 
 // Spans returns the spans created by Init. If ok is false, no constraints
 // could be generated.
 func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
-	if !ic.spansPopulated || (len(ic.spans) == 1 && ic.spans[0].IsFullSpan()) {
+	if !ic.spansPopulated || (len(ic.consolidatedSpans) == 1 && ic.consolidatedSpans[0].IsFullSpan()) {
 		return nil, false
 	}
-	return ic.spans, true
+	return ic.consolidatedSpans, true
 }
 
 // RemainingFilter calculates a simplified filter that needs to be applied
