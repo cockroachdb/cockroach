@@ -66,7 +66,15 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 	r := newTestDataReader(t, path)
 	for r.Next(t) {
 		d := &r.data
-		actual := f(d)
+		actual := func() string {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Printf("\npanic during %s:\n%s\n", d.Pos, d.Input)
+					panic(r)
+				}
+			}()
+			return f(d)
+		}()
 
 		if r.rewrite != nil {
 			r.emit("----")
