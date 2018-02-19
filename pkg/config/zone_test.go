@@ -170,48 +170,179 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 			TTLSeconds: 1,
 		},
 		NumReplicas: 1,
-		Constraints: config.Constraints{
-			Constraints: []config.Constraint{
-				{
-					Type:  config.Constraint_POSITIVE,
-					Value: "foo",
-				},
-				{
-					Type:  config.Constraint_REQUIRED,
-					Key:   "duck",
-					Value: "foo",
-				},
-				{
-					Type:  config.Constraint_PROHIBITED,
-					Key:   "duck",
-					Value: "foo",
-				},
-			},
-		},
 	}
 
-	expected := `range_min_bytes: 1
+	testCases := []struct {
+		constraints []config.Constraints
+		expected    string
+	}{
+		{
+			constraints: nil,
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: []
+`,
+		},
+		{
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: [+duck=foo]
+`,
+		},
+		{
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{
+							Type:  config.Constraint_DEPRECATED_POSITIVE,
+							Value: "foo",
+						},
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+						{
+							Type:  config.Constraint_PROHIBITED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: [foo, +duck=foo, -duck=foo]
-`
+`,
+		},
+		{
+			constraints: []config.Constraints{
+				{
+					NumReplicas: 3,
+					Constraints: []config.Constraint{
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: ['+duck=foo:3']
+`,
+		},
+		{
+			constraints: []config.Constraints{
+				{
+					NumReplicas: 3,
+					Constraints: []config.Constraint{
+						{
+							Type:  config.Constraint_DEPRECATED_POSITIVE,
+							Value: "foo",
+						},
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+						{
+							Type:  config.Constraint_PROHIBITED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: ['foo,+duck=foo,-duck=foo:3']
+`,
+		},
+		{
+			constraints: []config.Constraints{
+				{
+					NumReplicas: 2,
+					Constraints: []config.Constraint{
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+				{
+					NumReplicas: 1,
+					Constraints: []config.Constraint{
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar1",
+						},
+						{
+							Type:  config.Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar2",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: ['+duck=foo:2', '+duck=bar1,+duck=bar2:1']
+`,
+		},
+	}
 
-	body, err := yaml.Marshal(original)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(body) != expected {
-		t.Fatalf("yaml.Marshal(%+v) = %s; not %s", original, body, expected)
-	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			original.Constraints = tc.constraints
+			body, err := yaml.Marshal(original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(body) != tc.expected {
+				t.Fatalf("yaml.Marshal(%+v)\ngot:\n%s\nwant:\n%s", original, body, tc.expected)
+			}
 
-	var unmarshaled config.ZoneConfig
-	if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
-		t.Fatal(err)
-	}
-	if !proto.Equal(&unmarshaled, &original) {
-		t.Errorf("yaml.UnmarshalStrict(%q) = %+v; not %+v", body, unmarshaled, original)
+			var unmarshaled config.ZoneConfig
+			if err := yaml.UnmarshalStrict(body, &unmarshaled); err != nil {
+				t.Fatal(err)
+			}
+			if !proto.Equal(&unmarshaled, &original) {
+				t.Errorf("yaml.UnmarshalStrict(%q)\ngot:\n%+v\nwant:\n%+v", body, unmarshaled, original)
+			}
+		})
 	}
 }
 
