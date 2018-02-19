@@ -339,11 +339,9 @@ func (ta *TxnAborter) GetExecCount(stmt string) (int, bool) {
 	return 0, false
 }
 
-func (ta *TxnAborter) statementFilter(
-	ctx context.Context, stmt string, r sql.ResultsWriter, err error,
-) error {
+func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, err error) {
 	ta.mu.Lock()
-	log.Infof(ctx, "statement filter running on: %s, with err=%s", stmt, err)
+	log.Infof(ctx, "statement filter running on: %s, with err=%v", stmt, err)
 	ri, ok := ta.mu.stmtsToAbort[stmt]
 	shouldAbort := false
 	if ok {
@@ -361,10 +359,9 @@ func (ta *TxnAborter) statementFilter(
 	ta.mu.Unlock()
 	if shouldAbort {
 		if err := ta.abortTxn(ri.key); err != nil {
-			return errors.Wrap(err, "TxnAborter failed to abort")
+			panic(fmt.Sprintf("TxnAborter failed to abort: %s", err))
 		}
 	}
-	return nil
 }
 
 // executorKnobs are the bridge between the TxnAborter and the sql.Executor.
@@ -429,7 +426,8 @@ func (ta *TxnAborter) VerifyAndClear() error {
 func (ta *TxnAborter) Close(t testing.TB) {
 	ta.abortDB.Close()
 	if err := ta.VerifyAndClear(); err != nil {
-		t.Error(err)
+		file, line, _ := caller.Lookup(1)
+		t.Errorf("%s:%d %s", file, line, err)
 	}
 }
 
@@ -1591,6 +1589,7 @@ func TestRollbackToSavepointFromUnusualStates(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	checkState := func(tx *gosql.Tx, ts time.Time) {
+		t.Helper()
 		r := tx.QueryRow("SHOW TRANSACTION ISOLATION LEVEL")
 		var iso string
 		var pri string
