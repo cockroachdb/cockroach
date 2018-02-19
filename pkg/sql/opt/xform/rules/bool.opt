@@ -41,6 +41,37 @@
 =>
 (FlattenOr $conditions)
 
+# SimplifyAnd removes True children of an And. If all children are True,
+# replaces the And node with True.
+# This rule is especially important when we build a simplified filter.
+[SimplifyAnd, Normalize]
+(And
+    $conditions:[ ... (True) ... ]
+)
+=>
+(SimplifyAnd $conditions)
+
+# SimplifyOr removes False children of an Or. If all children are False,
+# replaces the Or node with False.
+# This rule is especially important when we build a simplified filter.
+[SimplifyOr, Normalize]
+(Or
+    $conditions:[ ... (False) ... ]
+)
+=>
+(SimplifyOr $conditions)
+
+# TODO(radu): we don't yet elide Ands because we assume filters are alays under
+# an And.
+
+# ElideOr replaces an Or node with a single condition with that condition.
+[ElideOr, Normalize]
+(Or
+    $conditions:* & (IsSingletonList $conditions)
+)
+=>
+(ListFirst $conditions)
+
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le.
 [NegateComparison, Normalize]

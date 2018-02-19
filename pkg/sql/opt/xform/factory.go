@@ -139,6 +139,48 @@ func (f *factory) flattenOr(conditions opt.ListID) opt.GroupID {
 	return f.ConstructOr(f.mem.internList(list))
 }
 
+// simplifyAnd removes True children from an And operator. If no children are
+// left, replaces And with True.
+func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
+	list := make([]opt.GroupID, 0, conditions.Length-1)
+	for _, item := range f.mem.lookupList(conditions) {
+		itemExpr := f.mem.lookupNormExpr(item)
+		if itemExpr.op != opt.TrueOp {
+			list = append(list, item)
+		}
+	}
+	if len(list) == 0 {
+		return f.ConstructTrue()
+	}
+	return f.ConstructAnd(f.mem.internList(list))
+}
+
+// simplifyOr removes False children from an Or operator. If no children are
+// left, replaces Or with False.
+func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
+	list := make([]opt.GroupID, 0, conditions.Length-1)
+	for _, item := range f.mem.lookupList(conditions) {
+		itemExpr := f.mem.lookupNormExpr(item)
+		if itemExpr.op != opt.FalseOp {
+			list = append(list, item)
+		}
+	}
+	if len(list) == 0 {
+		return f.ConstructFalse()
+	}
+	return f.ConstructOr(f.mem.internList(list))
+}
+
+// isSingletonList returns true if the list has exactly one element.
+func (f *factory) isSingletonList(list opt.ListID) bool {
+	return len(f.mem.lookupList(list)) == 1
+}
+
+// listFirst returns the first element from a list.
+func (f *factory) listFirst(list opt.ListID) opt.GroupID {
+	return f.mem.lookupList(list)[0]
+}
+
 // canInvertComparison returns true if the given comparison op can be negated
 // by the invertComparison function. The op must already have been verified
 // to be one of the comparison ops.
