@@ -23,46 +23,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func TestAttributesIsSubset(t *testing.T) {
-	a := Attributes{Attrs: []string{"a", "b", "c"}}
-	b := Attributes{Attrs: []string{"a", "b"}}
-	c := Attributes{Attrs: []string{"a"}}
-	if !b.IsSubset(a) {
-		t.Errorf("expected %+v to be a subset of %+v", b, a)
-	}
-	if !c.IsSubset(a) {
-		t.Errorf("expected %+v to be a subset of %+v", c, a)
-	}
-	if !c.IsSubset(b) {
-		t.Errorf("expected %+v to be a subset of %+v", c, b)
-	}
-	if a.IsSubset(b) {
-		t.Errorf("%+v should not be a subset of %+v", a, b)
-	}
-	if a.IsSubset(c) {
-		t.Errorf("%+v should not be a subset of %+v", a, c)
-	}
-	if b.IsSubset(c) {
-		t.Errorf("%+v should not be a subset of %+v", b, c)
-	}
-}
-
-func TestAttributesSortedString(t *testing.T) {
-	a := Attributes{Attrs: []string{"a", "b", "c"}}
-	if a.SortedString() != "a,b,c" {
-		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", a, a.SortedString())
-	}
-	b := Attributes{Attrs: []string{"c", "a", "b"}}
-	if b.SortedString() != "a,b,c" {
-		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", b, b.SortedString())
-	}
-	// Duplicates.
-	c := Attributes{Attrs: []string{"c", "c", "a", "a", "b", "b"}}
-	if c.SortedString() != "a,b,c" {
-		t.Errorf("sorted string of %+v (%s) != \"a,b,c\"", c, c.SortedString())
-	}
-}
-
 func TestPercentilesFromData(t *testing.T) {
 	testCases := []struct {
 		data      []float64
