@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
 )
 
 // Several ranges outside of the SQL keyspace are given special names so they
@@ -226,6 +225,9 @@ func (c Constraint) String() string {
 
 // FromString populates the constraint from the constraint shorthand notation.
 func (c *Constraint) FromString(short string) error {
+	if len(short) == 0 {
+		return fmt.Errorf("the empty string is not a valid constraint")
+	}
 	switch short[0] {
 	case '+':
 		c.Type = Constraint_REQUIRED
@@ -245,34 +247,6 @@ func (c *Constraint) FromString(short string) error {
 	} else {
 		return errors.Errorf("constraint needs to be in the form \"(key=)value\", not %q", short)
 	}
-	return nil
-}
-
-var _ yaml.Marshaler = Constraints{}
-var _ yaml.Unmarshaler = &Constraints{}
-
-// MarshalYAML implements yaml.Marshaler.
-func (c Constraints) MarshalYAML() (interface{}, error) {
-	short := make([]string, len(c.Constraints))
-	for i, c := range c.Constraints {
-		short[i] = c.String()
-	}
-	return short, nil
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler.
-func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	var shortConstraints []string
-	if err := unmarshal(&shortConstraints); err != nil {
-		return err
-	}
-	constraints := make([]Constraint, len(shortConstraints))
-	for i, short := range shortConstraints {
-		if err := constraints[i].FromString(short); err != nil {
-			return err
-		}
-	}
-	c.Constraints = constraints
 	return nil
 }
 
