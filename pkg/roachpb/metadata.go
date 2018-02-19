@@ -59,43 +59,9 @@ func (r ReplicaID) String() string {
 	return strconv.FormatInt(int64(r), 10)
 }
 
-// IsSubset returns whether attributes list a is a subset of
-// attributes list b.
-func (a Attributes) IsSubset(b Attributes) bool {
-	m := map[string]struct{}{}
-	for _, s := range b.Attrs {
-		m[s] = struct{}{}
-	}
-	for _, s := range a.Attrs {
-		if _, ok := m[s]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func (a Attributes) uniqueAttrs() []string {
-	var attrs []string
-	m := map[string]struct{}{}
-	for _, s := range a.Attrs {
-		if _, ok := m[s]; !ok {
-			m[s] = struct{}{}
-			attrs = append(attrs, s)
-		}
-	}
-	return attrs
-}
-
+// String implements the fmt.Stringer interface.
 func (a Attributes) String() string {
-	return strings.Join(a.uniqueAttrs(), ",")
-}
-
-// SortedString returns a sorted, de-duplicated, comma-separated list
-// of the attributes.
-func (a Attributes) SortedString() string {
-	attrs := a.uniqueAttrs()
-	sort.Strings(attrs)
-	return strings.Join(attrs, ",")
+	return strings.Join(a.Attrs, ",")
 }
 
 // RSpan returns the RangeDescriptor's resolved span.
