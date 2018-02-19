@@ -132,8 +132,12 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
+					varNames := make([]string, len(varTypes))
+					for i := range varNames {
+						varNames[i] = fmt.Sprintf("@%d", i+1)
+					}
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := NewScalar(ctx, o.Factory())
+					b := NewScalar(ctx, o.Factory(), varNames, varTypes)
 					group, err := b.Build(typedExpr)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
