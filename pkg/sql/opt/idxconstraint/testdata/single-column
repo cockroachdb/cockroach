@@ -1,0 +1,152 @@
+index-constraints vars=(int) index=(@1)
+NULL
+----
+
+index-constraints vars=(int) index=(@1)
+false
+----
+
+index-constraints vars=(int) index=(@1)
+true
+----
+[ - ]
+
+index-constraints vars=(int) index=(@1)
+@1
+----
+[ - ]
+Remaining filter: @1
+
+index-constraints vars=(int) index=(@1)
+@1 > 2
+----
+[/3 - ]
+
+index-constraints vars=(int) index=(@1)
+NOT (@1 <= 2)
+----
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 > 2
+----
+[ - /3]
+
+index-constraints vars=(int) index=(@1)
+@1 >= 2
+----
+[/2 - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 >= 2
+----
+[ - /2]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 != 2
+----
+[ - /1]
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 not null)
+NOT (@1 = 2)
+----
+[ - /1]
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 != 2
+----
+[ - /3]
+[/1 - ]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 < 2
+----
+[ - /1]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 < 2
+----
+[/1 - ]
+
+index-constraints vars=(int) index=(@1 not null)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1 desc not null)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1)
+@1 != 2
+----
+(/NULL - /1]
+[/3 - ]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 != 2
+----
+[ - /3]
+[/1 - /NULL)
+
+index-constraints vars=(int) index=(@1)
+@1 < 2
+----
+(/NULL - /1]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 < 2
+----
+[/1 - /NULL)
+
+index-constraints vars=(int) index=(@1)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1 desc)
+@1 = 2
+----
+[/2 - /2]
+
+index-constraints vars=(int) index=(@1)
+NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 > NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 < NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 >= NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 >= NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 = NULL
+----
+
+index-constraints vars=(int) index=(@1)
+@1 != NULL
+----
+
+index-constraints vars=(bool) index=(@1)
+@1
+----
+[/true - /true]
+
+index-constraints vars=(bool) index=(@1)
+NOT @1
+----
+[/false - /false]
+

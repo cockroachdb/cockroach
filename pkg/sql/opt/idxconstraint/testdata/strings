@@ -1,0 +1,72 @@
+index-constraints vars=(string) index=@1
+@1 LIKE 'ABC%'
+----
+[/'ABC' - /'ABD')
+
+index-constraints vars=(string) index=@1
+@1 LIKE 'ABC_'
+----
+[/'ABC' - /'ABD')
+Remaining filter: @1 LIKE 'ABC_'
+
+index-constraints vars=(string) index=@1
+@1 LIKE 'ABC%Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: @1 LIKE 'ABC%Z'
+
+index-constraints vars=(string) index=@1
+@1 LIKE 'ABC'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(string) index=@1
+@1 LIKE '%'
+----
+(/NULL - ]
+Remaining filter: @1 LIKE '%'
+
+index-constraints vars=(string) index=@1
+@1 LIKE '%XY'
+----
+(/NULL - ]
+Remaining filter: @1 LIKE '%XY'
+
+index-constraints vars=(string) index=(@1 desc)
+@1 LIKE 'ABC%'
+----
+(/'ABD' - /'ABC']
+
+index-constraints vars=(int,string) index=(@1, @2 desc)
+@1 = 1 AND @2 LIKE 'ABC%'
+----
+(/1/'ABD' - /1/'ABC']
+
+index-constraints vars=(int,string) index=(@1, @2 desc)
+@1 >= 1 AND @1 <= 4 AND @2 LIKE 'ABC%'
+----
+(/1/'ABD' - /4/'ABC']
+Remaining filter: @2 LIKE 'ABC%'
+
+index-constraints vars=(string) index=(@1)
+@1 SIMILAR TO 'ABC.*'
+----
+[/'ABC' - /'ABD')
+Remaining filter: @1 SIMILAR TO 'ABC.*'
+
+index-constraints vars=(string) index=(@1)
+@1 SIMILAR TO 'ABC.*Z'
+----
+[/'ABC' - /'ABD')
+Remaining filter: @1 SIMILAR TO 'ABC.*Z'
+
+index-constraints vars=(string) index=(@1)
+@1 SIMILAR TO 'ABC'
+----
+[/'ABC' - /'ABC']
+
+index-constraints vars=(string) index=(@1)
+@1 SIMILAR TO '(ABC|ABCDEF)%'
+----
+[/'ABC' - /'ABD')
+Remaining filter: @1 SIMILAR TO '(ABC|ABCDEF)%'
