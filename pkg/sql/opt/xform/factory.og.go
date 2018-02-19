@@ -257,6 +257,19 @@ func (_f *factory) ConstructAnd(
 		}
 	}
 
+	// [SimplifyAnd]
+	{
+		for _, _item := range _f.mem.lookupList(conditions) {
+			_true := _f.mem.lookupNormExpr(_item).asTrue()
+			if _true != nil {
+				_f.reportOptimization()
+				_group = _f.simplifyAnd(conditions)
+				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
 }
 
@@ -300,6 +313,29 @@ func (_f *factory) ConstructOr(
 				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 				return _group
 			}
+		}
+	}
+
+	// [SimplifyOr]
+	{
+		for _, _item := range _f.mem.lookupList(conditions) {
+			_false := _f.mem.lookupNormExpr(_item).asFalse()
+			if _false != nil {
+				_f.reportOptimization()
+				_group = _f.simplifyOr(conditions)
+				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [EliminateSingletonOr]
+	{
+		if _f.isSingletonList(conditions) {
+			_f.reportOptimization()
+			_group = _f.firstListItem(conditions)
+			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+			return _group
 		}
 	}
 
