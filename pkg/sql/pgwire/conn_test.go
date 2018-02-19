@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // Test the conn struct: check that it marshalls the correct commands to the
@@ -91,9 +92,17 @@ func TestConn(t *testing.T) {
 
 	// Run the conn's loop in the background - it will push commands to the
 	// buffer.
+	serveCtx, stopServe := context.WithCancel(ctx)
 	g.Go(func() error {
-		return conn.serve(ctx, func() bool { return false } /* draining */)
+		return conn.serveImpl(
+			serveCtx,
+			func() bool { return false }, /* draining */
+			// sqlServer - nil means don't create a command processor and a write side of the conn
+			nil,
+			mon.BoundAccount{}, /* reserved */
+			s.Stopper())
 	})
+	defer stopServe()
 
 	if err := processPgxStartup(ctx, s, conn); err != nil {
 		t.Fatal(err)
@@ -103,21 +112,27 @@ func TestConn(t *testing.T) {
 	// client().
 	rd := sql.MakeStmtBufReader(conn.stmtBuf)
 	expectExecStmt(ctx, t, "SELECT 1", &rd, conn, queryStringComplete)
+	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 2", &rd, conn, queryStringComplete)
+	expectSync(ctx, t, &rd)
 	expectPrepareStmt(ctx, t, "p1", "SELECT 'p1'", &rd, conn)
 	expectDescribeStmt(ctx, t, "p1", pgwirebase.PrepareStatement, &rd, conn)
+	expectSync(ctx, t, &rd)
 	expectBindStmt(ctx, t, "p1", &rd, conn)
 	expectExecPortal(ctx, t, "", &rd, conn)
 	// Check that a query string with multiple queries sent using the simple
 	// protocol is broken up.
+	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 4", &rd, conn, queryStringIncomplete)
 	expectExecStmt(ctx, t, "SELECT 5", &rd, conn, queryStringIncomplete)
 	expectExecStmt(ctx, t, "SELECT 6", &rd, conn, queryStringComplete)
+	expectSync(ctx, t, &rd)
 
 	// Check that the batching works like the client intended.
 
 	// pgx wraps batchs in transactions.
 	expectExecStmt(ctx, t, "BEGIN TRANSACTION", &rd, conn, queryStringComplete)
+	expectSync(ctx, t, &rd)
 	expectPrepareStmt(ctx, t, "", "SELECT 7", &rd, conn)
 	expectBindStmt(ctx, t, "", &rd, conn)
 	expectDescribeStmt(ctx, t, "", pgwirebase.PreparePortal, &rd, conn)
@@ -133,17 +148,20 @@ func TestConn(t *testing.T) {
 	// can only be called when there is something in the buffer. Since the buffer
 	// is filled concurrently with this code, we call CurCmd to ensure that
 	// there's something in there.
-	if _, err := rd.CurCmd(ctx); err != nil {
+	if _, err := rd.CurCmd(); err != nil {
 		t.Fatal(err)
 	}
 	// Skip all the remaining messages in the batch.
-	if err := rd.SeekToNextBatch(ctx); err != nil {
+	if err := rd.SeekToNextBatch(); err != nil {
 		t.Fatal(err)
 	}
 	// We got to the COMMIT that pgx pushed to match the BEGIN it generated for
 	// the batch.
+	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "COMMIT TRANSACTION", &rd, conn, queryStringComplete)
+	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 9", &rd, conn, queryStringComplete)
+	expectSync(ctx, t, &rd)
 
 	// Test that parse error turns into SendError.
 	expectSendError(ctx, t, pgerror.CodeSyntaxError, &rd, conn)
@@ -161,9 +179,14 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 	rd := sql.MakeStmtBufReader(c.stmtBuf)
 
 	for {
-		cmd, err := rd.CurCmd(ctx)
+		cmd, err := rd.CurCmd()
 		if err != nil {
 			return err
+		}
+
+		if _, ok := cmd.(sql.Sync); ok {
+			rd.AdvanceOne()
+			continue
 		}
 
 		exec, ok := cmd.(sql.ExecStmt)
@@ -177,7 +200,7 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 		if err := execQuery(ctx, query, s, c); err != nil {
 			return err
 		}
-		rd.AdvanceOne(ctx)
+		rd.AdvanceOne()
 	}
 }
 
@@ -293,7 +316,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(nil /* internalMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, &metrics)
+	pgwireConn := newConn(conn, sql.SessionArgs{}, &metrics, &sql.ExecutorConfig{})
 	return pgwireConn, nil
 }
 
@@ -305,18 +328,18 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 func sendResult(
 	ctx context.Context, c *conn, cols sqlbase.ResultColumns, rows []tree.Datums,
 ) error {
-	if err := c.sendRowDescription(ctx, cols, nil /* formatCodes */, &c.wr); err != nil {
+	if err := c.writeRowDescription(ctx, cols, nil /* formatCodes */, c.conn); err != nil {
 		return err
 	}
 
 	for _, row := range rows {
-		c.writeBuf.initMsg(pgwirebase.ServerMsgDataRow)
-		c.writeBuf.putInt16(int16(len(row)))
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
+		c.msgBuilder.putInt16(int16(len(row)))
 		for _, col := range row {
-			c.writeBuf.writeTextDatum(ctx, col, time.UTC /* sessionLoc */)
+			c.msgBuilder.writeTextDatum(ctx, col, time.UTC /* sessionLoc */)
 		}
 
-		if err := c.writeBuf.finishMsg(&c.wr); err != nil {
+		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 			return err
 		}
 	}
@@ -334,11 +357,11 @@ const (
 func expectExecStmt(
 	ctx context.Context, t *testing.T, expSQL string, rd *sql.StmtBufReader, c *conn, typ executeType,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	es, ok := cmd.(sql.ExecStmt)
 	if !ok {
@@ -360,7 +383,7 @@ func expectExecStmt(
 			t.Fatal(err)
 		}
 	} else {
-		if err := finishQuery(commandComplete, c); err != nil {
+		if err := finishQuery(cmdComplete, c); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -369,11 +392,11 @@ func expectExecStmt(
 func expectPrepareStmt(
 	ctx context.Context, t *testing.T, expName string, expSQL string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	pr, ok := cmd.(sql.PrepareStmt)
 	if !ok {
@@ -401,11 +424,11 @@ func expectDescribeStmt(
 	rd *sql.StmtBufReader,
 	c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	desc, ok := cmd.(sql.DescribeStmt)
 	if !ok {
@@ -428,11 +451,11 @@ func expectDescribeStmt(
 func expectBindStmt(
 	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	bd, ok := cmd.(sql.BindStmt)
 	if !ok {
@@ -448,14 +471,27 @@ func expectBindStmt(
 	}
 }
 
-func expectExecPortal(
-	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
-) {
-	cmd, err := rd.CurCmd(ctx)
+func expectSync(ctx context.Context, t *testing.T, rd *sql.StmtBufReader) {
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
+
+	_, ok := cmd.(sql.Sync)
+	if !ok {
+		t.Fatalf("%s: expected command Sync, got: %T (%+v)", testutils.Caller(1), cmd, cmd)
+	}
+}
+
+func expectExecPortal(
+	ctx context.Context, t *testing.T, expName string, rd *sql.StmtBufReader, c *conn,
+) {
+	cmd, err := rd.CurCmd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rd.AdvanceOne()
 
 	ep, ok := cmd.(sql.ExecPortal)
 	if !ok {
@@ -474,11 +510,11 @@ func expectExecPortal(
 func expectSendError(
 	ctx context.Context, t *testing.T, pgErrCode string, rd *sql.StmtBufReader, c *conn,
 ) {
-	cmd, err := rd.CurCmd(ctx)
+	cmd, err := rd.CurCmd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	rd.AdvanceOne(ctx)
+	rd.AdvanceOne()
 
 	se, ok := cmd.(sql.SendError)
 	if !ok {
@@ -502,10 +538,9 @@ type finishType int
 
 const (
 	execute finishType = iota
-	// commandComplete is like execute, except that it marks the completion of a
-	// query in a larger query string and so no ReadyForQuery message should be
-	// sent.
-	commandComplete
+	// cmdComplete is like execute, except that it marks the completion of a query
+	// in a larger query string and so no ReadyForQuery message should be sent.
+	cmdComplete
 	prepare
 	bind
 	describe
@@ -515,55 +550,60 @@ const (
 
 // Send a CommandComplete/ReadyForQuery to signal that the rows are done.
 func finishQuery(t finishType, c *conn) error {
+	var skipFinish bool
+
 	switch t {
 	case execPortal:
 		fallthrough
-	case commandComplete:
+	case cmdComplete:
 		fallthrough
 	case execute:
-		c.writeBuf.initMsg(pgwirebase.ServerMsgCommandComplete)
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgCommandComplete)
 		// HACK: This message is supposed to contains a command tag but this test is
 		// not sure about how to produce one and it works without it.
-		c.writeBuf.nullTerminate()
+		c.msgBuilder.nullTerminate()
 	case prepare:
 		// pgx doesn't send a Sync in between prepare (Parse protocol message) and
 		// the subsequent Describe, so we're not going to send a ReadyForQuery
 		// below.
-		c.writeBuf.initMsg(pgwirebase.ServerMsgParseComplete)
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgParseComplete)
 	case describe:
-		if err := c.sendRowDescription(
-			context.TODO(), nil /* columns */, nil /* formatCodes */, &c.wr,
+		skipFinish = true
+		if err := c.writeRowDescription(
+			context.TODO(), nil /* columns */, nil /* formatCodes */, c.conn,
 		); err != nil {
 			return err
 		}
 	case bind:
 		// pgx doesn't send a Sync mesage in between Bind and Execute, so we're not
 		// going to send a ReadyForQuery below.
-		c.writeBuf.initMsg(pgwirebase.ServerMsgBindComplete)
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgBindComplete)
 	case generateError:
-		c.writeBuf.initMsg(pgwirebase.ServerMsgErrorResponse)
-		c.writeBuf.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
-		c.writeBuf.writeTerminatedString("ERROR")
-		c.writeBuf.putErrFieldMsg(pgwirebase.ServerErrFieldMsgPrimary)
-		c.writeBuf.writeTerminatedString("injected")
-		c.writeBuf.nullTerminate()
-		if err := c.writeBuf.finishMsg(&c.wr); err != nil {
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
+		c.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
+		c.msgBuilder.writeTerminatedString("ERROR")
+		c.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldMsgPrimary)
+		c.msgBuilder.writeTerminatedString("injected")
+		c.msgBuilder.nullTerminate()
+		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 			return err
 		}
 	}
 
-	if err := c.writeBuf.finishMsg(&c.wr); err != nil {
-		return err
-	}
-
-	if t != commandComplete && t != bind && t != prepare {
-		c.writeBuf.initMsg(pgwirebase.ServerMsgReady)
-		c.writeBuf.writeByte('I') // transaction status: no txn
-		if err := c.writeBuf.finishMsg(&c.wr); err != nil {
+	if !skipFinish {
+		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
 			return err
 		}
 	}
-	return c.wr.Flush()
+
+	if t != cmdComplete && t != bind && t != prepare {
+		c.msgBuilder.initMsg(pgwirebase.ServerMsgReady)
+		c.msgBuilder.writeByte('I') // transaction status: no txn
+		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type pgxTestLogger struct{}

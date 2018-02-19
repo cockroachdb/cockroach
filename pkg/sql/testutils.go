@@ -74,17 +74,17 @@ func MakeStmtBufReader(buf *StmtBuf) StmtBufReader {
 }
 
 // CurCmd returns the current command in the buffer.
-func (r StmtBufReader) CurCmd(ctx context.Context) (Command, error) {
-	cmd, _ /* pos */, err := r.buf.curCmd(ctx)
+func (r StmtBufReader) CurCmd() (Command, error) {
+	cmd, _ /* pos */, err := r.buf.curCmd()
 	return cmd, err
 }
 
 // AdvanceOne moves the cursor one position over.
-func (r *StmtBufReader) AdvanceOne(ctx context.Context) {
-	r.buf.advanceOne(ctx)
+func (r *StmtBufReader) AdvanceOne() {
+	r.buf.advanceOne()
 }
 
 // SeekToNextBatch skips to the beginning of the next batch of commands.
-func (r *StmtBufReader) SeekToNextBatch(ctx context.Context) error {
-	return r.buf.seekToNextBatch(ctx)
+func (r *StmtBufReader) SeekToNextBatch() error {
+	return r.buf.seekToNextBatch()
 }

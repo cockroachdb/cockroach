@@ -19,7 +19,6 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"math"
 	"net"
 	"strconv"
 	"time"
@@ -273,7 +272,7 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
 	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, c.executor, c.metrics.internalMemMetrics, c.sessionArgs.User,
+		ctx, c.executor.Cfg(), c.metrics.internalMemMetrics, c.sessionArgs.User,
 	)
 	if err != nil {
 		return c.sendError(err)
@@ -319,8 +318,9 @@ func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error 
 }
 
 func (c *v3Conn) setupSession(ctx context.Context, reserved mon.BoundAccount) error {
+	c.sessionArgs.RemoteAddr = c.conn.RemoteAddr()
 	c.session = sql.NewSession(
-		ctx, c.sessionArgs, c.executor, c.conn.RemoteAddr(), &c.metrics.SQLMemMetrics, c,
+		ctx, c.sessionArgs, c.executor, &c.metrics.SQLMemMetrics, c,
 	)
 	c.session.StartMonitor(c.sqlMemoryPool, reserved)
 	return nil
@@ -530,13 +530,6 @@ func (c *v3Conn) handleSimpleQuery(buf *pgwirebase.ReadBuffer) error {
 	return c.done()
 }
 
-// maxPreparedStatementArgs is the maximum number of arguments a prepared
-// statement can have when prepared via the Postgres wire protocol. This is not
-// documented by Postgres, but is a consequence of the fact that a 16-bit
-// integer in the wire format is used to indicate the number of values to bind
-// during prepared statement execution.
-const maxPreparedStatementArgs = math.MaxUint16
-
 func (c *v3Conn) handleParse(buf *pgwirebase.ReadBuffer) error {
 	name, err := buf.GetString()
 	if err != nil {
@@ -587,9 +580,10 @@ func (c *v3Conn) handleParse(buf *pgwirebase.ReadBuffer) error {
 	}
 	// Convert the inferred SQL types back to an array of pgwire Oids.
 	inTypes := make([]oid.Oid, 0, len(stmt.TypeHints))
-	if len(stmt.TypeHints) > maxPreparedStatementArgs {
+	if len(stmt.TypeHints) > pgwirebase.MaxPreparedStatementArgs {
 		return c.sendError(pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
-			"more than %d arguments to prepared statement: %d", maxPreparedStatementArgs, len(stmt.TypeHints)))
+			"more than %d arguments to prepared statement: %d",
+			pgwirebase.MaxPreparedStatementArgs, len(stmt.TypeHints)))
 	}
 	for k, t := range stmt.TypeHints {
 		i, err := strconv.Atoi(k)

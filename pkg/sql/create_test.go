@@ -448,7 +448,7 @@ func TestCreateStatementType(t *testing.T) {
 	e := s.Executor().(*sql.Executor)
 	session := sql.NewSession(
 		ctx, sql.SessionArgs{User: security.RootUser}, e,
-		nil /* remote */, &sql.MemoryMetrics{}, nil /* conn */)
+		&sql.MemoryMetrics{}, nil /* conn */)
 	session.StartUnlimitedMonitor()
 	defer session.Finish(e)
 

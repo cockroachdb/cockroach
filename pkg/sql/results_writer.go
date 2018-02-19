@@ -145,7 +145,9 @@ type ResultsGroup interface {
 type StatementResult interface {
 	// BeginResult should be called prior to any of the other methods.
 	// TODO(andrei): remove BeginResult and SetColumns, and have
-	// NewStatementResult() take in a tree.Statement
+	// NewStatementResult() take in a tree.Statement. But that might not work
+	// because a statement's tag might depend on the state that it's being
+	// executed in?
 	BeginResult(stmt tree.Statement)
 	// GetPGTag returns the PGTag of the statement passed into BeginResult.
 	PGTag() string
@@ -155,7 +157,11 @@ type StatementResult interface {
 	// SetColumns should be called after BeginResult and before AddRow if the
 	// StatementType is tree.Rows.
 	SetColumns(columns sqlbase.ResultColumns)
-	// AddRow takes the passed in row and adds it to the current result.
+	// AddRow takes the passed in row and adds it to the current result. If an
+	// error is returned, it is a communication error; in this case the only
+	// further allowed call on the ResultWriter set of interfaces is
+	// ResultsGroup.Close(). In particular, StatementResult.CloseResult() cannot
+	// be called.
 	AddRow(ctx context.Context, row tree.Datums) error
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
@@ -220,12 +226,12 @@ func (b *bufferedWriter) NewResultsGroup() ResultsGroup {
 func (b *bufferedWriter) SetEmptyQuery() {
 }
 
-// SetEmptyQuery implements the ResultsGroup interface.
+// NewStatementResult is part of the ResultsGroup interface.
 func (b *bufferedWriter) NewStatementResult() StatementResult {
 	return b
 }
 
-// CanAutomaticallyRetry implements the ResultsGroup interface.
+// ResultsSentToClient implements the ResultsGroup interface.
 func (b *bufferedWriter) ResultsSentToClient() bool {
 	return false
 }
