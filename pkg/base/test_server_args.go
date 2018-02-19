@@ -18,6 +18,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -63,6 +64,9 @@ type TestServerArgs struct {
 	// representing a store. If no StoreSpecs are provided then a single
 	// DefaultTestStoreSpec will be used.
 	StoreSpecs []StoreSpec
+
+	// Locality is optional and will set the server's locality.
+	Locality roachpb.Locality
 
 	// TempStorageConfig defines parameters for the temp storage used as
 	// working memory for distributed operations and CSV importing.
