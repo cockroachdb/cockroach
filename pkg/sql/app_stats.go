@@ -263,8 +263,11 @@ func scrubStmtStatKey(vt virtualSchemaHolder, key string) (string, bool) {
 				buf.WriteByte('_')
 				return
 			}
-			// Virtual table: we want to keep the name.
-			tn.Format(buf, parser.FmtParsable)
+			// Virtual table: we want to keep the name; however we need to
+			// scrub the database name prefix.
+			newTn := *tn
+			newTn.PrefixName = "_"
+			newTn.Format(buf, parser.FmtParsable)
 		})
 	return parser.AsStringWithFlags(stmt, formatter), true
 }
