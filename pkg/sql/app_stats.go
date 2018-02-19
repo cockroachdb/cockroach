@@ -17,6 +17,7 @@ package sql
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -324,19 +325,19 @@ func (s *sqlStats) getScrubbedStmtStats(
 	return ret
 }
 
-// HashForReporting 1-way hashes values for use in stat reporting. The salt
-// should be the cluster.secret setting.
-func HashForReporting(salt, appName string) string {
-	// If no salt is provided, we cannot irreversibly hash the value, so return
-	// a default value.
-	if len(salt) == 0 {
-		return "unknown"
-	}
-	hash := sha256.New()
+// FailedHashedValue is used as a default return value for when HashForReporting
+// cannot hash a value correctly.
+const FailedHashedValue = "unknown"
 
-	if _, err := hash.Write([]byte(salt)); err != nil {
-		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
+// HashForReporting 1-way hashes values for use in stat reporting. The secret
+// should be the cluster.secret setting.
+func HashForReporting(secret, appName string) string {
+	// If no secret is provided, we cannot irreversibly hash the value, so return
+	// a default value.
+	if len(secret) == 0 {
+		return FailedHashedValue
 	}
+	hash := hmac.New(sha256.New, []byte(secret))
 	if _, err := hash.Write([]byte(appName)); err != nil {
 		panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
 	}
