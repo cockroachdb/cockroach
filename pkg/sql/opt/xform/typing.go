@@ -118,7 +118,9 @@ func typeAsUnary(ev ExprView) types.T {
 		}
 	}
 
-	panic(fmt.Sprintf("could not find type for unary expression: %v", ev))
+	// TODO(rytaft): This should cause a panic, but for now just return NULL
+	// so the builder code can be implemented and tested.
+	return types.Null
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
@@ -141,5 +143,7 @@ func typeAsBinary(ev ExprView) types.T {
 		}
 	}
 
-	panic(fmt.Sprintf("could not find type for binary expression: %v", ev))
+	// TODO(rytaft): This should cause a panic, but for now just return NULL
+	// so the builder code can be implemented and tested.
+	return types.Null
 }
