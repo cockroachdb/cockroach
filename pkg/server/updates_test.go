@@ -369,7 +369,11 @@ func TestReportUsage(t *testing.T) {
 			`SET CLUSTER SETTING _ = _`,
 		},
 	} {
-		if app, ok := bucketByApp[sql.HashForReporting(clusterSecret, appName)]; !ok {
+		hashedAppName := sql.HashForReporting(clusterSecret, appName)
+		if hashedAppName == sql.FailedHashedValue {
+			t.Fatalf("expected hashedAppName to not be 'unknown'")
+		}
+		if app, ok := bucketByApp[hashedAppName]; !ok {
 			t.Fatalf("missing stats for app %q %+v", appName, bucketByApp)
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
