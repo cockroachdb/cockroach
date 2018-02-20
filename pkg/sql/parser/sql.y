@@ -6356,14 +6356,25 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
+// Special identifier current_catalog is equivalent to current_database().
+// https://www.postgresql.org/docs/10/static/functions-info.html
+| CURRENT_CATALOG
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_database")}
+  }
 | CURRENT_TIMESTAMP
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
-| CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+// Special identifier current_role is equivalent to current_user.
+// https://www.postgresql.org/docs/10/static/functions-info.html
+| CURRENT_ROLE
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_user")}
   }
 | SESSION_USER
   {
