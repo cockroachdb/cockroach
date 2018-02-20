@@ -1200,8 +1200,11 @@ func (t *logicTest) processSubtest(
 			}
 			if !s.skip {
 				for i := 0; i < repeat; i++ {
-					if ok := t.execStatement(stmt); !ok {
-						return errors.Errorf("%s: error in statement, skipping to next file", stmt.pos)
+					if cont, err := t.execStatement(stmt); err != nil {
+						if !cont {
+							return err
+						}
+						t.Error(err)
 					}
 				}
 			} else {
@@ -1457,14 +1460,24 @@ func (t *logicTest) processSubtest(
 }
 
 // verifyError checks that either no error was found where none was
-// expected, or that an error was found when one was expected. Returns
-// "true" to indicate the behavior was as expected.
-func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err error) bool {
+// expected, or that an error was found when one was expected.
+// Returns a nil error to indicate the behavior was as expected.  If
+// non-nil, returns also true in the boolean flag whether it is safe
+// to continue (i.e. an error was expected, an error was obtained, and
+// the errors didn't match).
+func (t *logicTest) verifyError(
+	sql, pos, expectErr, expectErrCode string, err error,
+) (bool, error) {
 	if expectErr == "" && expectErrCode == "" && err != nil {
-		return t.unexpectedError(sql, pos, err)
+		cont := t.unexpectedError(sql, pos, err)
+		if cont {
+			// unexpectedError() already reported via t.Errorf. no need for more.
+			err = nil
+		}
+		return cont, err
 	}
 	if !testutils.IsError(err, expectErr) {
-		t.Errorf("%s: %s\nexpected %q, but found %v", pos, sql, expectErr, err)
+		newErr := errors.Errorf("%s: %s\nexpected %q, but found %v", pos, sql, expectErr, err)
 		if err != nil && strings.Contains(err.Error(), expectErr) {
 			if t.subtestT != nil {
 				t.subtestT.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
@@ -1474,28 +1487,28 @@ func (t *logicTest) verifyError(sql, pos, expectErr, expectErrCode string, err e
 					"query error %s", regexp.QuoteMeta(err.Error()))
 			}
 		}
-		return false
+		return (err == nil) == (expectErr == ""), newErr
 	}
 	if expectErrCode != "" {
 		if err != nil {
 			pqErr, ok := err.(*pq.Error)
 			if !ok {
-				t.Errorf("%s %s\n: expected error code %q, but the error we found is not "+
+				newErr := errors.Errorf("%s %s\n: expected error code %q, but the error we found is not "+
 					"a libpq error: %s", pos, sql, expectErrCode, err)
-				return false
+				return true, newErr
 			}
 			if pqErr.Code != pq.ErrorCode(expectErrCode) {
-				t.Errorf("%s: %s\nexpected error code %q, but found code %q (%s)",
+				newErr := errors.Errorf("%s: %s\nexpected error code %q, but found code %q (%s)",
 					pos, sql, expectErrCode, pqErr.Code, pqErr.Code.Name())
-				return false
+				return true, newErr
 			}
 		} else {
-			t.Errorf("%s: %s\nexpected error code %q, but found success",
+			newErr := errors.Errorf("%s: %s\nexpected error code %q, but found success",
 				pos, sql, expectErrCode)
-			return false
+			return (err != nil), newErr
 		}
 	}
-	return true
+	return true, nil
 }
 
 // unexpectedError handles ignoring queries that fail during prepare
@@ -1524,7 +1537,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 	return false
 }
 
-func (t *logicTest) execStatement(stmt logicStatement) bool {
+func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
@@ -1537,11 +1550,11 @@ func (t *logicTest) execStatement(stmt logicStatement) bool {
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	ok := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
-	if ok {
+	cont, err := t.verifyError("", stmt.pos, stmt.expectErr, stmt.expectErrCode, err)
+	if err != nil {
 		t.finishOne("OK")
 	}
-	return ok
+	return cont, err
 }
 
 func (t *logicTest) hashResults(results []string) (string, error) {
@@ -1561,8 +1574,8 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		t.outf("%s;", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
-	if ok := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); !ok {
-		return nil
+	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
+		return err
 	}
 	if err != nil {
 		// An error occurred, but it was expected.
