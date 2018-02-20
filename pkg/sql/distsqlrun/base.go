@@ -150,20 +150,18 @@ func Run(ctx context.Context, src RowSource, dst RowReceiver) {
 			case NeedMoreRows:
 				continue
 			case DrainRequested:
-				row = nil
+				DrainAndForwardMetadata(ctx, src, dst)
+				dst.ProducerDone()
+				return
 			case ConsumerClosed:
 				src.ConsumerClosed()
 				dst.ProducerDone()
 				return
 			}
 		}
-		if row == nil {
-			if meta != nil {
-				DrainAndForwardMetadata(ctx, src, dst)
-			}
-			dst.ProducerDone()
-			return
-		}
+		// row == nil && meta == nil: the source has been fully drained.
+		dst.ProducerDone()
+		return
 	}
 }
 
