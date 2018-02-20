@@ -1666,7 +1666,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	// table's primary index.
 	// TODO(pbardea): Loosen restriction when joinReader takes secondary indexes.
 	lookupJoinEnabled := planCtx.EvalContext().SessionData.LookupJoinEnabled
-	isLookupJoin, lookupJoinScan, lookupFailReason := verifyLookupJoin(rightEqCols, n, joinType)
+	isLookupJoin, lookupJoinScan, lookupFailReason := verifyLookupJoin(leftEqCols, rightEqCols, n, joinType)
 
 	if lookupJoinEnabled {
 		if !isLookupJoin {
@@ -1808,7 +1808,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 // string, or returns false and an explanation behind why the lookup join
 // could not be used.
 func verifyLookupJoin(
-	rightEqCols []uint32, n *joinNode, joinType sqlbase.JoinType,
+	leftEqCols, rightEqCols []uint32, n *joinNode, joinType sqlbase.JoinType,
 ) (bool, *scanNode, string) {
 	lookupJoinScan, ok := n.right.plan.(*scanNode)
 	if !ok {
@@ -1826,6 +1826,9 @@ func verifyLookupJoin(
 	// Check if equality columns still allow for lookup join.
 	if len(rightEqCols) > len(lookupJoinScan.index.ColumnIDs) {
 		return false, nil, "cannot have more equality columns than index columns"
+	}
+	if leftEqCols == nil {
+		return false, nil, "lookup columns cannot be empty for lookup join"
 	}
 
 	// Check if rightEqCols are prefix of index columns in scanNode lookupJoinScan.
