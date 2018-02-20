@@ -8,14 +8,14 @@
 
 # Summary
 
-Full Backup / Incremental Backup / Restore from Backup / Bulk Ingest
+Full Backup / Incremental Backup / Restore from Backup / Bulk Load
 
 
 # Motivation
 
-Any durable datastore is expected to have the ability to save a snaphot of data
+Any durable datastore is expected to have the ability to save a snapshot of data
 and later restore from that snapshot. Even in a system that can gracefully
-handle a configurable number of node failues, there are other motivations: a
+handle a configurable number of node failures, there are other motivations: a
 general sense of security, "Oops I dropped a table", legally required data
 archiving, and others.
 
@@ -38,7 +38,7 @@ be a deciding factor for potential customers.
 - Restore to a newer version of CockroachDB than was used for the backup.
   (Moving to an older version is also desirable when feasible.)
 - Incremental backups touch minimally more data than necessary
-- Blazing fast bulk ingest from "big data" pipelines and migration dumps
+- Blazing fast bulk load from "big data" pipelines and migration dumps
 - Backup (the common operation) is kept as cheap as possible, while restore must
   be fast but is allowed to be more costly
 
@@ -57,27 +57,21 @@ be a deciding factor for potential customers.
 ## Data Format
 
 A backup segments the keyspace into non-overlapping ranges and stores the data
-in each as a file in the [RocksDB WriteBatch format](
-https://github.com/facebook/rocksdb/blob/v4.9/db/write_batch.cc#L10-L30). A
-marshalled proto `BackupDescriptor` is placed next to the data and contains the
-start and end hlc timestamps of the backup, mappings between each keyrange and
-the filepath with that data, and denormalized copies of the SQL descriptors.
-Support for common cloud storage providers will be included, as will local files
-(for testing and nfs mounts).
+in each in the [LevelDB sstable format]. A marshalled proto `BackupDescriptor`
+is placed next to the data and contains the start and end hlc timestamps of the
+backup, mappings between each keyrange and the filepath with that data, and
+denormalized copies of the SQL descriptors. Support for common cloud storage
+providers will be included, as will local files (for testing and nfs mounts).
 
-_TODO(dan): Is there any advantage of using WriteBatch over a file of proto
-records?_
+Using sstables as the storage format paves the way to implementing
+reasonably-efficient read-only queries over backups.
 
-Restore and ingest both use this same format. A backup will use the current
-ranges as segments, so they will be roughly range sized when restored. It's
-suggested that ingest segements are also this size, but not required.
+Restore and load both use this same format. A backup will use the current ranges
+as segments, so they will be roughly range sized when restored. It's suggested
+that load segements are also this size, but not required.
 
-See [Alternatives](#sstables-and-addfile) for a discussion of RocksDB AddFile
-and using sstables as the file format.
-
-See [Alternatives](#overlapping-ingest-segments) for a discussion of how we can
-remove the requirement for non-overlapping key ranges in ingest.
-
+See [Alternatives](#overlapping-load-segments) for a discussion of how we can
+remove the requirement for non-overlapping key ranges in load.
 
 ## Full Backup
 
@@ -85,27 +79,21 @@ An hlc timestamp is given as the end time (no later than `now - max offset` but
 choosing a time further in the past, up to a few minutes, will help minimize
 interference with in-progress transactions). The start time is implicitly `0,0`.
 All range descriptors are scanned in a txn and each one becomes a keyrange
-segment for backup. Optionally, a selected set of tables can be backed up. A
-record of the backup's progress is written and used to continue if the
-coordinating node goes down.
-
-_TODO(dan): It seems like this this progress should be written to a
-`system.jobs` table. Link to an RFC for creating new system tables._
+segment for backup. Optionally, a selected set of tables can be backed up. The
+backup's progress is written to [the `system.jobs` table][jobs-rfc] and used to
+continue if the coordinating node goes down.
 
 Via `DistSender`, the leaseholder of the range containing each segment is tasked
 with backing it up and grabs a snapshot. If the node doesn't have the entire
 keyrange because a split has happened in the interim, the rpc is failed and the
-coordinator retries with more fine-grained segments. Alternately, the backup RPC
-could continue, and do a (potentially) remote scan to get the data from the
-right side of the split.
+coordinator retries with more fine-grained segments.
 
 The RocksDB snapshot is iterated and for each key the latest MVCC entry before
 the end time is streamed to the backup's configured basepath. Or, if the backup
 should support time travel when restored, every MVCC entry between the start and
-end time. The iteration must either go through the Store at the right level for
-the Store's read/push/resolve loop to take effect or implement such a loop
-itself. A running hash of key and value bytes is kept. When finished, the full
-path to this data file and the hash is returned in the rpc response.
+end time. The iteration must go through the Store at the right level for the
+Store's read/push/resolve loop to take effect. When finished, the full path to
+this data file and the hash of this file is returned in the rpc response.
 
 Once each segment has been successfully completed, the backup descriptor is
 written with the segment keyranges and data paths along with the SQL descriptors
@@ -129,26 +117,23 @@ RocksDB has an explicit keyrange bound and an implicit hlc timestamp bound.
 RocksDB's existing `Iterator` will use the former to select relevant sstables
 during iteration, but doesn't understand the structure of our keys and so cannot
 use the latter. This will create an unacceptable overhead in incremental
-backups, so a `DiffIterator` will be added to handle this as well as surface the
-tombstones.
+backups, so an `MVCCIncrementalIterator` will be added to handle this as well as
+surface the tombstones.
 
-Option 1: Via `TablePropertiesCollectorFactory`, RocksDB allows a user to
-collect aggregate statistics during sstable creation and store them in the
-resulting file. Each keyval is presented as it is processed (along with the
-RocksDB sequence number). When there are no more keyvals, a hook is called to
-get metadata that is stored in the written file. This metadata is retrievable
-via standard RocksDB apis. We will store the earliest and latest timestamp seen
-in the metadata.
+Via `TablePropertiesCollectorFactory`, RocksDB allows a user to collect
+aggregate statistics during sstable creation and store them in the resulting
+file. Each keyval is presented as it is processed (along with the RocksDB
+sequence number). When there are no more keyvals, a hook is called to get
+metadata that is stored in the written file. This metadata is retrievable via
+standard RocksDB apis. We will store the earliest and latest timestamp seen in
+the metadata.
 
-_TODO(dan): Can we note the corresponding sequence numbers and use them for
-anything?_
-
-Option 2: If Option 1 proves too expensive to run on every sstable creation,
-then it will be run only for level 0 sstables. Then, at each compaction, an
-`EventListener` will be used to merge the earliest and latest timestamp
-metadata. Unfortunately, this hook is too late to allow writing the merged
-timestamps to the sstable metadata, so a side store will have to be introduced.
-
+Had the `TablePropertiesCollectorFactory` proved too expensive to run on every
+sstable creation, then it could have been limited to the level 0 sstables. Then,
+at each compaction, an `EventListener` would have been used to merge the
+earliest and latest timestamp metadata. Unfortunately, this hook is too late to
+allow writing the merged timestamps to the sstable metadata, so a side store
+will have to be introduced. Fortunately, the simpler approach was viable.
 
 ## Restore from Backup
 
@@ -162,15 +147,15 @@ metadata in the `BackupDescriptor`, to split off new ranges in the keyspace. A
 replica from each is sent an rpc via `DistSender` with the path(s) of the
 corresponding segment data. The replica streams in the data, merging full and
 incremental backups as appropriate, and rewrites keys with the new table ID.
-These are applied in batches using the proposer evaluated kv `MVCCPut` command.
-The data checksums are matched before committing. The `system.descriptor` entry
-is written for the table and a temporary name is given to the table in
-`system.namespace`, and both are gossiped.
+These are applied in batches using the proposer evaluated kv `AddSSTable`
+command. The data checksums are matched before committing. The
+`system.descriptor` entry and `system.namespace` entry are written for the table
+only after the rest of the work is complete to prevent users from accessing
+intermediate state.
 
-An alternate, much faster method that doesn't send the data bytes through raft,
-and thus avoids the write amplification, is described in the upcoming [Bulk
-Ingest RFC](#TODO). NB: This optimization requires empty ranges, so if
-interleaved tables are being restored, they must be restored together to use it.
+An alternate, much faster method that doesn't store the data bytes in the raft
+log, and thus avoids the write amplification, is described in the [Raft SSTable
+Sideloading RFC](raft_sstable_sideloading.md).
 
 The restored table's NULL, DEFAULT, and PRIMARY KEY constraints do not need to
 be checked. NOT NULL and CHECK are verified for each row as it is inserted. The
@@ -188,23 +173,23 @@ The `system.namespace` is flipped to the final name. If the restored table is
 replacing a current one, the old data can be cleaned up.
 
 
-## Bulk Ingest
+## Bulk Load
 
-Bulk ingest of precomputed data works similarly to restore. The user provides
+Bulk load of precomputed data works similarly to restore. The user provides
 files with non-overlapping ranges of kv entries. In contrast to restore, they
 will not include timestamps. The files should ideally be range-sized, but the
-system will handle ingesting big segments (which will be split after ingest via
+system will handle loading big segments (which will be split after load via
 the normal mechanism). Small segments will be merged into neighbors before
-ingest, when possible.
+load, when possible.
 
 CockroachDB will provide input and output adaptors for a few common distributed
 computation frameworks. Input adaptors will be provided that read a backup,
 allowing for data pipelines with no chance of affecting production. Output
-adaptors will produce files in the expected format for bulk ingest and with a
-placeholder table ID. We will also build cli subcommands that will ingest the
+adaptors will produce files in the expected format for bulk load and with a
+placeholder table ID. We will also build cli subcommands that will load the
 output of `./cockroach dump` and `pgdump`.
 
-See [Alternatives](#overlapping-ingest-segments) for details on how we'll remove
+See [Alternatives](#overlapping-load-segments) for details on how we'll remove
 the restrictions that the segments be non-overlapping.
 
 ## Resumability
@@ -392,16 +377,15 @@ other, but they're both valid `BACKUP` descriptors, so this is also fine.
 
 # Alternatives
 
-## SSTables and AddFile
-RocksDB has an [AddFile](
-https://github.com/facebook/rocksdb/wiki/Creating-and-Ingesting-SST-files)
-method that links a well-formed sstable directly into the LSM tree. These files
-are easy to output from backup and this bypasses quite a bit of computation. It
-could potentially be a huge performance win. However, there are many details to
-work out, including validation of the files and keeping the `MVCCStats` updated.
-It's possible that work done to support this could also be used for snapshots.
+## RocksDB WriteBatch format
 
-## Overlapping Ingest Segments
+The initial proposal suggested using the [RocksDB WriteBatch
+format](https://github.com/facebook/rocksdb/blob/v4.9/db/write_batch.cc#L10-L30)
+instead of sstables as the storage format. As mentioned above, sstables are
+preferable since they allow for a reasonably-efficient implementation of
+read-only queries over backups.
+
+## Overlapping Load Segments
 Distributed SQL is already building a framework for scalable computation. It
 seems likely that this could be used to segment files of overlapping keyranges
 (which are much easier for users to produce).
@@ -426,7 +410,7 @@ freeze. This could be combined with the transaction firehose to avoid data loss.
 ## Only Backup Primary Data
 Secondary indexes are derivable from the primary data, so we could skip backing
 them up to save space. Recomputing them on restore will probably make it too
-slow. Bulk ingest, however, will generate any secondary indexes.
+slow.
 
 # Unresolved questions
 
@@ -445,9 +429,13 @@ threshold for the tables where they use this feature.
   secondary index) out of a table in a backup.
 - The user could be instructed to bring up a new cluster and restore the whole
   table. This could be used to dump only what they wanted.
-- If sstables are used for the file format for backup, we could easily implement
+- Since sstables are used for the file format for backup, we could easily implement
   a read-only `storage.Engine` on top of the set of immutable, internally
   sorted, non-overlapping segments. This could less trivially be used to start a
   read-only version of cockroach on top of it.
 - The user could use one of the provided distributed computation input adaptors
   to write a job that extracts the data they need.
+
+[AddFile]: https://github.com/facebook/rocksdb/wiki/Creating-and-Ingesting-SST-files
+[LevelDB sstable format]: https://github.com/facebook/rocksdb/wiki/A-Tutorial-of-RocksDB-SST-formats
+[jobs-rfc]: 20170215_system_jobs.md
