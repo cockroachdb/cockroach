@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -151,6 +150,16 @@ type groupCSVWriter struct {
 	csvBytesWritten int64 // Only access via atomic
 }
 
+// defaultRetryOptions was copied from base because base was bringing in a lot
+// of other deps and this shaves ~0.5s off the ~2s pkg/cmd/workload build time.
+func defaultRetryOptions() retry.Options {
+	return retry.Options{
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2,
+	}
+}
+
 // groupWriteCSVs creates files on GCS in the specified folder that contain the
 // data for the given table and rows.
 //
@@ -178,7 +187,7 @@ func (c *groupCSVWriter) groupWriteCSVs(
 
 		path := path.Join(c.folder, table.Name, fmt.Sprintf(`%09d.csv`, rowStart))
 		const maxAttempts = 3
-		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		err := retry.WithMaxAttempts(ctx, defaultRetryOptions(), maxAttempts, func() error {
 			w := c.gcs.Bucket(c.config.GCSBucket).Object(path).NewWriter(ctx)
 			var err error
 			rowIdx, err = workload.WriteCSVRows(ctx, w, table, rowStart, rowEnd, c.chunkSizeBytes)
@@ -402,8 +411,20 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 	return nil
 }
 
+// StoreDir returns the canonical URL for a tar-gzip'd snapshot of a CockroachDB
+// store directory from a cluster with the initial tables of a fixture loaded.
+func StoreDir(config FixtureConfig, gen workload.Generator, storeIdx, numStores int) string {
+	return config.objectPathToURI(path.Join(
+		generatorToGCSFolder(config, gen),
+		fmt.Sprintf(`stores=%d`, numStores),
+		fmt.Sprintf(`%d.tgz`, storeIdx),
+	))
+}
+
 // ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.
-func ListFixtures(ctx context.Context, gcs *storage.Client, config FixtureConfig) ([]string, error) {
+func ListFixtures(
+	ctx context.Context, gcs *storage.Client, config FixtureConfig,
+) ([]string, error) {
 	b := gcs.Bucket(config.GCSBucket)
 
 	var fixtures []string

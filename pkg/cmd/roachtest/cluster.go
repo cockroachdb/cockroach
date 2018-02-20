@@ -40,13 +40,13 @@ import (
 )
 
 var (
-	local       bool
-	artifacts   string
-	cockroach   string
-	workload    string
-	clusterName string
-	clusterID   string
-	username    = os.Getenv("ROACHPROD_USER")
+	local         bool
+	artifacts     string
+	cockroachPath string
+	workloadPath  string
+	clusterName   string
+	clusterID     string
+	username      = os.Getenv("ROACHPROD_USER")
 )
 
 func ifLocal(trueVal, falseVal string) string {
@@ -91,12 +91,12 @@ func findBinary(binary, defValue string) (string, error) {
 
 func initBinaries() {
 	var err error
-	cockroach, err = findBinary(cockroach, "cockroach")
+	cockroachPath, err = findBinary(cockroachPath, "cockroach")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	workload, err = findBinary(workload, "workload")
+	workloadPath, err = findBinary(workloadPath, "workload")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -327,7 +327,7 @@ func (c *cluster) All() nodeListOption {
 	return c.Range(1, c.nodes)
 }
 
-// All returns a node list containing the nodes [begin,end].
+// Range returns a node list containing the nodes [begin,end].
 func (c *cluster) Range(begin, end int) nodeListOption {
 	if begin < 1 || end > c.nodes {
 		c.t.Fatalf("invalid node range: %d-%d (1-%d)", begin, end, c.nodes)
@@ -339,7 +339,7 @@ func (c *cluster) Range(begin, end int) nodeListOption {
 	return r
 }
 
-// All returns a node list containing only the node i.
+// Node returns a node list containing only the node i.
 func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
@@ -443,9 +443,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	}
 }
 
-// TODO(pmattis): cluster.Stop and cluster.Wipe are neither used or
-// tested. Silence unused warning.
-var _ = (*cluster).Stop
+// TODO(pmattis): cluster.Wipe is not used or tested. Silence unused warning.
 var _ = (*cluster).Wipe
 
 // Run a command on the specified node.

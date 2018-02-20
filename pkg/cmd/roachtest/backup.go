@@ -18,37 +18,48 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
+
+	"github.com/cockroachdb/cockroach/pkg/workload"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
 )
 
 func init() {
-	runImportTPCC := func(t *test, warehouses, nodes int) {
+	// TODO(dan): Make this backup2TB once the fixture is ready.
+	tests.Add(`backupTiny`, func(t *test) {
+		const nodes = 1
 		ctx := context.Background()
 		c := newCluster(ctx, t, nodes)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroachPath, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workloadPath, "./workload", c.Range(1, nodes))
-		t.Status("starting csv servers")
-		c.Start(ctx, c.Range(1, nodes))
-		for node := 1; node <= nodes; node++ {
-			c.Run(ctx, node, `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		meta, err := workload.Get(`bank`)
+		if err != nil {
+			t.Fatal(err)
 		}
+		gen := meta.New()
+		if err := gen.(workload.Flagser).Flags().Parse([]string{
+			`--rows=100`, `--payload-bytes=1024`, `--ranges=0`,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		c.RestoreStoreDirSnapshots(ctx, gen)
 
-		t.Status("running workload")
+		c.Put(ctx, cockroachPath, "./cockroach", c.Range(1, nodes))
+		c.Put(ctx, workloadPath, "./workload", c.Node(1))
+		c.Start(ctx, c.Range(1, nodes))
+
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
-			cmd := fmt.Sprintf(
-				`./workload fixtures make tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
-					`--gcs-bucket-override=%s --gcs-prefix-override=%s`,
-				warehouses, gcsTestBucket, c.name)
+			backupPath := (&url.URL{
+				Scheme: gcsURLScheme,
+				Host:   gcsTestBucket,
+				Path:   c.name,
+			}).String()
+			cmd := fmt.Sprintf(`./cockroach sql --insecure -e "BACKUP workload.bank TO '%s'"`,
+				backupPath)
 			c.Run(ctx, 1, cmd)
 			return nil
 		})
 		m.Wait()
-	}
-
-	const warehouses, nodes = 1000, 4
-	tests.Add(fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, nodes), func(t *test) {
-		runImportTPCC(t, warehouses, nodes)
 	})
 }

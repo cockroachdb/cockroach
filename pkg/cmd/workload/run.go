@@ -163,9 +163,9 @@ func sanitizeDBURL(dbURL string) (string, error) {
 	}
 	if strings.TrimPrefix(parsedURL.Path, "/") != "" {
 		return "", fmt.Errorf(
-			`database URL specifies database %q, but database "test" is always used`, parsedURL.Path)
+			`database URL specifies database %q, but database "workload" is always used`, parsedURL.Path)
 	}
-	parsedURL.Path = "test"
+	parsedURL.Path = "workload"
 
 	switch parsedURL.Scheme {
 	case "postgres", "postgresql":
@@ -213,11 +213,11 @@ func runInit(gen workload.Generator, args []string) error {
 
 func runInitImpl(gen workload.Generator, db *gosql.DB) error {
 	if *drop {
-		if _, err := db.Exec(`DROP DATABASE IF EXISTS test`); err != nil {
+		if _, err := db.Exec(`DROP DATABASE IF EXISTS workload`); err != nil {
 			return err
 		}
 	}
-	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS workload"); err != nil {
 		return err
 	}
 
