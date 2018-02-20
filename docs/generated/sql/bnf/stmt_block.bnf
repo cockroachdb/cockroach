@@ -1766,6 +1766,7 @@ over_clause ::=
 func_expr_common_subexpr ::=
 	'CURRENT_DATE'
 	| 'CURRENT_SCHEMA'
+	| 'CURRENT_CATALOG'
 	| 'CURRENT_TIMESTAMP'
 	| 'CURRENT_USER'
 	| 'SESSION_USER'
