@@ -27,12 +27,12 @@ func init() {
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(1))
+		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		t.Status("starting csv servers")
-		for node := 1; node <= nodes; node++ {
-			c.Run(ctx, node, `./workload csv-server --port=8081 &> /dev/null < /dev/null &`)
-		}
 		c.Start(ctx, c.Range(1, nodes))
+		for node := 1; node <= nodes; node++ {
+			c.Run(ctx, node, `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+		}
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -47,7 +47,7 @@ func init() {
 		m.Wait()
 	}
 
-	const warehouses, nodes = 100, 4
+	const warehouses, nodes = 1000, 4
 	tests.Add(fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, nodes), func(t *test) {
 		runImportTPCC(t, warehouses, nodes)
 	})
