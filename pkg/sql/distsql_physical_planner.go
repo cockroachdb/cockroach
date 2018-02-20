@@ -911,11 +911,13 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	p.AddProjection(outCols)
 
 	post = p.GetLastStagePost()
-	for i := range planToStreamColMap {
-		planToStreamColMap[i] = -1
-	}
-	for i, col := range post.OutputColumns {
-		planToStreamColMap[col] = i
+	if post.Projection {
+		for i := range planToStreamColMap {
+			planToStreamColMap[i] = -1
+		}
+		for i, col := range post.OutputColumns {
+			planToStreamColMap[col] = i
+		}
 	}
 	p.planToStreamColMap = planToStreamColMap
 	return p, nil
