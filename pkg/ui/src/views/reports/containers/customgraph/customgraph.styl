@@ -1,0 +1,28 @@
+@require nib
+@require "~styl/base/palette.styl"
+
+.metric-table-dropdown
+  line-height 17px
+  padding 6px 12px
+  vertical-align middle
+  border-radius 2px
+  padding-right 10px
+  color $body-color
+
+  &:hover
+    background-color $dropdown-hover-color
+
+  &__title
+    vertical-align middle
+    display inline-block
+
+  &__select
+    display inline-block
+    vertical-align middle
+    white-space nowrap
+
+    &:hover
+      background-color $dropdown-hover-color
+
+.metric-edit-button
+    padding 3px

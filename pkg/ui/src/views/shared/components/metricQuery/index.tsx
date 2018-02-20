@@ -23,6 +23,8 @@ import React from "react";
 import * as protos from  "src/js/protos";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
+import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
+import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 
 /**
  * AxisUnits is an enumeration used to specify the type of units being displayed
@@ -86,6 +88,9 @@ export interface MetricProps {
   aggregateAvg?: boolean;
   downsampleMax?: boolean;
   downsampleMin?: boolean;
+  derivative?: TimeSeriesQueryDerivative;
+  aggregator?: TimeSeriesQueryAggregator;
+  downsampler?: TimeSeriesQueryAggregator;
 }
 
 /**
