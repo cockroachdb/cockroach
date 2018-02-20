@@ -1050,6 +1050,8 @@ func TestParse2(t *testing.T) {
 		// Some functions are nearly keywords.
 		{`SELECT CURRENT_SCHEMA`,
 			`SELECT current_schema()`},
+		{`SELECT CURRENT_CATALOG`,
+			`SELECT current_database()`},
 		{`SELECT CURRENT_TIMESTAMP`,
 			`SELECT current_timestamp()`},
 		{`SELECT CURRENT_DATE`,
