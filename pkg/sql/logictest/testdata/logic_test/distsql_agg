@@ -91,7 +91,7 @@ SELECT SUM((a-1)*1000) + SUM((b-1)*100) + SUM((c::INT-1)*10) + SUM(d-1) FROM dat
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzElM-rozAQx-_7VyxzsjCHRm236yllTx7aLv0BC4ssWTOI0BpJIuxS_N8f6qGv0sYHfejNJH7y-TIT5gqFkrQVFzIQ_QYGCD4gBIAQAsICEoRSq5SMUbr5pQNi-Q-iOUJelJVtthOEVGmC6Ao2t2eCCI7i75n2JCRpQJBkRX5uJaXOL0L_51JYAQi7ykZfOUPuIw-Qh5DUCKqyt5uNFRlBxGr8uH2dZZoyYVVPfjhtPM5mgLCJtx7326_1L48HzdeP3Wl79Hg4exrCfxri5q4KpSVpknfqpP60mIfT5k88EDS4C8om7dWAfZxe-ZOWYMA-TgmCSUswYB-nBOGkJRiwjz-0HoTYkylVYag3vB7fPG-GGsmMugloVKVT-qlV2mq65a7l2g1JxnanrFvERXfUBHwPMyfs38GsD_tu84A6cNKhGw5fyb1wwku3efmK-ZsTXrnNq1fM3929mg88E_cj67uT-stbAAAA__-dk9aZ
+https://cockroachdb.github.io/distsqlplan/decode.html?eJy8lD9r8zAQh_f3Y9zkgIbIdvKmnhw6eUhS8gcKxRTVOowhsYwkQ0vwdy-2hjQmkQop2izJj57fceLOUAuOa3ZCBckbUCAQAoEICMRAYAY5gUaKApUSsv_FABn_hGRKoKqbVvfbOYFCSITkDLrSR4QE9uzjiFtkHCUQ4KhZdRwkjaxOTH6lnGkGeUdAtPpyjdKsREhoR36vWpalxJJpMTLtDqsgpRMgsMrWQRoOX8vXII36r-fNYb0P0nhyN0R4N8TF3dZCcpTIr9R592cxd4fVe-YIGl0Fpf4a41D5aUzor16Hyk-9kb96HSo_9cb-6nWo_A-aGyG2qBpRKxwNnNs3T_tBhLxEM7WUaGWBL1IUg8YsNwM3bHBU2pxSs8hqc9QH_AlTKxxewXQMh3azQx1Z6dgOx4_knlnhud08f8T83wov7ObFI-Yne6-mjmdif2Rjd979-w4AAP__1sfBCQ==
 
 query RIRI
 SELECT SUM(a), MIN(b), MAX(c), COUNT(d) FROM data
