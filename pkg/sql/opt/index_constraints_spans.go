@@ -486,6 +486,55 @@ func (c *indexConstraintCtx) mergeSpanSets(
 	return result
 }
 
+// areKeysConsecutive returns true if:
+//  - a and b are both inclusive,
+//  - a and b have the same length,
+//  - all but the last datums match between a and b,
+//  - the last datum of b is the next datum after a (for types that support it).
+func (c *indexConstraintCtx) areKeysConsecutive(offset int, a, b LogicalKey) bool {
+	if !a.Inclusive || !b.Inclusive {
+		return false
+	}
+	n := len(a.Vals)
+	if len(b.Vals) != n {
+		return false
+	}
+	// All the datums up to the last one must be equal.
+	if c.compareKeyVals(offset, a.Vals[:n-1], b.Vals[:n-1]) != 0 {
+		return false
+	}
+	next, ok := c.nextDatum(a.Vals[n-1], c.colInfos[offset+n-1].Direction)
+	if !ok {
+		return false
+	}
+	return next.Compare(c.evalCtx, b.Vals[n-1]) == 0
+}
+
+// consolidateSpans merges spans that have consecutive keys, for example:
+// [/1 - /2], [/3 - /4] are equivalent to [/1 - /4].
+func (c *indexConstraintCtx) consolidateSpans(offset int, spans LogicalSpans) LogicalSpans {
+	var result LogicalSpans
+	for i := 1; i < len(spans); i++ {
+		if c.areKeysConsecutive(offset, spans[i-1].End, spans[i].Start) {
+			// We only allocate the result if we need to change something.
+			if result == nil {
+				result = make(LogicalSpans, 0, len(spans)-1)
+				result = append(result, spans[:i]...)
+			}
+			// Adjust the last span.
+			result[len(result)-1].End = spans[i].End
+		} else {
+			if result != nil {
+				result = append(result, spans[i])
+			}
+		}
+	}
+	if result == nil {
+		return spans
+	}
+	return result
+}
+
 // isSpanSubset returns true if the spans in a are completely
 // contained in the spans in b.
 func (c *indexConstraintCtx) isSpanSubset(offset int, a LogicalSpans, b LogicalSpans) bool {
