@@ -187,7 +187,7 @@ algorithms and that remains unchanged in this RFC.
 
 ## Outline of the implementation
 
-The generic, reuisable algorithms are implemented in
+The generic, reusable algorithms are implemented in
 `pkg/sql/sem/tree/name_resolution.go`.
 
 - `(*TableName).ResolveExisting()`: algorithm A1
