@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,13 +14,14 @@
 //
 // This file implements data structures used by index constraints generation.
 
-package opt
+package idxconstraint
 
 import (
 	"bytes"
 	"fmt"
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -168,7 +169,7 @@ var _ = ExactPrefix
 // index constraints.
 type IndexColumnInfo struct {
 	// VarIdx identifies the indexed var that corresponds to this column.
-	VarIdx    int
+	VarIdx    opt.ColumnIndex
 	Typ       types.T
 	Direction encoding.Direction
 	// Nullable should be set to false if this column cannot store NULLs; used
@@ -208,6 +209,8 @@ func makeIndexConstraintCtx(
 // taken into account.
 //
 // Returns 0 if the lists are equal, or one is a prefix of the other.
+// Otherwise returns -1 or +1 depending which is lexicographically smaller
+// (taking into account the index column directions).
 func (c *indexConstraintCtx) compareKeyVals(offset int, a, b tree.Datums) int {
 	for i := 0; i < len(a) && i < len(b); i++ {
 		if cmp := a[i].Compare(c.evalCtx, b[i]); cmp != 0 {
