@@ -22,7 +22,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -274,98 +273,6 @@ func (s *scope) endAggFunc() (refScope *scope) {
 	return refScope
 }
 
-// findColumn finds the given column in the scope, and returns
-// a columnProps representing the column.
-//
-// If multiple columns match c in the same scope, findColumn throws an error
-// due to ambiguity. If no columns match in the current scope, findColumn
-// searches the parent scope. If the column is not found in any of the
-// ancestor scopes, findColumn throws an error.
-func (s *scope) findColumn(c *tree.ColumnItem) *columnProps {
-	//tblName := optbase.TableName(c.TableName.Table())
-	tblName := optbase.TableName("")
-	colName := optbase.ColumnName(c.ColumnName)
-
-	if tblName != "" {
-		// TODO(rytaft): This needs to be updated to include schema.
-		found := false
-		for _, col := range s.cols {
-			if col.table == tblName {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
-				"source name %q not found in FROM clause", tblName)})
-		}
-	}
-
-	var candidates []*columnProps
-
-	// We only allow hidden columns in the current scope. Hidden columns
-	// in parent scopes are not accessible.
-	allowHidden := true
-
-	for curr := s; curr != nil; curr, allowHidden = curr.parent, false {
-		for i := range curr.cols {
-			col := &curr.cols[i]
-			// TODO(rytaft): Do not return a match if this column is being
-			// backfilled, or the column expression being resolved is not from
-			// a selector column expression from an UPDATE/DELETE.
-
-			if col.matches(tblName, colName) && (allowHidden || !col.hidden) {
-				candidates = append(candidates, col)
-			}
-		}
-
-		if len(candidates) == 1 {
-			col := candidates[0]
-			return col
-		} else if len(candidates) > 1 {
-			if tblName == "" {
-				// The table name was unqualified, so if a single anonymous, non-hidden
-				// source exists with a matching column, use that.
-				var anon *columnProps
-				for i := range candidates {
-					if candidates[i].table == "" && !candidates[i].hidden {
-						if anon != nil {
-							panic(ambiguousError(c, candidates))
-						}
-						anon = candidates[i]
-					}
-				}
-
-				if anon != nil {
-					return anon
-				}
-
-				// One last option: if a single non-hidden source exists with a
-				// matching column, use that.
-				var visible *columnProps
-				for i := range candidates {
-					if !candidates[i].hidden {
-						if visible != nil {
-							panic(ambiguousError(c, candidates))
-						}
-						visible = candidates[i]
-					}
-				}
-
-				if visible != nil {
-					return visible
-				}
-			}
-
-			panic(ambiguousError(c, candidates))
-		}
-	}
-
-	panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-		"column name %q not found", tree.ErrString(c))})
-}
-
 // scope implements the tree.Visitor interface so that it can walk through
 // a tree.Expr tree, perform name resolution, and replace unresolved column
 // names with a columnProps. The info stored in columnProps is necessary for
@@ -383,20 +290,88 @@ func (*columnProps) ColumnResolutionResult() {}
 
 // FindSourceProvidingColumn is part of the tree.ColumnItemResolver interface.
 func (s *scope) FindSourceProvidingColumn(
-	_ context.Context, colNameName tree.Name,
+	_ context.Context, colName tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	colName := optbase.ColumnName(colNameName)
-	for ; s != nil; s = s.parent {
+	var candidates []*columnProps
+
+	// We only allow hidden columns in the current scope. Hidden columns
+	// in parent scopes are not accessible.
+	allowHidden := true
+
+	// If multiple columns match c in the same scope, we return an error
+	// due to ambiguity. If no columns match in the current scope, we
+	// search the parent scope. If the column is not found in any of the
+	// ancestor scopes, we return an error.
+	for ; s != nil; s, allowHidden = s.parent, false {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.matches("", colName) {
-				// TODO(whomever): source names in a FROM clause also have a
-				// catalog/schema prefix and it matters.
-				return tree.NewUnqualifiedTableName(tree.Name(col.table)), col, int(col.index), nil
+			// TODO(rytaft): Do not return a match if this column is being
+			// backfilled, or the column expression being resolved is not from
+			// a selector column expression from an UPDATE/DELETE.
+
+			// TODO(whomever): source names in a FROM clause also have a
+			// catalog/schema prefix and it matters.
+			if col.name == colName && (allowHidden || !col.hidden) {
+				candidates = append(candidates, col)
+			}
+		}
+
+		switch len(candidates) {
+		case 0:
+			// No matching columns found. Check parent scopes.
+			continue
+
+		case 1:
+			// We found a match! Return it.
+			col := candidates[0]
+			return &col.table, col, int(col.index), nil
+
+		default:
+			// Multiple matches found. See if we can disambiguate based on
+			// other attributes of the columns.
+
+			// Helper function to find a single column that matches the conditions
+			// specified in the isMatch function. Returns an error if multiple
+			// columns match.
+			findSingleMatchingColumn := func(isMatch func(*columnProps) bool) (match *columnProps, err error) {
+				for i := range candidates {
+					if isMatch(candidates[i]) {
+						if match != nil {
+							return nil, newAmbiguousColumnError(&colName, candidates)
+						}
+						match = candidates[i]
+					}
+				}
+
+				return match, nil
+			}
+
+			// The table name was unqualified, so if a single anonymous, non-hidden
+			// source exists with a matching column, use that.
+			anon, err := findSingleMatchingColumn(func(c *columnProps) bool {
+				return c.table.TableName == "" && !c.hidden
+			})
+			if err != nil {
+				return nil, nil, -1, err
+			}
+			if anon != nil {
+				return &anon.table, anon, int(anon.index), nil
+			}
+
+			// One last option: if a single non-hidden source exists with a
+			// matching column, use that.
+			visible, err := findSingleMatchingColumn(func(c *columnProps) bool { return !c.hidden })
+			if err != nil {
+				return nil, nil, -1, err
+			}
+			if visible != nil {
+				return &visible.table, visible, int(visible.index), nil
 			}
 		}
 	}
-	return nil, nil, -1, fmt.Errorf("unknown column %s", colName)
+
+	return nil, nil, -1, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+		"column name %q not found", tree.ErrString(&colName))
 }
 
 // FindSourceMatchingName is part of the tree.ColumnItemResolver interface.
@@ -408,19 +383,51 @@ func (s *scope) FindSourceMatchingName(
 	srcMeta tree.ColumnSourceMeta,
 	err error,
 ) {
-	tblName := optbase.TableName(tn.Table())
-	for ; s != nil; s = s.parent {
-		for i := range s.cols {
-			col := &s.cols[i]
-			// TODO(whomever): this improperly disregards the catalog/schema prefix.
-			if col.table == tblName {
-				// TODO(whomever): this improperly fails to recognize when a source table
-				// is ambiguous, e.g. SELECT kv.k FROM db1.kv, db2.kv
-				return tree.ExactlyOne, tree.NewUnqualifiedTableName(tree.Name(col.table)), s, nil
+	sources := make(map[tree.TableName]struct{})
+	for _, col := range s.cols {
+		sources[col.table] = exists
+	}
+
+	found := false
+	var source tree.TableName
+	for src := range sources {
+		if !sourceNameMatches(src, tn) {
+			continue
+		}
+		if found {
+			return tree.MoreThanOne, nil, s, newAmbiguousSourceError(&tn)
+		}
+		found = true
+		source = src
+	}
+
+	if !found {
+		return tree.NoResults, nil, s, nil
+	}
+	return tree.ExactlyOne, &source, s, nil
+}
+
+// sourceNameMatches checks whether a request for table name toFind
+// can be satisfied by the FROM source name srcName.
+//
+// For example:
+// - a request for "kv" is matched by a source named "db1.public.kv"
+// - a request for "public.kv" is not matched by a source named just "kv"
+func sourceNameMatches(srcName tree.TableName, toFind tree.TableName) bool {
+	if srcName.TableName != toFind.TableName {
+		return false
+	}
+	if toFind.ExplicitSchema {
+		if !srcName.ExplicitSchema || srcName.SchemaName != toFind.SchemaName {
+			return false
+		}
+		if toFind.ExplicitCatalog {
+			if !srcName.ExplicitCatalog || srcName.CatalogName != toFind.CatalogName {
+				return false
 			}
 		}
 	}
-	return tree.NoResults, nil, nil, nil
+	return true
 }
 
 // Resolve is part of the tree.ColumnItemResolver interface.
@@ -429,24 +436,24 @@ func (s *scope) Resolve(
 	prefix *tree.TableName,
 	srcMeta tree.ColumnSourceMeta,
 	colHint int,
-	colNameName tree.Name,
+	colName tree.Name,
 ) (tree.ColumnResolutionResult, error) {
 	if colHint >= 0 {
 		// Column was found by FindSourceProvidingColumn above.
 		return srcMeta.(*columnProps), nil
 	}
+
 	// Otherwise, a table is known but not the column yet.
 	inScope := srcMeta.(*scope)
-	tblName := optbase.TableName(prefix.Table())
-	colName := optbase.ColumnName(colNameName)
 	for i := range inScope.cols {
 		col := &s.cols[i]
-		if col.matches(tblName, colName) {
+		if col.name == colName && sourceNameMatches(col.table, *prefix) {
 			return col, nil
 		}
 	}
 
-	return nil, fmt.Errorf("unknown column %s", columnProps{name: colName, table: tblName})
+	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+		"column name %q not found", tree.ErrString(tree.NewColumnItem(prefix, colName)))
 }
 
 // VisitPre is part of the Visitor interface.
@@ -463,7 +470,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return s.VisitPre(vn)
 
 	case *tree.ColumnItem:
-		colI, err := t.Resolve(context.TODO(), s)
+		colI, err := t.Resolve(s.builder.ctx, s)
 		if err != nil {
 			panic(builderError{err})
 		}
@@ -546,10 +553,10 @@ func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 	panic("unimplemented: scope.IndexedVarNodeFormatter")
 }
 
-// ambiguousError returns an error with a helpful error message to be used in
-// case of an ambiguous column reference.
-func ambiguousError(c *tree.ColumnItem, candidates []*columnProps) error {
-	colString := tree.ErrString(c)
+// newAmbiguousColumnError returns an error with a helpful error message to be
+// used in case of an ambiguous column reference.
+func newAmbiguousColumnError(n *tree.Name, candidates []*columnProps) error {
+	colString := tree.ErrString(n)
 	var msgBuf bytes.Buffer
 	sep := ""
 	fmtCandidate := func(tn tree.TableName) {
@@ -560,11 +567,24 @@ func ambiguousError(c *tree.ColumnItem, candidates []*columnProps) error {
 		fmt.Fprintf(&msgBuf, "%s%s.%s", sep, name, colString)
 	}
 	for i := range candidates {
-		candidate := tree.MakeUnqualifiedTableName(tree.Name(candidates[i].table))
+		candidate := candidates[i].table
 		fmtCandidate(candidate)
 		sep = ", "
 	}
-	return builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
+	return pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
 		"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String(),
-	)}
+	)
+}
+
+// newAmbiguousSourceError returns an error with a helpful error message to be
+// used in case of an ambiguous table name.
+func newAmbiguousSourceError(tn *tree.TableName) error {
+	if tn.Catalog() == "" {
+		return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+			"ambiguous source name: %q", tree.ErrString(tn))
+
+	}
+	return pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+		"ambiguous source name: %q (within database %q)",
+		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
 }
