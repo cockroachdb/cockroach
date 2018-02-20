@@ -31,7 +31,12 @@ import (
 
 type dropTableNode struct {
 	n  *tree.DropTable
-	td []*sqlbase.TableDescriptor
+	td []toDelete
+}
+
+type toDelete struct {
+	tn   *tree.TableName
+	desc *sqlbase.TableDescriptor
 }
 
 // DropTable drops a table.
@@ -39,8 +44,9 @@ type dropTableNode struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
-	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
-	for _, name := range n.Names {
+	td := make([]toDelete, 0, len(n.Names))
+	for i := range n.Names {
+		name := &n.Names[i]
 		tn, err := name.Normalize()
 		if err != nil {
 			return nil, err
@@ -53,15 +59,16 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 			continue
 		}
 
-		td = append(td, droppedDesc)
+		td = append(td, toDelete{tn, droppedDesc})
 	}
 
 	dropping := make(map[sqlbase.ID]bool)
 	for _, d := range td {
-		dropping[d.ID] = true
+		dropping[d.desc.ID] = true
 	}
 
-	for _, droppedDesc := range td {
+	for _, toDel := range td {
+		droppedDesc := toDel.desc
 		for _, idx := range droppedDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
 				if !dropping[ref.Table] {
@@ -95,7 +102,8 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 
 func (n *dropTableNode) startExec(params runParams) error {
 	ctx := params.ctx
-	for _, droppedDesc := range n.td {
+	for _, toDel := range n.td {
+		droppedDesc := toDel.desc
 		if droppedDesc == nil {
 			continue
 		}
@@ -117,7 +125,8 @@ func (n *dropTableNode) startExec(params runParams) error {
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), params.SessionData().User, droppedViews},
+			}{toDel.tn.FQString(), n.n.String(),
+				params.SessionData().User, droppedViews},
 		); err != nil {
 			return err
 		}

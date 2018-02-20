@@ -147,7 +147,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 			User       string
 			MutationID uint32
 		}{
-			n.tableDesc.Name, n.n.Name.String(), n.n.String(),
+			n.n.Table.TableName().FQString(), n.n.Name.String(), n.n.String(),
 			params.SessionData().User, uint32(mutationID),
 		},
 	); err != nil {

@@ -88,6 +88,12 @@ func (t *TableName) Format(ctx *FmtCtx) {
 }
 func (t *TableName) String() string { return AsString(t) }
 
+// FQString renders the table name in full, not omitting the prefix
+// schema and catalog names. Suitable for logging, etc.
+func (t *TableName) FQString() string {
+	return AsStringWithFlags(t, FmtAlwaysQualifyTableNames)
+}
+
 // Table retrieves the unqualified table name.
 func (t *TableName) Table() string {
 	return string(t.TableName)

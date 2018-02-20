@@ -73,6 +73,10 @@ func GetObjectNames(
 // ResolveExistingObject looks up an existing object.
 // If required is true, an error is returned if the object does not exist.
 // Optionally, if a desired descriptor type is specified, that type is checked.
+//
+// The object name is modified in-place with the result of the name
+// resolution, if successful. It is not modified in case of error or
+// if no object is found.
 func ResolveExistingObject(
 	ctx context.Context, sc SchemaResolver, tn *ObjectName, required bool, requiredType requiredType,
 ) (res *ObjectDescriptor, err error) {
@@ -136,6 +140,9 @@ type resolveFlags struct {
 // ResolveTargetObject determines a valid target path for an object
 // that may not exist yet. It returns the descriptor for the database
 // where the target object lives.
+//
+// The object name is modified in-place with the result of the name
+// resolution.
 func ResolveTargetObject(
 	ctx context.Context, sc SchemaResolver, tn *ObjectName,
 ) (res *DatabaseDescriptor, err error) {
@@ -147,7 +154,7 @@ func ResolveTargetObject(
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
 			"invalid target name: %q", tree.ErrString(tn))
 	}
-	if tn.Schema() != "public" {
+	if tn.Schema() != tree.PublicSchema {
 		return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
 	}
 	return descI.(*DatabaseDescriptor), nil
