@@ -309,56 +309,6 @@ func BenchmarkRestoreTPCH10(b *testing.B) {
 	}
 }
 
-func BenchmarkRestore2TB(b *testing.B) {
-	if b.N != 1 {
-		b.Fatal("b.N must be 1")
-	}
-
-	bt := benchmarkTest{
-		b: b,
-		// TODO(dan): Switch this back to 10 machines when this test goes back
-		// to Azure. Each GCE machine disk is 375GB, so with our current need
-		// for 2x the restore size in disk space, 2tb unless we up this a bit.
-		nodes:  15,
-		prefix: "restore2tb",
-	}
-
-	ctx := context.Background()
-	bt.Start(ctx)
-	defer bt.Close(ctx)
-
-	db, err := gosql.Open("postgres", bt.f.PGUrl(ctx, 0))
-	if err != nil {
-		b.Fatalf("%+v", err)
-	}
-	defer db.Close()
-
-	// We're currently pinning this test to be run on GCE via
-	// teamcity-nightly-acceptance.sh. Effectively remove the setting for GCE,
-	// which doesn't seem to need it.
-	if _, err := db.Exec(`SET CLUSTER SETTING kv.bulk_io_write.max_rate = '1GB'`); err != nil {
-		b.Fatalf("%+v", err)
-	}
-
-	if _, err := db.Exec("CREATE DATABASE datablocks"); err != nil {
-		b.Fatalf("%+v", err)
-	}
-
-	fn := func(ctx context.Context) error {
-		_, err := db.Exec(`RESTORE datablocks.* FROM $1`, `gs://cockroach-test/2t-backup`)
-		return err
-	}
-	b.ResetTimer()
-	jobID, status, err := jobs.RunAndWaitForTerminalState(ctx, db, fn)
-	b.StopTimer()
-	if err != nil {
-		b.Fatalf("%+v", err)
-	}
-	if status != jobs.StatusSucceeded {
-		b.Fatalf("job %d: expected %s got %s", jobID, jobs.StatusSucceeded, status)
-	}
-}
-
 func BenchmarkBackup2TB(b *testing.B) {
 	if b.N != 1 {
 		b.Fatal("b.N must be 1")
