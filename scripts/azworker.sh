@@ -8,6 +8,8 @@
 
 set -euo pipefail
 
+cd "$(dirname "${0}")/.." && source build/shlib.sh
+
 LOCATION=${LOCATION-eastus}
 MACHINE_SIZE=${MACHINE_SIZE-Standard_F16}
 USER=${USER-$(id -un)}
@@ -52,10 +54,10 @@ case ${1-} in
     # Clear any cached host keys for this hostname and accept the new one.
     ssh-keygen -R "${FQDN}"
     # Retry while vm and sshd to start up.
-    "$(dirname "${0}")/travis_retry.sh" ssh -o StrictHostKeyChecking=no "${USER}@${FQDN}" true
+    retry ssh -o StrictHostKeyChecking=no "${USER}@${FQDN}" true
 
-    rsync -az "$(dirname "${0}")/../build/bootstrap/" "${USER}@${FQDN}:bootstrap/"
-    rsync -az "$(dirname "${0}")/../build/disable-hyperv-timesync.sh" "${USER}@${FQDN}:bootstrap/"
+    rsync -az "build/bootstrap/" "${USER}@${FQDN}:bootstrap/"
+    rsync -az "build/disable-hyperv-timesync.sh" "${USER}@${FQDN}:bootstrap/"
     ssh -A "${USER}@${FQDN}" ./bootstrap/bootstrap-debian.sh
     ssh -A "${USER}@${FQDN}" ./bootstrap/disable-hyperv-timesync.sh
     ssh -A "${USER}@${FQDN}" ./bootstrap/install-azure-cli.sh
