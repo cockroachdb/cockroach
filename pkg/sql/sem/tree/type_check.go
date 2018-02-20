@@ -209,7 +209,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 	binOp := fns[0].(BinOp)
 	expr.Left, expr.Right = leftTyped, rightTyped
 	expr.fn = binOp
-	expr.typ = binOp.returnType()(typedSubExprs)
+	expr.typ = binOp.returnType()([]types.T{leftReturn, rightReturn})
 	return expr, nil
 }
 
@@ -569,11 +569,13 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			"insufficient privilege to use %s", expr.Func)
 	}
 
+	argTypes := make([]types.T, len(typedSubExprs))
 	for i, subExpr := range typedSubExprs {
 		expr.Exprs[i] = subExpr
+		argTypes[i] = subExpr.ResolvedType()
 	}
 	expr.fn = builtin
-	expr.typ = builtin.returnType()(typedSubExprs)
+	expr.typ = builtin.returnType()(argTypes)
 	return expr, nil
 }
 
@@ -747,7 +749,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 	unaryOp := fns[0].(UnaryOp)
 	expr.Expr = exprTyped
 	expr.fn = unaryOp
-	expr.typ = unaryOp.returnType()(typedSubExprs)
+	expr.typ = unaryOp.returnType()([]types.T{exprReturn})
 	return expr, nil
 }
 

@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -29,9 +30,7 @@ import (
 func inferType(ev ExprView) types.T {
 	fn := typingFuncMap[ev.Operator()]
 	if fn == nil {
-		// TODO(rytaft): This should cause a panic, but for now just return NULL
-		// so the builder code can be implemented and tested.
-		return types.Null
+		panic(fmt.Sprintf("type inference for %v is not yet implemented", ev.Operator()))
 	}
 	return fn(ev)
 }
@@ -50,6 +49,7 @@ func init() {
 		opt.TupleOp:       typeAsTuple,
 		opt.ProjectionsOp: typeAsTuple,
 		opt.ExistsOp:      typeAsBool,
+		opt.FunctionOp:    typeFunction,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -118,9 +118,7 @@ func typeAsUnary(ev ExprView) types.T {
 		}
 	}
 
-	// TODO(rytaft): This should cause a panic, but for now just return NULL
-	// so the builder code can be implemented and tested.
-	return types.Null
+	panic(fmt.Sprintf("could not find type for unary expression: %v", ev))
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
@@ -143,7 +141,36 @@ func typeAsBinary(ev ExprView) types.T {
 		}
 	}
 
-	// TODO(rytaft): This should cause a panic, but for now just return NULL
-	// so the builder code can be implemented and tested.
-	return types.Null
+	panic(fmt.Sprintf("could not find type for binary expression: %v", ev))
+}
+
+func typeFunction(ev ExprView) types.T {
+	name := string(*ev.Child(0).Private().(*tree.DString))
+	builtins := builtins.Builtins[name]
+
+	if builtins == nil {
+		// This must be an ambiguous function, so get its type from the name.
+		_, returnType := opt.RecoverAmbiguousFunction(name)
+		return returnType
+	}
+
+	// Allocate slice of arg types (child count - 1 since function name doesn't
+	// need to be included.
+	argTypes := make([]types.T, ev.ChildCount()-1)
+	for i := 1; i < ev.ChildCount(); i++ {
+		argTypes[i-1] = ev.Child(i).Logical().Scalar.Type
+	}
+
+	for _, builtin := range builtins {
+		if builtin.Types.Match(argTypes) {
+			if builtin.PreferredOverload {
+				// Ambiguous functions need to have their names disambiguated.
+				// See opt.DisambiguateFunction for more details.
+				panic(fmt.Sprintf("function %s needs to be disambiguated", name))
+			}
+			return builtin.ReturnType(argTypes)
+		}
+	}
+
+	panic(fmt.Sprintf("could not find type for function expression: %v", ev))
 }
