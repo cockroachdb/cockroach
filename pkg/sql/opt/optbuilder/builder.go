@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
@@ -247,7 +248,7 @@ func (b *Builder) buildTable(
 			panic(builderError{err})
 		}
 
-		return b.buildScan(tbl, inScope)
+		return b.buildScan(tbl, tn, inScope)
 
 	case *tree.ParenTableExpr:
 		return b.buildTable(source.Expr, inScope)
@@ -272,7 +273,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// If an alias was specified, use that.
 		tableAlias = as.Alias
 		for i := range scope.cols {
-			scope.cols[i].table = optbase.TableName(tableAlias)
+			scope.cols[i].table.TableName = tableAlias
 		}
 	}
 
@@ -287,17 +288,20 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 			if scope.cols[colIdx].hidden {
 				continue
 			}
-			scope.cols[colIdx].name = optbase.ColumnName(colAlias[aliasIdx])
+			scope.cols[colIdx].name = colAlias[aliasIdx]
 			aliasIdx++
 		}
 	}
 }
 
-// buildScan builds a memo group for a scanOp expression on the given table.
+// buildScan builds a memo group for a scanOp expression on the given table
+// with the given table name.
 //
 // See Builder.buildStmt above for a description of the remaining input and
 // return values.
-func (b *Builder) buildScan(tbl optbase.Table, inScope *scope) (out opt.GroupID, outScope *scope) {
+func (b *Builder) buildScan(
+	tbl optbase.Table, tn *tree.TableName, inScope *scope,
+) (out opt.GroupID, outScope *scope) {
 	tblIndex := b.factory.Metadata().AddTable(tbl)
 
 	outScope = inScope.push()
@@ -306,8 +310,8 @@ func (b *Builder) buildScan(tbl optbase.Table, inScope *scope) (out opt.GroupID,
 		colIndex := b.factory.Metadata().TableColumn(tblIndex, i)
 		colProps := columnProps{
 			index:  colIndex,
-			name:   col.ColName(),
-			table:  tbl.TabName(),
+			name:   tree.Name(col.ColName()),
+			table:  *tn,
 			typ:    col.DatumType(),
 			hidden: col.IsHidden(),
 		}
@@ -798,16 +802,25 @@ func (b *Builder) expandStarAndResolveType(
 	// NB: The case statements are sorted lexicographically.
 	switch t := expr.(type) {
 	case *tree.AllColumnsSelector:
-		// TODO(whomever): this improperly omits the catalog/schema prefix.
-		tableName := optbase.TableName(t.TableName.Parts[0])
+		tn, err := tree.NormalizeTableName(&t.TableName)
+		if err != nil {
+			panic(builderError{err})
+		}
+
+		numRes, src, _, err := inScope.FindSourceMatchingName(b.ctx, tn)
+		if err != nil {
+			panic(builderError{err})
+		}
+		if numRes == tree.NoResults {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"no data source named %q", tree.ErrString(&tn))})
+		}
+
 		for i := range inScope.cols {
 			col := inScope.cols[i]
-			if col.table == tableName && !col.hidden {
+			if col.table == *src && !col.hidden {
 				exprs = append(exprs, &col)
 			}
-		}
-		if len(exprs) == 0 {
-			panic(errorf("unknown table %s", t))
 		}
 
 	case tree.UnqualifiedStar:
@@ -916,22 +929,22 @@ func (b *Builder) buildJoin(
 	right, rightScope := b.buildTable(join.Right, inScope)
 
 	// Check that the same table name is not used on both sides.
-	leftTables := make(map[string]struct{})
+	leftTables := make(map[tree.TableName]struct{})
 	for _, leftCol := range leftScope.cols {
-		leftTables[string(leftCol.table)] = exists
+		leftTables[leftCol.table] = exists
 	}
 
 	for _, rightCol := range rightScope.cols {
 		t := rightCol.table
-		if t == "" {
+		if t.TableName == "" {
 			// Allow joins of sources that define columns with no
 			// associated table name. At worst, the USING/NATURAL
 			// detection code or expression analysis for ON will detect an
 			// ambiguity later.
 			continue
 		}
-		if _, ok := leftTables[string(t)]; ok {
-			panic(errorf("cannot join columns from the same source name %q (missing AS clause)", t))
+		if _, ok := leftTables[t]; ok {
+			panic(errorf("cannot join columns from the same source name %q (missing AS clause)", t.TableName))
 		}
 	}
 
@@ -983,7 +996,7 @@ func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
 			}
 
 			if leftCol.name == rightCol.name {
-				common = append(common, tree.Name(leftCol.name))
+				common = append(common, leftCol.name)
 				break
 			}
 		}
@@ -1111,13 +1124,12 @@ func (b *Builder) buildUsingJoinPredicate(
 	names tree.NameList,
 	inScope *scope,
 ) (mergedCols map[opt.ColumnIndex]opt.GroupID, out opt.GroupID, outScope *scope) {
-	joined := make(map[optbase.ColumnName]*columnProps, len(names))
+	joined := make(map[tree.Name]*columnProps, len(names))
 	conditions := make([]opt.GroupID, 0, len(names))
 	mergedCols = make(map[opt.ColumnIndex]opt.GroupID)
 	outScope = inScope.push()
 
-	for _, n := range names {
-		name := optbase.ColumnName(n)
+	for _, name := range names {
 		if _, ok := joined[name]; ok {
 			panic(errorf("column %q appears more than once in USING clause", name))
 		}
@@ -1176,9 +1188,7 @@ func (b *Builder) buildUsingJoinPredicate(
 // (2) If the column has the same name as one of the columns in `joined` but is
 //     not equal, it is marked as hidden and added to the scope.
 // (3) All other columns are added to the scope without modification.
-func hideMatchingColumns(
-	cols []columnProps, joined map[optbase.ColumnName]*columnProps, scope *scope,
-) {
+func hideMatchingColumns(cols []columnProps, joined map[tree.Name]*columnProps, scope *scope) {
 	for _, col := range cols {
 		if foundCol, ok := joined[col.name]; ok {
 			// Hide other columns with the same name.
@@ -1249,7 +1259,7 @@ func (b *Builder) constructJoin(joinType joinType, left, right, filter opt.Group
 //
 // context is a string ("left" or "right") used to indicate in the error
 // message whether the name is missing from the left or right side of the join.
-func findUsingColumn(cols []columnProps, name optbase.ColumnName, context string) *columnProps {
+func findUsingColumn(cols []columnProps, name tree.Name, context string) *columnProps {
 	for i := range cols {
 		col := &cols[i]
 		if !col.hidden && col.name == name {
@@ -1409,9 +1419,9 @@ func (b *Builder) buildVariableProjection(
 	// as a visible member of an anonymous table.
 	col = &outScope.cols[len(outScope.cols)-1]
 	if label != "" {
-		col.name = optbase.ColumnName(label)
+		col.name = tree.Name(label)
 	}
-	col.table = ""
+	col.table.TableName = ""
 	col.hidden = false
 	return out
 }
@@ -1456,7 +1466,7 @@ func (b *Builder) buildDefaultScalarProjection(
 			// The column already exists, so use that instead.
 			col = &b.colMap[col.index]
 			if label != "" {
-				col.name = optbase.ColumnName(label)
+				col.name = tree.Name(label)
 			}
 			outScope.cols = append(outScope.cols, *col)
 
@@ -1487,7 +1497,7 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 	}
 
 	colIndex := b.factory.Metadata().AddColumn(label, typ)
-	col := columnProps{name: optbase.ColumnName(label), typ: typ, index: colIndex}
+	col := columnProps{name: tree.Name(label), typ: typ, index: colIndex}
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)
 	return &scope.cols[len(scope.cols)-1]

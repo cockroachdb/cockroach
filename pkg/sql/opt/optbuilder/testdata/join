@@ -892,12 +892,12 @@ project
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b) AS q
 ----
-error: source name "a" not found in FROM clause
+error: no data source matches prefix: a
 
 build
 SELECT x, a.x, b.y FROM (SELECT * FROM onecolumn AS a NATURAL JOIN twocolumn AS b)
 ----
-error: source name "a" not found in FROM clause
+error: no data source matches prefix: a
 
 
 ## Simple test cases for inner, left, right, and outer joins
