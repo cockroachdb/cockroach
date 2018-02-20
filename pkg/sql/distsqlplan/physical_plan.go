@@ -277,14 +277,36 @@ func (p *PhysicalPlan) SetLastStagePost(
 	p.ResultTypes = outputTypes
 }
 
+func isIdentityProjection(columns []uint32) bool {
+	for i, c := range columns {
+		if c != uint32(i) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasPostRender(post distsqlrun.PostProcessSpec) bool {
+	return post.Projection || post.RenderExprs != nil
+}
+
 // AddProjection applies a projection to a plan. The new plan outputs the
 // columns of the old plan as listed in the slice. The Ordering is updated;
 // columns in the ordering are added to the projection as needed.
+//
+// The PostProcessSpec may not be updated if the resulting projection keeps all
+// the columns in their original order, and if there is no existing rendering.
 //
 // Note: the columns slice is relinquished to this function, which can modify it
 // or use it directly in specs.
 func (p *PhysicalPlan) AddProjection(columns []uint32) {
 	post := p.GetLastStagePost()
+
+	// If there is no existing post-processing render or projection, and the one
+	// we are trying to apply projects every column, don't update the spec.
+	if !hasPostRender(post) && isIdentityProjection(columns) && len(columns) == len(p.ResultTypes) {
+		return
+	}
 
 	// Update the ordering.
 	if len(p.MergeOrdering.Columns) > 0 {
