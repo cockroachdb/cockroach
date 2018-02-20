@@ -54,3 +54,120 @@ SELECT * FROM t.a, t.b WHERE a.x = b.x
 ----
 2  20  2  200
 3  30  3  300
+
+exec-explain
+SELECT * FROM t.a INNER JOIN t.b ON a.x = b.x
+----
+join       0  join  ·         ·          (x, y, x, z)  ·
+ │         0  ·     type      inner      ·             ·
+ │         0  ·     equality  (x) = (x)  ·             ·
+ ├── scan  1  scan  ·         ·          (x, y)        ·
+ │         1  ·     table     a@primary  ·             ·
+ │         1  ·     spans     ALL        ·             ·
+ └── scan  1  scan  ·         ·          (x, z)        ·
+·          1  ·     table     b@primary  ·             ·
+·          1  ·     spans     ALL        ·             ·
+
+exec
+SELECT * FROM t.a INNER JOIN t.b ON a.x = b.x
+----
+2  20  2  200
+3  30  3  300
+
+exec-explain
+SELECT * FROM t.a NATURAL JOIN t.b
+----
+render          0  render  ·         ·          ("a.x", "a.y", "b.z")  ·
+ │              0  ·       render 0  x          ·                      ·
+ │              0  ·       render 1  y          ·                      ·
+ │              0  ·       render 2  z          ·                      ·
+ └── join       1  join    ·         ·          (x, y, x, z)           ·
+      │         1  ·       type      inner      ·                      ·
+      │         1  ·       equality  (x) = (x)  ·                      ·
+      ├── scan  2  scan    ·         ·          (x, y)                 ·
+      │         2  ·       table     a@primary  ·                      ·
+      │         2  ·       spans     ALL        ·                      ·
+      └── scan  2  scan    ·         ·          (x, z)                 ·
+·               2  ·       table     b@primary  ·                      ·
+·               2  ·       spans     ALL        ·                      ·
+
+exec
+SELECT * FROM t.a NATURAL JOIN t.b
+----
+2  20  200
+3  30  300
+
+exec-explain
+SELECT * FROM t.a LEFT OUTER JOIN t.b ON a.x = b.x
+----
+join       0  join  ·         ·           (x, y, x, z)  ·
+ │         0  ·     type      left outer  ·             ·
+ │         0  ·     equality  (x) = (x)   ·             ·
+ ├── scan  1  scan  ·         ·           (x, y)        ·
+ │         1  ·     table     a@primary   ·             ·
+ │         1  ·     spans     ALL         ·             ·
+ └── scan  1  scan  ·         ·           (x, z)        ·
+·          1  ·     table     b@primary   ·             ·
+·          1  ·     spans     ALL         ·             ·
+
+exec
+SELECT * FROM t.a LEFT OUTER JOIN t.b ON a.x = b.x
+----
+1  10  NULL  NULL
+2  20  2     200
+3  30  3     300
+
+exec-explain
+SELECT * FROM t.a NATURAL RIGHT OUTER JOIN t.b
+----
+render          0  render  ·         ·            ("b.x", "a.y", "b.z")  ·
+ │              0  ·       render 0  x            ·                      ·
+ │              0  ·       render 1  y            ·                      ·
+ │              0  ·       render 2  z            ·                      ·
+ └── join       1  join    ·         ·            (x, y, x, z)           ·
+      │         1  ·       type      right outer  ·                      ·
+      │         1  ·       equality  (x) = (x)    ·                      ·
+      ├── scan  2  scan    ·         ·            (x, y)                 ·
+      │         2  ·       table     a@primary    ·                      ·
+      │         2  ·       spans     ALL          ·                      ·
+      └── scan  2  scan    ·         ·            (x, z)                 ·
+·               2  ·       table     b@primary    ·                      ·
+·               2  ·       spans     ALL          ·                      ·
+
+exec
+SELECT * FROM t.a NATURAL RIGHT OUTER JOIN t.b
+----
+2  20    200
+3  30    300
+4  NULL  400
+
+exec-explain
+SELECT * FROM t.a FULL OUTER JOIN t.b USING(x)
+----
+render               0  render  ·         ·               (x, "a.y", "b.z")                ·
+ │                   0  ·       render 0  x               ·                                ·
+ │                   0  ·       render 1  "a.y"           ·                                ·
+ │                   0  ·       render 2  "b.z"           ·                                ·
+ └── render          1  render  ·         ·               (x, "a.x", "a.y", "b.x", "b.z")  ·
+      │              1  ·       render 0  COALESCE(x, x)  ·                                ·
+      │              1  ·       render 1  x               ·                                ·
+      │              1  ·       render 2  y               ·                                ·
+      │              1  ·       render 3  x               ·                                ·
+      │              1  ·       render 4  z               ·                                ·
+      └── join       2  join    ·         ·               (x, y, x, z)                     ·
+           │         2  ·       type      full outer      ·                                ·
+           │         2  ·       equality  (x) = (x)       ·                                ·
+           ├── scan  3  scan    ·         ·               (x, y)                           ·
+           │         3  ·       table     a@primary       ·                                ·
+           │         3  ·       spans     ALL             ·                                ·
+           └── scan  3  scan    ·         ·               (x, z)                           ·
+·                    3  ·       table     b@primary       ·                                ·
+·                    3  ·       spans     ALL             ·                                ·
+
+exec
+SELECT * FROM t.a FULL OUTER JOIN t.b USING(x)
+----
+1  10    NULL
+2  20    200
+3  30    300
+4  NULL  400

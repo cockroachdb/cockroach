@@ -45,6 +45,7 @@ func init() {
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,
 		opt.CastOp:            (*Builder).buildCast,
+		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 	}
 
@@ -183,6 +184,14 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedEx
 		panic(err)
 	}
 	return expr
+}
+
+func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	exprs := make(tree.TypedExprs, ev.ChildCount())
+	for i := range exprs {
+		exprs[i] = b.buildScalar(ctx, ev.Child(i))
+	}
+	return tree.NewTypedCoalesceExpr(exprs, ev.Logical().Scalar.Type)
 }
 
 func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
