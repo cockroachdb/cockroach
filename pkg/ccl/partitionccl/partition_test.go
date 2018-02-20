@@ -1223,7 +1223,6 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#22360")
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
@@ -1235,11 +1234,14 @@ func TestRepartitioning(t *testing.T) {
 	sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
 	defer cleanup()
 
-	for _, test := range testCases {
+	for i, test := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
-			sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
-			sqlDB.Exec(t, `CREATE DATABASE data`)
-			sqlDB.Exec(t, `USE data`)
+			// NOTE: We used to drop and recreate a database named
+			// "data" at the start of every test, but DROP DATABASE
+			// would occasionally hang forever.
+			dbName := fmt.Sprintf("data%d", i)
+			sqlDB.Exec(t, `CREATE DATABASE `+dbName)
+			sqlDB.Exec(t, `USE `+dbName)
 
 			{
 				if err := test.old.parse(); err != nil {
