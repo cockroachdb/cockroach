@@ -592,6 +592,19 @@ type CoalesceExpr struct {
 	typeAnnotation
 }
 
+// NewTypedCoalesceExpr returns a CoalesceExpr that is well-typed.
+func NewTypedCoalesceExpr(typedExprs TypedExprs, typ types.T) *CoalesceExpr {
+	c := &CoalesceExpr{
+		Name:  "IFNULL",
+		Exprs: make(Exprs, len(typedExprs)),
+	}
+	for i := range typedExprs {
+		c.Exprs[i] = typedExprs[i]
+	}
+	c.typ = typ
+	return c
+}
+
 // TypedExprAt returns the expression at the specified index as a TypedExpr.
 func (node *CoalesceExpr) TypedExprAt(idx int) TypedExpr {
 	return node.Exprs[idx].(TypedExpr)
