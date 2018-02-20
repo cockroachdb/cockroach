@@ -47,8 +47,9 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   updateViewport = () => {
+    const rect = this.graphEl.getBoundingClientRect();
     this.setState({
-      viewportSize: [this.graphEl.clientWidth, this.graphEl.clientHeight],
+      viewportSize: [rect.width, rect.height],
     });
   }
 
@@ -139,6 +140,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
               width: "100%",
               height: "100%",
               marginBottom: -3, // WHYYYYYYYYY?!?!?!?!?
+              position: "absolute",
             }}
             className="cluster-viz"
             ref={svg => this.graphEl = svg}
