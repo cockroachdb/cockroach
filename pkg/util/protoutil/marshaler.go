@@ -56,50 +56,36 @@ func (*ProtoPb) Unmarshal(data []byte, v interface{}) error {
 	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
 }
 
-type protoDecoder struct {
-	r io.Reader
-}
-
 // NewDecoder implements gwruntime.Marshaler.
 func (*ProtoPb) NewDecoder(r io.Reader) gwruntime.Decoder {
-	return &protoDecoder{r: r}
-}
-
-// Decode implements gwruntime.Marshaler.
-func (d *protoDecoder) Decode(v interface{}) error {
-	// NB: we use proto.Message here because grpc-gateway passes us protos that
-	// we don't control and thus don't implement protoutil.Message.
-	if p, ok := v.(proto.Message); ok {
-		bytes, err := ioutil.ReadAll(d.r)
-		if err == nil {
-			err = proto.Unmarshal(bytes, p)
+	return gwruntime.DecoderFunc(func(v interface{}) error {
+		// NB: we use proto.Message here because grpc-gateway passes us protos that
+		// we don't control and thus don't implement protoutil.Message.
+		if p, ok := v.(proto.Message); ok {
+			bytes, err := ioutil.ReadAll(r)
+			if err == nil {
+				err = proto.Unmarshal(bytes, p)
+			}
+			return err
 		}
-		return err
-	}
-	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
-}
-
-type protoEncoder struct {
-	w io.Writer
+		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+	})
 }
 
 // NewEncoder implements gwruntime.Marshaler.
 func (*ProtoPb) NewEncoder(w io.Writer) gwruntime.Encoder {
-	return &protoEncoder{w: w}
-}
-
-// Encode implements gwruntime.Marshaler.
-func (e *protoEncoder) Encode(v interface{}) error {
-	// NB: we use proto.Message here because grpc-gateway passes us protos that
-	// we don't control and thus don't implement protoutil.Message.
-	if p, ok := v.(proto.Message); ok {
-		bytes, err := proto.Marshal(p)
-		if err == nil {
-			_, err = e.w.Write(bytes)
+	return gwruntime.EncoderFunc(func(v interface{}) error {
+		// NB: we use proto.Message here because grpc-gateway passes us protos that
+		// we don't control and thus don't implement protoutil.Message.
+		if p, ok := v.(proto.Message); ok {
+			bytes, err := proto.Marshal(p)
+			if err == nil {
+				_, err = w.Write(bytes)
+			}
+			return err
 		}
-		return err
-	}
-	return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+		return errors.Errorf("unexpected type %T does not implement %s", v, typeProtoMessage)
+	})
 }
 
 var _ gwruntime.Delimited = (*ProtoPb)(nil)
