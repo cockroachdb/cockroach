@@ -221,6 +221,12 @@ export default function Debug() {
             url="#/debug/redux"
           />
         </DebugTableRow>
+        <DebugTableRow title="Custom Time-Series Graph">
+          <DebugTableLink
+            name="Customizable graph of time series metrics"
+            url="#/debug/graph"
+          />
+        </DebugTableRow>
       </DebugTable>
       <LicenseType />
     </div>

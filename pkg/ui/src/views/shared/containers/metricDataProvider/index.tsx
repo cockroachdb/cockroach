@@ -27,19 +27,25 @@ function queryFromProps(
     let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;
 
     // Compute derivative function.
-    if (metricProps.rate) {
+    if (!_.isNil(metricProps.derivative)) {
+      derivative = metricProps.derivative;
+    } else if (metricProps.rate) {
       derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.DERIVATIVE;
     } else if (metricProps.nonNegativeRate) {
       derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NON_NEGATIVE_DERIVATIVE;
     }
     // Compute downsample function.
-    if (metricProps.downsampleMax) {
+    if (!_.isNil(metricProps.downsampler)) {
+      downsampler = metricProps.downsampler;
+    } else if (metricProps.downsampleMax) {
       downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
     } else if (metricProps.downsampleMin) {
       downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
     }
     // Compute aggregation function.
-    if (metricProps.aggregateMax) {
+    if (!_.isNil(metricProps.aggregator)) {
+      sourceAggregator = metricProps.aggregator;
+    } else if (metricProps.aggregateMax) {
       sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MAX;
     } else if (metricProps.aggregateMin) {
       sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.MIN;
