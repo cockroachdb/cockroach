@@ -69,6 +69,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
+	tn := n.n.Table.TableName()
 
 	for _, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
@@ -353,7 +354,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if containsThisColumn {
 					if containsOnlyThisColumn || t.DropBehavior == tree.DropCascade {
 						if err := params.p.dropIndexByName(
-							params.ctx, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
+							params.ctx, tn, tree.UnrestrictedName(idx.Name), n.tableDesc, false,
 							t.DropBehavior, ignoreIdxConstraint,
 							tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 						); err != nil {
@@ -590,7 +591,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{n.tableDesc.Name, n.n.String(), params.SessionData().User, uint32(mutationID), droppedViews},
+		}{n.n.Table.TableName().FQString(), n.n.String(),
+			params.SessionData().User, uint32(mutationID), droppedViews},
 	); err != nil {
 		return err
 	}

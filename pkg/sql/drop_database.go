@@ -31,7 +31,7 @@ import (
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
 	dbDesc *sqlbase.DatabaseDescriptor
-	td     []*sqlbase.TableDescriptor
+	td     []toDelete
 }
 
 // DropDatabase drops a database.
@@ -82,7 +82,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		}
 	}
 
-	td := make([]*sqlbase.TableDescriptor, len(tbNames))
+	td := make([]toDelete, len(tbNames))
 	for i := range tbNames {
 		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], true /*required*/, anyDescType)
 		if err != nil {
@@ -91,7 +91,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		if tbDesc == nil {
 			// Database claims to have this table, but it does not exist.
 			return nil, errors.Errorf("table %q was described by database %q, but does not exist",
-				tbNames[i].String(), n.Name)
+				tree.ErrString(&tbNames[i]), n.Name)
 		}
 		// Recursively check permissions on all dependent views, since some may
 		// be in different databases.
@@ -100,7 +100,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 				return nil, err
 			}
 		}
-		td[i] = tbDesc
+		td[i] = toDelete{&tbNames[i], tbDesc}
 	}
 
 	td, err = p.filterCascadedTables(ctx, td)
@@ -115,21 +115,24 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
-	for _, tbDesc := range n.td {
+	for _, toDel := range n.td {
+		tbDesc := toDel.desc
 		if tbDesc.IsView() {
 			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
 			if err != nil {
 				return err
 			}
+			// TODO(knz): dependent dropped views should be qualified here.
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		} else {
 			cascadedViews, err := p.dropTableImpl(params, tbDesc)
 			if err != nil {
 				return err
 			}
+			// TODO(knz): dependent dropped table names should be qualified here.
 			tbNameStrings = append(tbNameStrings, cascadedViews...)
 		}
-		tbNameStrings = append(tbNameStrings, tbDesc.Name)
+		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
 	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
@@ -177,21 +180,20 @@ func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 // descriptors from the list that are dependent on other descriptors in the
 // list (e.g. if view v1 depends on table t1, then v1 will be filtered from
 // the list).
-func (p *planner) filterCascadedTables(
-	ctx context.Context, tables []*sqlbase.TableDescriptor,
-) ([]*sqlbase.TableDescriptor, error) {
+func (p *planner) filterCascadedTables(ctx context.Context, tables []toDelete) ([]toDelete, error) {
 	// Accumulate the set of all tables/views that will be deleted by cascade
 	// behavior so that we can filter them out of the list.
 	cascadedTables := make(map[sqlbase.ID]bool)
-	for _, desc := range tables {
+	for _, toDel := range tables {
+		desc := toDel.desc
 		if err := p.accumulateDependentTables(ctx, cascadedTables, desc); err != nil {
 			return nil, err
 		}
 	}
-	filteredTableList := make([]*sqlbase.TableDescriptor, 0, len(tables))
-	for _, desc := range tables {
-		if !cascadedTables[desc.ID] {
-			filteredTableList = append(filteredTableList, desc)
+	filteredTableList := make([]toDelete, 0, len(tables))
+	for _, toDel := range tables {
+		if !cascadedTables[toDel.desc.ID] {
+			filteredTableList = append(filteredTableList, toDel)
 		}
 	}
 	return filteredTableList, nil
