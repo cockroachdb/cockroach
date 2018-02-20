@@ -16,6 +16,7 @@ sudo apt-get dist-upgrade -y
 sudo apt-get install -y --no-install-recommends \
   autoconf \
   cmake \
+  ccache \
   docker.io \
   libtinfo-dev \
   git \
@@ -25,10 +26,13 @@ sudo apt-get install -y --no-install-recommends \
 sudo adduser "${USER}" docker
 
 # Configure environment variables
-echo 'export GOPATH=${HOME}/go' >> ~/.bashrc_go
-echo '. ~/.bashrc_go' >> ~/.bashrc
+echo 'export PATH="/usr/lib/ccache:${PATH}"' >> ~/.bashrc_bootstrap
+# NB: GOPATH defaults to ${HOME}/go (but maybe having it set for the remainder
+# of the script is enough reason to keep it here).
+echo 'export GOPATH=${HOME}/go' >> ~/.bashrc_bootstrap
+echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 
-. ~/.bashrc_go
+. ~/.bashrc_bootstrap
 
 mkdir -p "$GOPATH/src/github.com/cockroachdb"
 
