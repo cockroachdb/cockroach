@@ -24,13 +24,13 @@ import (
 
 type dropSequenceNode struct {
 	n  *tree.DropSequence
-	td []*sqlbase.TableDescriptor
+	td []toDelete
 }
 
 func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
-	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
-	for _, name := range n.Names {
-		tn, err := name.Normalize()
+	td := make([]toDelete, 0, len(n.Names))
+	for i := range n.Names {
+		tn, err := n.Names[i].Normalize()
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +47,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 			return nil, depErr
 		}
 
-		td = append(td, droppedDesc)
+		td = append(td, toDelete{tn, droppedDesc})
 	}
 
 	if len(td) == 0 {
@@ -62,7 +62,8 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 
 func (n *dropSequenceNode) startExec(params runParams) error {
 	ctx := params.ctx
-	for _, droppedDesc := range n.td {
+	for _, toDel := range n.td {
+		droppedDesc := toDel.desc
 		err := params.p.dropSequenceImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err
@@ -80,7 +81,7 @@ func (n *dropSequenceNode) startExec(params runParams) error {
 				SequenceName string
 				Statement    string
 				User         string
-			}{droppedDesc.Name, n.n.String(), params.SessionData().User},
+			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User},
 		); err != nil {
 			return err
 		}

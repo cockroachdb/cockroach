@@ -86,7 +86,7 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		}
 
 		if err := params.p.dropIndexByName(
-			ctx, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
+			ctx, index.tn, index.idxName, tableDesc, n.n.IfExists, n.n.DropBehavior, checkIdxConstraint,
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 		); err != nil {
 			return err
@@ -118,6 +118,7 @@ const (
 
 func (p *planner) dropIndexByName(
 	ctx context.Context,
+	tn *tree.TableName,
 	idxName tree.UnrestrictedName,
 	tableDesc *sqlbase.TableDescriptor,
 	ifExists bool,
@@ -239,7 +240,7 @@ func (p *planner) dropIndexByName(
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{tableDesc.Name, string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
+		}{tn.FQString(), string(idxName), jobDesc, p.SessionData().User, uint32(mutationID),
 			droppedViews},
 	); err != nil {
 		return err

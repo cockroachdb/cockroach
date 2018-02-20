@@ -79,7 +79,7 @@ func (n *alterSequenceNode) startExec(params runParams) error {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.seqDesc.Name, n.n.String(), params.SessionData().User},
+		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
 	); err != nil {
 		return err
 	}
