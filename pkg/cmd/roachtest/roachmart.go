@@ -29,6 +29,7 @@ func init() {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		c.Start(ctx)
+		c.InitEnterprise(ctx)
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {
