@@ -309,6 +309,20 @@ func (s *sortAllProcessor) Run(wg *sync.WaitGroup) {
 	}
 	Run(s.flowCtx.Ctx, s, s.out.output)
 	if wg != nil {
+		// TODO(tschottdorf): this is likely not the right fix, but I will need some
+		// guidance from more knowledgeable parties. Essentially, with query
+		// cancellation, there are code paths that don't end up calling
+		// `ConsumerClosed` (which would in turn call `.close()`.
+		//
+		// I think what happens is that `dst` goes into `DrainRequested` mode at
+		// which point `Run` calls into DrainAndForwardMetadata (which conceivably
+		// also never sees `ConsumerClosed`) and then calls `ProducerDone` and
+		// returns here. The details and what should be closing the consumer escape
+		// me.
+		//
+		// PS: I don't see why other processors wouldn't similarly be affected by
+		// this.
+		s.close()
 		wg.Done()
 	}
 }
