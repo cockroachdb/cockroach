@@ -193,7 +193,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			TableName string
 			Statement string
 			User      string
-		}{n.n.Table.String(), n.n.String(), params.SessionData().User},
+		}{n.n.Table.TableName().FQString(), n.n.String(), params.SessionData().User},
 	); err != nil {
 		return err
 	}

@@ -195,7 +195,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.String(), n.n.String(), params.SessionData().User},
+		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
 	)
 }
 
