@@ -516,7 +516,7 @@ type rebalanceOptions struct {
 // used as rebalancing receivers, ordered from best to worst.
 func rebalanceCandidates(
 	ctx context.Context,
-	fullSL StoreList,
+	allStores StoreList,
 	constraints analyzedConstraints,
 	rangeInfo RangeInfo,
 	existingNodeLocalities map[roachpb.NodeID]roachpb.Locality,
@@ -531,7 +531,7 @@ func rebalanceCandidates(
 	existingStores := make(map[roachpb.StoreID]existingStore)
 	var needRebalanceFrom bool
 	curDiversityScore := rangeDiversityScore(existingNodeLocalities)
-	for _, store := range fullSL.stores {
+	for _, store := range allStores.stores {
 		for _, repl := range rangeInfo.Desc.Replicas {
 			if store.StoreID != repl.StoreID {
 				continue
@@ -565,13 +565,13 @@ func rebalanceCandidates(
 		}
 	}
 
-	// 2. For each store, determine the stores that would be the best replacements
-	//		on the basis of constraints, disk fullness, and diversity. Only the best
-	//    should be included when computing balanceScores, since it isn't fair to
-	//    compare the fullness of stores in a valid/necessary/diverse locality to
-	//    those in an invalid/unnecessary/nondiverse locality (see #20751).
-	//    Along the way, determine whether rebalance is needed to improve the
-	//    range along these critical dimensions.
+	// 2. For each store, determine the stores that would be the best
+	// replacements on the basis of constraints, disk fullness, and diversity.
+	// Only the best should be included when computing balanceScores, since it
+	// isn't fair to compare the fullness of stores in a valid/necessary/diverse
+	// locality to those in an invalid/unnecessary/nondiverse locality (see
+	// #20751).  Along the way, determine whether rebalance is needed to improve
+	// the range along these critical dimensions.
 	//
 	// This creates groups of stores that are valid to compare with each other.
 	// For example, if a range has a replica in localities A, B, and C, it's ok
@@ -606,7 +606,7 @@ func rebalanceCandidates(
 			continue
 		}
 		var comparableCands candidateList
-		for _, store := range fullSL.stores {
+		for _, store := range allStores.stores {
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(
 				store, existing.cand.store.StoreID, constraints)
 			maxCapacityOK := maxCapacityCheck(store)
@@ -646,24 +646,27 @@ func rebalanceCandidates(
 		})
 	}
 
-	// 3. Decide whether we should try to rebalance.
+	// 3. Decide whether we should try to rebalance. Note that for each existing
+	// store, we only compare its fullness stats to the stats of "comparable"
+	// stores, i.e. those stores that at least as valid, necessary, and diverse
+	// as the existing store.
 	needRebalance := needRebalanceFrom || needRebalanceTo
 	var shouldRebalanceCheck bool
 	if !needRebalance {
 		for _, existing := range existingStores {
-			var comparableSL StoreList
+			var sl StoreList
 		outer:
 			for _, comparable := range comparableStores {
 				for _, existingCand := range comparable.existing {
 					if existing.cand.store.StoreID == existingCand.StoreID {
-						comparableSL = comparable.sl
+						sl = comparable.sl
 						break outer
 					}
 				}
 			}
 			// TODO(a-robinson): Some moderate refactoring could extract this logic out
 			// into the loop below, avoiding duplicate balanceScore calculations.
-			if shouldRebalance(ctx, existing.cand.store, comparableSL, rangeInfo, options) {
+			if shouldRebalance(ctx, existing.cand.store, sl, rangeInfo, options) {
 				shouldRebalanceCheck = true
 				break
 			}
@@ -674,8 +677,8 @@ func rebalanceCandidates(
 	}
 
 	// 4. Create sets of rebalance options, i.e. groups of candidate stores and
-	//		the existing replicas that they could legally replace in the range.  We
-	//		have to make a separate set of these for each group of comparableStores.
+	// the existing replicas that they could legally replace in the range.  We
+	// have to make a separate set of these for each group of comparableStores.
 	results := make([]rebalanceOptions, 0, len(comparableStores))
 	for _, comparable := range comparableStores {
 		var existingCandidates candidateList
@@ -796,6 +799,9 @@ func bestRebalanceTarget(
 	return &copiedTarget, options[bestIdx].existingCandidates
 }
 
+// betterRebalanceTarget returns whichever of target1 or target2 is a larger
+// improvement over its corresponding existing replica that it will be
+// replacing in the range.
 func betterRebalanceTarget(target1, existing1, target2, existing2 *candidate) *candidate {
 	if target2 == nil {
 		return target1
@@ -968,6 +974,10 @@ type analyzedConstraints struct {
 	satisfies map[roachpb.StoreID][]int
 }
 
+// analyzeConstraints processes the zone config constraints that apply to a
+// range along with the current replicas for a range, spitting back out
+// information about which constraints are satisfied by which replicas and
+// which replicas satisfy which constraints, aiding in allocation decisions.
 func analyzeConstraints(
 	ctx context.Context,
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
@@ -999,22 +1009,10 @@ func analyzeConstraints(
 	return result
 }
 
-// needSpecificReplicas returns true if the provided constraints have
-// per-replica placement needs rather than just overarching rules that apply to
-// all replicas. If this returns false, then no replica could ever be
-// considered "necessary" for the range.
-func needSpecificReplicas(analyzed analyzedConstraints) bool {
-	for _, constraints := range analyzed.constraints {
-		if constraints.NumReplicas > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-// allocateConstraintsCheck checks the store against all the constraints. If it
-// matches a constraint at all, it's valid. If it matches a constraint that is
-// not already fully satisfied by existing replicas, then it's necessary.
+// allocateConstraintsCheck checks the potential allocation target store
+// against all the constraints. If it matches a constraint at all, it's valid.
+// If it matches a constraint that is not already fully satisfied by existing
+// replicas, then it's necessary.
 //
 // NB: This assumes that the sum of all constraints.NumReplicas is equal to
 // configured number of replicas for the range, or that there's just one set of
@@ -1041,6 +1039,11 @@ func allocateConstraintsCheck(
 	return valid, false
 }
 
+// removeConstraintsCheck checks the existing store against the analyzed
+// constraints, determining whether it's valid (matches some constraint) and
+// necessary (matches some constraint that no other existing replica matches).
+// The difference between this and allocateConstraintsCheck is that this is to
+// be used on an existing replica of the range, not a potential addition.
 func removeConstraintsCheck(
 	store roachpb.StoreDescriptor, analyzed analyzedConstraints,
 ) (valid bool, necessary bool) {
@@ -1070,6 +1073,10 @@ func removeConstraintsCheck(
 	return true, false
 }
 
+// rebalanceConstraintsCheck checks the potential rebalance target store
+// against the analyzed constraints, determining whether it's valid whether it
+// will be necessary if fromStoreID (an existing replica) is removed from the
+// range.
 func rebalanceFromConstraintsCheck(
 	store roachpb.StoreDescriptor, fromStoreID roachpb.StoreID, analyzed analyzedConstraints,
 ) (valid bool, necessary bool) {
