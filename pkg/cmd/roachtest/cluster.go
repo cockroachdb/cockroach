@@ -469,6 +469,16 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 	}
 }
 
+func (c *cluster) InitEnterprise(ctx context.Context) {
+	licenseKey := os.Getenv("COCKROACH_DEV_LICENSE")
+	if licenseKey == "" {
+		c.t.Fatal("COCKROACH_DEV_LICENSE must be set to run enterprise tests")
+	}
+	sql := "SET CLUSTER SETTING cluster.organization = 'Cockroach Labs - Production Testing';"
+	sql += fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s';", licenseKey)
+	c.Run(ctx, 1, fmt.Sprintf("./cockroach sql --insecure -e %q", sql))
+}
+
 func (c *cluster) makeNodes(opts []option) string {
 	var r nodeListOption
 	for _, o := range opts {
