@@ -23,7 +23,8 @@ import (
 )
 
 // ColumnIndex uniquely identifies the usage of a column within the scope of a
-// query. See the comment for Metadata for more details.
+// query. ColumnIndex 0 is reserved to mean "unknown column". See the comment
+// for Metadata for more details.
 type ColumnIndex int32
 
 // TableIndex uniquely identifies the usage of a table within the scope of a

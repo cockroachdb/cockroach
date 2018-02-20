@@ -19,7 +19,7 @@
 #   (a = x) AND (b = y) AND (c = z)
 #
 # This rule makes it easier to extract constraints from boolean expressions,
-# since recognition code doesn't have to handle the tuple case separately.
+# so that recognition code doesn't have to handle the tuple case separately.
 [NormalizeTupleEquality]
 (Eq (Tuple $left:*) (Tuple $right:*))
 =>
