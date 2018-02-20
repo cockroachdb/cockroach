@@ -27,7 +27,7 @@ import (
 
 type dropViewNode struct {
 	n  *tree.DropView
-	td []*sqlbase.TableDescriptor
+	td []toDelete
 }
 
 // DropView drops a view.
@@ -35,9 +35,9 @@ type dropViewNode struct {
 //   Notes: postgres allows only the view owner to DROP a view.
 //          mysql requires the DROP privilege on the view.
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
-	td := make([]*sqlbase.TableDescriptor, 0, len(n.Names))
-	for _, name := range n.Names {
-		tn, err := name.Normalize()
+	td := make([]toDelete, 0, len(n.Names))
+	for i := range n.Names {
+		tn, err := n.Names[i].Normalize()
 		if err != nil {
 			return nil, err
 		}
@@ -50,13 +50,14 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 			continue
 		}
 
-		td = append(td, droppedDesc)
+		td = append(td, toDelete{tn, droppedDesc})
 	}
 
 	// Ensure this view isn't depended on by any other views, or that if it is
 	// then `cascade` was specified or it was also explicitly specified in the
 	// DROP VIEW command.
-	for _, droppedDesc := range td {
+	for _, toDel := range td {
+		droppedDesc := toDel.desc
 		for _, ref := range droppedDesc.DependedOnBy {
 			// Don't verify that we can remove a dependent view if that dependent
 			// view was explicitly specified in the DROP VIEW command.
@@ -77,7 +78,8 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 
 func (n *dropViewNode) startExec(params runParams) error {
 	ctx := params.ctx
-	for _, droppedDesc := range n.td {
+	for _, toDel := range n.td {
+		droppedDesc := toDel.desc
 		if droppedDesc == nil {
 			continue
 		}
@@ -99,7 +101,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 				Statement           string
 				User                string
 				CascadeDroppedViews []string
-			}{droppedDesc.Name, n.n.String(), params.SessionData().User, cascadeDroppedViews},
+			}{toDel.tn.FQString(), n.n.String(), params.SessionData().User, cascadeDroppedViews},
 		); err != nil {
 			return err
 		}
@@ -111,9 +113,9 @@ func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropViewNode) Close(context.Context)        {}
 
-func descInSlice(descID sqlbase.ID, td []*sqlbase.TableDescriptor) bool {
-	for _, desc := range td {
-		if descID == desc.ID {
+func descInSlice(descID sqlbase.ID, td []toDelete) bool {
+	for _, toDel := range td {
+		if descID == toDel.desc.ID {
 			return true
 		}
 	}

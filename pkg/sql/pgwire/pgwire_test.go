@@ -1114,88 +1114,88 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
-			"CREATE TABLE d.t (i INT, s STRING, d INT)",
+			"CREATE TABLE d.public.t (i INT, s STRING, d INT)",
 			[]preparedExecTest{
 				baseTest,
 				baseTest.Error(`pq: relation "t" already exists`),
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1, $2, $3)",
+			"INSERT INTO d.public.t VALUES ($1, $2, $3)",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, "one", 2).RowsAffected(1),
 				baseTest.SetArgs("two", 2, 2).Error(`pq: error in argument for $1: strconv.ParseInt: parsing "two": invalid syntax`),
 			},
 		},
 		{
-			"UPDATE d.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4",
+			"UPDATE d.public.t SET s = $1, i = i + $2, d = 1 + $3 WHERE i = $4",
 			[]preparedExecTest{
 				baseTest.SetArgs(4, 3, 2, 1).RowsAffected(1),
 			},
 		},
 		{
-			"UPDATE d.t SET i = $1 WHERE (i, s) = ($2, $3)",
+			"UPDATE d.public.t SET i = $1 WHERE (i, s) = ($2, $3)",
 			[]preparedExecTest{
 				baseTest.SetArgs(8, 4, "4").RowsAffected(1),
 			},
 		},
 		{
-			"DELETE FROM d.t WHERE s = $1 and i = $2 and d = 2 + $3",
+			"DELETE FROM d.public.t WHERE s = $1 and i = $2 and d = 2 + $3",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, 2, 3).RowsAffected(0),
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1), ($2)",
+			"INSERT INTO d.public.t VALUES ($1), ($2)",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, 2).RowsAffected(2),
 			},
 		},
 		{
-			"INSERT INTO d.t VALUES ($1), ($2) RETURNING $3 + 1",
+			"INSERT INTO d.public.t VALUES ($1), ($2) RETURNING $3 + 1",
 			[]preparedExecTest{
 				baseTest.SetArgs(3, 4, 5).RowsAffected(2),
 			},
 		},
 		{
-			"UPDATE d.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
+			"UPDATE d.public.t SET i = CASE WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				baseTest.SetArgs(true, true, 3).RowsAffected(5),
 			},
 		},
 		{
-			"UPDATE d.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
+			"UPDATE d.public.t SET i = CASE i WHEN $1 THEN i-$3 WHEN $2 THEN i+$3 END",
 			[]preparedExecTest{
 				baseTest.SetArgs(1, 2, 3).RowsAffected(5),
 			},
 		},
 		{
-			"UPDATE d.t SET d = CASE WHEN TRUE THEN $1 END",
+			"UPDATE d.public.t SET d = CASE WHEN TRUE THEN $1 END",
 			[]preparedExecTest{
 				baseTest.SetArgs(2).RowsAffected(5),
 			},
 		},
 		{
-			"DELETE FROM d.t RETURNING $1+1",
+			"DELETE FROM d.public.t RETURNING $1+1",
 			[]preparedExecTest{
 				baseTest.SetArgs(1).RowsAffected(5),
 			},
 		},
 		{
-			"DROP TABLE d.t",
+			"DROP TABLE d.public.t",
 			[]preparedExecTest{
 				baseTest,
-				baseTest.Error(`pq: relation "d.t" does not exist`),
+				baseTest.Error(`pq: relation "d.public.t" does not exist`),
 			},
 		},
 		{
-			"CREATE TABLE d.types (i int, f float, s string, b bytes, d date, m timestamp, z timestamp with time zone, n interval, o bool, e decimal)",
+			"CREATE TABLE d.public.types (i int, f float, s string, b bytes, d date, m timestamp, z timestamp with time zone, n interval, o bool, e decimal)",
 			[]preparedExecTest{
 				baseTest,
 			},
 		},
 		{
-			"INSERT INTO d.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+			"INSERT INTO d.public.types VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
 			[]preparedExecTest{
 				baseTest.RowsAffected(1).SetArgs(
 					int64(0),
