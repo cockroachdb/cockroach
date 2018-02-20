@@ -182,7 +182,7 @@ scan  0  scan  ·      ·            (a, b, c)  a!=NULL; b!=NULL; c!=NULL; key(a
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (a,b,c) a, b, c FROM abc]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzMkj1rwzAQhvf-ivLOV4hsp4Mmr1mSEroVD4p1BIPjM5IMLcH_vVgeUge3tHhwx_t49JzgvaIRy3tzYQ_9BgVCAkIKQgbCFgWhdVKy9-KGlRHY2XfoDaFq2i4M7YJQimPoK0IVaobGqznVfGRj2YFgOZiqjpLWVRfjPnJzKkE4dEE_5oryhPIURU-QLtxe9cGcGVr19I35JuwacZYd24mu6Gdu28uTtHdr8-JkIlarfTlZzZyuZs7-RcBmzEf2rTSef5WgzRBAtmce0-qlcyW_OCmjZiwPkYsNyz6MUzUWuyaO4oFfYfUj_DyBN_dwssScLoGzJfD2T3DRP3wGAAD___j6l7o=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkj9r80AMxvf3YzyzXvC_dPDUNUtaQrfi4eITweBYRneGluDvXnw3pA5uaTG440n66aeD54pOLB_MhR3KV6QgZCDkIBQg7FARepWanROdRiKwt28oE0LT9YOfyhWhFmWUV_jGt4wSL-bU8pGNZQXBsjdNGyS9Nhej74_mVKMaCTL42xbnzZlRpiN9YboJhk7UsrKdra_GhVsO8l_6u7FlcTYTp5t9MdvMlG9mKv4kIAumI7teOsc_SkAyBYjtmWPanAxa87NKHTTx-RS4ULDsfOym8bHvQisc-BlOv4UfZnByD2drzPkauFgD734FV-O_jwAAAP__iw2FSg==
 
 query TTT rowsort
 SELECT DISTINCT ON (a,b,c) a, b, c FROM abc
