@@ -109,7 +109,7 @@ func (bt *benchmarkTest) Start(ctx context.Context) {
 			go func(nodeNum int) {
 				errors <- bt.f.Exec(nodeNum,
 					fmt.Sprintf("find %[1]s -type f -delete && curl -sfSL %s/store%d.tgz | tar -C %[1]s -zx",
-						"/mnt/data0", acceptance.FixtureURL(bt.storeFixture), nodeNum+1,
+						"/mnt/data0/cockroach-data", acceptance.FixtureURL(bt.storeFixture), nodeNum+1,
 					),
 				)
 			}(i)
