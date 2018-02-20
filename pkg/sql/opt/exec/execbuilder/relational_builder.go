@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 type execPlan struct {
@@ -78,7 +79,22 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 		return b.buildProject(ev)
 
 	case opt.InnerJoinOp:
-		return b.buildInnerJoin(ev)
+		return b.buildJoin(ev, sqlbase.InnerJoin)
+
+	case opt.LeftJoinOp:
+		return b.buildJoin(ev, sqlbase.LeftOuterJoin)
+
+	case opt.RightJoinOp:
+		return b.buildJoin(ev, sqlbase.RightOuterJoin)
+
+	case opt.FullJoinOp:
+		return b.buildJoin(ev, sqlbase.FullOuterJoin)
+
+	case opt.SemiJoinOp:
+		return b.buildJoin(ev, sqlbase.LeftSemiJoin)
+
+	case opt.AntiJoinOp:
+		return b.buildJoin(ev, sqlbase.LeftAntiJoin)
 
 	default:
 		panic(fmt.Sprintf("unsupported relational op %s", ev.Operator()))
@@ -156,7 +172,7 @@ func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
-func (b *Builder) buildInnerJoin(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildJoin(ev xform.ExprView, joinType sqlbase.JoinType) (execPlan, error) {
 	left, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -168,18 +184,20 @@ func (b *Builder) buildInnerJoin(ev xform.ExprView) (execPlan, error) {
 
 	// Calculate the outputCols map for the join plan: the first numLeftCols
 	// correspond to the columns from the left, the rest correspond to columns
-	// from the right.
+	// from the right (except for Anti and Semi joins).
 	var ep execPlan
 	numLeftCols := left.outputCols.Len()
 	ep.outputCols = left.outputCols.Copy()
-	right.outputCols.ForEach(func(colIdx, rightIdx int) {
-		ep.outputCols.Set(colIdx, rightIdx+numLeftCols)
-	})
+	if joinType != sqlbase.LeftSemiJoin && joinType != sqlbase.LeftAntiJoin {
+		right.outputCols.ForEach(func(colIdx, rightIdx int) {
+			ep.outputCols.Set(colIdx, rightIdx+numLeftCols)
+		})
+	}
 
 	ctx := ep.makeBuildScalarCtx()
 	onExpr := b.buildScalar(&ctx, ev.Child(2))
 
-	ep.root, err = b.factory.ConstructInnerJoin(left.root, right.root, onExpr)
+	ep.root, err = b.factory.ConstructJoin(joinType, left.root, right.root, onExpr)
 	if err != nil {
 		return execPlan{}, err
 	}
