@@ -154,7 +154,7 @@ func ResolveTargetObject(
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
 			"invalid target name: %q", tree.ErrString(tn))
 	}
-	if tn.Schema() != "public" {
+	if tn.Schema() != tree.PublicSchema {
 		return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
 	}
 	return descI.(*DatabaseDescriptor), nil
