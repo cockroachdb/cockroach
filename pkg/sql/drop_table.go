@@ -17,7 +17,6 @@ package sql
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -325,7 +324,7 @@ func (p *planner) initiateDropTable(
 	}
 
 	// If the table is not interleaved and the ClearRange feature is
-	// enabled in the cluster, use the GCDeadline mechanism to schedule
+	// enabled in the cluster, use the delayed GC mechanism to schedule
 	// usage of the more efficient ClearRange pathway. ClearRange will
 	// only work if the entire hierarchy of interleaved tables are
 	// dropped at once, as with ON DELETE CASCADE where the top-level
@@ -336,15 +335,15 @@ func (p *planner) initiateDropTable(
 	if !tableDesc.IsInterleaved() &&
 		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
 		// Get the zone config applying to this table in order to
-		// set the GC deadline.
-		_, zoneCfg, _, err := GetZoneConfigInTxn(
+		// ensure there is a GC TTL.
+		_, _, _, err := GetZoneConfigInTxn(
 			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "",
 		)
 		if err != nil {
 			return err
 		}
-		tableDesc.GCDeadline = timeutil.Now().UnixNano() +
-			int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+
+		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
 	tableDesc.State = sqlbase.TableDescriptor_DROP

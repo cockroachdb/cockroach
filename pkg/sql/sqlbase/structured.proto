@@ -718,12 +718,14 @@ message TableDescriptor {
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
   optional SequenceOpts sequence_opts = 28;
 
-  // The GC deadline is set when a table is truncated or dropped,
-  // based on the current time and the GC TTL for the table. It's
-  // the timestamp after which the table's contents will be cleared
-  // from the cluster. In nanoseconds since the epoch.
-  optional int64 gc_deadline = 29 [(gogoproto.nullable) = false,
-           (gogoproto.customname) = "GCDeadline"];
+  // The drop time is set when a table is truncated or dropped,
+  // based on the current time in nanoseconds since the epoch.
+  // Use this timestamp + GC TTL to start deleting the table's
+  // contents.
+  //
+  // TODO(vivek): Replace with the ModificationTime. This has been
+  // added only for migration purposes.
+  optional int64 drop_time = 29 [(gogoproto.nullable) = false];
 
   message Replacement {
     optional uint32 id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];

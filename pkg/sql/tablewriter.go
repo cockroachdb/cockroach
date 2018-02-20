@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // expressionCarrier handles visiting sub-expressions.
@@ -860,16 +859,12 @@ func (td *tableDeleter) deleteAllRowsFast(
 			EndKey: tablePrefix.PrefixEnd(),
 		}
 	}
-	// If GCDeadline isn't set, assume this drop request is from a version
+	// If DropTime isn't set, assume this drop request is from a version
 	// 1.1 server and invoke legacy code that uses DeleteRange and range GC.
-	if td.tableDesc().GCDeadline == 0 {
+	if td.tableDesc().DropTime == 0 {
 		return td.legacyDeleteAllRowsFast(ctx, resume, limit, autoCommit, traceKV)
 	}
 
-	// Assert that GC deadline is in the past.
-	if timeutil.Since(timeutil.Unix(0, td.tableDesc().GCDeadline)) < 0 {
-		log.Fatalf(ctx, "not past the GC deadline: %s", td.tableDesc())
-	}
 	log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
 	// ClearRange cannot be run in a transaction, so create a
 	// non-transactional batch to send the request.
