@@ -933,8 +933,8 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 		RangeMaxBytes: maxBytes,
 	})()
 
-	var replStart roachpb.RKey
 	var activateSplitFilter int32
+	splitKey := roachpb.RKey(keys.UserTableDataMin)
 	splitPending, blockSplits := make(chan struct{}), make(chan struct{})
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.TestingResponseFilter =
@@ -942,7 +942,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 			if atomic.LoadInt32(&activateSplitFilter) == 1 {
 				for _, req := range ba.Requests {
 					if cPut, ok := req.GetInner().(*roachpb.ConditionalPutRequest); ok {
-						if cPut.Key.Equal(keys.RangeDescriptorKey(replStart)) {
+						if cPut.Key.Equal(keys.RangeDescriptorKey(splitKey)) {
 							splitPending <- struct{}{}
 							<-blockSplits
 						}
@@ -961,12 +961,18 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 	}
 	store.SetSplitQueueActive(false)
 
-	// Fill the range past the point where writes should backpressure.
-	descID := uint32(keys.MaxReservedDescID + 1)
-	tableBoundary := keys.MakeTablePrefix(descID)
-	repl := store.LookupReplica(tableBoundary, nil)
-	replStart = repl.Desc().StartKey
-	fillRange(t, store, repl.RangeID, tableBoundary, 2*maxBytes+1)
+	// Split at the split key.
+	sArgs := adminSplitArgs(splitKey.AsRawKey())
+	repl := store.LookupReplica(splitKey, nil)
+	if _, pErr := client.SendWrappedWith(context.Background(), rg1(store), roachpb.Header{
+		RangeID: repl.RangeID,
+	}, sArgs); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Fill the new range past the point where writes should backpressure.
+	repl = store.LookupReplica(splitKey, nil)
+	fillRange(t, store, repl.RangeID, splitKey.AsRawKey(), 2*maxBytes+1)
 
 	if !repl.ShouldBackpressureWrites() {
 		t.Fatal("expected ShouldBackpressureWrites=true, found false")
@@ -987,7 +993,7 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 	go func() {
 		// Write to the first key of the range to make sure that
 		// we don't end up on the wrong side of the split.
-		pArgs := putArgs(replStart.AsRawKey(), []byte("test"))
+		pArgs := putArgs(splitKey.AsRawKey(), []byte("test"))
 		header := roachpb.Header{RangeID: repl.RangeID}
 		_, pErr := client.SendWrappedWith(context.Background(), store, header, pArgs)
 		writeRes <- pErr
