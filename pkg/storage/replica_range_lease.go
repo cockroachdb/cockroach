@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -58,6 +59,7 @@ func (h *leaseRequestHandle) Cancel() {
 		// Cancel request, if necessary.
 		if len(h.p.llHandles) == 0 {
 			h.p.cancel()
+			h.p.cleanupAfterReq()
 		}
 	}
 	// Mark handle as canceled.
@@ -232,15 +234,15 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	// cancellation of all contexts onto this new one, only canceling it if all
 	// coalesced requests timeout/cancel. p.cancel (defined below) is the cancel
 	// function that must be called; calling just cancel is insufficient.
+	sp := p.repl.AmbientContext.Tracer.StartSpan("request lease")
 	ctx := p.repl.AnnotateCtx(context.Background())
-	ctx, cancel := context.WithCancel(ctx)
-	p.cancel = func() {
-		cancel()
-		p.cleanupAfterReq()
-	}
-	return p.repl.store.Stopper().RunAsyncTask(
-		ctx, "storage.pendingLeaseRequest: requesting lease",
-		func(ctx context.Context) {
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+	ctx, p.cancel = context.WithCancel(ctx)
+
+	err := p.repl.store.Stopper().RunAsyncTask(
+		ctx, "storage.pendingLeaseRequest: requesting lease", func(ctx context.Context) {
+			defer sp.Finish()
+
 			// If requesting an epoch-based lease & current state is expired,
 			// potentially heartbeat our own liveness or increment epoch of
 			// prior owner. Note we only do this if the previous lease was
@@ -312,6 +314,12 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			}
 			p.cleanupAfterReq()
 		})
+	if err != nil {
+		p.cleanupAfterReq()
+		sp.Finish()
+		return err
+	}
+	return nil
 }
 
 // Requires repl.mu is exclusively locked.
