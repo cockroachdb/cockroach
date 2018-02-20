@@ -6356,6 +6356,12 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
+// Special identifier current_catalog is equivalent to current_database().
+// https://www.postgresql.org/docs/10/static/functions-info.html
+| CURRENT_CATALOG
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_database")}
+  }
 | CURRENT_TIMESTAMP
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
