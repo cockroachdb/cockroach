@@ -1068,6 +1068,8 @@ func TestParse2(t *testing.T) {
 			`SELECT btrim(a, b)`},
 		{`SELECT CURRENT_USER`,
 			`SELECT current_user()`},
+		{`SELECT CURRENT_ROLE`,
+			`SELECT current_user()`},
 		{`SELECT SESSION_USER`,
 			`SELECT current_user()`},
 		{`SELECT USER`,

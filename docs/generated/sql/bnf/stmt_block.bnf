@@ -1769,6 +1769,7 @@ func_expr_common_subexpr ::=
 	| 'CURRENT_CATALOG'
 	| 'CURRENT_TIMESTAMP'
 	| 'CURRENT_USER'
+	| 'CURRENT_ROLE'
 	| 'SESSION_USER'
 	| 'USER'
 	| 'CAST' '(' a_expr 'AS' cast_target ')'
