@@ -111,6 +111,10 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
       result = moment(new Date(series[index]));
     }
 
+    if (!this.props.hoverState) {
+      return;
+    }
+
     // Only dispatch if we have something to change to avoid action spamming.
     if (this.props.hoverState.hoverChart !== this.props.title || !result.isSame(this.props.hoverState.hoverTime)) {
       this.props.hoverOn({
@@ -141,11 +145,13 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
         return;
       }
 
-      const { currentlyHovering, hoverChart } = this.props.hoverState;
       let hoverTime: moment.Moment;
-      // Don't draw the linked guideline on the hovered chart, NVD3 does that for us.
-      if (currentlyHovering && hoverChart !== this.props.title) {
-        hoverTime = this.props.hoverState.hoverTime;
+      if (this.props.hoverState) {
+        const { currentlyHovering, hoverChart } = this.props.hoverState;
+        // Don't draw the linked guideline on the hovered chart, NVD3 does that for us.
+        if (currentlyHovering && hoverChart !== this.props.title) {
+          hoverTime = this.props.hoverState.hoverTime;
+        }
       }
 
       ConfigureLineChart(
@@ -172,12 +178,22 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data } = this.props;
+    const { title, subtitle, tooltip, data, hoverOn} = this.props;
 
-    return <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
-      <div className="linegraph">
-        <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} onMouseMove={this.mouseMove} onMouseLeave={this.mouseLeave} />
-      </div>
-    </Visualization>;
+    let hoverProps: Partial<React.SVGProps<SVGSVGElement>> = {};
+    if (hoverOn) {
+      hoverProps = {
+        onMouseMove: this.mouseMove,
+        onMouseLeave: this.mouseLeave,
+      };
+    }
+
+    return (
+      <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
+        <div className="linegraph">
+          <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} {...hoverProps} />
+        </div>
+      </Visualization>
+    );
   }
 }
