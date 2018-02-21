@@ -26,8 +26,8 @@ func init() {
 		c := newCluster(ctx, t, 9, "--geo")
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Put(ctx, workload, "./workload")
+		c.Put(ctx, cockroachPath, "./cockroach")
+		c.Put(ctx, workloadPath, "./workload")
 		c.Start(ctx)
 
 		// TODO(benesch): avoid hardcoding this list.
