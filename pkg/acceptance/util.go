@@ -32,11 +32,6 @@ import (
 
 var stopper = stop.NewStopper()
 
-// GetStopper returns the stopper used by acceptance tests.
-func GetStopper() *stop.Stopper {
-	return stopper
-}
-
 // RunTests runs the tests in a package while gracefully handling interrupts.
 func RunTests(m *testing.M) {
 	randutil.SeedForTests()
