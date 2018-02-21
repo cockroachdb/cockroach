@@ -2315,6 +2315,9 @@ CockroachDB supports the following flags:
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				errCode := string(*args[0].(*tree.DString))
 				msg := string(*args[1].(*tree.DString))
+				if errCode == "" {
+					return nil, errors.New(msg)
+				}
 				return nil, pgerror.NewError(errCode, msg)
 			},
 			Category: categorySystemInfo,
