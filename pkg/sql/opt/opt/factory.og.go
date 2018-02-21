@@ -68,17 +68,9 @@ type Factory interface {
 	// ConstructAggregations constructs an expression for the Aggregations operator.
 	// Aggregations is a set of aggregate expressions that will become output
 	// columns for a containing GroupBy operator. The private Cols field contains
-	// the list of column indexes returned by the expression, as a *opt.ColList. It
+	// the list of column indexes returned by the expression, as a *ColList. It
 	// is legal for Cols to be empty.
 	ConstructAggregations(aggs ListID, cols PrivateID) GroupID
-
-	// ConstructGroupings constructs an expression for the Groupings operator.
-	// Groupings is a set of grouping expressions that will become output columns
-	// for a containing GroupBy operator. The GroupBy operator groups its input by
-	// the value of these expressions, and may compute aggregates over the groups.
-	// The private Cols field contains the list of column indexes returned by the
-	// expression, as a *opt.ColList. It is legal for Cols to be empty.
-	ConstructGroupings(elems ListID, cols PrivateID) GroupID
 
 	// ConstructExists constructs an expression for the Exists operator.
 	ConstructExists(input GroupID) GroupID
@@ -318,7 +310,12 @@ type Factory interface {
 	ConstructAntiJoinApply(left GroupID, right GroupID, on GroupID) GroupID
 
 	// ConstructGroupBy constructs an expression for the GroupBy operator.
-	ConstructGroupBy(input GroupID, groupings GroupID, aggregations GroupID) GroupID
+	// GroupBy is an operator that is used for performing aggregations (for queries
+	// with aggregate functions and/or group by expressions). It groups results that
+	// are equal on the grouping columns and computes aggregations as described by
+	// Aggregations (which is always an Aggregations operator). The arguments of the
+	// aggregations are columns from the input.
+	ConstructGroupBy(input GroupID, aggregations GroupID, groupingColumns PrivateID) GroupID
 
 	// ConstructUnion constructs an expression for the Union operator.
 	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
