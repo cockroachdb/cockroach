@@ -203,6 +203,7 @@ func (ag *aggregator) close() {
 				aggFunc.Close(ag.ctx)
 			}
 		}
+		ag.accumulating = false
 	}
 	ag.internalClose()
 }
