@@ -40,6 +40,35 @@ var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
 
+// The test files support only one command:
+//
+//   - index-constraints [arg | arg=val | arg=(val1,val2, ...)]...
+//
+//   Takes a scalar expression, builds a memo for it, and computes index
+//   constraints. Arguments:
+//
+//     - vars=(<type>, ...)
+//
+//       Sets the types for the index vars in the expression.
+//
+//     - index=(@<index> [ascending|asc|descending|desc] [not null], ...)
+//
+//       Information for the index (used by index-constraints). Each column of the
+//       index refers to an index var.
+//
+//     - inverted-index=@<index>
+//
+//       Information about an inverted index (used by index-constraints). The
+//       one column of the inverted index refers to an index var. Only one of
+//       "index" and "inverted-index" should be used.
+//
+//     - nonormalize
+//
+//       Disable the optimizer normalization rules.
+//
+//     - semtree-normalize
+//
+//       Run TypedExpr normalization before building the memo.
 func TestIndexConstraints(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -61,6 +90,9 @@ func TestIndexConstraints(t *testing.T) {
 				var colInfos []IndexColumnInfo
 				var iVarHelper tree.IndexedVarHelper
 				var invertedIndex bool
+				var normalizeTypedExpr bool
+				normalize := true
+
 				st := cluster.MakeTestingClusterSettings()
 				evalCtx := tree.MakeTestingEvalContext(st)
 
@@ -100,6 +132,12 @@ func TestIndexConstraints(t *testing.T) {
 							invertedIndex = true
 						}
 
+					case "nonormalize":
+						normalize = false
+
+					case "semtree-normalize":
+						normalizeTypedExpr = true
+
 					default:
 						d.Fatalf(t, "unknown argument: %s", key)
 					}
@@ -112,11 +150,22 @@ func TestIndexConstraints(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
+					if normalizeTypedExpr {
+						typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+						if err != nil {
+							d.Fatalf(t, "%v", err)
+						}
+					}
+
 					varNames := make([]string, len(varTypes))
 					for i := range varNames {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
-					o := xform.NewOptimizer(catalog, xform.OptimizeAll)
+					steps := xform.OptimizeAll
+					if !normalize {
+						steps = xform.OptimizeNone
+					}
+					o := xform.NewOptimizer(catalog, steps)
 					b := optbuilder.NewScalar(ctx, o.Factory(), varNames, varTypes)
 					group, err := b.Build(typedExpr)
 					if err != nil {
