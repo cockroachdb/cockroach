@@ -526,46 +526,50 @@ func (b *Builder) buildSelectClause(
 ) (out opt.GroupID, outScope *scope) {
 	sel := stmt.Select.(*tree.SelectClause)
 
-	var fromScope *scope
+	var fromScope, groupingsScope, projectionsScope *scope
 	out, fromScope = b.buildFrom(sel.From, sel.Where, inScope)
 
-	// The "from" columns are visible to any grouping expressions.
-	groupings, groupingsScope := b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope)
-
-	if groupings != nil {
-		fromScope.groupby.groupings = groupings
-	} else if sel.Having != nil || b.hasAggregates(sel.Exprs) {
-		// Even though there is no groupby clause, create a grouping scope
-		// anyway, since a HAVING clause or one or more aggregate functions
-		// in the projection list triggers an implicit groupby.
-		groupingsScope = fromScope.replace()
-	}
-
-	// Set the grouping scope so that any aggregates will be added to the set
-	// of grouping columns.
-	fromScope.groupby.groupingsScope = groupingsScope
-
-	// Any "grouping" columns are visible to both the "having" and "projection"
-	// expressions. The build has the side effect of extracting aggregation
-	// columns.
+	var groupings []opt.GroupID
 	var having opt.GroupID
-	if sel.Having != nil {
-		having = b.buildHaving(sel.Having.Expr, fromScope)
+
+	// We have an aggregation if:
+	//  - we have a GROUP BY, or
+	//  - we have a HAVING clause, or
+	//  - we have aggregate functions in the select expressions.
+	if len(sel.GroupBy) > 0 || sel.Having != nil || b.hasAggregates(sel.Exprs) {
+		// After GROUP BY, variables from inScope are hidden
+		groupingsScope = fromScope.replace()
+		// The "from" columns are visible to any grouping expressions.
+		groupings = b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope, groupingsScope)
+		fromScope.groupby.groupings = groupings
+		// Set the grouping scope so that any aggregates will be added to the set
+		// of grouping columns.
+		fromScope.groupby.groupingsScope = groupingsScope
+		projectionsScope = fromScope.replace()
+
+		// Any "grouping" columns are visible to both the "having" and "projection"
+		// expressions. The build has the side effect of extracting aggregation
+		// columns.
+		if sel.Having != nil {
+			having = b.buildHaving(sel.Having.Expr, fromScope)
+		}
+	} else {
+		projectionsScope = fromScope.push()
 	}
 
-	// If the projection is empty or a simple pass-through, then
-	// buildProjectionList will return nil values.
-	projections, projectionsScope := b.buildProjectionList(sel.Exprs, fromScope)
+	// Note: this call will populate groupingsScope.groupby.aggs if the
+	// expressions contain aggregate functions.
+	projections := b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 
 	// Wrap with groupby operator if groupings or aggregates exist.
-	if fromScope.inGroupingContext() {
+	if groupingsScope != nil {
 		// Any aggregate columns that were discovered would have been added to
 		// the grouping scope.
 		aggCols := groupingsScope.getAggregateCols()
 		aggList := b.constructList(opt.AggregationsOp, groupingsScope.groupby.aggs, aggCols)
 
 		var groupingCols []columnProps
-		if groupings != nil {
+		if len(groupings) > 0 {
 			groupingCols = groupingsScope.cols
 		}
 
@@ -589,8 +593,8 @@ func (b *Builder) buildSelectClause(
 		panic(errorf("ORDER BY not yet supported: %s", stmt.String()))
 	}
 
-	// Wrap with project operator if it exists.
-	if projections != nil {
+	// Don't add an unnecessary "pass through" project expression.
+	if !projectionsScope.hasSameColumns(outScope) {
 		p := b.constructList(opt.ProjectionsOp, projections, projectionsScope.cols)
 		out = b.factory.ConstructProject(out, p)
 		outScope = projectionsScope
@@ -662,14 +666,8 @@ func (b *Builder) buildFrom(
 // groups corresponding to each GROUP BY expression. See Builder.buildStmt
 // above for a description of the remaining input and return values.
 func (b *Builder) buildGroupingList(
-	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope,
-) (groupings []opt.GroupID, outScope *scope) {
-	if groupBy == nil {
-		return nil, nil
-	}
-
-	// After GROUP BY, variables from inScope are hidden
-	outScope = inScope.replace()
+	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope, outScope *scope,
+) (groupings []opt.GroupID) {
 
 	groupings = make([]opt.GroupID, 0, len(groupBy))
 	inScope.groupby.groupStrs = make(groupByStrSet, len(groupBy))
@@ -678,7 +676,7 @@ func (b *Builder) buildGroupingList(
 		groupings = append(groupings, subset...)
 	}
 
-	return groupings, outScope
+	return groupings
 }
 
 // buildGrouping builds a set of memo groups that represent a GROUP BY
@@ -879,20 +877,12 @@ func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
 // The first return value `projections` is an ordered list of top-level memo
 // groups corresponding to each select expression. See Builder.buildStmt above
 // for a description of the remaining input and return values.
+//
+// As a side-effect, the appropriate scopes are updated with aggregations
+// (scope.groupby.aggs)
 func (b *Builder) buildProjectionList(
-	selects tree.SelectExprs, inScope *scope,
-) (projections []opt.GroupID, outScope *scope) {
-	if len(selects) == 0 {
-		return nil, nil
-	}
-
-	if inScope.inGroupingContext() {
-		// In the case of grouping, FROM columns are no longer visible.
-		outScope = inScope.replace()
-	} else {
-		outScope = inScope.push()
-	}
-
+	selects tree.SelectExprs, inScope *scope, outScope *scope,
+) (projections []opt.GroupID) {
 	projections = make([]opt.GroupID, 0, len(selects))
 	for _, e := range selects {
 		end := len(outScope.cols)
@@ -907,27 +897,7 @@ func (b *Builder) buildProjectionList(
 		}
 	}
 
-	// Don't add an unnecessary "pass through" project expression.
-	if inScope.inGroupingContext() {
-		// If aggregates will be projected, check against them instead.
-		inScope = inScope.groupby.groupingsScope
-	}
-
-	if len(outScope.cols) == len(inScope.cols) {
-		matches := true
-		for i := range inScope.cols {
-			if inScope.cols[i].index != outScope.cols[i].index {
-				matches = false
-				break
-			}
-		}
-
-		if matches {
-			return nil, nil
-		}
-	}
-
-	return projections, outScope
+	return projections
 }
 
 // buildProjection builds a set of memo groups that represent a projection

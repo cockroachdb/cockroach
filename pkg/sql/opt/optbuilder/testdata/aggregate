@@ -1490,3 +1490,26 @@ project
            │    └── variable: kv.k [type=int]
            └── unary-minus [type=int]
                 └── variable: kv.w [type=int]
+
+build 
+SELECT 1 + MIN(v*2) FROM kv GROUP BY k+3
+----
+project
+ ├── columns: column7:int:null:7
+ ├── group-by
+ │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── groupings
+ │    │    └── plus [type=int]
+ │    │         ├── variable: kv.k [type=int]
+ │    │         └── const: 3 [type=int]
+ │    └── aggregations
+ │         └── function: min [type=NULL]
+ │              └── mult [type=int]
+ │                   ├── variable: kv.v [type=int]
+ │                   └── const: 2 [type=int]
+ └── projections
+      └── plus [type=int]
+           ├── const: 1 [type=int]
+           └── variable: column6 [type=int]
