@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/pkg/errors"
+	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -169,16 +170,11 @@ func (t *partitioningTest) parse() error {
 			}
 		}
 
-		for _, constraintStr := range strings.Split(constraints, `,`) {
-			if constraintStr == "" {
-				continue
-			}
-			var c config.Constraint
-			if err := c.FromString(constraintStr); err != nil {
-				return errors.Wrapf(err, "parsing constraint: %s", constraintStr)
-			}
-			subzone.Config.Constraints.Constraints = append(subzone.Config.Constraints.Constraints, c)
+		var parsedConstraints config.ConstraintsList
+		if err := yaml.UnmarshalStrict([]byte("["+constraints+"]"), &parsedConstraints); err != nil {
+			return errors.Wrapf(err, "parsing constraints: %s", constraints)
 		}
+		subzone.Config.Constraints = ([]config.Constraints)(parsedConstraints)
 
 		t.parsed.subzones = append(t.parsed.subzones, subzone)
 	}

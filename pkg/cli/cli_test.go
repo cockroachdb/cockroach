@@ -473,7 +473,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone ls
 	// .default
 	// .liveness
@@ -505,7 +505,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
@@ -518,7 +518,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone get system
 	// system
 	// range_min_bytes: 1048576
@@ -526,7 +526,7 @@ func Example_zone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone rm system
 	// CONFIGURE ZONE 1
 	// zone ls

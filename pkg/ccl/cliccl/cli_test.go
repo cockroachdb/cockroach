@@ -118,7 +118,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone get db.t.p0
 	// db.t@primary
 	// range_min_bytes: 1048576
@@ -126,7 +126,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone get db.t
 	// .default
 	// range_min_bytes: 1048576
@@ -149,7 +149,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone get db.t.p1
 	// db.t.p1
 	// range_min_bytes: 1048576
@@ -157,7 +157,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone get db.t.p0
 	// db.t@primary
 	// range_min_bytes: 1048576
@@ -165,7 +165,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 1
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone ls
 	// .default
 	// .liveness
@@ -190,7 +190,7 @@ func Example_cclzone() {
 	// gc:
 	//   ttlseconds: 90000
 	// num_replicas: 3
-	// constraints: [us-east-1a, ssd]
+	// constraints: [+us-east-1a, +ssd]
 	// zone ls
 	// .default
 	// .liveness
