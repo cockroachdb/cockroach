@@ -48,7 +48,11 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	// Check that the database exists.
-	dbDesc, err := ResolveDatabase(ctx, p, string(n.Name), !n.IfExists)
+	var dbDesc *DatabaseDescriptor
+	var err error
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		dbDesc, err = ResolveDatabase(ctx, p, string(n.Name), !n.IfExists)
+	})
 	if err != nil {
 		return nil, err
 	}
