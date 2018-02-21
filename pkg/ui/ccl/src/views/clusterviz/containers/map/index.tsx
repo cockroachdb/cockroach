@@ -14,7 +14,6 @@ import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasC
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { parseLocalityRoute } from "src/util/localities";
-import "./sim.css";
 
 export default class ClusterVisualization extends React.Component<RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
