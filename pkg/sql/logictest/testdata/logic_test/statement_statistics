@@ -131,3 +131,14 @@ SELECT _ FROM _ WHERE _ IN (_, _)
 SELECT _ FROM _ WHERE _ IN (_, _)
 SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
 SELECT _ FROM _ WHERE _ NOT IN (_, _)
+
+# Check that the timings are not out of whack (#22877).
+# We use the keys left over by the two unary selects
+# performed at the start of this test above.
+query TBB
+SELECT key, service_lat_avg > 0, service_lat_avg < 1
+  FROM crdb_internal.node_statement_statistics
+ WHERE key = 'SELECT _'
+----
+SELECT _ true true
+SELECT _ true true

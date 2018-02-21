@@ -822,6 +822,13 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				tcmd.Stmt, NeedRowDesc, pos, nil /* formatCodes */, ex.sessionData.Location)
 			res = stmtRes
 			curStmt := Statement{AST: tcmd.Stmt}
+
+			// Parsing occurred when the message was received. Propagate the
+			// parse timings to the current phaseTimes array so that
+			// statement statistics can further use them.
+			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
+			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
+
 			ev, payload, err = ex.execStmt(ex.Ctx(), curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
