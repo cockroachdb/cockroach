@@ -400,8 +400,11 @@ message SettingsResponse {
    map<string, Value> key_values = 1 [(gogoproto.nullable) = false];
 }
 
-// HealthRequest inquires whether the addressed node is healthy.
+// HealthRequest inquires whether the addressed node is healthy. If ready is
+// specified, a response will be returned if the node is ready to receive client
+// traffic.
 message HealthRequest {
+  bool ready = 1;
 }
 
 // HealthResponse is the response to HealthRequest. It currently does not
