@@ -186,6 +186,13 @@ func writeZoneConfig(
 			return 0, err
 		}
 	}
+	if len(zone.Constraints) > 1 || (len(zone.Constraints) == 1 && zone.Constraints[0].NumReplicas != 0) {
+		st := execCfg.Settings
+		if !st.Version.IsMinSupported(cluster.VersionPerReplicaZoneConstraints) {
+			return 0, errors.New(
+				"cluster version does not support zone configs with per-replica constraints")
+		}
+	}
 
 	internalExecutor := InternalExecutor{ExecCfg: execCfg}
 

@@ -510,13 +510,13 @@ func (sl StoreList) String() string {
 
 // filter takes a store list and filters it using the passed in constraints. It
 // maintains the original order of the passed in store list.
-func (sl StoreList) filter(constraints config.Constraints) StoreList {
-	if len(constraints.Constraints) == 0 {
+func (sl StoreList) filter(constraints []config.Constraints) StoreList {
+	if len(constraints) == 0 {
 		return sl
 	}
 	var filteredDescs []roachpb.StoreDescriptor
 	for _, store := range sl.stores {
-		if ok, _ := constraintCheck(store, constraints); ok {
+		if ok := constraintsCheck(store, constraints); ok {
 			filteredDescs = append(filteredDescs, store)
 		}
 	}
