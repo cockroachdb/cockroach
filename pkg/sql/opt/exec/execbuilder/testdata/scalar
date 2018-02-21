@@ -32,6 +32,22 @@ render       0  render  ·         ·                 (column1)  ·
 ·            1  ·       size      0 columns, 1 row  ·          ·
 
 exec-explain
+SELECT (1, 2)
+----
+render       0  render  ·         ·                 (column1)  ·
+ │           0  ·       render 0  (1, 2)            ·          ·
+ └── values  1  values  ·         ·                 ()         ·
+·            1  ·       size      0 columns, 1 row  ·          ·
+
+exec-explain
+SELECT (true, false)
+----
+render       0  render  ·         ·                 (column1)  ·
+ │           0  ·       render 0  (true, false)     ·          ·
+ └── values  1  values  ·         ·                 ()         ·
+·            1  ·       size      0 columns, 1 row  ·          ·
+
+exec-explain
 SELECT 1 + 2 FROM t.t
 ----
 render     0  render  ·         ·          (column8)                          ·

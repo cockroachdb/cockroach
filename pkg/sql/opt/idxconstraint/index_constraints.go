@@ -107,7 +107,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 		// We assume that the values of the tuple are already ordered and distinct.
 		spans := make(LogicalSpans, 0, val.ChildCount())
 		for i, n := 0, val.ChildCount(); i < n; i++ {
-			datum := getConstDatum(val.Child(i))
+			datum := xform.ExtractConstDatum(val.Child(i))
 			if !c.verifyType(offset, datum.ResolvedType()) {
 				return nil, false, false
 			}
@@ -131,7 +131,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	if !val.IsConstValue() {
 		return nil, false, false
 	}
-	return c.makeSpansForSingleColumnDatum(offset, op, getConstDatum(val))
+	return c.makeSpansForSingleColumnDatum(offset, op, xform.ExtractConstDatum(val))
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a
@@ -289,7 +289,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 
 	datums := make(tree.Datums, prefixLen)
 	for i := range datums {
-		datums[i] = getConstDatum(rhs.Child(i))
+		datums[i] = xform.ExtractConstDatum(rhs.Child(i))
 	}
 
 	// less is true if the op is < or <= and false if the op is > or >=.
@@ -454,7 +454,7 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 			if !val.IsConstValue() {
 				return nil, false, false
 			}
-			datum := getConstDatum(val)
+			datum := xform.ExtractConstDatum(val)
 			if !c.verifyType(offset+i, datum.ResolvedType()) {
 				return nil, false, false
 			}
@@ -502,7 +502,7 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 ) (_ LogicalSpans, ok bool, tight bool) {
 
 	if ev.IsConstValue() {
-		datum := getConstDatum(ev)
+		datum := xform.ExtractConstDatum(ev)
 		if datum == tree.DBoolFalse || datum == tree.DNull {
 			// Condition is never true, return no spans.
 			return LogicalSpans{}, true, true
@@ -855,12 +855,12 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			return nil, false, false
 		}
 
-		rightDatum := getConstDatum(rhs)
+		rightDatum := xform.ExtractConstDatum(rhs)
 		rd := rightDatum.(*tree.DJSON).JSON
 
 		switch rd.Type() {
 		case json.ArrayJSONType, json.ObjectJSONType:
-			return LogicalSpans{c.makeEqSpan(getConstDatum(rhs))}, true, true
+			return LogicalSpans{c.makeEqSpan(xform.ExtractConstDatum(rhs))}, true, true
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
 			// both matching scalars and arrays that contain that value. In order to do this we generate
@@ -1173,19 +1173,4 @@ func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
 // to index column <offset>.
 func (c *indexConstraintCtx) isIndexColumn(ev xform.ExprView, index int) bool {
 	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnIndex) == c.colInfos[index].VarIdx
-}
-
-// getConstDatum wraps the logic of getting a Datum from an expression which
-// IsConstValue.
-func getConstDatum(ev xform.ExprView) tree.Datum {
-	switch ev.Operator() {
-	case opt.TrueOp:
-		return tree.DBoolTrue
-	case opt.FalseOp:
-		return tree.DBoolFalse
-	case opt.ConstOp:
-		return ev.Private().(tree.Datum)
-	default:
-		panic(fmt.Sprintf("unsupported op %s", ev.Operator()))
-	}
 }
