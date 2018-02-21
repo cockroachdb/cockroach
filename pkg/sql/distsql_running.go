@@ -340,8 +340,10 @@ func makeDistSQLReceiver(
 		updateClock:  updateClock,
 		stmtType:     stmtType,
 	}
-	// When the root transaction finishes (i.e. it is abandoned,
-	// aborted, or committed), ensure the dist SQL flow is canceled.
+	// When the root transaction finishes (i.e. it is abandoned, aborted, or
+	// committed), ensure the flow is canceled so that we don't return results to
+	// the client that might have missed seeing their own writes. The committed
+	// case shouldn't happen.
 	if r.txn != nil {
 		r.txn.OnFinish(func(err error) {
 			r.canceled.Store(errWrap{err: err})
