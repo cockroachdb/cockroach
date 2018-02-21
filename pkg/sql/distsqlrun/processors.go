@@ -383,6 +383,7 @@ func (pb *processorBase) init(
 	output RowReceiver,
 ) error {
 	pb.flowCtx = flowCtx
+	pb.ctx = pb.flowCtx.Ctx
 	if evalCtx == nil {
 		evalCtx = flowCtx.NewEvalCtx()
 	}
@@ -420,8 +421,12 @@ func (pb *processorBase) internalClose() bool {
 	closing := !pb.closed
 	if closing {
 		pb.closed = true
+		pb.started = true // a closed processor has definitely started
 		tracing.FinishSpan(pb.span)
 		pb.span = nil
+		// Reset the context so that any incidental uses after this point do not
+		// access the finished span.
+		pb.ctx = pb.flowCtx.Ctx
 	}
 	// This prevents Next() from returning more rows.
 	pb.out.consumerClosed()
