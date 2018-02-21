@@ -412,7 +412,7 @@ func TestClientGetAndPutProto(t *testing.T) {
 
 	zoneConfig := config.ZoneConfig{
 		NumReplicas:   2,
-		Constraints:   config.Constraints{Constraints: []config.Constraint{{Value: "mem"}}},
+		Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "mem"}}}},
 		RangeMinBytes: 1 << 10, // 1k
 		RangeMaxBytes: 1 << 18, // 256k
 	}

@@ -230,23 +230,23 @@ func TestGetZoneConfig(t *testing.T) {
 	//     p1: true  [1, 255)
 	db1Cfg := config.ZoneConfig{
 		NumReplicas: 1,
-		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db1"}}},
+		Constraints: []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}},
 	}
 	tb11Cfg := config.ZoneConfig{
 		NumReplicas: 1,
-		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db1.tb1"}}},
+		Constraints: []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}},
 	}
 	p211Cfg := config.ZoneConfig{
 		NumReplicas: 1,
-		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}},
+		Constraints: []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}},
 	}
 	p212Cfg := config.ZoneConfig{
 		NumReplicas: 1,
-		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}},
+		Constraints: []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}},
 	}
 	tb21Cfg := config.ZoneConfig{
 		NumReplicas: 1,
-		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb1"}}},
+		Constraints: []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}},
 		Subzones: []config.Subzone{
 			{PartitionName: "p0", Config: p211Cfg},
 			{PartitionName: "p1", Config: p212Cfg},
@@ -259,7 +259,7 @@ func TestGetZoneConfig(t *testing.T) {
 	}
 	p221Cfg := config.ZoneConfig{
 		NumReplicas: 1,
-		Constraints: config.Constraints{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}},
+		Constraints: []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}},
 	}
 	tb22Cfg := config.ZoneConfig{
 		NumReplicas: 0,
