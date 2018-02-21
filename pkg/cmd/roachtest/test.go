@@ -148,10 +148,10 @@ func (r *registry) Run(filter []string) int {
 		close(done)
 	}()
 
-	// If we're running with parallelism > 1, periodically output test status to
-	// give an indication of progress.
+	// If we're running with parallelism > 1 or locally, periodically output test
+	// status to give an indication of progress.
 	var tick <-chan time.Time
-	if parallelism > 1 {
+	if parallelism > 1 || local {
 		ticker := time.NewTicker(time.Minute)
 		defer ticker.Stop()
 		tick = ticker.C
