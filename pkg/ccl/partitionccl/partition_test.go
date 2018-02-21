@@ -1219,7 +1219,6 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#22360")
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
