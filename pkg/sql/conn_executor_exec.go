@@ -56,6 +56,7 @@ func (ex *connExecutor) execStmt(
 	pinfo *tree.PlaceholderInfo,
 	pos CmdPos,
 ) (fsm.Event, fsm.EventPayload, error) {
+
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
@@ -89,6 +90,15 @@ func (ex *connExecutor) execStmt(
 		defer func() {
 			if unregisterFn != nil {
 				unregisterFn()
+			}
+			// Detect context cancelation and overwrite whatever error might have been
+			// set on the result before. The idea is that once the query's context is
+			// canceled, all sorts of actors can detect the cancelation and set all
+			// sorts of errors on the result. Rather than trying to impose discipline
+			// in that jungle, we just overwrite them all here with an error that's
+			// nicer to look at for the client.
+			if ctx.Err() != nil {
+				res.OverwriteError(sqlbase.NewQueryCanceledError())
 			}
 		}()
 
@@ -466,6 +476,13 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+
+		// Detect context cancelation and overwrite whatever error might have been
+		// set on the result before.
+		if ctx.Err() != nil {
+			res.OverwriteError(sqlbase.NewQueryCanceledError())
+		}
+
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(
 			planner, stmt, false /* distSQLUsed*/, ex.extraTxnState.autoRetryCounter,
@@ -899,7 +916,7 @@ func (ex *connExecutor) addActiveQuery(
 ) func() {
 
 	_, hidden := stmt.(tree.HiddenFromShowQueries)
-	qm := queryMeta{
+	qm := &queryMeta{
 		start:         ex.phaseTimes[sessionEndParse],
 		stmt:          stmt,
 		phase:         preparing,
@@ -908,7 +925,7 @@ func (ex *connExecutor) addActiveQuery(
 		hidden:        hidden,
 	}
 	ex.mu.Lock()
-	ex.mu.ActiveQueries[queryID] = &qm
+	ex.mu.ActiveQueries[queryID] = qm
 	ex.mu.Unlock()
 	return func() {
 		ex.mu.Lock()

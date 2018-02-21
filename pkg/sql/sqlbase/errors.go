@@ -230,7 +230,7 @@ func NewQueryCanceledError() error {
 
 // IsQueryCanceledError checks whether this is a query canceled error.
 func IsQueryCanceledError(err error) bool {
-	return errHasCode(err, pgerror.CodeQueryCanceledError) || strings.Contains(err.Error(), "query execution canceled")
+	return errHasCode(err, pgerror.CodeQueryCanceledError)
 }
 
 func errHasCode(err error, code string) bool {

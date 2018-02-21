@@ -560,12 +560,19 @@ type CommandResult interface {
 // query execution error.
 type CommandResultErrBase interface {
 	// SetError accumulates an execution error that needs to be reported to the
-	// client. No further calls other than Close() and Discard() are allowed. In
-	// particular, CloseWithErr() is not allowed.
+	// client. No further calls other than OverwriteError(), Close() and Discard()
+	// are allowed. In particular, CloseWithErr() is not allowed.
 	SetError(error)
 
 	// Err returns the error previously set with SetError(), if any.
 	Err() error
+
+	// OverwriteError is like SetError(), except it can be called after SetError()
+	// has already been called and it will overwrite the error. Used by high-level
+	// code when it has a strong opinion about what the error that should be
+	// returned to the client is and doesn't much care about whether an error has
+	// already been set on the result.
+	OverwriteError(error)
 }
 
 // ResultBase is the common interface implemented by all the different command
@@ -781,6 +788,11 @@ func (r *errOnlyRestrictedCommandResult) AddRow(ctx context.Context, row tree.Da
 
 // SetError is part of the RestrictedCommandResult interface.
 func (r *errOnlyRestrictedCommandResult) SetError(err error) {
+	r.err = err
+}
+
+// OverwriteError is part of the RestrictedCommandResult interface.
+func (r *errOnlyRestrictedCommandResult) OverwriteError(err error) {
 	r.err = err
 }
 
