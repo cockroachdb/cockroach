@@ -26,7 +26,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -344,7 +343,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 	varsUsedIn := len(inScope.groupby.varsUsed)
 	switch t := scalar.(type) {
 	case *columnProps:
-		if inGroupingContext && !inScope.groupby.groupingsScope.hasColumn(t.index) {
+		if inGroupingContext && !inScope.groupby.aggInScope.hasColumn(t.index) {
 			inScope.groupby.varsUsed = append(inScope.groupby.varsUsed, t.index)
 		}
 		return b.factory.ConstructVariable(b.factory.InternPrivate(t.index))
@@ -488,47 +487,21 @@ func (b *Builder) buildFunction(
 		panic(builderError{err})
 	}
 
-	isAgg := isAggregate(def)
-	if isAgg {
-		inScope.startAggFunc()
+	funcDef := opt.FuncDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
+
+	if isAggregate(def) {
+		return b.buildAggregateFunction(f, funcDef, label, inScope)
 	}
 
-	argList := make([]opt.GroupID, 0, len(f.Exprs))
-	for _, pexpr := range f.Exprs {
-		var arg opt.GroupID
-		if _, ok := pexpr.(tree.UnqualifiedStar); ok {
-			arg = b.factory.ConstructConst(b.factory.InternPrivate(tree.NewDInt(1)))
-		} else {
-			arg = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
-		}
-
-		argList = append(argList, arg)
+	argList := make([]opt.GroupID, len(f.Exprs))
+	for i, pexpr := range f.Exprs {
+		argList[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
 	}
 
 	// Construct a private FuncDef that refers to a resolved function overload.
-	outDef := opt.FuncDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
-	out = b.factory.ConstructFunction(b.factory.InternList(argList), b.factory.InternPrivate(outDef))
-
-	if isAgg {
-		refScope := inScope.endAggFunc()
-
-		// If the aggregate already exists as a column, use that. Otherwise
-		// create a new column and add it the list of aggregates that need to
-		// be computed by the groupby expression.
-		col = refScope.findAggregate(out)
-		if col == nil {
-			col = b.synthesizeColumn(refScope, label, f.ResolvedType())
-
-			// Add the aggregate to the list of aggregates that need to be computed by
-			// the groupby expression.
-			refScope.groupby.aggs = append(refScope.groupby.aggs, out)
-		}
-
-		// Replace the function call with a reference to the column.
-		out = b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
-	}
-
-	return out, col
+	return b.factory.ConstructFunction(
+		b.factory.InternList(argList), b.factory.InternPrivate(funcDef),
+	), nil
 }
 
 // buildSelect builds a set of memo groups that represent the given select
@@ -572,66 +545,17 @@ func (b *Builder) buildSelectClause(
 ) (out opt.GroupID, outScope *scope) {
 	sel := stmt.Select.(*tree.SelectClause)
 
-	var fromScope, groupingsScope, projectionsScope *scope
+	var fromScope *scope
 	out, fromScope = b.buildFrom(sel.From, sel.Where, inScope)
+	outScope = fromScope
 
-	var groupings []opt.GroupID
-	var having opt.GroupID
-
-	// We have an aggregation if:
-	//  - we have a GROUP BY, or
-	//  - we have a HAVING clause, or
-	//  - we have aggregate functions in the select expressions.
-	if len(sel.GroupBy) > 0 || sel.Having != nil || b.hasAggregates(sel.Exprs) {
-		// After GROUP BY, variables from fromScope are hidden.
-		groupingsScope = fromScope.replace()
-		// The "from" columns are visible to any grouping expressions.
-		groupings = b.buildGroupingList(sel.GroupBy, sel.Exprs, fromScope, groupingsScope)
-		fromScope.groupby.groupings = groupings
-		// Set the grouping scope so that any aggregates will be added to the set
-		// of grouping columns.
-		fromScope.groupby.groupingsScope = groupingsScope
-		projectionsScope = fromScope.replace()
-
-		// Any "grouping" columns are visible to both the "having" and "projection"
-		// expressions. The build has the side effect of extracting aggregation
-		// columns.
-		if sel.Having != nil {
-			having = b.buildHaving(sel.Having.Expr, fromScope)
-		}
+	var projections []opt.GroupID
+	var projectionsScope *scope
+	if b.needsAggregation(sel) {
+		out, outScope, projections, projectionsScope = b.buildAggregation(sel, out, fromScope)
 	} else {
 		projectionsScope = fromScope.push()
-	}
-
-	// Note: if we have an aggregation and the expressions contain aggregate
-	// functions for this aggregation, this call will populate
-	// groupingsScope.groupby.aggs.
-	projections := b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
-
-	// Wrap with groupby operator if groupings or aggregates exist.
-	if groupingsScope != nil {
-		// Any aggregate columns that were discovered would have been added to
-		// the grouping scope.
-		aggCols := groupingsScope.getAggregateCols()
-		aggList := b.constructList(opt.AggregationsOp, groupingsScope.groupby.aggs, aggCols)
-
-		var groupingCols []columnProps
-		if len(groupings) > 0 {
-			groupingCols = groupingsScope.cols
-		}
-
-		groupingList := b.constructList(opt.GroupingsOp, groupings, groupingCols)
-		out = b.factory.ConstructGroupBy(out, groupingList, aggList)
-
-		// Wrap with having filter if it exists.
-		if having != 0 {
-			out = b.factory.ConstructSelect(out, having)
-		}
-
-		outScope = groupingsScope
-	} else {
-		// No aggregates, so current output scope is the "from" scope.
-		outScope = fromScope
+		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 	}
 
 	if stmt.OrderBy != nil {
@@ -698,78 +622,6 @@ func (b *Builder) buildFrom(
 	}
 
 	return out, outScope
-}
-
-// buildGroupingList builds a set of memo groups that represent a list of
-// GROUP BY expressions.
-//
-// groupBy  The given GROUP BY expressions.
-// selects  The select expressions are needed in case one of the GROUP BY
-//          expressions is an index into to the select list. For example,
-//              SELECT count(*), k FROM t GROUP BY 2
-//          indicates that the grouping is on the second select expression, k.
-//
-// The first return value `groupings` is an ordered list of top-level memo
-// groups corresponding to each GROUP BY expression. See Builder.buildStmt
-// above for a description of the remaining input and return values.
-func (b *Builder) buildGroupingList(
-	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope, outScope *scope,
-) (groupings []opt.GroupID) {
-
-	groupings = make([]opt.GroupID, 0, len(groupBy))
-	inScope.groupby.groupStrs = make(groupByStrSet, len(groupBy))
-	for _, e := range groupBy {
-		subset := b.buildGrouping(e, selects, inScope, outScope)
-		groupings = append(groupings, subset...)
-	}
-
-	return groupings
-}
-
-// buildGrouping builds a set of memo groups that represent a GROUP BY
-// expression.
-//
-// groupBy  The given GROUP BY expression.
-// selects  The select expressions are needed in case the GROUP BY expression
-//          is an index into to the select list.
-//
-// The return value is an ordered list of top-level memo groups corresponding
-// to the expression. The list generally consists of a single memo group except
-// in the case of "*", where the expression is expanded to multiple columns.
-//
-// See Builder.buildStmt above for a description of the remaining input values
-// (outScope is passed as a parameter here rather than a return value because
-// the newly bound variables are appended to a growing list to be returned by
-// buildGroupingList).
-func (b *Builder) buildGrouping(
-	groupBy tree.Expr, selects tree.SelectExprs, inScope, outScope *scope,
-) []opt.GroupID {
-	// Unwrap parenthesized expressions like "((a))" to "a".
-	groupBy = tree.StripParens(groupBy)
-
-	// Check whether the GROUP BY clause refers to a column in the SELECT list
-	// by index, e.g. `SELECT a, SUM(b) FROM y GROUP BY 1`.
-	col := colIndex(len(selects), groupBy, "GROUP BY")
-	label := ""
-	if col != -1 {
-		groupBy = selects[col].Expr
-		label = string(selects[col].As)
-	}
-
-	// Resolve types, expand stars, and flatten tuples.
-	exprs := b.expandStarAndResolveType(groupBy, inScope)
-	exprs = flattenTuples(exprs)
-
-	// Finally, build each of the GROUP BY columns.
-	out := make([]opt.GroupID, 0, len(exprs))
-	for _, e := range exprs {
-		// Save a representation of the GROUP BY expression for validation of the
-		// SELECT and HAVING expressions. This enables queries such as:
-		//    SELECT x+y FROM t GROUP BY x+y
-		inScope.groupby.groupStrs[symbolicExprStr(e)] = exists
-		out = append(out, b.buildScalarProjection(e, label, inScope, outScope))
-	}
-	return out
 }
 
 // colIndex takes an expression that refers to a column using an integer,
@@ -900,37 +752,6 @@ func flattenTuple(t *tree.Tuple, exprs []tree.TypedExpr) []tree.TypedExpr {
 		}
 	}
 	return exprs
-}
-
-// hasAggregates determines if any of the given select expressions contain an
-// aggregate function.
-func (b *Builder) hasAggregates(selects tree.SelectExprs) bool {
-	exprTransformCtx := transform.ExprTransformContext{}
-	for _, sel := range selects {
-		// TODO(rytaft): This function does not recurse into subqueries, so this
-		// will be incorrect for correlated subqueries.
-		if exprTransformCtx.AggregateInExpr(sel.Expr, b.semaCtx.SearchPath) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// buildHaving builds a set of memo groups that represent the given HAVING
-// clause. inScope contains the name bindings that are visible for this HAVING
-// clause (e.g., passed in from an enclosing statement).
-//
-// The return value corresponds to the top-level memo group ID for this
-// HAVING clause.
-func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
-	out := b.buildScalar(inScope.resolveType(having, types.Bool), inScope)
-	if len(inScope.groupby.varsUsed) > 0 {
-		i := inScope.groupby.varsUsed[0]
-		col := b.colMap[i]
-		panic(groupingError(col.String()))
-	}
-	return out
 }
 
 // buildJoin builds a set of memo groups that represent the given join table
@@ -1375,7 +1196,7 @@ func (b *Builder) buildScalarProjection(
 func (b *Builder) buildVariableProjection(
 	col *columnProps, label string, inScope, outScope *scope,
 ) opt.GroupID {
-	if inScope.inGroupingContext() && !inScope.groupby.groupingsScope.hasColumn(col.index) {
+	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.index) {
 		panic(groupingError(col.String()))
 	}
 	out := b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
@@ -1469,8 +1290,8 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 	return &scope.cols[len(scope.cols)-1]
 }
 
-// constructList invokes the factory to create one of several operators that
-// contain a list of groups: ProjectionsOp, AggregationsOp, and GroupingsOp.
+// constructList invokes the factory to create one of the operators that contain
+// a list of groups: ProjectionsOp and AggregationsOp.
 func (b *Builder) constructList(
 	op opt.Operator, items []opt.GroupID, cols []columnProps,
 ) opt.GroupID {
@@ -1487,8 +1308,6 @@ func (b *Builder) constructList(
 		return b.factory.ConstructProjections(list, private)
 	case opt.AggregationsOp:
 		return b.factory.ConstructAggregations(list, private)
-	case opt.GroupingsOp:
-		return b.factory.ConstructGroupings(list, private)
 	}
 
 	panic(fmt.Sprintf("unexpected operator: %s", op))
@@ -1516,15 +1335,13 @@ func (b *Builder) buildDistinct(
 	}
 
 	// Distinct is equivalent to group by without any aggregations.
-	groupings := make([]opt.GroupID, 0, len(byCols))
+	var groupCols opt.ColSet
 	for i := range byCols {
-		v := b.factory.ConstructVariable(b.factory.InternPrivate(byCols[i].index))
-		groupings = append(groupings, v)
+		groupCols.Add(int(byCols[i].index))
 	}
 
-	groupingList := b.constructList(opt.GroupingsOp, groupings, byCols)
 	aggList := b.constructList(opt.AggregationsOp, nil, nil)
-	return b.factory.ConstructGroupBy(in, groupingList, aggList)
+	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternPrivate(&groupCols))
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {
