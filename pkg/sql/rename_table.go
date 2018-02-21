@@ -80,7 +80,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 
 	var prevDbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true, allowAdding: true}, func() {
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
 		prevDbDesc, err = ResolveDatabase(ctx, p, oldTn.Catalog(), true /*required*/)
 	})
 	if err != nil {
