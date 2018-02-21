@@ -17,38 +17,78 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+
+	_ "github.com/lib/pq"
 )
 
 func init() {
-	runTPCC := func(t *test, warehouses, nodes int, extra string) {
+	// TODO(tschottdorf): rearrange all tests so that their synopses are available
+	// via godoc and (some variation on) `roachtest run <testname> --help`.
+
+	// This test imports a TPCC dataset and then issues a manual deletion for the
+	// `stock` table (which contains warehouses*100k rows). Next, it issues a
+	// `DROP` for the whole database, and sets the GC TTL to one second.
+	runDrop := func(t *test, warehouses, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1)
+		c := newCluster(ctx, t, nodes)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
+		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, workload, "./workload", c.All())
+		c.Start(ctx, c.All())
 
-		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		t.Status("importing TPCC fixture")
+		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
-			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d"+
-					extra+duration+" {pgurl:1-%d}",
-				warehouses, nodes)
-			c.Run(ctx, nodes+1, cmd)
+				"./workload fixtures load tpcc --warehouses=%d --into-db tpcc {pgurl:1}", warehouses)
+			c.Run(ctx, 1, cmd)
+
+			// TODO(tschottdorf): this is awkward: pgurl interpolation sits inside
+			// `roachprod`, but we just want to connect to a node and run a SQL command.
+			// Need to put an `Expand` method on `*cluster` as well that in turn calls
+			// into one exposed on `roachprod` and returns the result. In the meantime,
+			// hack around it and just run this on the first node making assumptions
+			// about the URL. As a consequence, this only works with `-local` right now.
+			db, err := sql.Open("postgres", "postgresql://root@localhost:26257/tpcc?sslmode=disable")
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			const stmtDelete = "DELETE FROM tpcc.stock"
+			t.Status(stmtDelete)
+			if _, err := db.ExecContext(ctx, stmtDelete); err != nil {
+				return err
+			}
+
+			const stmtDrop = "DROP DATABASE tpcc"
+			if _, err := db.ExecContext(ctx, stmtDrop); err != nil {
+				return err
+			}
+
+			// The data has already been deleted, but changing the default zone config
+			// should take effect retroactively.
+			const stmtZone = `ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '
+gc:
+  ttlseconds: 1
+'`
+			t.Status(stmtZone)
+			if _, err := db.ExecContext(ctx, stmtZone); err != nil {
+				return err
+			}
+
+			// TODO(tschottdorf): assert that the disk usage drops to "near nothing".
 			return nil
 		})
 		m.Wait()
 	}
 
-	tests.Add("tpcc/w=1/nodes=3", func(t *test) {
-		concurrency := ifLocal("", " --concurrency=384")
-		runTPCC(t, 1, 3, " --wait=false"+concurrency)
-	})
-	tests.Add("tpmc/w=1/nodes=3", func(t *test) {
-		runTPCC(t, 1, 3, " --concurrency=10")
+	tests.Add("drop/tpcc/w=100/nodes=9", func(t *test) {
+		// NB: this is likely not going to work out in `-local` mode. Edit the
+		// numbers during iteration.
+		runDrop(t, 1, 3) // TODO: w=100, nodes=9
 	})
 }
