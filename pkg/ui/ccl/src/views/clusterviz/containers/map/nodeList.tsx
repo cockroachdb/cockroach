@@ -11,7 +11,6 @@ import {InjectedRouter, RouterState} from "react-router";
 
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { NodesOverview } from "src/views/cluster/containers/nodesOverview";
-import "./sim.css";
 
 export default class NodeList extends React.Component<RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {

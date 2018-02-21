@@ -10,7 +10,7 @@ import React from "react";
 import moment from "moment";
 
 import { NodeStatus$Properties } from "src/util/proto";
-import { getDisplayName, sumNodeStats } from "src/redux/nodes";
+import { sumNodeStats } from "src/redux/nodes";
 import { cockroach } from "src/js/protos";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
@@ -29,6 +29,10 @@ interface NodeViewProps {
   liveness: { [id: string]: NodeLivenessStatus };
 }
 
+const SCALE_FACTOR = 0.6;
+const TRANSLATE_X = -90 * SCALE_FACTOR;
+const TRANSLATE_Y = -100 * SCALE_FACTOR;
+
 export class NodeView extends React.Component<NodeViewProps> {
   getLivenessIcon(nodeCounts: { suspect: number, dead: number }) {
     if (nodeCounts.dead > 0) {
@@ -45,13 +49,14 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], liveness);
 
     const startTime = LongToMoment(node.started_at);
-    const uptimeText = moment.duration(startTime.diff(moment())).humanize();
+    const uptimeText = "up for " + moment.duration(startTime.diff(moment())).humanize();
 
     return (
-      <g transform="translate(-90 -100)">
+      <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
         <Labels
-          label={getDisplayName(node)}
+          label={`Node ${node.desc.node_id}`}
           subLabel={uptimeText}
+          tooltip={node.desc.address.address_field}
         />
         <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
         <g
