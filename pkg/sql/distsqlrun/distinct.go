@@ -152,6 +152,10 @@ func (d *distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		d.evalCtx = d.flowCtx.NewEvalCtx()
 	}
 
+	if d.closed {
+		return nil, d.producerMeta(nil /* err */)
+	}
+
 	for {
 		row, meta := d.input.Next()
 		if d.closed || meta != nil {
