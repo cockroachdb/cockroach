@@ -231,9 +231,10 @@ type Executor struct {
 	sqlStats sqlStats
 
 	// Attempts to use unimplemented features.
-	unimplementedErrors struct {
+	errorCounts struct {
 		syncutil.Mutex
-		counts map[string]int64
+		unimplemented map[string]int64
+		codes         map[string]int64
 	}
 }
 
@@ -710,9 +711,22 @@ func (e *Executor) RecordError(err error) {
 		return
 	}
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
-			e.recordUnimplementedFeature(pgErr.InternalCommand)
+		e.errorCounts.Lock()
+
+		if e.errorCounts.codes == nil {
+			e.errorCounts.codes = make(map[string]int64)
 		}
+		e.errorCounts.codes[pgErr.Code]++
+
+		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+			if feature := pgErr.InternalCommand; feature != "" {
+				if e.errorCounts.unimplemented == nil {
+					e.errorCounts.unimplemented = make(map[string]int64)
+				}
+				e.errorCounts.unimplemented[feature]++
+			}
+		}
+		e.errorCounts.Unlock()
 	}
 }
 
