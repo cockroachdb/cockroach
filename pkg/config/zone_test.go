@@ -65,11 +65,65 @@ func TestZoneConfigValidate(t *testing.T) {
 			},
 			"is greater than or equal to RangeMaxBytes",
 		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_DEPRECATED_POSITIVE}}},
+				},
+			},
+			"constraints must either be required .+ or prohibited .+",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			"the number of replicas specified in constraints .+ does not equal",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   3,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			"the number of replicas specified in constraints .+ does not equal",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 0,
+					},
+					{
+						Constraints: []Constraint{{Value: "b", Type: Constraint_REQUIRED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+			"constraints must apply to at least one replica",
+		},
 	}
+
 	for i, c := range testCases {
 		err := c.cfg.Validate()
 		if !testutils.IsError(err, c.expected) {
-			t.Fatalf("%d: expected %q, got %v", i, c.expected, err)
+			t.Errorf("%d: expected %q, got %v", i, c.expected, err)
 		}
 	}
 }

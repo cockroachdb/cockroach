@@ -295,8 +295,8 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 	}
 }
 
-// Validate returns an error if the ZoneConfig specifies a known-dangerous
-// configuration.
+// Validate returns an error if the ZoneConfig specifies a known-dangerous or
+// disallowed configuration.
 func (z *ZoneConfig) Validate() error {
 	for _, s := range z.Subzones {
 		if err := s.Config.Validate(); err != nil {
@@ -321,6 +321,43 @@ func (z *ZoneConfig) Validate() error {
 	if z.RangeMinBytes >= z.RangeMaxBytes {
 		return fmt.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
 			z.RangeMinBytes, z.RangeMaxBytes)
+	}
+
+	for _, constraints := range z.Constraints {
+		for _, constraint := range constraints.Constraints {
+			if constraint.Type == Constraint_DEPRECATED_POSITIVE {
+				return fmt.Errorf("constraints must either be required (prefixed with a '+') or " +
+					"prohibited (prefixed with a '-')")
+			}
+		}
+	}
+
+	// We only need to further validate constraints if per-replica constraints
+	// are in use. The old style of constraints that apply to all replicas don't
+	// require validation.
+	if len(z.Constraints) > 1 || (len(z.Constraints) == 1 && z.Constraints[0].NumReplicas != 0) {
+		var numConstrainedRepls int64
+		for _, constraints := range z.Constraints {
+			if constraints.NumReplicas <= 0 {
+				return fmt.Errorf("constraints must apply to at least one replica")
+			}
+			numConstrainedRepls += int64(constraints.NumReplicas)
+			for _, constraint := range constraints.Constraints {
+				if constraint.Type != Constraint_REQUIRED && constraints.NumReplicas != z.NumReplicas {
+					return fmt.Errorf(
+						"only required constraints (prefixed with a '+') can be applied to a subset of replicas")
+				}
+				if strings.Contains(constraint.Key, ":") || strings.Contains(constraint.Value, ":") {
+					return fmt.Errorf("the ':' character is not allowed in constraint keys or values")
+				}
+			}
+		}
+		// TODO(a-robinson): Relax this constraint, as discussed on #22412.
+		if numConstrainedRepls != int64(z.NumReplicas) {
+			return fmt.Errorf(
+				"the number of replicas specified in constraints (%d) does not equal the number of replicas configured for the zone (%d)",
+				numConstrainedRepls, z.NumReplicas)
+		}
 	}
 	return nil
 }
