@@ -2790,7 +2790,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return NewDFloat(DFloat(float64(*v))), nil
 		case *DInterval:
 			micros := v.Nanos / 1000
-			return NewDFloat(DFloat(float64(micros) / 1e-6)), nil
+			return NewDFloat(DFloat(float64(micros) / 1e6)), nil
 		}
 
 	case *coltypes.TDecimal:
