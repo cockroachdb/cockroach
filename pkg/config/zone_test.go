@@ -38,6 +38,12 @@ func TestZoneConfigValidate(t *testing.T) {
 		},
 		{
 			config.ZoneConfig{
+				NumReplicas: -1,
+			},
+			"at least one replica is required",
+		},
+		{
+			config.ZoneConfig{
 				NumReplicas: 2,
 			},
 			"at least 3 replicas are required for multi-replica configurations",
@@ -58,10 +64,28 @@ func TestZoneConfigValidate(t *testing.T) {
 		{
 			config.ZoneConfig{
 				NumReplicas:   1,
+				RangeMinBytes: -1,
+				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
+			},
+			"RangeMinBytes -1 less than minimum allowed",
+		},
+		{
+			config.ZoneConfig{
+				NumReplicas:   1,
 				RangeMinBytes: config.DefaultZoneConfig().RangeMaxBytes,
 				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
 			},
 			"is greater than or equal to RangeMaxBytes",
+		},
+		{
+			config.ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: config.DefaultZoneConfig().RangeMaxBytes,
+				GC: config.GCPolicy{
+					TTLSeconds: -1,
+				},
+			},
+			"GC.TTLSeconds -1 less than minimum allowed",
 		},
 	}
 	for i, c := range testCases {
