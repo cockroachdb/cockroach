@@ -1202,7 +1202,6 @@ func createSchemaChangeEvalCtx(ts hlc.Timestamp) extendedEvalContext {
 	// is/should be used for impure functions like now().
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, ts.WallTime))
-	evalCtx.SetClusterTimestamp(ts)
 
 	return evalCtx
 }

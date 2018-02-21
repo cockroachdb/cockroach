@@ -123,7 +123,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	}
 	newTableDesc := *tableDesc
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
-		ID: id, Time: p.txn.OrigTimestamp(),
+		ID: id, Time: p.txn.OrigTimestamp(true /*mattersForTxnOrdering*/),
 	}
 	newTableDesc.SetID(0)
 	newTableDesc.Version = 1
