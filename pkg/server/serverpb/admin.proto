@@ -410,6 +410,16 @@ message HealthRequest {
 message HealthResponse {
 }
 
+// ReadyRequest inquires whether the addressed node is ready to receive client
+// traffic.
+message ReadyRequest {
+}
+
+// ReadyResponse is the response to ReadyRequest. The request fails if the node
+// is not ready to receive client traffic.
+message ReadyResponse {
+}
+
 // LivenessRequest requests liveness data for all nodes on the cluster.
 message LivenessRequest {
 }
@@ -627,6 +637,13 @@ service Admin {
   rpc Health(HealthRequest) returns (HealthResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/health"
+    };
+  }
+
+  // Ready returns the target node's readiness to service client requests.
+  rpc Ready(ReadyRequest) returns (ReadyResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/ready"
     };
   }
 

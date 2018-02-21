@@ -1040,14 +1040,33 @@ func (s *adminServer) Cluster(
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
-	isHealthy, err := s.server.nodeLiveness.IsHealthy(s.server.NodeID())
+	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if !isHealthy {
-		return nil, status.Errorf(codes.Unavailable, "node is not healthy")
+	if !isLive {
+		return nil, status.Error(codes.Unavailable, "node is not live")
 	}
 	return &serverpb.HealthResponse{}, nil
+}
+
+// Ready returns the target node's readiness to service client requests.
+func (s *adminServer) Ready(
+	ctx context.Context, req *serverpb.ReadyRequest,
+) (*serverpb.ReadyResponse, error) {
+	if !s.server.operational() {
+		return nil, status.Error(codes.Unavailable, "node is not ready")
+	}
+
+	isHealthy, err := s.server.nodeLiveness.IsHealthy(s.server.NodeID())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if !isHealthy {
+		return nil, status.Error(codes.Unavailable, "node is not ready")
+	}
+
+	return &serverpb.ReadyResponse{}, nil
 }
 
 // Liveness returns the liveness state of all nodes on the cluster.
