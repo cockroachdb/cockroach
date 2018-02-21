@@ -148,14 +148,9 @@ func (r *registry) Run(filter []string) int {
 		close(done)
 	}()
 
-	// If we're running with parallelism > 1, periodically output test status to
-	// give an indication of progress.
-	var tick <-chan time.Time
-	if parallelism > 1 {
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
-		tick = ticker.C
-	}
+	// Periodically output test status to give an indication of progress.
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
 
 	for i := 1; ; i++ {
 		select {
@@ -167,7 +162,7 @@ func (r *registry) Run(filter []string) int {
 			fmt.Fprintln(r.out, "PASS")
 			return 0
 
-		case <-tick:
+		case <-ticker.C:
 			running.Lock()
 			runningTests := make([]*test, 0, len(running.m))
 			for t := range running.m {
