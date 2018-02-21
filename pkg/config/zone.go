@@ -303,24 +303,38 @@ func (z *ZoneConfig) Validate() error {
 			return err
 		}
 	}
-	switch z.NumReplicas {
-	case 0:
+
+	switch {
+	case z.NumReplicas < 0:
+		return fmt.Errorf("at least one replica is required")
+	case z.NumReplicas == 0:
 		if len(z.Subzones) > 0 {
 			// NumReplicas == 0 is allowed when this ZoneConfig is a subzone
 			// placeholder. See IsSubzonePlaceholder.
 			return nil
 		}
 		return fmt.Errorf("at least one replica is required")
-	case 2:
+	case z.NumReplicas == 2:
 		return fmt.Errorf("at least 3 replicas are required for multi-replica configurations")
 	}
+
 	if z.RangeMaxBytes < minRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
 			z.RangeMaxBytes, minRangeMaxBytes)
 	}
+
+	if z.RangeMinBytes < 0 {
+		return fmt.Errorf("RangeMinBytes %d less than minimum allowed 0", z.RangeMinBytes)
+	}
 	if z.RangeMinBytes >= z.RangeMaxBytes {
 		return fmt.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
 			z.RangeMinBytes, z.RangeMaxBytes)
+	}
+
+	// Reserve the value 0 to potentially have some special meaning in the future,
+	// such as to disable GC.
+	if z.GC.TTLSeconds < 1 {
+		return fmt.Errorf("GC.TTLSeconds %d less than minimum allowed 1", z.GC.TTLSeconds)
 	}
 
 	for _, constraints := range z.Constraints {
@@ -357,6 +371,7 @@ func (z *ZoneConfig) Validate() error {
 				numConstrainedRepls, z.NumReplicas)
 		}
 	}
+
 	return nil
 }
 
