@@ -39,10 +39,10 @@ message Constraint {
   option (gogoproto.goproto_stringer) = false;
 
   enum Type {
-    // POSITIVE will attempt to ensure all stores the replicas are on has this
-    // constraint.
-    POSITIVE = 0;
-    // REQUIRED is like POSITIVE except replication will fail if not satisfied.
+    // DEPRECATED_POSITIVE has no effect on a replica's placement.
+    DEPRECATED_POSITIVE = 0;
+    // REQUIRED ensures all replicas are placed on stores that match the
+    // constraint. Replication will fail if there aren't any such stores.
     REQUIRED = 1;
     // PROHIBITED will prevent replicas from having this key, value.
     PROHIBITED = 2;
@@ -57,6 +57,13 @@ message Constraint {
 // Constraints is a collection of constraints.
 message Constraints {
   option (gogoproto.equal) = true;
+
+  // The number of replicas that should abide by the constraints. If left
+  // unspecified (i.e. set to 0), the constraints will be assumed to apply
+  // to all replicas of the range.
+  // As of v2.0, only REQUIRED constraints are allowed when num_replicas is
+  // set to a non-zero value.
+  optional int32 num_replicas = 7 [(gogoproto.nullable) = false];
 
   repeated Constraint constraints = 6 [(gogoproto.nullable) = false];
 }
@@ -76,7 +83,11 @@ message ZoneConfig {
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
-  optional Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
+  //
+  // NOTE: The sum of the num_replicas fields of the Constraints must add up to
+  // ZoneConfig.num_replicas, or there must be no more than a single Constraints
+  // field with num_replicas set to 0.
+  repeated Constraints constraints = 6 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"constraints,flow\""];
 
   // Subzones stores config overrides for "subzones", each of which represents
   // either a SQL table index or a partition of a SQL table index. Subzones are
