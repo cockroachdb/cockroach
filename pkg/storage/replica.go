@@ -5521,6 +5521,11 @@ func evaluateBatch(
 						// commit, we'll need a client-side retry, so we return immediately
 						// to see if we can do a txn coord sender retry instead.
 						returnWriteTooOldErr = true
+					case *roachpb.InitPutRequest:
+						// Init puts are also an exception. There's no reason to believe they
+						// will succeed on a retry, so better to short circuit and return the
+						// write too old error.
+						returnWriteTooOldErr = true
 					}
 				}
 				if ba.Txn != nil {

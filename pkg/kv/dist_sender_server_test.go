@@ -2095,6 +2095,70 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
+			name: "write too old with initput",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put", false)
+			},
+			txnCoordRetry: true, // fails on first attempt at cput with write too old
+			// Succeeds on second attempt.
+		},
+		{
+			name: "write too old with initput matching older and newer values",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put", false)
+			},
+			// No retries.
+		},
+		{
+			name: "write too old with initput matching older value",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put1")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put2")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put1", false)
+			},
+			// No retries, no failure as init put short circuits if it matches older value.
+		},
+		{
+			name: "write too old with initput matching newer value",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put1")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put2")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put2", false)
+			},
+			// No txn coord retry as we get condition failed error.
+			expFailure: "unexpected value", // the failure we get is a condition failed error
+		},
+		{
+			name: "write too old with initput failing on tombstone",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Del(ctx, "iput")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put2")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put2", true)
+			},
+			expFailure: "unexpected value", // condition failed error when failing on tombstones
+		},
+		{
 			name: "write too old with put in batch commit",
 			afterTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "put")
@@ -2412,6 +2476,10 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			}); err != nil {
 				if len(tc.expFailure) == 0 || !testutils.IsError(err, tc.expFailure) {
 					t.Fatal(err)
+				}
+			} else {
+				if len(tc.expFailure) > 0 {
+					t.Errorf("expected failure %q", tc.expFailure)
 				}
 			}
 			// Verify auto retry metric. Because there's a chance that splits
