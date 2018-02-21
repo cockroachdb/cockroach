@@ -32,9 +32,9 @@ type FunctionDefinition struct {
 func NewFunctionDefinition(name string, def []Builtin) *FunctionDefinition {
 	hasRowDependentOverloads := false
 	overloads := make([]overloadImpl, len(def))
-	for i, d := range def {
-		overloads[i] = d
-		if d.NeedsRepeatedEvaluation {
+	for i := range def {
+		overloads[i] = &def[i]
+		if def[i].NeedsRepeatedEvaluation {
 			hasRowDependentOverloads = true
 		}
 	}

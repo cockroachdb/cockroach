@@ -29,9 +29,7 @@ import (
 func inferType(ev ExprView) types.T {
 	fn := typingFuncMap[ev.Operator()]
 	if fn == nil {
-		// TODO(rytaft): This should cause a panic, but for now just return NULL
-		// so the builder code can be implemented and tested.
-		return types.Null
+		panic(fmt.Sprintf("type inference for %v is not yet implemented", ev.Operator()))
 	}
 	return fn(ev)
 }
@@ -44,12 +42,15 @@ var typingFuncMap [opt.NumOperators]typingFunc
 
 func init() {
 	typingFuncMap = [opt.NumOperators]typingFunc{
-		opt.VariableOp:    typeVariable,
-		opt.ConstOp:       typeAsTypedExpr,
-		opt.PlaceholderOp: typeAsTypedExpr,
-		opt.TupleOp:       typeAsTuple,
-		opt.ProjectionsOp: typeAsTuple,
-		opt.ExistsOp:      typeAsBool,
+		opt.VariableOp:     typeVariable,
+		opt.ConstOp:        typeAsTypedExpr,
+		opt.PlaceholderOp:  typeAsTypedExpr,
+		opt.TupleOp:        typeAsTuple,
+		opt.ProjectionsOp:  typeAsAny,
+		opt.GroupingsOp:    typeAsAny,
+		opt.AggregationsOp: typeAsAny,
+		opt.ExistsOp:       typeAsBool,
+		opt.FunctionOp:     typeFunction,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -118,9 +119,7 @@ func typeAsUnary(ev ExprView) types.T {
 		}
 	}
 
-	// TODO(rytaft): This should cause a panic, but for now just return NULL
-	// so the builder code can be implemented and tested.
-	return types.Null
+	panic(fmt.Sprintf("could not find type for unary expression: %v", ev))
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
@@ -143,7 +142,19 @@ func typeAsBinary(ev ExprView) types.T {
 		}
 	}
 
-	// TODO(rytaft): This should cause a panic, but for now just return NULL
-	// so the builder code can be implemented and tested.
-	return types.Null
+	panic(fmt.Sprintf("could not find type for binary expression: %v", ev))
+}
+
+// typeFunction returns the type of a function expression by extracting it from
+// the function's private field, which is an instance of opt.FuncDef.
+func typeFunction(ev ExprView) types.T {
+	return ev.Private().(opt.FuncDef).Type
+}
+
+// typeAsAny returns types.Any for an operator that never has its type used.
+// This avoids wasting time constructing a type that's not not needed. For
+// example, the Projections scalar operator holds a list of expressions on
+// behalf of the Project operator, but its type is never used.
+func typeAsAny(_ ExprView) types.T {
+	return types.Any
 }
