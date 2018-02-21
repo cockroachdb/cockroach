@@ -82,17 +82,6 @@ type RowReceiver interface {
 	ProducerDone()
 }
 
-// CancellableRowReceiver is a special type of a RowReceiver that can be set to
-// canceled asynchronously (i.e. concurrently or after Push()es and ProducerDone()s).
-// Once canceled, subsequent Push()es return ConsumerClosed. Implemented by distSQLReceiver
-// which is the final RowReceiver, and the origin point for propagation of ConsumerClosed
-// consumer statuses.
-type CancellableRowReceiver interface {
-	// SetCanceled sets this RowReceiver as canceled. Subsequent Push()es (if any)
-	// return a ConsumerStatus of ConsumerClosed.
-	SetCanceled()
-}
-
 // RowSource is any component of a flow that produces rows that cam be consumed
 // by another component.
 type RowSource interface {
