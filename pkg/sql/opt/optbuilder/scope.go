@@ -292,7 +292,12 @@ func (*columnProps) ColumnResolutionResult() {}
 func (s *scope) FindSourceProvidingColumn(
 	_ context.Context, colName tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	var candidates []*columnProps
+	var candidateFromAnonSource *columnProps
+	var candidateWithPrefix *columnProps
+	var hiddenCandidate *columnProps
+	var moreThanOneCandidateFromAnonSource bool
+	var moreThanOneCandidateWithPrefix bool
+	var moreThanOneHiddenCandidate bool
 
 	// We only allow hidden columns in the current scope. Hidden columns
 	// in parent scopes are not accessible.
@@ -308,65 +313,49 @@ func (s *scope) FindSourceProvidingColumn(
 			// TODO(rytaft): Do not return a match if this column is being
 			// backfilled, or the column expression being resolved is not from
 			// a selector column expression from an UPDATE/DELETE.
-
-			// TODO(whomever): source names in a FROM clause also have a
-			// catalog/schema prefix and it matters.
-			if col.name == colName && (allowHidden || !col.hidden) {
-				candidates = append(candidates, col)
+			if col.name == colName {
+				if col.table.TableName == "" && !col.hidden {
+					if candidateFromAnonSource != nil {
+						moreThanOneCandidateFromAnonSource = true
+						break
+					}
+					candidateFromAnonSource = col
+				} else if !col.hidden {
+					if candidateWithPrefix != nil {
+						moreThanOneCandidateWithPrefix = true
+					}
+					candidateWithPrefix = col
+				} else if allowHidden {
+					if hiddenCandidate != nil {
+						moreThanOneHiddenCandidate = true
+					}
+					hiddenCandidate = col
+				}
 			}
 		}
 
-		switch len(candidates) {
-		case 0:
-			// No matching columns found. Check parent scopes.
-			continue
+		// The table name was unqualified, so if a single anonymous source exists
+		// with a matching non-hidden column, use that.
+		if candidateFromAnonSource != nil && !moreThanOneCandidateFromAnonSource {
+			return &candidateFromAnonSource.table, candidateFromAnonSource, int(candidateFromAnonSource.index), nil
+		}
 
-		case 1:
-			// We found a match! Return it.
-			col := candidates[0]
-			return &col.table, col, int(col.index), nil
+		// Else if a single named source exists with a matching non-hidden column,
+		// use that.
+		if candidateWithPrefix != nil && !moreThanOneCandidateWithPrefix {
+			return &candidateWithPrefix.table, candidateWithPrefix, int(candidateWithPrefix.index), nil
+		}
 
-		default:
-			// Multiple matches found. See if we can disambiguate based on
-			// other attributes of the columns.
+		if moreThanOneCandidateFromAnonSource || moreThanOneCandidateWithPrefix || moreThanOneHiddenCandidate {
+			return nil, nil, -1, s.newAmbiguousColumnError(
+				&colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
+			)
+		}
 
-			// Helper function to find a single column that matches the conditions
-			// specified in the isMatch function. Returns an error if multiple
-			// columns match.
-			findSingleMatchingColumn := func(isMatch func(*columnProps) bool) (match *columnProps, err error) {
-				for i := range candidates {
-					if isMatch(candidates[i]) {
-						if match != nil {
-							return nil, newAmbiguousColumnError(&colName, candidates)
-						}
-						match = candidates[i]
-					}
-				}
-
-				return match, nil
-			}
-
-			// The table name was unqualified, so if a single anonymous, non-hidden
-			// source exists with a matching column, use that.
-			anon, err := findSingleMatchingColumn(func(c *columnProps) bool {
-				return c.table.TableName == "" && !c.hidden
-			})
-			if err != nil {
-				return nil, nil, -1, err
-			}
-			if anon != nil {
-				return &anon.table, anon, int(anon.index), nil
-			}
-
-			// One last option: if a single non-hidden source exists with a
-			// matching column, use that.
-			visible, err := findSingleMatchingColumn(func(c *columnProps) bool { return !c.hidden })
-			if err != nil {
-				return nil, nil, -1, err
-			}
-			if visible != nil {
-				return &visible.table, visible, int(visible.index), nil
-			}
+		// One last option: if a single source exists with a matching hidden
+		// column, use that.
+		if hiddenCandidate != nil {
+			return &hiddenCandidate.table, hiddenCandidate, int(hiddenCandidate.index), nil
 		}
 	}
 
@@ -555,7 +544,9 @@ func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // newAmbiguousColumnError returns an error with a helpful error message to be
 // used in case of an ambiguous column reference.
-func newAmbiguousColumnError(n *tree.Name, candidates []*columnProps) error {
+func (s *scope) newAmbiguousColumnError(
+	n *tree.Name, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate bool,
+) error {
 	colString := tree.ErrString(n)
 	var msgBuf bytes.Buffer
 	sep := ""
@@ -565,12 +556,27 @@ func newAmbiguousColumnError(n *tree.Name, candidates []*columnProps) error {
 			name = "<anonymous>"
 		}
 		fmt.Fprintf(&msgBuf, "%s%s.%s", sep, name, colString)
-	}
-	for i := range candidates {
-		candidate := candidates[i].table
-		fmtCandidate(candidate)
 		sep = ", "
 	}
+	for i := range s.cols {
+		col := &s.cols[i]
+		if col.name == *n && (allowHidden || !col.hidden) {
+			if col.table.TableName == "" && !col.hidden {
+				if moreThanOneCandidateFromAnonSource {
+					fmtCandidate(col.table)
+				}
+			} else if !col.hidden {
+				if moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
+					fmtCandidate(col.table)
+				}
+			} else {
+				if moreThanOneHiddenCandidate && !moreThanOneCandidateWithPrefix && !moreThanOneCandidateFromAnonSource {
+					fmtCandidate(col.table)
+				}
+			}
+		}
+	}
+
 	return pgerror.NewErrorf(pgerror.CodeAmbiguousColumnError,
 		"column reference %q is ambiguous (candidates: %s)", colString, msgBuf.String(),
 	)

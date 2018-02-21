@@ -180,3 +180,16 @@ project
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
  └── projections
       └── variable: b.rowid [type=int]
+
+exec-ddl
+CREATE TABLE c (x INT, y FLOAT)
+----
+table c
+  x int NULL
+  y float NULL
+  rowid int NOT NULL (hidden)
+
+build
+SELECT rowid FROM b, c
+----
+error: column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
