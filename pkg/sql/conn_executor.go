@@ -243,10 +243,12 @@ type Server struct {
 	// updates.
 	dbCache *databaseCacheHolder
 
-	// Attempts to use unimplemented features.
-	unimplementedErrors struct {
+	errorCounts struct {
 		syncutil.Mutex
-		counts map[string]int64
+		// Error returned by code.
+		codes map[string]int64
+		// Attempts to use unimplemented features.
+		unimplemented map[string]int64
 	}
 }
 
@@ -292,33 +294,53 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	})
 }
 
-func (s *Server) recordUnimplementedFeature(feature string) {
-	if feature == "" {
+// recordError takes an error and increments the corresponding count for its
+// error code, and, if it is an unimplemented error, the count for that feature.
+func (s *Server) recordError(err error) {
+	if err == nil {
 		return
 	}
-	s.unimplementedErrors.Lock()
-	if s.unimplementedErrors.counts == nil {
-		s.unimplementedErrors.counts = make(map[string]int64)
+	s.errorCounts.Lock()
+	if s.errorCounts.codes == nil {
+		s.errorCounts.codes = make(map[string]int64)
 	}
-	s.unimplementedErrors.counts[feature]++
-	s.unimplementedErrors.Unlock()
+
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		s.errorCounts.codes[pgErr.Code]++
+
+		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+			if feature := pgErr.InternalCommand; feature != "" {
+				if s.errorCounts.unimplemented == nil {
+					s.errorCounts.unimplemented = make(map[string]int64)
+				}
+				s.errorCounts.unimplemented[feature]++
+			}
+		}
+	} else {
+		s.errorCounts.codes["unknown"]++
+	}
+	s.errorCounts.Unlock()
 }
 
-// FillUnimplementedErrorCounts fills the passed map with the server's current
+// FillErrorCounts fills the passed map with the server's current
 // counts of how often individual unimplemented features have been encountered.
-func (s *Server) FillUnimplementedErrorCounts(fill map[string]int64) {
-	s.unimplementedErrors.Lock()
-	for k, v := range s.unimplementedErrors.counts {
-		fill[k] = v
+func (s *Server) FillErrorCounts(codes, unimplemented map[string]int64) {
+	s.errorCounts.Lock()
+	for k, v := range s.errorCounts.codes {
+		codes[k] = v
 	}
-	s.unimplementedErrors.Unlock()
+	for k, v := range s.errorCounts.unimplemented {
+		unimplemented[k] = v
+	}
+	s.errorCounts.Unlock()
 }
 
-// ResetUnimplementedCounts resets counting of unimplemented errors.
-func (s *Server) ResetUnimplementedCounts() {
-	s.unimplementedErrors.Lock()
-	s.unimplementedErrors.counts = make(map[string]int64, len(s.unimplementedErrors.counts))
-	s.unimplementedErrors.Unlock()
+// ResetErrorCounts resets the counts of error types seen.
+func (s *Server) ResetErrorCounts() {
+	s.errorCounts.Lock()
+	s.errorCounts.codes = make(map[string]int64, len(s.errorCounts.codes))
+	s.errorCounts.unimplemented = make(map[string]int64, len(s.errorCounts.unimplemented))
+	s.errorCounts.Unlock()
 }
 
 // ResetStatementStats resets the executor's collected statement statistics.
@@ -957,15 +979,16 @@ func (ex *connExecutor) run(ctx context.Context) error {
 		if advInfo.code != stayInPlace && advInfo.code != rewind {
 			// Close the result. In case of an execution error, the result might have
 			// its error set already or it might not.
+			resErr := res.Err()
+
 			pe, ok := payload.(payloadWithError)
-			if ok {
-				ex.recordUnimplementedErrorMaybe(pe.errorCause())
-			}
-			if res.Err() == nil && ok {
+			if resErr == nil && ok {
+				ex.server.recordError(pe.errorCause())
 				// Depending on whether the result has the error already or not, we have
 				// to call either Close or CloseWithErr.
 				res.CloseWithErr(pe.errorCause())
 			} else {
+				ex.server.recordError(resErr)
 				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
 			}
 		} else {
@@ -1690,19 +1713,6 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
-	}
-}
-
-// recordUnimplementedErrorMaybe takes an error and increments the
-// "unimplemented" metric if the error has the corresponding pg code.
-func (ex *connExecutor) recordUnimplementedErrorMaybe(err error) {
-	if err == nil {
-		return
-	}
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
-			ex.server.recordUnimplementedFeature(pgErr.InternalCommand)
-		}
 	}
 }
 
