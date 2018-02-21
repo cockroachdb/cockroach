@@ -58,6 +58,9 @@ type txnState2 struct {
 	// This is only set while the session's state is not stateNoTxn.
 	Ctx context.Context
 
+	// connCtx is the connection's context. This is the parent of Ctx.
+	connCtx context.Context
+
 	// sp is the span corresponding to the SQL txn. These are often root spans, as
 	// SQL txns are frequently the level at which we do tracing.
 	sp opentracing.Span

@@ -406,6 +406,7 @@ func (s *Server) ServeConn(
 		},
 		state: txnState2{
 			mon:           &txnMon,
+			connCtx:       ctx,
 			txnAbortCount: s.StatementCounters.TxnAbortCount,
 		},
 		transitionCtx: transitionCtx{
