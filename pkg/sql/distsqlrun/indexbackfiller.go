@@ -201,6 +201,7 @@ func (ib *indexBackfiller) runChunk(
 			for _, entry := range entries {
 				batch.InitPut(entry.Key, &entry.Value, false /* failOnTombstones */)
 			}
+			txn.OrigTimestampWasObserved()
 			if err := txn.CommitInBatch(ctx, batch); err != nil {
 				return ConvertBackfillError(ctx, &ib.spec.Table, batch)
 			}
@@ -235,6 +236,7 @@ func (ib *indexBackfiller) runChunk(
 	// Write the new index values.
 	if err := ib.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		batch := txn.NewBatch()
+		txn.OrigTimestampWasObserved()
 
 		for _, entry := range entries {
 			// Since we're not regenerating the index entries here, if the
