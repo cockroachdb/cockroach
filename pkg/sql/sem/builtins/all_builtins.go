@@ -42,9 +42,9 @@ func init() {
 	// Generate missing categories.
 	for _, name := range AllBuiltinNames {
 		def := Builtins[name]
-		for i, b := range def {
-			if b.Category == "" {
-				def[i].Category = getCategory(def[i])
+		for i := range def {
+			if def[i].Category == "" {
+				def[i].Category = getCategory(&def[i])
 			}
 		}
 	}
@@ -52,7 +52,7 @@ func init() {
 	sort.Strings(AllBuiltinNames)
 }
 
-func getCategory(b tree.Builtin) string {
+func getCategory(b *tree.Builtin) string {
 	// If single argument attempt to categorize by the type of the argument.
 	switch typ := b.Types.(type) {
 	case tree.ArgTypes:

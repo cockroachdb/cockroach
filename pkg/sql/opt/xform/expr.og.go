@@ -4065,6 +4065,9 @@ func (m *memoExpr) asUnaryComplement() *unaryComplementExpr {
 	return (*unaryComplementExpr)(m)
 }
 
+// functionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given
+// arguments. The private field is an opt.FuncDef struct that provides the name
+// of the function as well as a pointer to the builtin overload definition.
 type functionExpr memoExpr
 
 func makeFunctionExpr(args opt.ListID, def opt.PrivateID) functionExpr {

@@ -1166,6 +1166,9 @@ func (_f *factory) ConstructUnaryComplement(
 }
 
 // ConstructFunction constructs an expression for the Function operator.
+// Function invokes a builtin SQL function like CONCAT or NOW, passing the given
+// arguments. The private field is an opt.FuncDef struct that provides the name
+// of the function as well as a pointer to the builtin overload definition.
 func (_f *factory) ConstructFunction(
 	args opt.ListID,
 	def opt.PrivateID,

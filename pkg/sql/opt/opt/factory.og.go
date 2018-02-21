@@ -222,6 +222,9 @@ type Factory interface {
 	ConstructUnaryComplement(input GroupID) GroupID
 
 	// ConstructFunction constructs an expression for the Function operator.
+	// Function invokes a builtin SQL function like CONCAT or NOW, passing the given
+	// arguments. The private field is an opt.FuncDef struct that provides the name
+	// of the function as well as a pointer to the builtin overload definition.
 	ConstructFunction(args ListID, def PrivateID) GroupID
 
 	// ------------------------------------------------------------
