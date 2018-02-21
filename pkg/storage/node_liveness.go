@@ -354,7 +354,8 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 
 // IsHealthy returns whether or not the specified node is considered healthy
 // based on its current liveness status. It is an error if the specified node is
-// not in the local liveness table.
+// not in the local liveness table. This is different from IsLive because it
+// takes decommissioning/draining into account.
 func (nl *NodeLiveness) IsHealthy(nodeID roachpb.NodeID) (bool, error) {
 	liveness, err := nl.GetLiveness(nodeID)
 	if err != nil {

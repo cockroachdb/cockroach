@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -1040,14 +1041,44 @@ func (s *adminServer) Cluster(
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
+	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "node is not live")
+	}
+	if !isLive {
+		return nil, status.Errorf(codes.Unavailable, "node is not live")
+	}
+	return &serverpb.HealthResponse{}, nil
+}
+
+// Ready returns the target node's readiness to service client requests.
+func (s *adminServer) Ready(
+	ctx context.Context, req *serverpb.ReadyRequest,
+) (*serverpb.ReadyResponse, error) {
 	isHealthy, err := s.server.nodeLiveness.IsHealthy(s.server.NodeID())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
 	if !isHealthy {
-		return nil, status.Errorf(codes.Unavailable, "node is not healthy")
+		return nil, status.Errorf(codes.Unavailable, "node is not ready")
 	}
-	return &serverpb.HealthResponse{}, nil
+
+	// Attempt to execute a SQL query with a timeout.
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, cancelFunc := context.WithDeadline(ctx, timeutil.Now().Add(1*time.Second))
+	defer cancelFunc()
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
+	r, err := s.server.sqlExecutor.ExecuteStatementsBuffered(
+		session, "SELECT 1", nil, 1,
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "node is not ready")
+	}
+	r.Close(ctx)
+
+	return &serverpb.ReadyResponse{}, nil
 }
 
 // Liveness returns the liveness state of all nodes on the cluster.
