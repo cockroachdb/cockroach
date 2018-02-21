@@ -61,23 +61,14 @@ define Projections {
 }
 
 # Aggregations is a set of aggregate expressions that will become output
-# columns for a containing GroupBy operator. The private Cols field contains
-# the set of column indexes returned by the expression, as a *ColList.
+# columns for a containing GroupBy operator.
+# Each expression in Aggs is a Function that has Variable for all its arguments.
+# The private Cols field contains the column indexes for the results of the
+# aggregations, as a *ColList.
 [Scalar]
 define Aggregations {
     Aggs ExprList
     Cols ColList
-}
-
-# Groupings is a set of grouping expressions that will become output columns
-# for a containing GroupBy operator. The GroupBy operator groups its input by
-# the value of these expressions, and may compute aggregates over the groups.
-# The private Cols field contains the set of column indexes returned by the
-# expression, as a *ColList.
-[Scalar]
-define Groupings {
-    Elems ExprList
-    Cols  ColList
 }
 
 [Scalar]

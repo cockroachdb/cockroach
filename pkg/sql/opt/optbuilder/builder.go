@@ -449,42 +449,49 @@ func (b *Builder) buildFunction(
 		inScope.startAggFunc()
 	}
 
-	argList := make([]opt.GroupID, 0, len(f.Exprs))
-	for _, pexpr := range f.Exprs {
-		var arg opt.GroupID
-		if _, ok := pexpr.(tree.UnqualifiedStar); ok {
-			arg = b.factory.ConstructConst(b.factory.InternPrivate(tree.NewDInt(1)))
-		} else {
-			arg = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
-		}
-
-		argList = append(argList, arg)
-	}
-
 	// Construct a private FuncDef that refers to a resolved function overload.
 	outDef := opt.FuncDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
-	out = b.factory.ConstructFunction(b.factory.InternList(argList), b.factory.InternPrivate(outDef))
 
 	if isAgg {
+		info := aggregateInfo{
+			def:  outDef,
+			args: make([]aggregateArg, len(f.Exprs)),
+		}
+		for i, pexpr := range f.Exprs {
+			info.args[i].group = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
+			info.args[i].typ = pexpr.(tree.TypedExpr).ResolvedType()
+			if c, ok := pexpr.(*columnProps); ok {
+				info.args[i].colIndex = c.index
+			}
+		}
+
 		refScope := inScope.endAggFunc()
 
 		// If the aggregate already exists as a column, use that. Otherwise
 		// create a new column and add it the list of aggregates that need to
 		// be computed by the groupby expression.
-		col = refScope.findAggregate(out)
+		col = refScope.findAggregate(info)
 		if col == nil {
 			col = b.synthesizeColumn(refScope, label, f.ResolvedType())
 
+			info.colIndex = col.index
 			// Add the aggregate to the list of aggregates that need to be computed by
 			// the groupby expression.
-			refScope.groupby.aggs = append(refScope.groupby.aggs, out)
+			refScope.groupby.aggs = append(refScope.groupby.aggs, info)
 		}
 
 		// Replace the function call with a reference to the column.
-		out = b.factory.ConstructVariable(b.factory.InternPrivate(col.index))
+		return b.factory.ConstructVariable(b.factory.InternPrivate(col.index)), col
 	}
 
-	return out, col
+	argList := make([]opt.GroupID, len(f.Exprs))
+	for i, pexpr := range f.Exprs {
+		argList[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
+	}
+
+	return b.factory.ConstructFunction(
+		b.factory.InternList(argList), b.factory.InternPrivate(outDef),
+	), nil
 }
 
 // buildSelect builds a set of memo groups that represent the given select
@@ -568,16 +575,106 @@ func (b *Builder) buildSelectClause(
 	if groupingsScope != nil {
 		// Any aggregate columns that were discovered would have been added to
 		// the grouping scope.
-		aggCols := groupingsScope.getAggregateCols()
-		aggList := b.constructList(opt.AggregationsOp, groupingsScope.groupby.aggs, aggCols)
+		//
+		// We build aggregations using three operators:
+		//  - a pre-projection: a ProjectOp which generates the columns needed for
+		//    the aggregation:
+		//      - group by expressions
+		//      - arguments to aggregation functions
+		//
+		//  - the aggregation: a GroupByOp which has the pre-projection as the
+		//    input and produces columns with the results of the aggregation
+		//    functions. The group by columns are also passed through.
+		//
+		//  - a post-projection: calculates expressions using the results of the
+		//    aggregations; this analogous to the ProjectOp that we would use for
+		//    a no-aggregation Select.
+		//
+		// For example:
+		//   SELECT 1 + MIN(v*2) FROM kv GROUP BY k+3
+		//
+		//   pre-projection:  k+3 (as col1)  v*2 (as col2)
+		//   aggregation:     group by col1, calculate MIN(col2) (as col3)
+		//   post-projection: 1 + col3
+		//
+		// The pre-projection consists of the grouping columns and the inputs to the
+		// aggregate functions (groupingsScope.groupby.aggs).
+		// The post-projection is described by projections.
+		aggInfos := groupingsScope.groupby.aggs
 
-		var groupingCols []columnProps
-		if len(groupings) > 0 {
-			groupingCols = groupingsScope.cols
+		groupingCols := groupingsScope.getGroupingCols()
+
+		// Construct the pre-projection:
+		//  - grouping columns
+		//  - arguments to aggregate functions
+
+		// The "from" columns are visible to the pre-projection.
+		preProjScope := fromScope.push()
+		// Note: the capacities here are a guess (we assume each aggregate function has
+		// one argument).
+		preProjGroups := make([]opt.GroupID, 0, len(groupingCols)+len(aggInfos))
+		preProjCols := make(opt.ColList, 0, len(groupingCols)+len(aggInfos))
+
+		// We use a map from group ID to index in the above slices to avoid
+		// duplicates in the pre-projection.
+		groupMap := make(map[opt.GroupID]int)
+
+		// Add the grouping cols.
+		preProjGroups = append(preProjGroups, groupings...)
+		for i := range groupingCols {
+			preProjCols = append(preProjCols, groupingCols[i].index)
+		}
+		for i, g := range preProjGroups {
+			groupMap[g] = i
 		}
 
-		groupingList := b.constructList(opt.GroupingsOp, groupings, groupingCols)
-		out = b.factory.ConstructGroupBy(out, groupingList, aggList)
+		// Add the aggregate function arguments.
+		for _, agg := range aggInfos {
+			for _, arg := range agg.args {
+				if _, ok := groupMap[arg.group]; ok {
+					continue
+				}
+				preProjGroups = append(preProjGroups, arg.group)
+				if arg.colIndex != 0 {
+					// The argument is just a variable reference; use that existing
+					// column.
+					preProjCols = append(preProjCols, arg.colIndex)
+				} else {
+					col := b.synthesizeColumn(preProjScope, "" /* label */, arg.typ)
+					preProjCols = append(preProjCols, col.index)
+				}
+				groupMap[arg.group] = len(preProjCols) - 1
+			}
+		}
+
+		// Don't add an unnecessary "pass-through" projection.
+		if !columnPropsMatchColList(fromScope.cols, preProjCols) {
+			preProjList := b.constructList(opt.ProjectionsOp, preProjGroups, preProjCols)
+			out = b.factory.ConstructProject(out, preProjList)
+		}
+
+		// Construct the aggregation. We represent the aggregations as Function
+		// operators with Variable arguments; construct those now.
+		aggExprs := make([]opt.GroupID, len(aggInfos))
+		for i, agg := range aggInfos {
+			argList := make([]opt.GroupID, len(agg.args))
+			for j, arg := range agg.args {
+				colIndex := preProjCols[groupMap[arg.group]]
+				argList[j] = b.factory.ConstructVariable(b.factory.InternPrivate(colIndex))
+			}
+			aggExprs[i] = b.factory.ConstructFunction(
+				b.factory.InternList(argList),
+				b.factory.InternPrivate(agg.def),
+			)
+		}
+
+		aggCols := groupingsScope.getAggregateCols()
+		aggList := b.constructList(opt.AggregationsOp, aggExprs, columnPropsToColList(aggCols))
+		var groupingColSet opt.ColSet
+		for _, c := range groupingCols {
+			groupingColSet.Add(int(c.index))
+		}
+		out = b.factory.ConstructGroupBy(out, aggList, b.factory.InternPrivate(&groupingColSet))
 
 		// Wrap with having filter if it exists.
 		if having != 0 {
@@ -596,9 +693,10 @@ func (b *Builder) buildSelectClause(
 		panic(errorf("ORDER BY not yet supported: %s", stmt.String()))
 	}
 
+	projCols := columnPropsToColList(projectionsScope.cols)
 	// Don't add an unnecessary "pass through" project expression.
-	if !projectionsScope.hasSameColumns(outScope) {
-		p := b.constructList(opt.ProjectionsOp, projections, projectionsScope.cols)
+	if !columnPropsMatchColList(outScope.cols, projCols) {
+		p := b.constructList(opt.ProjectionsOp, projections, projCols)
 		out = b.factory.ConstructProject(out, p)
 		outScope = projectionsScope
 	}
@@ -1076,15 +1174,10 @@ func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *col
 }
 
 // constructList invokes the factory to create one of several operators that
-// contain a list of groups: ProjectionsOp, AggregationsOp, and GroupingsOp.
+// contain a list of groups: ProjectionsOp, AggregationsOp.
 func (b *Builder) constructList(
-	op opt.Operator, items []opt.GroupID, cols []columnProps,
+	op opt.Operator, items []opt.GroupID, colList opt.ColList,
 ) opt.GroupID {
-	colList := make(opt.ColList, len(cols))
-	for i := range cols {
-		colList[i] = cols[i].index
-	}
-
 	list := b.factory.InternList(items)
 	private := b.factory.InternPrivate(&colList)
 
@@ -1093,8 +1186,6 @@ func (b *Builder) constructList(
 		return b.factory.ConstructProjections(list, private)
 	case opt.AggregationsOp:
 		return b.factory.ConstructAggregations(list, private)
-	case opt.GroupingsOp:
-		return b.factory.ConstructGroupings(list, private)
 	}
 
 	panic(fmt.Sprintf("unexpected operator: %s", op))
@@ -1108,15 +1199,13 @@ func (b *Builder) buildDistinct(
 	}
 
 	// Distinct is equivalent to group by without any aggregations.
-	groupings := make([]opt.GroupID, 0, len(byCols))
+	var groupCols opt.ColSet
 	for i := range byCols {
-		v := b.factory.ConstructVariable(b.factory.InternPrivate(byCols[i].index))
-		groupings = append(groupings, v)
+		groupCols.Add(int(byCols[i].index))
 	}
 
-	groupingList := b.constructList(opt.GroupingsOp, groupings, byCols)
 	aggList := b.constructList(opt.AggregationsOp, nil, nil)
-	return b.factory.ConstructGroupBy(in, groupingList, aggList)
+	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternPrivate(&groupCols))
 }
 
 func isAggregate(def *tree.FunctionDefinition) bool {

@@ -62,12 +62,6 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0 + int(aggregationsExpr.aggs().Length)
 	},
 
-	// GroupingsOp
-	func(ev ExprView) int {
-		groupingsExpr := (*groupingsExpr)(ev.mem.lookupExpr(ev.loc))
-		return 0 + int(groupingsExpr.elems().Length)
-	},
-
 	// ExistsOp
 	func(ev ExprView) int {
 		return 1
@@ -384,7 +378,7 @@ var childCountLookup = [...]childCountLookupFunc{
 
 	// GroupByOp
 	func(ev ExprView) int {
-		return 3
+		return 2
 	},
 
 	// UnionOp
@@ -489,17 +483,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		switch n {
 		default:
 			list := ev.mem.lookupList(aggregationsExpr.aggs())
-			return list[n-0]
-		}
-	},
-
-	// GroupingsOp
-	func(ev ExprView, n int) opt.GroupID {
-		groupingsExpr := (*groupingsExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		default:
-			list := ev.mem.lookupList(groupingsExpr.elems())
 			return list[n-0]
 		}
 	},
@@ -1373,8 +1356,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		case 0:
 			return groupByExpr.input()
 		case 1:
-			return groupByExpr.groupings()
-		case 2:
 			return groupByExpr.aggregations()
 		default:
 			panic("child index out of range")
@@ -1498,12 +1479,6 @@ var privateLookup = [...]privateLookupFunc{
 	func(ev ExprView) opt.PrivateID {
 		aggregationsExpr := (*aggregationsExpr)(ev.mem.lookupExpr(ev.loc))
 		return aggregationsExpr.cols()
-	},
-
-	// GroupingsOp
-	func(ev ExprView) opt.PrivateID {
-		groupingsExpr := (*groupingsExpr)(ev.mem.lookupExpr(ev.loc))
-		return groupingsExpr.cols()
 	},
 
 	// ExistsOp
@@ -1821,7 +1796,8 @@ var privateLookup = [...]privateLookupFunc{
 
 	// GroupByOp
 	func(ev ExprView) opt.PrivateID {
-		return 0
+		groupByExpr := (*groupByExpr)(ev.mem.lookupExpr(ev.loc))
+		return groupByExpr.groupingColumns()
 	},
 
 	// UnionOp
@@ -1863,7 +1839,6 @@ var isScalarLookup = [...]bool{
 	true,  // TupleOp
 	true,  // ProjectionsOp
 	true,  // AggregationsOp
-	true,  // GroupingsOp
 	true,  // ExistsOp
 	true,  // AndOp
 	true,  // OrOp
@@ -1946,7 +1921,6 @@ var isConstValueLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2029,7 +2003,6 @@ var isBooleanLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	true,  // AndOp
 	true,  // OrOp
@@ -2112,7 +2085,6 @@ var isComparisonLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2195,7 +2167,6 @@ var isBinaryLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2278,7 +2249,6 @@ var isUnaryLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2361,7 +2331,6 @@ var isRelationalLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2444,7 +2413,6 @@ var isJoinLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2527,7 +2495,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2610,7 +2577,6 @@ var isEnforcerLookup = [...]bool{
 	false, // TupleOp
 	false, // ProjectionsOp
 	false, // AggregationsOp
-	false, // GroupingsOp
 	false, // ExistsOp
 	false, // AndOp
 	false, // OrOp
@@ -2903,8 +2869,10 @@ func (m *memoExpr) asProjections() *projectionsExpr {
 }
 
 // aggregationsExpr is a set of aggregate expressions that will become output
-// columns for a containing GroupBy operator. The private Cols field contains
-// the set of column indexes returned by the expression, as a *ColList.
+// columns for a containing GroupBy operator.
+// Each expression in Aggs is a Function that has Variable for all its arguments.
+// The private Cols field contains the column indexes for the results of the
+// aggregations, as a *ColList.
 type aggregationsExpr memoExpr
 
 func makeAggregationsExpr(aggs opt.ListID, cols opt.PrivateID) aggregationsExpr {
@@ -2928,36 +2896,6 @@ func (m *memoExpr) asAggregations() *aggregationsExpr {
 		return nil
 	}
 	return (*aggregationsExpr)(m)
-}
-
-// groupingsExpr is a set of grouping expressions that will become output columns
-// for a containing GroupBy operator. The GroupBy operator groups its input by
-// the value of these expressions, and may compute aggregates over the groups.
-// The private Cols field contains the set of column indexes returned by the
-// expression, as a *ColList.
-type groupingsExpr memoExpr
-
-func makeGroupingsExpr(elems opt.ListID, cols opt.PrivateID) groupingsExpr {
-	return groupingsExpr{op: opt.GroupingsOp, state: exprState{elems.Offset, elems.Length, uint32(cols)}}
-}
-
-func (e *groupingsExpr) elems() opt.ListID {
-	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
-}
-
-func (e *groupingsExpr) cols() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *groupingsExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asGroupings() *groupingsExpr {
-	if m.op != opt.GroupingsOp {
-		return nil
-	}
-	return (*groupingsExpr)(m)
 }
 
 type existsExpr memoExpr
@@ -4560,22 +4498,26 @@ func (m *memoExpr) asAntiJoinApply() *antiJoinApplyExpr {
 	return (*antiJoinApplyExpr)(m)
 }
 
+// groupByExpr is an operator that is used for performing aggregations from group by
+// expressions. It groups results that are equal on the grouping columns and
+// computes aggregations as described by Aggregations (always an Aggregation
+// operator). The arguments of the aggregations are columns from the input.
 type groupByExpr memoExpr
 
-func makeGroupByExpr(input opt.GroupID, groupings opt.GroupID, aggregations opt.GroupID) groupByExpr {
-	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(groupings), uint32(aggregations)}}
+func makeGroupByExpr(input opt.GroupID, aggregations opt.GroupID, groupingColumns opt.PrivateID) groupByExpr {
+	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(aggregations), uint32(groupingColumns)}}
 }
 
 func (e *groupByExpr) input() opt.GroupID {
 	return opt.GroupID(e.state[0])
 }
 
-func (e *groupByExpr) groupings() opt.GroupID {
+func (e *groupByExpr) aggregations() opt.GroupID {
 	return opt.GroupID(e.state[1])
 }
 
-func (e *groupByExpr) aggregations() opt.GroupID {
-	return opt.GroupID(e.state[2])
+func (e *groupByExpr) groupingColumns() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *groupByExpr) fingerprint() fingerprint {

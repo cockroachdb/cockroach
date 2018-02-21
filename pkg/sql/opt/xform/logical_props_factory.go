@@ -165,12 +165,11 @@ func (f *logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 func (f *logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	// Output columns are the union of columns from grouping and aggregate
-	// projection lists.
-	groupings := ev.Child(1)
-	props.Relational.OutputCols = opt.ColListToSet(*groupings.Private().(*opt.ColList))
-	agg := ev.Child(2)
-	props.Relational.OutputCols.UnionWith(opt.ColListToSet(*agg.Private().(*opt.ColList)))
+	// Output columns are the union of grouping columns with columns from the
+	// aggregate projection list.
+	props.Relational.OutputCols = *ev.Private().(*opt.ColSet)
+	aggColList := *ev.Child(1).Private().(*opt.ColList)
+	props.Relational.OutputCols.UnionWith(opt.ColListToSet(aggColList))
 
 	return props
 }

@@ -90,21 +90,19 @@ func TestLogicalGroupByProps(t *testing.T) {
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 
-	// (GroupBy (Scan a) (Projections [(Variable a.y)]) (Projections [(False)]))
+	// (GroupBy (Scan a) (Aggregations [(False)])) with grouping column a
 	scanGroup := f.ConstructScan(f.InternPrivate(a))
 
 	col1 := f.Metadata().TableColumn(a, 1)
-	varGroup := f.ConstructVariable(f.InternPrivate(col1))
-	items1 := f.InternList([]opt.GroupID{varGroup})
-	cols1 := opt.ColList{col1}
-	groupingsGroup := f.ConstructProjections(items1, f.InternPrivate(&cols1))
+	var cols1 opt.ColSet
+	cols1.Add(int(col1))
 
 	col2 := f.Metadata().AddColumn("false", types.Bool)
 	items2 := f.InternList([]opt.GroupID{f.ConstructFalse()})
 	cols2 := opt.ColList{col2}
-	aggsGroup := f.ConstructProjections(items2, f.InternPrivate(&cols2))
+	aggsGroup := f.ConstructAggregations(items2, f.InternPrivate(&cols2))
 
-	groupByGroup := f.ConstructGroupBy(scanGroup, groupingsGroup, aggsGroup)
+	groupByGroup := f.ConstructGroupBy(scanGroup, aggsGroup, f.InternPrivate(&cols1))
 
 	expected := "columns: a.y:int:null:2 false:bool:null:3\n"
 	testLogicalProps(t, f, groupByGroup, expected)

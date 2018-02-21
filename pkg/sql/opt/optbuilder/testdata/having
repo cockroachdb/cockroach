@@ -22,9 +22,10 @@ project
  ├── columns: column5:int:null:5
  ├── select
  │    ├── group-by
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
+ │    │    ├── project
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
  │    │    └── aggregations
  │    └── true [type=bool]
  └── projections
@@ -36,11 +37,14 @@ SELECT s, COUNT(*) FROM t.kv GROUP BY s HAVING COUNT(*) > 1
 select
  ├── columns: kv.s:string:null:4 column5:int:null:5
  ├── group-by
- │    ├── columns: kv.s:string:null:4 column5:int:null:5
- │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    ├── groupings
- │    │    └── variable: kv.s [type=string]
+ │    ├── grouping columns: kv.s:string:null:4
+ │    ├── aggregation columns: column5:int:null:5
+ │    ├── project
+ │    │    ├── columns: kv.s:string:null:4
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── projections
+ │    │         └── variable: kv.s [type=string]
  │    └── aggregations
  │         └── function: count_rows [type=int]
  └── gt [type=bool]
@@ -55,10 +59,14 @@ project
  ├── select
  │    ├── columns: column5:int:null:5 column6:int:null:6
  │    ├── group-by
- │    │    ├── columns: column5:int:null:5 column6:int:null:6
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
+ │    │    ├── aggregation columns: column5:int:null:5 column6:int:null:6
+ │    │    ├── project
+ │    │    │    ├── columns: kv.v:int:null:2 kv.k:int:1
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         ├── variable: kv.v [type=int]
+ │    │    │         └── variable: kv.k [type=int]
  │    │    └── aggregations
  │    │         ├── function: min [type=int]
  │    │         │    └── variable: kv.v [type=int]
@@ -79,10 +87,14 @@ project
  ├── select
  │    ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
  │    ├── group-by
- │    │    ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
+ │    │    ├── aggregation columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
+ │    │    ├── project
+ │    │    │    ├── columns: kv.v:int:null:2 kv.k:int:1
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         ├── variable: kv.v [type=int]
+ │    │    │         └── variable: kv.k [type=int]
  │    │    └── aggregations
  │    │         ├── function: max [type=int]
  │    │         │    └── variable: kv.v [type=int]
@@ -133,13 +145,16 @@ project
  ├── select
  │    ├── columns: column5:int:null:5 column6:int:null:6
  │    ├── group-by
- │    │    ├── columns: column5:int:null:5 column6:int:null:6
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
- │    │    │    └── plus [type=int]
- │    │    │         ├── variable: kv.k [type=int]
- │    │    │         └── variable: kv.w [type=int]
+ │    │    ├── grouping columns: column5:int:null:5
+ │    │    ├── aggregation columns: column6:int:null:6
+ │    │    ├── project
+ │    │    │    ├── columns: column5:int:null:5
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         └── plus [type=int]
+ │    │    │              ├── variable: kv.k [type=int]
+ │    │    │              └── variable: kv.w [type=int]
  │    │    └── aggregations
  │    │         └── function: count_rows [type=int]
  │    └── gt [type=bool]
@@ -165,11 +180,14 @@ project
  ├── select
  │    ├── columns: kv.v:int:null:2 column5:int:null:5
  │    ├── group-by
- │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
- │    │    │    └── variable: kv.v [type=int]
+ │    │    ├── grouping columns: kv.v:int:null:2
+ │    │    ├── aggregation columns: column5:int:null:5
+ │    │    ├── project
+ │    │    │    ├── columns: kv.v:int:null:2
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         └── variable: kv.v [type=int]
  │    │    └── aggregations
  │    │         └── function: max [type=int]
  │    │              └── variable: kv.v [type=int]
@@ -187,12 +205,16 @@ project
  ├── select
  │    ├── columns: column5:string:null:5 column6:decimal:null:6
  │    ├── group-by
- │    │    ├── columns: column5:string:null:5 column6:decimal:null:6
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
- │    │    │    └── function: lower [type=string]
- │    │    │         └── variable: kv.s [type=string]
+ │    │    ├── grouping columns: column5:string:null:5
+ │    │    ├── aggregation columns: column6:decimal:null:6
+ │    │    ├── project
+ │    │    │    ├── columns: column5:string:null:5 kv.w:int:null:3
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         ├── function: lower [type=string]
+ │    │    │         │    └── variable: kv.s [type=string]
+ │    │    │         └── variable: kv.w [type=int]
  │    │    └── aggregations
  │    │         └── function: sum [type=decimal]
  │    │              └── variable: kv.w [type=int]
@@ -211,12 +233,16 @@ project
  ├── select
  │    ├── columns: column5:string:null:5 column6:decimal:null:6
  │    ├── group-by
- │    │    ├── columns: column5:string:null:5 column6:decimal:null:6
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
- │    │    │    └── function: lower [type=string]
- │    │    │         └── variable: kv.s [type=string]
+ │    │    ├── grouping columns: column5:string:null:5
+ │    │    ├── aggregation columns: column6:decimal:null:6
+ │    │    ├── project
+ │    │    │    ├── columns: column5:string:null:5 kv.w:int:null:3
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         ├── function: lower [type=string]
+ │    │    │         │    └── variable: kv.s [type=string]
+ │    │    │         └── variable: kv.w [type=int]
  │    │    └── aggregations
  │    │         └── function: sum [type=decimal]
  │    │              └── variable: kv.w [type=int]
@@ -237,14 +263,16 @@ project
  ├── select
  │    ├── columns: kv.v:int:null:2 column5:int:null:5
  │    ├── group-by
- │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
- │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    ├── groupings
- │    │    │    ├── variable: kv.v [type=int]
- │    │    │    └── mult [type=int]
- │    │    │         ├── variable: kv.k [type=int]
- │    │    │         └── variable: kv.w [type=int]
+ │    │    ├── grouping columns: kv.v:int:null:2 column5:int:null:5
+ │    │    ├── project
+ │    │    │    ├── columns: kv.v:int:null:2 column5:int:null:5
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── projections
+ │    │    │         ├── variable: kv.v [type=int]
+ │    │    │         └── mult [type=int]
+ │    │    │              ├── variable: kv.k [type=int]
+ │    │    │              └── variable: kv.w [type=int]
  │    │    └── aggregations
  │    └── gt [type=bool]
  │         ├── mult [type=int]

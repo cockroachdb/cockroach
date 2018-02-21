@@ -47,7 +47,6 @@ func init() {
 		opt.PlaceholderOp:  typeAsTypedExpr,
 		opt.TupleOp:        typeAsTuple,
 		opt.ProjectionsOp:  typeAsAny,
-		opt.GroupingsOp:    typeAsAny,
 		opt.AggregationsOp: typeAsAny,
 		opt.ExistsOp:       typeAsBool,
 		opt.FunctionOp:     typeFunction,

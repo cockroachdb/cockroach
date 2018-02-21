@@ -39,16 +39,11 @@ const (
 	ProjectionsOp
 
 	// AggregationsOp is a set of aggregate expressions that will become output
-	// columns for a containing GroupBy operator. The private Cols field contains
-	// the set of column indexes returned by the expression, as a *ColList.
+	// columns for a containing GroupBy operator.
+	// Each expression in Aggs is a Function that has Variable for all its arguments.
+	// The private Cols field contains the column indexes for the results of the
+	// aggregations, as a *ColList.
 	AggregationsOp
-
-	// GroupingsOp is a set of grouping expressions that will become output columns
-	// for a containing GroupBy operator. The GroupBy operator groups its input by
-	// the value of these expressions, and may compute aggregates over the groups.
-	// The private Cols field contains the set of column indexes returned by the
-	// expression, as a *ColList.
-	GroupingsOp
 
 	ExistsOp
 
@@ -212,6 +207,10 @@ const (
 
 	AntiJoinApplyOp
 
+	// GroupByOp is an operator that is used for performing aggregations from group by
+	// expressions. It groups results that are equal on the grouping columns and
+	// computes aggregations as described by Aggregations (always an Aggregation
+	// operator). The arguments of the aggregations are columns from the input.
 	GroupByOp
 
 	UnionOp
@@ -246,9 +245,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsgroupingsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctionscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 85, 91, 94, 96, 99, 101, 103, 105, 107, 109, 111, 113, 119, 123, 131, 137, 147, 157, 171, 180, 193, 204, 219, 221, 227, 235, 241, 246, 252, 256, 261, 265, 268, 277, 280, 283, 289, 296, 303, 312, 322, 336, 351, 361, 372, 388, 396, 400, 406, 412, 419, 429, 438, 448, 457, 466, 475, 491, 506, 522, 537, 552, 567, 575, 580, 589, 595, 599, 606}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 387, 391, 397, 403, 410, 420, 429, 439, 448, 457, 466, 482, 497, 513, 528, 543, 558, 566, 571, 580, 586, 590, 597}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -260,7 +259,6 @@ var ScalarOperators = [...]Operator{
 	TupleOp,
 	ProjectionsOp,
 	AggregationsOp,
-	GroupingsOp,
 	ExistsOp,
 	AndOp,
 	OrOp,
