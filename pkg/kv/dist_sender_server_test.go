@@ -2095,6 +2095,44 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			txnCoordRetry: true,
 		},
 		{
+			name: "write too old with initput",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put", false)
+			},
+			txnCoordRetry: true,               // fails on first attempt at cput
+			expFailure:    "unexpected value", // the failure we get is a condition failed error
+		},
+		{
+			name: "write too old with initput matching older and newer values",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put", false)
+			},
+			// No retries.
+		},
+		{
+			name: "write too old with initput matching older value",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put1")
+			},
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put2")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.InitPut(ctx, "iput", "put1", false)
+			},
+			txnCoordRetry: false,              // non-matching value means we fail txn coord retry
+			expFailure:    "unexpected value", // the failure we get is a condition failed error
+		},
+		{
 			name: "write too old with put in batch commit",
 			afterTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "put")
