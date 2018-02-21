@@ -964,13 +964,12 @@ func (*ConditionalPutRequest) flags() int {
 	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
 }
 
-// InitPut may read but not write, however, it "reads" effectively
-// at the timestamp of any existing value, and should not prevent
-// subsequent writers from writing at a timestamp between this req's
-// putative timestamp and the timestamp of the existing value. This
-// also allows us to avoid tracking refresh spans for InitPuts ops.
+// InitPut, like ConditionalPut, effectively reads and may not write.
+// It also may return the actual data read on ConditionFailedErrors,
+// so must update the timestamp cache on errors. Like CPut, InitPuts
+// do not require a refresh because they return errors on write-too-old.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
 }
 
 // Increment reads the existing value, but always leaves an intent so
