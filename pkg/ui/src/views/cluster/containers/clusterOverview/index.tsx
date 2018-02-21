@@ -187,7 +187,14 @@ class ClusterOverview extends React.Component<RouterState, {}> {
         <section className="cluster-overview">
           <ClusterSummaryConnected />
         </section>
-        <div style={{ flexGrow: 1, position: "relative", margin: 24, border: "1px solid #EDEDED", borderRadius: 3, backgroundColor: "white" }}>
+        <div style={{
+          flexGrow: 1,
+          position: "relative",
+          margin: "18px 24px",
+          border: "1px solid #EDEDED",
+          borderRadius: 3,
+          backgroundColor: "white"
+        }}>
           <div style={{ position: "absolute", width: "100%", height: "100%" }}>
             { this.props.children }
           </div>
