@@ -45,7 +45,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], liveness);
 
     const startTime = LongToMoment(node.started_at);
-    const uptimeText = moment.duration(startTime.diff(moment())).humanize();
+    const uptimeText = "up for " + moment.duration(startTime.diff(moment())).humanize();
 
     return (
       <g transform="translate(-90 -100)">
