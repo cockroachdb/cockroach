@@ -46,91 +46,14 @@ type groupByStrSet map[string]struct{}
 // exists is the 0-byte value of each element in groupByStrSet.
 var exists = struct{}{}
 
-type groupby struct {
-	// groupingsScope refers to another scope that groups columns in this
-	// scope. Any aggregate functions which contain column references to this
-	// scope trigger the creation of new grouping columns in the grouping
-	// scope. In addition, if an aggregate function contains no column
-	// references, then the aggregate will be added to the "nearest" grouping
-	// scope. For example:
-	//   SELECT MAX(1) FROM t1
-	groupingsScope *scope
-
-	// aggs contains all aggregation expressions that were extracted from the
-	// query and which will become columns in this scope.
-	aggs []opt.GroupID
-
-	// groupings contains all group by expressions that were extracted from the
-	// query and which will become columns in this scope.
-	groupings []opt.GroupID
-
-	// groupStrs contains a string representation of each GROUP BY expression
-	// using symbolic notation. These strings are used to determine if SELECT
-	// and HAVING expressions contain sub-expressions matching a GROUP BY
-	// expression. This enables queries such as:
-	//    SELECT x+y FROM t GROUP BY x+y
-	// but not:
-	//    SELECT x+y FROM t GROUP BY y+x
-	groupStrs groupByStrSet
-
-	// inAgg is true within the body of an aggregate function. inAgg is used
-	// to ensure that nested aggregates are disallowed.
-	inAgg bool
-
-	// varsUsed is only utilized when groupingsScope is not nil.
-	// It keeps track of variables that are encountered by the builder that are:
-	//   (1) not explicit GROUP BY columns,
-	//   (2) not part of a sub-expression that matches a GROUP BY expression, and
-	//   (3) not contained in an aggregate.
-	//
-	// varsUsed is a slice rather than a set because the builder appends
-	// variables found in each sub-expression, and variables from individual
-	// sub-expresssions may be removed if they are found to match a GROUP BY
-	// expression. If any variables remain in varsUsed when the builder is
-	// done building a SELECT expression or HAVING clause, the builder throws
-	// an error.
-	//
-	// For example, consider this query:
-	//   SELECT COUNT(*), v/(k+v) FROM t.kv GROUP BY k+v
-	// When building the expression v/(k+v), varsUsed will contain the variables
-	// shown in brackets after each of the following expressions is built (in
-	// order of completed recursive calls):
-	//
-	//  1.   Build v [v]
-	//          \
-	//  2.       \  Build k [v, k]
-	//            \    \
-	//  3.         \    \  Build v [v, k, v]
-	//              \    \   /
-	//  4.           \  Build (k+v) [v]  <- truncate varsUsed since (k+v) matches
-	//                \   /                 a GROUP BY expression
-	//  5.          Build v/(k+v) [v] <- error - build is complete and varsUsed
-	//                                   is not empty
-	varsUsed []opt.ColumnIndex
-
-	// refScope is the scope to which all column references contained by the
-	// aggregate function must refer. This is used to detect illegal cases
-	// where the aggregate contains column references that point to
-	// different scopes. For example:
-	//   SELECT a
-	//   FROM t1
-	//   GROUP BY a
-	//   HAVING EXISTS
-	//   (
-	//     SELECT MAX(t1.a+t2.b)
-	//     FROM t2
-	//   )
-	refScope *scope
-}
-
-// inGroupingContext returns true when the groupingsScope is not nil. This is
-// the case when the builder is building expressions in a SELECT list, and
+// inGroupingContext returns true when the aggInScope is not nil. This is the
+// case when the builder is building expressions in a SELECT list, and
 // aggregates, GROUP BY, or HAVING are present. This is also true when the
 // builder is building expressions inside the HAVING clause. When
 // inGroupingContext returns true, varsUsed will be utilized to enforce scoping
 // rules. See the comment above varsUsed for more details.
 func (s *scope) inGroupingContext() bool {
-	return s.groupby.groupingsScope != nil
+	return s.groupby.aggInScope != nil
 }
 
 // push creates a new scope with this scope as its parent.
@@ -200,12 +123,23 @@ func (s *scope) getAggregateCols() []columnProps {
 
 // findAggregate finds the given aggregate among the bound variables
 // in this scope. Returns nil if the aggregate is not found.
-func (s *scope) findAggregate(agg opt.GroupID) *columnProps {
+func (s *scope) findAggregate(agg aggregateInfo) *columnProps {
 	for i, a := range s.groupby.aggs {
-		if a == agg {
-			// Aggregate already exists, so return information about the
-			// existing column that computes it.
-			return &s.getAggregateCols()[i]
+		// Find an existing aggregate that has the same function and the same
+		// arguments.
+		if a.def == agg.def && len(a.args) == len(agg.args) {
+			match := true
+			for j, arg := range a.args {
+				if arg != agg.args[j] {
+					match = false
+					break
+				}
+			}
+			if match {
+				// Aggregate already exists, so return information about the
+				// existing column that computes it.
+				return &s.getAggregateCols()[i]
+			}
 		}
 	}
 
@@ -218,9 +152,9 @@ func (s *scope) findGrouping(grouping opt.GroupID) *columnProps {
 	for i, g := range s.groupby.groupings {
 		if g == grouping {
 			// Grouping already exists, so return information about the
-			// existing column that computes it. Columns in the groupingsScope are
-			// always listed in the same order as s.groupby.groupings.
-			return &s.groupby.groupingsScope.cols[i]
+			// existing column that computes it. The first columns in aggInScope
+			// are always listed in the same order as s.groupby.groupings.
+			return &s.groupby.aggInScope.cols[i]
 		}
 	}
 
@@ -230,28 +164,20 @@ func (s *scope) findGrouping(grouping opt.GroupID) *columnProps {
 // startAggFunc is called when the builder starts building an aggregate
 // function. It is used to disallow nested aggregates and ensure that aggregate
 // functions are only used in a groupings scope.
-func (s *scope) startAggFunc() {
-	var found bool
+func (s *scope) startAggFunc() (aggInScope *scope, aggOutScope *scope) {
 	for curr := s; curr != nil; curr = curr.parent {
 		if curr.groupby.inAgg {
 			panic(errorf("aggregate function cannot be nested within another aggregate function"))
 		}
 
-		if curr.groupby.groupingsScope != nil {
+		if curr.groupby.aggInScope != nil {
 			// The aggregate will be added to the innermost groupings scope.
-			// TODO(rytaft): This will not work for subqueries. We should wait to set
-			// the refScope until the variables inside the aggregate are resolved.
-			s.groupby.refScope = curr.groupby.groupingsScope
-			found = true
-			break
+			s.groupby.inAgg = true
+			return curr.groupby.aggInScope, curr.groupby.aggOutScope
 		}
 	}
 
-	if !found {
-		panic(errorf("aggregate function is not allowed in this context"))
-	}
-
-	s.groupby.inAgg = true
+	panic(errorf("aggregate function is not allowed in this context"))
 }
 
 // endAggFunc is called when the builder finishes building an aggregate
@@ -259,18 +185,11 @@ func (s *scope) startAggFunc() {
 // aggregates and ensure that aggregate functions are only used in a groupings
 // scope. It returns the reference scope to which the new aggregate should be
 // added.
-func (s *scope) endAggFunc() (refScope *scope) {
+func (s *scope) endAggFunc() {
 	if !s.groupby.inAgg {
 		panic(errorf("mismatched calls to start/end aggFunc"))
 	}
-
-	refScope = s.groupby.refScope
-	if refScope == nil {
-		panic(errorf("not in grouping scope"))
-	}
-
 	s.groupby.inAgg = false
-	return refScope
 }
 
 // scope implements the tree.Visitor interface so that it can walk through
