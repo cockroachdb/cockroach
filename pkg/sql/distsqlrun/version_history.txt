@@ -18,3 +18,28 @@
     unrecognized by a server running older versions, hence the version bump.
     Servers running v7 can still execute regular joins between interleaved
     tables from servers running v6, thus the MinAcceptedVersion is kept at 6.
+- Version: 9 (MinAcceptedVersion: 6)
+  - Many changes were made without bumping the version. These changes involved
+    changes to the semantics of existing processors. These changes include:
+    - Two new join types (LEFT_SEMI, LEFT_ANTI) were added to the JoinType enum
+      to support new types of joins that can be used to improve performance of
+      certain queries. The new join types would not be recognized by a server
+      with an old version number.
+    - The JoinReaderSpec was modified by adding three new properties
+      (lookup_columns, on_expr, and index_map) to enable the JoinReader to perform
+      lookup joins enabling more efficient joins for certain queries. Old server
+      versions would not recognize these new properties.
+    - Two new join types (INTERSECT_ALL, EXCEPT_ALL) were added to the sqlbase.JoinType
+      enum to support INTERSECT and EXCEPT queries. These "set operation" queries
+      can now be planned by DistSQL, and older versions will not be capable of
+      supporting these queries.
+    - The ARRAY_AGG and JSON_AGG aggregate functions were added to the
+      AggregatorSpec_Func enum. Older versions will not recognize these new enum
+      members, and will not be able to support aggregations with either.
+    - IMPORT was changed to support importing CSVs with no primary key specified.
+      This required a change to the CSV proto semantics, making old and new
+      versions mutually incompatible. This was an EXPERIMENTAL feature in 1.1 and
+      thus we do not bump the MinAcceptedVersion, even though IMPORT in mixed
+      clusters without primary keys will fail.
+    - TableReader was extended to support physical checks. Old versions would not
+      recognize these new fields.
