@@ -105,6 +105,13 @@ func TestReportUsage(t *testing.T) {
 			base.DefaultTestStoreSpec,
 		},
 		Settings: st,
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "east"},
+				{Key: "state", Value: "ny"},
+				{Key: "city", Value: "nyc"},
+			},
+		},
 	}
 	s, db, _ := serverutils.StartServer(t, params)
 	ts := s.(*TestServer)
@@ -197,6 +204,7 @@ func TestReportUsage(t *testing.T) {
 
 	expectedUsageReports := 0
 
+	clusterSecret := sql.ClusterSecret.Get(&st.SV)
 	testutils.SucceedsSoon(t, func() error {
 		expectedUsageReports++
 
@@ -246,6 +254,19 @@ func TestReportUsage(t *testing.T) {
 		}
 		if expected, actual := "true", r.last.internal; expected != actual {
 			t.Errorf("expected internal to be %v, got %v", expected, actual)
+		}
+		if expected, actual := len(params.Locality.Tiers), len(r.last.Node.Locality.Tiers); expected != actual {
+			t.Errorf("expected locality to have %d tier, got %d", expected, actual)
+		}
+		for i := range params.Locality.Tiers {
+			if expected, actual := sql.HashForReporting(clusterSecret, params.Locality.Tiers[i].Key),
+				r.last.Node.Locality.Tiers[i].Key; expected != actual {
+				t.Errorf("expected locality tier %d key to be %s, got %s", i, expected, actual)
+			}
+			if expected, actual := sql.HashForReporting(clusterSecret, params.Locality.Tiers[i].Value),
+				r.last.Node.Locality.Tiers[i].Value; expected != actual {
+				t.Errorf("expected locality tier %d value to be %s, got %s", i, expected, actual)
+			}
 		}
 
 		for _, store := range r.last.Stores {
@@ -330,7 +351,6 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("expected %d apps in stats report, got %d", expected, actual)
 	}
 
-	clusterSecret := sql.ClusterSecret.Get(&st.SV)
 	for appName, expectedStatements := range map[string][]string{
 		"": {
 			`CREATE DATABASE _`,
@@ -349,7 +369,11 @@ func TestReportUsage(t *testing.T) {
 			`SET CLUSTER SETTING _ = _`,
 		},
 	} {
-		if app, ok := bucketByApp[sql.HashForReporting(clusterSecret, appName)]; !ok {
+		hashedAppName := sql.HashForReporting(clusterSecret, appName)
+		if hashedAppName == sql.FailedHashedValue {
+			t.Fatalf("expected hashedAppName to not be 'unknown'")
+		}
+		if app, ok := bucketByApp[hashedAppName]; !ok {
 			t.Fatalf("missing stats for app %q %+v", appName, bucketByApp)
 		} else {
 			if actual, expected := len(app), len(expectedStatements); expected != actual {
