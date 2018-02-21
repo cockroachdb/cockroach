@@ -174,6 +174,20 @@ func (s *scope) hasColumn(index opt.ColumnIndex) bool {
 	return false
 }
 
+// hasSameColumns returns true if this scope has the same columns
+// as the other scope (in the same order).
+func (s *scope) hasSameColumns(other *scope) bool {
+	if len(s.cols) != len(other.cols) {
+		return false
+	}
+	for i := range s.cols {
+		if s.cols[i].index != other.cols[i].index {
+			return false
+		}
+	}
+	return true
+}
+
 // getAggregateCols returns the columns in this scope corresponding
 // to aggregate functions.
 func (s *scope) getAggregateCols() []columnProps {
