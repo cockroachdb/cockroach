@@ -18,6 +18,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -494,12 +495,11 @@ func TestShowQueries(t *testing.T) {
 	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
 
 	found := false
-	// TODO(andrei): The statement filter below wrongly uses t.Fatal(). It's going
-	// to run on a different goroutine.
+	var failure error
 	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
 		if stmt == selectStmt {
 			found = true
-			const showQuery = "SELECT node_id, query FROM [SHOW CLUSTER QUERIES]"
+			const showQuery = "SELECT node_id, (now() - start)::FLOAT, query FROM [SHOW CLUSTER QUERIES]"
 
 			rows, err := conn1.Query(showQuery)
 			if err != nil {
@@ -513,34 +513,53 @@ func TestShowQueries(t *testing.T) {
 
 				var nodeID int
 				var sql string
-				if err := rows.Scan(&nodeID, &sql); err != nil {
-					t.Fatal(err)
+				var delta float64
+				if err := rows.Scan(&nodeID, &delta, &sql); err != nil {
+					failure = err
+					return
 				}
 				switch sql {
 				case showQuery, expectedSelectStmt:
 				default:
-					t.Fatalf(
+					failure = fmt.Errorf(
 						"unexpected query in SHOW QUERIES: %+q, expected: %+q",
 						sql,
 						expectedSelectStmt,
 					)
+					return
 				}
 				if nodeID < 1 || nodeID > 2 {
-					t.Fatalf("invalid node ID: %d", nodeID)
+					failure = fmt.Errorf("invalid node ID: %d", nodeID)
+					return
+				}
+
+				// The delta measures how long ago or in the future (in
+				// seconds) the start time is. It must be
+				// "close to now", otherwise we have a problem with the time
+				// accounting.
+				if math.Abs(delta) > 10 {
+					failure = fmt.Errorf("start time too far in the past or the future: expected <10s, got %.3fs", delta)
+					return
 				}
 			}
 			if err := rows.Err(); err != nil {
-				t.Fatal(err)
+				failure = err
+				return
 			}
 
 			if expectedCount := 2; count != expectedCount {
-				t.Fatalf("unexpected number of running queries: %d, expected %d", count, expectedCount)
+				failure = fmt.Errorf("unexpected number of running queries: %d, expected %d", count, expectedCount)
+				return
 			}
 		}
 	}
 
 	if _, err := conn2.Exec(selectStmt); err != nil {
 		t.Fatal(err)
+	}
+
+	if failure != nil {
+		t.Fatal(failure)
 	}
 
 	if !found {
