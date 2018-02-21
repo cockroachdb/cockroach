@@ -75,9 +75,6 @@ type commandResult struct {
 	// case for queries executed through the simple protocol). Otherwise, it needs
 	// to have an entry for every column.
 	formatCodes []pgwirebase.FormatCode
-
-	// finishedCallback, if set, will be called on Close/CloseWithErr/Discard.
-	finishedCallback func()
 }
 
 func (c *conn) makeCommandResult(
@@ -112,12 +109,6 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 	if r.errExpected && r.err == nil {
 		panic("expected err to be set on result by Close, but wasn't")
 	}
-
-	defer func() {
-		if f := r.finishedCallback; f != nil {
-			f()
-		}
-	}()
 
 	r.conn.writerState.fi.registerCmd(r.pos)
 
@@ -177,16 +168,10 @@ func (r *commandResult) CloseWithErr(err error) {
 	r.err = err
 	// TODO(andrei): I'm not sure this is the best place to do error conversion.
 	r.conn.bufferErr(convertToErrWithPGCode(err))
-	if f := r.finishedCallback; f != nil {
-		f()
-	}
 }
 
 // Discard is part of the CommandResult interface.
 func (r *commandResult) Discard() {
-	if f := r.finishedCallback; f != nil {
-		f()
-	}
 }
 
 // Err is part of the CommandResult interface.
@@ -271,9 +256,4 @@ func (r *commandResult) SetLimit(n int) {
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.stmtType = stmt.StatementType()
 	r.cmdCompleteTag = stmt.StatementTag()
-}
-
-// SetFinishedCallback is part of the CommandResult interface.
-func (r *commandResult) SetFinishedCallback(callback func()) {
-	r.finishedCallback = callback
 }

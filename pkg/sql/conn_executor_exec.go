@@ -75,41 +75,12 @@ func (ex *connExecutor) execStmt(
 	var ev fsm.Event
 	var payload fsm.EventPayload
 	var err error
+
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
 		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
-
-		if filter := ex.server.cfg.TestingKnobs.StatementFilter; err == nil && filter != nil {
-			var execErr error
-			if perr, ok := payload.(payloadWithError); ok {
-				execErr = perr.errorCause()
-			}
-			filter(ctx, stmt.String(), execErr)
-		}
-
-		// If the execution generated an event, we short-circuit here. Otherwise,
-		// if we're told that nothing exceptional happened, we have further loose
-		// ends to tie.
-		if err != nil || ev != nil {
-			break
-		}
-		autoCommit := ex.machine.CurState().(stateOpen).ImplicitTxn.Get()
-		if autoCommit {
-			autoCommitErr := ex.handleAutoCommit(ctx, stmt.AST)
-			if autoCommitErr != nil {
-				ev, payload = ex.makeErrEvent(autoCommitErr, stmt.AST)
-			}
-		}
-		if ev == nil && autoCommit {
-			if payload != nil {
-				panic("nil event but payload")
-			}
-			ev = eventTxnFinish{}
-			payload = eventTxnFinishPayload{commit: true}
-		}
-
 	case stateAborted, stateRestartWait:
 		ev, payload = ex.execStmtInAbortedState(ctx, stmt, res)
 	case stateCommitWait:
@@ -127,8 +98,7 @@ func (ex *connExecutor) execStmt(
 // directly and delegates everything else to the execution engines.
 // Results and query execution errors are written to res.
 //
-// This method does not handle "auto commit" - committing implicit transactions.
-// That's done at a higher level.
+// This method also handles "auto commit" - committing of implicit transactions.
 //
 // If an error is returned, the connection is supposed to be consider done.
 // Query execution errors are not returned explicitly; they're incorporated in
@@ -137,23 +107,51 @@ func (ex *connExecutor) execStmt(
 // The returned event can be nil if no state transition is required.
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
-) (fsm.Event, fsm.EventPayload, error) {
+) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
 	ex.server.StatementCounters.incrementCount(stmt.AST)
-
 	os := ex.machine.CurState().(stateOpen)
+
+	// Canceling a query cancels its transaction's context so we take a reference
+	// to the cancelation function here.
+	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	// Generally we want to unregister after the auto-commit below. However, in
+	// case we'll execute the statement through the parallel execution queue,
+	// we'll pass the responsibility for unregistering to the queue.
+	defer func() {
+		if unregisterFn != nil {
+			unregisterFn()
+		}
+	}()
+
+	defer func() {
+		if filter := ex.server.cfg.TestingKnobs.StatementFilter; retErr == nil && filter != nil {
+			var execErr error
+			if perr, ok := retPayload.(payloadWithError); ok {
+				execErr = perr.errorCause()
+			}
+			filter(ctx, stmt.String(), execErr)
+		}
+
+		// Do the auto-commit, if necessary.
+		if retEv != nil || retErr != nil {
+			return
+		}
+		if os.ImplicitTxn.Get() {
+			autoCommitErr := ex.handleAutoCommit(ctx, stmt.AST)
+			if autoCommitErr != nil {
+				retEv, retPayload = ex.makeErrEvent(autoCommitErr, stmt.AST)
+				return
+			}
+			retEv = eventTxnFinish{}
+			retPayload = eventTxnFinishPayload{commit: true}
+			return
+		}
+	}()
 
 	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
 		ev, payload := ex.makeErrEvent(err, stmt.AST)
 		return ev, payload, nil
 	}
-
-	// Canceling a query cancels its transaction's context so we take a reference
-	// to the cancellation function here.
-	unregisterFun := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
-	// We tie unregistering to closing the result. We might take the
-	// responsibility back later if it turns out that we're going to execute this
-	// query through the parallelize queue.
-	res.SetFinishedCallback(unregisterFun)
 
 	// Check if the statement is parallelized or is independent from parallel
 	// execution. If neither of these cases are true, we need to synchronize
@@ -205,7 +203,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
-		return eventRetryIntentSet{}, nil, nil
+		return eventRetryIntentSet{}, nil /* payload */, nil
 
 	case *tree.RollbackToSavepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
@@ -217,7 +215,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		res.ResetStmtType((*tree.Savepoint)(nil))
-		return eventTxnRestart{}, nil, nil
+		return eventTxnRestart{}, nil /* payload */, nil
 
 	case *tree.Prepare:
 		// This is handling the SQL statement "PREPARE". See execPrepare for
@@ -315,9 +313,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		// We're passing unregisterFun to the parallel execution.
-		res.SetFinishedCallback(nil)
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFun)
+		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFn)
+		unregisterFn = nil
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -334,8 +331,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			return nil, nil, err
 		}
 		if err := res.Err(); err != nil {
-			ev, payload := ex.makeErrEvent(err, stmt.AST)
-			return ev, payload, nil
+			return makeErrEvent(err)
 		}
 	}
 
@@ -870,8 +866,8 @@ func (ex *connExecutor) runShowTransactionState(
 // addActiveQuery adds a running query to the list of running queries.
 //
 // It returns a cleanup function that needs to be run when the query is no
-// longer "running": i.e. after it has finished execution and its results have
-// been delivered to the client.
+// longer executing. NOTE(andrei): As of Feb 2018, "executing" does not imply
+// that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
 	queryID uint128.Uint128, stmt tree.Statement, cancelFun context.CancelFunc,
 ) func() {
