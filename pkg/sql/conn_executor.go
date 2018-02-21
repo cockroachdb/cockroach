@@ -42,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -822,6 +821,11 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				tcmd.Stmt, NeedRowDesc, pos, nil /* formatCodes */, ex.sessionData.Location)
 			res = stmtRes
 			curStmt := Statement{AST: tcmd.Stmt}
+
+			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
+			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
+
 			ev, payload, err = ex.execStmt(ex.Ctx(), curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
@@ -847,12 +851,13 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				Values:    portal.Qargs,
 			}
 
-			// No parsing is taking place, but we need to set the parsing phase time
-			// because the service latency is measured from
-			// phaseTimes[sessionStartParse].
-			now := timeutil.Now()
-			ex.phaseTimes[sessionStartParse] = now
-			ex.phaseTimes[sessionEndParse] = now
+			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+			// When parsing has been done earlier, via a separate parse
+			// message, it is not any more part of the statistics collected
+			// for this execution. In that case, we simply report that
+			// parsing took no time.
+			ex.phaseTimes[sessionStartParse] = time.Time{}
+			ex.phaseTimes[sessionEndParse] = time.Time{}
 
 			if portal.Stmt.Statement == nil {
 				res = ex.clientComm.CreateEmptyQueryResult(pos)

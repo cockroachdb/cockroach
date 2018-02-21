@@ -41,17 +41,14 @@ const (
 	// the session age.
 	sessionInit sessionPhase = iota
 
-	// When a batch of SQL code is received in pgwire.
-	// Used to compute the batch age.
-	sessionStartBatch
-
 	// Executor phases.
-	sessionStartParse
-	sessionEndParse
-	plannerStartLogicalPlan
-	plannerEndLogicalPlan
-	plannerStartExecStmt
-	plannerEndExecStmt
+	sessionQueryReceived    // Query is received.
+	sessionStartParse       // Parse starts.
+	sessionEndParse         // Parse ends.
+	plannerStartLogicalPlan // Planning starts.
+	plannerEndLogicalPlan   // Planning ends.
+	plannerStartExecStmt    // Execution starts.
+	plannerEndExecStmt      // Execution ends.
 
 	// sessionNumPhases must be listed last so that it can be used to
 	// define arrays sufficiently large to hold all the other values.
@@ -110,8 +107,8 @@ func recordStatementSummary(
 		Sub(phaseTimes[sessionStartParse]).Seconds()
 	planLat := phaseTimes[plannerEndLogicalPlan].
 		Sub(phaseTimes[plannerStartLogicalPlan]).Seconds()
-	// service latency: start to parse to end of run
-	svcLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionStartParse])
+	// service latency: time query received to end of run
+	svcLatRaw := phaseTimes[plannerEndExecStmt].Sub(phaseTimes[sessionQueryReceived])
 	svcLat := svcLatRaw.Seconds()
 
 	// processing latency: contributing towards SQL results.
@@ -140,8 +137,6 @@ func recordStatementSummary(
 
 	if log.V(2) {
 		// ages since significant epochs
-		batchAge := phaseTimes[plannerEndExecStmt].
-			Sub(phaseTimes[sessionStartBatch]).Seconds()
 		sessionAge := phaseTimes[plannerEndExecStmt].
 			Sub(phaseTimes[sessionInit]).Seconds()
 
@@ -151,13 +146,13 @@ func recordStatementSummary(
 				"plan %.2fµs (%.1f%%), "+
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
-				"batch age %.3fms, session age %.4fs",
+				"session age %.4fs",
 			rowsAffected, automaticRetryCount,
 			parseLat*1e6, 100*parseLat/svcLat,
 			planLat*1e6, 100*planLat/svcLat,
 			runLat*1e6, 100*runLat/svcLat,
 			execOverhead*1e6, 100*execOverhead/svcLat,
-			batchAge*1000, sessionAge,
+			sessionAge,
 		)
 	}
 }
