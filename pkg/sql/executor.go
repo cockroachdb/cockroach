@@ -623,7 +623,6 @@ func (e *Executor) ExecuteStatements(
 	session *Session, stmts string, pinfo *tree.PlaceholderInfo,
 ) error {
 	session.resetForBatch(e)
-	session.phaseTimes[sessionStartBatch] = timeutil.Now()
 
 	defer session.maybeRecover("executing", stmts)
 
@@ -643,6 +642,7 @@ func (e *Executor) ExecutePreparedStatement(
 		// because the service latency is measured from
 		// phaseTimes[sessionStartParse].
 		now := timeutil.Now()
+		session.phaseTimes[sessionQueryReceived] = now
 		session.phaseTimes[sessionStartParse] = now
 		session.phaseTimes[sessionEndParse] = now
 	}
@@ -685,7 +685,9 @@ func (e *Executor) execPrepared(
 func (e *Executor) execRequest(session *Session, sql string, pinfo *tree.PlaceholderInfo) error {
 	txnState := &session.TxnState
 
-	session.phaseTimes[sessionStartParse] = timeutil.Now()
+	now := timeutil.Now()
+	session.phaseTimes[sessionQueryReceived] = now
+	session.phaseTimes[sessionStartParse] = now
 	sl, err := parser.Parse(sql)
 	stmts := NewStatementList(sl)
 	session.phaseTimes[sessionEndParse] = timeutil.Now()
