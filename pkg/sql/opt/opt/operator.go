@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 //go:generate optgen -out operator.og.go ops ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
@@ -34,6 +35,19 @@ func (i Operator) String() string {
 	}
 
 	return opNames[opIndexes[i]:opIndexes[i+1]]
+}
+
+// FuncDef defines the value of the Def private field of the Function operator.
+// It provides the name and return type of the function, as well as a pointer
+// to an already resolved builtin overload definition.
+type FuncDef struct {
+	Name     string
+	Type     types.T
+	Overload *tree.Builtin
+}
+
+func (f FuncDef) String() string {
+	return f.Name
 }
 
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic

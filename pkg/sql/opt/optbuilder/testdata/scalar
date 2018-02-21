@@ -200,7 +200,7 @@ build-scalar vars=(string)
 LENGTH(@1) = 2
 ----
 eq [type=bool]
- ├── function: length [type=NULL]
+ ├── function: length [type=int]
  │    └── variable: @1 [type=string]
  └── const: 2 [type=int]
 

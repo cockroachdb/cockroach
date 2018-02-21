@@ -465,7 +465,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		// arguments, we don't want to take the NULL argument fast-path.
 		handledNull := false
 		for _, fn := range fns {
-			if fn.(Builtin).NullableArgs {
+			if fn.(*Builtin).NullableArgs {
 				handledNull = true
 				break
 			}
@@ -528,7 +528,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		expr.Filter = typedFilter
 	}
 
-	builtin := fns[0].(Builtin)
+	builtin := fns[0].(*Builtin)
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
@@ -1727,7 +1727,7 @@ func (v stripFuncsVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 	case *ComparisonExpr:
 		t.fn = CmpOp{}
 	case *FuncExpr:
-		t.fn = Builtin{}
+		t.fn = nil
 	}
 	return true, expr
 }
