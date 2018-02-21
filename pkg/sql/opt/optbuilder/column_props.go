@@ -96,3 +96,25 @@ func (*columnProps) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 // Variable is part of the tree.VariableExpr interface. This prevents the
 // column from being evaluated during normalization.
 func (*columnProps) Variable() {}
+
+func columnPropsToColList(cols []columnProps) opt.ColList {
+	colList := make(opt.ColList, len(cols))
+	for i := range cols {
+		colList[i] = cols[i].index
+	}
+	return colList
+}
+
+// columnPropsMatchColList returns true if the column indices in cols
+// match 1-1 with the indices in ColList.
+func columnPropsMatchColList(cols []columnProps, colList opt.ColList) bool {
+	if len(cols) != len(colList) {
+		return false
+	}
+	for i := range cols {
+		if cols[i].index != colList[i] {
+			return false
+		}
+	}
+	return true
+}

@@ -54,9 +54,7 @@ type groupby struct {
 	//   SELECT MAX(1) FROM t1
 	groupingsScope *scope
 
-	// aggs contains all aggregation expressions that were extracted from the
-	// query and which will become columns in this scope.
-	aggs []opt.GroupID
+	aggs []aggregateInfo
 
 	// groupings contains all group by expressions that were extracted from the
 	// query and which will become columns in this scope.
@@ -121,6 +119,25 @@ type groupby struct {
 	refScope *scope
 }
 
+// aggregateInfo stores information about an aggregation function call.
+type aggregateInfo struct {
+	def  opt.FuncDef
+	args []aggregateArg
+	// colIndex is the index of the synthesized column for the result
+	// of this aggregation.
+	colIndex opt.ColumnIndex
+}
+
+// aggregateArg stores information about an argument of an aggregation function.
+type aggregateArg struct {
+	// group of the argument expression.
+	group opt.GroupID
+	typ   types.T
+	// colIndex is set if the argument is a "bare" reference to a column. We use
+	// it to avoid synthesizing new columns unnecessarily.
+	colIndex opt.ColumnIndex
+}
+
 // inGroupingContext returns true when the groupingsScope is not nil. This is
 // the case when the builder is building expressions in a SELECT list, and
 // aggregates, GROUP BY, or HAVING are present. This is also true when the
@@ -174,18 +191,11 @@ func (s *scope) hasColumn(index opt.ColumnIndex) bool {
 	return false
 }
 
-// hasSameColumns returns true if this scope has the same columns
-// as the other scope (in the same order).
-func (s *scope) hasSameColumns(other *scope) bool {
-	if len(s.cols) != len(other.cols) {
-		return false
-	}
-	for i := range s.cols {
-		if s.cols[i].index != other.cols[i].index {
-			return false
-		}
-	}
-	return true
+// getGroupingCols returns the columns in this scope corresponding
+// to aggregate functions.
+func (s *scope) getGroupingCols() []columnProps {
+	// Grouping columns are always at the beginning of the column list.
+	return s.cols[:len(s.cols)-len(s.groupby.aggs)]
 }
 
 // getAggregateCols returns the columns in this scope corresponding
@@ -198,12 +208,23 @@ func (s *scope) getAggregateCols() []columnProps {
 
 // findAggregate finds the given aggregate among the bound variables
 // in this scope. Returns nil if the aggregate is not found.
-func (s *scope) findAggregate(agg opt.GroupID) *columnProps {
+func (s *scope) findAggregate(agg aggregateInfo) *columnProps {
 	for i, a := range s.groupby.aggs {
-		if a == agg {
-			// Aggregate already exists, so return information about the
-			// existing column that computes it.
-			return &s.getAggregateCols()[i]
+		// Find an existing aggregate that has the same function and the same
+		// arguments.
+		if a.def == agg.def && len(a.args) == len(agg.args) {
+			match := true
+			for i, arg := range a.args {
+				if arg.group != agg.args[i].group {
+					match = false
+					break
+				}
+			}
+			if match {
+				// Aggregate already exists, so return information about the
+				// existing column that computes it.
+				return &s.getAggregateCols()[i]
+			}
 		}
 	}
 

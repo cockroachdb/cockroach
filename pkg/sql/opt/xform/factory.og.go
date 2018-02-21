@@ -155,8 +155,10 @@ func (_f *factory) ConstructProjections(
 
 // ConstructAggregations constructs an expression for the Aggregations operator.
 // Aggregations is a set of aggregate expressions that will become output
-// columns for a containing GroupBy operator. The private Cols field contains
-// the set of column indexes returned by the expression, as a *ColList.
+// columns for a containing GroupBy operator.
+// Each expression in Aggs is a Function that has Variable for all its arguments.
+// The private Cols field contains the column indexes for the results of the
+// aggregations, as a *ColList.
 func (_f *factory) ConstructAggregations(
 	aggs opt.ListID,
 	cols opt.PrivateID,
@@ -172,29 +174,6 @@ func (_f *factory) ConstructAggregations(
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_aggregationsExpr)))
-}
-
-// ConstructGroupings constructs an expression for the Groupings operator.
-// Groupings is a set of grouping expressions that will become output columns
-// for a containing GroupBy operator. The GroupBy operator groups its input by
-// the value of these expressions, and may compute aggregates over the groups.
-// The private Cols field contains the set of column indexes returned by the
-// expression, as a *ColList.
-func (_f *factory) ConstructGroupings(
-	elems opt.ListID,
-	cols opt.PrivateID,
-) opt.GroupID {
-	_groupingsExpr := makeGroupingsExpr(elems, cols)
-	_group := _f.mem.lookupGroupByFingerprint(_groupingsExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_groupingsExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupingsExpr)))
 }
 
 // ConstructExists constructs an expression for the Exists operator.
@@ -1509,12 +1488,16 @@ func (_f *factory) ConstructAntiJoinApply(
 }
 
 // ConstructGroupBy constructs an expression for the GroupBy operator.
+// GroupBy is an operator that is used for performing aggregations from group by
+// expressions. It groups results that are equal on the grouping columns and
+// computes aggregations as described by Aggregations (always an Aggregation
+// operator). The arguments of the aggregations are columns from the input.
 func (_f *factory) ConstructGroupBy(
 	input opt.GroupID,
-	groupings opt.GroupID,
 	aggregations opt.GroupID,
+	groupingColumns opt.PrivateID,
 ) opt.GroupID {
-	_groupByExpr := makeGroupByExpr(input, groupings, aggregations)
+	_groupByExpr := makeGroupByExpr(input, aggregations, groupingColumns)
 	_group := _f.mem.lookupGroupByFingerprint(_groupByExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1584,7 +1567,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [77]dynConstructLookupFunc
+var dynConstructLookup [76]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1635,11 +1618,6 @@ func init() {
 	// AggregationsOp
 	dynConstructLookup[opt.AggregationsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructAggregations(f.InternList(children), private)
-	}
-
-	// GroupingsOp
-	dynConstructLookup[opt.GroupingsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructGroupings(f.InternList(children), private)
 	}
 
 	// ExistsOp
@@ -1954,7 +1932,7 @@ func init() {
 
 	// GroupByOp
 	dynConstructLookup[opt.GroupByOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructGroupBy(children[0], children[1], children[2])
+		return f.ConstructGroupBy(children[0], children[1], private)
 	}
 
 	// UnionOp
