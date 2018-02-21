@@ -948,7 +948,7 @@ func (b *Builder) buildJoin(
 		}
 	}
 
-	joinType := getJoinType(join.Join)
+	joinType := sqlbase.JoinTypeFromAstString(join.Join)
 
 	switch cond := join.Cond.(type) {
 	case tree.NaturalJoinCond, *tree.UsingJoinCond:
@@ -1019,7 +1019,7 @@ func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
 // See Builder.buildStmt above for a description of the remaining input and
 // return values.
 func (b *Builder) buildUsingJoin(
-	joinType joinType,
+	joinType sqlbase.JoinType,
 	names tree.NameList,
 	left, right opt.GroupID,
 	leftScope, rightScope, inScope *scope,
@@ -1118,7 +1118,7 @@ func (b *Builder) buildUsingJoin(
 // See Builder.buildStmt above for a description of the remaining input and
 // return values.
 func (b *Builder) buildUsingJoinPredicate(
-	joinType joinType,
+	joinType sqlbase.JoinType,
 	leftCols []columnProps,
 	rightCols []columnProps,
 	names tree.NameList,
@@ -1155,11 +1155,11 @@ func (b *Builder) buildUsingJoinPredicate(
 		conditions = append(conditions, eq)
 
 		// Add the merged column to the scope, constructing a new column if needed.
-		if joinType == joinTypeInner || joinType == joinTypeLeftOuter {
+		if joinType == sqlbase.InnerJoin || joinType == sqlbase.LeftOuterJoin {
 			// The merged column is the same as the corresponding column from the
 			// left side.
 			outScope.cols = append(outScope.cols, *leftCol)
-		} else if joinType == joinTypeRightOuter &&
+		} else if joinType == sqlbase.RightOuterJoin &&
 			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
 			// The merged column is the same as the corresponding column from the
 			// right side.
@@ -1215,39 +1215,17 @@ func (b *Builder) constructFilter(conditions []opt.GroupID) opt.GroupID {
 	}
 }
 
-type joinType int
-
-const (
-	joinTypeInner joinType = iota
-	joinTypeLeftOuter
-	joinTypeRightOuter
-	joinTypeFullOuter
-)
-
-func getJoinType(astJoinType string) joinType {
-	switch astJoinType {
-	case "JOIN", "INNER JOIN", "CROSS JOIN":
-		return joinTypeInner
-	case "LEFT JOIN":
-		return joinTypeLeftOuter
-	case "RIGHT JOIN":
-		return joinTypeRightOuter
-	case "FULL JOIN":
-		return joinTypeFullOuter
-	default:
-		panic(errorf("unsupported JOIN type %T", astJoinType))
-	}
-}
-
-func (b *Builder) constructJoin(joinType joinType, left, right, filter opt.GroupID) opt.GroupID {
+func (b *Builder) constructJoin(
+	joinType sqlbase.JoinType, left, right, filter opt.GroupID,
+) opt.GroupID {
 	switch joinType {
-	case joinTypeInner:
+	case sqlbase.InnerJoin:
 		return b.factory.ConstructInnerJoin(left, right, filter)
-	case joinTypeLeftOuter:
+	case sqlbase.LeftOuterJoin:
 		return b.factory.ConstructLeftJoin(left, right, filter)
-	case joinTypeRightOuter:
+	case sqlbase.RightOuterJoin:
 		return b.factory.ConstructRightJoin(left, right, filter)
-	case joinTypeFullOuter:
+	case sqlbase.FullOuterJoin:
 		return b.factory.ConstructFullJoin(left, right, filter)
 	default:
 		panic(fmt.Errorf("unsupported JOIN type %d", joinType))
