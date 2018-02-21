@@ -24,27 +24,27 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      ├── function: min [type=NULL]
+      ├── function: min [type=int]
       │    └── const: 1 [type=int]
-      ├── function: max [type=NULL]
+      ├── function: max [type=int]
       │    └── const: 1 [type=int]
-      ├── function: count [type=NULL]
+      ├── function: count [type=int]
       │    └── const: 1 [type=int]
-      ├── function: sum_int [type=NULL]
+      ├── function: sum_int [type=int]
       │    └── const: 1 [type=int]
-      ├── function: avg [type=NULL]
+      ├── function: avg [type=decimal]
       │    └── const: 1 [type=int]
-      ├── function: sum [type=NULL]
+      ├── function: sum [type=decimal]
       │    └── const: 1 [type=int]
-      ├── function: stddev [type=NULL]
+      ├── function: stddev [type=decimal]
       │    └── const: 1 [type=int]
-      ├── function: variance [type=NULL]
+      ├── function: variance [type=decimal]
       │    └── const: 1 [type=int]
-      ├── function: bool_and [type=NULL]
+      ├── function: bool_and [type=bool]
       │    └── true [type=bool]
-      ├── function: bool_and [type=NULL]
+      ├── function: bool_and [type=bool]
       │    └── false [type=bool]
-      └── function: xor_agg [type=NULL]
+      └── function: xor_agg [type=bytes]
            └── const: '\x01' [type=bytes]
 
 build
@@ -56,7 +56,7 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      └── function: array_agg [type=NULL]
+      └── function: array_agg [type=int[]]
            └── const: 1 [type=int]
 
 build
@@ -68,7 +68,7 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      └── function: json_agg [type=NULL]
+      └── function: json_agg [type=jsonb]
            └── variable: kv.v [type=int]
 
 build
@@ -80,7 +80,7 @@ group-by
  │    └── tuple [type=tuple{}]
  ├── groupings
  └── aggregations
-      └── function: jsonb_agg [type=NULL]
+      └── function: jsonb_agg [type=jsonb]
            └── const: 1 [type=int]
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
@@ -121,7 +121,7 @@ project
  │    ├── groupings
  │    │    └── variable: kv.k [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
@@ -139,7 +139,7 @@ project
  │    ├── groupings
  │    │    └── variable: kv.k [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.k [type=int]
@@ -172,7 +172,7 @@ project
  │    ├── groupings
  │    │    └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -189,7 +189,7 @@ project
  │    ├── groupings
  │    │    └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -206,7 +206,7 @@ project
  │    ├── groupings
  │    │    └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -223,7 +223,7 @@ project
  │    ├── groupings
  │    │    └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── variable: kv.s [type=string]
@@ -242,7 +242,7 @@ project
  │    │    ├── variable: kv.v [type=int]
  │    │    └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: kv.v [type=int]
       ├── variable: column5 [type=int]
@@ -262,7 +262,7 @@ project
  │    │    ├── variable: kv.v [type=int]
  │    │    └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: kv.v [type=int]
       ├── variable: column5 [type=int]
@@ -273,19 +273,20 @@ build
 SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY UPPER(s)
 ----
 project
- ├── columns: column6:int:null:6 column5:string:null:5
+ ├── columns: column6:int:null:6 column7:string:null:7
  ├── group-by
  │    ├── columns: column5:string:null:5 column6:int:null:6
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
- │    │    └── function: upper [type=NULL]
+ │    │    └── function: upper [type=string]
  │    │         └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column6 [type=int]
-      └── variable: column5 [type=string]
+      └── function: upper [type=string]
+           └── variable: kv.s [type=string]
 
 # Selecting and grouping on a constant works.
 build
@@ -300,7 +301,7 @@ project
  │    ├── groupings
  │    │    └── const: 3 [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       └── variable: column6 [type=int]
 
@@ -314,10 +315,10 @@ project
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
- │    │    └── function: length [type=NULL]
+ │    │    └── function: length [type=int]
  │    │         └── const: 'abc' [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       └── variable: column6 [type=int]
 
@@ -334,10 +335,10 @@ project
  │    ├── groupings
  │    │    └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
-      └── function: upper [type=NULL]
+      └── function: upper [type=string]
            └── variable: kv.s [type=string]
 
 # Selecting a value that is not grouped, even if a function of it it, does not work.
@@ -361,7 +362,7 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.v [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column6 [type=int]
       └── variable: column5 [type=int]
@@ -381,7 +382,7 @@ project
  │    │    ├── variable: kv.k [type=int]
  │    │    └── variable: kv.v [type=int]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── projections
       ├── variable: column5 [type=int]
       └── plus [type=int]
@@ -428,7 +429,7 @@ project
  │    │         ├── variable: kv.v [type=int]
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: count [type=NULL]
+ │         └── function: count [type=int]
  │              └── variable: kv.k [type=int]
  └── projections
       ├── variable: count_1 [type=int]
@@ -443,7 +444,7 @@ group-by
  │    └── tuple [type=tuple{}]
  ├── groupings
  └── aggregations
-      └── function: count_rows [type=NULL]
+      └── function: count_rows [type=int]
 
 build
 SELECT COUNT(k) from t.kv
@@ -454,7 +455,7 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      └── function: count [type=NULL]
+      └── function: count [type=int]
            └── variable: kv.k [type=int]
 
 build
@@ -466,7 +467,7 @@ group-by
  │    └── tuple [type=tuple{}]
  ├── groupings
  └── aggregations
-      └── function: count [type=NULL]
+      └── function: count [type=int]
            └── const: 1 [type=int]
 
 build
@@ -478,7 +479,7 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      └── function: count [type=NULL]
+      └── function: count [type=int]
            └── const: 1 [type=int]
 
 build
@@ -495,10 +496,10 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      ├── function: count_rows [type=NULL]
-      ├── function: count [type=NULL]
+      ├── function: count_rows [type=int]
+      ├── function: count [type=int]
       │    └── variable: kv.k [type=int]
-      └── function: count [type=NULL]
+      └── function: count [type=int]
            └── variable: kv.v [type=int]
 
 # TODO(rytaft): This should work once we add support for the AllColumnSelector.
@@ -516,7 +517,7 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      └── function: count [type=NULL]
+      └── function: count [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── variable: kv.k [type=int]
                 └── variable: kv.v [type=int]
@@ -532,9 +533,9 @@ project
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
  │    └── aggregations
- │         ├── function: count [type=NULL]
+ │         ├── function: count [type=int]
  │         │    └── variable: kv.k [type=int]
- │         └── function: count [type=NULL]
+ │         └── function: count [type=int]
  │              └── variable: kv.v [type=int]
  └── projections
       └── plus [type=int]
@@ -550,13 +551,13 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      ├── function: min [type=NULL]
+      ├── function: min [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: max [type=NULL]
+      ├── function: max [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: min [type=NULL]
+      ├── function: min [type=int]
       │    └── variable: kv.v [type=int]
-      └── function: max [type=NULL]
+      └── function: max [type=int]
            └── variable: kv.v [type=int]
 
 build
@@ -573,13 +574,13 @@ group-by
  │         └── const: 8 [type=int]
  ├── groupings
  └── aggregations
-      ├── function: min [type=NULL]
+      ├── function: min [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: max [type=NULL]
+      ├── function: max [type=int]
       │    └── variable: kv.k [type=int]
-      ├── function: min [type=NULL]
+      ├── function: min [type=int]
       │    └── variable: kv.v [type=int]
-      └── function: max [type=NULL]
+      └── function: max [type=int]
            └── variable: kv.v [type=int]
 
 build
@@ -596,7 +597,7 @@ group-by
  │         └── const: NULL [type=NULL]
  ├── groupings
  └── aggregations
-      └── function: array_agg [type=NULL]
+      └── function: array_agg [type=string[]]
            └── variable: kv.s [type=string]
 
 build
@@ -608,13 +609,13 @@ group-by
  │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  ├── groupings
  └── aggregations
-      ├── function: avg [type=NULL]
+      ├── function: avg [type=decimal]
       │    └── variable: kv.k [type=int]
-      ├── function: avg [type=NULL]
+      ├── function: avg [type=decimal]
       │    └── variable: kv.v [type=int]
-      ├── function: sum [type=NULL]
+      ├── function: sum [type=decimal]
       │    └── variable: kv.k [type=int]
-      └── function: sum [type=NULL]
+      └── function: sum [type=decimal]
            └── variable: kv.v [type=int]
 
 exec-ddl
@@ -640,13 +641,13 @@ group-by
  │    └── columns: abc.a:string:1 abc.b:float:null:2 abc.c:bool:null:3 abc.d:decimal:null:4
  ├── groupings
  └── aggregations
-      ├── function: min [type=NULL]
+      ├── function: min [type=string]
       │    └── variable: abc.a [type=string]
-      ├── function: min [type=NULL]
+      ├── function: min [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: min [type=NULL]
+      ├── function: min [type=bool]
       │    └── variable: abc.c [type=bool]
-      └── function: min [type=NULL]
+      └── function: min [type=decimal]
            └── variable: abc.d [type=decimal]
 
 build
@@ -658,13 +659,13 @@ group-by
  │    └── columns: abc.a:string:1 abc.b:float:null:2 abc.c:bool:null:3 abc.d:decimal:null:4
  ├── groupings
  └── aggregations
-      ├── function: max [type=NULL]
+      ├── function: max [type=string]
       │    └── variable: abc.a [type=string]
-      ├── function: max [type=NULL]
+      ├── function: max [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: max [type=NULL]
+      ├── function: max [type=bool]
       │    └── variable: abc.c [type=bool]
-      └── function: max [type=NULL]
+      └── function: max [type=decimal]
            └── variable: abc.d [type=decimal]
 
 build
@@ -676,13 +677,13 @@ group-by
  │    └── columns: abc.a:string:1 abc.b:float:null:2 abc.c:bool:null:3 abc.d:decimal:null:4
  ├── groupings
  └── aggregations
-      ├── function: avg [type=NULL]
+      ├── function: avg [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: sum [type=NULL]
+      ├── function: sum [type=float]
       │    └── variable: abc.b [type=float]
-      ├── function: avg [type=NULL]
+      ├── function: avg [type=decimal]
       │    └── variable: abc.d [type=decimal]
-      └── function: sum [type=NULL]
+      └── function: sum [type=decimal]
            └── variable: abc.d [type=decimal]
 
 # Verify summing of intervals
@@ -703,7 +704,7 @@ group-by
  │    └── columns: intervals.a:interval:1
  ├── groupings
  └── aggregations
-      └── function: sum [type=NULL]
+      └── function: sum [type=interval]
            └── variable: intervals.a [type=interval]
 
 build
@@ -762,7 +763,7 @@ group-by
  │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  ├── groupings
  └── aggregations
-      └── function: min [type=NULL]
+      └── function: min [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -782,7 +783,7 @@ group-by
  │              └── const: 7 [type=int]
  ├── groupings
  └── aggregations
-      └── function: min [type=NULL]
+      └── function: min [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -794,7 +795,7 @@ group-by
  │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  ├── groupings
  └── aggregations
-      └── function: max [type=NULL]
+      └── function: max [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -811,7 +812,7 @@ group-by
  │         └── const: 1 [type=int]
  ├── groupings
  └── aggregations
-      └── function: max [type=NULL]
+      └── function: max [type=int]
            └── variable: xyz.y [type=int]
 
 build
@@ -828,7 +829,7 @@ group-by
  │         └── const: 7 [type=int]
  ├── groupings
  └── aggregations
-      └── function: min [type=NULL]
+      └── function: min [type=int]
            └── variable: xyz.y [type=int]
 
 build
@@ -849,7 +850,7 @@ group-by
  │              └── const: 3.0 [type=float]
  ├── groupings
  └── aggregations
-      └── function: min [type=NULL]
+      └── function: min [type=int]
            └── variable: xyz.x [type=int]
 
 build
@@ -870,7 +871,7 @@ group-by
  │              └── const: 2 [type=int]
  ├── groupings
  └── aggregations
-      └── function: max [type=NULL]
+      └── function: max [type=int]
            └── variable: xyz.x [type=int]
 
 
@@ -890,7 +891,7 @@ group-by
  │         └── const: 10 [type=int]
  ├── groupings
  └── aggregations
-      └── function: variance [type=NULL]
+      └── function: variance [type=decimal]
            └── variable: xyz.x [type=int]
 
 build
@@ -907,7 +908,7 @@ group-by
  │         └── const: 1 [type=int]
  ├── groupings
  └── aggregations
-      └── function: stddev [type=NULL]
+      └── function: stddev [type=decimal]
            └── variable: xyz.x [type=int]
 
 exec-ddl
@@ -926,9 +927,9 @@ group-by
  │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
  ├── groupings
  └── aggregations
-      ├── function: bool_and [type=NULL]
+      ├── function: bool_and [type=bool]
       │    └── variable: bools.b [type=bool]
-      └── function: bool_or [type=NULL]
+      └── function: bool_or [type=bool]
            └── variable: bools.b [type=bool]
 
 
@@ -971,12 +972,12 @@ project
  │    │    └── columns: xor_bytes.a:bytes:null:1 xor_bytes.b:int:null:2 xor_bytes.c:int:null:3 xor_bytes.rowid:int:4
  │    ├── groupings
  │    └── aggregations
- │         ├── function: xor_agg [type=NULL]
+ │         ├── function: xor_agg [type=bytes]
  │         │    └── variable: xor_bytes.a [type=bytes]
- │         └── function: xor_agg [type=NULL]
+ │         └── function: xor_agg [type=int]
  │              └── variable: xor_bytes.c [type=int]
  └── projections
-      ├── function: to_hex [type=NULL]
+      ├── function: to_hex [type=string]
       │    └── variable: column5 [type=bytes]
       └── variable: column7 [type=int]
 
@@ -989,9 +990,9 @@ group-by
  │    └── tuple [type=tuple{}]
  ├── groupings
  └── aggregations
-      ├── function: max [type=NULL]
+      ├── function: max [type=bool]
       │    └── true [type=bool]
-      └── function: min [type=NULL]
+      └── function: min [type=bool]
            └── true [type=bool]
 
 exec-ddl
@@ -1053,7 +1054,7 @@ project
  │    │    ├── variable: ab.a [type=int]
  │    │    └── variable: ab.b [type=int]
  │    └── aggregations
- │         └── function: min [type=NULL]
+ │         └── function: min [type=string]
  │              └── variable: xy.y [type=string]
  └── projections
       ├── variable: column6 [type=string]
@@ -1103,7 +1104,7 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: sum [type=NULL]
+ │         └── function: sum [type=decimal]
  │              └── variable: kv.w [type=int]
  └── projections
       ├── variable: column6 [type=decimal]
@@ -1113,24 +1114,25 @@ build
 SELECT SUM(t.kv.w), LOWER(s), t.kv.v + k * t.kv.w, t.kv.v FROM t.kv GROUP BY v, LOWER(kv.s), kv.k * w
 ----
 project
- ├── columns: column7:decimal:null:7 column5:string:null:5 column8:int:null:8 kv.v:int:null:2
+ ├── columns: column7:decimal:null:7 column8:string:null:8 column9:int:null:9 kv.v:int:null:2
  ├── group-by
  │    ├── columns: kv.v:int:null:2 column5:string:null:5 column6:int:null:6 column7:decimal:null:7
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
  │    │    ├── variable: kv.v [type=int]
- │    │    ├── function: lower [type=NULL]
+ │    │    ├── function: lower [type=string]
  │    │    │    └── variable: kv.s [type=string]
  │    │    └── mult [type=int]
  │    │         ├── variable: kv.k [type=int]
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
- │         └── function: sum [type=NULL]
+ │         └── function: sum [type=decimal]
  │              └── variable: kv.w [type=int]
  └── projections
       ├── variable: column7 [type=decimal]
-      ├── variable: column5 [type=string]
+      ├── function: lower [type=string]
+      │    └── variable: kv.s [type=string]
       ├── plus [type=int]
       │    ├── variable: kv.v [type=int]
       │    └── mult [type=int]
@@ -1250,14 +1252,14 @@ project
  │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
  │    │    └── true [type=bool]
  │    ├── groupings
- │    │    ├── function: concat [type=NULL]
+ │    │    ├── function: concat [type=string]
  │    │    │    ├── variable: kv.s [type=string]
  │    │    │    └── variable: abc.a [type=string]
  │    │    └── variable: abc.a [type=string]
  │    └── aggregations
  └── projections
-      └── function: concat [type=NULL]
-           ├── function: concat [type=NULL]
+      └── function: concat [type=string]
+           ├── function: concat [type=string]
            │    ├── variable: kv.s [type=string]
            │    └── variable: abc.a [type=string]
            └── variable: abc.a [type=string]
@@ -1389,19 +1391,19 @@ project
  │    │    │    └── columns: times.t:time:2
  │    │    └── true [type=bool]
  │    ├── groupings
- │    │    ├── function: date_trunc [type=NULL]
+ │    │    ├── function: date_trunc [type=interval]
  │    │    │    ├── const: 'second' [type=string]
  │    │    │    └── variable: times.t [type=time]
- │    │    └── function: date_trunc [type=NULL]
+ │    │    └── function: date_trunc [type=interval]
  │    │         ├── const: 'minute' [type=string]
  │    │         └── variable: times.t [type=time]
  │    └── aggregations
  └── projections
-      └── minus [type=NULL]
-           ├── function: date_trunc [type=NULL]
+      └── minus [type=interval]
+           ├── function: date_trunc [type=interval]
            │    ├── const: 'second' [type=string]
            │    └── variable: times.t [type=time]
-           └── function: date_trunc [type=NULL]
+           └── function: date_trunc [type=interval]
                 ├── const: 'minute' [type=string]
                 └── variable: times.t [type=time]
 

@@ -295,3 +295,54 @@ project
       │    └── variable: a.y [type=int]
       └── unary-complement [type=int]
            └── variable: a.x [type=int]
+
+# Function with fixed return type.
+build
+SELECT length('text')
+----
+project
+ ├── columns: column1:int:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── function: length [type=int]
+           └── const: 'text' [type=string]
+
+# Function with return type dependent on arg types.
+build
+SELECT div(1.0, 2.0)
+----
+project
+ ├── columns: column1:decimal:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── function: div [type=decimal]
+           ├── const: 1.0 [type=decimal]
+           └── const: 2.0 [type=decimal]
+
+# Function with same arguments in multiple overloads.
+build
+SELECT NOW()
+----
+project
+ ├── columns: column1:timestamptz:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── function: now [type=timestamptz]
+
+# Variadic function.
+build
+SELECT GREATEST(1, 2, 3, 4)
+----
+project
+ ├── columns: column1:int:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── function: greatest [type=int]
+           ├── const: 1 [type=int]
+           ├── const: 2 [type=int]
+           ├── const: 3 [type=int]
+           └── const: 4 [type=int]
