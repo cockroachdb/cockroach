@@ -94,7 +94,7 @@ var logStatementsExecuteEnabled = settings.RegisterBoolSetting(
 // (p.curPlan) to the exec / audit logs.
 func (p *planner) maybeLogStatement(ctx context.Context, lbl string, rows int, err error) {
 	p.maybeLogStatementInternal(
-		ctx, lbl, rows, err, p.statsCollector.PhaseTimes()[sessionStartParse])
+		ctx, lbl, rows, err, p.statsCollector.PhaseTimes()[sessionStartQuery])
 }
 
 func (p *planner) maybeLogStatementInternal(
