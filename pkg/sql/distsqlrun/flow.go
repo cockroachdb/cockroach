@@ -512,7 +512,6 @@ func (f *Flow) Cleanup(ctx context.Context) {
 }
 
 // cancel iterates through all unconnected streams of this flow and marks them canceled.
-// If the syncFlowConsumer is of type CancellableRowReceiver, mark it as canceled.
 // This function is called in Wait() after the associated context has been canceled.
 // In order to cancel a flow, call f.ctxCancel() instead of this function.
 //
@@ -536,12 +535,6 @@ func (f *Flow) cancel() {
 				&ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
 			is.receiver.ProducerDone()
 			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
-		}
-	}
-
-	if f.syncFlowConsumer != nil {
-		if recv, ok := f.syncFlowConsumer.(CancellableRowReceiver); ok {
-			recv.SetCanceled()
 		}
 	}
 }
