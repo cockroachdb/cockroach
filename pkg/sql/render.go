@@ -489,7 +489,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		if err != nil {
 			return hlc.MaxTimestamp, false, err
 		}
-		if ts != p.txn.OrigTimestamp() {
+		if ts != p.txn.OrigTimestamp(false /*mattersForTxnOrdering*/) {
 			return hlc.MaxTimestamp, false,
 				fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
