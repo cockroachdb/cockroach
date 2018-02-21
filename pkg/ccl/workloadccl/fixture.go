@@ -194,8 +194,9 @@ func (c *groupCSVWriter) groupWriteCSVs(
 			newBytesWritten := atomic.AddInt64(&c.csvBytesWritten, w.Attrs().Size)
 			d := timeutil.Since(c.start)
 			throughput := float64(newBytesWritten) / (d.Seconds() * float64(1<<20) /* 1MiB */)
-			log.Infof(ctx, `wrote csv %s [%d,%d] of %d rows (total %s in %s: %.1f MB/s)`,
+			log.Infof(ctx, `wrote csv %s [%d,%d] of %d rows (%.2f%% (%s) in %s: %.1f MB/s)`,
 				table.Name, rowStart, rowIdx, table.InitialRowCount,
+				float64(100*table.InitialRowCount)/float64(rowIdx),
 				humanizeutil.IBytes(newBytesWritten), d, throughput)
 
 			return nil
