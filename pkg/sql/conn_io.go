@@ -128,6 +128,9 @@ type ExecStmt struct {
 	// Stmt can be nil, in which case a "empty query response" message should be
 	// produced.
 	Stmt tree.Statement
+	// TimeReceived is the time at which the exec message was received
+	// from the client. Used to compute the service latency.
+	TimeReceived time.Time
 	// ParseStart/ParseEnd are the timing info for parsing of the query. Used for
 	// stats reporting.
 	ParseStart time.Time
@@ -145,6 +148,9 @@ type ExecPortal struct {
 	// limit is a feature of pgwire that we don't really support. We accept it and
 	// don't complain as long as the statement produces fewer results than this.
 	Limit int
+	// TimeReceived is the time at which the exec message was received
+	// from the client. Used to compute the service latency.
+	TimeReceived time.Time
 }
 
 // command implements the Command interface.
