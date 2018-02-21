@@ -1505,7 +1505,7 @@ project
  │    │         ├── variable: kv.k [type=int]
  │    │         └── const: 3 [type=int]
  │    └── aggregations
- │         └── function: min [type=NULL]
+ │         └── function: min [type=int]
  │              └── mult [type=int]
  │                   ├── variable: kv.v [type=int]
  │                   └── const: 2 [type=int]
