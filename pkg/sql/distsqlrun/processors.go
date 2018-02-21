@@ -383,6 +383,7 @@ func (pb *processorBase) init(
 	output RowReceiver,
 ) error {
 	pb.flowCtx = flowCtx
+	pb.ctx = pb.flowCtx.Ctx
 	if evalCtx == nil {
 		evalCtx = flowCtx.NewEvalCtx()
 	}
@@ -397,7 +398,7 @@ func (pb *processorBase) init(
 //     // Perform processor specific initialization.
 //   }
 func (pb *processorBase) maybeStart(name, logTag string) bool {
-	if pb.started {
+	if pb.started || pb.closed {
 		return false
 	}
 	pb.started = true
@@ -422,6 +423,7 @@ func (pb *processorBase) internalClose() bool {
 		pb.closed = true
 		tracing.FinishSpan(pb.span)
 		pb.span = nil
+		pb.ctx = pb.flowCtx.Ctx
 	}
 	// This prevents Next() from returning more rows.
 	pb.out.consumerClosed()
