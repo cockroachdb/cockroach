@@ -822,6 +822,11 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				tcmd.Stmt, NeedRowDesc, pos, nil /* formatCodes */, ex.sessionData.Location)
 			res = stmtRes
 			curStmt := Statement{AST: tcmd.Stmt}
+
+			ex.phaseTimes[sessionStartQuery] = tcmd.TimeReceived
+			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
+			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
+
 			ev, payload, err = ex.execStmt(ex.Ctx(), curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
@@ -847,9 +852,11 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				Values:    portal.Qargs,
 			}
 
-			// No parsing is taking place, but we need to set the parsing phase time
-			// because the service latency is measured from
-			// phaseTimes[sessionStartParse].
+			ex.phaseTimes[sessionStartQuery] = tcmd.TimeReceived
+			// When parsing has been done earlier, via a separate prepare
+			// message, it is not any more part of the statistics collected
+			// for this execution. In that case, we simply report that
+			// parsing took no time.
 			now := timeutil.Now()
 			ex.phaseTimes[sessionStartParse] = now
 			ex.phaseTimes[sessionEndParse] = now

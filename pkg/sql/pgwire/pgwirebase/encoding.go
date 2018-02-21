@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
@@ -65,8 +66,9 @@ type BufferedReader interface {
 
 // ReadBuffer provides a convenient way to read pgwire protocol messages.
 type ReadBuffer struct {
-	Msg []byte
-	tmp [4]byte
+	Msg          []byte
+	tmp          [4]byte
+	TimeReceived time.Time
 }
 
 // reset sets b.Msg to exactly size, attempting to use spare capacity
@@ -110,6 +112,7 @@ func (b *ReadBuffer) ReadUntypedMsg(rd io.Reader) (int, error) {
 
 	b.reset(size)
 	n, err := io.ReadFull(rd, b.Msg)
+	b.TimeReceived = timeutil.Now()
 	return nread + n, err
 }
 
