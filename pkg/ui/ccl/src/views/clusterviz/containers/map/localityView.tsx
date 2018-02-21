@@ -27,6 +27,10 @@ interface LocalityViewProps {
   liveness: { [id: string]: LivenessStatus };
 }
 
+const SCALE_FACTOR = 0.7;
+const TRANSLATE_X = -90 * SCALE_FACTOR;
+const TRANSLATE_Y = -100 * SCALE_FACTOR;
+
 // TODO(vilterp): CSS, I guess.
 const DEAD_COLOR = "#E75263";
 const SUSPECT_COLOR = "#FFAD26";
@@ -99,7 +103,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
       <g
         onClick={this.onClick}
         style={{ cursor: "pointer" }}
-        transform="translate(-90 -100)"
+        transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}
       >
         <rect width={180} height={210} opacity={0} />
         <Labels

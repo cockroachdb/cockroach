@@ -14,7 +14,8 @@ import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasC
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import { parseLocalityRoute } from "src/util/localities";
-import "./sim.css";
+
+import "./tweaks.styl";
 
 export default class ClusterVisualization extends React.Component<RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
@@ -30,19 +31,22 @@ export default class ClusterVisualization extends React.Component<RouterState & 
 
     // TODO(vilterp): dedup with NodeList
     return (
-      <div style={{
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-      }}>
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+        className="clusterviz"
+      >
         <div style={{
           flex: "none",
           backgroundColor: "white",
           boxShadow: "0 0 4px 0 rgba(0, 0, 0, 0.2)",
           zIndex: 5,
-          padding: "16px 24px",
+          padding: "4px 12px",
         }}>
           <div style={{ float: "left" }}>
             <Dropdown
@@ -53,7 +57,7 @@ export default class ClusterVisualization extends React.Component<RouterState & 
             />
           </div>
           <div style={{ float: "right" }}><TimeScaleDropdown /></div>
-          <div style={{ textAlign: "center", paddingTop: 13 }}><Breadcrumbs tiers={tiers} /></div>
+          <div style={{ textAlign: "center", paddingTop: 4 }}><Breadcrumbs tiers={tiers} /></div>
         </div>
         <NodeCanvasContainer tiers={tiers} />
       </div>

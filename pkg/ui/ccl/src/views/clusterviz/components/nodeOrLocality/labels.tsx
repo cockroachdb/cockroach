@@ -12,6 +12,7 @@ import { DARK_BLUE, MAIN_BLUE } from "src/views/shared/colors";
 interface LabelsProps {
   label: string;
   subLabel: string;
+  tooltip?: string;
 }
 
 export class Labels extends React.Component<LabelsProps> {
@@ -25,6 +26,7 @@ export class Labels extends React.Component<LabelsProps> {
         letterSpacing="1"
         transform="translate(50 22)"
       >
+        <title>{this.props.tooltip}</title>
         <text fill={DARK_BLUE}>
           {this.props.label}
         </text>
