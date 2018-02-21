@@ -578,11 +578,15 @@ type ResultBase interface {
 // CommandResultClose is a subset of CommandResult dealing with the closing of
 // the result.
 type CommandResultClose interface {
-	// Close marks a result as complete. All results must be eventually closed
-	// through Close()/CloseWithErr()/Discard. No further uses of the CommandResult are
-	// allowed.
-	// The implementation is free to deliver it to the client at will (except if
-	// there's a ClientLock in effect).
+	// Close marks a result as complete. No further uses of the CommandResult are
+	// allowed after this call. All results must be eventually closed through
+	// Close()/CloseWithErr()/Discard(), except in case query processing has
+	// encountered an irrecoverable error and the client connection will be
+	// closed; in such cases it is not mandated that these functions are called on
+	// the result that may have been open at the time the error occurred.
+	// NOTE(andrei): We might want to tighten the contract if the results get any
+	// state that needs to be closed even when the whole connection is about to be
+	// terminated.
 	Close(TransactionStatusIndicator)
 
 	// CloseWithErr is like Close, except it tells the client that an execution
@@ -625,14 +629,6 @@ type RestrictedCommandResult interface {
 	// The implementation cannot hold on to the row slice; it needs to make a
 	// shallow copy if it needs to.
 	AddRow(ctx context.Context, row tree.Datums) error
-
-	// SetFinishedCallback takes a callback that will be called once
-	// Close/CloseWithErr/Discard is called. This is used by SQL to unregister
-	// queries from a registry of running queries.
-	//
-	// This can be called multiple times, each time overwriting the previous
-	// value. The callback can be nil, in which case nothing will be called.
-	SetFinishedCallback(callback func())
 
 	// IncrementRowsAffected increments a counter by n. This is used for all
 	// result types other than tree.Rows.
@@ -780,11 +776,6 @@ func (r *errOnlyRestrictedCommandResult) ResetStmtType(stmt tree.Statement) {
 
 // AddRow is part of the RestrictedCommandResult interface.
 func (r *errOnlyRestrictedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	panic("unimplemented")
-}
-
-// SetFinishedCallback is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) SetFinishedCallback(callback func()) {
 	panic("unimplemented")
 }
 

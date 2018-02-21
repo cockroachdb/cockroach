@@ -79,7 +79,24 @@ func (ex *connExecutor) execStmt(
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
-		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+
+		// Canceling a query cancels its transaction's context so we take a reference
+		// to the cancelation function here.
+		unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+		// Generally we want to unregister after the auto-commit below. However, in
+		// case we'll execute the statement through the parallel execution queue,
+		// we'll pass the responsibility for unregistering to the queue.
+		defer func() {
+			if unregisterFn != nil {
+				unregisterFn()
+			}
+		}()
+
+		var sync bool
+		ev, payload, sync, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res, unregisterFn)
+		if !sync {
+			unregisterFn = nil
+		}
 
 		if filter := ex.server.cfg.TestingKnobs.StatementFilter; err == nil && filter != nil {
 			var execErr error
@@ -130,30 +147,37 @@ func (ex *connExecutor) execStmt(
 // This method does not handle "auto commit" - committing implicit transactions.
 // That's done at a higher level.
 //
+// unregisterFn will be passed to the parallel execution queue if the query is
+// executed async.
+//
 // If an error is returned, the connection is supposed to be consider done.
 // Query execution errors are not returned explicitly; they're incorporated in
 // the returned Event.
 //
 // The returned event can be nil if no state transition is required.
+// The returned bool is false if the statement is being executed through the
+// parallel execution queue and so that queue has taken responsibility for
+// calling unregisterFn, true otherwise (meaning that the query has finished
+// execution when this returns (modulo auto-commit), in which case the caller
+// needs to call unregisterFn).
 func (ex *connExecutor) execStmtInOpenState(
-	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
-) (fsm.Event, fsm.EventPayload, error) {
+	ctx context.Context,
+	stmt Statement,
+	pinfo *tree.PlaceholderInfo,
+	res RestrictedCommandResult,
+	unregisterFn func(),
+) (fsm.Event, fsm.EventPayload, bool, error) {
 	ex.server.StatementCounters.incrementCount(stmt.AST)
 
 	os := ex.machine.CurState().(stateOpen)
 
-	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, error) {
-		ev, payload := ex.makeErrEvent(err, stmt.AST)
-		return ev, payload, nil
-	}
+	// syncExecution will be the bool return value. See method comments.
+	syncExecution := true
 
-	// Canceling a query cancels its transaction's context so we take a reference
-	// to the cancellation function here.
-	unregisterFun := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
-	// We tie unregistering to closing the result. We might take the
-	// responsibility back later if it turns out that we're going to execute this
-	// query through the parallelize queue.
-	res.SetFinishedCallback(unregisterFun)
+	makeErrEvent := func(err error) (fsm.Event, fsm.EventPayload, bool, error) {
+		ev, payload := ex.makeErrEvent(err, stmt.AST)
+		return ev, payload, syncExecution, nil
+	}
 
 	// Check if the statement is parallelized or is independent from parallel
 	// execution. If neither of these cases are true, we need to synchronize
@@ -175,7 +199,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.CommitTransaction:
 		// CommitTransaction is executed fully here; there's no plan for it.
 		ev, payload := ex.commitSQLTransaction(ctx, stmt.AST)
-		return ev, payload, nil
+		return ev, payload, true /* sync */, nil
 
 	case *tree.ReleaseSavepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
@@ -184,12 +208,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		// ReleaseSavepoint is executed fully here; there's no plan for it.
 		ev, payload := ex.commitSQLTransaction(ctx, stmt.AST)
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
-		return ev, payload, nil
+		return ev, payload, true /* sync */, nil
 
 	case *tree.RollbackTransaction:
 		// RollbackTransaction is executed fully here; there's no plan for it.
 		ev, payload := ex.rollbackSQLTransaction(ctx)
-		return ev, payload, nil
+		return ev, payload, true /* sync */, nil
 
 	case *tree.Savepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Name); err != nil {
@@ -205,7 +229,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		// Note that Savepoint doesn't have a corresponding plan node.
 		// This here is all the execution there is.
-		return eventRetryIntentSet{}, nil, nil
+		return eventRetryIntentSet{}, nil /* payload */, true /* sync */, nil
 
 	case *tree.RollbackToSavepoint:
 		if err := tree.ValidateRestartCheckpoint(s.Savepoint); err != nil {
@@ -217,7 +241,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		res.ResetStmtType((*tree.Savepoint)(nil))
-		return eventTxnRestart{}, nil, nil
+		return eventTxnRestart{}, nil /* payload */, true /* sync */, nil
 
 	case *tree.Prepare:
 		// This is handling the SQL statement "PREPARE". See execPrepare for
@@ -237,7 +261,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if _, err := ex.addPreparedStmt(ctx, name, Statement{AST: s.Statement}, typeHints); err != nil {
 			return makeErrEvent(err)
 		}
-		return nil, nil, nil
+		return nil, nil, true /* sync */, nil
 
 	case *tree.Execute:
 		// Replace the `EXECUTE foo` statement with the prepared statement, and
@@ -315,9 +339,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		// We're passing unregisterFun to the parallel execution.
-		res.SetFinishedCallback(nil)
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFun)
+		syncExecution = false
+		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFn)
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -331,16 +354,15 @@ func (ex *connExecutor) execStmtInOpenState(
 	} else {
 		p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 		if err := ex.dispatchToExecutionEngine(ctx, stmt, p, res); err != nil {
-			return nil, nil, err
+			return nil, nil, true /* sync */, err
 		}
 		if err := res.Err(); err != nil {
-			ev, payload := ex.makeErrEvent(err, stmt.AST)
-			return ev, payload, nil
+			return makeErrEvent(err)
 		}
 	}
 
 	// No event was generated.
-	return nil, nil, nil
+	return nil, nil, syncExecution, nil
 }
 
 // commitSQLTransaction executes a COMMIT or RELEASE SAVEPOINT statement. The
@@ -870,8 +892,8 @@ func (ex *connExecutor) runShowTransactionState(
 // addActiveQuery adds a running query to the list of running queries.
 //
 // It returns a cleanup function that needs to be run when the query is no
-// longer "running": i.e. after it has finished execution and its results have
-// been delivered to the client.
+// longer executing. NOTE(andrei): As of Feb 2018, "executing" does not imply
+// that the results have been delivered to the client.
 func (ex *connExecutor) addActiveQuery(
 	queryID uint128.Uint128, stmt tree.Statement, cancelFun context.CancelFunc,
 ) func() {
