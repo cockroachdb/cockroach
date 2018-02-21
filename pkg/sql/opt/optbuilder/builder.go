@@ -461,7 +461,9 @@ func (b *Builder) buildFunction(
 		argList = append(argList, arg)
 	}
 
-	out = b.factory.ConstructFunction(b.factory.InternList(argList), b.factory.InternPrivate(def))
+	// Construct a private FuncDef that refers to a resolved function overload.
+	outDef := opt.FuncDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
+	out = b.factory.ConstructFunction(b.factory.InternList(argList), b.factory.InternPrivate(outDef))
 
 	if isAgg {
 		refScope := inScope.endAggFunc()

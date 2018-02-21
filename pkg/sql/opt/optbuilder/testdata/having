@@ -42,7 +42,7 @@ select
  │    ├── groupings
  │    │    └── variable: kv.s [type=string]
  │    └── aggregations
- │         └── function: count_rows [type=NULL]
+ │         └── function: count_rows [type=int]
  └── gt [type=bool]
       ├── variable: column5 [type=int]
       └── const: 1 [type=int]
@@ -60,9 +60,9 @@ project
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    ├── groupings
  │    │    └── aggregations
- │    │         ├── function: min [type=NULL]
+ │    │         ├── function: min [type=int]
  │    │         │    └── variable: kv.v [type=int]
- │    │         └── function: max [type=NULL]
+ │    │         └── function: max [type=int]
  │    │              └── variable: kv.k [type=int]
  │    └── gt [type=bool]
  │         ├── variable: column5 [type=int]
@@ -84,11 +84,11 @@ project
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    ├── groupings
  │    │    └── aggregations
- │    │         ├── function: max [type=NULL]
+ │    │         ├── function: max [type=int]
  │    │         │    └── variable: kv.v [type=int]
- │    │         ├── function: max [type=NULL]
+ │    │         ├── function: max [type=int]
  │    │         │    └── variable: kv.k [type=int]
- │    │         └── function: min [type=NULL]
+ │    │         └── function: min [type=int]
  │    │              └── variable: kv.v [type=int]
  │    └── gt [type=bool]
  │         ├── variable: column5 [type=int]
@@ -141,7 +141,7 @@ project
  │    │    │         ├── variable: kv.k [type=int]
  │    │    │         └── variable: kv.w [type=int]
  │    │    └── aggregations
- │    │         └── function: count_rows [type=NULL]
+ │    │         └── function: count_rows [type=int]
  │    └── gt [type=bool]
  │         ├── plus [type=int]
  │         │    ├── variable: kv.k [type=int]
@@ -171,7 +171,7 @@ project
  │    │    ├── groupings
  │    │    │    └── variable: kv.v [type=int]
  │    │    └── aggregations
- │    │         └── function: max [type=NULL]
+ │    │         └── function: max [type=int]
  │    │              └── variable: kv.v [type=int]
  │    └── gt [type=bool]
  │         ├── variable: kv.v [type=int]
@@ -191,13 +191,13 @@ project
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    ├── groupings
- │    │    │    └── function: lower [type=NULL]
+ │    │    │    └── function: lower [type=string]
  │    │    │         └── variable: kv.s [type=string]
  │    │    └── aggregations
- │    │         └── function: sum [type=NULL]
+ │    │         └── function: sum [type=decimal]
  │    │              └── variable: kv.w [type=int]
  │    └── like [type=bool]
- │         ├── function: lower [type=NULL]
+ │         ├── function: lower [type=string]
  │         │    └── variable: kv.s [type=string]
  │         └── const: 'test%' [type=string]
  └── projections
@@ -215,10 +215,10 @@ project
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    ├── groupings
- │    │    │    └── function: lower [type=NULL]
+ │    │    │    └── function: lower [type=string]
  │    │    │         └── variable: kv.s [type=string]
  │    │    └── aggregations
- │    │         └── function: sum [type=NULL]
+ │    │         └── function: sum [type=decimal]
  │    │              └── variable: kv.w [type=int]
  │    └── in [type=bool]
  │         ├── variable: column6 [type=decimal]

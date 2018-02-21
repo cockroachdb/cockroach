@@ -1012,7 +1012,7 @@ type FuncExpr struct {
 	WindowDef *WindowDef
 
 	typeAnnotation
-	fn Builtin
+	fn *Builtin
 }
 
 // ResolvedFunc returns the function definition; can only be called after
@@ -1021,10 +1021,16 @@ func (node *FuncExpr) ResolvedFunc() *FunctionDefinition {
 	return node.Func.FunctionReference.(*FunctionDefinition)
 }
 
+// ResolvedBuiltin returns the builtin definition; can only be called after
+// Resolve (which happens during TypeCheck).
+func (node *FuncExpr) ResolvedBuiltin() *Builtin {
+	return node.fn
+}
+
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
 func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc {
-	if node.fn.AggregateFunc == nil {
+	if node.fn == nil || node.fn.AggregateFunc == nil {
 		return nil
 	}
 	return func(evalCtx *EvalContext) AggregateFunc {
@@ -1036,7 +1042,7 @@ func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc
 // GetWindowConstructor returns a window function constructor if the
 // FuncExpr is a built-in window function.
 func (node *FuncExpr) GetWindowConstructor() func(*EvalContext) WindowFunc {
-	if node.fn.WindowFunc == nil {
+	if node.fn == nil || node.fn.WindowFunc == nil {
 		return nil
 	}
 	return func(evalCtx *EvalContext) WindowFunc {
@@ -1062,12 +1068,12 @@ func (node *FuncExpr) IsWindowFunctionApplication() bool {
 // potentially returns a different value when called in the same statement with
 // the same parameters.
 func (node *FuncExpr) IsImpure() bool {
-	return node.fn.Impure
+	return node.fn != nil && node.fn.Impure
 }
 
 // IsDistSQLBlacklist returns whether the function is not supported by DistSQL.
 func (node *FuncExpr) IsDistSQLBlacklist() bool {
-	return node.fn.DistsqlBlacklist
+	return node.fn != nil && node.fn.DistsqlBlacklist
 }
 
 type funcType int
