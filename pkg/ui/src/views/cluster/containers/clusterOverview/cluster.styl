@@ -1,13 +1,29 @@
 @require "~styl/base/palette.styl"
 @require "~styl/layout/layout.styl"
 
+.page
+  padding-top 0
+
+  &>.section
+    padding 18px 24px
+
+  &> div > .section
+    padding 18px 24px
+
+.database-summary-title h2
+  padding-top 0
+
+.page-config
+  padding-top 0
+  padding-bottom 0
+
 .cluster-overview
   .cluster-summary
     background-color white
-    padding-top $page-padding-top
-    padding-bottom $page-padding-top
-    padding-left 20px
-    margin-top 12px
+    padding-top 24px
+    padding-bottom 24px
+    padding-left 24px
+    margin-top 0
     margin-left 24px
     margin-right 24px
     border 1px solid $table-border-color

@@ -29,6 +29,10 @@ interface NodeViewProps {
   liveness: { [id: string]: NodeLivenessStatus };
 }
 
+const SCALE_FACTOR = 0.6;
+const TRANSLATE_X = -90 * SCALE_FACTOR;
+const TRANSLATE_Y = -100 * SCALE_FACTOR;
+
 export class NodeView extends React.Component<NodeViewProps> {
   getLivenessIcon(nodeCounts: { suspect: number, dead: number }) {
     if (nodeCounts.dead > 0) {
@@ -48,7 +52,7 @@ export class NodeView extends React.Component<NodeViewProps> {
     const uptimeText = "up for " + moment.duration(startTime.diff(moment())).humanize();
 
     return (
-      <g transform="translate(-90 -100)">
+      <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
         <Labels
           label={`Node ${node.desc.node_id}`}
           subLabel={uptimeText}
