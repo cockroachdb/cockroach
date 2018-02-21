@@ -132,10 +132,13 @@ func (e *algebraicSetOp) producerMeta(err error) *ProducerMetadata {
 }
 
 func (e *algebraicSetOp) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	var row sqlbase.EncDatumRow
-	var meta *ProducerMetadata
+	if e.closed {
+		return nil, e.producerMeta(nil /* err */)
+	}
 
 	for {
+		var row sqlbase.EncDatumRow
+		var meta *ProducerMetadata
 		switch e.opType {
 		case AlgebraicSetOpSpec_Except_all:
 			row, meta = e.nextExceptAll()
