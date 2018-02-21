@@ -101,6 +101,9 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		v.rowBuf = make(sqlbase.EncDatumRow, len(v.columns))
 	}
+	if v.closed {
+		return nil, v.producerMeta(nil /* err */)
+	}
 
 	for {
 		row, meta, err := v.sd.GetRow(v.rowBuf)

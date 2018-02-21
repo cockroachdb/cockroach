@@ -161,13 +161,13 @@ func newSortAllProcessor(s *sorterBase) Processor {
 }
 
 func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	if s.closed {
-		return nil, nil
-	}
 	if s.maybeStart("sortAllProcessor", "sortAllProcessor") {
 		if err := s.fill(); err != nil {
 			return nil, s.producerMeta(err)
 		}
+	}
+	if s.closed {
+		return nil, s.producerMeta(nil /* err */)
 	}
 
 	for {
@@ -445,9 +445,13 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		s.rows.Sort(ctx)
 	}
 
+	if s.closed {
+		return nil, s.producerMeta(nil /* err */)
+	}
 	if s.rows.Len() == 0 {
 		return s.trailingMetadata()
 	}
+
 	for {
 		row := s.rows.EncRow(0)
 		s.rows.PopFirst()
@@ -619,10 +623,13 @@ func (s *sortChunksProcessor) fill() (*ProducerMetadata, error) {
 
 func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	s.maybeStart("sortChunks", "SortChunks")
+	if s.closed {
+		return nil, s.producerMeta(nil /* err */)
+	}
+
 	for {
 		// If we don't have an active chunk, clear and refill it.
 		if s.rows.Len() == 0 {
-
 			s.rows.Clear(s.rows.evalCtx.Ctx())
 			meta, err := s.fill()
 			if err != nil {
