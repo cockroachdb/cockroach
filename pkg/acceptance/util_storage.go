@@ -16,16 +16,6 @@ package acceptance
 
 import "fmt"
 
-// EphemeralStorageAccount returns the name of the storage account to use to
-// store data that should be periodically purged. It returns a storage account
-// in the region specified by the -tf.storage-location flag to avoid bandwidth
-// egress charges.
-//
-// See /docs/CLOUD-RESOURCES.md for details.
-func EphemeralStorageAccount() string {
-	return "roachephemeral" + *flagTFStorageLocation
-}
-
 // FixtureStorageAccount returns the name of the storage account that contains
 // permanent test data ("test fixtures"). It returns a storage account in the
 // region specified by the -tf.storage-location flag to avoid bandwidth egress
