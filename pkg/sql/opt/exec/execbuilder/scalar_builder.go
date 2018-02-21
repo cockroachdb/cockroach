@@ -87,9 +87,8 @@ func (b *Builder) buildVariable(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	if xform.MatchesTupleOfConstants(ev) {
 		datums := make(tree.Datums, ev.ChildCount())
-		for i := 0; i < ev.ChildCount(); i++ {
-			child := ev.Child(i)
-			datums[i] = child.Private().(tree.Datum)
+		for i := range datums {
+			datums[i] = xform.ExtractConstDatum(ev.Child(i))
 		}
 		return tree.NewDTuple(datums...)
 	}
