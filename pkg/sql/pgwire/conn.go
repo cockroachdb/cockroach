@@ -277,6 +277,7 @@ Loop:
 		if log.V(2) {
 			log.Infof(ctx, "pgwire: processing %s", typ)
 		}
+		timeReceived := timeutil.Now()
 		switch typ {
 		case pgwirebase.ClientMsgSimpleQuery:
 			if doingExtendedQueryMessage {
@@ -290,14 +291,14 @@ Loop:
 					break
 				}
 			}
-			if err = c.handleSimpleQuery(ctx, &c.readBuf); err != nil {
+			if err = c.handleSimpleQuery(ctx, &c.readBuf, timeReceived); err != nil {
 				break
 			}
 			err = c.stmtBuf.Push(ctx, sql.Sync{})
 
 		case pgwirebase.ClientMsgExecute:
 			doingExtendedQueryMessage = true
-			err = c.handleExecute(ctx, &c.readBuf)
+			err = c.handleExecute(ctx, &c.readBuf, timeReceived)
 
 		case pgwirebase.ClientMsgParse:
 			doingExtendedQueryMessage = true
@@ -378,7 +379,9 @@ Loop:
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleSimpleQuery(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleSimpleQuery(
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
+) error {
 	query, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -395,7 +398,12 @@ func (c *conn) handleSimpleQuery(ctx context.Context, buf *pgwirebase.ReadBuffer
 
 	if len(stmts) == 0 {
 		return c.stmtBuf.Push(
-			ctx, sql.ExecStmt{Stmt: nil, ParseStart: startParse, ParseEnd: endParse})
+			ctx, sql.ExecStmt{
+				Stmt:         nil,
+				TimeReceived: timeReceived,
+				ParseStart:   startParse,
+				ParseEnd:     endParse,
+			})
 	}
 
 	for _, stmt := range stmts {
@@ -427,7 +435,10 @@ func (c *conn) handleSimpleQuery(ctx context.Context, buf *pgwirebase.ReadBuffer
 		if err := c.stmtBuf.Push(
 			ctx,
 			sql.ExecStmt{
-				Stmt: stmt, ParseStart: startParse, ParseEnd: endParse,
+				Stmt:         stmt,
+				TimeReceived: timeReceived,
+				ParseStart:   startParse,
+				ParseEnd:     endParse,
 			}); err != nil {
 			return err
 		}
@@ -678,7 +689,9 @@ func (c *conn) handleBind(ctx context.Context, buf *pgwirebase.ReadBuffer) error
 
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
-func (c *conn) handleExecute(ctx context.Context, buf *pgwirebase.ReadBuffer) error {
+func (c *conn) handleExecute(
+	ctx context.Context, buf *pgwirebase.ReadBuffer, timeReceived time.Time,
+) error {
 	portalName, err := buf.GetString()
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
@@ -687,7 +700,11 @@ func (c *conn) handleExecute(ctx context.Context, buf *pgwirebase.ReadBuffer) er
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
-	return c.stmtBuf.Push(ctx, sql.ExecPortal{Name: portalName, Limit: int(limit)})
+	return c.stmtBuf.Push(ctx, sql.ExecPortal{
+		Name:         portalName,
+		TimeReceived: timeReceived,
+		Limit:        int(limit),
+	})
 }
 
 func (c *conn) handleFlush(ctx context.Context) error {
