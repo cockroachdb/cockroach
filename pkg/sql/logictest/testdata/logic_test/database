@@ -161,11 +161,5 @@ GRANT DROP ON DATABASE privs TO testuser
 
 user testuser
 
-# Wait for gossip to propagate the new version of the database descriptor.
-#
-# TODO: block the `GRANT` statement until the new version has been propagated.
-# See #22841.
-sleep 250ms
-
 statement ok
 DROP DATABASE privs CASCADE

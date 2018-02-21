@@ -37,7 +37,11 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 		return nil, err
 	}
 
-	dbDesc, err := ResolveDatabase(ctx, p, string(n.Name), true /*required*/)
+	var dbDesc *DatabaseDescriptor
+	var err error
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		dbDesc, err = ResolveDatabase(ctx, p, string(n.Name), true /*required*/)
+	})
 	if err != nil {
 		return nil, err
 	}
