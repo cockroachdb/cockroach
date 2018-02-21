@@ -1040,13 +1040,31 @@ func (s *adminServer) Cluster(
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
+	// This is a simple health check, the client doesn't care whether or not the
+	// node is ready to receive client traffic.
+	if !req.Ready {
+		isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
+		if err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+		if !isLive {
+			return nil, status.Error(codes.Unavailable, "node is not live")
+		}
+		return &serverpb.HealthResponse{}, nil
+	}
+
+	if !s.server.operational() {
+		return nil, status.Error(codes.Unavailable, "node is not ready")
+	}
+
 	isHealthy, err := s.server.nodeLiveness.IsHealthy(s.server.NodeID())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, err.Error())
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if !isHealthy {
-		return nil, status.Errorf(codes.Unavailable, "node is not healthy")
+		return nil, status.Error(codes.Unavailable, "node is not ready")
 	}
+
 	return &serverpb.HealthResponse{}, nil
 }
 

@@ -343,8 +343,9 @@ func (nl *NodeLiveness) GetLivenessThreshold() time.Duration {
 }
 
 // IsLive returns whether or not the specified node is considered live
-// based on the last receipt of a liveness update via gossip. It is an
-// error if the specified node is not in the local liveness table.
+// based on whether or not its liveness has expired regardless of the liveness
+// status. It is an  error if the specified node is not in the local liveness
+// table.
 func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	liveness, err := nl.GetLiveness(nodeID)
 	if err != nil {
@@ -353,9 +354,8 @@ func (nl *NodeLiveness) IsLive(nodeID roachpb.NodeID) (bool, error) {
 	return liveness.IsLive(nl.clock.Now(), nl.clock.MaxOffset()), nil
 }
 
-// IsHealthy returns whether or not the specified node is considered healthy
-// based on its current liveness status. It is an error if the specified node is
-// not in the local liveness table.
+// IsHealthy returns whether or not the specified node IsLive and is in a LIVE
+// state. i.e. not draining, decommissioning, or otherwise unhealthy.
 func (nl *NodeLiveness) IsHealthy(nodeID roachpb.NodeID) (bool, error) {
 	liveness, err := nl.GetLiveness(nodeID)
 	if err != nil {
