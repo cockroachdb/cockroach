@@ -3242,3 +3242,36 @@ project
       ├── variable: foo.d [type=float]
       ├── variable: bar.c [type=float]
       └── variable: bar.d [type=int]
+
+exec-ddl
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  s STRING
+)
+----
+table kv
+  k int NOT NULL
+  v int NULL
+  w int NULL
+  s string NULL
+
+build
+SELECT k FROM kv, (SELECT 1 AS k)
+----
+project
+ ├── columns: k:int:null:5
+ ├── inner-join
+ │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 k:int:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── project
+ │    │    ├── columns: k:int:null:5
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    └── projections
+ │    │         └── const: 1 [type=int]
+ │    └── true [type=bool]
+ └── projections
+      └── variable: k [type=int]
