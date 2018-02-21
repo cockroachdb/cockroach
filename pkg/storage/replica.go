@@ -257,6 +257,10 @@ func (s *destroyStatus) Set(err error, reason DestroyReason) {
 	s.reason = reason
 }
 
+func (s *destroyStatus) Reset() {
+	s.Set(nil, destroyReasonAlive)
+}
+
 // A Replica is a contiguous keyspace with writes managed via an
 // instance of the Raft consensus algorithm. Many ranges may exist
 // in a store and they are unlikely to be contiguous. Ranges are
@@ -905,8 +909,7 @@ func (r *Replica) setReplicaIDRaftMuLockedMuLocked(replicaID roachpb.ReplicaID) 
 	if r.mu.destroyStatus.reason == destroyReasonRemovalPending {
 		// An earlier incarnation of this replica was removed, but apparently it has been re-added
 		// now, so reset the status.
-		r.mu.destroyStatus.err = nil
-		r.mu.destroyStatus.reason = destroyReasonAlive
+		r.mu.destroyStatus.Reset()
 	}
 
 	// if r.mu.replicaID != 0 {
