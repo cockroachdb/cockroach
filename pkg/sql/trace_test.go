@@ -80,7 +80,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"sql txn implicit",
+				"sql txn",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -115,7 +115,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"sql txn implicit",
+				"sql txn",
 				"flow",
 				"table reader",
 				"/cockroach.roachpb.Internal/Batch",
@@ -138,7 +138,7 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"sql txn implicit",
+				"sql txn",
 				"starting plan",
 				"consuming rows",
 				"/cockroach.roachpb.Internal/Batch",

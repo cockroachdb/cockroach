@@ -33,11 +33,11 @@
 query TTT
 SELECT span, message, operation FROM [SHOW TRACE FOR SELECT 1]
 ----
-(0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
-(0,1)  === SPAN START: starting plan ===     starting plan
-(0,2)  === SPAN START: consuming rows ===    consuming rows
-(0,2)  plan completed execution              consuming rows
-(0,2)  resources released, stopping trace    consuming rows
+(0,0)  === SPAN START: sql txn ===         sql txn
+(0,1)  === SPAN START: starting plan ===   starting plan
+(0,2)  === SPAN START: consuming rows ===  consuming rows
+(0,2)  plan completed execution            consuming rows
+(0,2)  resources released, stopping trace  consuming rows
 
 statement ok
 PREPARE x AS SELECT 1
@@ -45,11 +45,11 @@ PREPARE x AS SELECT 1
 query TTT
 SELECT span, message, operation FROM [SHOW TRACE FOR EXECUTE x]
 ----
-(0,0)  === SPAN START: sql txn implicit ===  sql txn implicit
-(0,1)  === SPAN START: starting plan ===     starting plan
-(0,2)  === SPAN START: consuming rows ===    consuming rows
-(0,2)  plan completed execution              consuming rows
-(0,2)  resources released, stopping trace    consuming rows
+(0,0)  === SPAN START: sql txn ===         sql txn
+(0,1)  === SPAN START: starting plan ===   starting plan
+(0,2)  === SPAN START: consuming rows ===  consuming rows
+(0,2)  plan completed execution            consuming rows
+(0,2)  resources released, stopping trace  consuming rows
 
 # Check SHOW KV TRACE FOR SESSION.
 
@@ -61,27 +61,27 @@ SET tracing = on,kv; CREATE DATABASE t; SET tracing = off
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR SESSION] WHERE message NOT LIKE '%Z/%'
 ----
-(1,0)  sql txn implicit  querying next range at /Table/2/1/0/"t"/3/1
-(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /System/"desc-idgen"
-(1,0)  sql txn implicit  r1: sending batch 1 Inc to (n1,s1):1
-(1,0)  sql txn implicit  CPut /Table/2/1/0/"t"/3/1 -> 51
-(1,0)  sql txn implicit  CPut /Table/3/1/51/2/1 -> database:<name:"t" id:51 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > >
-(1,0)  sql txn implicit  querying next range at /Table/SystemConfigSpan/Start
-(1,0)  sql txn implicit  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /Table/2/1/0/"system"/3/1
-(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /Table/3/1/1/2/1
-(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /Table/2/1/1/"eventlog"/3/1
-(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /Table/3/1/12/2/1
-(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /Table/3/1/1/2/1
-(1,0)  sql txn implicit  r1: sending batch 1 Get to (n1,s1):1
-(1,0)  sql txn implicit  r1: sending batch 5 CPut to (n1,s1):1
-(1,0)  sql txn implicit  querying next range at /Table/SystemConfigSpan/Start
-(1,0)  sql txn implicit  r1: sending batch 1 EndTxn to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/2/1/0/"t"/3/1
+(1,0)  sql txn  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn  querying next range at /System/"desc-idgen"
+(1,0)  sql txn  r1: sending batch 1 Inc to (n1,s1):1
+(1,0)  sql txn  CPut /Table/2/1/0/"t"/3/1 -> 51
+(1,0)  sql txn  CPut /Table/3/1/51/2/1 -> database:<name:"t" id:51 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > >
+(1,0)  sql txn  querying next range at /Table/SystemConfigSpan/Start
+(1,0)  sql txn  r1: sending batch 2 CPut, 1 BeginTxn to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/2/1/0/"system"/3/1
+(1,0)  sql txn  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/3/1/1/2/1
+(1,0)  sql txn  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/2/1/1/"eventlog"/3/1
+(1,0)  sql txn  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/3/1/12/2/1
+(1,0)  sql txn  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/3/1/1/2/1
+(1,0)  sql txn  r1: sending batch 1 Get to (n1,s1):1
+(1,0)  sql txn  r1: sending batch 5 CPut to (n1,s1):1
+(1,0)  sql txn  querying next range at /Table/SystemConfigSpan/Start
+(1,0)  sql txn  r1: sending batch 1 EndTxn to (n1,s1):1
 
 
 # More KV operations.
@@ -146,66 +146,66 @@ SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (1,2)]
 ----
-(0,0)  sql txn implicit  CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
-(0,2)  consuming rows    output row: []
-(0,0)  sql txn implicit  querying next range at /Table/52/1/1/0
-(0,0)  sql txn implicit  r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
+(0,0)  sql txn         CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+(0,2)  consuming rows  output row: []
+(0,0)  sql txn         querying next range at /Table/52/1/1/0
+(0,0)  sql txn         r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (1,2)]
 ----
-(0,0)  sql txn implicit  CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
-(0,2)  consuming rows    output row: []
-(0,0)  sql txn implicit  querying next range at /Table/52/1/1/0
-(0,0)  sql txn implicit  r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
-(0,2)  consuming rows    execution failed: duplicate key value (k)=(1) violates unique constraint "primary"
+(0,0)  sql txn         CPut /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+(0,2)  consuming rows  output row: []
+(0,0)  sql txn         querying next range at /Table/52/1/1/0
+(0,0)  sql txn         r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
+(0,2)  consuming rows  execution failed: duplicate key value (k)=(1) violates unique constraint "primary"
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR INSERT INTO t.kv(k, v) VALUES (2,2)]
 ----
-(0,0)  sql txn implicit  CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
-(0,2)  consuming rows    output row: []
-(0,0)  sql txn implicit  querying next range at /Table/52/1/2/0
-(0,0)  sql txn implicit  r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
-(0,2)  consuming rows    execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
+(0,0)  sql txn         CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
+(0,2)  consuming rows  output row: []
+(0,0)  sql txn         querying next range at /Table/52/1/2/0
+(0,0)  sql txn         r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
+(0,2)  consuming rows  execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,3)]
 ----
-(0,2)  consuming rows    output row: []
-(0,0)  sql txn implicit  Scan /Table/52/1/{2-3}
-(0,0)  sql txn implicit  querying next range at /Table/52/1/2
-(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
-(0,0)  sql txn implicit  CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/3
-(0,0)  sql txn implicit  querying next range at /Table/52/1/2/0
-(0,0)  sql txn implicit  r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
+(0,2)  consuming rows  output row: []
+(0,0)  sql txn         Scan /Table/52/1/{2-3}
+(0,0)  sql txn         querying next range at /Table/52/1/2
+(0,0)  sql txn         r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn         CPut /Table/52/1/2/0 -> /TUPLE/2:2:Int/3
+(0,0)  sql txn         querying next range at /Table/52/1/2/0
+(0,0)  sql txn         r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (1,2)]
 ----
-(0,2)  consuming rows    output row: []
-(0,0)  sql txn implicit  Scan /Table/52/1/{1-2}
-(0,0)  sql txn implicit  querying next range at /Table/52/1/1
-(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
-(0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2
-(0,0)  sql txn implicit  Put /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
-(0,0)  sql txn implicit  querying next range at /Table/52/1/1/0
-(0,0)  sql txn implicit  r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
+(0,2)  consuming rows  output row: []
+(0,0)  sql txn         Scan /Table/52/1/{1-2}
+(0,0)  sql txn         querying next range at /Table/52/1/1
+(0,0)  sql txn         r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn         fetched: /kv/primary/1/v -> /2
+(0,0)  sql txn         Put /Table/52/1/1/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn         querying next range at /Table/52/1/1/0
+(0,0)  sql txn         r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,2)]
 ----
-(0,2)  consuming rows    output row: []
-(0,0)  sql txn implicit  Scan /Table/52/1/{2-3}
-(0,0)  sql txn implicit  querying next range at /Table/52/1/2
-(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
-(0,0)  sql txn implicit  fetched: /kv/primary/2/v -> /3
-(0,0)  sql txn implicit  Put /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
-(0,0)  sql txn implicit  Del /Table/52/2/3/0
-(0,0)  sql txn implicit  CPut /Table/52/2/2/0 -> /BYTES/Š
-(0,0)  sql txn implicit  querying next range at /Table/52/1/2/0
-(0,0)  sql txn implicit  r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn to (n1,s1):1
-(0,2)  consuming rows    execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
+(0,2)  consuming rows  output row: []
+(0,0)  sql txn         Scan /Table/52/1/{2-3}
+(0,0)  sql txn         querying next range at /Table/52/1/2
+(0,0)  sql txn         r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn         fetched: /kv/primary/2/v -> /3
+(0,0)  sql txn         Put /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
+(0,0)  sql txn         Del /Table/52/2/3/0
+(0,0)  sql txn         CPut /Table/52/2/2/0 -> /BYTES/Š
+(0,0)  sql txn         querying next range at /Table/52/1/2/0
+(0,0)  sql txn         r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn to (n1,s1):1
+(0,2)  consuming rows  execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
 
 query TTT
 SELECT span, operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 'wall_time:...'), '\d\d\d\d\d+', '...PK...') as message
@@ -247,17 +247,17 @@ query TTT
 SELECT span, operation, regexp_replace(message, '\d\d\d\d\d+', '...PK...') as message
   FROM [SHOW KV TRACE FOR UPDATE t.kv2 SET v = v + 2]
 ----
-(0,0)  sql txn implicit  Scan /Table/53/{1-2}
-(0,0)  sql txn implicit  querying next range at /Table/53/1
-(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
-(0,0)  sql txn implicit  fetched: /kv2/primary/...PK.../k/v -> /1/2
-(0,0)  sql txn implicit  Put /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/4
-(0,2)  consuming rows    output row: [...PK... 1 4]
-(0,0)  sql txn implicit  fetched: /kv2/primary/...PK.../k/v -> /2/3
-(0,0)  sql txn implicit  Put /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/5
-(0,2)  consuming rows    output row: [...PK... 2 5]
-(0,0)  sql txn implicit  querying next range at /Table/53/1/...PK.../0
-(0,0)  sql txn implicit  r1: sending batch 2 Put, 1 BeginTxn to (n1,s1):1
+(0,0)  sql txn         Scan /Table/53/{1-2}
+(0,0)  sql txn         querying next range at /Table/53/1
+(0,0)  sql txn         r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn         fetched: /kv2/primary/...PK.../k/v -> /1/2
+(0,0)  sql txn         Put /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+(0,2)  consuming rows  output row: [...PK... 1 4]
+(0,0)  sql txn         fetched: /kv2/primary/...PK.../k/v -> /2/3
+(0,0)  sql txn         Put /Table/53/1/...PK.../0 -> /TUPLE/1:1:Int/2/1:2:Int/5
+(0,2)  consuming rows  output row: [...PK... 2 5]
+(0,0)  sql txn         querying next range at /Table/53/1/...PK.../0
+(0,0)  sql txn         r1: sending batch 2 Put, 1 BeginTxn to (n1,s1):1
 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv2]
@@ -302,19 +302,19 @@ SELECT span, operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 
 query TTT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
 ----
-(0,0)  sql txn implicit  Scan /Table/52/{1-2}
-(0,0)  sql txn implicit  querying next range at /Table/52/1
-(0,0)  sql txn implicit  r1: sending batch 1 Scan to (n1,s1):1
-(0,0)  sql txn implicit  fetched: /kv/primary/1/v -> /2
-(0,0)  sql txn implicit  Del /Table/52/2/2/0
-(0,0)  sql txn implicit  DelRange /Table/52/1/1 - /Table/52/1/1/#
-(0,2)  consuming rows    output row: [1 2]
-(0,0)  sql txn implicit  fetched: /kv/primary/2/v -> /3
-(0,0)  sql txn implicit  Del /Table/52/2/3/0
-(0,0)  sql txn implicit  DelRange /Table/52/1/2 - /Table/52/1/2/#
-(0,2)  consuming rows    output row: [2 3]
-(0,0)  sql txn implicit  querying next range at /Table/52/1/1
-(0,0)  sql txn implicit  r1: sending batch 2 Del, 2 DelRng, 1 BeginTxn to (n1,s1):1
+(0,0)  sql txn         Scan /Table/52/{1-2}
+(0,0)  sql txn         querying next range at /Table/52/1
+(0,0)  sql txn         r1: sending batch 1 Scan to (n1,s1):1
+(0,0)  sql txn         fetched: /kv/primary/1/v -> /2
+(0,0)  sql txn         Del /Table/52/2/2/0
+(0,0)  sql txn         DelRange /Table/52/1/1 - /Table/52/1/1/#
+(0,2)  consuming rows  output row: [1 2]
+(0,0)  sql txn         fetched: /kv/primary/2/v -> /3
+(0,0)  sql txn         Del /Table/52/2/3/0
+(0,0)  sql txn         DelRange /Table/52/1/2 - /Table/52/1/2/#
+(0,2)  consuming rows  output row: [2 3]
+(0,0)  sql txn         querying next range at /Table/52/1/1
+(0,0)  sql txn         r1: sending batch 2 Del, 2 DelRng, 1 BeginTxn to (n1,s1):1
 
 query TTT
 SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
