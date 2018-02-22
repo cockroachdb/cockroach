@@ -284,7 +284,7 @@ project
  │    │         ├── variable: onecolumn.x [type=int]
  │    │         └── variable: othercolumn.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: onecolumn.x [type=int]
  │         │    └── variable: othercolumn.x [type=int]
  │         ├── variable: onecolumn.x [type=int]
@@ -313,7 +313,7 @@ project
  │    │         ├── variable: onecolumn.x [type=int]
  │    │         └── variable: othercolumn.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: onecolumn.x [type=int]
  │         │    └── variable: othercolumn.x [type=int]
  │         ├── variable: onecolumn.x [type=int]
@@ -342,7 +342,7 @@ project
  │    │         ├── variable: onecolumn.x [type=int]
  │    │         └── variable: othercolumn.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: onecolumn.x [type=int]
  │         │    └── variable: othercolumn.x [type=int]
  │         ├── variable: onecolumn.x [type=int]
@@ -601,7 +601,7 @@ project
  │    │         ├── variable: empty.x [type=int]
  │    │         └── variable: onecolumn.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: empty.x [type=int]
  │         │    └── variable: onecolumn.x [type=int]
  │         ├── variable: empty.x [type=int]
@@ -646,7 +646,7 @@ project
  │    │         ├── variable: onecolumn.x [type=int]
  │    │         └── variable: empty.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: onecolumn.x [type=int]
  │         │    └── variable: empty.x [type=int]
  │         ├── variable: onecolumn.x [type=int]
@@ -1728,7 +1728,7 @@ project
  │    │         ├── variable: t1.x [type=int]
  │    │         └── variable: t2.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: t1.x [type=int]
  │         │    └── variable: t2.x [type=int]
  │         ├── variable: t1.col1 [type=int]
@@ -1771,10 +1771,10 @@ project
  │    │              ├── variable: t1.y [type=int]
  │    │              └── variable: t2.y [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: t1.x [type=int]
  │         │    └── variable: t2.x [type=int]
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: t1.y [type=int]
  │         │    └── variable: t2.y [type=int]
  │         ├── variable: t1.col1 [type=int]
@@ -1855,7 +1855,7 @@ project
  │    │         ├── variable: t1.x [type=int]
  │    │         └── variable: t2.x [type=int]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=int]
  │         │    ├── variable: t1.x [type=int]
  │         │    └── variable: t2.x [type=int]
  │         ├── variable: t1.col1 [type=int]
@@ -2135,7 +2135,7 @@ project
  │    │         ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
  │    │         └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=collatedstring{en_u_ks_level1}]
  │         │    ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
  │         │    └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  │         ├── variable: str1.a [type=int]
@@ -2164,7 +2164,7 @@ project
  │    │         ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
  │    │         └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  │    └── projections
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=collatedstring{en_u_ks_level1}]
  │         │    ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
  │         │    └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  │         ├── variable: str1.a [type=int]
@@ -2200,7 +2200,7 @@ project
  │    │              └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  │    └── projections
  │         ├── variable: str2.a [type=int]
- │         ├── coalesce [type=NULL]
+ │         ├── coalesce [type=collatedstring{en_u_ks_level1}]
  │         │    ├── variable: str1.s [type=collatedstring{en_u_ks_level1}]
  │         │    └── variable: str2.s [type=collatedstring{en_u_ks_level1}]
  │         ├── variable: str1.a [type=int]
@@ -2339,10 +2339,10 @@ project
  │    │    │              ├── variable: xyu.y [type=int]
  │    │    │              └── variable: xyv.y [type=int]
  │    │    └── projections
- │    │         ├── coalesce [type=NULL]
+ │    │         ├── coalesce [type=int]
  │    │         │    ├── variable: xyu.x [type=int]
  │    │         │    └── variable: xyv.x [type=int]
- │    │         ├── coalesce [type=NULL]
+ │    │         ├── coalesce [type=int]
  │    │         │    ├── variable: xyu.y [type=int]
  │    │         │    └── variable: xyv.y [type=int]
  │    │         ├── variable: xyu.x [type=int]
@@ -2620,10 +2620,10 @@ project
  │    │    │              ├── variable: xyu.y [type=int]
  │    │    │              └── variable: xyv.y [type=int]
  │    │    └── projections
- │    │         ├── coalesce [type=NULL]
+ │    │         ├── coalesce [type=int]
  │    │         │    ├── variable: xyu.x [type=int]
  │    │         │    └── variable: xyv.x [type=int]
- │    │         ├── coalesce [type=NULL]
+ │    │         ├── coalesce [type=int]
  │    │         │    ├── variable: xyu.y [type=int]
  │    │         │    └── variable: xyv.y [type=int]
  │    │         ├── variable: xyu.x [type=int]
