@@ -171,6 +171,9 @@ func addInfoToURL(url *url.URL, s *Server, runningTime time.Duration) {
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
 func (s *Server) checkForUpdates(runningTime time.Duration) bool {
+	if updatesURL == nil {
+		return true // don't bother with asking for retry -- we'll never succeed.
+	}
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
@@ -264,6 +267,9 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 }
 
 func (s *Server) reportDiagnostics(runningTime time.Duration) {
+	if reportingURL == nil {
+		return
+	}
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
 	defer span.Finish()
 
