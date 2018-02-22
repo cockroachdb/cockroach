@@ -2411,7 +2411,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 // GetClusterTimestamp retrieves the current cluster timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
-	ts := ctx.Txn.OrigTimestamp(true /*mattersForTxnOrdering*/)
+	ts := ctx.Txn.CommitTimestamp()
 	if ts == (hlc.Timestamp{}) {
 		panic("zero cluster timestamp in txn")
 	}
