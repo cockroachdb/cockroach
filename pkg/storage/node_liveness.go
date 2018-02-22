@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/opentracing/opentracing-go"
 )
 
 var (
@@ -394,7 +395,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 					// Give the context a timeout approximately as long as the time we
 					// have left before our liveness entry expires.
 					ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
-					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "heartbeat")
+					ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
 					defer cancel()
 					defer sp.Finish()
 
@@ -466,6 +467,8 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, liveness *Liveness, incrementEpoch bool,
 ) error {
+	sp, ctx := opentracing.StartSpanFromContext(ctx, "liveness heartbeat")
+	defer sp.Finish()
 	defer func(start time.Time) {
 		dur := timeutil.Now().Sub(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
