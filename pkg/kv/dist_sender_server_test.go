@@ -2451,7 +2451,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			epoch := 0
 			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				if tc.tsLeaked {
-					txn.OrigTimestampWasObserved()
+					_ = txn.CommitTimestamp()
 				}
 				if epoch > 0 {
 					if !tc.clientRetry {

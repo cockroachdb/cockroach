@@ -576,7 +576,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		details := *sc.job.WithTxn(txn).Payload().Details.(*jobs.Payload_SchemaChange).SchemaChange
 		if details.ReadAsOf == (hlc.Timestamp{}) {
-			details.ReadAsOf = txn.OrigTimestamp(true /*mattersForTxnOrdering*/)
+			details.ReadAsOf = txn.CommitTimestamp()
 			if err := sc.job.WithTxn(txn).SetDetails(ctx, details); err != nil {
 				return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
 			}
