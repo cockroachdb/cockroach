@@ -37,7 +37,7 @@ func init() {
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, c.All(), StartArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 
 		t.Status("importing TPCC fixture")
 		m := newMonitor(ctx, c, c.All())
