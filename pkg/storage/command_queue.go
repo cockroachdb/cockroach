@@ -57,9 +57,16 @@ type CommandQueue struct {
 	reads       interval.Tree
 	writes      interval.Tree
 	idAlloc     int64
-	wRg, rwRg   interval.RangeGroup // avoids allocating in getPrereqs
-	oHeap       overlapHeap         // avoids allocating in getPrereqs
-	overlaps    []*cmd              // avoids allocating in getOverlaps
+
+	// avoids allocating in getPrereqs
+	wRg, rwRg interval.RangeGroup
+	oHeap     overlapHeap
+	// avoids allocating in getOverlaps
+	overlaps                    []*cmd
+	readOnly                    bool
+	timestamp                   hlc.Timestamp
+	collectOverlappingReadsRef  interval.Operation
+	collectOverlappingWritesRef interval.Operation
 
 	coveringOptimization bool // if true, use covering span optimization
 
@@ -243,6 +250,13 @@ func NewCommandQueue(coveringOptimization bool) *CommandQueue {
 		rwRg:                 interval.NewRangeTree(),
 		coveringOptimization: coveringOptimization,
 	}
+	// We store a reference to each of these methods in fields on the
+	// CommandQueue. This allows us to pass them to Tree.DoMatching
+	// without allocating in getOverlaps. Passing a closure to DoMatching
+	// will allocate as expected, but even passing the method reference
+	// directly allocates.
+	cq.collectOverlappingReadsRef = cq.collectOverlappingReads
+	cq.collectOverlappingWritesRef = cq.collectOverlappingWrites
 	return cq
 }
 
@@ -545,37 +559,44 @@ func (cq *CommandQueue) getPrereqs(
 func (cq *CommandQueue) getOverlaps(
 	readOnly bool, timestamp hlc.Timestamp, rng interval.Range,
 ) []*cmd {
-	if !readOnly {
+	cq.readOnly = readOnly
+	cq.timestamp = timestamp
+	if !cq.readOnly {
 		// Upon a write cmd, flush out cmds from readsBuffer to the read interval
 		// tree.
 		cq.flushReadsBuffer()
-
-		cq.reads.DoMatching(func(i interval.Interface) bool {
-			c := i.(*cmd)
-			// Writes only wait on equal or later reads (we always wait
-			// if the pending read didn't have a timestamp specified).
-			if (c.timestamp == hlc.Timestamp{}) || !c.timestamp.Less(timestamp) {
-				cq.overlaps = append(cq.overlaps, c)
-			}
-			return false
-		}, rng)
+		cq.reads.DoMatching(cq.collectOverlappingReadsRef, rng)
 	}
 	// Both reads and writes must wait on other writes, depending on timestamps.
-	cq.writes.DoMatching(func(i interval.Interface) bool {
-		c := i.(*cmd)
-		// Writes always wait on other writes. Reads must wait on writes
-		// which occur at the same or an earlier timestamp. Note that
-		// timestamps for write commands may be pushed forward by the
-		// timestamp cache. This is fine because it doesn't matter how far
-		// forward the timestamp is pushed if it's already ahead of this read.
-		if !readOnly || (timestamp == hlc.Timestamp{}) || !timestamp.Less(c.timestamp) {
-			cq.overlaps = append(cq.overlaps, c)
-		}
-		return false
-	}, rng)
+	cq.writes.DoMatching(cq.collectOverlappingWritesRef, rng)
 	overlaps := cq.overlaps
 	cq.overlaps = cq.overlaps[:0]
 	return overlaps
+}
+
+// collectOverlappingReads implements the tree.Operation interface.
+func (cq *CommandQueue) collectOverlappingReads(i interval.Interface) bool {
+	c := i.(*cmd)
+	// Writes only wait on equal or later reads (we always wait
+	// if the pending read didn't have a timestamp specified).
+	if (c.timestamp == hlc.Timestamp{}) || !c.timestamp.Less(cq.timestamp) {
+		cq.overlaps = append(cq.overlaps, c)
+	}
+	return false
+}
+
+// collectOverlappingWrites implements the tree.Operation interface.
+func (cq *CommandQueue) collectOverlappingWrites(i interval.Interface) bool {
+	c := i.(*cmd)
+	// Writes always wait on other writes. Reads must wait on writes
+	// which occur at the same or an earlier timestamp. Note that
+	// timestamps for write commands may be pushed forward by the
+	// timestamp cache. This is fine because it doesn't matter how far
+	// forward the timestamp is pushed if it's already ahead of this read.
+	if !cq.readOnly || (cq.timestamp == hlc.Timestamp{}) || !cq.timestamp.Less(c.timestamp) {
+		cq.overlaps = append(cq.overlaps, c)
+	}
+	return false
 }
 
 // overlapHeap is a max-heap ordered by cmd.id.
