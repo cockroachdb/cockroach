@@ -40,7 +40,7 @@ import (
 
 const (
 	opTxnCoordSender = "txn coordinator"
-	opHeartbeatLoop  = "heartbeat"
+	opHeartbeatLoop  = "heartbeat txn"
 )
 
 // maxTxnIntentsBytes is a threshold in bytes for intent spans stored
