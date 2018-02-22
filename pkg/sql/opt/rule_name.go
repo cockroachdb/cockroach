@@ -14,8 +14,6 @@
 
 package opt
 
-//go:generate optgen -out rule_name.og.go rulenames ops/*.opt norm/rules/*.opt xform/rules/*.opt
-
 //go:generate stringer -output=rule_name_string.go -type=RuleName rule_name.go rule_name.og.go
 
 // RuleName enumerates the names of all the optimizer rules. Manual rule names

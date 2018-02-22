@@ -20,8 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-//go:generate optgen -out operator.og.go ops ops/*.opt
-
 // Operator describes the type of operation that a memo expression performs.
 // Some operators are relational (join, select, project) and others are scalar
 // (and, or, plus, variable).
