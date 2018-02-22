@@ -65,28 +65,37 @@ func TestCheckVersion(t *testing.T) {
 	r.Close()
 	s.Stopper().Stop(ctx)
 
-	r.Lock()
-	defer r.Unlock()
+	t.Run("expected-reporting", func(t *testing.T) {
+		r.Lock()
+		defer r.Unlock()
 
-	if expected, actual := 1, r.requests; actual != expected {
-		t.Fatalf("expected %v update checks, got %v", expected, actual)
-	}
+		if expected, actual := 1, r.requests; actual != expected {
+			t.Fatalf("expected %v update checks, got %v", expected, actual)
+		}
 
-	if expected, actual := s.(*TestServer).ClusterID().String(), r.last.uuid; expected != actual {
-		t.Errorf("expected uuid %v, got %v", expected, actual)
-	}
+		if expected, actual := s.(*TestServer).ClusterID().String(), r.last.uuid; expected != actual {
+			t.Errorf("expected uuid %v, got %v", expected, actual)
+		}
 
-	if expected, actual := build.GetInfo().Tag, r.last.version; expected != actual {
-		t.Errorf("expected version tag %v, got %v", expected, actual)
-	}
+		if expected, actual := build.GetInfo().Tag, r.last.version; expected != actual {
+			t.Errorf("expected version tag %v, got %v", expected, actual)
+		}
 
-	if expected, actual := "OSS", r.last.licenseType; expected != actual {
-		t.Errorf("expected license type %v, got %v", expected, actual)
-	}
+		if expected, actual := "OSS", r.last.licenseType; expected != actual {
+			t.Errorf("expected license type %v, got %v", expected, actual)
+		}
 
-	if expected, actual := "false", r.last.internal; expected != actual {
-		t.Errorf("expected internal to be %v, got %v", expected, actual)
-	}
+		if expected, actual := "false", r.last.internal; expected != actual {
+			t.Errorf("expected internal to be %v, got %v", expected, actual)
+		}
+	})
+
+	t.Run("npe", func(t *testing.T) {
+		// ensure nil, which happens when an empty env override URL is used, does not
+		// cause a crash. We've deferred a cleanup of the original pointer above.
+		updatesURL = nil
+		s.(*TestServer).checkForUpdates(time.Minute)
+	})
 }
 
 func TestReportUsage(t *testing.T) {
