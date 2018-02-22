@@ -137,6 +137,12 @@ func (s *Server) maybeCheckForUpdates(
 		return scheduled
 	}
 
+	// if diagnostics reporting is disabled, we should assume that means that the
+	// user doesn't want us phoning home for new-version checks either.
+	if !log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+		return now.Add(updateCheckFrequency)
+	}
+
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
 	if succeeded := s.checkForUpdates(runningTime); !succeeded {
