@@ -148,6 +148,7 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 }
 
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
+	t.Skip("#22796")
 	steps := []versionStep{
 		binaryVersionUpgrade("v1.0.6"),
 		// v1.1.0 is the first binary version that knows about cluster versions,
