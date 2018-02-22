@@ -109,7 +109,7 @@ func (q *timeSeriesMaintenanceQueue) shouldQueue(
 	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
-			log.ErrEventf(ctx, "time series maintenance queue last processed timestamp: %s", err)
+			return false, 0
 		}
 		shouldQ, priority = shouldQueueAgain(now, lpTS, TimeSeriesMaintenanceInterval)
 		if !shouldQ {

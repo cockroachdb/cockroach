@@ -1692,9 +1692,11 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	if r.store != nil {
 		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
 		if err != nil {
+			log.ErrEventf(ctx, "last processed timestamp unavailable: %s", err)
 			return hlc.Timestamp{}, err
 		}
 	}
+	log.VEventf(ctx, 2, "last processed timestamp: %s", timestamp)
 	return timestamp, nil
 }
 

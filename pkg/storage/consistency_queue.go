@@ -75,7 +75,7 @@ func (q *consistencyQueue) shouldQueue(
 	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
-			log.ErrEventf(ctx, "consistency queue last processed timestamp: %s", err)
+			return false, 0
 		}
 		if shouldQ, priority = shouldQueueAgain(now, lpTS, interval); !shouldQ {
 			return false, 0
