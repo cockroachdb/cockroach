@@ -336,7 +336,12 @@ func (s *scope) FindSourceProvidingColumn(
 
 		// The table name was unqualified, so if a single anonymous source exists
 		// with a matching non-hidden column, use that.
-		if candidateFromAnonSource != nil && !moreThanOneCandidateFromAnonSource {
+		if moreThanOneCandidateFromAnonSource {
+			return nil, nil, -1, s.newAmbiguousColumnError(
+				&colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
+			)
+		}
+		if candidateFromAnonSource != nil {
 			return &candidateFromAnonSource.table, candidateFromAnonSource, int(candidateFromAnonSource.index), nil
 		}
 
@@ -345,8 +350,7 @@ func (s *scope) FindSourceProvidingColumn(
 		if candidateWithPrefix != nil && !moreThanOneCandidateWithPrefix {
 			return &candidateWithPrefix.table, candidateWithPrefix, int(candidateWithPrefix.index), nil
 		}
-
-		if moreThanOneCandidateFromAnonSource || moreThanOneCandidateWithPrefix || moreThanOneHiddenCandidate {
+		if moreThanOneCandidateWithPrefix || moreThanOneHiddenCandidate {
 			return nil, nil, -1, s.newAmbiguousColumnError(
 				&colName, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate,
 			)
@@ -545,7 +549,8 @@ func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 // newAmbiguousColumnError returns an error with a helpful error message to be
 // used in case of an ambiguous column reference.
 func (s *scope) newAmbiguousColumnError(
-	n *tree.Name, allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate bool,
+	n *tree.Name,
+	allowHidden, moreThanOneCandidateFromAnonSource, moreThanOneCandidateWithPrefix, moreThanOneHiddenCandidate bool,
 ) error {
 	colString := tree.ErrString(n)
 	var msgBuf bytes.Buffer
