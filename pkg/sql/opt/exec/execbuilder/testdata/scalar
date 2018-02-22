@@ -240,11 +240,11 @@ render     0  render  ·         ·            (column8)                        
 exec-explain
 SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t.t
 ----
-render     0  render  ·         ·                                    (column8)                          ·
- │         0  ·       render 0  CASE WHEN t.a = 2 THEN 1 ELSE 2 END  ·                                  ·
- └── scan  1  scan    ·         ·                                    (a, b, c, d, j, s, rowid[hidden])  ·
-·          1  ·       table     t@primary                            ·                                  ·
-·          1  ·       spans     ALL                                  ·                                  ·
+render     0  render  ·         ·                                             (column8)                          ·
+ │         0  ·       render 0  CASE WHEN t.public.t.a = 2 THEN 1 ELSE 2 END  ·                                  ·
+ └── scan  1  scan    ·         ·                                             (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                     ·                                  ·
+·          1  ·       spans     ALL                                           ·                                  ·
 
 ## Functions not supported yet.
 #exec-explain

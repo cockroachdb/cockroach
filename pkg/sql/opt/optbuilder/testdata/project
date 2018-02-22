@@ -135,3 +135,61 @@ project
       └── plus [type=float]
            ├── variable: column4 [type=float]
            └── const: 1.0 [type=float]
+
+build
+SELECT rowid FROM b;
+----
+project
+ ├── columns: b.rowid:int:3
+ ├── scan
+ │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
+ └── projections
+      └── variable: b.rowid [type=int]
+
+build
+SELECT rowid FROM (SELECT * FROM b)
+----
+error: column name "rowid" not found
+
+build
+SELECT rowid FROM (SELECT rowid FROM b)
+----
+project
+ ├── columns: b.rowid:int:3
+ ├── scan
+ │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
+ └── projections
+      └── variable: b.rowid [type=int]
+
+build
+SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
+----
+project
+ ├── columns: b.rowid:int:3
+ ├── scan
+ │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
+ └── projections
+      └── variable: b.rowid [type=int]
+
+build
+SELECT r FROM (SELECT rowid FROM b) AS q(r)
+----
+project
+ ├── columns: b.rowid:int:3
+ ├── scan
+ │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
+ └── projections
+      └── variable: b.rowid [type=int]
+
+exec-ddl
+CREATE TABLE c (x INT, y FLOAT)
+----
+table c
+  x int NULL
+  y float NULL
+  rowid int NOT NULL (hidden)
+
+build
+SELECT rowid FROM b, c
+----
+error: column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
