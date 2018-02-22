@@ -136,7 +136,7 @@ func (n *createTableNode) startExec(params runParams) error {
 
 	var desc sqlbase.TableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
-	creationTime := params.p.txn.OrigTimestamp(true /*mattersForTxnOrdering*/)
+	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
 		desc, err = makeTableDescIfAs(
 			n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan),

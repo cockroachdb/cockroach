@@ -190,7 +190,7 @@ type dbCacheSubscriber interface {
 // of a transaction retry.
 func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn) {
 	if tc.timestamp != (hlc.Timestamp{}) &&
-		tc.timestamp != txn.OrigTimestamp(false /*mattersForTxnOrdering*/) {
+		tc.timestamp != txn.OrigTimestamp() {
 		if err := tc.releaseTables(ctx, dontBlockForDBCacheUpdate); err != nil {
 			log.Warningf(ctx, "error releasing tables")
 		}
@@ -283,7 +283,7 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	origTimestamp := flags.txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
+	origTimestamp := flags.txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
@@ -304,7 +304,9 @@ func (tc *TableCollection) getTableVersion(
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline.
+	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
+	// so we need to set a deadline on the transaction to prevent it from committing
+	// beyond the table version expiration time.
 	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil, nil
 }
@@ -351,7 +353,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 	}
 
-	origTimestamp := txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
+	origTimestamp := txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
 		if err == sqlbase.ErrDescriptorNotFound {
@@ -367,7 +369,9 @@ func (tc *TableCollection) getTableVersionByID(
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
 	// If the table we just acquired expires before the txn's deadline, reduce
-	// the deadline.
+	// the deadline. We use OrigTimestamp() that doesn't return the commit timestamp,
+	// so we need to set a deadline on the transaction to prevent it from committing
+	// beyond the table version expiration time.
 	txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
 }
@@ -555,7 +559,7 @@ func (tc *TableCollection) getAllDescriptors(
 		if err != nil {
 			return nil, err
 		}
-		tc.timestamp = txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
+		tc.timestamp = txn.OrigTimestamp()
 		tc.allDescriptors = descs
 	}
 	return tc.allDescriptors, nil

@@ -267,27 +267,25 @@ func (txn *Txn) Isolation() enginepb.IsolationType {
 	return txn.mu.Proto.Isolation
 }
 
-// OrigTimestampWasObserved when called indicates that
-// the value of OrigTimestamp was observed and matters
-// for transaction ordering (i.e. don't bump)
-func (txn *Txn) OrigTimestampWasObserved() {
+// OrigTimestamp returns the transaction's starting timestamp.
+// Note a transaction can be internally pushed forward in time before
+// committing so this is not guaranteed to be the commit timestamp.
+// Use CommitTimestamp() when needed.
+func (txn *Txn) OrigTimestamp() hlc.Timestamp {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.Proto.OrigTimestamp
+}
+
+// CommitTimestamp returns the transaction's start timestamp.
+// The start timestamp can get pushed but the use of this
+// method will guarantee that the caller of this method sees
+// the push and thus calls this method again to receive the new
+// timestamp.
+func (txn *Txn) CommitTimestamp() hlc.Timestamp {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	txn.mu.Proto.OrigTimestampWasObserved = true
-}
-
-// OrigTimestamp returns the transaction's starting timestamp.
-// When the argument mattersForTxnOrdering is set, the
-// value of OrigTimestamp returned should remain the one used
-// for the txn commit.
-// TODO(spencer): extend the comment to explain what
-// this does.
-func (txn *Txn) OrigTimestamp(mattersForTxnOrdering bool) hlc.Timestamp {
-	txn.mu.Lock()
-	defer txn.mu.Unlock()
-	if mattersForTxnOrdering {
-		txn.mu.Proto.OrigTimestampWasObserved = true
-	}
 	return txn.mu.Proto.OrigTimestamp
 }
 
@@ -571,7 +569,7 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 // The deadline cannot be lower than txn.OrigTimestamp.
 func (txn *Txn) UpdateDeadlineMaybe(ctx context.Context, deadline hlc.Timestamp) bool {
 	if txn.deadline == nil || deadline.Less(*txn.deadline) {
-		if deadline.Less(txn.OrigTimestamp(false)) {
+		if deadline.Less(txn.OrigTimestamp()) {
 			log.Fatalf(ctx, "deadline below txn.OrigTimestamp is nonsensical; "+
 				"txn has would have no change to commit. Deadline: %s, txn: %s",
 				deadline, txn.Proto())
