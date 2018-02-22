@@ -462,7 +462,7 @@ func (ds *DistSender) sendSingleRange(
 
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
 	if err != nil {
-		log.ErrEvent(ctx, err.Error())
+		log.VErrEvent(ctx, 2, err.Error())
 		return nil, roachpb.NewError(err)
 	}
 
@@ -1096,7 +1096,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			desc, evictToken, err = ds.getDescriptor(ctx, descKey, nil, isReverse)
 			if err != nil {
-				log.ErrEventf(ctx, "range descriptor re-lookup failed: %s", err)
+				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
 				continue
 			}
 		}
@@ -1114,7 +1114,7 @@ func (ds *DistSender) sendPartialBatch(
 			pErr.Index.Index = int32(positions[pErr.Index.Index])
 		}
 
-		log.ErrEventf(ctx, "reply error %s: %s", ba, pErr)
+		log.VErrEventf(ctx, 2, "reply error %s: %s", ba, pErr)
 
 		// Error handling: If the error indicates that our range
 		// descriptor is out of date, evict it from the cache and try
@@ -1360,7 +1360,7 @@ func (ds *DistSender) sendToReplicas(
 				if haveCommit && !grpcutil.RequestDidNotStart(err) {
 					ambiguousError = err
 				}
-				log.ErrEventf(ctx, "RPC error: %s", err)
+				log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			} else {
 				propagateError := false
 				switch tErr := call.Reply.Error.GetDetail().(type) {
@@ -1402,7 +1402,7 @@ func (ds *DistSender) sendToReplicas(
 					return call.Reply, nil
 				}
 
-				log.ErrEventf(ctx, "application error: %s", call.Reply.Error)
+				log.VErrEventf(ctx, 1, "application error: %s", call.Reply.Error)
 			}
 
 			if transport.IsExhausted() {
