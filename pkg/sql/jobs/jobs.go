@@ -361,6 +361,12 @@ func (j *Job) insert(ctx context.Context, id int64, payload *Payload) error {
 	}
 
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		// Note: although the following uses OrigTimestamp and
+		// OrigTimestamp can diverge from the value of now() throughout a
+		// transaction, this may be OK -- we merely required ModifiedMicro
+		// to be equal *or greater* than previously inserted timestamps
+		// computed by now(). For now OrigTimestamp can only move forward
+		// and the assertion OrigTimestamp >= now() holds at all times.
 		payload.ModifiedMicros = timeutil.ToUnixMicros(txn.Proto().OrigTimestamp.GoTime())
 		payloadBytes, err := protoutil.Marshal(payload)
 		if err != nil {
