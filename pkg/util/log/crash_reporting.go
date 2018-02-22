@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -270,15 +271,9 @@ func (e *safeError) Error() string {
 // anonymized reporting.
 func Redact(r interface{}) string {
 	typAnd := func(i interface{}, text string) string {
-		type stackTracer interface {
-			StackTrace() errors.StackTrace
-		}
-		typ := fmt.Sprintf("%T", i)
-		if e, ok := i.(stackTracer); ok {
-			tr := e.StackTrace()
-			if len(tr) > 0 {
-				typ = fmt.Sprintf("%v", tr[0]) // prints file:line
-			}
+		typ := util.ErrorSource(i)
+		if typ == "" {
+			typ = fmt.Sprintf("%T", i)
 		}
 		if text == "" {
 			return typ
