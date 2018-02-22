@@ -128,6 +128,7 @@ type sortAllProcessor struct {
 }
 
 var _ Processor = &sortAllProcessor{}
+var _ RowSource = &sortAllProcessor{}
 
 func newSortAllProcessor(s *sorterBase) Processor {
 	var rows memRowContainer
@@ -393,6 +394,7 @@ type sortTopKProcessor struct {
 }
 
 var _ Processor = &sortTopKProcessor{}
+var _ RowSource = &sortTopKProcessor{}
 
 func newSortTopKProcessor(s *sorterBase, k int64) Processor {
 	var rows memRowContainer
@@ -547,6 +549,7 @@ type sortChunksProcessor struct {
 }
 
 var _ Processor = &sortChunksProcessor{}
+var _ RowSource = &sortChunksProcessor{}
 
 func newSortChunksProcessor(s *sorterBase) Processor {
 	var rows memRowContainer
