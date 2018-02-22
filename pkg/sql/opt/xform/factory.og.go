@@ -1186,6 +1186,25 @@ func (_f *factory) ConstructFunction(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
 }
 
+// ConstructUnsupportedExpr constructs an expression for the UnsupportedExpr operator.
+// UnsupportedExpr is used for interfacing with the old planner code. It can
+// encapsulate a TypedExpr that is otherwise not supported by the optimizer.
+func (_f *factory) ConstructUnsupportedExpr(
+	value opt.PrivateID,
+) opt.GroupID {
+	_unsupportedExprExpr := makeUnsupportedExprExpr(value)
+	_group := _f.mem.lookupGroupByFingerprint(_unsupportedExprExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unsupportedExprExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unsupportedExprExpr)))
+}
+
 // ConstructScan constructs an expression for the Scan operator.
 // Scan returns a result set containing every row in the specified table. Rows
 // and columns are not expected to have any particular ordering. The private
@@ -1584,7 +1603,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [77]dynConstructLookupFunc
+var dynConstructLookup [78]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1870,6 +1889,11 @@ func init() {
 	// FunctionOp
 	dynConstructLookup[opt.FunctionOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructFunction(f.InternList(children), private)
+	}
+
+	// UnsupportedExprOp
+	dynConstructLookup[opt.UnsupportedExprOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnsupportedExpr(private)
 	}
 
 	// ScanOp

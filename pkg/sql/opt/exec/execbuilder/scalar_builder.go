@@ -39,10 +39,11 @@ func init() {
 	// the functions depend on scalarBuildFuncMap which in turn depends on the
 	// functions).
 	scalarBuildFuncMap = [opt.NumOperators]buildFunc{
-		opt.VariableOp:    (*Builder).buildVariable,
-		opt.ConstOp:       (*Builder).buildTypedExpr,
-		opt.PlaceholderOp: (*Builder).buildTypedExpr,
-		opt.TupleOp:       (*Builder).buildTuple,
+		opt.VariableOp:        (*Builder).buildVariable,
+		opt.ConstOp:           (*Builder).buildTypedExpr,
+		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
+		opt.TupleOp:           (*Builder).buildTuple,
+		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -151,4 +152,8 @@ func (b *Builder) buildBinary(ctx *buildScalarCtx, ev xform.ExprView) tree.Typed
 		b.buildScalar(ctx, ev.Child(1)),
 		ev.Logical().Scalar.Type,
 	)
+}
+
+func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	return ev.Private().(tree.TypedExpr)
 }
