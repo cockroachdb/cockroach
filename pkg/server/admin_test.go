@@ -835,7 +835,7 @@ func TestAdminAPISettings(t *testing.T) {
 	defer s.Stopper().Stop(context.TODO())
 
 	// Any bool that defaults to true will work here.
-	const settingKey = "diagnostics.reporting.report_metrics"
+	const settingKey = "sql.metrics.statement_details.enabled"
 	st := s.ClusterSettings()
 	allKeys := settings.Keys()
 
