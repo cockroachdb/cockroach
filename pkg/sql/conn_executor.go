@@ -317,7 +317,11 @@ func (s *Server) recordError(err error) {
 			}
 		}
 	} else {
-		s.errorCounts.codes["unknown"]++
+		typ := util.ErrorSource(err)
+		if typ == "" {
+			typ = "unknown"
+		}
+		s.errorCounts.codes[typ]++
 	}
 	s.errorCounts.Unlock()
 }
