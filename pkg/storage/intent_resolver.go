@@ -449,7 +449,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 			// before resolving the intents.
 			if txn.Status == roachpb.PENDING {
 				if !txnwait.IsExpired(now, txn) {
-					log.ErrEventf(ctx, "cannot push a PENDING transaction which is not expired: %s", txn)
+					log.VErrEventf(ctx, 3, "cannot push a PENDING transaction which is not expired: %s", txn)
 					return
 				}
 				b := &client.Batch{}
@@ -464,7 +464,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 				})
 				ir.store.metrics.GCPushTxn.Inc(1)
 				if err := ir.store.DB().Run(ctx, b); err != nil {
-					log.ErrEventf(ctx, "failed to push PENDING, expired txn (%s): %s", txn, err)
+					log.VErrEventf(ctx, 2, "failed to push PENDING, expired txn (%s): %s", txn, err)
 					return
 				}
 				// Get the pushed txn and update the intents slice.

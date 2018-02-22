@@ -125,7 +125,9 @@ func formatTags(ctx context.Context, buf *msgBuf) bool {
 func MakeMessage(ctx context.Context, format string, args []interface{}) string {
 	var buf msgBuf
 	formatTags(ctx, &buf)
-	if len(format) == 0 {
+	if len(args) == 0 {
+		buf.WriteString(format)
+	} else if len(format) == 0 {
 		fmt.Fprint(&buf, args...)
 	} else {
 		fmt.Fprintf(&buf, format, args...)
