@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -712,12 +713,12 @@ func (e *Executor) RecordError(err error) {
 	if err == nil {
 		return
 	}
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		e.errorCounts.Lock()
+	e.errorCounts.Lock()
 
-		if e.errorCounts.codes == nil {
-			e.errorCounts.codes = make(map[string]int64)
-		}
+	if e.errorCounts.codes == nil {
+		e.errorCounts.codes = make(map[string]int64)
+	}
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		e.errorCounts.codes[pgErr.Code]++
 
 		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
@@ -728,8 +729,14 @@ func (e *Executor) RecordError(err error) {
 				e.errorCounts.unimplemented[feature]++
 			}
 		}
-		e.errorCounts.Unlock()
+	} else {
+		typ := util.ErrorSource(err)
+		if typ == "" {
+			typ = "unknown"
+		}
+		e.errorCounts.codes[typ]++
 	}
+	e.errorCounts.Unlock()
 }
 
 // execParsed executes a batch of statements received as a unit from the client
