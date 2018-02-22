@@ -18,7 +18,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // These constants are single bytes for performance. They allow single-byte
@@ -252,11 +251,13 @@ var (
 
 	// TimeseriesPrefix is the key prefix for all timeseries data.
 	TimeseriesPrefix = roachpb.Key(makeKey(SystemPrefix, roachpb.RKey("tsd")))
+	// TimeseriesKeyMax is the maximum value for any timeseries data.
+	TimeseriesKeyMax = TimeseriesPrefix.PrefixEnd()
 
 	// TableDataMin is the start of the range of table data keys.
-	TableDataMin = roachpb.Key(encoding.EncodeVarintAscending(nil, 0))
+	TableDataMin = roachpb.Key(MakeTablePrefix(0))
 	// TableDataMin is the end of the range of table data keys.
-	TableDataMax = roachpb.Key(encoding.EncodeVarintAscending(nil, math.MaxInt64))
+	TableDataMax = roachpb.Key(MakeTablePrefix(math.MaxUint32))
 
 	// SystemConfigSplitKey is the key to split at immediately prior to the
 	// system config span. NB: Split keys need to be valid column keys.
