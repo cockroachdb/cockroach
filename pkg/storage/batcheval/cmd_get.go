@@ -36,7 +36,7 @@ func Get(
 	reply := resp.(*roachpb.GetResponse)
 
 	val, intents, err := engine.MVCCGet(ctx, batch, args.Key, h.Timestamp,
-		h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+		h.ReadConsistency == roachpb.CONSISTENT, false /* tombstones */, h.Txn)
 
 	reply.Value = val
 	if h.ReadConsistency == roachpb.READ_UNCOMMITTED {

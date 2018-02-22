@@ -199,7 +199,8 @@ func TestBootstrapCluster(t *testing.T) {
 	}
 
 	// Scan the complete contents of the local database directly from the engine.
-	rows, _, _, err := engine.MVCCScan(context.Background(), e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, nil)
+	rows, _, _, err := engine.MVCCScan(
+		context.Background(), e, keys.LocalMax, roachpb.KeyMax, math.MaxInt64, hlc.MaxTimestamp, true, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

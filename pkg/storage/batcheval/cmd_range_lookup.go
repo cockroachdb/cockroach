@@ -123,7 +123,7 @@ func DeprecatedRangeLookup(
 
 		// Scan for descriptors.
 		kvs, _, intents, err = engine.MVCCScan(
-			ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), rangeCount, ts, consistent, txn,
+			ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), rangeCount, ts, consistent, false /* tombstones */, txn,
 		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.
@@ -177,7 +177,7 @@ func DeprecatedRangeLookup(
 			}
 
 			kvs, _, intents, err = engine.MVCCScan(
-				ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), 1, ts, consistent, txn,
+				ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), 1, ts, consistent, false /* tombstones */, txn,
 			)
 			if err != nil {
 				return result.Result{}, err
@@ -197,7 +197,7 @@ func DeprecatedRangeLookup(
 
 		// Reverse scan for descriptors.
 		revKVs, _, revIntents, err := engine.MVCCReverseScan(
-			ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), rangeCount, ts, consistent, txn,
+			ctx, batch, span.Key.AsRawKey(), span.EndKey.AsRawKey(), rangeCount, ts, consistent, false /* tombstones */, txn,
 		)
 		if err != nil {
 			// An error here is likely a WriteIntentError when reading consistently.

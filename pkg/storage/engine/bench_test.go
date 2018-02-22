@@ -177,7 +177,7 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse b
 		endKey = endKey.Next()
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		kvs, _, _, err := scan(context.Background(), eng, startKey, endKey, int64(numRows), ts, true, nil)
+		kvs, _, _, err := scan(context.Background(), eng, startKey, endKey, int64(numRows), ts, true, false, nil)
 		if err != nil {
 			b.Fatalf("failed scan: %s", err)
 		}
@@ -211,7 +211,7 @@ func runMVCCGet(emk engineMaker, numVersions, valueSize int, b *testing.B) {
 		key := roachpb.Key(encoding.EncodeUvarintAscending(keyBuf[:4], uint64(keyIdx)))
 		walltime := int64(5 * (rand.Int31n(int32(numVersions)) + 1))
 		ts := hlc.Timestamp{WallTime: walltime}
-		if v, _, err := MVCCGet(context.Background(), eng, key, ts, true, nil); err != nil {
+		if v, _, err := MVCCGet(context.Background(), eng, key, ts, true, false, nil); err != nil {
 			b.Fatalf("failed get: %s", err)
 		} else if v == nil {
 			b.Fatalf("failed get (key not found): %d@%d", keyIdx, walltime)
@@ -484,7 +484,7 @@ func runMVCCMerge(emk engineMaker, value *roachpb.Value, numKeys int, b *testing
 
 	// Read values out to force merge.
 	for _, key := range keys {
-		val, _, err := MVCCGet(context.Background(), eng, key, hlc.Timestamp{}, true, nil)
+		val, _, err := MVCCGet(context.Background(), eng, key, hlc.Timestamp{}, true, false, nil)
 		if err != nil {
 			b.Fatal(err)
 		} else if val == nil {

@@ -102,7 +102,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
-		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.Timestamp{}, true, nil, false, f); err != nil {
+		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.Timestamp{}, true, false, nil, false, f); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -228,7 +228,7 @@ func TestStoreRangeMergeWithData(t *testing.T) {
 
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(aDesc.StartKey), keys.RangeDescriptorKey(bDesc.StartKey)} {
-		if _, _, err := engine.MVCCGet(context.Background(), store.Engine(), key, store.Clock().Now(), true, nil); err != nil {
+		if _, _, err := engine.MVCCGet(context.Background(), store.Engine(), key, store.Clock().Now(), true, false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

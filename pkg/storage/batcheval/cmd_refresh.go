@@ -42,11 +42,13 @@ func Refresh(
 	}
 
 	// Get the most recent committed value and return any intent by
-	// specifying consistent=false.
+	// specifying consistent=false. Note that we include tombstones,
+	// which must be considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Header(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
 	val, intents, err := engine.MVCCGet(
-		ctx, batch, args.Key, h.Txn.Timestamp, false /* consistent */, nil, /* txn */
+		ctx, batch, args.Key, h.Txn.Timestamp, false /* consistent */, true /* tombstones */, nil, /* txn */
 	)
+
 	if err != nil {
 		return result.Result{}, err
 	} else if val != nil {

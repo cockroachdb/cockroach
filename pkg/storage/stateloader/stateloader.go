@@ -167,7 +167,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 ) (uint64, uint64, error) {
 	var appliedIndex uint64
 	v, _, err := engine.MVCCGet(ctx, reader, rsl.RaftAppliedIndexKey(),
-		hlc.Timestamp{}, true, nil)
+		hlc.Timestamp{}, true /* consistent */, false /* tombstones */, nil)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -181,7 +181,7 @@ func (rsl StateLoader) LoadAppliedIndex(
 	// TODO(tschottdorf): code duplication.
 	var leaseAppliedIndex uint64
 	v, _, err = engine.MVCCGet(ctx, reader, rsl.LeaseAppliedIndexKey(),
-		hlc.Timestamp{}, true, nil)
+		hlc.Timestamp{}, true /* consistent */, false /* tombstones */, nil)
 	if err != nil {
 		return 0, 0, err
 	}

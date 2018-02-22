@@ -38,7 +38,7 @@ func Scan(
 	reply := resp.(*roachpb.ScanResponse)
 
 	rows, resumeSpan, intents, err := engine.MVCCScan(ctx, batch, args.Key, args.EndKey,
-		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, h.Txn)
+		cArgs.MaxKeys, h.Timestamp, h.ReadConsistency == roachpb.CONSISTENT, false /* tombstones */, h.Txn)
 	if err != nil {
 		return result.Result{}, err
 	}

@@ -70,7 +70,7 @@ func TestBatchReadLaterWrite(t *testing.T) {
 	// Read from a batch that was opened before the value was written to the
 	// underlying engine. The batch will see the write.
 	{
-		rv, _, err := MVCCGet(ctx, batch, key, hlc.Timestamp{}, true, nil)
+		rv, _, err := MVCCGet(ctx, batch, key, hlc.Timestamp{}, true, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -86,7 +86,7 @@ func TestBatchReadLaterWrite(t *testing.T) {
 	// Read from a snapshot opened prior to the write. The snapshot won't see the
 	// write.
 	{
-		rv, _, err := MVCCGet(ctx, snap, key, hlc.Timestamp{}, true, nil)
+		rv, _, err := MVCCGet(ctx, snap, key, hlc.Timestamp{}, true, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
