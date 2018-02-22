@@ -157,11 +157,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		// We can't join the request in progress.
 		// TODO(nvanbenschoten): should this return a LeaseRejectedError? Should
 		// it cancel and replace the request in progress? Reconsider.
-		llHandle := p.newHandle()
-		llHandle.resolve(roachpb.NewErrorf("request for different replica in progress "+
-			"(requesting: %+v, in progress: %+v)",
+		return p.newResolvedHandle(roachpb.NewErrorf(
+			"request for different replica in progress (requesting: %+v, in progress: %+v)",
 			nextLeaseHolder.ReplicaID, nextLease.Replica.ReplicaID))
-		return llHandle
 	}
 
 	// No request in progress. Let's propose a Lease command asynchronously.
@@ -400,6 +398,14 @@ func (p *pendingLeaseRequest) newHandle() *leaseRequestHandle {
 	}
 }
 
+// newResolvedHandle creates a new leaseRequestHandle referencing the pending
+// lease request. It then resolves the handle with the provided error.
+func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseRequestHandle {
+	h := p.newHandle()
+	h.resolve(pErr)
+	return h
+}
+
 // leaseStatus returns lease status. If the lease is epoch-based,
 // the liveness field will be set to the liveness used to compute
 // its state, unless state == leaseError.
@@ -510,22 +516,16 @@ func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) *l
 	// Propose a Raft command to get a lease for this replica.
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		llHandle := r.mu.pendingLeaseRequest.newHandle()
-		llHandle.resolve(roachpb.NewError(err))
-		return llHandle
+		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(err))
 	}
 	if transferLease, ok := r.mu.pendingLeaseRequest.TransferInProgress(repDesc.ReplicaID); ok {
-		llHandle := r.mu.pendingLeaseRequest.newHandle()
-		llHandle.resolve(roachpb.NewError(
+		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
 			newNotLeaseHolderError(&transferLease, r.store.StoreID(), r.mu.state.Desc)))
-		return llHandle
 	}
 	if r.store.IsDraining() {
 		// We've retired from active duty.
-		llHandle := r.mu.pendingLeaseRequest.newHandle()
-		llHandle.resolve(roachpb.NewError(
+		return r.mu.pendingLeaseRequest.newResolvedHandle(roachpb.NewError(
 			newNotLeaseHolderError(nil, r.store.StoreID(), r.mu.state.Desc)))
-		return llHandle
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
 		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
