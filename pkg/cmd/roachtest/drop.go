@@ -18,37 +18,74 @@ package main
 import (
 	"context"
 	"fmt"
+
+	_ "github.com/lib/pq"
 )
 
 func init() {
-	runTPCC := func(t *test, warehouses, nodes int, extra string) {
+	// TODO(tschottdorf): rearrange all tests so that their synopses are available
+	// via godoc and (some variation on) `roachtest run <testname> --help`.
+
+	// This test imports a TPCC dataset and then issues a manual deletion followed
+	// by a truncation for the `stock` table (which contains warehouses*100k
+	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
+	// to one second.
+	runDrop := func(t *test, warehouses, nodes int) {
 		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1)
+		c := newCluster(ctx, t, nodes)
 		defer c.Destroy(ctx)
 
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
+		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, workload, "./workload", c.All())
+		c.Start(ctx, c.All())
 
-		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
+		t.Status("importing TPCC fixture")
+		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
-			duration := " --duration=" + ifLocal("10s", "10m")
 			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d"+
-					extra+duration+" {pgurl:1-%d}",
-				warehouses, nodes)
-			c.Run(ctx, nodes+1, cmd)
+				"./workload fixtures load tpcc --warehouses=%d --into-db tpcc {pgurl:1}", warehouses)
+			c.Run(ctx, 1, cmd)
+
+			run := func(stmt string) {
+				t.Status(stmt)
+				c.Run(ctx, 1, `./cockroach sql --insecure -e "`+stmt+`"`)
+			}
+
+			const stmtDelete = "DELETE FROM tpcc.stock"
+			run(stmtDelete)
+
+			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
+			run(stmtTruncate)
+
+			const stmtDrop = "DROP DATABASE tpcc"
+			run(stmtDrop)
+			// The data has already been deleted, but changing the default zone config
+			// should take effect retroactively.
+			const stmtZone = `ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '
+gc:
+  ttlseconds: 1
+'`
+			run(stmtZone)
+
+			// TODO(tschottdorf): assert that the disk usage drops to "near nothing".
 			return nil
 		})
 		m.Wait()
 	}
 
-	tests.Add("tpcc/w=1/nodes=3", func(t *test) {
-		concurrency := ifLocal("", " --concurrency=384")
-		runTPCC(t, 1, 3, " --wait=false"+concurrency)
-	})
-	tests.Add("tpmc/w=1/nodes=3", func(t *test) {
-		runTPCC(t, 1, 3, " --concurrency=10")
-	})
+	warehouses := 100
+	nodes := 9
+
+	tests.Add(
+		fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, nodes),
+		func(t *test) {
+			// NB: this is likely not going to work out in `-local` mode. Edit the
+			// numbers during iteration.
+			if local {
+				nodes = 4
+				warehouses = 1
+				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, nodes)
+			}
+			runDrop(t, warehouses, nodes)
+		})
 }
