@@ -226,7 +226,7 @@ func checkTxn(txn *client.Txn, exp expKVTxn) error {
 		return errors.Errorf("expected Timestamp: %d, but got: %s",
 			*exp.tsNanos, txn.Proto().Timestamp)
 	}
-	if origTimestamp := txn.OrigTimestamp(false /*mattersForTxnOrdering*/); exp.origTSNanos != nil &&
+	if origTimestamp := txn.OrigTimestamp(); exp.origTSNanos != nil &&
 		*exp.origTSNanos != origTimestamp.WallTime {
 		return errors.Errorf("expected OrigTimestamp: %d, but got: %s",
 			*exp.origTSNanos, origTimestamp)
