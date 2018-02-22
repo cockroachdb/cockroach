@@ -105,25 +105,25 @@ error: aggregate function cannot be nested within another aggregate function
 build
 SELECT MAX(k), MIN(v) FROM t.kv HAVING k
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Expressions listed in the HAVING clause must conform to same validation as the SELECT clause (grouped or aggregated).
 build
 SELECT 3 FROM t.kv GROUP BY v HAVING k > 5
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # pg has a special case for grouping on primary key, which would allow this, but we do not.
 # See http://www.postgresql.org/docs/current/static/sql-select.html#SQL-GROUPBY
 build
 SELECT 3 FROM t.kv GROUP BY k HAVING v > 2
 ----
-error: column "kv.v" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.kv.v" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT k FROM t.kv HAVING k > 7
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 build
 SELECT count(*), k+w FROM t.kv GROUP BY k+w HAVING (k+w) > 5
@@ -154,7 +154,7 @@ project
 build
 SELECT count(*), k+w FROM t.kv GROUP BY k+w HAVING (k+v) > 5
 ----
-error: column "kv.k" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.kv.k" must appear in the GROUP BY clause or be used in an aggregate function
 
 # Check that everything still works with differently qualified names
 build
@@ -257,4 +257,4 @@ project
 build
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
 ----
-error: column "kv.w" must appear in the GROUP BY clause or be used in an aggregate function
+error: column "t.kv.w" must appear in the GROUP BY clause or be used in an aggregate function

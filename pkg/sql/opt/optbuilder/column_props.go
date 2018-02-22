@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -28,8 +27,8 @@ import (
 // interface. During name resolution, unresolved column names in the AST are
 // replaced with a columnProps.
 type columnProps struct {
-	name  optbase.ColumnName
-	table optbase.TableName
+	name  tree.Name
+	table tree.TableName
 	typ   types.T
 
 	// index is an identifier for this column, which is unique across all the
@@ -42,35 +41,26 @@ var _ tree.Expr = &columnProps{}
 var _ tree.TypedExpr = &columnProps{}
 var _ tree.VariableExpr = &columnProps{}
 
-func (c columnProps) String() string {
-	if c.name == "" {
-		return fmt.Sprintf("@%d", c.index+1)
-	}
-	if c.table == "" {
-		return tree.NameString(string(c.name))
-	}
-	return fmt.Sprintf("%s.%s",
-		tree.NameString(string(c.table)), tree.NameString(string(c.name)))
+func (c *columnProps) String() string {
+	return tree.AsString(c)
 }
 
-// matches returns true if:
-// (a) the provided table name and column name match the corresponding names
-//     in the columnProps, or
-// (b) the provided column name matches the name in columnProps and the
-//     provided table name is empty.
-func (c columnProps) matches(tblName optbase.TableName, colName optbase.ColumnName) bool {
-	if colName != c.name {
-		return false
-	}
-	if tblName == "" {
-		return true
-	}
-	return c.table == tblName
-}
-
-// Format is part of the tree.Expr interface.
+// Format implements the NodeFormatter interface.
 func (c *columnProps) Format(ctx *tree.FmtCtx) {
-	ctx.Printf(c.String())
+	if c.table.TableName != "" {
+		if c.table.ExplicitSchema && c.table.SchemaName != "" {
+			if c.table.ExplicitCatalog && c.table.CatalogName != "" {
+				ctx.FormatNode(&c.table.CatalogName)
+				ctx.WriteByte('.')
+			}
+			ctx.FormatNode(&c.table.SchemaName)
+			ctx.WriteByte('.')
+		}
+
+		ctx.FormatNode(&c.table.TableName)
+		ctx.WriteByte('.')
+	}
+	ctx.FormatNode(&c.name)
 }
 
 // Walk is part of the tree.Expr interface.

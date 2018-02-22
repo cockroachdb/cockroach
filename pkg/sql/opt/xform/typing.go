@@ -52,6 +52,7 @@ func init() {
 		opt.AggregationsOp:    typeAsAny,
 		opt.ExistsOp:          typeAsBool,
 		opt.FunctionOp:        typeFunction,
+		opt.CoalesceOp:        typeCoalesce,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -158,4 +159,20 @@ func typeFunction(ev ExprView) types.T {
 // behalf of the Project operator, but its type is never used.
 func typeAsAny(_ ExprView) types.T {
 	return types.Any
+}
+
+// typeCoalesce returns the type of a coalesce expression, which is equal to
+// the type of its children.
+func typeCoalesce(ev ExprView) types.T {
+	typ := types.Null
+	for i := 0; i < ev.ChildCount(); i++ {
+		childType := ev.Child(i).Logical().Scalar.Type
+		if typ == types.Null {
+			typ = childType
+		} else if childType != types.Null && !typ.Equivalent(childType) {
+			panic(fmt.Sprintf("could not find type for coalesce expression: %v", ev))
+		}
+	}
+
+	return typ
 }
