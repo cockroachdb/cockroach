@@ -481,7 +481,7 @@ sort             ·      ·
  │               order  +b,+a,+d
  └── index-join  ·      ·
       ├── scan   ·      ·
-      │          table  abc@ba
+      │          table  abc@bc
       │          spans  /11-
       └── scan   ·      ·
 ·                table  abc@primary
