@@ -2146,7 +2146,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			expFailure: "unexpected value", // the failure we get is a condition failed error
 		},
 		{
-			name: "write too old with initput failing on tombstone",
+			name: "write too old with initput failing on tombstone before",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Del(ctx, "iput")
 			},
@@ -2157,6 +2157,37 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.InitPut(ctx, "iput", "put2", true)
 			},
 			expFailure: "unexpected value", // condition failed error when failing on tombstones
+		},
+		{
+			name: "write too old with initput failing on tombstone after",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "iput", "put")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				// The first time through, this will be a noop, as put is the existing value.
+				if err := txn.InitPut(ctx, "iput", "put", true); err != nil {
+					return err
+				}
+				// Create an out-of-band tombstone on the iput, which must be refreshed
+				// when the put below experiences a write-too-old error.
+				if err := txn.DB().Del(ctx, "iput"); err != nil {
+					return err
+				}
+				// Write the version of "a" which triggers write-too-old
+				// *after* the tombstone at the "iput" key, to ensure we see the
+				// tombstone when refreshing the iput span.
+				if err := txn.DB().Put(ctx, "a", "value"); err != nil {
+					return err
+				}
+				// This command will get a write too old and refresh the init
+				// put, forcing a client-retry. On the retry, the init put
+				// will fail with a condition failed error.
+				return txn.Put(ctx, "a", "value")
+			},
+			clientRetry: true,
+			// Would get a condition failed error when failing on
+			// tombstones, but the retryable is not re-executed in the
+			// test fixture.
 		},
 		{
 			name: "write too old with put in batch commit",

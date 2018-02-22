@@ -229,6 +229,7 @@ func iterateEntries(
 		keys.RaftLogKey(rangeID, hi),
 		hlc.Timestamp{},
 		true,  /* consistent */
+		false, /* tombstones */
 		nil,   /* txn */
 		false, /* reverse */
 		scanFunc,
