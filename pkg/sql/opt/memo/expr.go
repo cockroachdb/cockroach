@@ -14,8 +14,6 @@
 
 package memo
 
-//go:generate optgen -out expr.og.go exprs ../ops/*.opt
-
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )

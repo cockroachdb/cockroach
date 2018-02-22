@@ -24,8 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
-
 // DynamicID is used when dynamically creating operators using the factory's
 // DynamicConstruct method. Each operand, whether it be a group, a private, or
 // a list, is first converted to a DynamicID and then passed as one of the
