@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -151,12 +152,39 @@ func TestReportUsage(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := db.Exec(`SELECT 1::INTERVAL(1)`); !testutils.IsError(
-			err, "unimplemented",
+		if _, err := db.Exec(`some non-parsing garbage`); !testutils.IsError(
+			err, "syntax",
+		) {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`SELECT crdb_internal.force_error('blah', $1)`, elemName); !testutils.IsError(
+			err, elemName,
+		) {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`SELECT crdb_internal.force_error('', $1)`, elemName); !testutils.IsError(
+			err, elemName,
+		) {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`SELECT 2/0`); !testutils.IsError(
+			err, "division by zero",
+		) {
+			t.Fatal(err)
+		}
+		// pass args to force a prepare/exec path as that may differ.
+		if _, err := db.Exec(`SELECT 2/$1`, 0); !testutils.IsError(
+			err, "division by zero",
 		) {
 			t.Fatal(err)
 		}
 		if _, err := db.Exec(`ALTER TABLE foo RENAME CONSTRAINT x TO y`); !testutils.IsError(
+			err, "unimplemented",
+		) {
+			t.Fatal(err)
+		}
+		// pass args to force a prepare/exec path as that may differ.
+		if _, err := db.Exec(`SELECT 1::INTERVAL(1), $1`, 1); !testutils.IsError(
 			err, "unimplemented",
 		) {
 			t.Fatal(err)
@@ -303,6 +331,26 @@ func TestReportUsage(t *testing.T) {
 			t.Fatalf("reported table %d does not match: expected\n%+v got\n%+v", tbl.ID, tbl, r)
 		}
 	}
+
+	if expected, actual := 5, len(r.last.ErrorCounts); expected != actual {
+		t.Fatalf("expected %d error codes counts in report, got %d (%v)", expected, actual, r.last.ErrorCounts)
+	}
+
+	for code, expected := range map[string]int64{
+		pgerror.CodeSyntaxError:              10,
+		pgerror.CodeFeatureNotSupportedError: 30,
+		pgerror.CodeDivisionByZeroError:      20,
+		"blah":    10,
+		"unknown": 10,
+	} {
+		if actual := r.last.ErrorCounts[code]; expected != actual {
+			t.Fatalf(
+				"unexpected %d hits to error code %q, got %d from %v",
+				expected, code, actual, r.last.ErrorCounts,
+			)
+		}
+	}
+
 	if expected, actual := 3, len(r.last.UnimplementedErrors); expected != actual {
 		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
 	}
@@ -338,7 +386,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 12, len(r.last.SqlStats); expected != actual {
+	if expected, actual := 15, len(r.last.SqlStats); expected != actual {
 		t.Fatalf("expected %d queries in stats report, got %d :\n %v", expected, actual, r.last.SqlStats)
 	}
 
@@ -360,6 +408,9 @@ func TestReportUsage(t *testing.T) {
 			`INSERT INTO _ VALUES (_)`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
+			`SELECT _ / $1`,
+			`SELECT _ / _`,
+			`SELECT crdb_internal.force_error(_, $1)`,
 			`SET CLUSTER SETTING _ = _`,
 			`SET CLUSTER SETTING _ = _`, // these are scrubbed to same key.
 		},

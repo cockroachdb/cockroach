@@ -349,31 +349,23 @@ func (e *Executor) ResetStatementStats(ctx context.Context) {
 	e.sqlStats.resetStats(ctx)
 }
 
-// FillUnimplementedErrorCounts fills the passed map with the executor's current
+// FillErrorCounts fills the passed map with the executor's current
 // counts of how often individual unimplemented features have been encountered.
-func (e *Executor) FillUnimplementedErrorCounts(fill map[string]int64) {
-	e.unimplementedErrors.Lock()
-	for k, v := range e.unimplementedErrors.counts {
-		fill[k] = v
+func (e *Executor) FillErrorCounts(codes, unimplemented map[string]int64) {
+	e.errorCounts.Lock()
+	for k, v := range e.errorCounts.codes {
+		codes[k] = v
 	}
-	e.unimplementedErrors.Unlock()
+	for k, v := range e.errorCounts.unimplemented {
+		unimplemented[k] = v
+	}
+	e.errorCounts.Unlock()
 }
 
-func (e *Executor) recordUnimplementedFeature(feature string) {
-	if feature == "" {
-		return
-	}
-	e.unimplementedErrors.Lock()
-	if e.unimplementedErrors.counts == nil {
-		e.unimplementedErrors.counts = make(map[string]int64)
-	}
-	e.unimplementedErrors.counts[feature]++
-	e.unimplementedErrors.Unlock()
-}
-
-// ResetUnimplementedCounts resets counting of unimplemented errors.
-func (e *Executor) ResetUnimplementedCounts() {
-	e.unimplementedErrors.Lock()
-	e.unimplementedErrors.counts = make(map[string]int64, len(e.unimplementedErrors.counts))
-	e.unimplementedErrors.Unlock()
+// ResetErrorCounts resets counts of errors returned.
+func (e *Executor) ResetErrorCounts() {
+	e.errorCounts.Lock()
+	e.errorCounts.codes = make(map[string]int64, len(e.errorCounts.codes))
+	e.errorCounts.unimplemented = make(map[string]int64, len(e.errorCounts.unimplemented))
+	e.errorCounts.Unlock()
 }

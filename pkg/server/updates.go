@@ -244,10 +244,10 @@ func (s *Server) maybeReportDiagnostics(
 	}
 	if !s.cfg.UseLegacyConnHandling {
 		s.pgServer.SQLServer.ResetStatementStats(ctx)
-		s.pgServer.SQLServer.ResetUnimplementedCounts()
+		s.pgServer.SQLServer.ResetErrorCounts()
 	} else {
 		s.sqlExecutor.ResetStatementStats(ctx)
-		s.sqlExecutor.ResetUnimplementedCounts()
+		s.sqlExecutor.ResetErrorCounts()
 	}
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
@@ -294,6 +294,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		schema = nil
 	}
 	info.Schema = schema
+	info.ErrorCounts = make(map[string]int64)
 	info.UnimplementedErrors = make(map[string]int64)
 
 	// Read the system.settings table to determine the settings for which we have
@@ -333,10 +334,10 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 
 	if !s.cfg.UseLegacyConnHandling {
 		info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
-		s.pgServer.SQLServer.FillUnimplementedErrorCounts(info.UnimplementedErrors)
+		s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
 	} else {
 		info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
-		s.sqlExecutor.FillUnimplementedErrorCounts(info.UnimplementedErrors)
+		s.sqlExecutor.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
 	}
 	return &info
 }
