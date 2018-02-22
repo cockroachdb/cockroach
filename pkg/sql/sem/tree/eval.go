@@ -1001,7 +1001,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				div := ctx.getTmpDec().SetCoefficient(int64(rInt)).SetExponent(0)
 				dd := &DDecimal{}
 				dd.SetCoefficient(int64(MustBeDInt(left)))
-				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
+				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, div)
+				if cond.DivisionByZero() {
+					return dd, ErrDivByZero
+				}
 				return dd, err
 			},
 		},
@@ -1021,7 +1024,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				l := &left.(*DDecimal).Decimal
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
-				_, err := DecimalCtx.Quo(&dd.Decimal, l, r)
+				cond, err := DecimalCtx.Quo(&dd.Decimal, l, r)
+				if cond.DivisionByZero() {
+					return dd, ErrDivByZero
+				}
 				return dd, err
 			},
 		},
@@ -1034,7 +1040,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				r := MustBeDInt(right)
 				dd := &DDecimal{}
 				dd.SetCoefficient(int64(r))
-				_, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
+				cond, err := DecimalCtx.Quo(&dd.Decimal, l, &dd.Decimal)
+				if cond.DivisionByZero() {
+					return dd, ErrDivByZero
+				}
 				return dd, err
 			},
 		},
@@ -1047,7 +1056,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				r := &right.(*DDecimal).Decimal
 				dd := &DDecimal{}
 				dd.SetCoefficient(int64(l))
-				_, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
+				cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, r)
+				if cond.DivisionByZero() {
+					return dd, ErrDivByZero
+				}
 				return dd, err
 			},
 		},
