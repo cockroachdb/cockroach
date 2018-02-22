@@ -454,7 +454,7 @@ func useInterleavedJoin(n *joinNode) bool {
 //        Join on PK1 (this is a prefix of the parent PKs).
 //        For child key /5/6/#/42, the maximal join prefix is /5
 //
-//  3. Subest joins:
+//  3. Subset joins:
 //        Parent table (PK1, PK2, PK3)
 //        Child table (PK1, PK2, PK3, PK4)
 //        Join on PK1, PK3
@@ -527,9 +527,23 @@ func maximalJoinPrefix(
 		if len(key) == 0 {
 			break
 		}
+		// Note: this key might have been edited with PrefixEnd. This can cause
+		// problems for certain datatypes, like strings, which have a sentinel byte
+		// sequence indicating the end of the type. In that case, PeekLength will
+		// fail. If that happens, we try to UndoPrefixEnd the key and check the
+		// length again.
+		// TODO(jordan): this function should be aware of whether a key has been
+		// PrefixEnd'd or not, and act accordingly.
 		valLen, err := encoding.PeekLength(key)
 		if err != nil {
-			return nil, false, err
+			key, ok := encoding.UndoPrefixEnd(key)
+			if !ok {
+				return nil, false, err
+			}
+			valLen, err = encoding.PeekLength(key)
+			if err != nil {
+				return nil, false, err
+			}
 		}
 		prefixLen += valLen
 		key = key[valLen:]
