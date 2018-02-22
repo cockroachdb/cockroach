@@ -136,7 +136,7 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, sequenceName,
-		params.p.txn.OrigTimestamp(true /*mattersForTxnOrdering*/), privileges)
+		params.p.txn.CommitTimestamp(), privileges)
 
 	// Mimic a table with one column, "value".
 	desc.Columns = []sqlbase.ColumnDescriptor{
