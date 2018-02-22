@@ -23,7 +23,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"os/user"
 	"path/filepath"
 	"regexp"
@@ -105,49 +104,53 @@ func initBinaries() {
 
 var clusters = map[*cluster]struct{}{}
 var clustersMu syncutil.Mutex
-var clustersOnce sync.Once
 var interrupted int32
 
+func destroyAllClusters() {
+	atomic.StoreInt32(&interrupted, 1)
+
+	// Fire off a goroutine to destroy all of the clusters.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		var wg sync.WaitGroup
+		clustersMu.Lock()
+		wg.Add(len(clusters))
+		for c := range clusters {
+			go func(c *cluster) {
+				defer wg.Done()
+				c.destroy(context.Background())
+			}(c)
+		}
+		clusters = map[*cluster]struct{}{}
+		clustersMu.Unlock()
+
+		wg.Wait()
+	}()
+
+	// Wait up to 5 min for clusters to be destroyed. This can take a while and
+	// we don't want to rush it.
+	select {
+	case <-done:
+	case <-time.After(5 * time.Minute):
+	}
+}
+
 func registerCluster(c *cluster) {
-	clustersOnce.Do(func() {
-		go func() {
-			// Shut down test clusters when interrupted (for example CTRL+C).
-			sig := make(chan os.Signal, 1)
-			signal.Notify(sig, os.Interrupt)
-			<-sig
-			atomic.StoreInt32(&interrupted, 1)
-
-			// Fire off a goroutine to destroy all of the clusters.
-			done := make(chan struct{})
-			go func() {
-				defer close(done)
-
-				var wg sync.WaitGroup
-				clustersMu.Lock()
-				wg.Add(len(clusters))
-				for c := range clusters {
-					go func(c *cluster) {
-						defer wg.Done()
-						c.destroy(context.Background())
-					}(c)
-				}
-				clustersMu.Unlock()
-
-				wg.Wait()
-			}()
-
-			// Wait up to 5 min for clusters to be destroyed. This can take a while and
-			// we don't want to rush it.
-			select {
-			case <-done:
-			case <-time.After(5 * time.Minute):
-			}
-		}()
-	})
-
 	clustersMu.Lock()
 	clusters[c] = struct{}{}
 	clustersMu.Unlock()
+}
+
+func unregisterCluster(c *cluster) bool {
+	clustersMu.Lock()
+	_, exists := clusters[c]
+	if exists {
+		delete(clusters, c)
+	}
+	clustersMu.Unlock()
+	return exists
 }
 
 func execCmd(ctx context.Context, l *logger, args ...string) error {
@@ -168,8 +171,6 @@ func makeClusterName(t testI) string {
 	if local {
 		return "local"
 	}
-
-	// TODO(peter): Add an option to use an existing cluster.
 
 	if username == "" {
 		usr, err := user.Current()
@@ -267,11 +268,12 @@ func (n nodeListOption) String() string {
 // between a test and a subtest is current disallowed (see cluster.assertT). A
 // cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name   string
-	nodes  int
-	status func(...interface{})
-	t      testI
-	l      *logger
+	name      string
+	nodes     int
+	status    func(...interface{})
+	t         testI
+	l         *logger
+	destroyed chan struct{}
 }
 
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
@@ -288,11 +290,12 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 	}
 
 	c := &cluster{
-		name:   makeClusterName(t),
-		nodes:  nodes,
-		status: func(...interface{}) {},
-		t:      t,
-		l:      l,
+		name:      makeClusterName(t),
+		nodes:     nodes,
+		status:    func(...interface{}) {},
+		t:         t,
+		l:         l,
+		destroyed: make(chan struct{}),
 	}
 	if impl, ok := t.(*test); ok {
 		c.status = impl.Status
@@ -352,10 +355,23 @@ func (c *cluster) Destroy(ctx context.Context) {
 		_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
 			filepath.Join(artifacts, c.t.Name(), "logs"))
 	}
-	c.destroy(ctx)
+	// Only destroy the cluster if it exists in the cluster registry. The cluster
+	// may not exist if the test was interrupted and the teardown machinery is
+	// destroying all clusters. (See destroyAllClusters).
+	if exists := unregisterCluster(c); exists {
+		c.destroy(ctx)
+	}
+	// If the test was interrupted, another goroutine is destroying the cluster
+	// and we need to wait for that to finish before closing the
+	// logger. Otherwise, the destruction can get interrupted due to closing the
+	// stdout/stderr of the roachprod command.
+	<-c.destroyed
+	c.l.close()
 }
 
 func (c *cluster) destroy(ctx context.Context) {
+	defer close(c.destroyed)
+
 	if c.name != clusterName {
 		c.status("destroying cluster")
 		if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
@@ -367,12 +383,6 @@ func (c *cluster) destroy(ctx context.Context) {
 			c.l.errorf("%s", err)
 		}
 	}
-
-	clustersMu.Lock()
-	delete(clusters, c)
-	clustersMu.Unlock()
-
-	c.l.close()
 }
 
 // Put a local file to all of the machines in a cluster.
