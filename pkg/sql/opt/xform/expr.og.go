@@ -301,6 +301,11 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 0 + int(functionExpr.args().Length)
 	},
 
+	// UnsupportedExprOp
+	func(ev ExprView) int {
+		return 0
+	},
+
 	// ScanOp
 	func(ev ExprView) int {
 		return 0
@@ -1129,6 +1134,11 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
+	// UnsupportedExprOp
+	func(ev ExprView, n int) opt.GroupID {
+		panic("child index out of range")
+	},
+
 	// ScanOp
 	func(ev ExprView, n int) opt.GroupID {
 		panic("child index out of range")
@@ -1737,6 +1747,12 @@ var privateLookup = [...]privateLookupFunc{
 		return functionExpr.def()
 	},
 
+	// UnsupportedExprOp
+	func(ev ExprView) opt.PrivateID {
+		unsupportedExprExpr := (*unsupportedExprExpr)(ev.mem.lookupExpr(ev.loc))
+		return unsupportedExprExpr.value()
+	},
+
 	// ScanOp
 	func(ev ExprView) opt.PrivateID {
 		scanExpr := (*scanExpr)(ev.mem.lookupExpr(ev.loc))
@@ -1910,6 +1926,7 @@ var isScalarLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	true,  // FunctionOp
+	true,  // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -1993,6 +2010,7 @@ var isConstValueLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2076,6 +2094,7 @@ var isBooleanLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2159,6 +2178,7 @@ var isComparisonLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2242,6 +2262,7 @@ var isBinaryLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2325,6 +2346,7 @@ var isUnaryLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2408,6 +2430,7 @@ var isRelationalLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	true,  // ScanOp
 	true,  // ValuesOp
 	true,  // SelectOp
@@ -2491,6 +2514,7 @@ var isJoinLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2574,6 +2598,7 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -2657,6 +2682,7 @@ var isEnforcerLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // FunctionOp
+	false, // UnsupportedExprOp
 	false, // ScanOp
 	false, // ValuesOp
 	false, // SelectOp
@@ -4091,6 +4117,29 @@ func (m *memoExpr) asFunction() *functionExpr {
 		return nil
 	}
 	return (*functionExpr)(m)
+}
+
+// unsupportedExprExpr is used for interfacing with the old planner code. It can
+// encapsulate a TypedExpr that is otherwise not supported by the optimizer.
+type unsupportedExprExpr memoExpr
+
+func makeUnsupportedExprExpr(value opt.PrivateID) unsupportedExprExpr {
+	return unsupportedExprExpr{op: opt.UnsupportedExprOp, state: exprState{uint32(value)}}
+}
+
+func (e *unsupportedExprExpr) value() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
+}
+
+func (e *unsupportedExprExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnsupportedExpr() *unsupportedExprExpr {
+	if m.op != opt.UnsupportedExprOp {
+		return nil
+	}
+	return (*unsupportedExprExpr)(m)
 }
 
 // scanExpr returns a result set containing every row in the specified table. Rows
