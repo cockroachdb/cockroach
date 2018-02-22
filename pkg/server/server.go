@@ -243,6 +243,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		st,
 		s.distSender,
 		s.clock,
+		s.gossip,
 		s.cfg.Linearizable,
 		s.stopper,
 		txnMetrics,

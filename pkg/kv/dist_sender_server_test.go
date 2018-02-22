@@ -99,6 +99,7 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 		cluster.MakeTestingClusterSettings(),
 		ds,
 		s.Clock(),
+		s.(*server.TestServer).Gossip(),
 		false, /* linearizable */
 		s.Stopper(),
 		kv.MakeTxnMetrics(metric.TestSampleInterval),

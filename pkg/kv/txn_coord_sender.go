@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -221,6 +222,7 @@ type TxnCoordSenderFactory struct {
 	st                *cluster.Settings
 	wrapped           client.Sender
 	clock             *hlc.Clock
+	gossip            *gossip.Gossip
 	heartbeatInterval time.Duration
 	clientTimeout     time.Duration
 	linearizable      bool // enables linearizable behavior
@@ -242,6 +244,7 @@ func NewTxnCoordSenderFactory(
 	st *cluster.Settings,
 	wrapped client.Sender,
 	clock *hlc.Clock,
+	gossip *gossip.Gossip,
 	linearizable bool,
 	stopper *stop.Stopper,
 	txnMetrics TxnMetrics,
@@ -251,6 +254,7 @@ func NewTxnCoordSenderFactory(
 		st:                st,
 		wrapped:           wrapped,
 		clock:             clock,
+		gossip:            gossip,
 		heartbeatInterval: base.DefaultHeartbeatInterval,
 		clientTimeout:     defaultClientTimeout,
 		linearizable:      linearizable,
@@ -899,6 +903,21 @@ func (tc *TxnCoordSender) validateTxnForBatch(ctx context.Context, ba *roachpb.B
 			haveBeginTxn = true
 		}
 	}
+
+	if len(ba.Txn.ObservedTimestamps) == 0 && tc.typ == client.RootTxn && tc.gossip != nil {
+		// Ensure the local NodeID is marked as free from clock offset;
+		// the transaction's timestamp was taken off the local clock. Note
+		// that we only do this if the transaction coordinator is for the
+		// root transaction, not a distributed leaf.
+		if nodeID := tc.gossip.NodeID.Get(); nodeID != 0 {
+			// OrigTimestamp is the HLC timestamp at which the Txn started, so
+			// this effectively means no more uncertainty on this node.
+			txnClone := ba.Txn.Clone()
+			txnClone.UpdateObservedTimestamp(nodeID, txnClone.OrigTimestamp)
+			ba.Txn = &txnClone
+		}
+	}
+
 	return nil
 }
 

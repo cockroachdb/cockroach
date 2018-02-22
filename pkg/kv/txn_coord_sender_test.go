@@ -363,6 +363,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 		st,
 		NewDistSender(cfg, s.Gossip),
 		s.Clock,
+		s.Gossip,
 		false, /* linearizable */
 		s.Stopper,
 		MakeTxnMetrics(metric.TestSampleInterval),
@@ -986,6 +987,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 				cluster.MakeTestingClusterSettings(),
 				senderFn,
 				clock,
+				nil,   /* gossip */
 				false, /* linearizable */
 				stopper,
 				MakeTxnMetrics(metric.TestSampleInterval),
@@ -1167,7 +1169,7 @@ func TestTxnCoordSenderSingleRoundtripTxn(t *testing.T) {
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	factory := NewTxnCoordSenderFactory(
 		ambient, cluster.MakeTestingClusterSettings(),
-		senderFn, clock, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
+		senderFn, clock, nil /* gossip */, false, stopper, MakeTxnMetrics(metric.TestSampleInterval),
 	)
 	tc := factory.New(client.RootTxn)
 
@@ -1227,6 +1229,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 				cluster.MakeTestingClusterSettings(),
 				senderFn,
 				clock,
+				nil, /* gossip */
 				false,
 				stopper,
 				MakeTxnMetrics(metric.TestSampleInterval),
@@ -1279,6 +1282,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 		cluster.MakeTestingClusterSettings(),
 		senderFn,
 		clock,
+		nil, /* gossip */
 		false,
 		stopper,
 		MakeTxnMetrics(metric.TestSampleInterval),
@@ -1808,6 +1812,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				cluster.MakeTestingClusterSettings(),
 				senderFn,
 				clock,
+				nil, /* gossip */
 				false,
 				stopper,
 				MakeTxnMetrics(metric.TestSampleInterval),

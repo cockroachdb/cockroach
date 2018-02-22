@@ -88,6 +88,7 @@ func InitFactoryForLocalTestCluster(
 		st,
 		distSender,
 		clock,
+		gossip,
 		false, /* linearizable */
 		stopper,
 		MakeTxnMetrics(metric.TestSampleInterval),

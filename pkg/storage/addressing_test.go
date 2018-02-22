@@ -143,7 +143,7 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		// intents, otherwise the MVCCScan that the test does below fails.
 		tcsf := kv.NewTxnCoordSenderFactory(
 			log.AmbientContext{Tracer: st.Tracer}, st,
-			store.testSender(), store.cfg.Clock,
+			store.testSender(), store.cfg.Clock, store.cfg.Gossip,
 			false, stopper, kv.MakeTxnMetrics(time.Second),
 		)
 		db := client.NewDB(tcsf, store.cfg.Clock)

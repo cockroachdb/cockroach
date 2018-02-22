@@ -89,6 +89,7 @@ func createTestNode(
 		st,
 		distSender,
 		cfg.Clock,
+		cfg.Gossip,
 		false, /* linearizable */
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
