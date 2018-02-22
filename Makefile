@@ -191,6 +191,7 @@ TAR     ?= tar
 PKG_ROOT       := ./pkg
 UI_ROOT        := $(PKG_ROOT)/ui
 SQLPARSER_ROOT := $(PKG_ROOT)/sql/parser
+OPT_ROOT       := $(PKG_ROOT)/sql/opt
 
 # Ensure we have an unambiguous GOPATH.
 export GOPATH := $(realpath ../../../..)
@@ -690,6 +691,12 @@ SQLPARSER_TARGETS = \
 
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
+OPTGEN_TARGETS = \
+	$(OPT_ROOT)/opt/factory.og.go \
+	$(OPT_ROOT)/opt/operator.og.go \
+	$(OPT_ROOT)/xform/expr.og.go \
+	$(OPT_ROOT)/xform/factory.og.go
+
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
@@ -711,7 +718,8 @@ BUILDINFO = .buildinfo/tag .buildinfo/rev
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
-	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) protobuf
+	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) \
+	$(OPTGEN_TARGETS) protobuf
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -837,12 +845,15 @@ dupl: $(BOOTSTRAP_TARGET)
 	       -not -name '*.ir.go'     \
 	| dupl -files $(DUPLFLAGS)
 
-.PHONY: generate
-generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS)
+.PHONY: build-optgen
+build-optgen:
 	@$(GO_INSTALL) -v \
 		./pkg/sql/opt/optgen/cmd/langgen \
 		./pkg/sql/opt/optgen/cmd/optgen
+
+.PHONY: generate
+generate: ## Regenerate generated code.
+generate: protobuf build-optgen $(DOCGEN_TARGETS)
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
@@ -885,6 +896,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
+	$(OPTGEN_TARGETS) \
 	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
@@ -1159,6 +1171,31 @@ $(PKG_ROOT)/sql/lex/keywords.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/all_k
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
+OPTGEN_DEFS = \
+ 	$(OPT_ROOT)/ops/scalar.opt \
+	$(OPT_ROOT)/ops/relational.opt \
+	$(OPT_ROOT)/ops/enforcer.opt
+
+OPTGEN_RULES = \
+	$(OPT_ROOT)/xform/rules/bool.opt \
+	$(OPT_ROOT)/xform/rules/comp.opt
+
+.SECONDARY: $(OPT_ROOT)/opt/factory.og.go
+$(OPT_ROOT)/opt/factory.og.go: $(OPTGEN_DEFS) build-optgen
+	optgen -out $(OPT_ROOT)/opt/factory.og.go ifactory $(OPTGEN_DEFS)
+
+.SECONDARY: $(OPT_ROOT)/opt/operator.og.go
+$(OPT_ROOT)/opt/operator.og.go: $(OPTGEN_DEFS) build-optgen
+	optgen -out $(OPT_ROOT)/opt/operator.og.go ops $(OPTGEN_DEFS)
+
+.SECONDARY: $(OPT_ROOT)/xform/expr.og.go
+$(OPT_ROOT)/xform/expr.og.go: $(OPTGEN_DEFS) build-optgen
+	optgen -out $(OPT_ROOT)/xform/expr.og.go exprs $(OPTGEN_DEFS)
+
+.SECONDARY: $(OPT_ROOT)/xform/factory.og.go
+$(OPT_ROOT)/xform/factory.og.go: $(OPTGEN_DEFS) $(OPTGEN_RULES) build-optgen
+	optgen -out $(OPT_ROOT)/xform/factory.og.go factory $(OPTGEN_DEFS) $(OPTGEN_RULES)
+
 # This target will print unreserved_keywords which are not actually
 # used in the grammar.
 .PHONY: unused_unreserved_keywords
@@ -1221,7 +1258,7 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(UI_PROTOS)
+	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
