@@ -24,8 +24,6 @@ import (
 	"golang.org/x/tools/container/intsets"
 )
 
-//go:generate optgen -out rule_name.og.go rulenames ../ops/*.opt rules/*.opt
-
 //go:generate stringer -output=rule_name_string.go -type=RuleName rule_name.og.go
 
 // OptimizeSteps is passed to NewOptimizer, and specifies the maximum number

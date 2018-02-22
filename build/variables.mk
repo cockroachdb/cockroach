@@ -90,6 +90,7 @@ define VALID_VARS
   NATIVE_SPECIFIER_TAG
   NATIVE_SUFFIX
   NODE_RUN
+  OPTGEN_TARGETS
   PATH
   PBJS
   PBTS
@@ -149,7 +150,9 @@ define VALID_VARS
   cyan
   go-version-check
   langgen-package
+  optgen-defs
   optgen-package
+  optgen-rules
   prefix
   space
   term-reset
