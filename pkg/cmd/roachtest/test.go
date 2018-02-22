@@ -212,7 +212,7 @@ func (t *test) Name() string {
 func (t *test) Status(args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.status = fmt.Sprint(args...)
+	t.mu.status = strings.SplitN(fmt.Sprint(args...), "\n", 2)[0]
 	t.mu.statusTime = timeutil.Now()
 }
 
