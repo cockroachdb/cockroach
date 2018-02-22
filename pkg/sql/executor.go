@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -231,9 +232,10 @@ type Executor struct {
 	sqlStats sqlStats
 
 	// Attempts to use unimplemented features.
-	unimplementedErrors struct {
+	errorCounts struct {
 		syncutil.Mutex
-		counts map[string]int64
+		unimplemented map[string]int64
+		codes         map[string]int64
 	}
 }
 
@@ -711,11 +713,30 @@ func (e *Executor) RecordError(err error) {
 	if err == nil {
 		return
 	}
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
-			e.recordUnimplementedFeature(pgErr.InternalCommand)
-		}
+	e.errorCounts.Lock()
+
+	if e.errorCounts.codes == nil {
+		e.errorCounts.codes = make(map[string]int64)
 	}
+	if pgErr, ok := pgerror.GetPGCause(err); ok {
+		e.errorCounts.codes[pgErr.Code]++
+
+		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+			if feature := pgErr.InternalCommand; feature != "" {
+				if e.errorCounts.unimplemented == nil {
+					e.errorCounts.unimplemented = make(map[string]int64)
+				}
+				e.errorCounts.unimplemented[feature]++
+			}
+		}
+	} else {
+		typ := util.ErrorSource(err)
+		if typ == "" {
+			typ = "unknown"
+		}
+		e.errorCounts.codes[typ]++
+	}
+	e.errorCounts.Unlock()
 }
 
 // execParsed executes a batch of statements received as a unit from the client
