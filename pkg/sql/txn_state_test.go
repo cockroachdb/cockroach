@@ -260,8 +260,7 @@ func TestTransitions(t *testing.T) {
 		expEv   txnEvent
 	}
 
-	implicitTxnName := sqlImplicitTxnName
-	explicitTxnName := sqlTxnName
+	txnName := sqlTxnName
 	now := testCon.clock.Now()
 	iso := enginepb.SERIALIZABLE
 	pri := roachpb.NormalUserPriority
@@ -315,7 +314,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnStart,
 			},
 			expTxn: &expKVTxn{
-				debugName:    &implicitTxnName,
+				debugName:    &txnName,
 				isolation:    &iso,
 				userPriority: &pri,
 				tsNanos:      &now.WallTime,
@@ -339,7 +338,7 @@ func TestTransitions(t *testing.T) {
 				expEv:   txnStart,
 			},
 			expTxn: &expKVTxn{
-				debugName:    &explicitTxnName,
+				debugName:    &txnName,
 				isolation:    &iso,
 				userPriority: &pri,
 				tsNanos:      &now.WallTime,
