@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"regexp"
 	"runtime"
 	"sort"
@@ -152,6 +153,10 @@ func (r *registry) Run(filter []string) int {
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 
+	// Shut down test clusters when interrupted (for example CTRL+C).
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+
 	for i := 1; ; i++ {
 		select {
 		case <-done:
@@ -186,6 +191,9 @@ func (r *registry) Run(filter []string) int {
 			}
 			fmt.Fprint(r.out, buf.String())
 			running.Unlock()
+
+		case <-sig:
+			destroyAllClusters()
 		}
 	}
 }
