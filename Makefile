@@ -713,6 +713,13 @@ PROTOBUF_TARGETS := $(GO_PROTOS_TARGET) $(GW_PROTOS_TARGET) $(CPP_PROTOS_TARGET)
 
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
+OPTGEN_TARGETS = \
+	pkg/sql/opt/memo/expr.og.go \
+	pkg/sql/opt/operator.og.go \
+	pkg/sql/opt/xform/explorer.og.go \
+	pkg/sql/opt/norm/factory.og.go \
+	pkg/sql/opt/rule_name.og.go
+
 .DEFAULT_GOAL := all
 all: $(COCKROACH)
 
@@ -735,7 +742,7 @@ BUILD_TAGGED_RELEASE =
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
-	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) $(PROTOBUF_TARGETS)
+	$(CGO_FLAGS_FILES) $(BOOTSTRAP_TARGET) $(SQLPARSER_TARGETS) $(BUILDINFO) $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) $(PROTOBUF_TARGETS)
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: override LINKFLAGS += \
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
@@ -876,7 +883,7 @@ dupl: $(BOOTSTRAP_TARGET)
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) bin/optgen bin/langgen
+generate: protobuf $(DOCGEN_TARGETS) $(OPTGEN_TARGETS) bin/langen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
@@ -924,6 +931,7 @@ $(ARCHIVE): $(ARCHIVE).tmp
 ARCHIVE_EXTRAS = \
 	$(BUILDINFO) \
 	$(SQLPARSER_TARGETS) \
+	$(OPTGEN_TARGETS) \
 	pkg/ui/distccl/bindata.go pkg/ui/distoss/bindata.go
 
 # TODO(benesch): Make this recipe use `git ls-files --recurse-submodules`
@@ -1225,6 +1233,25 @@ bin/.docgen_functions: bin/docgen
 	docgen functions docs/generated/sql --quiet
 	touch $@
 
+optgen-defs := pkg/sql/opt/ops/*.opt
+optgen-norm-rules := pkg/sql/opt/norm/rules/*.opt
+optgen-xform-rules := pkg/sql/opt/xform/rules/*.opt
+
+pkg/sql/opt/memo/expr.og.go: $(optgen-defs) bin/optgen
+	optgen -out $@ exprs $(optgen-defs)
+
+pkg/sql/opt/operator.og.go: $(optgen-defs) bin/optgen
+	optgen -out $@ ops $(optgen-defs)
+
+pkg/sql/opt/rule_name.og.go: $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules) bin/optgen
+	optgen -out $(@D)/rule_name.og.go rulenames $(optgen-defs) $(optgen-norm-rules) $(optgen-xform-rules)
+
+pkg/sql/opt/xform/explorer.og.go: $(optgen-defs) $(optgen-xform-rules) bin/optgen
+	optgen -out $@ explorer $(optgen-defs) $(optgen-xform-rules)
+
+pkg/sql/opt/norm/factory.og.go: $(optgen-defs) $(optgen-norm-rules) bin/optgen
+	optgen -out $@ factory $(optgen-defs) $(optgen-norm-rules)
+
 # Format libroach .cc and .h files (excluding protos) using clang-format if installed.
 # We also exclude the auto-generated keys.h
 .PHONY: c-deps-fmt
@@ -1259,7 +1286,7 @@ clean: clean-c-deps
 .PHONY: maintainer-clean
 maintainer-clean: ## Like clean, but also remove some auto-generated source code.
 maintainer-clean: clean ui-maintainer-clean
-	rm -f $(SQLPARSER_TARGETS) $(UI_PROTOS)
+	rm -f $(SQLPARSER_TARGETS) $(OPTGEN_TARGETS) $(UI_PROTOS)
 
 .PHONY: unsafe-clean
 unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored files.
