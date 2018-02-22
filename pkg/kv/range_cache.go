@@ -415,7 +415,7 @@ func (rdc *RangeDescriptorCache) performRangeLookup(
 	ctx context.Context, key roachpb.RKey, useReverseScan bool,
 ) ([]roachpb.RangeDescriptor, []roachpb.RangeDescriptor, error) {
 	// Tag inner operations.
-	ctx = log.WithLogTag(ctx, "range-lookup", nil)
+	ctx = log.WithLogTagStr(ctx, "range-lookup", key.String())
 	if !rdc.st.Version.IsActive(cluster.VersionMeta2Splits) {
 		return rdc.performLegacyRangeLookup(ctx, key, useReverseScan)
 	}
