@@ -1212,14 +1212,15 @@ func TestReplicaDrainLease(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Acquire initial lease.
-	status, pErr := tc.repl.redirectOnOrAcquireLease(context.Background())
+	ctx := context.Background()
+	status, pErr := tc.repl.redirectOnOrAcquireLease(ctx)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
 
 	tc.store.SetDraining(true)
 	tc.repl.mu.Lock()
-	pErr = <-tc.repl.requestLeaseLocked(status).C()
+	pErr = <-tc.repl.requestLeaseLocked(ctx, status).C()
 	tc.repl.mu.Unlock()
 	_, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError)
 	if !ok {
@@ -1227,7 +1228,7 @@ func TestReplicaDrainLease(t *testing.T) {
 	}
 	tc.store.SetDraining(false)
 	// Newly undrained, leases work again.
-	if _, pErr := tc.repl.redirectOnOrAcquireLease(context.Background()); pErr != nil {
+	if _, pErr := tc.repl.redirectOnOrAcquireLease(ctx); pErr != nil {
 		t.Fatal(pErr)
 	}
 }
@@ -1912,7 +1913,7 @@ func TestLeaseConcurrent(t *testing.T) {
 			if err := stopper.RunAsyncTask(context.Background(), "test", func(ctx context.Context) {
 				tc.repl.mu.Lock()
 				status := tc.repl.leaseStatus(*tc.repl.mu.state.Lease, ts, hlc.Timestamp{})
-				llHandle := tc.repl.requestLeaseLocked(status)
+				llHandle := tc.repl.requestLeaseLocked(ctx, status)
 				tc.repl.mu.Unlock()
 				wg.Done()
 				pErr := <-llHandle.C()
