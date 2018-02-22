@@ -20,6 +20,8 @@ import { WorldMap } from "./worldmap";
 import { Box, ZoomTransformer } from "./zoom";
 import { LivenessStatus } from "src/redux/nodes";
 
+import "./mapLayout.styl";
+
 interface MapLayoutProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
