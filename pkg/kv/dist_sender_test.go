@@ -469,66 +469,6 @@ var threeReplicaMockRangeDescriptorDB = mockRangeDescriptorDBForDescs(
 	testUserRangeDescriptor3Replicas,
 )
 
-func TestOwnNodeCertain(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-
-	g, clock := makeGossip(t, stopper)
-	const expNodeID = 42
-	nd := &roachpb.NodeDescriptor{
-		NodeID:  expNodeID,
-		Address: util.MakeUnresolvedAddr("tcp", "foobar:1234"),
-	}
-	g.NodeID.Reset(nd.NodeID)
-	if err := g.SetNodeDescriptor(nd); err != nil {
-		t.Fatal(err)
-	}
-	if err := g.AddInfoProto(gossip.MakeNodeIDKey(expNodeID), nd, time.Hour); err != nil {
-		t.Fatal(err)
-	}
-
-	act := make(map[roachpb.NodeID]hlc.Timestamp)
-	var testFn rpcSendFn = func(
-		_ context.Context,
-		_ SendOptions,
-		_ ReplicaSlice,
-		ba roachpb.BatchRequest,
-		_ *rpc.Context,
-	) (*roachpb.BatchResponse, error) {
-		for _, v := range ba.Txn.ObservedTimestamps {
-			act[v.NodeID] = v.Timestamp
-		}
-		return ba.CreateReply(), nil
-	}
-
-	cfg := DistSenderConfig{
-		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
-		Clock:      clock,
-		TestingKnobs: DistSenderTestingKnobs{
-			TransportFactory: adaptLegacyTransport(testFn),
-		},
-		RangeDescriptorDB: defaultMockRangeDescriptorDB,
-	}
-	expTS := hlc.Timestamp{WallTime: 1, Logical: 2}
-	ds := NewDistSender(cfg, g)
-	v := roachpb.MakeValueFromString("value")
-	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, err := client.SendWrappedWith(context.Background(), ds, roachpb.Header{
-		// MaxTimestamp is set very high so that all uncertainty updates have
-		// effect.
-		Txn: &roachpb.Transaction{OrigTimestamp: expTS, MaxTimestamp: hlc.MaxTimestamp},
-	}, put); err != nil {
-		t.Fatalf("put encountered error: %s", err)
-	}
-	exp := map[roachpb.NodeID]hlc.Timestamp{
-		expNodeID: expTS,
-	}
-	if !reflect.DeepEqual(exp, act) {
-		t.Fatalf("wanted %v, got %v", exp, act)
-	}
-}
-
 func TestImmutableBatchArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()

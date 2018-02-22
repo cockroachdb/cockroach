@@ -964,3 +964,67 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNodeIDAndObservedTimestamps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Mock out sender function to check that created transactions
+	// have the observed timestamp set for the configured node ID.
+	factory := client.TxnSenderFactoryFunc(func(_ client.TxnType) client.TxnSender {
+		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return ba.CreateReply(), nil
+		})
+	})
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	dbCtx := client.DefaultDBContext()
+	dbCtx.NodeID = &base.NodeIDContainer{}
+	db := client.NewDBWithContext(factory, clock, dbCtx)
+	ctx := context.Background()
+
+	// Verify direct creation of Txns.
+	directCases := []struct {
+		typ         client.TxnType
+		nodeID      roachpb.NodeID
+		expObserved bool
+	}{
+		{typ: client.RootTxn, nodeID: 0, expObserved: false},
+		{typ: client.RootTxn, nodeID: 1, expObserved: true},
+		{typ: client.LeafTxn, nodeID: 0, expObserved: false},
+		{typ: client.LeafTxn, nodeID: 1, expObserved: false},
+	}
+	for i, test := range directCases {
+		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
+			txn := client.NewTxn(db, test.nodeID, test.typ)
+			if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
+			}
+		})
+	}
+
+	// Verify node ID container using DB.Txn().
+	indirectCases := []struct {
+		nodeID      roachpb.NodeID
+		expObserved bool
+	}{
+		{nodeID: 0, expObserved: false},
+		{nodeID: 1, expObserved: true},
+	}
+	for i, test := range indirectCases {
+		t.Run(fmt.Sprintf("indirect-txn-%d", i), func(t *testing.T) {
+			if test.nodeID != 0 {
+				dbCtx.NodeID.Set(ctx, test.nodeID)
+			}
+			if err := db.Txn(
+				ctx, func(_ context.Context, txn *client.Txn) error {
+					if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+						t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
+					}
+					return nil
+				},
+			); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

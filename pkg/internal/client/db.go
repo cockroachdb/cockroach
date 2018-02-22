@@ -169,6 +169,9 @@ type DBContext struct {
 	// userPriority is set to any value except 1 in call arguments, this
 	// value is ignored.
 	UserPriority roachpb.UserPriority
+	// NodeID provides the node ID for setting the gateway node and avoiding
+	// clock uncertainty for root transactions started at the gateway.
+	NodeID *base.NodeIDContainer
 }
 
 // DefaultDBContext returns (a copy of) the default options for
@@ -176,6 +179,7 @@ type DBContext struct {
 func DefaultDBContext() DBContext {
 	return DBContext{
 		UserPriority: roachpb.NormalUserPriority,
+		NodeID:       &base.NodeIDContainer{},
 	}
 }
 
@@ -502,10 +506,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// (https://github.com/cockroachdb/cockroach/issues/10511).
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// TODO(andrei): Plumb a gatewayNodeID here. If we pass 0, then the gateway
-	// field will be filled in by the DistSender which will assume that the
-	// current node is the gateway.
-	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
+	txn := NewTxn(db, db.ctx.NodeID.Get(), RootTxn)
 	txn.SetDebugName("unnamed")
 	opts := TxnExecOptions{
 		AutoCommit: true,
