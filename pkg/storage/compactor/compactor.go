@@ -428,7 +428,7 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 	var existing storagebase.Compaction
 	ok, _, _, err := c.eng.GetProto(engine.MVCCKey{Key: key}, &existing)
 	if err != nil {
-		log.ErrEventf(ctx, "unable to record suggested compaction: %s", err)
+		log.VErrEventf(ctx, 2, "unable to record suggested compaction: %s", err)
 		return
 	}
 
