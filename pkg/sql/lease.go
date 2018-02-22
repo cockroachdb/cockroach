@@ -142,7 +142,7 @@ func (s LeaseStore) acquire(
 ) (*tableVersionState, error) {
 	var table *tableVersionState
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		expiration := txn.OrigTimestamp(false /*mattersForTxnOrdering*/)
+		expiration := txn.OrigTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
 		if expiration.Less(minExpirationTime) {
 			expiration = minExpirationTime
@@ -346,8 +346,8 @@ func (s LeaseStore) Publish(
 			// will be OrigTimestamp. However, once we've used the
 			// timestamp, it's rather essential that we have a guarantee
 			// that the txn will commit at that exact timestamp. Using
-			// mattersForTxnOrdering=true provides this guarantee.
-			modTime := txn.OrigTimestamp(true /*mattersForTxnOrdering*/)
+			// CommitTimestamp() provides this guarantee.
+			modTime := txn.CommitTimestamp()
 			tableDesc.ModificationTime = modTime
 			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
 				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
