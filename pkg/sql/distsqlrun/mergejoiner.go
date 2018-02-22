@@ -138,6 +138,10 @@ func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		log.VEventf(m.ctx, 2, "starting merge joiner run")
 	}
 
+	if m.closed {
+		return nil, m.producerMeta(nil /* err */)
+	}
+
 	for {
 		row, meta := m.nextRow()
 		if m.closed || meta != nil {
