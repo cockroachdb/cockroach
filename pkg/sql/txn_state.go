@@ -145,12 +145,7 @@ func (ts *txnState2) resetForNewSQLTxn(
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
 	var sp opentracing.Span
-	var opName string
-	if txnType == implicitTxn {
-		opName = sqlImplicitTxnName
-	} else {
-		opName = sqlTxnName
-	}
+	opName := sqlTxnName
 
 	// Create a span for the new txn. The span is always Recordable to support the
 	// use of session tracing, which may start recording on it.
@@ -161,6 +156,10 @@ func (ts *txnState2) resetForNewSQLTxn(
 	} else {
 		// Create a root span for this SQL txn.
 		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable)
+	}
+
+	if txnType == implicitTxn {
+		sp.SetTag("implicit", "true")
 	}
 
 	// Put the new span in the context.
