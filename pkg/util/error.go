@@ -14,7 +14,11 @@
 
 package util
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/pkg/errors"
+)
 
 // UnexpectedWithIssueErr indicates an error with an associated Github issue.
 // It's supposed to be used for conditions that would otherwise be checked by
@@ -46,4 +50,19 @@ func (e UnexpectedWithIssueErr) Error() string {
 	return fmt.Sprintf("unexpected error%s (we've been trying to track this particular issue down; "+
 		"please report your reproduction at "+
 		"https://github.com/cockroachdb/cockroach/issues/%d)", fmtMsg, e.issue)
+}
+
+// ErrorSource attempts to return the file:line where `i` was created if `i` has
+// that information (i.e. if it is an errors.withStack). Returns "" otherwise.
+func ErrorSource(i interface{}) string {
+	type stackTracer interface {
+		StackTrace() errors.StackTrace
+	}
+	if e, ok := i.(stackTracer); ok {
+		tr := e.StackTrace()
+		if len(tr) > 0 {
+			return fmt.Sprintf("%v", tr[0]) // prints file:line
+		}
+	}
+	return ""
 }
