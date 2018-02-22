@@ -331,11 +331,22 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("expected %d error codes counts in report, got %d (%v)", expected, actual, r.last.ErrorCounts)
 	}
 
+	// this test would be infuriating if it had to be updated on every edit to
+	// builtins.go that changed the line number of force_error, so just scrub the
+	// line number here.
+	for k := range r.last.ErrorCounts {
+		if strings.HasPrefix(k, "builtins.go") {
+			r.last.ErrorCounts["builtins.go"] = r.last.ErrorCounts[k]
+			delete(r.last.ErrorCounts, k)
+			break
+		}
+	}
+
 	for code, expected := range map[string]int64{
 		pgerror.CodeFeatureNotSupportedError: 30,
 		pgerror.CodeDivisionByZeroError:      20,
-		"blah":    10,
-		"unknown": 10,
+		"blah":        10,
+		"builtins.go": 10,
 	} {
 		if actual := r.last.ErrorCounts[code]; expected != actual {
 			t.Fatalf(
