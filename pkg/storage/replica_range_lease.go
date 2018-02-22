@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -94,6 +95,7 @@ type pendingLeaseRequest struct {
 	llHandles map[*leaseRequestHandle]struct{}
 	// cancel is the context cancellation function for the async lease
 	// request, if one exists. If nil, then no request is in progress.
+	// repl.mu to be exclusively locked to call the function.
 	cancel func()
 	// nextLease is the pending RequestLease request, if any. It can be used to
 	// figure out if we're in the process of extending our own lease, or
@@ -136,6 +138,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 //
 // Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) InitOrJoinRequest(
+	ctx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	status LeaseStatus,
 	startKey roachpb.Key,
@@ -202,7 +205,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		}
 	}
 
-	if err := p.requestLeaseAsync(nextLeaseHolder, reqLease, status, leaseReq); err != nil {
+	if err := p.requestLeaseAsync(ctx, nextLeaseHolder, reqLease, status, leaseReq); err != nil {
 		// We failed to start the asynchronous task. Send a blank NotLeaseHolderError
 		// back to indicate that we have no idea who the range lease holder might
 		// be; we've withdrawn from active duty.
@@ -223,24 +226,43 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 // requestLeaseAsync sends a transfer lease or lease request to the
 // specified replica. The request is sent in an async task.
 func (p *pendingLeaseRequest) requestLeaseAsync(
+	parentCtx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	reqLease roachpb.Lease,
 	status LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
+	const opName = "request range lease"
+	var sp opentracing.Span
+	tr := p.repl.AmbientContext.Tracer
+	if parentSp := opentracing.SpanFromContext(parentCtx); parentSp != nil {
+		// We use FollowsFrom because the lease request's span can outlive
+		// the parent request.
+		sp = tr.StartSpan(opName, opentracing.FollowsFrom(parentSp.Context()))
+	} else {
+		sp = tr.StartSpan(opName)
+	}
+
 	// Create a new context *without* a timeout. Instead, we multiplex the
 	// cancellation of all contexts onto this new one, only canceling it if all
 	// coalesced requests timeout/cancel. p.cancel (defined below) is the cancel
 	// function that must be called; calling just cancel is insufficient.
 	ctx := p.repl.AnnotateCtx(context.Background())
+	ctx = opentracing.ContextWithSpan(ctx, sp)
 	ctx, cancel := context.WithCancel(ctx)
+
+	// Make sure we clean up the context and request state. This will be called
+	// either when the request completes cleanly or when it is terminated early.
 	p.cancel = func() {
 		cancel()
-		p.cleanupAfterReq()
+		p.cancel = nil
+		p.nextLease = roachpb.Lease{}
 	}
-	return p.repl.store.Stopper().RunAsyncTask(
-		ctx, "storage.pendingLeaseRequest: requesting lease",
-		func(ctx context.Context) {
+
+	err := p.repl.store.Stopper().RunAsyncTask(
+		ctx, "storage.pendingLeaseRequest: requesting lease", func(ctx context.Context) {
+			defer sp.Finish()
+
 			// If requesting an epoch-based lease & current state is expired,
 			// potentially heartbeat our own liveness or increment epoch of
 			// prior owner. Note we only do this if the previous lease was
@@ -294,11 +316,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			p.repl.mu.Lock()
 			defer p.repl.mu.Unlock()
 			if ctx.Err() != nil {
-				// We were canceled. At this point, another async request could
-				// be active so we don't want to do anything else.
+				// We were canceled and this request was already cleaned up
+				// under lock. At this point, another async request could be
+				// active so we don't want to do anything else.
 				return
 			}
-			// Send result of lease to all waiter channels.
+
+			// Send result of lease to all waiter channels and cleanup request.
 			for llHandle := range p.llHandles {
 				// Don't send the same transaction object twice; this can lead to races.
 				if pErr != nil {
@@ -310,14 +334,14 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				}
 				delete(p.llHandles, llHandle)
 			}
-			p.cleanupAfterReq()
+			p.cancel()
 		})
-}
-
-// Requires repl.mu is exclusively locked.
-func (p *pendingLeaseRequest) cleanupAfterReq() {
-	p.cancel = nil
-	p.nextLease = roachpb.Lease{}
+	if err != nil {
+		p.cancel()
+		sp.Finish()
+		return err
+	}
+	return nil
 }
 
 // JoinRequest adds one more waiter to the currently pending request.
@@ -329,7 +353,7 @@ func (p *pendingLeaseRequest) cleanupAfterReq() {
 // Requires repl.mu is exclusively locked.
 func (p *pendingLeaseRequest) JoinRequest() *leaseRequestHandle {
 	llHandle := p.newHandle()
-	if len(p.llHandles) == 0 {
+	if _, ok := p.RequestPending(); !ok {
 		llHandle.resolve(roachpb.NewErrorf("no request in progress"))
 		return llHandle
 	}
@@ -475,7 +499,7 @@ func (r *Replica) requiresExpiringLeaseRLocked() bool {
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(status LeaseStatus) *leaseRequestHandle {
+func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) *leaseRequestHandle {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
 		r.store.TestingKnobs().LeaseRequestEvent(status.Timestamp)
 	}
@@ -500,7 +524,7 @@ func (r *Replica) requestLeaseLocked(status LeaseStatus) *leaseRequestHandle {
 		return llHandle
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
-		repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
+		ctx, repDesc, status, r.mu.state.Desc.StartKey.AsRawKey(), false /* transfer */)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. A
@@ -563,7 +587,7 @@ func (r *Replica) AdminTransferLease(ctx context.Context, target roachpb.StoreID
 		// Stop using the current lease.
 		r.mu.minLeaseProposedTS = status.Timestamp
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(
-			nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
+			ctx, nextLeaseHolder, status, desc.StartKey.AsRawKey(), true, /* transfer */
 		)
 		return nil, transfer, nil
 	}
