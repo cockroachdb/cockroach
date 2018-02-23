@@ -82,6 +82,7 @@ case "${cmd}" in
       -ignore 'Path bin*' \
       -ignore 'Path build/builder_home' \
       -ignore 'Path pkg/sql/parser/gen' \
+      -ignore 'Path cockroach-data' \
       -ignore 'Name zcgo_flags*.go'
     ;;
     *)
