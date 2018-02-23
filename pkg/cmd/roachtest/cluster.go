@@ -19,6 +19,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -36,6 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+
+	// "postgres" gosql driver
+	_ "github.com/lib/pq"
 )
 
 var (
@@ -395,7 +399,7 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("uploading binary")
-	err := execCmd(ctx, c.l, "roachprod", "put", c.makeNodes(opts), src, dest)
+	err := execCmd(ctx, c.l, "roachprod", "put", c.makeNodes(opts...), src, dest)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -439,7 +443,7 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 		"start",
 	}
 	args = append(args, roachprodArgs(opts)...)
-	args = append(args, c.makeNodes(opts))
+	args = append(args, c.makeNodes(opts...))
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
 	}
@@ -456,7 +460,7 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("stopping cluster")
-	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts))
+	err := execCmd(ctx, c.l, "roachprod", "stop", c.makeNodes(opts...))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -473,7 +477,7 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("wiping cluster")
-	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts))
+	err := execCmd(ctx, c.l, "roachprod", "wipe", c.makeNodes(opts...))
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -499,13 +503,31 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 		c.t.Fatal("interrupted")
 	}
 	err := execCmd(ctx, l,
-		append([]string{"roachprod", "ssh", fmt.Sprintf("%s:%d", c.name, node), "--"}, args...)...)
+		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
 }
 
-func (c *cluster) makeNodes(opts []option) string {
+// Conn returns a SQL connection to the specified node.
+func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
+	cmd := exec.CommandContext(
+		ctx, `roachprod`, `pgurl`, `--external`, c.makeNodes(c.Node(node)),
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(strings.Join(cmd.Args, ` `))
+		c.t.Fatal(err)
+	}
+	url := strings.Trim(string(output), "' \n")
+	db, err := gosql.Open("postgres", url)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+	return db
+}
+
+func (c *cluster) makeNodes(opts ...option) string {
 	var r nodeListOption
 	for _, o := range opts {
 		if s, ok := o.(nodeSelector); ok {
@@ -532,7 +554,7 @@ func newMonitor(ctx context.Context, c *cluster, opts ...option) *monitor {
 	m := &monitor{
 		t:     c.t,
 		l:     c.l,
-		nodes: c.makeNodes(opts),
+		nodes: c.makeNodes(opts...),
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.g, m.ctx = errgroup.WithContext(m.ctx)
