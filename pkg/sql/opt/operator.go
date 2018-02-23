@@ -25,17 +25,6 @@ type operator uint8
 const (
 	unknownOp operator = iota
 
-	// -- Relational operators --
-	// This list will grow significantly as we implement new operators.
-	// The only relational operators implemented so far are scanOp and selectOp.
-
-	// scan is the lowest level relational operator, responsible for scanning
-	// tables.
-	scanOp
-
-	// selectOp is a pass-through operator which applies filters to its input.
-	selectOp
-
 	// -- Scalar operators --
 
 	// variableOp is a leaf expression that represents a non-constant value, like a column

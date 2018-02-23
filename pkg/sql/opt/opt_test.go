@@ -80,42 +80,21 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
 var (
 	testDataGlob = flag.String("d", "testdata/[^.]*", "test data glob")
 )
-
-// testCatalog implements the optbase.Catalog interface.
-type testCatalog struct {
-	kvDB *client.DB
-}
-
-// FindTable implements the optbase.Catalog interface.
-func (c testCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	// This is a very simplified form of the main name resolution
-	// algorithms that misses out on most of the rules supported by
-	// pg/cockroachdb, but it might just do the trick for testing.
-	if !name.ExplicitCatalog {
-		name.CatalogName = name.SchemaName
-		name.SchemaName = tree.PublicSchemaName
-	}
-	return sqlbase.GetTableDescriptor(c.kvDB, name.Catalog(), name.Table()), nil
-}
 
 func TestOpt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -131,9 +110,8 @@ func TestOpt(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
-			catalog := testCatalog{kvDB: kvDB}
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var e *Expr
@@ -217,16 +195,6 @@ func TestOpt(t *testing.T) {
 							d.Fatalf(t, "%v", err)
 						}
 						return ""
-
-					case "build":
-						stmt, err := parser.ParseOne(d.Input)
-						if err != nil {
-							d.Fatalf(t, "%v", err)
-						}
-						e, err = build(ctx, stmt, catalog, &evalCtx)
-						if err != nil {
-							return fmt.Sprintf("error: %v\n", err)
-						}
 
 					case "build-scalar":
 						buildScalarFn()
