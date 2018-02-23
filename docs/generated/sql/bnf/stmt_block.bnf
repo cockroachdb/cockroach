@@ -151,6 +151,7 @@ show_stmt ::=
 	| show_jobs_stmt
 	| show_queries_stmt
 	| show_roles_stmt
+	| show_schemas_stmt
 	| show_session_stmt
 	| show_sessions_stmt
 	| show_stats_stmt
@@ -457,6 +458,10 @@ show_queries_stmt ::=
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
 
+show_schemas_stmt ::=
+	'SHOW' 'SCHEMAS' 'FROM' name
+	| 'SHOW' 'SCHEMAS'
+
 show_session_stmt ::=
 	'SHOW' session_var
 	| 'SHOW' 'SESSION' session_var
@@ -719,6 +724,7 @@ unreserved_keyword ::=
 	| 'STATUS'
 	| 'SAVEPOINT'
 	| 'SCATTER'
+	| 'SCHEMAS'
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
