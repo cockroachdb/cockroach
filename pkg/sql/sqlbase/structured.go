@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ID, ColumnID, FamilyID, and IndexID are all uint32, but are each given a
@@ -168,6 +169,9 @@ func GetTableDescFromID(ctx context.Context, txn *client.Txn, id ID) (*TableDesc
 		return nil, err
 	}
 	table := desc.GetTable()
+
+	log.Infof(ctx, "read table %d from store with lease: %s", id, table.Lease)
+
 	if table == nil {
 		return nil, ErrDescriptorNotFound
 	}

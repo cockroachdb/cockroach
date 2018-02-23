@@ -139,6 +139,7 @@ func shouldLogSchemaChangeError(err error) bool {
 func (sc *SchemaChanger) AcquireLease(
 	ctx context.Context, tables *TableCollection,
 ) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
+	log.Infof(ctx, "attempt to lease: %d", sc.tableID)
 	var lease sqlbase.TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -158,21 +159,19 @@ func (sc *SchemaChanger) AcquireLease(
 
 		if tableDesc.Lease != nil {
 			if timeutil.Unix(0, tableDesc.Lease.ExpirationTime).Add(expirationTimeUncertainty).After(timeutil.Now()) {
+				log.Infof(ctx, "existing lease %s", tableDesc.Lease)
 				return errExistingSchemaChangeLease
 			}
 			log.Infof(ctx, "Overriding existing expired lease %v", tableDesc.Lease)
 		}
 		lease = sc.createSchemaChangeLease()
 		tableDesc.Lease = &lease
-		if tables != nil {
-			// tables is nil when running schema changes from the background schema change task.
-			// When running schema changes at the end of a SQL txn, tables is the
-			// table collection used as descriptor cache by queries. That must
-			// remain consistent with the KV state, so we must update it here.
-			tables.addUncommittedTable(*tableDesc)
-		}
+
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
+	if err == nil {
+		log.Infof(ctx, "acquired schema change lease: %d, %s", sc.tableID, lease)
+	}
 	return lease, err
 }
 
@@ -197,7 +196,8 @@ func (sc *SchemaChanger) findTableWithLease(
 func (sc *SchemaChanger) ReleaseLease(
 	ctx context.Context, lease sqlbase.TableDescriptor_SchemaChangeLease, tables *TableCollection,
 ) error {
-	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	log.Infof(ctx, "attempt to release lease: %d, %s", sc.tableID, lease)
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(ctx, txn, lease)
 		if err != nil {
 			return err
@@ -206,15 +206,13 @@ func (sc *SchemaChanger) ReleaseLease(
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		if tables != nil {
-			// tables is nil when running schema changes from the background schema change task.
-			// When running schema changes at the end of a SQL txn, tables is the
-			// table collection used as descriptor cache by queries. That must
-			// remain consistent with the KV state, so we must update it here.
-			tables.addUncommittedTable(*tableDesc)
-		}
+
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc))
 	})
+	if err == nil {
+		log.Infof(ctx, "released lease: %d, %s", sc.tableID, lease)
+	}
+	return err
 }
 
 // ExtendLease for the current leaser. This needs to be called often while
@@ -415,6 +413,7 @@ func (sc *SchemaChanger) exec(
 		// If the schema changer deleted the descriptor, there's no longer a lease to be
 		// released.
 		if !needRelease {
+			log.Warning(ctx, "decided to not release lease")
 			return
 		}
 		if err := sc.ReleaseLease(ctx, lease, evalCtx.Tables); err != nil {
