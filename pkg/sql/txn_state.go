@@ -94,9 +94,6 @@ type txnState2 struct {
 	// consumeAdvanceInfo().
 	adv advanceInfo
 
-	// tracing facilitates the implementation of session tracing functionality
-	tracing SessionTracing
-
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
@@ -171,7 +168,6 @@ func (ts *txnState2) resetForNewSQLTxn(
 
 	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
-	ts.tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 
@@ -219,9 +215,6 @@ func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
 	}
 
 	ts.sp.Finish()
-	if err := ts.tracing.onFinishSQLTxn(); err != nil {
-		log.Errorf(connCtx, "error finishing trace: %s", err)
-	}
 	ts.sp = nil
 	ts.Ctx = nil
 	ts.mu.txn = nil
