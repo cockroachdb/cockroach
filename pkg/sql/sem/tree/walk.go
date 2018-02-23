@@ -751,6 +751,25 @@ func (stmt *Insert) WalkStmt(v Visitor) Statement {
 }
 
 // CopyNode makes a copy of this Statement without recursing in any child Statements.
+func (stmt *CreateTable) CopyNode() *CreateTable {
+	stmtCopy := *stmt
+	return &stmtCopy
+}
+
+// WalkStmt is part of the WalkableStmt interface.
+func (stmt *CreateTable) WalkStmt(v Visitor) Statement {
+	ret := stmt
+	if stmt.AsSource != nil {
+		rows, changed := WalkStmt(v, stmt.AsSource)
+		if changed {
+			ret = stmt.CopyNode()
+			ret.AsSource = rows.(*Select)
+		}
+	}
+	return ret
+}
+
+// CopyNode makes a copy of this Statement without recursing in any child Statements.
 func (stmt *Import) CopyNode() *Import {
 	stmtCopy := *stmt
 	stmtCopy.Files = append(Exprs(nil), stmt.Files...)
@@ -1114,6 +1133,7 @@ func (stmt *ValuesClause) WalkStmt(v Visitor) Statement {
 	return ret
 }
 
+var _ WalkableStmt = &CreateTable{}
 var _ WalkableStmt = &Backup{}
 var _ WalkableStmt = &Delete{}
 var _ WalkableStmt = &Explain{}
