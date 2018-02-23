@@ -846,13 +846,13 @@ dupl: $(BOOTSTRAP_TARGET)
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) | bin/langgen bin/optgen
+generate: protobuf $(DOCGEN_TARGETS) bin/optgen bin/langgen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 .PHONY: lint
 lint: override TAGS += lint
 lint: ## Run all style checkers and linters.
-lint: | bin/returncheck
+lint: bin/returncheck
 	@if [ -t 1 ]; then echo '$(yellow)NOTE: `make lint` is very slow! Perhaps `make lintshort`?$(term-reset)'; fi
 	$(XGO) test $(PKG_ROOT)/testutils/lint -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run 'TestLint/$(TESTS)'
 
@@ -968,7 +968,7 @@ CPP_SOURCES_CCL := $(subst $(PKG_ROOT),$(CPP_PROTO_CCL_ROOT),$(CPP_PROTOS_CCL:%.
 
 UI_PROTOS := $(UI_JS) $(UI_TS)
 
-$(GO_PROTOS_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) | bin/protoc-gen-gogoroach
+$(GO_PROTOS_TARGET): $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) $(BOOTSTRAP_TARGET) bin/protoc-gen-gogoroach
 	$(FIND_RELEVANT) -type f -name '*.pb.go' -exec rm {} +
 	set -e; for dir in $(sort $(dir $(GO_PROTOS))); do \
 	  build/werror.sh $(PROTOC) -I$(PKG_ROOT):$(GOGO_PROTOBUF_PATH):$(PROTOBUF_PATH):$(COREOS_PATH):$(GRPC_GATEWAY_GOOGLEAPIS_PATH) --gogoroach_out=$(PROTO_MAPPINGS),plugins=grpc,import_prefix=github.com/cockroachdb/cockroach/pkg/:$(PKG_ROOT) $$dir/*.proto; \
@@ -1183,12 +1183,12 @@ $(SQLPARSER_ROOT)/help_messages.go: $(SQLPARSER_ROOT)/sql.y $(SQLPARSER_ROOT)/he
 	mv -f $@.tmp $@
 	gofmt -s -w $@
 
-bin/.docgen_bnfs: $(SQLPARSER_ROOT)/sql.y pkg/cmd/docgen/diagrams.go pkg/cmd/docgen/main.go | $(SUBMODULES_TARGET)
-	go run pkg/cmd/docgen/{main,diagrams}.go grammar bnf docs/generated/sql/bnf --quiet
+bin/.docgen_bnfs: bin/docgen
+	docgen grammar bnf docs/generated/sql/bnf --quiet
 	touch $@
 
-bin/.docgen_functions: $(PKG_ROOT)/sql/sem/builtins/*.go $(SQLPARSER_TARGETS) $(GO_PROTOS_TARGET) | $(SUBMODULES_TARGET)
-	go run pkg/cmd/docgen/{main,funcs}.go functions docs/generated/sql --quiet
+bin/.docgen_functions: bin/docgen
+	docgen functions docs/generated/sql --quiet
 	touch $@
 
 # Format libroach .cc and .h files (excluding protos) using clang-format if installed.
@@ -1232,12 +1232,49 @@ unsafe-clean: ## Like maintainer-clean, but also remove ALL untracked/ignored fi
 unsafe-clean: maintainer-clean unsafe-clean-c-deps
 	git clean -dxf
 
+# The following rules automatically generate dependency information for Go
+# binaries. See [0] for details on the approach.
+#
+# [0]: http://make.mad-scientist.net/papers/advanced-auto-dependency-generation/
+
+bins := \
+  bin/allocsim \
+  bin/benchmark \
+  bin/cockroach-oss \
+  bin/cockroach-short \
+  bin/docgen \
+  bin/generate-binary \
+  bin/github-post \
+  bin/github-pull-request-make \
+  bin/gossipsim \
+  bin/langgen \
+  bin/protoc-gen-gogoroach \
+  bin/publish-artifacts \
+  bin/optgen \
+  bin/returncheck \
+  bin/roachtest \
+  bin/teamcity-trigger \
+  bin/urlcheck \
+  bin/workload \
+  bin/zerosum
+
 # Mappings for binaries that don't live in pkg/cmd.
 langgen-package := ./pkg/sql/opt/optgen/cmd/langgen
 optgen-package := ./pkg/sql/opt/optgen/cmd/optgen
 
-bin/%: .ALWAYS_REBUILD | $(SUBMODULES_TARGET)
+# Additional dependencies for binaries that depend on generated code.
+bin/workload bin/docgen: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+
+$(bins): bin/%: bin/%.d | bin/prereqs $(SUBMODULES_TARGET)
+	@echo go install -v $*
+	bin/prereqs $(if $($*-package),$($*-package),$(PKG_ROOT)/cmd/$*) > $@.d
 	@$(GO_INSTALL) -v $(if $($*-package),$($*-package),$(PKG_ROOT)/cmd/$*)
 
-# Additional dependencies for binaries that depend on generated code.
-bin/workload: $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/prereqs: ./pkg/cmd/prereqs/*.go
+	@echo go install -v ./pkg/cmd/prereqs
+	@$(GO_INSTALL) -v ./pkg/cmd/prereqs
+
+.PRECIOUS: bin/%.d
+bin/%.d: ;
+
+include $(wildcard bin/*.d)
