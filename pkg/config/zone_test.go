@@ -80,6 +80,29 @@ func TestZoneConfigValidate(t *testing.T) {
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
 				Constraints: []Constraints{
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}}},
+				},
+			},
+			"",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+			"",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
 						NumReplicas: 2,
@@ -117,6 +140,23 @@ func TestZoneConfigValidate(t *testing.T) {
 				},
 			},
 			"constraints must apply to at least one replica",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   3,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+					{
+						Constraints: []Constraint{{Value: "b", Type: Constraint_PROHIBITED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+			"only required constraints .+ can be applied to a subset of replicas",
 		},
 	}
 
