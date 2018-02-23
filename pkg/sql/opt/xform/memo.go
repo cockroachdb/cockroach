@@ -135,7 +135,6 @@ func newMemo(catalog optbase.Catalog) *memo {
 	}
 
 	m.listStorage.init()
-	m.logPropsFactory.init(m)
 	return m
 }
 

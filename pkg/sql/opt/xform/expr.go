@@ -155,6 +155,10 @@ func (ev ExprView) String() string {
 	return tp.String()
 }
 
+func (ev ExprView) lookupChildGroup(nth int) *memoGroup {
+	return ev.mem.lookupGroup(ev.ChildGroup(nth))
+}
+
 func (ev ExprView) privateID() opt.PrivateID {
 	return privateLookup[ev.op](ev)
 }
@@ -240,8 +244,8 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 		formatColList(ev.mem, logicalProps, *ev.Private().(*opt.ColList), tp)
 
 	default:
-		// Write the output columns. Fall back to writing output columns in column
-		// index order, with best guess label.
+		// Fall back to writing output columns in column index order, with best
+		// guess label.
 		logicalProps.formatOutputCols(ev.mem, tp)
 	}
 

@@ -24,31 +24,50 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func TestLogicalProps(t *testing.T) {
-	datadriven.RunTest(t, "testdata/logical_props", func(d *datadriven.TestData) string {
-		// Only props command supported.
-		if d.Cmd != "props" {
-			t.FailNow()
-		}
+	catalog := testutils.NewTestCatalog()
 
+	datadriven.RunTest(t, "testdata/logical_props", func(d *datadriven.TestData) string {
 		stmt, err := parser.ParseOne(d.Input)
 		if err != nil {
 			d.Fatalf(t, "%v", err)
 		}
 
-		f := newFactory(createLogPropsCatalog(), 0)
-		b := optbuilder.New(context.Background(), f, stmt)
-		root, _, err := b.Build()
-		if err != nil {
-			d.Fatalf(t, "%v", err)
-		}
+		switch d.Cmd {
+		case "exec-ddl":
+			if stmt.StatementType() != tree.DDL {
+				d.Fatalf(t, "statement type is not DDL: %v", stmt.StatementType())
+			}
 
-		return formatProps(f, root)
+			switch stmt := stmt.(type) {
+			case *tree.CreateTable:
+				tbl := catalog.CreateTable(stmt)
+				return tbl.String()
+
+			default:
+				d.Fatalf(t, "expected CREATE TABLE statement but found: %v", stmt)
+				return ""
+			}
+
+		case "props":
+			f := newFactory(createLogPropsCatalog(), 0)
+			b := optbuilder.New(context.Background(), f, stmt)
+			root, _, err := b.Build()
+			if err != nil {
+				d.Fatalf(t, "%v", err)
+			}
+			return formatProps(f, root)
+
+		default:
+			d.Fatalf(t, "unsupported command: %s", d.Cmd)
+			return ""
+		}
 	})
 }
 
@@ -83,31 +102,6 @@ func TestLogicalJoinProps(t *testing.T) {
 	joinFunc(opt.SemiJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2\n")
 	joinFunc(opt.AntiJoinOp, "columns: a.x:int:1 a.y:int:null:2\n")
 	joinFunc(opt.AntiJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2\n")
-}
-
-func TestLogicalGroupByProps(t *testing.T) {
-	cat := createLogPropsCatalog()
-	f := newFactory(cat, 0)
-	a := f.Metadata().AddTable(cat.Table("a"))
-
-	// (GroupBy (Scan a) (Projections [(Variable a.y)]) (Projections [(False)]))
-	scanGroup := f.ConstructScan(f.InternPrivate(a))
-
-	col1 := f.Metadata().TableColumn(a, 1)
-	varGroup := f.ConstructVariable(f.InternPrivate(col1))
-	items1 := f.InternList([]opt.GroupID{varGroup})
-	cols1 := opt.ColList{col1}
-	groupingsGroup := f.ConstructProjections(items1, f.InternPrivate(&cols1))
-
-	col2 := f.Metadata().AddColumn("false", types.Bool)
-	items2 := f.InternList([]opt.GroupID{f.ConstructFalse()})
-	cols2 := opt.ColList{col2}
-	aggsGroup := f.ConstructProjections(items2, f.InternPrivate(&cols2))
-
-	groupByGroup := f.ConstructGroupBy(scanGroup, groupingsGroup, aggsGroup)
-
-	expected := "columns: a.y:int:null:2 false:bool:null:3\n"
-	testLogicalProps(t, f, groupByGroup, expected)
 }
 
 func TestLogicalSetProps(t *testing.T) {
