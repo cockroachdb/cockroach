@@ -53,6 +53,11 @@ define Select {
     Filter Expr
 }
 
+# Project modifies the set of columns returned by the input result set. Columns
+# can be removed, reordered, or renamed. In addition, new columns can be
+# synthesized. Projections is a scalar Projections list operator that contains
+# the list of expressions that describe the output columns. The Cols field of
+# the Projections operator provides the indexes of each of the output columns.
 [Relational]
 define Project {
     Input       Expr
