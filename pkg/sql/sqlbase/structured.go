@@ -2590,23 +2590,6 @@ func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 	return nil
 }
 
-var _ optbase.Table = &TableDescriptor{}
-
-// TabName is part of the optbase.Table interface.
-func (desc *TableDescriptor) TabName() optbase.TableName {
-	return optbase.TableName(desc.GetName())
-}
-
-// NumColumns is part of the optbase.Table interface.
-func (desc *TableDescriptor) NumColumns() int {
-	return len(desc.Columns)
-}
-
-// Column is part of the optbase.Table interface.
-func (desc *TableDescriptor) Column(i int) optbase.Column {
-	return &desc.Columns[i]
-}
-
 // PartitionNames returns a slice containing the name of every partition and
 // subpartition in an arbitrary order.
 func (desc *TableDescriptor) PartitionNames() []string {

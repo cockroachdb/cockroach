@@ -107,7 +107,7 @@ func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	res := execPlan{root: node}
-	for i := 0; i < tbl.NumColumns(); i++ {
+	for i := 0; i < tbl.ColumnCount(); i++ {
 		res.outputCols.Set(int(md.TableColumn(tblIndex, i)), i)
 	}
 	return res, nil
