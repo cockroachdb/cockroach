@@ -513,7 +513,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str>   SAVEPOINT SCATTER SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -687,6 +687,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_roles_stmt
+%type <tree.Statement> show_schemas_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
 %type <tree.Statement> show_stats_stmt
@@ -2573,6 +2574,7 @@ show_stmt:
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
+| show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
 | show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
 | show_sessions_stmt        // EXTEND WITH HELP: SHOW SESSIONS
 | show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
@@ -2856,6 +2858,20 @@ show_tables_stmt:
     $$.val = &tree.ShowTables{Schema: tree.PublicSchemaName}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
+
+// %Help: SHOW SCHEMAS - list schemas
+// %Category: DDL
+// %Text: SHOW SCHEMAS [FROM <databasename> ]
+show_schemas_stmt:
+  SHOW SCHEMAS FROM name
+  {
+    $$.val = &tree.ShowSchemas{Database: tree.Name($4)}
+  }
+| SHOW SCHEMAS
+  {
+    $$.val = &tree.ShowSchemas{}
+  }
+| SHOW SCHEMAS error // SHOW HELP: SHOW SCHEMAS
 
 // %Help: SHOW SYNTAX - analyze SQL syntax
 // %Category: Misc
@@ -7487,6 +7503,7 @@ unreserved_keyword:
 | STATUS
 | SAVEPOINT
 | SCATTER
+| SCHEMAS
 | SCRUB
 | SEARCH
 | SECOND

@@ -322,6 +322,8 @@ func TestParse(t *testing.T) {
 		{`SHOW CLUSTER SETTING all`},
 
 		{`SHOW DATABASES`},
+		{`SHOW SCHEMAS`},
+		{`SHOW SCHEMAS FROM a`},
 		{`SHOW TABLES`},
 		{`SHOW TABLES FROM a.public`},
 		{`SHOW COLUMNS FROM a`},

@@ -108,6 +108,15 @@ Table       Name     Unique  Seq  Column  Direction  Storing  Implicit
 descriptor  primary  true    1    id      ASC        false    false
 
 query T colnames
+SELECT * FROM [SHOW SCHEMAS FROM system]
+----
+Schema
+crdb_internal
+information_schema
+pg_catalog
+public
+
+query T colnames
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 Table
