@@ -2080,14 +2080,25 @@ func shouldUseDistSQL(
 	distSQLMode sessiondata.DistSQLExecMode,
 	dp *DistSQLPlanner,
 	planner *planner,
-	plan planNode,
 ) (bool, error) {
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false, nil
 	}
 
+	plan := planner.curPlan.plan
+
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.(*zeroNode); ok {
+		return false, nil
+	}
+
+	// We don't support subqueries yet.
+	if len(planner.curPlan.subqueryPlans) > 0 {
+		if distSQLMode == sessiondata.DistSQLAlways {
+			err := newQueryNotSupportedError("subqueries not supported yet")
+			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
+			return false, err
+		}
 		return false, nil
 	}
 
@@ -2172,7 +2183,7 @@ func (e *Executor) execStmt(
 	if !useOptimizer {
 		var err error
 		useDistSQL, err = shouldUseDistSQL(
-			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan,
+			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner,
 		)
 		if err != nil {
 			return err
