@@ -94,9 +94,6 @@ type txnState2 struct {
 	// consumeAdvanceInfo().
 	adv advanceInfo
 
-	// tracing facilitates the implementation of session tracing functionality
-	tracing SessionTracing
-
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
@@ -145,12 +142,7 @@ func (ts *txnState2) resetForNewSQLTxn(
 	// TODO(andrei): figure out how to close these spans on server shutdown? Ties
 	// into a larger discussion about how to drain SQL and rollback open txns.
 	var sp opentracing.Span
-	var opName string
-	if txnType == implicitTxn {
-		opName = sqlImplicitTxnName
-	} else {
-		opName = sqlTxnName
-	}
+	opName := sqlTxnName
 
 	// Create a span for the new txn. The span is always Recordable to support the
 	// use of session tracing, which may start recording on it.
@@ -163,6 +155,10 @@ func (ts *txnState2) resetForNewSQLTxn(
 		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable)
 	}
 
+	if txnType == implicitTxn {
+		sp.SetTag("implicit", "true")
+	}
+
 	// Put the new span in the context.
 	txnCtx := opentracing.ContextWithSpan(connCtx, sp)
 
@@ -172,7 +168,6 @@ func (ts *txnState2) resetForNewSQLTxn(
 
 	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(txnCtx)
-	ts.tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 
@@ -220,9 +215,6 @@ func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
 	}
 
 	ts.sp.Finish()
-	if err := ts.tracing.onFinishSQLTxn(); err != nil {
-		log.Errorf(connCtx, "error finishing trace: %s", err)
-	}
 	ts.sp = nil
 	ts.Ctx = nil
 	ts.mu.txn = nil
