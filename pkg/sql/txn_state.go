@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -61,6 +63,11 @@ type txnState2 struct {
 	// sp is the span corresponding to the SQL txn. These are often root spans, as
 	// SQL txns are frequently the level at which we do tracing.
 	sp opentracing.Span
+	// recordingThreshold, is not zero, indicates that sp is recording and that
+	// the recording should be dumped to the log if execution of the transaction
+	// took more than this.
+	recordingThreshold time.Duration
+	recordingStart     time.Time
 
 	// cancel is the cancellation function for the above context. Called upon
 	// COMMIT/ROLLBACK of the transaction to release resources associated with the
@@ -159,6 +166,14 @@ func (ts *txnState2) resetForNewSQLTxn(
 		sp.SetTag("implicit", "true")
 	}
 
+	alreadyRecording := tranCtx.sessionTracing.Enabled()
+	duration := traceTxnThreshold.Get(&tranCtx.settings.SV)
+	if !alreadyRecording && (duration > 0) {
+		tracing.StartRecording(sp, tracing.SnowballRecording)
+		ts.recordingThreshold = duration
+		ts.recordingStart = timeutil.Now()
+	}
+
 	// Put the new span in the context.
 	txnCtx := opentracing.ContextWithSpan(connCtx, sp)
 
@@ -214,10 +229,24 @@ func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
 			"attempting to finishSQLTxn(), but KV txn is not finalized: %+v", ts.mu.txn))
 	}
 
+	if ts.recordingThreshold > 0 {
+		if r := tracing.GetRecording(ts.sp); r != nil {
+			if timeutil.Since(ts.recordingStart) >= ts.recordingThreshold {
+				dump := tracing.FormatRecordedSpans(r)
+				if len(dump) > 0 {
+					log.Infof(ts.Ctx, "SQL trace:\n%s", dump)
+				}
+			}
+		} else {
+			log.Warning(ts.Ctx, "Missing trace when sampled was enabled.")
+		}
+	}
+
 	ts.sp.Finish()
 	ts.sp = nil
 	ts.Ctx = nil
 	ts.mu.txn = nil
+	ts.recordingThreshold = 0
 }
 
 func (ts *txnState2) setIsolationLevel(isolation enginepb.IsolationType) error {
@@ -338,6 +367,10 @@ type transitionCtx struct {
 	// The Tracer used to create root spans for new txns if the parent ctx doesn't
 	// have a span.
 	tracer opentracing.Tracer
+	// sessionTracing provides access to the session's tracing interface. The
+	// state machine needs to see if session tracing is enabled.
+	sessionTracing *SessionTracing
+	settings       *cluster.Settings
 }
 
 var noRewind = rewindCapability{}
