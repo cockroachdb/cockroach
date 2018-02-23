@@ -2860,15 +2860,26 @@ show_sessions_stmt:
 show_tables_stmt:
   SHOW TABLES FROM name '.' name
   {
-    $$.val = &tree.ShowTables{Database: tree.Name($4), Schema: tree.Name($6)}
+    $$.val = &tree.ShowTables{tree.TableNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+    }}
   }
 | SHOW TABLES FROM name
   {
-    $$.val = &tree.ShowTables{Database: tree.Name($4), Schema: tree.PublicSchemaName}
+    $$.val = &tree.ShowTables{tree.TableNamePrefix{
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+    }}
   }
 | SHOW TABLES
   {
-    $$.val = &tree.ShowTables{Schema: tree.PublicSchemaName}
+    $$.val = &tree.ShowTables{tree.TableNamePrefix{
+        SchemaName: tree.PublicSchemaName,
+        ExplicitSchema: true,
+    }}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
 
