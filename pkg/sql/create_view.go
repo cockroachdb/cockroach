@@ -220,7 +220,7 @@ func (n *createViewNode) makeViewTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
 	desc := initTableDescriptor(id, parentID, viewName,
-		params.p.txn.OrigTimestamp(true /*mattersForTxnOrdering*/), privileges)
+		params.p.txn.CommitTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
