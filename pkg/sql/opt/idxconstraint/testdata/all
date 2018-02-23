@@ -17,9 +17,7 @@ index-constraints vars=(int) index=(@1)
 @1
 ----
 [ - ]
-
-# Remaining filter: @1
-
+Remaining filter: @1
 
 index-constraints vars=(int) index=(@1)
 @1 > 2
@@ -158,17 +156,13 @@ index-constraints vars=(int, int) index=(@1)
 @1 = 1 AND @2 = 2
 ----
 [/1 - /1]
-
-# Remaining filter: @2 = 2
-
+Remaining filter: @2 = 2
 
 index-constraints vars=(int, int) index=(@2)
 @1 = 1 AND @2 = 2
 ----
 [/2 - /2]
-
-# Remaining filter: @1 = 1
-
+Remaining filter: @1 = 1
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > NULL
@@ -192,35 +186,27 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 > 2 AND @2 > 5
 ----
 [/3/6 - ]
-
-# Remaining filter: @2 > 5
-
+Remaining filter: @2 > 5
 
 index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 > 2 AND @2 < 5
 ----
 [/3/4 - ]
-
-# Remaining filter: @2 < 5
-
+Remaining filter: @2 < 5
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 != 1 AND @2 > 5
 ----
 (/NULL - /0]
 [/2/6 - ]
-
-# Remaining filter: @2 > 5
-
+Remaining filter: @2 > 5
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 != 1 AND @2 < 5
 ----
 (/NULL - /0/4]
 (/2/NULL - ]
-
-# Remaining filter: @2 < 5
-
+Remaining filter: @2 < 5
 
 index-constraints vars=(int) index=(@1)
 @1 >= 1 AND @1 <= 5 AND @1 != 3
@@ -232,41 +218,31 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/8 - /2/9]
-
-# Remaining filter: (@2 >= 8) AND (@2 <= 9)
-
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
 
 index-constraints vars=(int, int) index=(@1 desc, @2)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/2/8 - /1/9]
-
-# Remaining filter: (@2 >= 8) AND (@2 <= 9)
-
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
 
 index-constraints vars=(int, int) index=(@1, @2 desc)
 @1 >= 1 AND @1 <= 2 AND @2 >= 8 AND @2 <= 9
 ----
 [/1/9 - /2/8]
-
-# Remaining filter: (@2 >= 8) AND (@2 <= 9)
-
+Remaining filter: (@2 >= 8) AND (@2 <= 9)
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 > 1 AND @1 < 4 AND @2 > 5 AND @2 < 8
 ----
 [/2/6 - /3/7]
-
-# Remaining filter: (@2 > 5) AND (@2 < 8)
-
+Remaining filter: (@2 > 5) AND (@2 < 8)
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 > 1 AND @1 < 4 AND @2 = 5
 ----
 [/2/5 - /3/5]
-
-# Remaining filter: @2 = 5
-
+Remaining filter: @2 = 5
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 > 3 AND @2 < 5
@@ -292,9 +268,7 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @1 <= 5 AND @2 != 2
 ----
 (/1/NULL - /5]
-
-# Remaining filter: @2 != 2
-
+Remaining filter: @2 != 2
 
 # Tests with a type that doesn't support Prev.
 index-constraints vars=(string) index=(@1)
@@ -306,9 +280,7 @@ index-constraints vars=(string, int) index=(@1, @2)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 [/e'a\x00'/5 - /'z')
-
-# Remaining filter: @2 = 5
-
+Remaining filter: @2 = 5
 
 index-constraints vars=(string) index=(@1 desc)
 @1 > 'a' AND @1 < 'z'
@@ -319,9 +291,7 @@ index-constraints vars=(string, int) index=(@1 desc, @2)
 @1 > 'a' AND @1 < 'z' AND @2 = 5
 ----
 (/'z' - /e'a\x00'/5]
-
-# Remaining filter: @2 = 5
-
+Remaining filter: @2 = 5
 
 # Tests with a type that doesn't support Next or Prev.
 index-constraints vars=(decimal) index=(@1)
@@ -352,8 +322,7 @@ index-constraints vars=(decimal, decimal) index=(@1, @2)
 @1 > 1.5 AND @2 > 2
 ----
 (/1.5 - ]
-
-# Remaining filter: @2 > 2
+Remaining filter: @2 > 2
 
 
 # Tests with variable IN tuple.
@@ -416,9 +385,7 @@ index-constraints vars=(int, int) index=(@1, @2)
 [/2/1 - /2/1]
 [/2/2 - /2/2]
 [/2/3 - /2/3]
-
-# Remaining filter: @2 IN (1, 2, 3)
-
+Remaining filter: @2 IN (1, 2, 3)
 
 index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 @1 IN (1, 2) AND @2 IN (1, 2, 3)
@@ -429,25 +396,19 @@ index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 [/1/3 - /1/3]
 [/1/2 - /1/2]
 [/1/1 - /1/1]
-
-# Remaining filter: @2 IN (1, 2, 3)
-
+Remaining filter: @2 IN (1, 2, 3)
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/2/1 - /4/3]
-
-# Remaining filter: @2 IN (1, 2, 3)
-
+Remaining filter: @2 IN (1, 2, 3)
 
 index-constraints vars=(int, int) index=(@1 desc, @2 desc)
 @1 >= 2 AND @1 <= 4 AND @2 IN (1, 2, 3)
 ----
 [/4/3 - /2/1]
-
-# Remaining filter: @2 IN (1, 2, 3)
-
+Remaining filter: @2 IN (1, 2, 3)
 
 
 index-constraints vars=(int, int) index=(@1, @2)
@@ -489,17 +450,13 @@ index-constraints vars=(int, int, int) index=(@1, @3)
 (@1, @2, @3) = (1, 2, 3)
 ----
 [/1/3 - /1/3]
-
-# Remaining filter: @2 = 2
-
+Remaining filter: @2 = 2
 
 index-constraints vars=(int, int, int) index=(@3, @2)
 (@1, @2, @3) = (1, 2, 3)
 ----
 [/3/2 - /3/2]
-
-# Remaining filter: @1 = 1
-
+Remaining filter: @1 = 1
 
 index-constraints vars=(int, int, int, int, int) index=(@1, @2, @3, @4, @5)
 (@1, @2, 3, (4, @5)) = (1, 2, @3, (@4, 5))
@@ -515,9 +472,7 @@ index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4)
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/6/2/3/4 - /9/2/3/4]
-
-# Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
-
+Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
 
 index-constraints \
   vars=(int, int, int, int) \
@@ -525,9 +480,7 @@ index-constraints \
 @1 > 5 AND @1 < 10 AND (@2, @3, @4) = (2, 3, 4)
 ----
 [/9/2/3/4 - /6/2/3/4]
-
-# Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
-
+Remaining filter: ((@2 = 2) AND (@3 = 3)) AND (@4 = 4)
 
 # Tests with tuple inequalities.
 
@@ -540,9 +493,7 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) >= (1, 2, @1)
 ----
 [/1/2 - ]
-
-# Remaining filter: (@1, @2, @3) >= (1, 2, @1)
-
+Remaining filter: (@1, @2, @3) >= (1, 2, @1)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) > (1, 2, 3)
@@ -553,85 +504,65 @@ index-constraints vars=(int, int, int) index=(@1, @2)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2 - ]
-
-# Remaining filter: (@1, @2, @3) > (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2)
 (@1, @2, @3) < (1, 2, 3)
 ----
 (/NULL - /1/2]
-
-# Remaining filter: (@1, @2, @3) < (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) < (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, 3)
 ----
 (/NULL - /1/2/3]
-
-# Remaining filter: (@1, @2, @3) <= (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) <= (1, 2, @1)
 ----
 (/NULL - /1/2]
-
-# Remaining filter: (@1, @2, @3) <= (1, 2, @1)
-
+Remaining filter: (@1, @2, @3) <= (1, 2, @1)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, 3)
 ----
 (/NULL - /1/2/2]
-
-# Remaining filter: (@1, @2, @3) < (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) < (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) < (1, 2, @1)
 ----
 (/NULL - /1/2]
-
-# Remaining filter: (@1, @2, @3) < (1, 2, @1)
-
+Remaining filter: (@1, @2, @3) < (1, 2, @1)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, 3)
 ----
 [ - /1/2/2]
 [/1/2/4 - ]
-
-# Remaining filter: (@1, @2, @3) != (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
 (@1, @2, @3) != (1, 2, 3)
 ----
 [ - /1/2/4]
 [/1/2/2 - ]
-
-# Remaining filter: (@1, @2, @3) != (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 desc, @2, @3)
 (@1, @2, @3) != (1, 2, 3)
 ----
 [ - /1/2/2]
 [/1/2/4 - ]
-
-# Remaining filter: (@1, @2, @3) != (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 not null, @2, @3)
 (@1, @2, @3) != (1, 2, 3)
 ----
 [ - /1/2/2]
 [/1/2/4 - ]
-
-# Remaining filter: (@1, @2, @3) != (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
 (@1, @2, @3) != (1, 2, 3)
@@ -644,73 +575,55 @@ index-constraints vars=(int, int, int) index=(@1, @2 not null, @3 not null)
 ----
 [ - /1/2/2]
 [/1/2/4 - ]
-
-# Remaining filter: (@1, @2, @3) != (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) != (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, 2, @1)
 ----
 [ - ]
-
-# Remaining filter: (@1, @2, @3) != (1, 2, @1)
-
+Remaining filter: (@1, @2, @3) != (1, 2, @1)
 
 index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc)
 (@1, @2, @3) >= (1, 2, 3)
 ----
 [ - /1/2/3]
-
-# Remaining filter: (@1, @2, @3) >= (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) >= (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [ - /1/2]
-
-# Remaining filter: (@1, @2, @3) > (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2 - ]
-
-# Remaining filter: (@1, @2, @3) > (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3 desc)
 (@2, @3) > (1, 2)
 ----
 [ - ]
-
-# Remaining filter: (@2, @3) > (1, 2)
-
+Remaining filter: (@2, @3) > (1, 2)
 
 index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) >= (1, 2) AND (@1, @2) <= (3, 4)
 ----
 [/1/2 - /3/4]
-
-# Remaining filter: (@1, @2) <= (3, 4)
-
+Remaining filter: (@1, @2) <= (3, 4)
 
 index-constraints vars=(int, int) index=(@1, @2) semtree-normalize
 (@1, @2) BETWEEN (1, 2) AND (3, 4)
 ----
 [/1/2 - /3/4]
-
-# Remaining filter: (@1, @2) <= (3, 4)
-
+Remaining filter: (@1, @2) <= (3, 4)
 
 index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4) semtree-normalize
 (@1, @2, @4) BETWEEN (1, 2, 3) AND (4, 5, 6)
 ----
 [/1/2 - /4/5]
-
-# Remaining filter: ((@1, @2, @4) >= (1, 2, 3)) AND ((@1, @2, @4) <= (4, 5, 6))
-
+Remaining filter: ((@1, @2, @4) >= (1, 2, 3)) AND ((@1, @2, @4) <= (4, 5, 6))
 
 index-constraints vars=(int, bool) index=(@1, @2)
 (@1, @2) > (1, true)
@@ -721,9 +634,7 @@ index-constraints vars=(int, bool) index=(@1, @2)
 (@1, @2) < (1, false)
 ----
 (/NULL - /1/false)
-
-# Remaining filter: (@1, @2) < (1, false)
-
+Remaining filter: (@1, @2) < (1, false)
 
 index-constraints vars=(int, int, int) index=(@1 not null, @2 not null, @3 not null)
 (@1, @2, @3) <= (1, 2, 3)
@@ -754,17 +665,13 @@ index-constraints vars=(int, int, int) index=(@1, @2 not null, @3)
 (@1, @2, @3) <= (1, 2, 3)
 ----
 (/NULL - /1/2/3]
-
-# Remaining filter: (@1, @2, @3) <= (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3 not null)
 (@1, @2, @3) <= (1, 2, 3)
 ----
 (/NULL - /1/2/3]
-
-# Remaining filter: (@1, @2, @3) <= (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
 index-constraints \
   vars=(int, int, int) \
@@ -777,41 +684,31 @@ index-constraints vars=(int, int, int) index=(@1 desc, @2 desc not null, @3 desc
 (@1, @2, @3) > (1, 2, 3)
 ----
 [ - /1/2/4]
-
-# Remaining filter: (@1, @2, @3) > (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 desc, @2 desc, @3 desc not null)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [ - /1/2/4]
-
-# Remaining filter: (@1, @2, @3) > (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @3, @2) != (1, NULL, 2)
 ----
 [ - ]
-
-# Remaining filter: (@1, @3, @2) != (1, NULL, 2)
-
+Remaining filter: (@1, @3, @2) != (1, NULL, 2)
 
 index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
 (@1, @2, @3) > (1, 2, 3)
 ----
 [/1/2 - ]
-
-# Remaining filter: (@1, @2, @3) > (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) > (1, 2, 3)
 
 index-constraints vars=(int, int, int) index=(@1 not null, @2 not null)
 (@1, @2, @3) <= (1, 2, 3)
 ----
 [ - /1/2]
-
-# Remaining filter: (@1, @2, @3) <= (1, 2, 3)
-
+Remaining filter: (@1, @2, @3) <= (1, 2, 3)
 
 # Cases with NULLs in tuple inequalities. These conditions are true only when
 # they don't depend on the NULL value, i.e. when the inequality holds true for
@@ -858,9 +755,7 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 (@1, @2, @3) != (1, NULL, 3)
 ----
 [ - ]
-
-# Remaining filter: (@1, @2, @3) != (1, NULL, 3)
-
+Remaining filter: (@1, @2, @3) != (1, NULL, 3)
 
 # Tests with tuple IN tuple.
 
@@ -893,9 +788,7 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/5/6 - /5/6]
 [/7/8 - /7/8]
 [/9/10 - /9/10]
-
-# Remaining filter: (@1 + 5, @1, @1 + @2, @2) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
-
+Remaining filter: (@1 + 5, @1, @1 + @2, @2) IN ((1, 5, 1, 6), (2, 7, 2, 8), (3, 9, 3, 10))
 
 # Test that we properly handle NULLs inside IN tuples.
 index-constraints vars=(int, int) index=(@1, @2)
@@ -926,18 +819,14 @@ index-constraints vars=(int, int, int, int) index=(@2, @4)
 ----
 [/4/4 - /4/4]
 [/5/5 - /5/5]
-
-# Remaining filter: (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
-
+Remaining filter: (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
 
 index-constraints vars=(int, int, int, int) index=(@2)
 (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
 ----
 [/4 - /4]
 [/5 - /5]
-
-# Remaining filter: (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
-
+Remaining filter: (@1, @2, @3, @4) IN ((1, 5, 1, 5), (2, 4, 2, 4), (3, 5, 3, 5))
 
 index-constraints vars=(int, int) index=(@1, @2)
 (@2, @1) IN ((1, 5), (2, 1), (3, 4), (4, 1))
@@ -999,17 +888,13 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/6/1/3 - /6/1/3]
 [/6/1/5 - /6/1/5]
 [/6/1/7 - /6/1/7]
-
-# Remaining filter: (@1, @3) IN ((2, 3), (4, 5), (6, 7))
-
+Remaining filter: (@1, @3) IN ((2, 3), (4, 5), (6, 7))
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 > 1 AND (@2, @3) IN ((2, 3), (4, 5), (6, 7))
 ----
 [/2/2/3 - ]
-
-# Remaining filter: (@2, @3) IN ((2, 3), (4, 5), (6, 7))
-
+Remaining filter: (@2, @3) IN ((2, 3), (4, 5), (6, 7))
 
 index-constraints vars=(int) index=(@1)
 @1 IS NULL
@@ -1035,9 +920,7 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND @2 IS NULL
 ----
 [/1/NULL - ]
-
-# Remaining filter: @2 IS NULL
-
+Remaining filter: @2 IS NULL
 
 index-constraints vars=(int) index=(@1)
 @1 IS NOT DISTINCT FROM NULL
@@ -1091,25 +974,19 @@ index-constraints vars=(int, int) index=(@1, @2)
 @2 = @1
 ----
 (/NULL - ]
-
-# Remaining filter: @2 = @1
-
+Remaining filter: @2 = @1
 
 index-constraints vars=(int, int) index=(@1, @2)
 @2 < @1
 ----
 (/NULL - ]
-
-# Remaining filter: @2 < @1
-
+Remaining filter: @2 < @1
 
 index-constraints vars=(int, int) index=(@1 not null, @2)
 @1 = @2
 ----
 [ - ]
-
-# Remaining filter: @1 = @2
-
+Remaining filter: @1 = @2
 
 # Tests with top-level OR.
 # TODO(radu): expression simplification is limited when dealing with ORs; some
@@ -1132,44 +1009,34 @@ index-constraints vars=(int) index=(@1)
 (@1 >= 1 AND @1 <= 5) OR (@1 >= 2 AND @1 <= 8)
 ----
 [/1 - /8]
-
-# Remaining filter: (@1 <= 5) OR (@1 >= 2)
-
+Remaining filter: (@1 <= 5) OR (@1 >= 2)
 
 index-constraints vars=(int) index=(@1)
 (@1 >= 1 AND @1 <= 3) OR (@1 >= 5 AND @1 <= 8)
 ----
 [/1 - /3]
 [/5 - /8]
-
-# Remaining filter: (@1 <= 3) OR (@1 >= 5)
-
+Remaining filter: (@1 <= 3) OR (@1 >= 5)
 
 index-constraints vars=(int, int) index=(@1)
 (@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
 ----
 [/1 - /1]
 [/2 - /2]
-
-# Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
-
+Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
 
 index-constraints vars=(int, int) index=(@2)
 (@1 = 1 AND @2 = 5) OR (@1 = 2 and @2 = 6)
 ----
 [/5 - /5]
 [/6 - /6]
-
-# Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
-
+Remaining filter: ((@1 = 1) AND (@2 = 5)) OR ((@1 = 2) AND (@2 = 6))
 
 index-constraints vars=(int, int) index=(@2)
 @1 = 1 OR @2 = 2
 ----
 [ - ]
-
-# Remaining filter: (@1 = 1) OR (@2 = 2)
-
+Remaining filter: (@1 = 1) OR (@2 = 2)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 OR (@1, @2, @3) IN ((4, 5, 6), (7, 8, 9))
@@ -1185,9 +1052,7 @@ index-constraints vars=(int, int, int) index=(@1, @2, @3)
 [/2/4/5 - /2/4/5]
 [/2/6/7 - /2/6/7]
 [/3 - /3]
-
-# Remaining filter: ((@1 = 1) OR ((@1 = 2) AND ((@2, @3) IN ((4, 5), (6, 7))))) OR (@1 = 3)
-
+Remaining filter: ((@1 = 1) OR ((@1 = 2) AND ((@2, @3) IN ((4, 5), (6, 7))))) OR (@1 = 3)
 
 # Tests with inner OR.
 
@@ -1196,53 +1061,45 @@ index-constraints vars=(int, int) index=(@1, @2)
 ----
 [/1/2 - /1/2]
 [/1/3 - /1/3]
-
-# Remaining filter: (@2 = 2) OR (@2 = 3)
-
+Remaining filter: (@2 = 2) OR (@2 = 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 AND (@2 = 2 OR (@2 = 3 AND @3 = 4))
 ----
 [/1/2 - /1/2]
 [/1/3/4 - /1/3/4]
-
-# Remaining filter: (@2 = 2) OR ((@2 = 3) AND (@3 = 4))
-
+Remaining filter: (@2 = 2) OR ((@2 = 3) AND (@3 = 4))
 
 index-constraints vars=(int, int) index=(@1, @2)
 @1 >= 1 AND (@2 = 2 OR @2 = 3)
 ----
 [/1/2 - ]
-
-# Remaining filter: (@2 = 2) OR (@2 = 3)
-
+Remaining filter: (@2 = 2) OR (@2 = 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 AND (@2 = 2 OR @2 = 3) AND (@3 >= 4)
 ----
 [/1/2/4 - /1/2]
 [/1/3/4 - /1/3]
-
-# Remaining filter: (@2 = 2) OR (@2 = 3)
-
+Remaining filter: (@2 = 2) OR (@2 = 3)
 
 index-constraints vars=(int, int, int) index=(@1, @2, @3)
 @1 = 1 AND @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
 ----
 (/1/NULL - /1]
-
-# Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
-
+Remaining filter: @2 = CASE WHEN @3 = 2 THEN 1 ELSE 2 END
 
 # This testcase exposed an issue around extending spans. We don't normalize the
 # expression so we have a hierarchy of ANDs (which requires a more complex path
-# for calculating spans).
+# for calculating spans). As a side-effect of disabling normalization, an
+# unnecessary filter remains.
 index-constraints vars=(int, int, int, int) index=(@1, @2, @3, @4) nonormalize
 @1 = 1 AND @2 = 2 AND @3 = 3 AND @4 IN (4,5,6)
 ----
 [/1/2/3/4 - /1/2/3/4]
 [/1/2/3/5 - /1/2/3/5]
 [/1/2/3/6 - /1/2/3/6]
+Remaining filter: ((true AND true) AND true) AND true
 
 index-constraints vars=(int, int) index=(@1, @2)
 (@1 = 1) AND (@2 > 5) AND (@2 < 1)
@@ -1255,33 +1112,25 @@ index-constraints vars=(int) index=(@1)
 @1 = 1.5
 ----
 (/NULL - ]
-
-# Remaining filter: @1 = 1.5
-
+Remaining filter: @1 = 1.5
 
 index-constraints vars=(int) index=(@1)
 @1 > 1.5
 ----
 (/NULL - ]
-
-# Remaining filter: @1 > 1.5
-
+Remaining filter: @1 > 1.5
 
 index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) = (1, 2.5)
 ----
 (/1/NULL - /1]
-
-# Remaining filter: @2 = 2.5
-
+Remaining filter: @2 = 2.5
 
 index-constraints vars=(int, int) index=(@1, @2)
 (@1, @2) >= (1, 2.5)
 ----
 [/1 - ]
-
-# Remaining filter: (@1, @2) >= (1, 2.5)
-
+Remaining filter: (@1, @2) >= (1, 2.5)
 
 # Verify that we ignore spans that become invalid after extension.
 index-constraints vars=(int, int) index=(@1, @2)
@@ -1292,9 +1141,7 @@ index-constraints vars=(int, int) index=(@1, @2)
 (@1 >= 1 AND (@1, @2) < (1, 2) OR @1 > 3) AND @2 = 5
 ----
 [/4/5 - ]
-
-# Remaining filter: @2 = 5
-
+Remaining filter: @2 = 5
 
 # Regression test for #3472.
 index-constraints vars=(int, int) index=(@1, @2)
@@ -1317,25 +1164,19 @@ index-constraints vars=(jsonb) inverted-index=@1
 @1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-
-# Remaining filter: @1 @> '{"b": 1}'
-
+Remaining filter: @1 @> '{"b": 1}'
 
 index-constraints vars=(jsonb) inverted-index=@1
 '{"a": 1}' <@ @1 AND '{"b": 1}' <@ @1
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-
-# Remaining filter: @1 @> '{"b": 1}'
-
+Remaining filter: @1 @> '{"b": 1}'
 
 index-constraints vars=(jsonb, int) inverted-index=@1
 @2 = 1 AND @1 @> '{"a": 1}' AND @1 @> '{"b": 1}'
 ----
 [/'{"a": 1}' - /'{"a": 1}']
-
-# Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
-
+Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
 
 index-constraints vars=(string) index=@1
 @1 LIKE 'ABC%'
@@ -1346,17 +1187,13 @@ index-constraints vars=(string) index=@1
 @1 LIKE 'ABC_'
 ----
 [/'ABC' - /'ABD')
-
-# Remaining filter: @1 LIKE 'ABC_'
-
+Remaining filter: @1 LIKE 'ABC_'
 
 index-constraints vars=(string) index=@1
 @1 LIKE 'ABC%Z'
 ----
 [/'ABC' - /'ABD')
-
-# Remaining filter: @1 LIKE 'ABC%Z'
-
+Remaining filter: @1 LIKE 'ABC%Z'
 
 index-constraints vars=(string) index=@1
 @1 LIKE 'ABC'
@@ -1367,17 +1204,13 @@ index-constraints vars=(string) index=@1
 @1 LIKE '%'
 ----
 (/NULL - ]
-
-# Remaining filter: @1 LIKE '%'
-
+Remaining filter: @1 LIKE '%'
 
 index-constraints vars=(string) index=@1
 @1 LIKE '%XY'
 ----
 (/NULL - ]
-
-# Remaining filter: @1 LIKE '%XY'
-
+Remaining filter: @1 LIKE '%XY'
 
 index-constraints vars=(string) index=(@1 desc)
 @1 LIKE 'ABC%'
@@ -1393,25 +1226,19 @@ index-constraints vars=(int,string) index=(@1, @2 desc)
 @1 >= 1 AND @1 <= 4 AND @2 LIKE 'ABC%'
 ----
 (/1/'ABD' - /4/'ABC']
-
-# Remaining filter: @2 LIKE 'ABC%'
-
+Remaining filter: @2 LIKE 'ABC%'
 
 index-constraints vars=(string) index=(@1)
 @1 SIMILAR TO 'ABC.*'
 ----
 [/'ABC' - /'ABD')
-
-# Remaining filter: @1 SIMILAR TO 'ABC.*'
-
+Remaining filter: @1 SIMILAR TO 'ABC.*'
 
 index-constraints vars=(string) index=(@1)
 @1 SIMILAR TO 'ABC.*Z'
 ----
 [/'ABC' - /'ABD')
-
-# Remaining filter: @1 SIMILAR TO 'ABC.*Z'
-
+Remaining filter: @1 SIMILAR TO 'ABC.*Z'
 
 index-constraints vars=(string) index=(@1)
 @1 SIMILAR TO 'ABC'
@@ -1422,5 +1249,4 @@ index-constraints vars=(string) index=(@1)
 @1 SIMILAR TO '(ABC|ABCDEF)%'
 ----
 [/'ABC' - /'ABD')
-
-# Remaining filter: @1 SIMILAR TO '(ABC|ABCDEF)%'
+Remaining filter: @1 SIMILAR TO '(ABC|ABCDEF)%'
