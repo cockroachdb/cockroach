@@ -437,8 +437,9 @@ func (s *Server) ServeConn(
 			nodeID: s.cfg.NodeID.Get(),
 			clock:  s.cfg.Clock,
 			// Future transaction's monitors will inherits from sessionRootMon.
-			connMon: &sessionRootMon,
-			tracer:  s.cfg.AmbientCtx.Tracer,
+			connMon:  &sessionRootMon,
+			tracer:   s.cfg.AmbientCtx.Tracer,
+			settings: s.cfg.Settings,
 		},
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
@@ -469,6 +470,7 @@ func (s *Server) ServeConn(
 	}
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
 	ex.dataMutator.sessionTracing.ex = &ex
+	ex.transitionCtx.sessionTracing = &ex.dataMutator.sessionTracing
 
 	defer func() {
 		r := recover()
