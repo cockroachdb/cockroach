@@ -61,6 +61,11 @@ SELECT NULL::INT[]
 ----
 NULL
 
+query BB
+SELECT NULL::INT[] IS DISTINCT FROM NULL, ARRAY[1,2,3] IS DISTINCT FROM NULL
+----
+false true
+
 # #19821
 
 query T
