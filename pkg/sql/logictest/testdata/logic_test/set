@@ -41,8 +41,7 @@ SHOW DATABASE
 database
 ·
 
-
-statement error no database specified
+statement error pattern "public" did not match any valid database or schema
 SHOW TABLES
 
 # SET statement succeeds, CREATE TABLE fails.

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // ShowTables returns all the tables.
@@ -27,15 +28,12 @@ import (
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
 func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode, error) {
-	name := p.SessionData().Database
-	if n.Database != "" {
-		name = string(n.Database)
-	}
-	if name == "" {
-		return nil, errNoDatabase
-	}
-	if _, err := ResolveDatabase(ctx, p, name, true /*required*/); err != nil {
+	found, _, err := n.Resolve(ctx, p, p.CurrentDatabase(), p.CurrentSearchPath())
+	if err != nil {
 		return nil, err
+	}
+	if !found {
+		return nil, sqlbase.NewInvalidWildcardError(tree.ErrString(&n.TableNamePrefix))
 	}
 
 	const getTablesQuery = `
@@ -45,6 +43,6 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 				ORDER BY table_schema, table_name`
 
 	return p.delegateQuery(ctx, "SHOW TABLES",
-		fmt.Sprintf(getTablesQuery, (*tree.Name)(&name), lex.EscapeSQLString(string(n.Schema))),
+		fmt.Sprintf(getTablesQuery, &n.CatalogName, lex.EscapeSQLString(n.Schema())),
 		func(_ context.Context) error { return nil }, nil)
 }

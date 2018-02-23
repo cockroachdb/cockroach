@@ -1,5 +1,36 @@
 # LogicTest: default distsql
 
+statement ok
+CREATE TABLE a(a INT)
+
+statement ok
+CREATE DATABASE public; CREATE TABLE public.public.t(a INT)
+
+# "public" with the current database designates the public schema
+query T
+SHOW TABLES FROM public
+----
+a
+
+# To access all tables in database "public", one must specify
+# its public schema explicitly.
+query T
+SHOW TABLES FROM public.public
+----
+t
+
+# Of course one can also list the tables in "public" by making it the
+# current database.
+statement ok
+SET DATABASE = public
+
+query T
+SHOW TABLES
+----
+t
+
+statement ok
+SET DATABASE = test; DROP DATABASE public
 
 # Unqualified pg_type resolves from pg_catalog.
 query T
