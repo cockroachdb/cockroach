@@ -49,7 +49,8 @@ type testContext struct {
 	mon         mon.BytesMonitor
 	tracer      opentracing.Tracer
 	// ctx is mimicking the spirit of a clientn connection's context
-	ctx context.Context
+	ctx      context.Context
+	settings *cluster.Settings
 }
 
 func makeTestContext() testContext {
@@ -62,6 +63,7 @@ func makeTestContext() testContext {
 			},
 		)
 	})
+	settings := cluster.MakeTestingClusterSettings()
 	return testContext{
 		manualClock: manual,
 		clock:       clock,
@@ -73,10 +75,11 @@ func makeTestContext() testContext {
 			nil,  /* maxHist */
 			-1,   /* increment */
 			1000, /* noteworthy */
-			cluster.MakeTestingClusterSettings(),
+			settings,
 		),
-		tracer: tracing.NewTracer(),
-		ctx:    context.TODO(),
+		tracer:   tracing.NewTracer(),
+		ctx:      context.TODO(),
+		settings: settings,
 	}
 }
 
@@ -248,11 +251,13 @@ func TestTransitions(t *testing.T) {
 	dummyRewCap := rewindCapability{rewindPos: CmdPos(12)}
 	testCon := makeTestContext()
 	tranCtx := transitionCtx{
-		db:      testCon.mockDB,
-		nodeID:  roachpb.NodeID(5),
-		clock:   testCon.clock,
-		tracer:  tracing.NewTracer(),
-		connMon: &testCon.mon,
+		db:             testCon.mockDB,
+		nodeID:         roachpb.NodeID(5),
+		clock:          testCon.clock,
+		tracer:         tracing.NewTracer(),
+		connMon:        &testCon.mon,
+		sessionTracing: &SessionTracing{},
+		settings:       testCon.settings,
 	}
 
 	type expAdvance struct {
