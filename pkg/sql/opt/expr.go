@@ -15,9 +15,6 @@
 package opt
 
 import (
-	"bytes"
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -94,9 +91,6 @@ type Expr struct {
 	// two child expressions (each one being a conjunct).
 	children []*Expr
 
-	// Relational properties. Nil for scalar expressions.
-	relProps *relationalProps
-
 	// Scalar properties (properties that pertain only to scalar operators).
 	// Nil for relational expressions.
 	scalarProps *scalarProps
@@ -136,19 +130,6 @@ func normalizeExprNode(e *Expr) {
 	}
 }
 
-// formatRelational adds a node for a relational operator and returns a
-// reference to the new treeprinter.Node (for adding more children).
-func formatRelational(e *Expr, tp treeprinter.Node) treeprinter.Node {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v", e.op)
-	if !e.relProps.outputCols.Empty() {
-		fmt.Fprintf(&buf, " [out=%s]", e.relProps.outputCols)
-	}
-	n := tp.Child(buf.String())
-	e.relProps.format(n)
-	return n
-}
-
 // formatExprs formats the given expressions as children of the same
 // node. Optionally creates a new parent node (if title is not "", and we have
 // expressions).
@@ -175,71 +156,6 @@ func (e *Expr) String() string {
 	tp := treeprinter.New()
 	e.format(tp)
 	return tp.String()
-}
-
-// inputs returns the children expressions, excluding auxiliary expressions.
-func (e *Expr) inputs() []*Expr {
-	return e.children[:len(e.children)-int(e.layout().numAux)]
-}
-
-// aux returns the auxiliary expression(s) at location i in the children of
-// Expr e.
-func (e *Expr) aux(i int8, op operator) []*Expr {
-	t := e.children[i : i+1]
-	if t[0] == nil {
-		return nil
-	}
-	if t[0].op == op {
-		return t[0].children
-	}
-	return t
-}
-
-// addAux1 adds a single auxiliary expression with operator op at location
-// i in the children of Expr e.
-func (e *Expr) addAux1(i int8, op operator, aux *Expr) {
-	if t := e.children[i]; t == nil {
-		e.children[i] = aux
-	} else if t.op != op {
-		e.children[i] = &Expr{
-			op:       op,
-			children: []*Expr{t, aux},
-		}
-	} else {
-		t.children = append(t.children, aux)
-	}
-}
-
-func (e *Expr) filters() []*Expr {
-	l := e.layout()
-	if l.filters < 0 {
-		return nil
-	}
-	return e.aux(l.filters, andOp)
-}
-
-func (e *Expr) addFilter(f *Expr) {
-	// Recursively flatten AND expressions when adding them as a filter. The
-	// filters for an expression are implicitly AND'ed together (i.e. they are in
-	// conjunctive normal form).
-	if f.op == andOp {
-		for _, input := range f.inputs() {
-			e.addFilter(input)
-		}
-		return
-	}
-
-	e.addAux1(e.layout().filters, andOp, f)
-}
-
-func (e *Expr) layout() exprLayout {
-	return operatorTab[e.op].layout
-}
-
-func (e *Expr) initProps() {
-	if e.relProps != nil {
-		e.relProps.init()
-	}
 }
 
 func (e *Expr) shallowCopy() *Expr {
