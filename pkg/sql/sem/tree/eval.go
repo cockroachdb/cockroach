@@ -1524,6 +1524,13 @@ func init() {
 			RightType: types.TArray{Typ: t},
 			fn:        cmpOpScalarEQFn,
 		})
+
+		CmpOps[IsNotDistinctFrom] = append(CmpOps[IsNotDistinctFrom], CmpOp{
+			LeftType:     types.TArray{Typ: t},
+			RightType:    types.TArray{Typ: t},
+			fn:           cmpOpScalarIsFn,
+			nullableArgs: true,
+		})
 	}
 }
 
