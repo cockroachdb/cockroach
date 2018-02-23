@@ -226,21 +226,6 @@ func (irj *InterleavedReaderJoinerSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
-func (aso *AlgebraicSetOpSpec) summary() (string, []string) {
-	var details []string
-	if len(aso.Ordering.Columns) > 0 {
-		details = append(details, aso.Ordering.diagramString())
-	}
-
-	switch aso.OpType {
-	case AlgebraicSetOpSpec_Except_all:
-		return "ExceptAll", details
-	default:
-		panic(fmt.Sprintf("Unsupported op type: %v", aso.OpType))
-	}
-}
-
-// summary implements the diagramCellType interface.
 func (s *SorterSpec) summary() (string, []string) {
 	details := []string{s.OutputOrdering.diagramString()}
 	if s.OrderingMatchLen != 0 {
