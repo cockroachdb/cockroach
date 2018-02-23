@@ -509,7 +509,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	useDistSQL, err := shouldUseDistSQL(
-		ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner, planner.curPlan.plan)
+		ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner)
 	if err != nil {
 		res.SetError(err)
 		return nil
