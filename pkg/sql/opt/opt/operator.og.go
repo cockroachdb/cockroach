@@ -35,19 +35,21 @@ const (
 
 	// ProjectionsOp is a set of typed scalar expressions that will become output
 	// columns for a containing Project operator. The private Cols field contains
-	// the set of column indexes returned by the expression, as a *ColList.
+	// the list of column indexes returned by the expression, as a *opt.ColList. It
+	// is not legal for Cols to be empty.
 	ProjectionsOp
 
 	// AggregationsOp is a set of aggregate expressions that will become output
 	// columns for a containing GroupBy operator. The private Cols field contains
-	// the set of column indexes returned by the expression, as a *ColList.
+	// the list of column indexes returned by the expression, as a *opt.ColList. It
+	// is legal for Cols to be empty.
 	AggregationsOp
 
 	// GroupingsOp is a set of grouping expressions that will become output columns
 	// for a containing GroupBy operator. The GroupBy operator groups its input by
 	// the value of these expressions, and may compute aggregates over the groups.
-	// The private Cols field contains the set of column indexes returned by the
-	// expression, as a *ColList.
+	// The private Cols field contains the list of column indexes returned by the
+	// expression, as a *opt.ColList. It is legal for Cols to be empty.
 	GroupingsOp
 
 	ExistsOp
@@ -184,6 +186,11 @@ const (
 	// predicate expression. Rows which do not match the filter are discarded.
 	SelectOp
 
+	// ProjectOp modifies the set of columns returned by the input result set. Columns
+	// can be removed, reordered, or renamed. In addition, new columns can be
+	// synthesized. Projections is a scalar Projections list operator that contains
+	// the list of expressions that describe the output columns. The Cols field of
+	// the Projections operator provides the indexes of each of the output columns.
 	ProjectOp
 
 	// InnerJoinOp creates a result set that combines columns from its left and right

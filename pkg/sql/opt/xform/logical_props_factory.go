@@ -23,13 +23,9 @@ import (
 // logicalPropsFactory is a helper class that consolidates the code that
 // derives a parent expression's logical properties from those of its
 // children.
-type logicalPropsFactory struct {
-	mem *memo
-}
-
-func (f *logicalPropsFactory) init(mem *memo) {
-	f.mem = mem
-}
+// NOTE: The factory is defined as an empty struct with methods rather than as
+//       functions in order to keep the methods grouped and self-contained.
+type logicalPropsFactory struct{}
 
 // constructProps is called by the memo group construction code in order to
 // initialize the new group's logical properties.
@@ -38,7 +34,7 @@ func (f *logicalPropsFactory) init(mem *memo) {
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (f *logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
 	if ev.IsRelational() {
 		return f.constructRelationalProps(ev)
 	}
@@ -46,7 +42,7 @@ func (f *logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
 	return f.constructScalarProps(ev)
 }
 
-func (f *logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
 	switch ev.Operator() {
 	case opt.ScanOp:
 		return f.constructScanProps(ev)
@@ -75,11 +71,11 @@ func (f *logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f *logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	tblIndex := ev.Private().(opt.TableIndex)
-	tbl := f.mem.metadata.Table(tblIndex)
+	tbl := ev.Metadata().Table(tblIndex)
 
 	// A table's output column indexes are contiguous.
 	props.Relational.OutputCols.AddRange(int(tblIndex), int(tblIndex)+tbl.NumColumns()-1)
@@ -94,10 +90,10 @@ func (f *logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
+	inputProps := ev.lookupChildGroup(0).logical
 
 	// Inherit output columns from input.
 	props.Relational.OutputCols = inputProps.Relational.OutputCols
@@ -108,14 +104,13 @@ func (f *logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
+	inputProps := ev.lookupChildGroup(0).logical
 
 	// Use output columns from projection list.
-	projections := ev.Child(1)
-	props.Relational.OutputCols = opt.ColListToSet(*projections.Private().(*opt.ColList))
+	props.Relational.OutputCols = opt.ColListToSet(*ev.Child(1).Private().(*opt.ColList))
 
 	// Inherit not null columns from input.
 	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
@@ -124,11 +119,11 @@ func (f *logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
-	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
+	leftProps := ev.lookupChildGroup(0).logical
+	rightProps := ev.lookupChildGroup(1).logical
 
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
@@ -162,24 +157,24 @@ func (f *logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Output columns are the union of columns from grouping and aggregate
 	// projection lists.
 	groupings := ev.Child(1)
 	props.Relational.OutputCols = opt.ColListToSet(*groupings.Private().(*opt.ColList))
-	agg := ev.Child(2)
-	props.Relational.OutputCols.UnionWith(opt.ColListToSet(*agg.Private().(*opt.ColList)))
+	aggs := ev.Child(2)
+	props.Relational.OutputCols.UnionWith(opt.ColListToSet(*aggs.Private().(*opt.ColList)))
 
 	return props
 }
 
-func (f *logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	leftProps := f.mem.lookupGroup(ev.ChildGroup(0)).logical
-	rightProps := f.mem.lookupGroup(ev.ChildGroup(1)).logical
+	leftProps := ev.lookupChildGroup(0).logical
+	rightProps := ev.lookupChildGroup(1).logical
 	colMap := *ev.Private().(*opt.ColMap)
 
 	// Use left input's output columns.
@@ -202,7 +197,7 @@ func (f *logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
@@ -210,7 +205,7 @@ func (f *logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f *logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 	return LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
 }
 

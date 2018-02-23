@@ -28,40 +28,46 @@ import (
 )
 
 func TestTyping(t *testing.T) {
-	datadriven.RunTest(t, "testdata/typing", func(d *datadriven.TestData) string {
-		// Only compile command supported.
-		if d.Cmd != "build" {
-			t.FailNow()
-		}
+	catalog := testutils.NewTestCatalog()
 
+	datadriven.RunTest(t, "testdata/typing", func(d *datadriven.TestData) string {
 		stmt, err := parser.ParseOne(d.Input)
 		if err != nil {
 			d.Fatalf(t, "%v", err)
 		}
 
-		o := NewOptimizer(createTypingCatalog(), OptimizeNone)
-		b := optbuilder.New(context.Background(), o.Factory(), stmt)
-		root, props, err := b.Build()
-		if err != nil {
-			d.Fatalf(t, "%v", err)
+		switch d.Cmd {
+		case "exec-ddl":
+			if stmt.StatementType() != tree.DDL {
+				d.Fatalf(t, "statement type is not DDL: %v", stmt.StatementType())
+			}
+
+			switch stmt := stmt.(type) {
+			case *tree.CreateTable:
+				tbl := catalog.CreateTable(stmt)
+				return tbl.String()
+
+			default:
+				d.Fatalf(t, "expected CREATE TABLE statement but found: %v", stmt)
+				return ""
+			}
+
+		case "build":
+			o := NewOptimizer(createTypingCatalog(), OptimizeNone)
+			b := optbuilder.New(context.Background(), o.Factory(), stmt)
+			root, props, err := b.Build()
+			if err != nil {
+				d.Fatalf(t, "%v", err)
+			}
+
+			ev := o.Optimize(root, props)
+			return ev.String()
+
+		default:
+			d.Fatalf(t, "unsupported command: %s", d.Cmd)
+			return ""
 		}
-
-		ev := o.Optimize(root, props)
-		return ev.String()
 	})
-}
-
-func TestTypingTrueFalse(t *testing.T) {
-	o := NewOptimizer(createTypingCatalog(), OptimizeNone)
-	f := o.Factory()
-
-	// (True)
-	ev := o.Optimize(f.ConstructTrue(), &opt.PhysicalProps{})
-	testTyping(t, ev, types.Bool)
-
-	// (False)
-	ev = o.Optimize(f.ConstructFalse(), &opt.PhysicalProps{})
-	testTyping(t, ev, types.Bool)
 }
 
 func TestTypingJson(t *testing.T) {
