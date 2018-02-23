@@ -1123,6 +1123,8 @@ func TestParse2(t *testing.T) {
 		{`SELECT FAMILY(x)`,
 			`SELECT "family"(x)`},
 
+		{`SET SCHEMA 'public'`,
+			`SET search_path = 'public'`},
 		{`SET TIME ZONE 'pst8pdt'`,
 			`SET timezone = 'pst8pdt'`},
 		{`SET TIME ZONE 'Europe/Rome'`,
