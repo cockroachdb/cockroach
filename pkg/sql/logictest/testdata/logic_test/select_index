@@ -884,7 +884,8 @@ SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY 
 1  NULL  1  NULL
 1  NULL  5  NULL
 
-# Regression test for #3548: verify we create constraints on implicit columns.
+# Regression test for #3548: verify we create constraints on implicit columns
+# when they are part of the key (non-unique index).
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY(a,b), INDEX(c))
 
@@ -896,6 +897,21 @@ render     0  render  ·         ·                  (c)                        
  └── scan  1  scan    ·         ·                  (a[omitted], b[omitted], c)  a=CONST; c=CONST; b!=NULL; key(b)
 ·          1  ·       table     abc@abc_c_idx      ·                            ·
 ·          1  ·       spans     /1/3-/1/4          ·                            ·
+
+# Verify we don't create constraints on implicit columns when they are not part
+# of the key (unique index).
+statement ok
+CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY(d,e), UNIQUE INDEX(f))
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
+----
+render     0  render  ·         ·                  (f)                 f=CONST; key()
+ │         0  ·       render 0  test.public.def.f  ·                   ·
+ └── scan  1  scan    ·         ·                  (d, e[omitted], f)  d=CONST; f=CONST; key()
+·          1  ·       table     def@def_f_key      ·                   ·
+·          1  ·       spans     /1-/2              ·                   ·
+·          1  ·       filter    d = 3              ·                   ·
 
 # Regression test for #20504.
 query TITTTTT

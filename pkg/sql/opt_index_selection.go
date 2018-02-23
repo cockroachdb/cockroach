@@ -379,13 +379,15 @@ func (v indexInfoByCost) Sort() {
 // baseline cost for the index).
 func (v *indexInfo) makeIndexConstraints(filter *opt.Expr, evalCtx *tree.EvalContext) error {
 	numIndexCols := len(v.index.ColumnIDs)
-	numExtraCols := len(v.index.ExtraColumnIDs)
 
+	numExtraCols := 0
 	isInverted := (v.index.Type == sqlbase.IndexDescriptor_INVERTED)
-	if isInverted {
-		// TODO(radu): we currently don't support index constraints on PK
-		// columns on an inverted index.
-		numExtraCols = 0
+	// TODO(radu): we currently don't support index constraints on PK
+	// columns on an inverted index.
+	if !isInverted && !v.index.Unique {
+		// We have a non-unique index; the extra columns are added to the key and we
+		// can use them for index constraints.
+		numExtraCols = len(v.index.ExtraColumnIDs)
 	}
 
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(v.desc.Columns))
