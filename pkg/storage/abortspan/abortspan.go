@@ -112,7 +112,7 @@ func (sc *AbortSpan) Iterate(
 	ctx context.Context, e engine.Reader, f func([]byte, roachpb.AbortSpanEntry),
 ) {
 	_, _ = engine.MVCCIterate(ctx, e, sc.min(), sc.max(), hlc.Timestamp{},
-		true /* consistent */, nil /* txn */, false, /* reverse */
+		true /* consistent */, false /* tombstones */, nil /* txn */, false, /* reverse */
 		func(kv roachpb.KeyValue) (bool, error) {
 			var entry roachpb.AbortSpanEntry
 			if _, err := keys.DecodeAbortSpanKey(kv.Key, nil); err != nil {
