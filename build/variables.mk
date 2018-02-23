@@ -150,6 +150,7 @@ define VALID_VARS
   XHOST_TRIPLE
   YARN_INSTALLED_TARGET
   bindir
+  bins
   cyan
   go-version-check
   langgen-package
