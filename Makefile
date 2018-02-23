@@ -423,6 +423,8 @@ PORTABLE := $(or $(findstring portable,$(TYPE)),$(findstring release,$(TYPE)))
 
 ENABLE_ROCKSDB_ASSERTIONS := $(findstring race,$(TAGS))
 
+XCMAKE_FLAGS := $(CMAKE_FLAGS)
+
 ifdef XHOST_TRIPLE
 
 # Darwin wants clang, so special treatment is in order.
@@ -455,7 +457,7 @@ CONFIGURE_FLAGS += --host=$(XHOST_TRIPLE) CC=$(CC_PATH) CXX=$(CXX_PATH)
 # Use XCMAKE_FLAGS when invoking CMake on libraries/binaries for the target
 # platform (i.e., the cross-compiled platform, if specified); use plain
 # CMAKE_FLAGS when invoking CMake on libraries/binaries for the host platform.
-XCMAKE_FLAGS := $(CMAKE_FLAGS) -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
+XCMAKE_FLAGS += -DCMAKE_C_COMPILER=$(CC_PATH) -DCMAKE_CXX_COMPILER=$(CXX_PATH) -DCMAKE_SYSTEM_NAME=$(CMAKE_SYSTEM_NAME)
 
 TARGET_TRIPLE := $(XHOST_TRIPLE)
 else
