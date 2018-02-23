@@ -178,18 +178,15 @@ func (node *ShowSchemas) Format(ctx *FmtCtx) {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	Database Name
-	Schema   Name
+	TableNamePrefix
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TABLES")
-	if node.Database != "" {
+	if node.ExplicitSchema {
 		ctx.WriteString(" FROM ")
-		ctx.FormatNode(&node.Database)
-		ctx.WriteByte('.')
-		ctx.FormatNode(&node.Schema)
+		ctx.FormatNode(&node.TableNamePrefix)
 	}
 }
 
