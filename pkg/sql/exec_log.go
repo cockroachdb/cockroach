@@ -109,7 +109,7 @@ func (p *planner) maybeLogStatementInternal(
 	// Instead, make the logger work. This is critical for auditing - we
 	// can't miss any statement.
 
-	s := &p.sessionDataMutator
+	s := p.sessionDataMutator
 
 	logV := log.V(2)
 	logExecuteEnabled := logStatementsExecuteEnabled.Get(&s.settings.SV)

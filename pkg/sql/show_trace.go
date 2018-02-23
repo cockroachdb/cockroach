@@ -64,8 +64,8 @@ SELECT %s
                message,
                tag,
                loc,
-               first_value(operation) OVER (PARTITION BY txn_idx, span_idx ORDER BY message_idx) as operation,
-               (txn_idx, span_idx) AS span
+               first_value(operation) OVER (PARTITION BY span_idx ORDER BY message_idx) as operation,
+               span_idx AS span
           FROM crdb_internal.session_trace)
  %s
  ORDER BY timestamp
@@ -206,7 +206,7 @@ func (n *showTraceNode) startExec(params runParams) error {
 		return errTracingAlreadyEnabled
 	}
 	if err := params.extendedEvalCtx.SessionMutator.StartSessionTracing(
-		params.ctx, tracing.SnowballRecording, n.kvTracingEnabled,
+		tracing.SnowballRecording, n.kvTracingEnabled,
 	); err != nil {
 		return err
 	}
@@ -266,7 +266,7 @@ func (n *showTraceNode) Next(params runParams) (bool, error) {
 		n.run.stopTracing = nil
 
 		var err error
-		n.run.traceRows, err = params.extendedEvalCtx.Tracing.generateSessionTraceVTable()
+		n.run.traceRows, err = params.extendedEvalCtx.Tracing.getRecording()
 		if err != nil {
 			return false, err
 		}
