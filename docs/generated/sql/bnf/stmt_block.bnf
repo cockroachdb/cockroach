@@ -719,6 +719,7 @@ unreserved_keyword ::=
 	| 'STATUS'
 	| 'SAVEPOINT'
 	| 'SCATTER'
+	| 'SCHEMA'
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
