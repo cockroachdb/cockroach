@@ -513,7 +513,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str>   SAVEPOINT SCATTER SCHEMA SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -2426,18 +2426,31 @@ generic_set:
 set_rest_more:
 // Generic SET syntaxes:
    generic_set
-// Special syntaxes mandated by SQL standard:
+// Special SET syntax forms in addition to the generic form.
+// See: https://www.postgresql.org/docs/10/static/sql-set.html
+//
+// "SET TIME ZONE value is an alias for SET timezone TO value."
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "timezone", Values: tree.Exprs{$3.expr()}}
   }
-| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
+// "SET SCHEMA 'value' is an alias for SET search_path TO value. Only
+// one schema can be specified using this syntax."
+| SCHEMA var_value
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
+  }
+// See comment for the non-terminal for SET NAMES below.
 | set_names
+| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | error // SHOW HELP: SET SESSION
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
-// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
+// "SET NAMES value is an alias for SET client_encoding TO value."
+// See https://www.postgresql.org/docs/10/static/sql-set.html
+// Also see https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
 set_names:
   NAMES var_value
   {
@@ -7487,6 +7500,7 @@ unreserved_keyword:
 | STATUS
 | SAVEPOINT
 | SCATTER
+| SCHEMA
 | SCRUB
 | SEARCH
 | SECOND
