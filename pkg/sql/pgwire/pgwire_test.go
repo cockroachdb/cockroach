@@ -735,6 +735,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		"SHOW TABLES FROM system": {
 			baseTest.Results("descriptor").Others(13),
 		},
+		"SHOW SCHEMAS FROM system": {
+			baseTest.Results("crdb_internal").Others(3),
+		},
 		"SHOW CONSTRAINTS FROM system.users": {
 			baseTest.Results("users", "primary", "PRIMARY KEY", "username", gosql.NullString{}),
 		},

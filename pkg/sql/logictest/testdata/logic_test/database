@@ -20,6 +20,15 @@ a
 system
 test
 
+query T colnames
+SHOW SCHEMAS FROM a
+----
+Schema
+crdb_internal
+information_schema
+pg_catalog
+public
+
 statement ok
 CREATE DATABASE b TEMPLATE=template0
 
