@@ -169,6 +169,8 @@ func StartRecording(os opentracing.Span, recType RecordingType) {
 //
 // Calling this after StartRecording is not required; the recording will go away
 // when all the spans finish.
+//
+// StopRecording() can be called on a Finish()ed span.
 func StopRecording(os opentracing.Span) {
 	os.(*span).disableRecording()
 }
@@ -177,7 +179,10 @@ func (s *span) disableRecording() {
 	s.mu.Lock()
 	atomic.StoreInt32(&s.recording, 0)
 	s.mu.recordingGroup = nil
-	if s.mu.recordingType == SnowballRecording {
+	// We test the duration as a way to check if the span has been finished. If it
+	// has, we don't want to do the call below as it might crash (at least if
+	// there's a netTr).
+	if (s.mu.duration == -1) && (s.mu.recordingType == SnowballRecording) {
 		// Clear the Snowball baggage item, assuming that it was set by
 		// enableRecording().
 		s.setBaggageItemLocked(Snowball, "")
