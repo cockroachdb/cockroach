@@ -139,7 +139,7 @@ func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExp
 }
 
 func setTimeZone(
-	_ context.Context, m sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 ) error {
 	if len(values) != 1 {
 		return errors.New("set time zone requires a single argument")

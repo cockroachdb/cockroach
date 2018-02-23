@@ -225,8 +225,6 @@ type Session struct {
 	// bufferedResultWriter for internal uses.
 	ResultsWriter ResultsWriter
 
-	Tracing SessionTracing
-
 	tables TableCollection
 
 	// ActiveSyncQueries contains query IDs of all synchronous (i.e. non-parallel)
@@ -407,7 +405,6 @@ func NewSession(
 		},
 		settings:       e.cfg.Settings,
 		curTxnReadOnly: &s.TxnState.readOnly,
-		sessionTracing: &s.Tracing,
 		applicationNameChanged: func(newName string) {
 			if s.sqlStats != nil {
 				s.appStats = s.sqlStats.getStatsForApplication(newName)
@@ -497,7 +494,7 @@ func (s *Session) Finish(e *Executor) {
 		s.eventLog = nil
 	}
 
-	if s.Tracing.Enabled() {
+	if s.dataMutator.sessionTracing.Enabled() {
 		if err := s.dataMutator.StopSessionTracing(); err != nil {
 			log.Infof(s.context, "error stopping tracing: %s", err)
 		}
@@ -585,7 +582,7 @@ func (s *Session) resetPlanner(
 	p.extendedEvalCtx.NodeID = s.execCfg.NodeID.Get()
 	p.extendedEvalCtx.ReCache = reCache
 
-	p.sessionDataMutator = s.dataMutator
+	p.sessionDataMutator = &s.dataMutator
 	p.preparedStatements = &s.PreparedStatements
 	p.autoCommit = false
 }
@@ -664,9 +661,9 @@ func (s *Session) extendedEvalCtx(
 			StmtTimestamp:   stmtTimestamp,
 			TxnTimestamp:    txnTimestamp,
 		},
-		SessionMutator:  s.dataMutator,
+		SessionMutator:  &s.dataMutator,
 		VirtualSchemas:  s.execCfg.VirtualSchemas,
-		Tracing:         &s.Tracing,
+		Tracing:         &s.dataMutator.sessionTracing,
 		StatusServer:    statusServer,
 		MemMetrics:      s.memMetrics,
 		Tables:          &s.tables,
@@ -1077,7 +1074,7 @@ func (ts *txnState) resetForNewSQLTxn(
 	// traceTxnThreshold and debugTrace7881Enabled to integrate more nicely with
 	// session tracing.
 	st := s.execCfg.Settings
-	if !s.Tracing.Enabled() && (traceTxnThreshold.Get(&st.SV) > 0 || debugTrace7881Enabled) {
+	if !s.dataMutator.sessionTracing.Enabled() && (traceTxnThreshold.Get(&st.SV) > 0 || debugTrace7881Enabled) {
 		mode := tracing.SingleNodeRecording
 		if traceTxnThreshold.Get(&st.SV) > 0 {
 			mode = tracing.SnowballRecording
@@ -1095,7 +1092,6 @@ func (ts *txnState) resetForNewSQLTxn(
 	ts.sp = sp
 	ts.Ctx, ts.cancel = contextutil.WithCancel(ctx)
 	ts.SetState(AutoRetry)
-	s.Tracing.onNewSQLTxn(ts.sp)
 
 	ts.mon.Start(ctx, &s.mon, mon.BoundAccount{})
 
@@ -1161,9 +1157,6 @@ func (ts *txnState) finishSQLTxn(s *Session) {
 
 	sampledFor7881 := (ts.sp.BaggageItem(keyFor7881Sample) != "")
 	ts.sp.Finish()
-	if err := s.Tracing.onFinishSQLTxn(); err != nil {
-		log.Errorf(s.context, "error finishing trace: %s", err)
-	}
 	// TODO(andrei): we should find a cheap way to get a trace's duration without
 	// calling the expensive GetRecording().
 	durThreshold := traceTxnThreshold.Get(&s.execCfg.Settings.SV)
@@ -1474,8 +1467,8 @@ func (s *Session) user() string {
 // It holds the current trace being collected (or the last trace collected, if
 // tracing is not currently ongoing).
 //
-// SessionTracing and its interactions with the Session are thread-safe; tracing
-// can be turned on at any time.
+// SessionTracing and its interactions with the connExecutor are thread-safe;
+// tracing can be turned on at any time.
 type SessionTracing struct {
 	// enabled is set at times when "session enabled" is active - i.e. when
 	// transactions are being recorded.
@@ -1486,127 +1479,124 @@ type SessionTracing struct {
 	// operators to the current context.
 	kvTracingEnabled bool
 
-	// If tracing==true, recordingType indicates the type of the current
+	// If recording==true, recordingType indicates the type of the current
 	// recording.
 	recordingType tracing.RecordingType
 
-	// txnRecording accumulates the recorded spans. Each []RawSpan represents the
-	// trace of a SQL transaction. The first element corresponds to the
-	// partially-recorded transaction in which SET TRACING ON was run (or its
-	// implicit txn, if there wasn't a SQL transaction already running). The last
-	// one will contain the partial-recording of the transaction in which SET
-	// TRACE OFF has been run.
-	txnRecordings [][]tracing.RecordedSpan
+	// ex is the connExecutor to which this SessionTracing is tied.
+	ex *connExecutor
 
-	// curSp is the currently recording span - the span corresponding to the
-	// current SQL txn.
-	curSp opentracing.Span
+	// firstTxnSpan is the span of the first txn that was active when session
+	// tracing was enabled.
+	firstTxnSpan opentracing.Span
+
+	// connSpan is the connection's span. This is recording.
+	connSpan opentracing.Span
+
+	// lastRecording will collect the recording when stopping tracing.
+	lastRecording []traceRow
 }
 
-// StartTracing starts "session tracing". It enables recording on the span in
-// the passed-in context After calling this, all SQL transactions running on
-// this session will be traced.
-// This method takes in a span and includes it in the recording. It is expected
-// that the span corresponding to the transaction in which session recording is
-// started will be passed in - and so the remainder of that transaction will
-// also be recorded. Of course, children spans of the current txn span that have
-// already been created will not be traced.
-//
+// getRecording returns the session trace. If we're not currently tracing, this
+// will be the last recorded trace. If we are currently tracing, we'll return
+// whatever was recorded so far.
+func (st *SessionTracing) getRecording() ([]traceRow, error) {
+	if !st.enabled {
+		return st.lastRecording, nil
+	}
+
+	var spans []tracing.RecordedSpan
+	if st.firstTxnSpan != nil {
+		spans = append(spans, tracing.GetRecording(st.firstTxnSpan)...)
+	}
+	spans = append(spans, tracing.GetRecording(st.connSpan)...)
+
+	return generateSessionTraceVTable(spans)
+}
+
+// StartTracing starts "session tracing". From this moment on, everything
+// happening on both the connection's context and the current txn's context (if
+// any) will be traced.
 // StopTracing() needs to be called to finish this trace.
 //
+// There's two contexts on which we must record:
+// 1) If we're inside a txn, we start recording on the txn's span. We assume
+// that the txn's ctx has a recordable span on it.
+// 2) Regardless of whether we're in a txn or not, we need to record the
+// connection's context. This context generally does not have a span, so we
+// "hijack" it with one that does. Whatever happens on that context, plus
+// whatever happens in future derived txn contexts, will be recorded.
+//
 // Args:
-// sp: The current transaction's span. See above.
 // kvTracingEnabled: If set, the traces will also include "KV trace" messages -
 //   verbose messages around the interaction of SQL with KV. Some of the messages
 //   are per-row.
-func (st *SessionTracing) StartTracing(
-	ctx context.Context, recType tracing.RecordingType, kvTracingEnabled bool,
-) error {
+func (st *SessionTracing) StartTracing(recType tracing.RecordingType, kvTracingEnabled bool) error {
 	if st.enabled {
 		return errors.Errorf("already tracing")
 	}
-	sp := opentracing.SpanFromContext(ctx)
-	if sp == nil {
-		return errors.Errorf("no span for SessionTracing")
+
+	// If we're inside a transaction, start recording on the txn span.
+	if _, ok := st.ex.machine.CurState().(stateNoTxn); !ok {
+		sp := opentracing.SpanFromContext(st.ex.state.Ctx)
+		if sp == nil {
+			return errors.Errorf("no txn span for SessionTracing")
+		}
+		tracing.StartRecording(sp, recType)
+		st.firstTxnSpan = sp
 	}
 
-	// Reset the previous recording, if any.
-	st.txnRecordings = nil
-
-	tracing.StartRecording(sp, recType)
 	st.enabled = true
 	st.kvTracingEnabled = kvTracingEnabled
 	st.recordingType = recType
-	st.curSp = sp
+
+	// Now hijack the conn's ctx with one that has a recording span.
+
+	opName := "session recording"
+	var sp opentracing.Span
+	if parentSp := opentracing.SpanFromContext(st.ex.ctxHolder.connCtx); parentSp != nil {
+		// Create a child span while recording.
+		sp = parentSp.Tracer().StartSpan(
+			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+	} else {
+		// Create a root span while recording.
+		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(opName, tracing.Recordable)
+	}
+	tracing.StartRecording(sp, recType)
+	st.connSpan = sp
+
+	// Hijack the connections context.
+	newConnCtx := opentracing.ContextWithSpan(st.ex.ctxHolder.connCtx, sp)
+	st.ex.ctxHolder.hijack(newConnCtx)
+
 	return nil
 }
 
 // StopTracing stops the trace that was started with StartTracing().
-//
-// This method takes in the span of the current trasaction and includes its
-// recording in the session recording.
-//
 // An error is returned if tracing was not active.
 func (st *SessionTracing) StopTracing() error {
 	if !st.enabled {
 		return errors.Errorf("not tracing")
 	}
 	st.enabled = false
-	// Stop recording the current transaction.
-	if st.curSp == nil {
-		return errors.Errorf("no span for SessionTracing")
-	}
-	spans := tracing.GetRecording(st.curSp)
-	tracing.StopRecording(st.curSp)
-	st.curSp = nil
-	if spans == nil {
-		return errors.Errorf("nil recording")
-	}
-	// Append the partially-recorded current transaction to the list of
-	// transactions.
-	st.txnRecordings = append(st.txnRecordings, spans)
-	return nil
-}
 
-// onFinishSQLTxn is called when a SQL transaction is about to be finished (i.e.
-// just before the span corresponding to the txn is Finish()ed). It saves that
-// span's recording in the SessionTracing.
-func (st *SessionTracing) onFinishSQLTxn() error {
-	if !st.Enabled() {
-		return nil
-	}
+	var spans []tracing.RecordedSpan
 
-	if st.curSp == nil {
-		return errors.Errorf("no span for SessionTracing")
+	if st.firstTxnSpan != nil {
+		spans = append(spans, tracing.GetRecording(st.firstTxnSpan)...)
+		tracing.StopRecording(st.firstTxnSpan)
 	}
-	spans := tracing.GetRecording(st.curSp)
-	if spans == nil {
-		return errors.Errorf("nil recording")
-	}
-	st.txnRecordings = append(st.txnRecordings, spans)
-	// tracing.StopRecording() is not necessary. The span is about to be closed
-	// anyway.
-	return nil
-}
+	st.connSpan.Finish()
+	spans = append(spans, tracing.GetRecording(st.connSpan)...)
+	// NOTE: We're stopping recording on the connection's ctx only; the stopping
+	// is not inherited by children. If we are inside of a txn, that span will
+	// continue recording, even though nobody will collect its recording again.
+	tracing.StopRecording(st.connSpan)
+	st.ex.ctxHolder.unhijack()
 
-// onNewSQLTxn is called when a new SQL txn is started (i.e. soon after the span
-// corresponding to that transaction has been created). It starts recording on
-// that new span. The recording will be retrieved when the transaction finishes
-// (in onFinishSQLTxn).
-//
-// sp is the span corresponding to the new SQL transaction.
-//
-// TODO(andrei): onNewSQLTxn is not used by the connExecutor, so it can be
-// deleted once the Session is gone.
-func (st *SessionTracing) onNewSQLTxn(sp opentracing.Span) {
-	if !st.Enabled() {
-		return
-	}
-	if sp == nil {
-		panic("no span for SessionTracing")
-	}
-	tracing.StartRecording(sp, st.recordingType)
-	st.curSp = sp
+	var err error
+	st.lastRecording, err = generateSessionTraceVTable(spans)
+	return err
 }
 
 // RecordingType returns which type of tracing is currently being done.
@@ -1641,7 +1631,6 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 
 // traceRow is the type of a single row in the session_trace vtable.
 // The columns are as follows:
-// - txn_idx
 // - span_idx
 // - message_idx
 // - timestamp
@@ -1650,7 +1639,7 @@ func extractMsgFromRecord(rec tracing.RecordedSpan_LogRecord) string {
 // - location
 // - tag
 // - message
-type traceRow [9]tree.Datum
+type traceRow [8]tree.Datum
 
 // A regular expression to split log messages.
 // It has three parts:
@@ -1664,8 +1653,7 @@ var logMessageRE = regexp.MustCompile(
 
 // generateSessionTraceVTable generates the rows of said table by using the log
 // messages from the session's trace (i.e. the ongoing trace, if any, or the
-// last one recorded). Note that, if there's an ongoing trace, the current
-// transaction is not part of it yet.
+// last one recorded).
 //
 // All the log messages from the current recording are returned, in
 // the order in which they should be presented in the crdb_internal.session_info
@@ -1695,33 +1683,28 @@ var logMessageRE = regexp.MustCompile(
 // | +-------------------+ |
 // |            7          |
 // +-----------------------+
-func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
+//
+// Note that what's described above is not the order in which SHOW TRACE FOR ...
+// displays the information.
+func generateSessionTraceVTable(spans []tracing.RecordedSpan) ([]traceRow, error) {
 	// Get all the log messages, in the right order.
 	var allLogs []logRecordRow
-	for txnIdx, spans := range st.txnRecordings {
-		seenSpans := make(map[uint64]struct{})
 
-		// The spans are recorded in the order in which they are started, so the
-		// first one will be a txn's root span.
-		// In the loop below, we expect that, once we call getMessagesForSubtrace on
-		// the first span in the transaction, all spans will be recursively marked
-		// as seen. However, if that doesn't happen (e.g. we're missing a parent
-		// span for some reason), the loop will handle the situation.
-		for spanIdx, span := range spans {
-			if _, ok := seenSpans[span.SpanID]; ok {
-				continue
-			}
-			spanWithIndex := spanWithIndex{
-				RecordedSpan: &spans[spanIdx],
-				index:        spanIdx,
-				txnIdx:       txnIdx,
-			}
-			msgs, err := getMessagesForSubtrace(spanWithIndex, spans, seenSpans)
-			if err != nil {
-				return nil, err
-			}
-			allLogs = append(allLogs, msgs...)
+	// NOTE: The spans are recorded in the order in which they are started.
+	seenSpans := make(map[uint64]struct{})
+	for spanIdx, span := range spans {
+		if _, ok := seenSpans[span.SpanID]; ok {
+			continue
 		}
+		spanWithIndex := spanWithIndex{
+			RecordedSpan: &spans[spanIdx],
+			index:        spanIdx,
+		}
+		msgs, err := getMessagesForSubtrace(spanWithIndex, spans, seenSpans)
+		if err != nil {
+			return nil, err
+		}
+		allLogs = append(allLogs, msgs...)
 	}
 
 	// Transform the log messages into table rows.
@@ -1758,7 +1741,6 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 		}
 
 		row := traceRow{
-			tree.NewDInt(tree.DInt(lrr.span.txnIdx)),              // txn_idx
 			tree.NewDInt(tree.DInt(lrr.span.index)),               // span_idx
 			tree.NewDInt(tree.DInt(lrr.index)),                    // message_idx
 			tree.MakeDTimestampTZ(lrr.timestamp, time.Nanosecond), // timestamp
@@ -1776,9 +1758,7 @@ func (st *SessionTracing) generateSessionTraceVTable() ([]traceRow, error) {
 // getOrderedChildSpans returns all the spans in allSpans that are children of
 // spanID. It assumes the input is ordered by start time, in which case the
 // output is also ordered.
-func getOrderedChildSpans(
-	spanID uint64, txnIdx int, allSpans []tracing.RecordedSpan,
-) []spanWithIndex {
+func getOrderedChildSpans(spanID uint64, allSpans []tracing.RecordedSpan) []spanWithIndex {
 	children := make([]spanWithIndex, 0)
 	for i := range allSpans {
 		if allSpans[i].ParentSpanID == spanID {
@@ -1787,7 +1767,6 @@ func getOrderedChildSpans(
 				spanWithIndex{
 					RecordedSpan: &allSpans[i],
 					index:        i,
-					txnIdx:       txnIdx,
 				})
 		}
 	}
@@ -1796,7 +1775,7 @@ func getOrderedChildSpans(
 
 // getMessagesForSubtrace takes a span and interleaves its log messages with
 // those from its children (recursively). The order is the one defined in the
-// comment on SessionTracing.GenerateSessionTraceVTable.
+// comment on generateSessionTraceVTable().
 //
 // seenSpans is modified to record all the spans that are part of the subtrace
 // rooted at span.
@@ -1820,7 +1799,7 @@ func getMessagesForSubtrace(
 		})
 
 	seenSpans[span.SpanID] = struct{}{}
-	childSpans := getOrderedChildSpans(span.SpanID, span.txnIdx, allSpans)
+	childSpans := getOrderedChildSpans(span.SpanID, allSpans)
 	var i, j int
 	// Sentinel value - year 6000.
 	maxTime := time.Date(6000, 0, 0, 0, 0, 0, 0, time.UTC)
@@ -1871,9 +1850,6 @@ type logRecordRow struct {
 type spanWithIndex struct {
 	*tracing.RecordedSpan
 	index int
-	// txnIdx is the 0-based index of the transaction in which this span was
-	// recorded.
-	txnIdx int
 }
 
 // sessionDataMutator is the interface used by sessionVars to change the session
@@ -1885,9 +1861,7 @@ type sessionDataMutator struct {
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool
-	// TODO(andrei): sessionTracing will always be owned by sessionDataMutator
-	// once the old Session goes away, and so won't need to be a pointer any more.
-	sessionTracing *SessionTracing
+	sessionTracing SessionTracing
 	// applicationNamedChanged, if set, is called when the "application name"
 	// variable is updated.
 	applicationNameChanged func(newName string)
@@ -1954,9 +1928,9 @@ func (m *sessionDataMutator) StopSessionTracing() error {
 }
 
 func (m *sessionDataMutator) StartSessionTracing(
-	ctx context.Context, recType tracing.RecordingType, kvTracingEnabled bool,
+	recType tracing.RecordingType, kvTracingEnabled bool,
 ) error {
-	return m.sessionTracing.StartTracing(ctx, recType, kvTracingEnabled)
+	return m.sessionTracing.StartTracing(recType, kvTracingEnabled)
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented
