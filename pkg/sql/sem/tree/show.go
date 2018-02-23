@@ -164,8 +164,7 @@ func (node *ShowSessions) Format(ctx *FmtCtx) {
 
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
-	Database Name
-	Schema   Name
+	TableNamePrefix
 }
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
@@ -185,11 +184,13 @@ func (node *ShowConstraints) Format(ctx *FmtCtx) {
 // Format implements the NodeFormatter interface.
 func (node *ShowTables) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW TABLES")
-	if node.Database != "" {
+	if node.SchemaName != "" {
 		ctx.WriteString(" FROM ")
-		ctx.FormatNode(&node.Database)
-		ctx.WriteByte('.')
-		ctx.FormatNode(&node.Schema)
+		if node.ExplicitCatalog {
+			ctx.FormatNode(&node.CatalogName)
+			ctx.WriteByte('.')
+		}
+		ctx.FormatNode(&node.SchemaName)
 	}
 }
 
