@@ -102,15 +102,19 @@ type Iterator interface {
 	// value is returned in batch repr format with the key being present as the
 	// empty string. If an intent exists at the specified key, it will be
 	// returned in batch repr format in the separate intent return value.
+	// Specify true for tombstones to return a value if the key has been
+	// deleted (Value.RawBytes will be empty).
 	MVCCGet(key roachpb.Key, timestamp hlc.Timestamp,
-		txn *roachpb.Transaction, consistent bool,
+		txn *roachpb.Transaction, consistent, tombstones bool,
 	) (*roachpb.Value, []roachpb.Intent, error)
 	// MVCCScan scans the underlying engine from start to end keys and returns
 	// key/value pairs which have a timestamp less than or equal to the supplied
 	// timestamp, up to a max rows. The key/value pairs are returned as a buffer
 	// of varint-prefixed slices, alternating from key to value, numKvs pairs.
+	// Specify true for tombstones to return deleted values (the value portion
+	// will be empty).
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
-		txn *roachpb.Transaction, consistent, reverse bool,
+		txn *roachpb.Transaction, consistent, reverse, tombstone bool,
 	) (kvs []byte, numKvs int64, intents []byte, err error)
 }
 

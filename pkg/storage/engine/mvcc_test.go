@@ -824,6 +824,13 @@ func TestMVCCGetAndDelete(t *testing.T) {
 			if value != nil {
 				t.Fatal("the value should be empty")
 			}
+			// Read the latest version with tombstone.
+			value, _, err = MVCCGetWithTombstone(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4}, true, nil)
+			if err != nil {
+				t.Fatal(err)
+			} else if value == nil || len(value.RawBytes) != 0 {
+				t.Fatalf("the value should be non-nil with empty RawBytes; got %+v", value)
+			}
 
 			// Read the old version which should still exist.
 			for _, logical := range []int32{0, math.MaxInt32} {
@@ -965,6 +972,12 @@ func TestMVCCGetAndDeleteInTxn(t *testing.T) {
 				t.Fatal(err)
 			} else if value != nil {
 				t.Fatal("the value should be empty")
+			}
+			// Read the latest version with tombstone.
+			if value, _, err := MVCCGetWithTombstone(context.Background(), engine, testKey1, hlc.Timestamp{WallTime: 4}, true, &txn); err != nil {
+				t.Fatal(err)
+			} else if value == nil || len(value.RawBytes) != 0 {
+				t.Fatalf("the value should be non-nil with empty RawBytes; got %+v", value)
 			}
 
 			// Read the old version which shouldn't exist, as within a
@@ -1607,6 +1620,33 @@ func TestMVCCDeleteRange(t *testing.T) {
 		!bytes.Equal(kvs[1].Value.RawBytes, value4.RawBytes) ||
 		!bytes.Equal(kvs[2].Value.RawBytes, value5.RawBytes) ||
 		!bytes.Equal(kvs[3].Value.RawBytes, value6.RawBytes) {
+		t.Fatal("the value should not be empty")
+	}
+
+	// Try again, but with tombstones set to true to fetch the deleted keys as well.
+	kvs = []roachpb.KeyValue{}
+	if _, err = MVCCIterate(
+		context.Background(), engine, keyMin, keyMax, hlc.Timestamp{WallTime: 2},
+		true, true /* tombstones */, nil, false, func(kv roachpb.KeyValue) (bool, error) {
+			kvs = append(kvs, kv)
+			return false, nil
+		},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 6 ||
+		!bytes.Equal(kvs[0].Key, testKey1) ||
+		!bytes.Equal(kvs[1].Key, testKey2) ||
+		!bytes.Equal(kvs[2].Key, testKey3) ||
+		!bytes.Equal(kvs[3].Key, testKey4) ||
+		!bytes.Equal(kvs[4].Key, testKey5) ||
+		!bytes.Equal(kvs[5].Key, testKey6) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value1.RawBytes) ||
+		!bytes.Equal(kvs[1].Value.RawBytes, nil) ||
+		!bytes.Equal(kvs[2].Value.RawBytes, nil) ||
+		!bytes.Equal(kvs[3].Value.RawBytes, value4.RawBytes) ||
+		!bytes.Equal(kvs[4].Value.RawBytes, value5.RawBytes) ||
+		!bytes.Equal(kvs[5].Value.RawBytes, value6.RawBytes) {
 		t.Fatal("the value should not be empty")
 	}
 

@@ -102,7 +102,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
 
 	scan := func(f func(roachpb.KeyValue) (bool, error)) {
-		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.Timestamp{}, true, nil, false, f); err != nil {
+		if _, err := engine.MVCCIterate(context.Background(), store.Engine(), roachpb.KeyMin, roachpb.KeyMax, hlc.Timestamp{}, true, false, nil, false, f); err != nil {
 			t.Fatal(err)
 		}
 	}

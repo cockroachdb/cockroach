@@ -51,7 +51,8 @@ func RefreshRange(
 	// timestamp. Note that we do not iterate using the txn and the
 	// iteration is done with consistent=false. This reads only
 	// committed values and returns all intents, including those from
-	// the txn itself.
+	// the txn itself. Note that we include tombstones, which must be
+	// considered as updates on refresh.
 	log.VEventf(ctx, 2, "refresh %s @[%s-%s]", args.Header(), h.Txn.OrigTimestamp, h.Txn.Timestamp)
 	intents, err := engine.MVCCIterateUsingIter(
 		ctx,
@@ -60,6 +61,7 @@ func RefreshRange(
 		args.EndKey,
 		h.Txn.Timestamp,
 		false, /* consistent */
+		true,  /* tombstones */
 		nil,   /* txn */
 		false, /* reverse */
 		iter,
