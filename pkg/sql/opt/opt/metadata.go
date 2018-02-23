@@ -149,7 +149,7 @@ func (md *Metadata) ColumnType(index ColumnIndex) types.T {
 func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
 	tblIndex := TableIndex(md.NumColumns() + 1)
 
-	for i := 0; i < tbl.NumColumns(); i++ {
+	for i := 0; i < tbl.ColumnCount(); i++ {
 		col := tbl.Column(i)
 		if tbl.TabName() == "" {
 			md.AddColumn(string(col.ColName()), col.DatumType())

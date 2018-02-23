@@ -112,14 +112,32 @@ func (t *TestTable) TabName() optbase.TableName {
 	return optbase.TableName(t.Name)
 }
 
-// NumColumns is part of the optbase.Table interface.
-func (t *TestTable) NumColumns() int {
+// ColumnCount is part of the optbase.Table interface.
+func (t *TestTable) ColumnCount() int {
 	return len(t.Columns)
 }
 
 // Column is part of the optbase.Table interface.
 func (t *TestTable) Column(i int) optbase.Column {
 	return t.Columns[i]
+}
+
+// Primary is part of the optbase.Table interface.
+func (t *TestTable) Primary() optbase.Index {
+	// TODO(andyk): Implement this.
+	return nil
+}
+
+// SecondaryCount is part of the optbase.Table interface.
+func (t *TestTable) SecondaryCount() int {
+	// TODO(andyk): Implement this.
+	return 0
+}
+
+// Secondary is part of the optbase.Table interface.
+func (t *TestTable) Secondary(i int) optbase.Index {
+	// TODO(andyk): Implement this.
+	panic("no secondary indexes")
 }
 
 // TestCatalog implements the optbase.Catalog interface for testing purposes.
