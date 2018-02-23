@@ -83,13 +83,12 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	var sourcePlan planNode
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
-		// to populate the new table descriptor in Start() below. We
-		// instantiate the sourcePlan as early as here so that EXPLAIN has
-		// something useful to show about CREATE TABLE .. AS ...
+		// to populate the new table descriptor in Start() below.
 		sourcePlan, err = p.Select(ctx, n.AsSource, []types.T{})
 		if err != nil {
 			return nil, err
 		}
+
 		numColNames := len(n.AsColumnNames)
 		numColumns := len(planColumns(sourcePlan))
 		if numColNames != 0 && numColNames != numColumns {
@@ -107,6 +106,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 // createTableRun contains the run-time state of createTableNode
 // during local execution.
 type createTableRun struct {
+	autoCommit   autoCommitOpt
 	rowsAffected int
 }
 
@@ -199,45 +199,89 @@ func (n *createTableNode) startExec(params runParams) error {
 	}
 
 	if n.n.As() {
-		// TODO(knz): Ideally we would want to plug the sourcePlan which
-		// was already computed as a data source into the insertNode. Now
-		// unfortunately this is not so easy: when this point is reached,
-		// expandPlan() has already been called on sourcePlan (for
-		// EXPLAIN), and expandPlan() on insertPlan (via optimizePlan)
-		// below would cause a 2nd invocation and cause a panic. So
-		// instead we close this sourcePlan and let the insertNode create
-		// it anew from the AsSource syntax node.
-		n.sourcePlan.Close(params.ctx)
-		n.sourcePlan = nil
+		// This is a very simplified version of the INSERT logic: no CHECK
+		// expressions, no FK checks, no arbitrary insertion order, no
+		// RETURNING, etc.
 
-		insert := &tree.Insert{
-			Table:     &n.n.Table,
-			Rows:      n.n.AsSource,
-			Returning: tree.AbsentReturningClause,
-		}
-		insertPlan, err := params.p.Insert(params.ctx, insert, nil /* desiredTypes */)
+		// Instantiate a row inserter and table writer. It has a 1-1
+		// mapping to the definitions in the descriptor.
+		ri, err := sqlbase.MakeRowInserter(
+			params.p.txn, &desc, nil, desc.Columns, sqlbase.SkipFKs, &params.p.alloc)
 		if err != nil {
 			return err
 		}
-		defer insertPlan.Close(params.ctx)
-		insertPlan, err = params.p.optimizePlan(params.ctx, insertPlan, allColumns(insertPlan))
+		ti := tableInserterPool.Get().(*tableInserter)
+		*ti = tableInserter{ri: ri}
+		tw := tableWriter(ti)
+		defer func() {
+			tw.close(params.ctx)
+			*ti = tableInserter{}
+			tableInserterPool.Put(ti)
+		}()
+		if err := tw.init(params.p.txn, params.p.EvalContext()); err != nil {
+			return err
+		}
+
+		// Prepare the buffer for row values. At this point, one more
+		// column has been added by ensurePrimaryKey() to the list of
+		// columns in sourcePlan.
+		rowBuffer := make(tree.Datums, len(desc.Columns))
+		pkColIdx := len(desc.Columns) - 1
+
+		// Prepare the rowID expression.
+		defExprSQL := *desc.Columns[pkColIdx].DefaultExpr
+		defExpr, err := parser.ParseExpr(defExprSQL)
 		if err != nil {
 			return err
 		}
-		if err = startPlan(params, insertPlan); err != nil {
-			return err
-		}
-		// This driver function call is done here instead of in the Next
-		// method since CREATE TABLE is a DDL statement and Executor only
-		// runs Next() for statements with type "Rows".
-		count, err := countRowsAffected(params, insertPlan)
+		defTypedExpr, err := params.p.analyzeExpr(
+			params.ctx,
+			defExpr,
+			nil, /*sources*/
+			tree.IndexedVarHelper{},
+			types.Any,
+			false, /*requireType*/
+			"CREATE TABLE AS")
 		if err != nil {
 			return err
 		}
-		// Return the number of rows affected as result.
-		n.run.rowsAffected = count
+
+		for {
+			if err := params.p.cancelChecker.Check(); err != nil {
+				return err
+			}
+			if next, err := n.sourcePlan.Next(params); !next {
+				if err != nil {
+					return err
+				}
+				_, err := tw.finalize(
+					params.ctx, n.run.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
+				if err != nil {
+					return err
+				}
+				break
+			}
+
+			// Populate the buffer and generate the PK value.
+			copy(rowBuffer, n.sourcePlan.Values())
+			rowBuffer[pkColIdx], err = defTypedExpr.Eval(params.p.EvalContext())
+			if err != nil {
+				return err
+			}
+
+			_, err := tw.row(params.ctx, rowBuffer, params.extendedEvalCtx.Tracing.KVTracingEnabled())
+			if err != nil {
+				return err
+			}
+			n.run.rowsAffected++
+		}
 	}
 	return nil
+}
+
+// enableAutoCommit is part of the autoCommitNode interface.
+func (n *createTableNode) enableAutoCommit() {
+	n.run.autoCommit = autoCommitEnabled
 }
 
 func (*createTableNode) Next(runParams) (bool, error) { return false, nil }
