@@ -3384,33 +3384,34 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 				}
 				return nil
 			}
+
 			repl.mu.Lock()
-			// If the replica ID in the error matches (which is the usual
-			// case; the exception is when a replica has been removed and
-			// re-added rapidly), we know the replica will be removed and we
-			// can cancel any pending commands. This is sometimes necessary
-			// to unblock PushTxn operations that are necessary for the
-			// replica GC to succeed.
-			if tErr.ReplicaID == repl.mu.replicaID {
-				repl.cancelPendingCommandsLocked()
+			// If the replica ID in the error does not match then we know
+			// that the replica has been removed and re-added quickly. In
+			// that case, we don't want to add it to the replicaGCQueue.
+			if tErr.ReplicaID != repl.mu.replicaID {
+				repl.mu.Unlock()
+				log.Infof(ctx, "replica too old response with old replica ID: %s", tErr.ReplicaID)
+				return nil
+			}
+			// If the replica ID in the error does match, we know the replica
+			// will be removed and we can cancel any pending commands. This is
+			// sometimes necessary to unblock PushTxn operations that are
+			// necessary for the replica GC to succeed.
+			repl.cancelPendingCommandsLocked()
+			// The replica will be garbage collected soon (we are sure
+			// since our replicaID is definitely too old), but in the meantime we
+			// already want to bounce all traffic from it. Note that the replica
+			// could be re-added with a higher replicaID, in which this error is
+			// cleared in setReplicaIDRaftMuLockedMuLocked.
+			if repl.mu.destroyStatus.IsAlive() {
+				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
 			}
 			repl.mu.Unlock()
-			added, err := s.replicaGCQueue.Add(
-				repl, replicaGCPriorityRemoved,
-			)
-			if err != nil {
+
+			if _, err := s.replicaGCQueue.Add(repl, replicaGCPriorityRemoved); err != nil {
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-			} else if added {
-				repl.mu.Lock()
-				// The replica will be garbage collected soon (we are sure
-				// since our replicaID is definitely too old), but in the meantime we
-				// already want to bounce all traffic from it. Note that the replica
-				// could be re-added with a higher replicaID, in which this error is
-				// cleared in setReplicaIDRaftMuLockedMuLocked.
-				if repl.mu.destroyStatus.IsAlive() {
-					repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
-				}
-				repl.mu.Unlock()
+			} else {
 				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.StoreNotFoundError:
