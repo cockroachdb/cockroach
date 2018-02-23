@@ -41,7 +41,7 @@ import (
 type extendedEvalContext struct {
 	tree.EvalContext
 
-	SessionMutator sessionDataMutator
+	SessionMutator *sessionDataMutator
 
 	// VirtualSchemas can be used to access virtual tables.
 	VirtualSchemas VirtualTabler
@@ -98,7 +98,7 @@ type planner struct {
 
 	// sessionDataMutator is used to mutate the session variables. Read
 	// access to them is provided through evalCtx.
-	sessionDataMutator sessionDataMutator
+	sessionDataMutator *sessionDataMutator
 
 	// execCfg is used to access the server configuration for the Executor.
 	execCfg *ExecutorConfig
