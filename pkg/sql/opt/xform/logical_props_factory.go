@@ -82,10 +82,10 @@ func (f *logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	tbl := f.mem.metadata.Table(tblIndex)
 
 	// A table's output column indexes are contiguous.
-	props.Relational.OutputCols.AddRange(int(tblIndex), int(tblIndex)+tbl.NumColumns()-1)
+	props.Relational.OutputCols.AddRange(int(tblIndex), int(tblIndex)+tbl.ColumnCount()-1)
 
 	// Initialize not-NULL columns from the table schema.
-	for i := 0; i < tbl.NumColumns(); i++ {
+	for i := 0; i < tbl.ColumnCount(); i++ {
 		if !tbl.Column(i).IsNullable() {
 			props.Relational.NotNullCols.Add(int(tblIndex) + i)
 		}
