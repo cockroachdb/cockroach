@@ -162,10 +162,35 @@ func (node *ShowSessions) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowSchemas represents a SHOW TABLES statement.
+type ShowSchemas struct {
+	Database Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowSchemas) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW SCHEMAS")
+	if node.Database != "" {
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.Database)
+	}
+}
+
 // ShowTables represents a SHOW TABLES statement.
 type ShowTables struct {
 	Database Name
 	Schema   Name
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowTables) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW TABLES")
+	if node.Database != "" {
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.Database)
+		ctx.WriteByte('.')
+		ctx.FormatNode(&node.Schema)
+	}
 }
 
 // ShowConstraints represents a SHOW CONSTRAINTS statement.
@@ -179,17 +204,6 @@ func (node *ShowConstraints) Format(ctx *FmtCtx) {
 	if node.Table.TableNameReference != nil {
 		ctx.WriteString(" FROM ")
 		ctx.FormatNode(&node.Table)
-	}
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowTables) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW TABLES")
-	if node.Database != "" {
-		ctx.WriteString(" FROM ")
-		ctx.FormatNode(&node.Database)
-		ctx.WriteByte('.')
-		ctx.FormatNode(&node.Schema)
 	}
 }
 
