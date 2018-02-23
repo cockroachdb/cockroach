@@ -1971,11 +1971,9 @@ func (e *Executor) execDistSQL(
 	return rowResultWriter.Err()
 }
 
-// execLocal runs the given logical plan using the local
+// execLocal runs the current logical plan using the local
 // (non-distributed) SQL implementation.
-func (e *Executor) execLocal(
-	planner *planner, plan planNode, rowResultWriter StatementResult,
-) error {
+func (e *Executor) execLocal(planner *planner, rowResultWriter StatementResult) error {
 	ctx := planner.EvalContext().Ctx()
 
 	// Create a BoundAccount to track the memory usage of each row.
@@ -1995,7 +1993,7 @@ func (e *Executor) execLocal(
 
 	switch rowResultWriter.StatementType() {
 	case tree.RowsAffected:
-		count, err := countRowsAffected(params, plan)
+		count, err := countRowsAffected(params, planner.curPlan.plan)
 		if err != nil {
 			return err
 		}
@@ -2080,14 +2078,25 @@ func shouldUseDistSQL(
 	distSQLMode sessiondata.DistSQLExecMode,
 	dp *DistSQLPlanner,
 	planner *planner,
-	plan planNode,
 ) (bool, error) {
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false, nil
 	}
 
+	plan := planner.curPlan.plan
+
 	// Don't try to run empty nodes (e.g. SET commands) with distSQL.
 	if _, ok := plan.(*zeroNode); ok {
+		return false, nil
+	}
+
+	// We don't support subqueries yet.
+	if len(planner.curPlan.subqueryPlans) > 0 {
+		if distSQLMode == sessiondata.DistSQLAlways {
+			err := newQueryNotSupportedError("subqueries not supported yet")
+			log.VEventf(ctx, 1, "query not supported for distSQL: %s", err)
+			return false, err
+		}
 		return false, nil
 	}
 
@@ -2172,7 +2181,7 @@ func (e *Executor) execStmt(
 	if !useOptimizer {
 		var err error
 		useDistSQL, err = shouldUseDistSQL(
-			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner, planner.curPlan.plan,
+			session.Ctx(), session.data.DistSQLMode, e.distSQLPlanner, planner,
 		)
 		if err != nil {
 			return err
@@ -2189,7 +2198,7 @@ func (e *Executor) execStmt(
 	if useDistSQL {
 		err = e.execDistSQL(planner, planner.curPlan.plan, res, stmt.AST.StatementType())
 	} else {
-		err = e.execLocal(planner, planner.curPlan.plan, res)
+		err = e.execLocal(planner, res)
 	}
 	// Ensure the error is saved where maybeLogStatement can find it.
 	res.SetError(err)
@@ -2263,7 +2272,7 @@ func (e *Executor) execStmtInParallel(
 		}
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
-		err = e.execLocal(planner, planner.curPlan.plan, bufferedWriter)
+		err = e.execLocal(planner, bufferedWriter)
 		// Ensure err is saved where maybeLogStatement can find it.
 		bufferedWriter.SetError(err)
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
