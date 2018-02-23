@@ -37,19 +37,20 @@ func init() {
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, c.All(), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 
-		t.Status("importing TPCC fixture")
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
-			cmd := fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d --into-db tpcc {pgurl:1}", warehouses)
-			c.Run(ctx, 1, cmd)
-
 			run := func(stmt string) {
 				t.Status(stmt)
 				c.Run(ctx, 1, `./cockroach sql --insecure -e "`+stmt+`"`)
 			}
+
+			run(`SET CLUSTER SETTING trace.debug.enable = true`)
+
+			t.Status("importing TPCC fixture")
+			c.Run(ctx, 1, fmt.Sprintf(
+				"./workload fixtures load tpcc --warehouses=%d --into-db tpcc {pgurl:1}", warehouses))
 
 			const stmtDelete = "DELETE FROM tpcc.stock"
 			run(stmtDelete)

@@ -197,6 +197,9 @@ type testI interface {
 	Failed() bool
 }
 
+// TODO(tschottdorf): Consider using a more idiomatic approach in which options
+// act upon a config struct:
+// https://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis
 type option interface {
 	option()
 }
@@ -348,13 +351,10 @@ func (c *cluster) Node(i int) nodeListOption {
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
-	if !c.isLocal() {
-		// TODO(peter): Figure out how to retrieve local logs. One option would be
-		// to stop the cluster and mv ~/local to wherever we want it.
-		c.status("retrieving logs")
-		_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
-			filepath.Join(artifacts, c.t.Name(), "logs"))
-	}
+	c.status("retrieving logs")
+	_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
+		filepath.Join(artifacts, c.t.Name(), "logs"))
+
 	// Only destroy the cluster if it exists in the cluster registry. The cluster
 	// may not exist if the test was interrupted and the teardown machinery is
 	// destroying all clusters. (See destroyAllClusters).
@@ -401,6 +401,27 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
+// startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
+func startArgs(extraArgs ...string) option {
+	return roachprodArgOption(extraArgs)
+}
+
+type roachprodArgOption []string
+
+func (o roachprodArgOption) option() {}
+
+func roachprodArgs(opts []option) []string {
+	var args []string
+	for _, opt := range opts {
+		a, ok := opt.(roachprodArgOption)
+		if !ok {
+			continue
+		}
+		args = append(args, ([]string)(a)...)
+	}
+	return args
+}
+
 // Start cockroach nodes on a subset of the cluster. The nodes parameter can
 // either be a specific node, empty (to indicate all nodes), or a pair of nodes
 // indicating a range.
@@ -413,8 +434,13 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("starting cluster")
-	err := execCmd(ctx, c.l, "roachprod", "start", c.makeNodes(opts))
-	if err != nil {
+	args := []string{
+		"roachprod",
+		"start",
+	}
+	args = append(args, roachprodArgs(opts)...)
+	args = append(args, c.makeNodes(opts))
+	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
 	}
 }
