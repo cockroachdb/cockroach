@@ -19,6 +19,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -37,6 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
+
+	// "postgres" gosql driver
+	_ "github.com/lib/pq"
 )
 
 var (
@@ -467,6 +471,24 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 	if err != nil {
 		c.t.Fatal(err)
 	}
+}
+
+// Conn returns a SQL connection to the specified node.
+func (c *cluster) Conn(ctx context.Context, t *test, node int) *gosql.DB {
+	cmd := exec.CommandContext(
+		ctx, `roachprod`, `pgurl`, `--external`, fmt.Sprintf("%s:%d", c.name, node),
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println(strings.Join(cmd.Args, ` `))
+		t.Fatal(err)
+	}
+	url := strings.Trim(string(output), "' \n")
+	db, err := gosql.Open("postgres", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
 }
 
 func (c *cluster) makeNodes(opts []option) string {
