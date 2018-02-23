@@ -255,6 +255,7 @@ func (cb *columnBackfiller) runChunk(
 				return err
 			}
 		}
+		txn.OrigTimestampWasObserved()
 		// Write the new row values.
 		if err := txn.CommitInBatch(ctx, b); err != nil {
 			return ConvertBackfillError(ctx, &cb.spec.Table, b)
