@@ -163,10 +163,6 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 		return false, expr
 	}
 	switch t := expr.(type) {
-	case *tree.Subquery:
-		v.err = newQueryNotSupportedError("subqueries not supported yet")
-		return false, expr
-
 	case *tree.FuncExpr:
 		if t.IsDistSQLBlacklist() {
 			v.err = newQueryNotSupportedErrorf("function %s cannot be executed with distsql", t)
