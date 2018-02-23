@@ -172,7 +172,7 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 13},
 	},
 	{
-		// VersionReadUncommittedRangeLookups is https://github.com/cockroachdb/cockroach/pull/21276.
+		// VersionPerReplicaZoneConstraints is https://github.com/cockroachdb/cockroach/pull/22819.
 		Key:     VersionPerReplicaZoneConstraints,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 14},
 	},

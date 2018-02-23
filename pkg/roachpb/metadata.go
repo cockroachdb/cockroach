@@ -60,7 +60,7 @@ func (r ReplicaID) String() string {
 }
 
 // Equals returns whether the Attributes lists are equivalent. Attributes lists
-// are treated as sets, meaaning that ordering and duplicates are ignored.
+// are treated as sets, meaning that ordering and duplicates are ignored.
 func (a Attributes) Equals(b Attributes) bool {
 	// This is O(n^2), but Attribute lists should never be long enough for that
 	// to matter, and allocating memory every time this is called would be worse.
