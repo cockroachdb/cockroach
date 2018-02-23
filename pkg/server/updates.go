@@ -137,6 +137,12 @@ func (s *Server) maybeCheckForUpdates(
 		return scheduled
 	}
 
+	// if diagnostics reporting is disabled, we should assume that means that the
+	// user doesn't want us phoning home for new-version checks either.
+	if !log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+		return now.Add(updateCheckFrequency)
+	}
+
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
 	if succeeded := s.checkForUpdates(runningTime); !succeeded {
@@ -171,6 +177,9 @@ func addInfoToURL(url *url.URL, s *Server, runningTime time.Duration) {
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
 func (s *Server) checkForUpdates(runningTime time.Duration) bool {
+	if updatesURL == nil {
+		return true // don't bother with asking for retry -- we'll never succeed.
+	}
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
@@ -264,6 +273,9 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 }
 
 func (s *Server) reportDiagnostics(runningTime time.Duration) {
+	if reportingURL == nil {
+		return
+	}
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
 	defer span.Finish()
 
