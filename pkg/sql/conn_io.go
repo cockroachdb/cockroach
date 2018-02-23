@@ -119,6 +119,7 @@ type StmtBuf struct {
 // Command is an interface implemented by all commands pushed by pgwire into the
 // buffer.
 type Command interface {
+	fmt.Stringer
 	command()
 }
 
@@ -127,7 +128,14 @@ type Command interface {
 type ExecStmt struct {
 	// Stmt can be nil, in which case a "empty query response" message should be
 	// produced.
+	//
+	// TODO(andrei): Many places call Stmt.String() (e.g. ExecStmt.String()),
+	// which seems inneficient. We should find a way to memo-ize this. Another
+	// option is to keep track of the query as we got it from the client, except
+	// that we might have gotten a batch of them at once, in which case only the
+	// parser can do the splitting.
 	Stmt tree.Statement
+
 	// TimeReceived is the time at which the exec message was received
 	// from the client. Used to compute the service latency.
 	TimeReceived time.Time
@@ -139,6 +147,10 @@ type ExecStmt struct {
 
 // command implements the Command interface.
 func (ExecStmt) command() {}
+
+func (e ExecStmt) String() string {
+	return fmt.Sprintf("ExecStmt: %s", e.Stmt.String())
+}
 
 var _ Command = ExecStmt{}
 
@@ -155,6 +167,10 @@ type ExecPortal struct {
 
 // command implements the Command interface.
 func (ExecPortal) command() {}
+
+func (e ExecPortal) String() string {
+	return fmt.Sprintf("ExecPortal name:%q", e.Name)
+}
 
 var _ Command = ExecPortal{}
 
@@ -175,6 +191,10 @@ type PrepareStmt struct {
 // command implements the Command interface.
 func (PrepareStmt) command() {}
 
+func (p PrepareStmt) String() string {
+	return fmt.Sprintf("PrepareStmt: %s", p.Stmt.String())
+}
+
 var _ Command = PrepareStmt{}
 
 // DescribeStmt is the Command for producing info about a prepared statement or
@@ -186,6 +206,10 @@ type DescribeStmt struct {
 
 // command implements the Command interface.
 func (DescribeStmt) command() {}
+
+func (d DescribeStmt) String() string {
+	return fmt.Sprintf("Describe: %q", d.Name)
+}
 
 var _ Command = DescribeStmt{}
 
@@ -214,6 +238,10 @@ type BindStmt struct {
 // command implements the Command interface.
 func (BindStmt) command() {}
 
+func (b BindStmt) String() string {
+	return fmt.Sprintf("BindStmt: %q->%q", b.PreparedStatementName, b.PortalName)
+}
+
 var _ Command = BindStmt{}
 
 // DeletePreparedStmt is the Command for freeing a prepared statement.
@@ -224,6 +252,10 @@ type DeletePreparedStmt struct {
 
 // command implements the Command interface.
 func (DeletePreparedStmt) command() {}
+
+func (d DeletePreparedStmt) String() string {
+	return fmt.Sprintf("DeletePreparedStmt: %q", d.Name)
+}
 
 var _ Command = DeletePreparedStmt{}
 
@@ -254,6 +286,10 @@ type Flush struct{}
 // command implements the Command interface.
 func (Flush) command() {}
 
+func (Flush) String() string {
+	return "Flush"
+}
+
 var _ Command = Flush{}
 
 // CopyIn is the command for execution of the Copy-in pgwire subprotocol.
@@ -270,6 +306,10 @@ type CopyIn struct {
 // command implements the Command interface.
 func (CopyIn) command() {}
 
+func (CopyIn) String() string {
+	return "CopyIn"
+}
+
 var _ Command = CopyIn{}
 
 // DrainRequest represents a notice that the server is draining and command
@@ -280,6 +320,10 @@ type DrainRequest struct{}
 
 // command implements the Command interface.
 func (DrainRequest) command() {}
+
+func (DrainRequest) String() string {
+	return "Drain"
+}
 
 var _ Command = DrainRequest{}
 
@@ -293,6 +337,10 @@ type SendError struct {
 
 // command implements the Command interface.
 func (SendError) command() {}
+
+func (s SendError) String() string {
+	return fmt.Sprintf("SendError: %s", s.Err)
+}
 
 var _ Command = SendError{}
 
