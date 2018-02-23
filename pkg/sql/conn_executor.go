@@ -463,12 +463,12 @@ func (s *Server) ServeConn(
 		},
 		settings:       s.cfg.Settings,
 		curTxnReadOnly: &ex.state.readOnly,
-		sessionTracing: &ex.state.tracing,
 		applicationNameChanged: func(newName string) {
 			ex.appStats = ex.server.sqlStats.getStatsForApplication(newName)
 		},
 	}
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
+	ex.dataMutator.sessionTracing.ex = &ex
 
 	defer func() {
 		r := recover()
@@ -553,7 +553,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		ex.prepStmtsNamespace.resetTo(ctx, &prepStmtNamespace{})
 	}
 
-	if ex.state.tracing.Enabled() {
+	if ex.dataMutator.sessionTracing.Enabled() {
 		if err := ex.dataMutator.StopSessionTracing(); err != nil {
 			log.Warningf(ctx, "error stopping tracing: %s", err)
 		}
@@ -654,11 +654,12 @@ type connExecutor struct {
 	// sessiondata.ApplicationName.
 	appStats *appStats
 
-	// connCtx is the root context in which all statements from the connection are
-	// running. This generally should not be used directly, but through the Ctx()
-	// method; if we're inside a transaction, Ctx() is going to return a derived
-	// context. See the Context Management comments at the top of the file.
-	connCtx context.Context
+	// ctxHolder contains the connection's context in which all command executed
+	// on the connection are running. This generally should not be used directly,
+	// but through the Ctx() method; if we're inside a transaction, Ctx() is going
+	// to return a derived context. See the Context Management comments at the top
+	// of the file.
+	ctxHolder ctxHolder
 
 	// planner is the "default planner" on a session, to save planner allocations
 	// during serial execution. Since planners are not threadsafe, this is only
@@ -693,6 +694,36 @@ type connExecutor struct {
 	// curStmt is the statement that's currently being prepared or executed, if
 	// any. This is printed by high-level panic recovery.
 	curStmt tree.Statement
+}
+
+// ctxHolder contains a connection's context and, while session tracing is
+// enabled, a derived context with a recording span. The connExecutor should use
+// the latter while session tracing is active, or the former otherwise; that's
+// what the ctx() method returns.
+type ctxHolder struct {
+	connCtx           context.Context
+	sessionTracingCtx context.Context
+}
+
+func (ch *ctxHolder) ctx() context.Context {
+	if ch.sessionTracingCtx != nil {
+		return ch.sessionTracingCtx
+	}
+	return ch.connCtx
+}
+
+func (ch *ctxHolder) hijack(sessionTracingCtx context.Context) {
+	if ch.sessionTracingCtx != nil {
+		panic("hijack already in effect")
+	}
+	ch.sessionTracingCtx = sessionTracingCtx
+}
+
+func (ch *ctxHolder) unhijack() {
+	if ch.sessionTracingCtx == nil {
+		panic("hijack not in effect")
+	}
+	ch.sessionTracingCtx = nil
 }
 
 type prepStmtNamespace struct {
@@ -784,7 +815,7 @@ func (ex *connExecutor) resetExtraTxnState(
 // session's context otherwise.
 func (ex *connExecutor) Ctx() context.Context {
 	if _, ok := ex.machine.CurState().(stateNoTxn); ok {
-		return ex.connCtx
+		return ex.ctxHolder.ctx()
 	}
 	return ex.state.Ctx
 }
@@ -814,7 +845,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 	ex.server.cfg.SessionRegistry.register(ex)
 	defer ex.server.cfg.SessionRegistry.deregister(ex)
 
-	ex.connCtx = ctx
+	ex.ctxHolder.connCtx = ctx
 	var draining bool
 	for {
 		ex.curStmt = nil
@@ -829,6 +860,8 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			}
 			return err
 		}
+		log.VEventf(ex.Ctx(), 2, "[%s pos:%d] connEx executing cmd %s",
+			ex.machine.CurState(), pos, cmd)
 
 		var ev fsm.Event
 		var payload fsm.EventPayload
@@ -868,6 +901,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				res = ex.clientComm.CreateErrorResult(pos)
 				break
 			}
+			log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
 			ex.curStmt = portal.Stmt.Statement
 
 			pinfo := &tree.PlaceholderInfo{
@@ -1474,9 +1508,9 @@ func (ex *connExecutor) evalCtx(p *planner, stmtTS time.Time) extendedEvalContex
 			NodeID:          ex.server.cfg.NodeID.Get(),
 			ReCache:         ex.server.reCache,
 		},
-		SessionMutator:  ex.dataMutator,
+		SessionMutator:  &ex.dataMutator,
 		VirtualSchemas:  ex.server.cfg.VirtualSchemas,
-		Tracing:         &ex.state.tracing,
+		Tracing:         &ex.dataMutator.sessionTracing,
 		StatusServer:    ex.server.cfg.StatusServer,
 		MemMetrics:      ex.memMetrics,
 		Tables:          &ex.extraTxnState.tables,
@@ -1537,7 +1571,7 @@ func (ex *connExecutor) resetPlanner(
 	p.extendedEvalCtx.NodeID = ex.server.cfg.NodeID.Get()
 	p.extendedEvalCtx.ReCache = ex.server.reCache
 
-	p.sessionDataMutator = ex.dataMutator
+	p.sessionDataMutator = &ex.dataMutator
 	p.preparedStatements = ex.getPrepStmtsAccessor()
 	p.autoCommit = false
 	p.isPreparing = false
