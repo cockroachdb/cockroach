@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var (
@@ -727,25 +728,8 @@ func TestWrongTxnRetry(t *testing.T) {
 		if err := outerTxn.Put(ctx, "a", "b"); err != nil {
 			t.Fatal(err)
 		}
-		var execOpt TxnExecOptions
-		execOpt.AutoRetry = false
-		innerClosure := func(ctx context.Context, innerTxn *Txn, opt *TxnExecOptions) error {
-			log.Infof(ctx, "starting inner: %s", innerTxn.Proto())
-			// Ensure the KV transaction is created.
-			if err := innerTxn.Put(ctx, "x", "y"); err != nil {
-				t.Fatal(err)
-			}
-			// HACK ALERT: to do without a TxnCoordSender, we jump through hoops to
-			// get the retryable error expected by txn.Exec().
-			return roachpb.NewHandledRetryableTxnError(
-				"test error", innerTxn.Proto().ID, *innerTxn.Proto())
-		}
-		innerTxn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
-		err := innerTxn.Exec(ctx, execOpt, innerClosure)
-		if !testutils.IsError(err, "test error") {
-			t.Fatalf("unexpected inner failure: %v", err)
-		}
-		return err
+		// Simulate an inner txn by generating an error with a bogus txn id.
+		return roachpb.NewHandledRetryableTxnError("test error", uuid.MakeV4(), roachpb.Transaction{})
 	}
 
 	if err := db.Txn(context.TODO(), txnClosure); !testutils.IsError(err, "test error") {
