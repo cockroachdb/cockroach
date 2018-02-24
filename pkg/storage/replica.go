@@ -5493,7 +5493,7 @@ func evaluateBatch(
 					writeTooOldErr.GetDetail().(*roachpb.WriteTooOldError).ActualTimestamp.Forward(tErr.ActualTimestamp)
 				} else {
 					writeTooOldErr = pErr
-					// For transaction, we want to swallow the write too old error
+					// For transactions, we want to swallow the write too old error
 					// and just move the transaction timestamp forward and set the
 					// WriteTooOld flag. See below for exceptions.
 					if ba.Txn != nil {
