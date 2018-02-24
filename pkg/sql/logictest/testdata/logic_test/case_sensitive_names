@@ -8,13 +8,13 @@ CREATE DATABASE D
 statement ok
 SHOW TABLES FROM d
 
-statement error pattern "D" did not match any valid database or schema
+statement error "D" did not match any valid database or schema
 SHOW TABLES FROM "D"
 
 statement ok
 CREATE DATABASE "E"
 
-statement error pattern "e" did not match any valid database or schema
+statement error "e" did not match any valid database or schema
 SHOW TABLES FROM e
 
 statement ok

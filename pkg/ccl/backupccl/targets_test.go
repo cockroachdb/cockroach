@@ -59,9 +59,9 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"system", "TABLE foo, foo", []string{"system", "foo"}, nil, ``},
 		{"data", "TABLE foo", nil, nil, `table "foo" does not exist`},
 
-		{"", "TABLE *", nil, nil, `pattern "\*" did not match any valid database or schema`},
-		{"", "TABLE *, system.public.foo", nil, nil, `pattern "\*" did not match any valid database or schema`},
-		{"noexist", "TABLE *", nil, nil, `pattern "\*" did not match any valid database or schema`},
+		{"", "TABLE *", nil, nil, `"\*" did not match any valid database or schema`},
+		{"", "TABLE *, system.public.foo", nil, nil, `"\*" did not match any valid database or schema`},
+		{"noexist", "TABLE *", nil, nil, `"\*" did not match any valid database or schema`},
 		{"system", "TABLE *", []string{"system", "foo", "bar"}, nil, ``},
 		{"data", "TABLE *", []string{"data", "baz"}, nil, ``},
 		{"empty", "TABLE *", []string{"empty"}, nil, ``},
@@ -80,7 +80,7 @@ func TestDescriptorsMatchingTargets(t *testing.T) {
 		{"system", "TABLE system.public.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
 		{"system", "TABLE system.foo, bar", []string{"system", "foo", "bar"}, nil, ``},
 
-		{"", "TABLE noexist.*", nil, nil, `pattern "noexist\.\*" did not match any valid database or schema`},
+		{"", "TABLE noexist.*", nil, nil, `"noexist\.\*" did not match any valid database or schema`},
 		{"", "TABLE empty.*", []string{"empty"}, nil, ``},
 		{"", "TABLE system.*", []string{"system", "foo", "bar"}, nil, ``},
 		{"", "TABLE system.public.*", []string{"system", "foo", "bar"}, nil, ``},
