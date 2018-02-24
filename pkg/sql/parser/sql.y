@@ -2870,6 +2870,8 @@ show_tables_stmt:
 | SHOW TABLES FROM name
   {
     $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+	// see name_resolution.go.
         SchemaName: tree.Name($4),
         ExplicitSchema: true,
     }}
