@@ -672,32 +672,6 @@ func TestCommitInBatchWrongTxn(t *testing.T) {
 	}
 }
 
-// TestTimestampSelectionInOptions verifies that a client can set the
-// Txn timestamp using client.TxnExecOptions.
-func TestTimestampSelectionInOptions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	mc := hlc.NewManualClock(100)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
-	db := NewDB(newTestTxnFactory(nil), clock)
-	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
-
-	refTimestamp := clock.Now()
-
-	txnClosure := func(ctx context.Context, txn *Txn, opt *TxnExecOptions) error {
-		// Ensure the KV transaction is created.
-		return txn.Put(ctx, "a", "b")
-	}
-
-	if err := txn.Exec(context.Background(), TxnExecOptions{}, txnClosure); err != nil {
-		t.Fatal(err)
-	}
-
-	// Check the timestamp was initialized.
-	if txn.Proto().OrigTimestamp.WallTime != refTimestamp.WallTime {
-		t.Errorf("expected txn orig ts to be %s; got %s", refTimestamp, txn.Proto().OrigTimestamp)
-	}
-}
-
 // TestSetPriority verifies that the batch UserPriority is correctly set
 // depending on the transaction priority.
 func TestSetPriority(t *testing.T) {
