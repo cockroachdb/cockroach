@@ -868,8 +868,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 	opts := client.TxnExecOptions{
-		AutoRetry:  false,
-		AutoCommit: true,
+		AutoRetry: false,
 	}
 	if err := txn.Exec(
 		context.TODO(), opts,
