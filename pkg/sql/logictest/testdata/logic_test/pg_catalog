@@ -5,7 +5,7 @@
 query error database "pg_catalog" does not exist
 ALTER DATABASE pg_catalog RENAME TO not_pg_catalog
 
-statement error unsupported schema specification: "pg_catalog.t"
+statement error schema cannot be modified: "pg_catalog"
 CREATE TABLE pg_catalog.t (x INT)
 
 query error database "pg_catalog" does not exist
