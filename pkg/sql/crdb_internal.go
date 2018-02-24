@@ -82,6 +82,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalTablesTable,
 		crdbInternalZonesTable,
 	},
+	validWithNoDatabaseContext: true,
 }
 
 var crdbInternalBuildInfoTable = virtualSchemaTable{
