@@ -1231,10 +1231,11 @@ func mvccPutInternal(
 				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 				return err
 			}
-			// We are replacing our own older write intent. If we are
-			// writing at the same timestamp we can simply overwrite it;
-			// otherwise we must explicitly delete the obsolete intent.
-			if timestamp != metaTimestamp {
+			// We are replacing our own write intent. If we are writing at
+			// the same timestamp (see comments in else block) we can
+			// overwrite the existing intent; otherwise we must manually
+			// delete the old intent, taking care with MVCC stats.
+			if metaTimestamp.Less(timestamp) {
 				{
 					// If the older write intent has a version underneath it, we need to
 					// read its size because its GCBytesAge contribution may change as we
@@ -1255,6 +1256,13 @@ func mvccPutInternal(
 				if err := engine.Clear(versionKey); err != nil {
 					return err
 				}
+			} else if timestamp.Less(metaTimestamp) {
+				// This case occurs when we're writing a key twice within a
+				// txn, and our timestamp has been pushed forward because of
+				// a write-too-old error on this key. For this case, we want
+				// to continue writing at the higher timestamp or else the
+				// MVCCMetadata could end up pointing *under* the newer write.
+				timestamp = metaTimestamp
 			}
 		} else if !metaTimestamp.Less(timestamp) {
 			// This is the case where we're trying to write under a
