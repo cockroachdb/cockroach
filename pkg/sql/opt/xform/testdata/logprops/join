@@ -21,7 +21,7 @@ build
 SELECT *, rowid FROM a INNER JOIN b ON a.x=b.x
 ----
 inner-join
- ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ ├── columns: x:int:1 y:int:null:2 x:int:null:3 z:int:4 rowid:int:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  ├── scan
@@ -34,7 +34,7 @@ build
 SELECT *, rowid FROM a LEFT JOIN b ON a.x=b.x
 ----
 left-join
- ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4 b.rowid:int:null:5
+ ├── columns: x:int:1 y:int:null:2 x:int:null:3 z:int:null:4 rowid:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  ├── scan
@@ -47,7 +47,7 @@ build
 SELECT *, rowid FROM a RIGHT JOIN b ON a.x=b.x
 ----
 right-join
- ├── columns: a.x:int:null:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ ├── columns: x:int:null:1 y:int:null:2 x:int:null:3 z:int:4 rowid:int:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  ├── scan
@@ -60,7 +60,7 @@ build
 SELECT *, rowid FROM a FULL JOIN b ON a.x=b.x
 ----
 full-join
- ├── columns: a.x:int:null:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4 b.rowid:int:null:5
+ ├── columns: x:int:null:1 y:int:null:2 x:int:null:3 z:int:null:4 rowid:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  ├── scan

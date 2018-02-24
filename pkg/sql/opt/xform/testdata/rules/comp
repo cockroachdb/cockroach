@@ -10,14 +10,14 @@ TABLE a
  └── INDEX primary
       └── k int not null
 
-#
+# --------------------------------------------------
 # NormalizeVar
-#
+# --------------------------------------------------
 opt
 SELECT * FROM a WHERE 1=k AND 2<>i
 ----
 select
- ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
  └── and [type=bool]
@@ -28,14 +28,14 @@ select
            ├── variable: a.i [type=int]
            └── const: 2 [type=int]
 
-#
+# --------------------------------------------------
 # NormalizeTupleEquality
-#
+# --------------------------------------------------
 opt
 SELECT * FROM a WHERE (i, f, s) = (1, 3.5, 'foo')
 ----
 select
- ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
  └── and [type=bool]
@@ -49,15 +49,16 @@ select
            ├── variable: a.s [type=string]
            └── const: 'foo' [type=string]
 
-#
+# --------------------------------------------------
 # NormalizeTupleEquality, FlattenAnd
-#   Nested tuples.
-#
+# --------------------------------------------------
+
+# Nested tuples.
 opt
 SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select
- ├── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
  └── and [type=bool]

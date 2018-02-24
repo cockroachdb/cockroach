@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/bool.opt rules/comp.opt
+//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/bool.opt rules/comp.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -105,12 +105,29 @@ func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
 
 // isSingletonList returns true if the list has exactly one element.
 func (f *factory) isSingletonList(list opt.ListID) bool {
-	return len(f.mem.lookupList(list)) == 1
+	return list.Length == 1
 }
 
 // firstListItem returns the first element from a list.
 func (f *factory) firstListItem(list opt.ListID) opt.GroupID {
 	return f.mem.lookupList(list)[0]
+}
+
+// ----------------------------------------------------------------------
+//
+// Project functions
+//   Custom match and replace functions used with project.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// hasSameProjectionCols returns true if the given expression has the same set
+// of output columns that the given Projections expression has.
+func (f *factory) hasSameProjectionCols(group, projections opt.GroupID) bool {
+	groupOutputCols := f.mem.lookupGroup(group).logical.Relational.OutputCols
+	projectionsExpr := f.mem.lookupNormExpr(projections).asProjections()
+	colList := *f.mem.lookupPrivate(projectionsExpr.cols()).(*opt.ColList)
+	projectOutputCols := opt.ColListToSet(colList)
+	return groupOutputCols.Equals(projectOutputCols)
 }
 
 // ----------------------------------------------------------------------
@@ -206,7 +223,7 @@ func (f *factory) canInvertComparison(comparison opt.GroupID) bool {
 // to:
 //   a.x <> 5
 func (f *factory) invertComparison(comparison opt.GroupID) opt.GroupID {
-	ev := makeExprView(f.mem, comparison, opt.MinPhysPropsID)
+	ev := makeExprView(f.mem, comparison, opt.NormPhysPropsID)
 	left := ev.ChildGroup(0)
 	right := ev.ChildGroup(1)
 

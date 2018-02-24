@@ -31,7 +31,7 @@ build
 SELECT a.x FROM t.a
 ----
 project
- ├── columns: a.x:int:1
+ ├── columns: x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── projections
@@ -41,13 +41,13 @@ build
 SELECT a.x, a.y FROM t.a
 ----
 scan
- └── columns: a.x:int:1 a.y:float:null:2
+ └── columns: x:int:1 y:float:null:2
 
 build
 SELECT a.y, a.x FROM t.a
 ----
 project
- ├── columns: a.y:float:null:2 a.x:int:1
+ ├── columns: y:float:null:2 x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── projections
@@ -58,7 +58,7 @@ build
 SELECT * FROM t.a
 ----
 scan
- └── columns: a.x:int:1 a.y:float:null:2
+ └── columns: x:int:1 y:float:null:2
 
 # Note that an explicit projection operator is added for table b (unlike for
 # table a) to avoid projecting the hidden rowid column.
@@ -66,7 +66,7 @@ build
 SELECT * FROM t.b
 ----
 project
- ├── columns: b.x:int:null:1 b.y:float:null:2
+ ├── columns: x:int:null:1 y:float:null:2
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
  └── projections
@@ -90,7 +90,7 @@ build
 SELECT *, ((x < y) OR x > 1000) FROM t.a
 ----
 project
- ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
+ ├── columns: x:int:1 y:float:null:2 column3:bool:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── projections
@@ -108,7 +108,7 @@ build
 SELECT a.*, true FROM t.a
 ----
 project
- ├── columns: a.x:int:1 a.y:float:null:2 column3:bool:null:3
+ ├── columns: x:int:1 y:float:null:2 column3:bool:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── projections
@@ -144,7 +144,7 @@ build
 SELECT rowid FROM b;
 ----
 project
- ├── columns: b.rowid:int:3
+ ├── columns: rowid:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
  └── projections
@@ -159,7 +159,7 @@ build
 SELECT rowid FROM (SELECT rowid FROM b)
 ----
 project
- ├── columns: b.rowid:int:3
+ ├── columns: rowid:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
  └── projections
@@ -169,7 +169,7 @@ build
 SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
- ├── columns: b.rowid:int:3
+ ├── columns: r:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
  └── projections
@@ -179,7 +179,7 @@ build
 SELECT r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
- ├── columns: b.rowid:int:3
+ ├── columns: r:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
  └── projections
