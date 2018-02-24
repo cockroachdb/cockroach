@@ -316,7 +316,7 @@ func (b *Builder) buildScan(
 	tblIndex := b.factory.Metadata().AddTable(tbl)
 
 	outScope = inScope.push()
-	for i := 0; i < tbl.NumColumns(); i++ {
+	for i := 0; i < tbl.ColumnCount(); i++ {
 		col := tbl.Column(i)
 		colIndex := b.factory.Metadata().TableColumn(tblIndex, i)
 		colProps := columnProps{

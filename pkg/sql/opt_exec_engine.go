@@ -31,19 +31,22 @@ var _ exec.TestEngineFactory = &Executor{}
 func (e *Executor) NewTestEngine() exec.TestEngine {
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 	p, cleanup := newInternalPlanner("opt", txn, "root", &MemoryMetrics{}, &e.cfg)
-	ee := &execEngine{
-		planner: p,
-		cleanup: cleanup,
-	}
-	return ee
+	return newExecEngine(p, cleanup)
 }
 
 type execEngine struct {
+	catalog optCatalog
 	planner *planner
 	cleanup func()
 }
 
 var _ exec.TestEngine = &execEngine{}
+
+func newExecEngine(p *planner, cleanup func()) *execEngine {
+	ee := &execEngine{planner: p, cleanup: cleanup}
+	ee.catalog.init(p)
+	return ee
+}
 
 // Factory is part of the exec.TestEngine interface.
 func (ee *execEngine) Factory() exec.Factory {
@@ -52,7 +55,7 @@ func (ee *execEngine) Factory() exec.Factory {
 
 // Catalog is part of the exec.TestEngine interface.
 func (ee *execEngine) Catalog() optbase.Catalog {
-	return ee
+	return &ee.catalog
 }
 
 // Execute is part of the exec.TestEngine interface.
@@ -105,11 +108,14 @@ func (ee *execEngine) Explain(n exec.Node) ([]tree.Datums, error) {
 
 // Close is part of the exec.TestEngine interface.
 func (ee *execEngine) Close() {
-	ee.cleanup()
+	if ee.cleanup != nil {
+		ee.cleanup()
+	}
 }
 
 var _ exec.Factory = &execEngine{}
 
+// ConstructValues is part of the exec.Factory interface.
 func (ee *execEngine) ConstructValues(
 	rows [][]tree.TypedExpr, colTypes []types.T, colNames []string,
 ) (exec.Node, error) {
@@ -127,7 +133,7 @@ func (ee *execEngine) ConstructValues(
 
 // ConstructScan is part of the exec.Factory interface.
 func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
-	desc := table.(*sqlbase.TableDescriptor)
+	desc := table.(*optTable).desc
 
 	columns := make([]tree.ColumnID, len(desc.Columns))
 	for i := range columns {
@@ -212,12 +218,4 @@ func (ee *execEngine) ConstructInnerJoin(
 	}
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
-}
-
-var _ optbase.Catalog = &execEngine{}
-
-// FindTable is part of the optbase.Catalog interface.
-func (ee *execEngine) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
-	p := ee.planner
-	return ResolveExistingObject(ctx, p, name, true /*required*/, requireTableDesc)
 }
