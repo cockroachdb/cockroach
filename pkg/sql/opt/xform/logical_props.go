@@ -70,25 +70,35 @@ func (p *LogicalProps) format(mem *memo, tp treeprinter.Node) {
 
 func (p *LogicalProps) formatOutputCols(mem *memo, tp treeprinter.Node) {
 	if !p.Relational.OutputCols.Empty() {
-		var buf bytes.Buffer
-		buf.WriteString("columns:")
-		p.Relational.OutputCols.ForEach(func(i int) {
-			p.formatCol(mem, &buf, opt.ColumnIndex(i))
+		formatCols(tp, func(buf *bytes.Buffer) {
+			p.Relational.OutputCols.ForEach(func(i int) {
+				p.formatCol(mem, buf, "", opt.ColumnIndex(i))
+			})
 		})
-		tp.Child(buf.String())
 	}
 }
 
-func (p *LogicalProps) formatCol(mem *memo, buf *bytes.Buffer, colIndex opt.ColumnIndex) {
-	label := mem.metadata.ColumnLabel(colIndex)
-	typ := mem.metadata.ColumnType(colIndex)
+func (p *LogicalProps) formatCol(
+	mem *memo, buf *bytes.Buffer, label string, index opt.ColumnIndex,
+) {
+	if label == "" {
+		label = mem.metadata.ColumnLabel(index)
+	}
+	typ := mem.metadata.ColumnType(index)
 	buf.WriteByte(' ')
 	buf.WriteString(label)
 	buf.WriteByte(':')
 	buf.WriteString(typ.String())
 	buf.WriteByte(':')
-	if !p.Relational.NotNullCols.Contains(int(colIndex)) {
+	if !p.Relational.NotNullCols.Contains(int(index)) {
 		buf.WriteString("null:")
 	}
-	fmt.Fprintf(buf, "%d", colIndex)
+	fmt.Fprintf(buf, "%d", index)
+}
+
+func formatCols(tp treeprinter.Node, fn func(buf *bytes.Buffer)) {
+	var buf bytes.Buffer
+	buf.WriteString("columns:")
+	fn(&buf)
+	tp.Child(buf.String())
 }

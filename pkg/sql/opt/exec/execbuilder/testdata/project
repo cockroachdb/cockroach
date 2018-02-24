@@ -113,21 +113,16 @@ SELECT u + v FROM (SELECT x + 3, y + 10 FROM t.a) AS foo(u, v)
 exec-explain
 SELECT x, x, y, x FROM t.a
 ----
-render     0  render  ·         ·          ("a.x", "a.x", "a.y", "a.x")  ·
- │         0  ·       render 0  x          ·                             ·
- │         0  ·       render 1  x          ·                             ·
- │         0  ·       render 2  y          ·                             ·
- │         0  ·       render 3  x          ·                             ·
- └── scan  1  scan    ·         ·          (x, y)                        ·
-·          1  ·       table     a@primary  ·                             ·
-·          1  ·       spans     ALL        ·                             ·
+scan  0  scan  ·      ·          (x, y)  ·
+·     0  ·     table  a@primary  ·       ·
+·     0  ·     spans  ALL        ·       ·
 
 exec
 SELECT x, x, y, x FROM t.a
 ----
-1  1  10  1
-2  2  20  2
-3  3  30  3
+1  10
+2  20
+3  30
 
 exec-explain
 SELECT x + 1, x + y FROM t.a WHERE x + y > 20

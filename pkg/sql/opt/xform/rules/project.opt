@@ -1,0 +1,14 @@
+# =============================================================================
+# project.opt contains patterns which normalize the Project operator.
+# =============================================================================
+
+
+# EliminateProject discards a Project operator which is not adding or removing
+# columns, but instead is just reordering existing columns.
+[EliminateProject, Normalize]
+(Project
+    $input:*
+    $projections:* & (HasSameProjectionCols $input $projections)
+)
+=>
+$input

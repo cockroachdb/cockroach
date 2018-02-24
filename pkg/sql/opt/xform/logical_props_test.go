@@ -62,7 +62,7 @@ func TestLogicalProps(t *testing.T) {
 			if err != nil {
 				d.Fatalf(t, "%v", err)
 			}
-			return formatProps(f, root)
+			return formatLogicalProps(f, root)
 
 		default:
 			d.Fatalf(t, "unsupported command: %s", d.Cmd)
@@ -156,21 +156,21 @@ func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected stri
 	}
 }
 
-func formatProps(f *factory, group opt.GroupID) string {
+func formatLogicalProps(f *factory, group opt.GroupID) string {
 	tp := treeprinter.New()
 	md := f.Metadata()
 	logical := f.mem.lookupGroup(group).logical
 
 	if logical.Relational != nil {
 		nd := tp.Child("relational")
-		nd.Child(fmt.Sprintf("columns:%s", formatCols(md, logical.Relational.OutputCols)))
-		nd.Child(fmt.Sprintf("not null:%s", formatCols(md, logical.Relational.NotNullCols)))
+		nd.Child(fmt.Sprintf("columns:%s", formatColSet(md, logical.Relational.OutputCols)))
+		nd.Child(fmt.Sprintf("not null:%s", formatColSet(md, logical.Relational.NotNullCols)))
 	}
 
 	return tp.String()
 }
 
-func formatCols(md *opt.Metadata, cols opt.ColSet) string {
+func formatColSet(md *opt.Metadata, cols opt.ColSet) string {
 	var buf bytes.Buffer
 	cols.ForEach(func(i int) {
 		colIndex := opt.ColumnIndex(i)

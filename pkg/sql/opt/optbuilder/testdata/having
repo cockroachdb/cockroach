@@ -34,7 +34,7 @@ build
 SELECT s, COUNT(*) FROM t.kv GROUP BY s HAVING COUNT(*) > 1
 ----
 select
- ├── columns: kv.s:string:null:4 column5:int:null:5
+ ├── columns: s:string:null:4 column5:int:null:5
  ├── group-by
  │    ├── columns: kv.s:string:null:4 column5:int:null:5
  │    ├── scan
@@ -233,7 +233,7 @@ build
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING k * kv.w > 5
 ----
 project
- ├── columns: kv.v:int:null:2
+ ├── columns: v:int:null:2
  ├── select
  │    ├── columns: kv.v:int:null:2 column5:int:null:5
  │    ├── group-by

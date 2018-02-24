@@ -18,7 +18,7 @@ build
 SELECT a.x FROM a
 ----
 project
- ├── columns: a.x:int:1
+ ├── columns: x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections
@@ -42,7 +42,7 @@ build
 SELECT * FROM a WHERE x = $1
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── eq [type=bool]
@@ -54,7 +54,7 @@ build
 SELECT (a.x, 1.5), a.y FROM a
 ----
 project
- ├── columns: column3:tuple{int, decimal}:null:3 a.y:int:null:2
+ ├── columns: column3:tuple{int, decimal}:null:3 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections
@@ -68,7 +68,7 @@ build
 SELECT * FROM a WHERE a.x = 1 AND NOT (a.y = 2 OR a.y = 3.5)
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── and [type=bool]
@@ -89,7 +89,7 @@ build
 SELECT * FROM a WHERE a.x = 1 AND a.x <> 2
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── and [type=bool]
@@ -105,7 +105,7 @@ build
 SELECT * FROM a WHERE a.x >= 1 AND a.x <= 10 AND a.y > 1 AND a.y < 10
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── and [type=bool]
@@ -129,7 +129,7 @@ build
 SELECT * FROM a WHERE a.x IN (1, 2) AND a.y NOT IN (3, 4)
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── and [type=bool]
@@ -149,7 +149,7 @@ build
 SELECT * FROM b WHERE b.x LIKE '%foo%' AND b.x NOT LIKE '%bar%'
 ----
 select
- ├── columns: b.x:string:1 b.z:decimal:2
+ ├── columns: x:string:1 z:decimal:2
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
  └── and [type=bool]
@@ -165,7 +165,7 @@ build
 SELECT * FROM b WHERE b.x ILIKE '%foo%' AND b.x NOT ILIKE '%bar%'
 ----
 select
- ├── columns: b.x:string:1 b.z:decimal:2
+ ├── columns: x:string:1 z:decimal:2
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
  └── and [type=bool]
@@ -181,7 +181,7 @@ build
 SELECT * FROM b WHERE b.x ~ 'foo' AND b.x !~ 'bar' AND b.x ~* 'foo' AND b.x !~* 'bar'
 ----
 select
- ├── columns: b.x:string:1 b.z:decimal:2
+ ├── columns: x:string:1 z:decimal:2
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
  └── and [type=bool]
@@ -205,7 +205,7 @@ build
 SELECT * FROM a WHERE a.x IS DISTINCT FROM a.y AND a.x IS NULL
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── and [type=bool]
