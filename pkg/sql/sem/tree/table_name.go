@@ -65,7 +65,6 @@ func (tp *TableNamePrefix) Format(ctx *FmtCtx) {
 			ctx.WriteByte('.')
 		}
 		ctx.FormatNode(&tp.SchemaName)
-		ctx.WriteByte('.')
 	}
 }
 
@@ -84,6 +83,10 @@ func (tp *TableNamePrefix) Catalog() string {
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	t.TableNamePrefix.Format(ctx)
+	alwaysFormatPrefix := ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
+	if t.ExplicitSchema || alwaysFormatPrefix {
+		ctx.WriteByte('.')
+	}
 	ctx.FormatNode(&t.TableName)
 }
 func (t *TableName) String() string { return AsString(t) }

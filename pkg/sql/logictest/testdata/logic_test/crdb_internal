@@ -9,6 +9,38 @@ CREATE TABLE crdb_internal.t (x INT)
 query error database "crdb_internal" does not exist
 DROP DATABASE crdb_internal
 
+query T
+SHOW TABLES FROM crdb_internal
+----
+backward_dependencies
+builtin_functions
+cluster_queries
+cluster_sessions
+cluster_settings
+create_statements
+forward_dependencies
+gossip_liveness
+gossip_nodes
+index_columns
+jobs
+kv_node_status
+kv_store_status
+leases
+node_build_info
+node_queries
+node_runtime_info
+node_sessions
+node_statement_statistics
+partitions
+ranges
+schema_changes
+session_trace
+session_variables
+table_columns
+table_indexes
+tables
+zones
+
 statement ok
 CREATE DATABASE testdb; CREATE TABLE testdb.foo(x INT)
 

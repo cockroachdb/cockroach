@@ -41,9 +41,14 @@ SHOW DATABASE
 database
 ·
 
-
 statement error no database specified
 SHOW TABLES
+
+# Verify SHOW TABLES FROM works when there is no current database.
+query T
+SHOW TABLES FROM foo
+----
+bar
 
 # SET statement succeeds, CREATE TABLE fails.
 statement error pgcode 42P07 relation \"bar\" already exists
