@@ -1,0 +1,63 @@
+exec-ddl
+CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
+----
+table a
+  x int NOT NULL
+  y float NULL
+
+exec-ddl
+CREATE TABLE t.b (x INT, y FLOAT)
+----
+table b
+  x int NULL
+  y float NULL
+  rowid int NOT NULL (hidden)
+
+# --------------------------------------------------
+# EliminateProject
+# --------------------------------------------------
+
+# Same order, same names.
+opt
+SELECT x, y FROM t.a
+----
+scan
+ └── columns: x:int:1 y:float:null:2
+
+# Different order, aliased names.
+opt
+SELECT a.y AS aliasy, a.x FROM t.a
+----
+scan
+ └── columns: aliasy:float:null:2 x:int:1
+
+# Reordered, duplicate, aliased columns.
+opt
+SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM t.a
+----
+scan
+ └── columns: alias1:float:null:2 x:int:1 alias1:float:null:2 x:int:1
+
+# Added column (should not eliminate).
+opt
+SELECT x, y, 1 FROM t.a
+----
+project
+ ├── columns: x:int:1 y:float:null:2 column3:int:null:3
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections
+      ├── variable: a.x [type=int]
+      ├── variable: a.y [type=float]
+      └── const: 1 [type=int]
+
+# Removed column (should not eliminate).
+opt
+SELECT x FROM t.a
+----
+project
+ ├── columns: x:int:1
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── projections
+      └── variable: a.x [type=int]

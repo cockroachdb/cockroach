@@ -51,6 +51,7 @@ func (b *Builder) build(ev xform.ExprView) (exec.Node, error) {
 		return nil, err
 	}
 	// TODO(radu): plan.outputCols will be used to apply a final projection.
+	// TODO(radu): check physical props for final presentation.
 	return plan.root, err
 }
 
