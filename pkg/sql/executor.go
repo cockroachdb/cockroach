@@ -486,7 +486,7 @@ func (dc *databaseCacheHolder) updateSystemConfig(cfg config.SystemConfig) {
 // results).
 func (e *Executor) Prepare(
 	stmt Statement, stmtStr string, session *Session, placeholderHints tree.PlaceholderTypes,
-) (res *PreparedStatement, err error) {
+) (res *PreparedStatement, retErr error) {
 	session.resetForBatch(e)
 	sessionEventf(session, "preparing: %s", stmtStr)
 
@@ -530,6 +530,13 @@ func (e *Executor) Prepare(
 		// session.TxnState.mu.txn, but more thought needs to be put into whether that
 		// is really needed.
 		txn = client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
+		defer func() {
+			if retErr != nil {
+				txn.CleanupOnError(session.Ctx(), retErr)
+			} else {
+				retErr = txn.CommitOrCleanup(session.Ctx())
+			}
+		}()
 		if err := txn.SetIsolation(session.data.DefaultIsolationLevel); err != nil {
 			panic(fmt.Errorf("cannot set up txn for prepare %q: %v", stmtStr, err))
 		}
