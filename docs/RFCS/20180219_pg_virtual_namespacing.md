@@ -35,11 +35,15 @@ This makes it possible to:
 
 The change does *not* include changing the hierarchical structure of
 stored database/table descriptors in CockroachDB. In particular it
-does not enable the use of multiple distinct schemas side-by-side
-inside a single database, i.e. the ability to have two tables with the
-same name in the same database (in different schemas): having both
-`mydb.foo.tbl1` and `mydb.bar.tbl1` side-by-side will still not be
-supported.
+does not enable the use of multiple distinct physical schemas
+side-by-side inside a single database, i.e. the ability to have two
+stored (physical) tables with the same name in the same database (in
+different schemas): having both `mydb.foo.tbl1` and `mydb.bar.tbl1`
+side-by-side will still not be supported.
+
+(Although it is still possible, like previously, to store a physical
+table in the `public` schema that has the same name as a virtual table
+in one of the virtual schemas.)
 
 To achieve this, the RFC proposes to tweak the name resolution rules
 and how the database introspection virtual tables (`pg_catalog.*`,
