@@ -687,10 +687,6 @@ type TxnExecOptions struct {
 	// cause problems in the event it must be run more than once.
 	// If not set, all errors cause the txn to be aborted.
 	AutoRetry bool
-	// If set, then the txn is automatically committed if no errors are
-	// encountered. If not set, committing or leaving open the txn is the
-	// responsibility of the client.
-	AutoCommit bool
 }
 
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
@@ -704,20 +700,12 @@ func (e *AutoCommitError) Error() string {
 
 // Exec executes fn in the context of a distributed transaction.
 // Execution is controlled by opt (see comments in TxnExecOptions).
+// If no error is returned by the closure, an attempt to commit the txn is made.
 //
 // opt is passed to fn, and it's valid for fn to modify opt as it sees
 // fit during each execution attempt.
 //
-// It's valid for txn to be nil (meaning the txn has already aborted) if fn
-// can handle that. This is useful for continuing transactions that have been
-// aborted because of an error in a previous batch of statements in the hope
-// that a ROLLBACK will reset the state. Neither opt.AutoRetry not opt.AutoCommit
-// can be set in this case.
-//
-// It is not permitted to call Commit concurrently with any call to Exec. Since
-// Exec with the AutoCommitflag is equivalent to an Exec possibly followed by a
-// Commit, it must not be called concurrently with any other call to Exec or
-// Commit.
+// It is not permitted to call Commit concurrently with any call to Exec.
 //
 // When this method returns, txn might be in any state; Exec does not attempt
 // to clean up the transaction before returning an error. In case of
@@ -736,14 +724,10 @@ func (txn *Txn) Exec(
 ) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
-	if txn == nil && (opt.AutoRetry || opt.AutoCommit) {
-		log.Fatal(ctx, "asked to retry or commit a txn that is already aborted")
-	}
-
 	for {
 		err = fn(ctx, txn, &opt)
 
-		if err == nil && opt.AutoCommit {
+		if err == nil {
 			status := txn.status()
 			switch status {
 			case roachpb.ABORTED:
