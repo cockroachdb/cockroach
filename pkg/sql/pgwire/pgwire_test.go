@@ -1192,6 +1192,12 @@ func TestPGPreparedExec(t *testing.T) {
 			},
 		},
 		{
+			"CREATE TABLE d.public.t AS SELECT $1+1 AS x",
+			[]preparedExecTest{
+				baseTest.SetArgs(1).RowsAffected(1),
+			},
+		},
+		{
 			"CREATE TABLE d.public.types (i int, f float, s string, b bytes, d date, m timestamp, z timestamp with time zone, n interval, o bool, e decimal)",
 			[]preparedExecTest{
 				baseTest,
