@@ -856,8 +856,9 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	db := createTestClient(t, s)
+	ctx := context.TODO()
 
-	if err := db.Put(context.TODO(), "k", "v"); err != nil {
+	if err := db.Put(ctx, "k", "v"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -867,18 +868,15 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
 		t.Fatal(err)
 	}
-	opts := client.TxnExecOptions{
-		AutoRetry: false,
+
+	// Set a deadline, then set a higher commit timestamp for the txn.
+	txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
+	txn.Proto().Timestamp.Forward(s.Clock().Now())
+	if _, err := txn.Get(ctx, "k"); err != nil {
+		t.Fatal(err)
 	}
-	if err := txn.Exec(
-		context.TODO(), opts,
-		func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-			// Set a deadline, then set a higher commit timestamp for the txn.
-			txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
-			txn.Proto().Timestamp.Forward(s.Clock().Now())
-			_, err := txn.Get(ctx, "k")
-			return err
-		}); !testutils.IsError(err, "deadline exceeded before transaction finalization") {
+	if err := txn.Commit(ctx); !testutils.IsError(
+		err, "deadline exceeded before transaction finalization") {
 		// We test for TransactionAbortedError. If this was not a read-only txn,
 		// the error returned by the server would have been different - a
 		// TransactionStatusError. This inconsistency is unfortunate.
