@@ -678,17 +678,6 @@ func endTxnReq(commit bool, deadline *hlc.Timestamp, hasTrigger bool) roachpb.Re
 	return req
 }
 
-// TxnExecOptions controls how Exec() runs a transaction and the corresponding
-// closure.
-type TxnExecOptions struct {
-	// If set, the transaction is automatically aborted if the closure returns any
-	// error aside from recoverable internal errors, in which case the closure is
-	// retried. The retryable function should have no side effects which could
-	// cause problems in the event it must be run more than once.
-	// If not set, all errors cause the txn to be aborted.
-	AutoRetry bool
-}
-
 // AutoCommitError wraps a non-retryable error coming from auto-commit.
 type AutoCommitError struct {
 	cause error
@@ -698,44 +687,27 @@ func (e *AutoCommitError) Error() string {
 	return e.cause.Error()
 }
 
-// Exec executes fn in the context of a distributed transaction.
-// Execution is controlled by opt (see comments in TxnExecOptions).
+// exec executes fn in the context of a distributed transaction. The closure is
+// retried on retriable errors.
 // If no error is returned by the closure, an attempt to commit the txn is made.
 //
-// opt is passed to fn, and it's valid for fn to modify opt as it sees
-// fit during each execution attempt.
-//
-// It is not permitted to call Commit concurrently with any call to Exec.
-//
-// When this method returns, txn might be in any state; Exec does not attempt
+// When this method returns, txn might be in any state; exec does not attempt
 // to clean up the transaction before returning an error. In case of
 // TransactionAbortedError, txn is reset to a fresh transaction, ready to be
 // used.
-//
-// TODO(andrei): The SQL Executor was the most complex user of this interface.
-// It needed fine control by using TxnExecOptions. Now SQL no longer uses this
-// interface, so it's time to see how it can be simplified. TxnExecOptions can
-// probably go away, and so can AutoCommitError. The method should also be
-// documented to not allow calls concurrent with any other txn use, so that the
-// Commit() call inside it is clearly correct (as in, it won't run concurrently
-// with other txn calls).
-func (txn *Txn) Exec(
-	ctx context.Context, opt TxnExecOptions, fn func(context.Context, *Txn, *TxnExecOptions) error,
-) (err error) {
+func (txn *Txn) exec(ctx context.Context, fn func(context.Context, *Txn) error) (err error) {
 	// Run fn in a retry loop until we encounter a success or
 	// error condition this loop isn't capable of handling.
 	for {
-		err = fn(ctx, txn, &opt)
+		err = fn(ctx, txn)
 
+		// Commit on success, unless the txn has already been committed by the
+		// closure. We allow that, as closure might want to run 1PC transactions.
 		if err == nil {
-			status := txn.status()
-			switch status {
-			case roachpb.ABORTED:
-				// TODO(andrei): Until 7881 is fixed.
-				log.Errorf(ctx, "#7881: no err but aborted txn proto. opt: %+v, txn: %+v",
-					opt, txn)
-			case roachpb.PENDING:
-				// fn succeeded, but didn't commit.
+			if txn.status() == roachpb.ABORTED {
+				log.Fatalf(ctx, "no err but aborted txn proto. txn: %+v", txn)
+			}
+			if txn.status() == roachpb.PENDING {
 				err = txn.Commit(ctx)
 				log.Eventf(ctx, "client.Txn did AutoCommit. err: %v\ntxn: %+v", err, txn.Proto())
 				if err != nil {
@@ -757,7 +729,7 @@ func (txn *Txn) Exec(
 				// We sent transactional requests, so the TxnCoordSender was supposed to
 				// turn retryable errors into HandledRetryableTxnError. Note that this
 				// applies only in the case where this is the root transaction.
-				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.Exec level: %s", err)
+				log.Fatalf(ctx, "unexpected UnhandledRetryableError at the txn.exec() level: %s", err)
 			}
 
 		case *roachpb.HandledRetryableTxnError:
@@ -773,7 +745,7 @@ func (txn *Txn) Exec(
 			retryable = true
 		}
 
-		if !opt.AutoRetry || !retryable {
+		if !retryable {
 			break
 		}
 

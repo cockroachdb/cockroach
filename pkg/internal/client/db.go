@@ -492,8 +492,6 @@ func (db *DB) Run(ctx context.Context, b *Batch) error {
 // from recoverable internal errors, and is automatically committed
 // otherwise. The retryable function should have no side effects which could
 // cause problems in the event it must be run more than once.
-//
-// If you need more control over how the txn is executed, check out txn.Exec().
 func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) error) error {
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
@@ -507,10 +505,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// current node is the gateway.
 	txn := NewTxn(db, 0 /* gatewayNodeID */, RootTxn)
 	txn.SetDebugName("unnamed")
-	opts := TxnExecOptions{
-		AutoRetry: true,
-	}
-	err := txn.Exec(ctx, opts, func(ctx context.Context, txn *Txn, _ *TxnExecOptions) error {
+	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)
 	})
 	if err != nil {
