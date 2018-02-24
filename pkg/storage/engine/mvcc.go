@@ -671,7 +671,7 @@ func (b *getBuffer) release() {
 // MVCCGet returns the value for the key specified in the request,
 // while satisfying the given timestamp condition. The key may contain
 // arbitrary bytes. If no value for the key exists, or it has been
-// deleted, returns nil for value.
+// deleted returns nil for value.
 //
 // The values of multiple versions for the given key should
 // be organized as follows:
@@ -697,7 +697,24 @@ func MVCCGet(
 	txn *roachpb.Transaction,
 ) (*roachpb.Value, []roachpb.Intent, error) {
 	iter := engine.NewIterator(true)
-	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent)
+	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent, false /* tombstones */)
+	iter.Close()
+	return value, intents, err
+}
+
+// MVCCGetWithTombstone is like MVCCGet (see comments above), but if
+// the value has been deleted, returns a non-nil value with RawBytes
+// set to nil for tombstones.
+func MVCCGetWithTombstone(
+	ctx context.Context,
+	engine Reader,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	consistent bool,
+	txn *roachpb.Transaction,
+) (*roachpb.Value, []roachpb.Intent, error) {
+	iter := engine.NewIterator(true)
+	value, intents, err := iter.MVCCGet(key, timestamp, txn, consistent, true /* tombstones */)
 	iter.Close()
 	return value, intents, err
 }
@@ -1627,6 +1644,7 @@ func mvccScanInternal(
 	max int64,
 	timestamp hlc.Timestamp,
 	consistent bool,
+	tombstones bool,
 	txn *roachpb.Transaction,
 	reverse bool,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
@@ -1640,7 +1658,7 @@ func mvccScanInternal(
 		ownIter = true
 	}
 	kvData, numKvs, intentData, err := iter.MVCCScan(
-		key, endKey, max, timestamp, txn, consistent, reverse)
+		key, endKey, max, timestamp, txn, consistent, reverse, tombstones)
 	if ownIter {
 		iter.Close()
 	}
@@ -1797,7 +1815,7 @@ func MVCCScan(
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
 	return mvccScanInternal(ctx, engine, nil, key, endKey, max, timestamp,
-		consistent, txn, false /* reverse */)
+		consistent, false /* tombstones */, txn, false /* reverse */)
 }
 
 // MVCCReverseScan scans the key range [start,end) key up to some maximum
@@ -1814,7 +1832,7 @@ func MVCCReverseScan(
 	txn *roachpb.Transaction,
 ) ([]roachpb.KeyValue, *roachpb.Span, []roachpb.Intent, error) {
 	return mvccScanInternal(ctx, engine, nil, key, endKey, max, timestamp,
-		consistent, txn, true /* reverse */)
+		consistent, false /* tombstones */, txn, true /* reverse */)
 }
 
 // MVCCIterate iterates over the key range [start,end). At each step of the
@@ -1827,6 +1845,7 @@ func MVCCIterate(
 	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	consistent bool,
+	tombstones bool,
 	txn *roachpb.Transaction,
 	reverse bool,
 	f func(roachpb.KeyValue) (bool, error),
@@ -1836,7 +1855,7 @@ func MVCCIterate(
 	defer iter.Close()
 
 	return MVCCIterateUsingIter(
-		ctx, engine, startKey, endKey, timestamp, consistent, txn, reverse, iter, f,
+		ctx, engine, startKey, endKey, timestamp, consistent, tombstones, txn, reverse, iter, f,
 	)
 }
 
@@ -1848,6 +1867,7 @@ func MVCCIterateUsingIter(
 	startKey, endKey roachpb.Key,
 	timestamp hlc.Timestamp,
 	consistent bool,
+	tombstones bool,
 	txn *roachpb.Transaction,
 	reverse bool,
 	iter Iterator,
@@ -1859,7 +1879,7 @@ func MVCCIterateUsingIter(
 	for {
 		const maxKeysPerScan = 1000
 		kvs, resume, newIntents, err := mvccScanInternal(
-			ctx, engine, iter, startKey, endKey, maxKeysPerScan, timestamp, consistent, txn, reverse)
+			ctx, engine, iter, startKey, endKey, maxKeysPerScan, timestamp, consistent, tombstones, txn, reverse)
 		if err != nil {
 			switch tErr := err.(type) {
 			case *roachpb.WriteIntentError:
