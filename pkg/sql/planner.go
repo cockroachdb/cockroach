@@ -208,6 +208,7 @@ func newInternalPlanner(
 			SearchPath: sqlbase.DefaultSearchPath,
 			Location:   time.UTC,
 			User:       user,
+			Database:   "system",
 		},
 		TxnState: txnState{Ctx: ctx, implicitTxn: true},
 		context:  ctx,
