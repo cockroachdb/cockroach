@@ -20,6 +20,7 @@ import (
 	"flag"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"text/tabwriter"
 	"unicode/utf8"
@@ -28,11 +29,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 var (
@@ -136,6 +139,22 @@ func TestBuild(t *testing.T) {
 					}
 					_ = tw.Flush()
 					return buf.String()
+
+				case "catalog":
+					// Create the engine in order to get access to its catalog.
+					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine()
+					defer eng.Close()
+
+					parts := strings.Split(d.Input, ".")
+					name := tree.NewTableName(tree.Name(parts[0]), tree.Name(parts[1]))
+					tbl, err := eng.Catalog().FindTable(context.Background(), name)
+					if err != nil {
+						d.Fatalf(t, "Catalog: %v", err)
+					}
+
+					tp := treeprinter.New()
+					optbase.FormatCatalogTable(tbl, tp)
+					return tp.String()
 
 				default:
 					d.Fatalf(t, "unsupported command: %s", d.Cmd)
