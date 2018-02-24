@@ -347,9 +347,6 @@ func (z *ZoneConfig) Validate() error {
 					return fmt.Errorf(
 						"only required constraints (prefixed with a '+') can be applied to a subset of replicas")
 				}
-				if strings.Contains(constraint.Key, ":") || strings.Contains(constraint.Value, ":") {
-					return fmt.Errorf("the ':' character is not allowed in constraint keys or values")
-				}
 			}
 		}
 		// TODO(a-robinson): Relax this constraint, as discussed on #22412.
