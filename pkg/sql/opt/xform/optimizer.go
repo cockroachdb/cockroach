@@ -78,8 +78,7 @@ func (o *Optimizer) Factory() opt.Factory {
 // of the qualifying lowest cost expressions may be selected by the optimizer.
 // TODO(andyk): For now, the input tree becomes the output tree, with no
 // transformations applied to it.
-func (o *Optimizer) Optimize(root opt.GroupID, required *opt.PhysicalProps) ExprView {
-	// TODO(andyk): Need to intern the physical props once there are actually
-	// fields in the physical props.
-	return makeExprView(o.mem, root, opt.MinPhysPropsID)
+func (o *Optimizer) Optimize(root opt.GroupID, requiredProps *opt.PhysicalProps) ExprView {
+	required := o.mem.internPhysicalProps(requiredProps)
+	return makeExprView(o.mem, root, required)
 }

@@ -242,24 +242,13 @@ const (
 	// TODO(andyk): Add the Ordering field.
 	SortOp
 
-	// PresentOp enforces physical properties related to column presentation, which
-	// includes column ordering, column naming, and duplicate columns. While the
-	// input expression must project the columns used by Present, it can project
-	// a superset of columns in any order and using any names. Whereas the Project
-	// operator modifies logical properties (i.e. the set of columns returned), the
-	// Present operator enforces physical properties (i.e. the presentation of the
-	// set of columns returned). See the Presentation field in the PhysicalProps
-	// struct.
-	// TODO(andyk): Add the Presentation field.
-	PresentOp
-
 	// NumOperators tracks the total count of operators.
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsortpresent"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 387, 395, 411, 415, 421, 427, 434, 444, 453, 463, 472, 481, 490, 506, 521, 537, 552, 567, 582, 590, 595, 604, 610, 614, 621}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 387, 395, 411, 415, 421, 427, 434, 444, 453, 463, 472, 481, 490, 506, 521, 537, 552, 567, 582, 590, 595, 604, 610, 614}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -434,5 +423,4 @@ var JoinApplyOperators = [...]Operator{
 
 var EnforcerOperators = [...]Operator{
 	SortOp,
-	PresentOp,
 }

@@ -39,6 +39,13 @@ type memoLoc struct {
 // forest is composed of every possible combination of parent expression with
 // its children, recursively applied.
 //
+// Memo expressions can be relational (e.g. join) or scalar (e.g. <). Operators
+// are always both logical (specify results) and physical (specify results and
+// a particular implementation). This means that even a "raw" unoptimized
+// expression tree can be executed (naively). Both relational and scalar
+// operators are uniformly represented as nodes in memo expression trees, which
+// facilitates tree pattern matching and replacement.
+//
 // Because memo groups contain logically equivalent expressions, all the memo
 // expressions in a group share the same logical properties. However, it's
 // possible for two logically equivalent expression to be placed in different
@@ -48,6 +55,10 @@ type memoLoc struct {
 // when they are not) results in invalid transformations and invalid plans.
 // But placing two logically equivalent expressions in different groups has a
 // much gentler failure mode: the memo and transformations are less efficient.
+// Expressions within the memo may have different physical properties. For
+// example, a memo group might contain both hash join and merge join
+// expressions which produce the same set of output rows, but produce them in
+// different orders.
 //
 // Expressions are inserted into the memo by the factory, which ensure that
 // expressions have been fully normalized before insertion (see the comment in
@@ -108,6 +119,11 @@ type memo struct {
 	// based on the logical properties of its children.
 	logPropsFactory logicalPropsFactory
 
+	// Intern the set of unique physical properties used by expressions in the
+	// memo, since there are so many duplicates.
+	physPropsMap map[string]opt.PhysicalPropsID
+	physProps    []opt.PhysicalProps
+
 	// Some memoExprs have a variable number of children. The memoExpr stores
 	// the list as a ListID struct, which is a slice of an array maintained by
 	// listStorage. Note that ListID 0 is invalid in order to indicate an
@@ -125,14 +141,24 @@ func newMemo(catalog optbase.Catalog) *memo {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
-	// for lists are all reserved.
+	// for lists are all reserved. In addition, deliberately leave the physical
+	// properties for opt.NormPhysPropsID (index 1) uninitialized, since
+	// physical should never actually be accessed when traversing the normalized
+	// tree.
 	m := &memo{
-		metadata:    opt.NewMetadata(catalog),
-		exprMap:     make(map[fingerprint]opt.GroupID),
-		groups:      make([]memoGroup, 1),
-		privatesMap: make(map[interface{}]opt.PrivateID),
-		privates:    make([]interface{}, 1),
+		metadata:     opt.NewMetadata(catalog),
+		exprMap:      make(map[fingerprint]opt.GroupID),
+		groups:       make([]memoGroup, 1),
+		physPropsMap: make(map[string]opt.PhysicalPropsID),
+		physProps:    make([]opt.PhysicalProps, 2, 3),
+		privatesMap:  make(map[interface{}]opt.PrivateID),
+		privates:     make([]interface{}, 1),
 	}
+
+	// Intern physical properties that require nothing of operator.
+	physProps := opt.PhysicalProps{}
+	m.physProps = append(m.physProps, physProps)
+	m.physPropsMap[physProps.Fingerprint()] = opt.MinPhysPropsID
 
 	m.listStorage.init()
 	return m
@@ -173,8 +199,8 @@ func (m *memo) memoizeNormExpr(norm *memoExpr) opt.GroupID {
 	}
 
 	mgrp := m.newGroup(norm)
-	e := makeExprView(m, mgrp.id, opt.MinPhysPropsID)
-	mgrp.logical = m.logPropsFactory.constructProps(e)
+	ev := makeExprView(m, mgrp.id, opt.NormPhysPropsID)
+	mgrp.logical = m.logPropsFactory.constructProps(ev)
 
 	m.exprMap[norm.fingerprint()] = mgrp.id
 	return mgrp.id
@@ -215,6 +241,27 @@ func (m *memo) internList(items []opt.GroupID) opt.ListID {
 // by a call to internList.
 func (m *memo) lookupList(id opt.ListID) []opt.GroupID {
 	return m.listStorage.lookup(id)
+}
+
+// internPhysicalProps adds the given props to the memo if that set hasn't yet
+// been added, and returns an ID which can later be used to look up the props.
+// If the same list was added previously, then this method is a no-op and
+// returns the same ID as did the previous call.
+func (m *memo) internPhysicalProps(props *opt.PhysicalProps) opt.PhysicalPropsID {
+	fingerprint := props.Fingerprint()
+	id, ok := m.physPropsMap[fingerprint]
+	if !ok {
+		id = opt.PhysicalPropsID(len(m.physProps))
+		m.physProps = append(m.physProps, *props)
+		m.physPropsMap[fingerprint] = id
+	}
+	return id
+}
+
+// lookupPhysicalProps returns the set of physical props that was earlier
+// interned in the memo by a call to internPhysicalProps.
+func (m *memo) lookupPhysicalProps(id opt.PhysicalPropsID) *opt.PhysicalProps {
+	return &m.physProps[id]
 }
 
 // internPrivate adds the given private value to the memo and returns an ID

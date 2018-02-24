@@ -32,7 +32,7 @@ build
 SELECT * FROM t.a, t.b
 ----
 project
- ├── columns: a.x:int:1 a.y:float:null:2 b.x:int:null:3 b.y:float:null:4
+ ├── columns: x:int:1 y:float:null:2 x:int:null:3 y:float:null:4
  ├── inner-join
  │    ├── columns: a.x:int:1 a.y:float:null:2 b.x:int:null:3 b.y:float:null:4 b.rowid:int:5
  │    ├── scan
@@ -50,7 +50,7 @@ build
 SELECT a.x, b.y FROM t.a, t.b WHERE a.x = b.x
 ----
 project
- ├── columns: a.x:int:1 b.y:float:null:4
+ ├── columns: x:int:1 y:float:null:4
  ├── select
  │    ├── columns: a.x:int:1 a.y:float:null:2 b.x:int:null:3 b.y:float:null:4 b.rowid:int:5
  │    ├── inner-join
@@ -71,7 +71,7 @@ build
 SELECT * FROM t.c, t.b, t.a WHERE c.x = a.x AND b.x = a.x
 ----
 project
- ├── columns: c.x:int:null:1 c.y:float:null:2 c.z:string:null:3 b.x:int:null:5 b.y:float:null:6 a.x:int:8 a.y:float:null:9
+ ├── columns: x:int:null:1 y:float:null:2 z:string:null:3 x:int:null:5 y:float:null:6 x:int:8 y:float:null:9
  ├── select
  │    ├── columns: c.x:int:null:1 c.y:float:null:2 c.z:string:null:3 c.rowid:int:4 b.x:int:null:5 b.y:float:null:6 b.rowid:int:7 a.x:int:8 a.y:float:null:9
  │    ├── inner-join

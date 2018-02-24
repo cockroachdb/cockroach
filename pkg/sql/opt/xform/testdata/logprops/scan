@@ -21,13 +21,13 @@ build
 SELECT * FROM a
 ----
 scan
- └── columns: a.x:int:1 a.y:int:null:2
+ └── columns: x:int:1 y:int:null:2
 
 build
 SELECT * FROM b
 ----
 project
- ├── columns: b.x:int:null:1 b.z:int:2
+ ├── columns: x:int:null:1 z:int:2
  ├── scan
  │    └── columns: b.x:int:null:1 b.z:int:2 b.rowid:int:3
  └── projections

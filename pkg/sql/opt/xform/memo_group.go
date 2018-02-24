@@ -64,16 +64,16 @@ func (g *memoGroup) memoGroupString(mem *memo) string {
 		}
 
 		// Wrap the memo expr in ExprView to make it easy to get children.
-		e := ExprView{
+		ev := ExprView{
 			mem:      mem,
 			loc:      memoLoc{group: g.id, expr: exprID(i)},
 			op:       mexpr.op,
-			required: opt.MinPhysPropsID,
+			required: opt.NormPhysPropsID,
 		}
 
-		fmt.Fprintf(&buf, "[%s", e.Operator())
+		fmt.Fprintf(&buf, "[%s", ev.Operator())
 
-		private := e.Private()
+		private := ev.Private()
 		if private != nil {
 			switch t := private.(type) {
 			case nil:
@@ -88,10 +88,10 @@ func (g *memoGroup) memoGroupString(mem *memo) string {
 			}
 		}
 
-		if e.ChildCount() > 0 {
+		if ev.ChildCount() > 0 {
 			fmt.Fprintf(&buf, " [")
-			for i := 0; i < e.ChildCount(); i++ {
-				child := e.ChildGroup(i)
+			for i := 0; i < ev.ChildCount(); i++ {
+				child := ev.ChildGroup(i)
 				if i > 0 {
 					buf.WriteString(" ")
 				}
