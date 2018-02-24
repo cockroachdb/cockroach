@@ -91,6 +91,10 @@ var pgCatalog = virtualSchema{
 		pgCatalogTypeTable,
 		pgCatalogViewsTable,
 	},
+	// Postgres's catalogs are ill-defined when there is no current
+	// database set. Simply reject any attempts to use them in that
+	// case.
+	validWithNoDatabaseContext: false,
 }
 
 // See: https://www.postgresql.org/docs/current/static/catalog-pg-am.html.

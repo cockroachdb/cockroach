@@ -1292,6 +1292,8 @@ SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 ----
 3
 
+user root
+
 # Verify that an unset database shows tables across databases.
 # But only those items visible to this user are reported.
 # (Tests below show that root sees more).
@@ -1299,68 +1301,30 @@ SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
 statement ok
 SET DATABASE = ''
 
-query T
+query error no database specified
 SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname='public' ORDER BY 1
-----
-t1
-t2
-t3
 
-query T
+query error no database specified
 SELECT viewname FROM pg_catalog.pg_views WHERE schemaname='public' ORDER BY 1
-----
-v1
 
-query T
+query error no database specified
 SELECT relname FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE nspname='public'
-----
 
-query T
+query error no database specified
 SELECT conname FROM pg_catalog.pg_constraint con
 JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
 WHERE n.nspname = 'public'
-----
 
-query I
+query error no database specified
 SELECT COUNT(*) FROM pg_catalog.pg_depend
-----
-2
 
-# Verify that an unset database shows everything in pg_catalog for the root
-# user.
+query error no database specified
+select 'upper'::REGPROC;
 
-user root
-
-query I
-SELECT COUNT(*) FROM pg_catalog.pg_tables WHERE schemaname='public'
-----
-19
-
-query I
-SELECT COUNT(*) FROM pg_catalog.pg_views WHERE schemaname='public'
-----
-1
-
-query I
-SELECT COUNT(*) FROM pg_catalog.pg_class c
-JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-WHERE nspname='public'
-----
-46
-
-query I
-SELECT COUNT(*) FROM pg_catalog.pg_constraint con
-JOIN pg_catalog.pg_namespace n ON con.connamespace = n.oid
-WHERE n.nspname = 'public'
-----
-22
-
-query I
-SELECT COUNT(*) FROM pg_catalog.pg_depend
-----
-2
+query error no database specified
+select 'system.namespace'::regclass
 
 statement ok
 SET DATABASE = test
@@ -1374,7 +1338,6 @@ JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
 2590763490  array_in  array_in
-
 
 ## #16285
 ## int2vectors should be 0-indexed
