@@ -146,7 +146,7 @@ func NewUndefinedDatabaseError(name string) error {
 func NewInvalidWildcardError(name string) error {
 	return pgerror.NewErrorf(
 		pgerror.CodeInvalidCatalogNameError,
-		"pattern %q did not match any valid database or schema", name)
+		"%q does not match any valid database or schema", name)
 }
 
 // NewUndefinedRelationError creates an error that represents a missing database table or view.
