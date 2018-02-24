@@ -607,6 +607,20 @@ func EnsureContext(
 	return ctx, func() {}
 }
 
+// EnsureChildSpan is the same as EnsureContext, except it creates a child
+// span for the input context if the input context already has an active
+// trace.
+func EnsureChildSpan(
+	ctx context.Context, tracer opentracing.Tracer, name string,
+) (context.Context, func()) {
+	if opentracing.SpanFromContext(ctx) == nil {
+		sp := tracer.StartSpan(name)
+		return opentracing.ContextWithSpan(ctx, sp), sp.Finish
+	}
+	ctx, sp := ChildSpan(ctx, name)
+	return ctx, sp.Finish
+}
+
 // StartSnowballTrace takes in a context and returns a derived one with a
 // "snowball span" in it. The caller takes ownership of this span from the
 // returned context and is in charge of Finish()ing it. The span has recording
