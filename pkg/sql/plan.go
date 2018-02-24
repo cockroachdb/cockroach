@@ -768,6 +768,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.CancelJob(ctx, n)
 	case *tree.CreateUser:
 		return p.CreateUser(ctx, n)
+	case *tree.CreateTable:
+		return p.CreateTable(ctx, n)
 	case *tree.Delete:
 		return p.Delete(ctx, n, nil)
 	case *tree.DropUser:
