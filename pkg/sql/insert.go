@@ -478,8 +478,8 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 
 	// Handle regular INSERT ... RETURNING without ON CONFLICT clause
 	if !n.run.isUpsertReturning {
-		for i, val := range rowVals {
-			if n.run.rowTemplate != nil {
+		if n.run.rowTemplate != nil {
+			for i, val := range rowVals {
 				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
 			}
 		}
