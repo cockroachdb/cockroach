@@ -417,11 +417,6 @@ var childCountLookup = [...]childCountLookupFunc{
 	func(ev ExprView) int {
 		return 1
 	},
-
-	// PresentOp
-	func(ev ExprView) int {
-		return 1
-	},
 }
 
 type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID
@@ -1458,15 +1453,6 @@ var childGroupLookup = [...]childGroupLookupFunc{
 
 		panic("child index out of range")
 	},
-
-	// PresentOp
-	func(ev ExprView, n int) opt.GroupID {
-		if n == 0 {
-			return ev.loc.group
-		}
-
-		panic("child index out of range")
-	},
 }
 
 type privateLookupFunc func(ev ExprView) opt.PrivateID
@@ -1882,11 +1868,6 @@ var privateLookup = [...]privateLookupFunc{
 	func(ev ExprView) opt.PrivateID {
 		return 0
 	},
-
-	// PresentOp
-	func(ev ExprView) opt.PrivateID {
-		return 0
-	},
 }
 
 var isScalarLookup = [...]bool{
@@ -1971,7 +1952,6 @@ var isScalarLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isConstValueLookup = [...]bool{
@@ -2056,7 +2036,6 @@ var isConstValueLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isBooleanLookup = [...]bool{
@@ -2141,7 +2120,6 @@ var isBooleanLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isComparisonLookup = [...]bool{
@@ -2226,7 +2204,6 @@ var isComparisonLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isBinaryLookup = [...]bool{
@@ -2311,7 +2288,6 @@ var isBinaryLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isUnaryLookup = [...]bool{
@@ -2396,7 +2372,6 @@ var isUnaryLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isRelationalLookup = [...]bool{
@@ -2481,7 +2456,6 @@ var isRelationalLookup = [...]bool{
 	true,  // IntersectOp
 	true,  // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isJoinLookup = [...]bool{
@@ -2566,7 +2540,6 @@ var isJoinLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isJoinApplyLookup = [...]bool{
@@ -2651,7 +2624,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	false, // SortOp
-	false, // PresentOp
 }
 
 var isEnforcerLookup = [...]bool{
@@ -2736,7 +2708,6 @@ var isEnforcerLookup = [...]bool{
 	false, // IntersectOp
 	false, // ExceptOp
 	true,  // SortOp
-	true,  // PresentOp
 }
 
 func (ev ExprView) IsScalar() bool {
