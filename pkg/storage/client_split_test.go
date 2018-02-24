@@ -2333,8 +2333,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 			ctx := context.Background()
 			txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 			opts := client.TxnExecOptions{
-				AutoCommit: true,
-				AutoRetry:  false,
+				AutoRetry: false,
 			}
 			if err := txn.Exec(ctx, opts, func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
 				b := txn.NewBatch()
