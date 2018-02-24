@@ -2737,6 +2737,58 @@ func TestMVCCConditionalPutOldTimestamp(t *testing.T) {
 	}
 }
 
+// TestMVCCMultiplePutOldTimestamp tests a case where multiple
+// transactional Puts occur to the same key, but with older timestamps
+// than a pre-existing key. The first should generate a
+// WriteTooOldError and write at a higher timestamp. The second should
+// avoid the WriteTooOldError but also write at the higher timestamp.
+func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	err := MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 3}, value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify the first txn Put returns a write too old error, but the
+	// intent is written at the advanced timestamp.
+	txn := *txn1
+	txn.Sequence++
+	err = MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value2, &txn)
+	if _, ok := err.(*roachpb.WriteTooOldError); !ok {
+		t.Errorf("expected WriteTooOldError on Put; got %v", err)
+	}
+	// Verify new value was actually written at (3, 1).
+	value, _, err := MVCCGet(context.Background(), engine, testKey1, hlc.MaxTimestamp, true, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expTS := hlc.Timestamp{WallTime: 3, Logical: 1}
+	if value.Timestamp != expTS || !bytes.Equal(value2.RawBytes, value.RawBytes) {
+		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
+			value.Timestamp, expTS, value2.RawBytes, value.RawBytes)
+	}
+
+	// Put again and verify no WriteTooOldError, but timestamp should continue
+	// to be set to (3,1).
+	txn.Sequence++
+	err = MVCCPut(context.Background(), engine, nil, testKey1, hlc.Timestamp{WallTime: 1}, value3, &txn)
+	if err != nil {
+		t.Error(err)
+	}
+	// Verify new value was actually written at (3, 1).
+	value, _, err = MVCCGet(context.Background(), engine, testKey1, hlc.MaxTimestamp, true, &txn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value.Timestamp != expTS || !bytes.Equal(value3.RawBytes, value.RawBytes) {
+		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
+			value.Timestamp, expTS, value3.RawBytes, value.RawBytes)
+	}
+}
+
 func TestMVCCAbortTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()

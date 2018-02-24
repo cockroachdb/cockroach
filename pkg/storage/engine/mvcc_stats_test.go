@@ -827,6 +827,15 @@ func TestMVCCStatsDelDelGC(t *testing.T) {
 // an intent is rewritten to a lower timestamp. This formerly caused bugs
 // because when computing the stats updates, there was an implicit assumption
 // that the meta entries would always move forward in time.
+// UPDATE: since there should be no way for a txn to write older intents,
+//   mvccPutInternal now makes sure that writes are always done at the most
+//   recent intent timestamp within the same txn. Note that this case occurs
+//   when the txn timestamp is moved forward due to a write too old condition,
+//   which writes the first intent at a higher timestamp. We don't allow the
+//   second intent to then be written at a lower timestamp, because that breaks
+//   the contract that the intent is always the newest version.
+//   This test now merely verifies that even when we try to write an older
+//   version, we're upgraded to write the MVCCMetadata.Timestamp.
 func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()
@@ -887,10 +896,9 @@ func TestMVCCStatsPutIntentTimestampNotPutTimestamp(t *testing.T) {
 	}
 
 	expAggMS := enginepb.MVCCStats{
-		// Surprise: the new intent actually lives at 1E9-1, and it's now
-		// 2E9+1, so it has accumulated an age of two. This formerly failed
-		// to register.
-		IntentAge: 2,
+		// Even though we tried to put a new intent at an older timestamp, it
+		// will have been written at 2E9+1, so the age will be 0.
+		IntentAge: 0,
 
 		LastUpdateNanos: 2E9 + 1,
 		LiveBytes:       mKeySize + m2ValSize + vKeySize + vValSize, // 2+46+12+10 = 70

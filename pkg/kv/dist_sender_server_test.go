@@ -2032,6 +2032,34 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			clientRetry: true,
 		},
 		{
+			name: "write too old with multiple puts to same key",
+			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value1")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				// Get so we must refresh when txn timestamp moves forward.
+				if _, err := txn.Get(ctx, "a"); err != nil {
+					return nil
+				}
+				// Now, Put a new value to "a" out of band from the txn.
+				if err := txn.DB().Put(ctx, "a", "value2"); err != nil {
+					return err
+				}
+				// On the first txn Put, we will get a WriteTooOld flag set,
+				// but lay down the intent and continue the txn.
+				if err := txn.Put(ctx, "a", "txn-value1"); err != nil {
+					return err
+				}
+				// Write again to make sure the timestamp of the second intent
+				// is correctly set to the txn's advanced timestamp. There was
+				// previously a bug where the txn's OrigTimestamp would be used
+				// and so on the txn refresh caused by the WriteTooOld flag, the
+				// out-of-band Put's value would be missed (see #23032).
+				return txn.Put(ctx, "a", "txn-value2")
+			},
+			clientRetry: true, // expect a client-side retry as refresh should fail
+		},
+		{
 			name: "write too old with cput matching newer value",
 			beforeTxnStart: func(ctx context.Context, db *client.DB) error {
 				return db.Put(ctx, "a", "value")
