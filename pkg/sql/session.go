@@ -1320,6 +1320,7 @@ type schemaChangerCollection struct {
 }
 
 func (scc *schemaChangerCollection) queueSchemaChanger(schemaChanger SchemaChanger) {
+	log.Infof(context.TODO(), "queuing mutation %d", schemaChanger.mutationID)
 	scc.schemaChangers = append(scc.schemaChangers, schemaChanger)
 }
 
@@ -1347,10 +1348,11 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.distSQLPlanner = cfg.DistSQLPlanner
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now())
+			log.Warningf(ctx, "executing schema change: %d/%d", sc.tableID, sc.mutationID)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
-				if shouldLogSchemaChangeError(err) {
-					log.Warningf(ctx, "error executing schema change: %s", err)
-				}
+				//if shouldLogSchemaChangeError(err) {
+				log.Warningf(ctx, "error executing schema change: %s", err)
+				//}
 				if err == sqlbase.ErrDescriptorNotFound {
 				} else if sqlbase.IsPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result

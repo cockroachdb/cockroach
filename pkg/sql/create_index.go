@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type createIndexNode struct {
@@ -39,6 +40,8 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 		return nil, err
 	}
 
+	log.Infof(ctx, "lookup descriptor in create index")
+
 	var tableDesc *TableDescriptor
 	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
 	// TODO(vivek): check if the cache can be used.
@@ -52,6 +55,8 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
+
+	log.Infof(ctx, "found descriptor in create index lease: %s", tableDesc.Lease)
 
 	return &createIndexNode{tableDesc: tableDesc, n: n}, nil
 }
@@ -127,6 +132,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
+	log.Infof(params.ctx, "mutation added %d", mutationID)
 	if err := params.p.writeTableDesc(params.ctx, n.tableDesc); err != nil {
 		return err
 	}

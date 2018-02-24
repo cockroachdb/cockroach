@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -765,13 +766,14 @@ func (p *planner) finalizeInterleave(
 	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
 		sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
+	log.Infof(ctx, "store ancestor %d, lease %s", ancestorTable.ID, ancestorTable.Lease)
 	if err := p.saveNonmutationAndNotify(ctx, ancestorTable); err != nil {
 		return err
 	}
 
 	if desc.State == sqlbase.TableDescriptor_ADD {
 		desc.State = sqlbase.TableDescriptor_PUBLIC
-
+		log.Infof(ctx, "store descriptor with ancestor %d, lease %s", desc.ID, desc.Lease)
 		if err := p.saveNonmutationAndNotify(ctx, desc); err != nil {
 			return err
 		}

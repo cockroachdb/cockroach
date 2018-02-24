@@ -216,9 +216,8 @@ func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
 ) (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
-	if log.V(2) {
-		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
-	}
+
+	log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 
 	if flags.allowAdding {
 		return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError,
@@ -315,7 +314,7 @@ func (tc *TableCollection) getTableVersion(
 func (tc *TableCollection) getTableVersionByID(
 	ctx context.Context, txn *client.Txn, tableID sqlbase.ID,
 ) (*sqlbase.TableDescriptor, error) {
-	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
+	log.Infof(ctx, "planner getting table on table ID %d", tableID)
 
 	if testDisableTableLeases {
 		table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
@@ -584,6 +583,7 @@ func (p *planner) createSchemaChangeJob(
 	span := tableDesc.PrimaryIndexSpan()
 	mutationID, err := tableDesc.FinalizeMutation()
 	if err != nil {
+		log.Info(ctx, "returning invalid id")
 		return sqlbase.InvalidMutationID, err
 	}
 	var spanList []jobs.ResumeSpanList
@@ -604,6 +604,7 @@ func (p *planner) createSchemaChangeJob(
 	}
 	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
 	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
+		log.Info(ctx, "returning invalid id next")
 		return sqlbase.InvalidMutationID, err
 	}
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
@@ -645,6 +646,9 @@ func (p *planner) writeTableDesc(ctx context.Context, tableDesc *sqlbase.TableDe
 	if p.extendedEvalCtx.Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Put %s -> %s", descKey, descVal)
 	}
+
+	log.Infof(ctx, "wrting table %d with lease %s", tableDesc.ID, tableDesc.Lease)
+
 	return p.txn.Put(ctx, descKey, descVal)
 }
 

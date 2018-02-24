@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // For more detailed documentation on DataSourceInfos, see
@@ -249,6 +250,7 @@ func (p *planner) getTableDescByID(
 	// TODO(knz): replace this by an API on SchemaAccessor/SchemaResolver.
 	descFunc := p.Tables().getTableVersionByID
 	if p.avoidCachedDescriptors {
+		log.Info(ctx, "using uncached descriptor")
 		descFunc = sqlbase.GetTableDescFromID
 	}
 	return descFunc(ctx, p.txn, tableID)

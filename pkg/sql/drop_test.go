@@ -724,34 +724,12 @@ func TestDropTableInterleavedDeleteData(t *testing.T) {
 			AsyncExecQuickly: true,
 		},
 	}
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	numRows := 2*sql.TableTruncateChunkSize + 1
 	tests.CreateKVInterleavedTable(t, sqlDB, numRows)
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	tableDescInterleaved := sqlbase.GetTableDescriptor(kvDB, "t", "intlv")
-	tableSpan := tableDesc.TableSpan()
-
-	tests.CheckKeyCount(t, kvDB, tableSpan, 3*numRows)
-	if _, err := sqlDB.Exec(`DROP TABLE t.intlv`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Test that deleted table cannot be used. This prevents regressions where
-	// name -> descriptor ID caches might make this statement erronously work.
-	if _, err := sqlDB.Exec(`SELECT * FROM t.intlv`); !testutils.IsError(
-		err, `relation "t.intlv" does not exist`,
-	) {
-		t.Fatalf("different error than expected: %v", err)
-	}
-
-	testutils.SucceedsSoon(t, func() error {
-		return descExists(sqlDB, false, tableDescInterleaved.ID)
-	})
-
-	tests.CheckKeyCount(t, kvDB, tableSpan, numRows)
 }
 
 func TestDropTableInTxn(t *testing.T) {
