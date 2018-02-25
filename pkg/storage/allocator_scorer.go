@@ -965,6 +965,11 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c config.Constraint) bool
 
 type analyzedConstraints struct {
 	constraints []config.Constraints
+	// True if the per-replica constraints don't fully cover all the desired
+	// replicas in the range (sum(constraints.NumReplicas) < zone.NumReplicas).
+	// In such cases, we allow replicas that don't match any of the per-replica
+	// constraints, but never mark them as necessary.
+	unconstrainedReplicas bool
 	// For each set of constraints in the above slice, track which StoreIDs
 	// satisfy them. This field is unused if there are no constraints.
 	satisfiedBy [][]roachpb.StoreID
@@ -982,18 +987,20 @@ func analyzeConstraints(
 	ctx context.Context,
 	getStoreDescFn func(roachpb.StoreID) (roachpb.StoreDescriptor, bool),
 	existing []roachpb.ReplicaDescriptor,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 ) analyzedConstraints {
 	result := analyzedConstraints{
-		constraints: constraints,
+		constraints: zone.Constraints,
 	}
 
-	if len(constraints) > 0 {
-		result.satisfiedBy = make([][]roachpb.StoreID, len(constraints))
+	if len(zone.Constraints) > 0 {
+		result.satisfiedBy = make([][]roachpb.StoreID, len(zone.Constraints))
 		result.satisfies = make(map[roachpb.StoreID][]int)
 	}
 
-	for i, subConstraints := range constraints {
+	var constrainedReplicas int32
+	for i, subConstraints := range zone.Constraints {
+		constrainedReplicas += subConstraints.NumReplicas
 		for _, repl := range existing {
 			// If for some reason we don't have the store descriptor (which shouldn't
 			// happen once a node is hooked into gossip), trust that it's valid. This
@@ -1005,6 +1012,9 @@ func analyzeConstraints(
 				result.satisfies[store.StoreID] = append(result.satisfies[store.StoreID], i)
 			}
 		}
+	}
+	if constrainedReplicas > 0 && constrainedReplicas < zone.NumReplicas {
+		result.unconstrainedReplicas = true
 	}
 	return result
 }
@@ -1036,6 +1046,10 @@ func allocateConstraintsCheck(
 		}
 	}
 
+	if analyzed.unconstrainedReplicas {
+		valid = true
+	}
+
 	return valid, false
 }
 
@@ -1052,8 +1066,9 @@ func removeConstraintsCheck(
 		return true, false
 	}
 
-	// The store satisfies none of the constraints.
-	if len(analyzed.satisfies[store.StoreID]) == 0 {
+	// The store satisfies none of the constraints, and the zone is not configured
+	// to desire more replicas than constraints have been specified for.
+	if len(analyzed.satisfies[store.StoreID]) == 0 && !analyzed.unconstrainedReplicas {
 		return false, false
 	}
 
@@ -1104,6 +1119,10 @@ func rebalanceFromConstraintsCheck(
 				return true, true
 			}
 		}
+	}
+
+	if analyzed.unconstrainedReplicas {
+		valid = true
 	}
 
 	return valid, false

@@ -109,7 +109,7 @@ func TestZoneConfigValidate(t *testing.T) {
 					},
 				},
 			},
-			"the number of replicas specified in constraints .+ does not equal",
+			"the number of replicas specified in constraints .+ cannot be greater than",
 		},
 		{
 			ZoneConfig{
@@ -122,7 +122,7 @@ func TestZoneConfigValidate(t *testing.T) {
 					},
 				},
 			},
-			"the number of replicas specified in constraints .+ does not equal",
+			"",
 		},
 		{
 			ZoneConfig{

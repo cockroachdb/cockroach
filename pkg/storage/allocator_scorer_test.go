@@ -601,6 +601,7 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 	testCases := []struct {
 		name              string
 		constraints       []config.Constraints
+		zoneNumReplicas   int32
 		existing          []roachpb.StoreID
 		expectedValid     map[roachpb.StoreID]bool
 		expectedNecessary map[roachpb.StoreID]bool
@@ -741,12 +742,78 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 				testStoreUSb:  true,
 			},
 		},
+		{
+			name: "multiple required constraints with NumReplicas and sum(NumReplicas) < zone.NumReplicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+			},
+			zoneNumReplicas: 3,
+			existing:        nil,
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+				testStoreEurope:    true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+			},
+		},
+		{
+			name: "multiple required constraints with sum(NumReplicas) < zone.NumReplicas and not enough existing replicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 1,
+				},
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 2,
+				},
+			},
+			zoneNumReplicas: 5,
+			existing:        []roachpb.StoreID{testStoreUSa1},
+			expectedValid: map[roachpb.StoreID]bool{
+				testStoreUSa15:     true,
+				testStoreUSa15Dupe: true,
+				testStoreUSa1:      true,
+				testStoreUSb:       true,
+				testStoreEurope:    true,
+			},
+			expectedNecessary: map[roachpb.StoreID]bool{
+				testStoreUSa1: true,
+				testStoreUSb:  true,
+			},
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			zone := config.ZoneConfig{
+				Constraints: tc.constraints,
+				NumReplicas: tc.zoneNumReplicas,
+			}
 			analyzed := analyzeConstraints(
-				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), tc.constraints)
+				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), zone)
 			for _, s := range testStores {
 				valid, necessary := allocateConstraintsCheck(s, analyzed)
 				if e, a := tc.expectedValid[s.StoreID], valid; e != a {
@@ -769,9 +836,10 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 		valid, necessary bool
 	}
 	testCases := []struct {
-		name        string
-		constraints []config.Constraints
-		expected    map[roachpb.StoreID]expected
+		name            string
+		constraints     []config.Constraints
+		zoneNumReplicas int32
+		expected        map[roachpb.StoreID]expected
 	}{
 		{
 			name: "prohibited constraint",
@@ -844,6 +912,24 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 				testStoreEurope: {false, false},
 			},
 		},
+		{
+			name: "required constraint with NumReplicas and sum(NumReplicas) < zone.NumReplicas",
+			constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "b", Type: config.Constraint_REQUIRED},
+					},
+					NumReplicas: 2,
+				},
+			},
+			zoneNumReplicas: 3,
+			expected: map[roachpb.StoreID]expected{
+				testStoreUSa15:  {true, false},
+				testStoreEurope: {true, false},
+				testStoreUSa1:   {true, true},
+				testStoreUSb:    {true, true},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -855,8 +941,11 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 					StoreID: storeID,
 				})
 			}
-			analyzed := analyzeConstraints(
-				context.Background(), getTestStoreDesc, existing, tc.constraints)
+			zone := config.ZoneConfig{
+				Constraints: tc.constraints,
+				NumReplicas: tc.zoneNumReplicas,
+			}
+			analyzed := analyzeConstraints(context.Background(), getTestStoreDesc, existing, zone)
 			for storeID, expected := range tc.expected {
 				valid, necessary := removeConstraintsCheck(testStores[storeID], analyzed)
 				if e, a := expected.valid, valid; e != a {
