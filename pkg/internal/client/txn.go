@@ -134,6 +134,10 @@ const (
 // transaction is the top level (root), or one of potentially many
 // distributed transactions (leaf).
 //
+// If the transaction is used to send any operations, CommitOrCleanup() or
+// CleanupOnError() should eventually be called to commit/rollback the
+// transaction (including stopping the heartbeat loop).
+//
 // gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
 //   transaction is running. Normally this is the current node, but in the case
 //   of Txns created on remote nodes by DistSQL this will be the gateway.
@@ -592,9 +596,6 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
 	}
-	if !txn.IsFinalized() {
-		log.Fatal(ctx, "Commit() failed to move txn to a final state")
-	}
 	return err
 }
 
@@ -626,17 +627,47 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 	return txn.rollback(ctx).GoError()
 }
 
+// TODO(andrei): It's common for rollbacks to fail with TransactionStatusError:
+// txn record not found (REASON_TXN_NOT_FOUND), in case the txn record was never
+// written (e.g. if a 1PC failed). One would think that, depending on the error
+// received by a 1PC batch, we'd know if a txn record was written and, if it
+// wasn't, we could short-circuit the rollback. There's two tricky things about
+// that, though: a) we'd need to know whether the DistSender has split what
+// looked like a 1PC batch to the client and b) ambiguous errors.
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
-	// TODO(andrei): It's common for rollbacks to fail with
-	// TransactionStatusError: txn record not found (REASON_TXN_NOT_FOUND),
-	// in case the txn record was never written (e.g. if a 1PC failed). One would
-	// think that, depending on the error received by a 1PC batch, we'd know if a
-	// txn record was written and, if it wasn't, we could short-circuit the
-	// rollback. There's two tricky things about that, though: a) we'd need to
-	// know whether the DistSender has split what looked like a 1PC batch to the
-	// client and b) ambiguous errors.
 	log.VEventf(ctx, 2, "rolling back transaction")
-	return txn.sendEndTxnReq(ctx, false /* commit */, nil)
+
+	// Mark the txn as finalized. We don't allow any more requests to be sent once
+	// a rollback is attempted. Also, the SQL layer likes to assert that the
+	// transaction has been finalized after attempting cleanup.
+	txn.mu.Lock()
+	txn.mu.finalized = true
+	txn.mu.Unlock()
+
+	sync := true
+	if ctx.Err() != nil {
+		sync = false
+	}
+	if sync {
+		pErr := txn.sendEndTxnReq(ctx, false /* commit */, nil)
+		if pErr == nil {
+			return nil
+		}
+		// If ctx has been canceled, assume that caused the error and try again
+		// async below.
+		if ctx.Err() == nil {
+			return pErr
+		}
+	}
+
+	ctx = txn.db.AnnotateCtx(context.Background())
+	// !!! This needs to be a stopper task; plumb the stopper to the DB.
+	go func() {
+		if err := txn.sendEndTxnReq(ctx, false /* commit */, nil); err != nil {
+			log.Infof(ctx, "async rollback failed: %s", err)
+		}
+	}()
+	return nil
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
@@ -897,9 +928,12 @@ func (txn *Txn) Send(
 
 		sender = txn.mu.sender
 		if txn.mu.Proto.Status != roachpb.PENDING || txn.mu.finalized {
-			return roachpb.NewErrorf(
-				"attempting to use transaction with wrong status or finalized: %s %v",
-				txn.mu.Proto.Status, txn.mu.finalized)
+			onlyRollback := lastIndex == 0 && haveEndTxn && !endTxnRequest.Commit
+			if !onlyRollback {
+				return roachpb.NewErrorf(
+					"attempting to use transaction with wrong status or finalized: %s %v",
+					txn.mu.Proto.Status, txn.mu.finalized)
+			}
 		}
 
 		// For testing purposes, txn.UserPriority can be a negative value (see
