@@ -385,7 +385,7 @@ func TestAllocatorSimpleRetrieval(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, _, err := a.AllocateTarget(
 		context.Background(),
-		simpleZoneConfig.Constraints,
+		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -419,7 +419,7 @@ func TestAllocatorCorruptReplica(t *testing.T) {
 
 	result, _, err := a.AllocateTarget(
 		context.Background(),
-		simpleZoneConfig.Constraints,
+		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -439,7 +439,7 @@ func TestAllocatorNoAvailableDisks(t *testing.T) {
 	defer stopper.Stop(context.Background())
 	result, _, err := a.AllocateTarget(
 		context.Background(),
-		simpleZoneConfig.Constraints,
+		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -461,7 +461,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	ctx := context.Background()
 	result1, _, err := a.AllocateTarget(
 		ctx,
-		multiDCConfig.Constraints,
+		multiDCConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -471,7 +471,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	}
 	result2, _, err := a.AllocateTarget(
 		ctx,
-		multiDCConfig.Constraints,
+		multiDCConfig,
 		[]roachpb.ReplicaDescriptor{{
 			NodeID:  result1.Node.NodeID,
 			StoreID: result1.StoreID,
@@ -490,7 +490,7 @@ func TestAllocatorTwoDatacenters(t *testing.T) {
 	// Verify that no result is forthcoming if we already have a replica.
 	result3, _, err := a.AllocateTarget(
 		ctx,
-		multiDCConfig.Constraints,
+		multiDCConfig,
 		[]roachpb.ReplicaDescriptor{
 			{
 				NodeID:  result1.Node.NodeID,
@@ -517,11 +517,13 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(sameDCStores, t)
 	result, _, err := a.AllocateTarget(
 		context.Background(),
-		[]config.Constraints{
-			{
-				Constraints: []config.Constraint{
-					{Value: "a", Type: config.Constraint_REQUIRED},
-					{Value: "hdd", Type: config.Constraint_REQUIRED},
+		config.ZoneConfig{
+			Constraints: []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Value: "a", Type: config.Constraint_REQUIRED},
+						{Value: "hdd", Type: config.Constraint_REQUIRED},
+					},
 				},
 			},
 		},
@@ -603,7 +605,7 @@ func TestAllocatorRebalance(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, _ := a.RebalanceTarget(
 			ctx,
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil,
 			testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: 3, StoreID: 3}}, firstRange),
 			storeFilterThrottled,
@@ -758,7 +760,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			status,
 			rangeInfo,
 			storeFilterThrottled,
@@ -778,7 +780,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			status,
 			rangeInfo,
 			storeFilterThrottled,
@@ -795,7 +797,7 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, details := a.RebalanceTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			status,
 			rangeInfo,
 			storeFilterThrottled,
@@ -881,7 +883,12 @@ func TestAllocatorRebalanceDeadNodes(t *testing.T) {
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			result, _ := a.RebalanceTarget(
-				ctx, nil, nil, testRangeInfo(c.existing, firstRange), storeFilterThrottled, false)
+				ctx,
+				config.ZoneConfig{},
+				nil,
+				testRangeInfo(c.existing, firstRange),
+				storeFilterThrottled,
+				false)
 			if c.expected > 0 {
 				if result == nil {
 					t.Fatalf("expected %d, but found nil", c.expected)
@@ -1075,7 +1082,7 @@ func TestAllocatorRebalanceByCount(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		result, _ := a.RebalanceTarget(
 			ctx,
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil,
 			testRangeInfo([]roachpb.ReplicaDescriptor{{StoreID: stores[0].StoreID}}, firstRange),
 			storeFilterThrottled,
@@ -1546,7 +1553,7 @@ func TestAllocatorRemoveTargetLocality(t *testing.T) {
 		}
 		targetRepl, details, err := a.RemoveTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
 			false,
@@ -1630,7 +1637,7 @@ func TestAllocatorAllocateTargetLocality(t *testing.T) {
 		}
 		targetStore, details, err := a.AllocateTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			existingRepls,
 			testRangeInfo(existingRepls, firstRange),
 			false,
@@ -1752,7 +1759,7 @@ func TestAllocatorRebalanceTargetLocality(t *testing.T) {
 		}
 		targetStore, details := a.RebalanceTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil,
 			testRangeInfo(existingRepls, firstRange),
 			storeFilterThrottled,
@@ -1869,6 +1876,21 @@ var (
 		{
 			Constraints: []config.Constraint{
 				{Value: "even", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+	}
+
+	twoSpecificLocalities = []config.Constraints{
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "a", Type: config.Constraint_REQUIRED},
+			},
+			NumReplicas: 1,
+		},
+		{
+			Constraints: []config.Constraint{
+				{Key: "datacenter", Value: "b", Type: config.Constraint_REQUIRED},
 			},
 			NumReplicas: 1,
 		},
@@ -2083,8 +2105,9 @@ func TestAllocateCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
+		zone := config.ZoneConfig{Constraints: tc.constraints}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, tc.constraints)
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 		candidates := allocateCandidates(
 			sl,
 			analyzed,
@@ -2307,8 +2330,9 @@ func TestRemoveCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
+		zone := config.ZoneConfig{Constraints: tc.constraints}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, tc.constraints)
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 		candidates := removeCandidates(
 			sl,
 			analyzed,
@@ -2355,10 +2379,11 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		candidates []roachpb.StoreID
 	}
 	testCases := []struct {
-		constraints  []config.Constraints
-		existing     []roachpb.StoreID
-		expected     []rebalanceStoreIDs
-		validTargets []roachpb.StoreID
+		constraints     []config.Constraints
+		zoneNumReplicas int32
+		existing        []roachpb.StoreID
+		expected        []rebalanceStoreIDs
+		validTargets    []roachpb.StoreID
 	}{
 		{
 			constraints:  threeSpecificLocalities,
@@ -2941,6 +2966,151 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			},
 			validTargets: []roachpb.StoreID{3, 4, 6, 8},
 		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{1, 3, 5},
+			expected:        []rebalanceStoreIDs{},
+			validTargets:    []roachpb.StoreID{},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{1, 3, 7},
+			expected:        []rebalanceStoreIDs{},
+			validTargets:    []roachpb.StoreID{},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{2, 4, 8},
+			expected:        []rebalanceStoreIDs{},
+			validTargets:    []roachpb.StoreID{},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{1, 2, 3},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{5, 6, 7, 8},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{5, 6, 7, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{2, 3, 4},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{5, 6, 7, 8},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{5, 6, 7, 8},
+				},
+			},
+			validTargets: []roachpb.StoreID{5, 6, 7, 8},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{1, 2, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{1},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{2},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{3, 4, 5},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{3},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+				{
+					existing:   []roachpb.StoreID{4},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{1, 2},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 2},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{1, 5, 7},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{1, 5, 6},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{3, 4},
+				},
+			},
+			validTargets: []roachpb.StoreID{3, 4},
+		},
+		{
+			constraints:     twoSpecificLocalities,
+			zoneNumReplicas: 3,
+			existing:        []roachpb.StoreID{5, 6, 7},
+			expected: []rebalanceStoreIDs{
+				{
+					existing:   []roachpb.StoreID{5},
+					candidates: []roachpb.StoreID{1, 2, 3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{6},
+					candidates: []roachpb.StoreID{1, 2, 3, 4},
+				},
+				{
+					existing:   []roachpb.StoreID{7},
+					candidates: []roachpb.StoreID{1, 2, 3, 4},
+				},
+			},
+			validTargets: []roachpb.StoreID{1, 2, 3, 4},
+		},
 	}
 
 	for testIdx, tc := range testCases {
@@ -2952,8 +3122,12 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			}
 		}
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
+		zone := config.ZoneConfig{
+			Constraints: tc.constraints,
+			NumReplicas: tc.zoneNumReplicas,
+		}
 		analyzed := analyzeConstraints(
-			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, tc.constraints)
+			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 		results := rebalanceCandidates(
 			context.Background(),
 			sl,
@@ -2985,12 +3159,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 			// Also verify that RebalanceTarget picks out one of the best options as
 			// the final rebalance choice.
 			target, details := a.RebalanceTarget(
-				context.Background(),
-				tc.constraints,
-				nil,
-				rangeInfo,
-				storeFilterThrottled,
-				false)
+				context.Background(), zone, nil, rangeInfo, storeFilterThrottled, false)
 			var found bool
 			if target == nil && len(tc.validTargets) == 0 {
 				found = true
@@ -3363,7 +3532,7 @@ func TestAllocatorRemoveTarget(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		targetRepl, _, err := a.RemoveTarget(
 			ctx,
-			nil, /* constraints */
+			config.ZoneConfig{},
 			replicas,
 			testRangeInfo(replicas, firstRange),
 			false,
@@ -3852,7 +4021,7 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		target, _ := a.RebalanceTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil,
 			testRangeInfo(desc.Replicas, desc.RangeID),
 			storeFilterThrottled,
@@ -3866,7 +4035,7 @@ func TestAllocatorRebalanceTargetDisableStatsRebalance(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		target, _ := a.RebalanceTarget(
 			context.Background(),
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil,
 			testRangeInfo(desc.Replicas, desc.RangeID),
 			storeFilterThrottled,
@@ -4251,7 +4420,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	// First test to make sure we would send the replica to purgatory.
 	_, _, err := a.AllocateTarget(
 		ctx,
-		simpleZoneConfig.Constraints,
+		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -4264,7 +4433,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	gossiputil.NewStoreGossiper(g).GossipStores(singleStore, t)
 	result, _, err := a.AllocateTarget(
 		ctx,
-		simpleZoneConfig.Constraints,
+		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -4287,7 +4456,7 @@ func TestAllocatorThrottled(t *testing.T) {
 	a.storePool.detailsMu.Unlock()
 	_, _, err = a.AllocateTarget(
 		ctx,
-		simpleZoneConfig.Constraints,
+		simpleZoneConfig,
 		[]roachpb.ReplicaDescriptor{},
 		firstRangeInfo,
 		false,
@@ -4553,7 +4722,7 @@ func TestAllocatorRebalanceAway(t *testing.T) {
 
 			actual, _ := a.RebalanceTarget(
 				ctx,
-				[]config.Constraints{constraints},
+				config.ZoneConfig{Constraints: []config.Constraints{constraints}},
 				nil,
 				testRangeInfo(existingReplicas, firstRange),
 				storeFilterThrottled,
@@ -4712,7 +4881,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 				if ts.Capacity.RangeCount > 0 {
 					target, details := alloc.RebalanceTarget(
 						ctx,
-						nil, /* constraints */
+						config.ZoneConfig{},
 						nil,
 						testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
 						storeFilterThrottled,
@@ -4832,7 +5001,7 @@ func Example_rebalancing() {
 			ts := &testStores[j]
 			target, details := alloc.RebalanceTarget(
 				context.Background(),
-				nil, /* constraints */
+				config.ZoneConfig{},
 				nil,
 				testRangeInfo([]roachpb.ReplicaDescriptor{{NodeID: ts.Node.NodeID, StoreID: ts.StoreID}}, firstRange),
 				storeFilterThrottled,
