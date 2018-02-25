@@ -31,11 +31,6 @@ const (
 	nonUniqueIndex
 )
 
-const (
-	isStoring    = true
-	isNotStoring = false
-)
-
 // CreateTable creates a test table from a parsed DDL statement and adds it to
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
@@ -105,7 +100,7 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 
 	// Add explicit columns and mark key columns as not null.
 	for _, colDef := range def.Columns {
-		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, isNotStoring)
+		col := idx.addColumn(tt, string(colDef.Column), colDef.Direction, true /* makeUnique */)
 
 		if typ == primaryIndex {
 			col.Nullable = false
@@ -115,29 +110,40 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 	if typ != primaryIndex {
 		// Add implicit key columns from primary index.
 		for _, idxCol := range tt.PrimaryIndex.Columns {
+			// Only add columns that aren't already part of index.
 			found := false
 			for _, colDef := range def.Columns {
 				if idxCol.Column.ColName() == optbase.ColumnName(colDef.Column) {
 					found = true
 				}
 			}
-			for _, name := range def.Storing {
-				if idxCol.Column.ColName() == optbase.ColumnName(name) {
-					found = true
-				}
-			}
 
 			if !found {
-				// Implicit column is stored if index columns are already unique.
+				// Implicit column is only part of the index's set of unique columns
+				// if the index *was not* declared as unique in the first place. The
+				// implicit columns are added to make the index unique (as well as
+				// to "cover" the primary index for lookups).
 				name := string(idxCol.Column.ColName())
-				idx.addColumn(tt, name, tree.Ascending, typ == uniqueIndex)
+				makeUnique := typ != uniqueIndex
+				idx.addColumn(tt, name, tree.Ascending, makeUnique)
 			}
 		}
 	}
 
 	// Add storing columns.
 	for _, name := range def.Storing {
-		idx.addColumn(tt, string(name), tree.Ascending, isStoring)
+		// Only add storing columns that weren't added as part of adding implicit
+		// key columns.
+		found := false
+		for _, idxCol := range tt.PrimaryIndex.Columns {
+			if optbase.ColumnName(name) == idxCol.Column.ColName() {
+				found = true
+			}
+		}
+
+		if !found {
+			idx.addColumn(tt, string(name), tree.Ascending, false)
+		}
 	}
 
 	if typ == primaryIndex {
@@ -160,7 +166,7 @@ func (tt *TestTable) makeIndexName(defName tree.Name, typ indexType) string {
 }
 
 func (ti *TestIndex) addColumn(
-	tt *TestTable, name string, direction tree.Direction, storing bool,
+	tt *TestTable, name string, direction tree.Direction, makeUnique bool,
 ) *TestColumn {
 	ord := tt.FindOrdinal(name)
 	col := tt.Column(ord)
@@ -170,13 +176,19 @@ func (ti *TestIndex) addColumn(
 		Descending: direction == tree.Descending,
 	}
 	ti.Columns = append(ti.Columns, idxCol)
-	if storing {
-		ti.Storing++
+	if makeUnique {
+		// Need to add to the index's count of columns that are part of its
+		// unique key.
+		ti.Unique++
 	}
 	return col.(*TestColumn)
 }
 
 func (tt *TestTable) addPrimaryColumnIndex(col *TestColumn) {
 	idxCol := optbase.IndexColumn{Column: col}
-	tt.PrimaryIndex = &TestIndex{Name: "primary", Columns: []optbase.IndexColumn{idxCol}}
+	tt.PrimaryIndex = &TestIndex{
+		Name:    "primary",
+		Columns: []optbase.IndexColumn{idxCol},
+		Unique:  1,
+	}
 }

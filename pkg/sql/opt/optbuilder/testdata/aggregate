@@ -139,9 +139,9 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY k
 ----
 project
- ├── columns: column5:int:null:5 kv.k:int:null:1
+ ├── columns: column5:int:null:5 kv.k:int:1
  ├── group-by
- │    ├── grouping columns: kv.k:int:null:1
+ │    ├── grouping columns: kv.k:int:1
  │    ├── aggregation columns: column5:int:null:5
  │    ├── project
  │    │    ├── columns: kv.k:int:1
@@ -160,9 +160,9 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY 2
 ----
 project
- ├── columns: column5:int:null:5 kv.k:int:null:1
+ ├── columns: column5:int:null:5 kv.k:int:1
  ├── group-by
- │    ├── grouping columns: kv.k:int:null:1
+ │    ├── grouping columns: kv.k:int:1
  │    ├── aggregation columns: column5:int:null:5
  │    ├── project
  │    │    ├── columns: kv.k:int:1
@@ -439,7 +439,7 @@ SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
 project
  ├── columns: column5:int:null:5 column6:int:null:6
  ├── group-by
- │    ├── grouping columns: kv.k:int:null:1 kv.v:int:null:2
+ │    ├── grouping columns: kv.k:int:1 kv.v:int:null:2
  │    ├── aggregation columns: column5:int:null:5
  │    ├── project
  │    │    ├── columns: kv.k:int:1 kv.v:int:null:2
@@ -1100,7 +1100,7 @@ SELECT 1 FROM t.kv GROUP BY kv.*;
 project
  ├── columns: column5:int:null:5
  ├── group-by
- │    ├── grouping columns: kv.k:int:null:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── grouping columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    └── aggregations
@@ -1191,7 +1191,7 @@ SELECT (b, a) FROM t.ab GROUP BY (b, a)
 project
  ├── columns: column3:tuple{int, int}:null:3
  ├── group-by
- │    ├── grouping columns: ab.a:int:null:1 ab.b:int:null:2
+ │    ├── grouping columns: ab.a:int:1 ab.b:int:null:2
  │    ├── project
  │    │    ├── columns: ab.b:int:null:2 ab.a:int:1
  │    │    ├── scan
@@ -1212,7 +1212,7 @@ SELECT MIN(y), (b, a)
 project
  ├── columns: column6:string:null:6 column7:tuple{int, int}:null:7
  ├── group-by
- │    ├── grouping columns: ab.a:int:null:1 ab.b:int:null:2 xy.x:string:null:3
+ │    ├── grouping columns: ab.a:int:1 ab.b:int:null:2 xy.x:string:null:3
  │    ├── aggregation columns: column6:string:null:6
  │    ├── project
  │    │    ├── columns: xy.x:string:null:3 ab.a:int:1 ab.b:int:null:2 xy.y:string:null:4
@@ -1433,7 +1433,7 @@ SELECT CONCAT(CONCAT(s, a), a) FROM kv, abc GROUP BY CONCAT(s, a), a
 project
  ├── columns: column10:string:null:10
  ├── group-by
- │    ├── grouping columns: abc.a:string:null:5 column9:string:null:9
+ │    ├── grouping columns: abc.a:string:5 column9:string:null:9
  │    ├── project
  │    │    ├── columns: column9:string:null:9 abc.a:string:5
  │    │    ├── inner-join
@@ -1689,7 +1689,7 @@ SELECT +k * (-w) FROM kv GROUP BY k, w
 project
  ├── columns: column5:int:null:5
  ├── group-by
- │    ├── grouping columns: kv.k:int:null:1 kv.w:int:null:3
+ │    ├── grouping columns: kv.k:int:1 kv.w:int:null:3
  │    ├── project
  │    │    ├── columns: kv.k:int:1 kv.w:int:null:3
  │    │    ├── scan
@@ -1738,7 +1738,7 @@ SELECT count(*) FROM kv GROUP BY k, k
 project
  ├── columns: column5:int:null:5
  ├── group-by
- │    ├── grouping columns: kv.k:int:null:1
+ │    ├── grouping columns: kv.k:int:1
  │    ├── aggregation columns: column5:int:null:5
  │    ├── project
  │    │    ├── columns: kv.k:int:1 kv.k:int:1

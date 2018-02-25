@@ -107,7 +107,7 @@ build
 SELECT DISTINCT x FROM t.xyz WHERE x > 0
 ----
 group-by
- ├── grouping columns: xyz.x:int:null:1
+ ├── grouping columns: xyz.x:int:1
  ├── project
  │    ├── columns: xyz.x:int:1
  │    ├── select
@@ -147,7 +147,7 @@ group-by
  ├── project
  │    ├── columns: column4:int:null:4
  │    ├── group-by
- │    │    ├── grouping columns: xyz.x:int:null:1
+ │    │    ├── grouping columns: xyz.x:int:1
  │    │    ├── aggregation columns: column4:int:null:4
  │    │    ├── project
  │    │    │    ├── columns: xyz.x:int:1 xyz.x:int:1
@@ -212,9 +212,9 @@ group-by
  ├── project
  │    ├── columns: column4:float:null:4 column5:int:null:5 column6:int:null:6
  │    ├── select
- │    │    ├── columns: xyz.x:int:null:1 xyz.y:int:null:2 column4:float:null:4
+ │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 column4:float:null:4
  │    │    ├── group-by
- │    │    │    ├── grouping columns: xyz.x:int:null:1 xyz.y:int:null:2
+ │    │    │    ├── grouping columns: xyz.x:int:1 xyz.y:int:null:2
  │    │    │    ├── aggregation columns: column4:float:null:4
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
