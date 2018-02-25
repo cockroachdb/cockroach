@@ -138,7 +138,7 @@ func createTestStoreWithEngine(
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	storeCfg.DB = client.NewDB(tcsFactory, storeCfg.Clock)
+	storeCfg.DB = client.NewDB(ac, tcsFactory, storeCfg.Clock)
 	storeCfg.StorePool = storage.NewTestStorePool(storeCfg)
 	storeCfg.Transport = storage.NewDummyRaftTransport(storeCfg.Settings)
 	// TODO(bdarnell): arrange to have the transport closed.
@@ -639,7 +639,7 @@ func (mrdb mtcRangeDescriptorDB) RangeLookup(
 func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.Closer = stopper.ShouldQuiesce()
-	ambient := log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}
+	ambient := m.storeConfig.AmbientCtx
 	m.distSenders[idx] = kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ambient,
 		Clock:      m.clocks[idx],
@@ -661,13 +661,13 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	m.dbs[idx] = client.NewDB(tcsFactory, m.clocks[idx])
+	m.dbs[idx] = client.NewDB(ambient, tcsFactory, m.clocks[idx])
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
 	storage.TimeUntilStoreDead.Override(&m.storeConfig.Settings.SV, m.timeUntilStoreDead)
 	m.storePools[idx] = storage.NewStorePool(
-		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer},
+		m.storeConfig.AmbientCtx,
 		m.storeConfig.Settings,
 		m.gossips[idx],
 		m.clocks[idx],

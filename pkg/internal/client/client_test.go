@@ -806,7 +806,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 				})
 			})
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := client.NewDB(factory, clock)
+			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 			ctx := context.TODO()
 
 			prepWithRC := func() *client.Batch {
@@ -976,7 +976,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := client.NewDBWithContext(factory, clock, dbCtx)
+	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.
@@ -1023,5 +1023,36 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// Test that a transaction can be rolled back even with a canceled context.
+// This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
+func TestCleanupWithCanceledContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	key := roachpb.Key("a")
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		cancel()
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, err := db.Get(ctx, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dur := time.Since(start)
+	if dur > time.Second {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
 	}
 }

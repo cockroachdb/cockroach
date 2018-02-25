@@ -103,6 +103,10 @@ type Txn struct {
 // transaction is the top level (root), or one of potentially many
 // distributed transactions (leaf).
 //
+// If the transactions is used to send any operations, CommitOrCleanup() or
+// CleanupOnError() should eventually be called to commit/rollback the
+// transaction (including stopping the heartbeat loop).
+//
 // gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
 //   transaction is running. Normally this is the current node, but in the case
 //   of Txns created on remote nodes by DistSQL this will be the gateway.
@@ -561,9 +565,6 @@ func (txn *Txn) CommitOrCleanup(ctx context.Context) error {
 	if err != nil {
 		txn.CleanupOnError(ctx, err)
 	}
-	if !txn.IsFinalized() {
-		log.Fatal(ctx, "Commit() failed to move txn to a final state")
-	}
 	return err
 }
 
@@ -598,6 +599,41 @@ func (txn *Txn) Rollback(ctx context.Context) error {
 func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 	log.VEventf(ctx, 2, "rolling back transaction")
 	return txn.sendEndTxnReq(ctx, false /* commit */, nil)
+}
+
+func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
+	log.VEventf(ctx, 2, "rolling back transaction")
+
+	// Mark the txn as finalized. We don't allow any more requests to be sent once
+	// a rollback is attempted. Also, the SQL layer likes to assert that the
+	// transaction has been finalized after attempting cleanup.
+	txn.mu.Lock()
+	txn.mu.finalized = true
+	txn.mu.Unlock()
+
+	sync := true
+	if ctx.Err() != nil {
+		sync = false
+	}
+	if sync {
+		pErr := txn.sendEndTxnReq(ctx, false /* commit */, nil)
+		if pErr == nil {
+			return nil
+		}
+		// If ctx has been canceled, assume that caused the error and try again
+		// async below.
+		if ctx.Err() == nil {
+			return pErr
+		}
+	}
+
+	ctx = txn.db.AnnotateCtx(context.Background())
+	go func() {
+		if err := txn.sendEndTxnReq(ctx, false /* commit */, nil); err != nil {
+			log.Infof(ctx, "async rollback failed: %s", err)
+		}
+	}()
+	return nil
 }
 
 // AddCommitTrigger adds a closure to be executed on successful commit
@@ -836,9 +872,12 @@ func (txn *Txn) Send(
 
 		sender = txn.mu.sender
 		if txn.mu.Proto.Status != roachpb.PENDING || txn.mu.finalized {
-			return roachpb.NewErrorf(
-				"attempting to use transaction with wrong status or finalized: %s %v",
-				txn.mu.Proto.Status, txn.mu.finalized)
+			onlyRolback := lastIndex == 0 && haveEndTxn && !endTxnRequest.Commit
+			if !onlyRolback {
+				return roachpb.NewErrorf(
+					"attempting to use transaction with wrong status or finalized: %s %v",
+					txn.mu.Proto.Status, txn.mu.finalized)
+			}
 		}
 
 		// For testing purposes, txn.UserPriority can be a negative value (see

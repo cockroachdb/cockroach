@@ -186,6 +186,8 @@ func DefaultDBContext() DBContext {
 // DB is a database handle to a single cockroach cluster. A DB is safe for
 // concurrent use by multiple goroutines.
 type DB struct {
+	log.AmbientContext
+
 	factory TxnSenderFactory
 	clock   *hlc.Clock
 	ctx     DBContext
@@ -204,16 +206,22 @@ func (db *DB) GetFactory() TxnSenderFactory {
 }
 
 // NewDB returns a new DB.
-func NewDB(factory TxnSenderFactory, clock *hlc.Clock) *DB {
-	return NewDBWithContext(factory, clock, DefaultDBContext())
+func NewDB(actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock) *DB {
+	return NewDBWithContext(actx, factory, clock, DefaultDBContext())
 }
 
 // NewDBWithContext returns a new DB with the given parameters.
-func NewDBWithContext(factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext) *DB {
+func NewDBWithContext(
+	actx log.AmbientContext, factory TxnSenderFactory, clock *hlc.Clock, ctx DBContext,
+) *DB {
+	if actx.Tracer == nil {
+		panic("no tracer set in AmbientCtx")
+	}
 	return &DB{
-		factory: factory,
-		clock:   clock,
-		ctx:     ctx,
+		AmbientContext: actx,
+		factory:        factory,
+		clock:          clock,
+		ctx:            ctx,
 	}
 }
 
