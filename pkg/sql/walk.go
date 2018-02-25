@@ -289,8 +289,27 @@ func (v *planVisitor) visit(plan planNode) {
 				v.expr(name, "aggregate", i, agg.expr)
 			}
 		}
-		if v.observer.attr != nil && n.numGroupCols > 0 {
-			v.observer.attr(name, "group by", fmt.Sprintf("@1-@%d", n.numGroupCols))
+		if v.observer.attr != nil && len(n.groupCols) > 0 {
+			// Display the grouping columns as @1-@x if possible.
+			shorthand := true
+			for i, idx := range n.groupCols {
+				if idx != i {
+					shorthand = false
+					break
+				}
+			}
+			if shorthand {
+				v.observer.attr(name, "group by", fmt.Sprintf("@1-@%d", len(n.groupCols)))
+			} else {
+				var buf bytes.Buffer
+				for i, idx := range n.groupCols {
+					if i > 0 {
+						buf.WriteByte(',')
+					}
+					fmt.Fprintf(&buf, "@%d", idx+1)
+				}
+				v.observer.attr(name, "group by", buf.String())
+			}
 		}
 
 		v.visit(n.plan)

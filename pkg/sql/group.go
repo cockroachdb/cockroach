@@ -48,9 +48,8 @@ type groupNode struct {
 	// The source node (which returns values that feed into the aggregation).
 	plan planNode
 
-	// The group-by columns are the first numGroupCols columns of
-	// the source plan.
-	numGroupCols int
+	// Indices of the group by columns in the source plan.
+	groupCols []int
 
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
@@ -232,7 +231,12 @@ func (p *planner) groupBy(
 			groupStrs[symbolicExprStr(e)] = colIdxs[i]
 		}
 	}
-	group.numGroupCols = len(r.render)
+	// Because of the way we set up the pre-projection, the grouping columns are
+	// always the first columns.
+	group.groupCols = make([]int, len(r.render))
+	for i := range group.groupCols {
+		group.groupCols[i] = i
+	}
 
 	var havingNode *filterNode
 	plan := planNode(group)
@@ -377,7 +381,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 		// TODO(dt): optimization: skip buckets when underlying plan is ordered by grouped values.
 
 		bucket := scratch
-		for idx := 0; idx < n.numGroupCols; idx++ {
+		for _, idx := range n.groupCols {
 			var err error
 			bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
 			if err != nil {
@@ -497,7 +501,7 @@ func (n *groupNode) addIsDistinctFromNullFilter(where *filterNode, render *rende
 // instead have another variable (e.g. from the AST) tell us what type
 // of aggregation we're dealing with, and test that here.
 func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.ColumnOrdering {
-	if n.numGroupCols > 0 {
+	if len(n.groupCols) > 0 {
 		return nil
 	}
 
