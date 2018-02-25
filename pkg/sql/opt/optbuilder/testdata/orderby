@@ -1,0 +1,146 @@
+# tests adapted from logictest -- order_by
+
+exec-ddl
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c BOOLEAN
+)
+----
+TABLE t
+ ├── a int not null
+ ├── b int
+ ├── c bool
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT c FROM t ORDER BY c
+----
+project
+ ├── columns: c:bool:null:3
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: +3
+ │    └── scan
+ │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ └── projections
+      └── variable: t.c [type=bool]
+
+build
+SELECT c FROM t ORDER BY c DESC
+----
+project
+ ├── columns: c:bool:null:3
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: -3
+ │    └── scan
+ │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ └── projections
+      └── variable: t.c [type=bool]
+
+build
+SELECT a, b FROM t ORDER BY b
+----
+project
+ ├── columns: a:int:1 b:int:null:2
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: +2
+ │    └── scan
+ │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ └── projections
+      ├── variable: t.a [type=int]
+      └── variable: t.b [type=int]
+
+build
+SELECT a, b FROM t ORDER BY b DESC
+----
+project
+ ├── columns: a:int:1 b:int:null:2
+ ├── ordering: -2
+ ├── sort
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: -2
+ │    └── scan
+ │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ └── projections
+      ├── variable: t.a [type=int]
+      └── variable: t.b [type=int]
+
+build
+SELECT a AS foo, b FROM t ORDER BY foo DESC
+----
+project
+ ├── columns: foo:int:1 b:int:null:2
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ └── projections
+      ├── variable: t.a [type=int]
+      └── variable: t.b [type=int]
+
+build
+SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
+----
+project
+ ├── columns: a:int:1 b:int:null:2
+ ├── ordering: +2,+1
+ ├── select
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: +2,+1
+ │    ├── sort
+ │    │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    │    ├── ordering: +2,+1
+ │    │    └── scan
+ │    │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    └── eq [type=bool]
+ │         ├── variable: t.b [type=int]
+ │         └── const: 7 [type=int]
+ └── projections
+      ├── variable: t.a [type=int]
+      └── variable: t.b [type=int]
+
+build
+SELECT a, b FROM t ORDER BY b, a DESC
+----
+project
+ ├── columns: a:int:1 b:int:null:2
+ ├── ordering: +2,-1
+ ├── sort
+ │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ │    ├── ordering: +2,-1
+ │    └── scan
+ │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+ └── projections
+      ├── variable: t.a [type=int]
+      └── variable: t.b [type=int]
+
+build
+SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
+----
+sort
+ ├── columns: a:int:1 b:int:null:2 ab:int:null:4
+ ├── ordering: -4,+1
+ └── project
+      ├── columns: t.a:int:1 t.b:int:null:2 ab:int:null:4
+      ├── select
+      │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+      │    ├── scan
+      │    │    └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
+      │    └── eq [type=bool]
+      │         ├── variable: t.b [type=int]
+      │         └── const: 7 [type=int]
+      └── projections
+           ├── variable: t.a [type=int]
+           ├── variable: t.b [type=int]
+           └── plus [type=int]
+                ├── variable: t.a [type=int]
+                └── variable: t.b [type=int]

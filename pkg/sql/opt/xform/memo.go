@@ -17,10 +17,13 @@ package xform
 import (
 	"bytes"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // memoLoc describes the location of an expression in the memo, which is a
@@ -118,6 +121,11 @@ type memo struct {
 	// logPropsFactory is used to derive logical properties for an expression,
 	// based on the logical properties of its children.
 	logPropsFactory logicalPropsFactory
+
+	// physPropsFactory is used to derive required physical properties for the
+	// children of an expression, based on the required physical properties for
+	// the parent.
+	physPropsFactory physicalPropsFactory
 
 	// Intern the set of unique physical properties used by expressions in the
 	// memo, since there are so many duplicates.
@@ -296,12 +304,109 @@ func (m *memo) lookupPrivate(id opt.PrivateID) interface{} {
 }
 
 func (m *memo) String() string {
+	tp := treeprinter.New()
+	root := tp.Child("memo")
+
 	var buf bytes.Buffer
 	for i := len(m.groups) - 1; i > 0; i-- {
 		mgrp := &m.groups[i]
-		fmt.Fprintf(&buf, "%d:", i)
-		fmt.Fprintf(&buf, " %s", mgrp.memoGroupString(m))
-		fmt.Fprintf(&buf, "\n")
+
+		buf.Reset()
+		for i := range mgrp.exprs {
+			if i != 0 {
+				buf.WriteByte(' ')
+			}
+
+			// Wrap the memo expr in ExprView to make it easy to get children.
+			eid := exprID(i)
+			ev := ExprView{
+				mem:      m,
+				loc:      memoLoc{group: mgrp.id, expr: eid},
+				op:       mgrp.exprs[eid].op,
+				required: opt.MinPhysPropsID,
+			}
+
+			m.formatExpr(ev, &buf, false /* includeRequired */)
+		}
+
+		child := root.Childf("%d: %s", i, buf.String())
+		m.formatBestExprs(mgrp, child)
 	}
-	return buf.String()
+
+	return tp.String()
+}
+
+type bestExprSort struct {
+	required    opt.PhysicalPropsID
+	fingerprint string
+	bestExpr    *bestExpr
+}
+
+func (m *memo) formatBestExprs(mgrp *memoGroup, tp treeprinter.Node) {
+	// Sort the bestExprs by required properties.
+	beSort := make([]bestExprSort, len(mgrp.bestExprs))
+	i := 0
+	mgrp.forEachBestExpr(func(required opt.PhysicalPropsID, best *bestExpr) {
+		beSort[i] = bestExprSort{
+			required:    required,
+			fingerprint: m.lookupPhysicalProps(required).Fingerprint(),
+			bestExpr:    best,
+		}
+		i++
+	})
+
+	sort.Slice(beSort, func(i, j int) bool {
+		return strings.Compare(beSort[i].fingerprint, beSort[j].fingerprint) < 0
+	})
+
+	var buf bytes.Buffer
+	for _, be := range beSort {
+		buf.Reset()
+
+		// Don't show best expressions for scalar groups because they're not too
+		// interesting.
+		ev := makeExprView(m, mgrp.id, be.required)
+		if !ev.IsScalar() {
+			child := tp.Childf("\"%s\" [cost=0.0]", be.fingerprint)
+
+			m.formatExpr(ev, &buf, true /* includeRequired */)
+			child.Childf("best: %s", buf.String())
+		}
+	}
+}
+
+func (m *memo) formatExpr(ev ExprView, buf *bytes.Buffer, includeRequired bool) {
+	fmt.Fprintf(buf, "(%s", ev.Operator())
+
+	private := ev.Private()
+	if private != nil {
+		switch t := private.(type) {
+		case nil:
+		case opt.TableIndex:
+			fmt.Fprintf(buf, " %s", m.metadata.Table(t).TabName())
+		case opt.ColumnIndex:
+			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
+		case *opt.ColSet, *opt.ColMap, *opt.ColList:
+			// Don't show anything, because it's mostly redundant.
+		default:
+			fmt.Fprintf(buf, " %s", private)
+		}
+	}
+
+	if ev.ChildCount() > 0 {
+		for i := 0; i < ev.ChildCount(); i++ {
+			child := ev.ChildGroup(i)
+			fmt.Fprintf(buf, " %d", child)
+
+			if !includeRequired {
+				// Print properties required of the child if they are interesting.
+				required := m.physPropsFactory.constructChildProps(ev, i)
+				if required != opt.MinPhysPropsID {
+					fmt.Fprintf(buf, "=\"%s\"", m.lookupPhysicalProps(required).Fingerprint())
+				}
+			}
+		}
+	}
+
+	buf.WriteString(")")
 }
