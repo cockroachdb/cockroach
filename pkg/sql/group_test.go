@@ -72,7 +72,7 @@ func TestDesiredAggregateOrder(t *testing.T) {
 				t.Fatalf("%s: expected %v, but found %v", d.expr, d.ordering, ordering)
 			}
 			// Verify we never have a desired ordering if there is a GROUP BY.
-			group.numGroupCols = 1
+			group.groupCols = []int{0}
 			ordering = group.desiredAggregateOrdering(p.EvalContext())
 			if len(ordering) > 0 {
 				t.Fatalf("%s: expected no ordering when there is a GROUP BY, found %v", d.expr, ordering)
