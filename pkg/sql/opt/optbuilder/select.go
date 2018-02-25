@@ -143,23 +143,32 @@ func (b *Builder) buildSelect(
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.ParenSelect:
-		return b.buildSelect(t.Select, inScope)
+		out, outScope = b.buildSelect(t.Select, inScope)
 
 	case *tree.SelectClause:
-		return b.buildSelectClause(stmt, inScope)
+		out, outScope = b.buildSelectClause(stmt, inScope)
 
 	case *tree.ValuesClause:
 		return b.buildValuesClause(t, inScope)
 
-	// TODO(rytaft): Add support for union clause.
+		// TODO(rytaft): Add support for union clause.
 
 	default:
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
 	}
 
-	// TODO(rytaft): Add support for ORDER BY expression.
+	// TODO(rytaft): Add full support for ORDER BY expression. This simple
+	// version only supports ordering by projected columns. It does not support
+	// order by expressions, or ordering by FROM columns. Also, take care to
+	// correctly handle cases like `SELECT a FROM t ORDER BY c`. The ordered
+	// property can only contain refs to output columns, so the `c` column
+	// must be retained in the projection (and presentation property then omits
+	// it.
+	outScope.ordering = b.buildOrderBy(stmt.OrderBy, outScope)
+
 	// TODO(rytaft): Support FILTER expression.
 	// TODO(peter): stmt.Limit
+	return out, outScope
 }
 
 // buildSelectClause builds a set of memo groups that represent the given
@@ -189,11 +198,7 @@ func (b *Builder) buildSelectClause(
 		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 	}
 
-	if stmt.OrderBy != nil {
-		// TODO(rytaft): Build Order By. Order By relies on the existence of
-		// ordering physical properties.
-		panic(errorf("ORDER BY not yet supported: %s", stmt.String()))
-	}
+	// TODO(rytaft): Handle Order By that can depend on from columns.
 
 	// Don't add an unnecessary "pass through" project expression.
 	if !projectionsScope.hasSameColumns(outScope) {
