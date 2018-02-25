@@ -9,9 +9,11 @@
 exec-ddl
 CREATE TABLE onecolumn (x INT)
 ----
-table onecolumn
-  x int NULL
-  rowid int NOT NULL (hidden)
+TABLE onecolumn
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a(x) CROSS JOIN onecolumn AS b(y)
@@ -222,9 +224,11 @@ project
 exec-ddl
 CREATE TABLE onecolumn_w(w INT)
 ----
-table onecolumn_w
-  w int NULL
-  rowid int NOT NULL (hidden)
+TABLE onecolumn_w
+ ├── w int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a NATURAL JOIN onecolumn_w as b
@@ -245,9 +249,11 @@ project
 exec-ddl
 CREATE TABLE othercolumn (x INT)
 ----
-table othercolumn
-  x int NULL
-  rowid int NOT NULL (hidden)
+TABLE othercolumn
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x
@@ -355,9 +361,11 @@ project
 exec-ddl
 CREATE TABLE empty (x INT)
 ----
-table empty
-  x int NULL
-  rowid int NOT NULL (hidden)
+TABLE empty
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM onecolumn AS a(x) CROSS JOIN empty AS b(y)
@@ -659,10 +667,12 @@ project
 exec-ddl
 CREATE TABLE twocolumn (x INT, y INT)
 ----
-table twocolumn
-  x int NULL
-  y int NULL
-  rowid int NOT NULL (hidden)
+TABLE twocolumn
+ ├── x int
+ ├── y int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 # Natural joins with partial match
 build
@@ -905,17 +915,21 @@ error: no data source matches prefix: a
 exec-ddl
 CREATE TABLE a (i int)
 ----
-table a
-  i int NULL
-  rowid int NOT NULL (hidden)
+TABLE a
+ ├── i int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE b (i int, b bool)
 ----
-table b
-  i int NULL
-  b bool NULL
-  rowid int NOT NULL (hidden)
+TABLE b
+ ├── i int
+ ├── b bool
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM a INNER JOIN b ON a.i = b.i
@@ -1149,9 +1163,11 @@ error: column "x" appears more than once in USING clause
 exec-ddl
 CREATE TABLE othertype (x TEXT)
 ----
-table othertype
-  x string NULL
-  rowid int NOT NULL (hidden)
+TABLE othertype
+ ├── x string
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM (onecolumn AS a JOIN othertype AS b USING(x))
@@ -1309,17 +1325,21 @@ project
 exec-ddl
 CREATE TABLE square (n INT PRIMARY KEY, sq INT)
 ----
-table square
-  n int NOT NULL
-  sq int NULL
+TABLE square
+ ├── n int not null
+ ├── sq int
+ └── INDEX primary
+      └── n int not null
 
 exec-ddl
 CREATE TABLE pairs (a INT, b INT)
 ----
-table pairs
-  a int NULL
-  b int NULL
-  rowid int NOT NULL (hidden)
+TABLE pairs
+ ├── a int
+ ├── b int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 # The filter expression becomes an equality constraint.
 build
@@ -1621,22 +1641,26 @@ select
 exec-ddl
 CREATE TABLE t1 (col1 INT, x INT, col2 INT, y INT)
 ----
-table t1
-  col1 int NULL
-  x int NULL
-  col2 int NULL
-  y int NULL
-  rowid int NOT NULL (hidden)
+TABLE t1
+ ├── col1 int
+ ├── x int
+ ├── col2 int
+ ├── y int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE t2 (col3 INT, y INT, x INT, col4 INT)
 ----
-table t2
-  col3 int NULL
-  y int NULL
-  x int NULL
-  col4 int NULL
-  rowid int NOT NULL (hidden)
+TABLE t2
+ ├── col3 int
+ ├── y int
+ ├── x int
+ ├── col4 int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT * FROM t1 JOIN t2 USING(x)
@@ -1906,86 +1930,85 @@ project
 exec-ddl
 CREATE TABLE pkBA (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a))
 ----
-table pkba
-  a int NULL
-  b int NULL
-  c int NULL
-  d int NULL
-  rowid int NOT NULL (hidden)
+TABLE pkba
+ ├── a int not null
+ ├── b int not null
+ ├── c int
+ ├── d int
+ └── INDEX primary
+      ├── b int not null
+      └── a int not null
 
 exec-ddl
 CREATE TABLE pkBC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,c))
 ----
-table pkbc
-  a int NULL
-  b int NULL
-  c int NULL
-  d int NULL
-  rowid int NOT NULL (hidden)
+TABLE pkbc
+ ├── a int
+ ├── b int not null
+ ├── c int not null
+ ├── d int
+ └── INDEX primary
+      ├── b int not null
+      └── c int not null
 
 exec-ddl
 CREATE TABLE pkBAC (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,c))
 ----
-table pkbac
-  a int NULL
-  b int NULL
-  c int NULL
-  d int NULL
-  rowid int NOT NULL (hidden)
+TABLE pkbac
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ ├── d int
+ └── INDEX primary
+      ├── b int not null
+      ├── a int not null
+      └── c int not null
 
 exec-ddl
 CREATE TABLE pkBAD (a INT, b INT, c INT, d INT, PRIMARY KEY(b,a,d))
 ----
-table pkbad
-  a int NULL
-  b int NULL
-  c int NULL
-  d int NULL
-  rowid int NOT NULL (hidden)
+TABLE pkbad
+ ├── a int not null
+ ├── b int not null
+ ├── c int
+ ├── d int not null
+ └── INDEX primary
+      ├── b int not null
+      ├── a int not null
+      └── d int not null
 
 build
 SELECT * FROM pkBA AS l JOIN pkBC AS r ON l.a = r.a AND l.b = r.b AND l.c = r.c
 ----
-project
- ├── columns: pkba.a:int:null:1 pkba.b:int:null:2 pkba.c:int:null:3 pkba.d:int:null:4 pkbc.a:int:null:6 pkbc.b:int:null:7 pkbc.c:int:null:8 pkbc.d:int:null:9
- ├── inner-join
- │    ├── columns: pkba.a:int:null:1 pkba.b:int:null:2 pkba.c:int:null:3 pkba.d:int:null:4 pkba.rowid:int:5 pkbc.a:int:null:6 pkbc.b:int:null:7 pkbc.c:int:null:8 pkbc.d:int:null:9 pkbc.rowid:int:10
- │    ├── scan
- │    │    └── columns: pkba.a:int:null:1 pkba.b:int:null:2 pkba.c:int:null:3 pkba.d:int:null:4 pkba.rowid:int:5
- │    ├── scan
- │    │    └── columns: pkbc.a:int:null:6 pkbc.b:int:null:7 pkbc.c:int:null:8 pkbc.d:int:null:9 pkbc.rowid:int:10
- │    └── and [type=bool]
- │         ├── and [type=bool]
- │         │    ├── eq [type=bool]
- │         │    │    ├── variable: pkba.a [type=int]
- │         │    │    └── variable: pkbc.a [type=int]
- │         │    └── eq [type=bool]
- │         │         ├── variable: pkba.b [type=int]
- │         │         └── variable: pkbc.b [type=int]
- │         └── eq [type=bool]
- │              ├── variable: pkba.c [type=int]
- │              └── variable: pkbc.c [type=int]
- └── projections
-      ├── variable: pkba.a [type=int]
-      ├── variable: pkba.b [type=int]
-      ├── variable: pkba.c [type=int]
-      ├── variable: pkba.d [type=int]
-      ├── variable: pkbc.a [type=int]
-      ├── variable: pkbc.b [type=int]
-      ├── variable: pkbc.c [type=int]
-      └── variable: pkbc.d [type=int]
+inner-join
+ ├── columns: pkba.a:int:1 pkba.b:int:2 pkba.c:int:null:3 pkba.d:int:null:4 pkbc.a:int:null:5 pkbc.b:int:6 pkbc.c:int:7 pkbc.d:int:null:8
+ ├── scan
+ │    └── columns: pkba.a:int:1 pkba.b:int:2 pkba.c:int:null:3 pkba.d:int:null:4
+ ├── scan
+ │    └── columns: pkbc.a:int:null:5 pkbc.b:int:6 pkbc.c:int:7 pkbc.d:int:null:8
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── eq [type=bool]
+      │    │    ├── variable: pkba.a [type=int]
+      │    │    └── variable: pkbc.a [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: pkba.b [type=int]
+      │         └── variable: pkbc.b [type=int]
+      └── eq [type=bool]
+           ├── variable: pkba.c [type=int]
+           └── variable: pkbc.c [type=int]
 
 build
 SELECT * FROM pkBA NATURAL JOIN pkBAD
 ----
 project
- ├── columns: pkba.a:int:null:1 pkba.b:int:null:2 pkba.c:int:null:3 pkba.d:int:null:4
+ ├── columns: pkba.a:int:1 pkba.b:int:2 pkba.c:int:null:3 pkba.d:int:null:4
  ├── inner-join
- │    ├── columns: pkba.a:int:null:1 pkba.b:int:null:2 pkba.c:int:null:3 pkba.d:int:null:4 pkba.rowid:int:5 pkbad.a:int:null:6 pkbad.b:int:null:7 pkbad.c:int:null:8 pkbad.d:int:null:9 pkbad.rowid:int:10
+ │    ├── columns: pkba.a:int:1 pkba.b:int:2 pkba.c:int:null:3 pkba.d:int:null:4 pkbad.a:int:5 pkbad.b:int:6 pkbad.c:int:null:7 pkbad.d:int:8
  │    ├── scan
- │    │    └── columns: pkba.a:int:null:1 pkba.b:int:null:2 pkba.c:int:null:3 pkba.d:int:null:4 pkba.rowid:int:5
+ │    │    └── columns: pkba.a:int:1 pkba.b:int:2 pkba.c:int:null:3 pkba.d:int:null:4
  │    ├── scan
- │    │    └── columns: pkbad.a:int:null:6 pkbad.b:int:null:7 pkbad.c:int:null:8 pkbad.d:int:null:9 pkbad.rowid:int:10
+ │    │    └── columns: pkbad.a:int:5 pkbad.b:int:6 pkbad.c:int:null:7 pkbad.d:int:8
  │    └── and [type=bool]
  │         ├── eq [type=bool]
  │         │    ├── variable: pkba.a [type=int]
@@ -2009,13 +2032,13 @@ build
 SELECT * FROM pkBAC AS l JOIN pkBAC AS r USING(a, b, c)
 ----
 project
- ├── columns: pkbac.a:int:null:1 pkbac.b:int:null:2 pkbac.c:int:null:3 pkbac.d:int:null:4 pkbac.d:int:null:9
+ ├── columns: pkbac.a:int:1 pkbac.b:int:2 pkbac.c:int:3 pkbac.d:int:null:4 pkbac.d:int:null:8
  ├── inner-join
- │    ├── columns: pkbac.a:int:null:1 pkbac.b:int:null:2 pkbac.c:int:null:3 pkbac.d:int:null:4 pkbac.rowid:int:5 pkbac.a:int:null:6 pkbac.b:int:null:7 pkbac.c:int:null:8 pkbac.d:int:null:9 pkbac.rowid:int:10
+ │    ├── columns: pkbac.a:int:1 pkbac.b:int:2 pkbac.c:int:3 pkbac.d:int:null:4 pkbac.a:int:5 pkbac.b:int:6 pkbac.c:int:7 pkbac.d:int:null:8
  │    ├── scan
- │    │    └── columns: pkbac.a:int:null:1 pkbac.b:int:null:2 pkbac.c:int:null:3 pkbac.d:int:null:4 pkbac.rowid:int:5
+ │    │    └── columns: pkbac.a:int:1 pkbac.b:int:2 pkbac.c:int:3 pkbac.d:int:null:4
  │    ├── scan
- │    │    └── columns: pkbac.a:int:null:6 pkbac.b:int:null:7 pkbac.c:int:null:8 pkbac.d:int:null:9 pkbac.rowid:int:10
+ │    │    └── columns: pkbac.a:int:5 pkbac.b:int:6 pkbac.c:int:7 pkbac.d:int:null:8
  │    └── and [type=bool]
  │         ├── eq [type=bool]
  │         │    ├── variable: pkbac.a [type=int]
@@ -2036,49 +2059,42 @@ project
 build
 SELECT * FROM pkBAC AS l JOIN pkBAD AS r ON l.c = r.d AND l.a = r.a AND l.b = r.b
 ----
-project
- ├── columns: pkbac.a:int:null:1 pkbac.b:int:null:2 pkbac.c:int:null:3 pkbac.d:int:null:4 pkbad.a:int:null:6 pkbad.b:int:null:7 pkbad.c:int:null:8 pkbad.d:int:null:9
- ├── inner-join
- │    ├── columns: pkbac.a:int:null:1 pkbac.b:int:null:2 pkbac.c:int:null:3 pkbac.d:int:null:4 pkbac.rowid:int:5 pkbad.a:int:null:6 pkbad.b:int:null:7 pkbad.c:int:null:8 pkbad.d:int:null:9 pkbad.rowid:int:10
- │    ├── scan
- │    │    └── columns: pkbac.a:int:null:1 pkbac.b:int:null:2 pkbac.c:int:null:3 pkbac.d:int:null:4 pkbac.rowid:int:5
- │    ├── scan
- │    │    └── columns: pkbad.a:int:null:6 pkbad.b:int:null:7 pkbad.c:int:null:8 pkbad.d:int:null:9 pkbad.rowid:int:10
- │    └── and [type=bool]
- │         ├── and [type=bool]
- │         │    ├── eq [type=bool]
- │         │    │    ├── variable: pkbac.c [type=int]
- │         │    │    └── variable: pkbad.d [type=int]
- │         │    └── eq [type=bool]
- │         │         ├── variable: pkbac.a [type=int]
- │         │         └── variable: pkbad.a [type=int]
- │         └── eq [type=bool]
- │              ├── variable: pkbac.b [type=int]
- │              └── variable: pkbad.b [type=int]
- └── projections
-      ├── variable: pkbac.a [type=int]
-      ├── variable: pkbac.b [type=int]
-      ├── variable: pkbac.c [type=int]
-      ├── variable: pkbac.d [type=int]
-      ├── variable: pkbad.a [type=int]
-      ├── variable: pkbad.b [type=int]
-      ├── variable: pkbad.c [type=int]
-      └── variable: pkbad.d [type=int]
+inner-join
+ ├── columns: pkbac.a:int:1 pkbac.b:int:2 pkbac.c:int:3 pkbac.d:int:null:4 pkbad.a:int:5 pkbad.b:int:6 pkbad.c:int:null:7 pkbad.d:int:8
+ ├── scan
+ │    └── columns: pkbac.a:int:1 pkbac.b:int:2 pkbac.c:int:3 pkbac.d:int:null:4
+ ├── scan
+ │    └── columns: pkbad.a:int:5 pkbad.b:int:6 pkbad.c:int:null:7 pkbad.d:int:8
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── eq [type=bool]
+      │    │    ├── variable: pkbac.c [type=int]
+      │    │    └── variable: pkbad.d [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: pkbac.a [type=int]
+      │         └── variable: pkbad.a [type=int]
+      └── eq [type=bool]
+           ├── variable: pkbac.b [type=int]
+           └── variable: pkbad.b [type=int]
 
 # Tests with joins with merged columns of collated string type.
 exec-ddl
 CREATE TABLE str1 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 ----
-table str1
-  a int NOT NULL
-  s collatedstring{en_u_ks_level1} NULL
+TABLE str1
+ ├── a int not null
+ ├── s collatedstring{en_u_ks_level1}
+ └── INDEX primary
+      └── a int not null
 
 exec-ddl
 CREATE TABLE str2 (a INT PRIMARY KEY, s STRING COLLATE en_u_ks_level1)
 ----
-table str2
-  a int NOT NULL
-  s collatedstring{en_u_ks_level1} NULL
+TABLE str2
+ ├── a int not null
+ ├── s collatedstring{en_u_ks_level1}
+ └── INDEX primary
+      └── a int not null
 
 build
 SELECT s, str1.s, str2.s FROM str1 INNER JOIN str2 USING(s)
@@ -2214,34 +2230,40 @@ project
 exec-ddl
 CREATE TABLE xyu (x INT, y INT, u INT, PRIMARY KEY(x,y,u))
 ----
-table xyu
-  x int NULL
-  y int NULL
-  u int NULL
-  rowid int NOT NULL (hidden)
+TABLE xyu
+ ├── x int not null
+ ├── y int not null
+ ├── u int not null
+ └── INDEX primary
+      ├── x int not null
+      ├── y int not null
+      └── u int not null
 
 exec-ddl
 CREATE TABLE xyv (x INT, y INT, v INT, PRIMARY KEY(x,y,v))
 ----
-table xyv
-  x int NULL
-  y int NULL
-  v int NULL
-  rowid int NOT NULL (hidden)
+TABLE xyv
+ ├── x int not null
+ ├── y int not null
+ ├── v int not null
+ └── INDEX primary
+      ├── x int not null
+      ├── y int not null
+      └── v int not null
 
 build
 SELECT * FROM xyu INNER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.v:int:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    ├── inner-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    ├── scan
- │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
+ │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
  │    │    ├── scan
- │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: xyu.x [type=int]
@@ -2262,15 +2284,15 @@ build
 SELECT * FROM xyu LEFT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.v:int:null:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:null:8
+ │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
  │    ├── left-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:null:8
+ │    │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
  │    │    ├── scan
- │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
+ │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
  │    │    ├── scan
- │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: xyu.x [type=int]
@@ -2291,15 +2313,15 @@ build
 SELECT * FROM xyu RIGHT OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: xyv.x:int:4 xyv.y:int:5 xyu.u:int:null:3 xyv.v:int:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    ├── right-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    ├── scan
- │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
+ │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
  │    │    ├── scan
- │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: xyu.x [type=int]
@@ -2320,17 +2342,17 @@ build
 SELECT * FROM xyu FULL OUTER JOIN xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:int:null:9 y:int:null:10 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: x:int:null:7 y:int:null:8 xyu.u:int:null:3 xyv.v:int:null:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:null:8 x:int:null:9 y:int:null:10
+ │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6 x:int:null:7 y:int:null:8
  │    ├── project
- │    │    ├── columns: x:int:null:9 y:int:null:10 xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:null:8
+ │    │    ├── columns: x:int:null:7 y:int:null:8 xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
  │    │    ├── full-join
- │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:null:8
+ │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
  │    │    │    ├── scan
- │    │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
+ │    │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
  │    │    │    ├── scan
- │    │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    │    └── and [type=bool]
  │    │    │         ├── eq [type=bool]
  │    │    │         │    ├── variable: xyu.x [type=int]
@@ -2348,11 +2370,9 @@ project
  │    │         ├── variable: xyu.x [type=int]
  │    │         ├── variable: xyu.y [type=int]
  │    │         ├── variable: xyu.u [type=int]
- │    │         ├── variable: xyu.rowid [type=int]
  │    │         ├── variable: xyv.x [type=int]
  │    │         ├── variable: xyv.y [type=int]
- │    │         ├── variable: xyv.v [type=int]
- │    │         └── variable: xyv.rowid [type=int]
+ │    │         └── variable: xyv.v [type=int]
  │    └── gt [type=bool]
  │         ├── variable: x [type=int]
  │         └── const: 2 [type=int]
@@ -2366,139 +2386,103 @@ project
 build
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y WHERE xyu.x = 1 AND xyu.y < 10
 ----
-project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    ├── inner-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    │    ├── scan
- │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    │    ├── scan
- │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    │    └── and [type=bool]
- │    │         ├── eq [type=bool]
- │    │         │    ├── variable: xyu.x [type=int]
- │    │         │    └── variable: xyv.x [type=int]
- │    │         └── eq [type=bool]
- │    │              ├── variable: xyu.y [type=int]
- │    │              └── variable: xyv.y [type=int]
+select
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ ├── inner-join
+ │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ │    ├── scan
+ │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ │    ├── scan
+ │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    └── and [type=bool]
  │         ├── eq [type=bool]
  │         │    ├── variable: xyu.x [type=int]
- │         │    └── const: 1 [type=int]
- │         └── lt [type=bool]
+ │         │    └── variable: xyv.x [type=int]
+ │         └── eq [type=bool]
  │              ├── variable: xyu.y [type=int]
- │              └── const: 10 [type=int]
- └── projections
-      ├── variable: xyu.x [type=int]
-      ├── variable: xyu.y [type=int]
-      ├── variable: xyu.u [type=int]
-      ├── variable: xyv.x [type=int]
-      ├── variable: xyv.y [type=int]
-      └── variable: xyv.v [type=int]
+ │              └── variable: xyv.y [type=int]
+ └── and [type=bool]
+      ├── eq [type=bool]
+      │    ├── variable: xyu.x [type=int]
+      │    └── const: 1 [type=int]
+      └── lt [type=bool]
+           ├── variable: xyu.y [type=int]
+           └── const: 10 [type=int]
 
 build
 SELECT * FROM xyu INNER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- ├── inner-join
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    ├── scan
- │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    ├── scan
- │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    └── and [type=bool]
- │         ├── and [type=bool]
- │         │    ├── and [type=bool]
- │         │    │    ├── eq [type=bool]
- │         │    │    │    ├── variable: xyu.x [type=int]
- │         │    │    │    └── variable: xyv.x [type=int]
- │         │    │    └── eq [type=bool]
- │         │    │         ├── variable: xyu.y [type=int]
- │         │    │         └── variable: xyv.y [type=int]
- │         │    └── eq [type=bool]
- │         │         ├── variable: xyu.x [type=int]
- │         │         └── const: 1 [type=int]
- │         └── lt [type=bool]
- │              ├── variable: xyu.y [type=int]
- │              └── const: 10 [type=int]
- └── projections
-      ├── variable: xyu.x [type=int]
-      ├── variable: xyu.y [type=int]
-      ├── variable: xyu.u [type=int]
-      ├── variable: xyv.x [type=int]
-      ├── variable: xyv.y [type=int]
-      └── variable: xyv.v [type=int]
+inner-join
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ ├── scan
+ │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ ├── scan
+ │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── and [type=bool]
+      │    │    ├── eq [type=bool]
+      │    │    │    ├── variable: xyu.x [type=int]
+      │    │    │    └── variable: xyv.x [type=int]
+      │    │    └── eq [type=bool]
+      │    │         ├── variable: xyu.y [type=int]
+      │    │         └── variable: xyv.y [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: xyu.x [type=int]
+      │         └── const: 1 [type=int]
+      └── lt [type=bool]
+           ├── variable: xyu.y [type=int]
+           └── const: 10 [type=int]
 
 build
 SELECT * FROM xyu LEFT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- ├── left-join
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:null:8
- │    ├── scan
- │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    ├── scan
- │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    └── and [type=bool]
- │         ├── and [type=bool]
- │         │    ├── and [type=bool]
- │         │    │    ├── eq [type=bool]
- │         │    │    │    ├── variable: xyu.x [type=int]
- │         │    │    │    └── variable: xyv.x [type=int]
- │         │    │    └── eq [type=bool]
- │         │    │         ├── variable: xyu.y [type=int]
- │         │    │         └── variable: xyv.y [type=int]
- │         │    └── eq [type=bool]
- │         │         ├── variable: xyu.x [type=int]
- │         │         └── const: 1 [type=int]
- │         └── lt [type=bool]
- │              ├── variable: xyu.y [type=int]
- │              └── const: 10 [type=int]
- └── projections
-      ├── variable: xyu.x [type=int]
-      ├── variable: xyu.y [type=int]
-      ├── variable: xyu.u [type=int]
-      ├── variable: xyv.x [type=int]
-      ├── variable: xyv.y [type=int]
-      └── variable: xyv.v [type=int]
+left-join
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
+ ├── scan
+ │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ ├── scan
+ │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── and [type=bool]
+      │    │    ├── eq [type=bool]
+      │    │    │    ├── variable: xyu.x [type=int]
+      │    │    │    └── variable: xyv.x [type=int]
+      │    │    └── eq [type=bool]
+      │    │         ├── variable: xyu.y [type=int]
+      │    │         └── variable: xyv.y [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: xyu.x [type=int]
+      │         └── const: 1 [type=int]
+      └── lt [type=bool]
+           ├── variable: xyu.y [type=int]
+           └── const: 10 [type=int]
 
 build
 SELECT * FROM xyu RIGHT OUTER JOIN xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- ├── right-join
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    ├── scan
- │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    ├── scan
- │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    └── and [type=bool]
- │         ├── and [type=bool]
- │         │    ├── and [type=bool]
- │         │    │    ├── eq [type=bool]
- │         │    │    │    ├── variable: xyu.x [type=int]
- │         │    │    │    └── variable: xyv.x [type=int]
- │         │    │    └── eq [type=bool]
- │         │    │         ├── variable: xyu.y [type=int]
- │         │    │         └── variable: xyv.y [type=int]
- │         │    └── eq [type=bool]
- │         │         ├── variable: xyu.x [type=int]
- │         │         └── const: 1 [type=int]
- │         └── lt [type=bool]
- │              ├── variable: xyu.y [type=int]
- │              └── const: 10 [type=int]
- └── projections
-      ├── variable: xyu.x [type=int]
-      ├── variable: xyu.y [type=int]
-      ├── variable: xyu.u [type=int]
-      ├── variable: xyv.x [type=int]
-      ├── variable: xyv.y [type=int]
-      └── variable: xyv.v [type=int]
+right-join
+ ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ ├── scan
+ │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ ├── scan
+ │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── and [type=bool]
+      │    │    ├── eq [type=bool]
+      │    │    │    ├── variable: xyu.x [type=int]
+      │    │    │    └── variable: xyv.x [type=int]
+      │    │    └── eq [type=bool]
+      │    │         ├── variable: xyu.y [type=int]
+      │    │         └── variable: xyv.y [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: xyu.x [type=int]
+      │         └── const: 1 [type=int]
+      └── lt [type=bool]
+           ├── variable: xyu.y [type=int]
+           └── const: 10 [type=int]
 
 
 # Test OUTER joins that are run in the distSQL merge joiner
@@ -2507,27 +2491,15 @@ build
 SELECT * FROM (SELECT * FROM xyu) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.v:int:null:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
+ │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
  │    ├── left-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    ├── project
- │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3
- │    │    │    ├── scan
- │    │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    │    │    └── projections
- │    │    │         ├── variable: xyu.x [type=int]
- │    │    │         ├── variable: xyu.y [type=int]
- │    │    │         └── variable: xyu.u [type=int]
- │    │    ├── project
- │    │    │    ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    │    ├── scan
- │    │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    │    │    └── projections
- │    │    │         ├── variable: xyv.x [type=int]
- │    │    │         ├── variable: xyv.y [type=int]
- │    │    │         └── variable: xyv.v [type=int]
+ │    │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: xyu.x [type=int]
@@ -2548,27 +2520,15 @@ build
 SELECT * FROM (SELECT * FROM xyu) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: xyv.x:int:4 xyv.y:int:5 xyu.u:int:null:3 xyv.v:int:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
+ │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    ├── right-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    ├── project
- │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3
- │    │    │    ├── scan
- │    │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    │    │    └── projections
- │    │    │         ├── variable: xyu.x [type=int]
- │    │    │         ├── variable: xyu.y [type=int]
- │    │    │         └── variable: xyu.u [type=int]
- │    │    ├── project
- │    │    │    ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    │    ├── scan
- │    │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    │    │    └── projections
- │    │    │         ├── variable: xyv.x [type=int]
- │    │    │         ├── variable: xyv.y [type=int]
- │    │    │         └── variable: xyv.v [type=int]
+ │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ │    │    ├── scan
+ │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: xyu.x [type=int]
@@ -2589,29 +2549,17 @@ build
 SELECT * FROM (SELECT * FROM xyu) AS xyu FULL OUTER JOIN (SELECT * FROM xyv) AS xyv USING(x, y) WHERE x > 2
 ----
 project
- ├── columns: x:int:null:9 y:int:null:10 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: x:int:null:7 y:int:null:8 xyu.u:int:null:3 xyv.v:int:null:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 x:int:null:9 y:int:null:10
+ │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6 x:int:null:7 y:int:null:8
  │    ├── project
- │    │    ├── columns: x:int:null:9 y:int:null:10 xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
+ │    │    ├── columns: x:int:null:7 y:int:null:8 xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
  │    │    ├── full-join
- │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    │    ├── project
- │    │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3
- │    │    │    │    ├── scan
- │    │    │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    │    │    │    └── projections
- │    │    │    │         ├── variable: xyu.x [type=int]
- │    │    │    │         ├── variable: xyu.y [type=int]
- │    │    │    │         └── variable: xyu.u [type=int]
- │    │    │    ├── project
- │    │    │    │    ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    │    │    ├── scan
- │    │    │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    │    │    │    └── projections
- │    │    │    │         ├── variable: xyv.x [type=int]
- │    │    │    │         ├── variable: xyv.y [type=int]
- │    │    │    │         └── variable: xyv.v [type=int]
+ │    │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    │    └── and [type=bool]
  │    │    │         ├── eq [type=bool]
  │    │    │         │    ├── variable: xyu.x [type=int]
@@ -2645,23 +2593,11 @@ build
 SELECT * FROM (SELECT * FROM xyu) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 left-join
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- ├── project
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3
- │    ├── scan
- │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    └── projections
- │         ├── variable: xyu.x [type=int]
- │         ├── variable: xyu.y [type=int]
- │         └── variable: xyu.u [type=int]
- ├── project
- │    ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    ├── scan
- │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    └── projections
- │         ├── variable: xyv.x [type=int]
- │         ├── variable: xyv.y [type=int]
- │         └── variable: xyv.v [type=int]
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:null:4 xyv.y:int:null:5 xyv.v:int:null:6
+ ├── scan
+ │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ ├── scan
+ │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  └── and [type=bool]
       ├── and [type=bool]
       │    ├── and [type=bool]
@@ -2681,57 +2617,42 @@ left-join
 build
 SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
-project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- ├── right-join
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:null:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    ├── scan
- │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
- │    ├── project
- │    │    ├── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7
- │    │    ├── scan
- │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
- │    │    └── projections
- │    │         ├── variable: xyv.x [type=int]
- │    │         ├── variable: xyv.y [type=int]
- │    │         └── variable: xyv.v [type=int]
- │    └── and [type=bool]
- │         ├── and [type=bool]
- │         │    ├── and [type=bool]
- │         │    │    ├── eq [type=bool]
- │         │    │    │    ├── variable: xyu.x [type=int]
- │         │    │    │    └── variable: xyv.x [type=int]
- │         │    │    └── eq [type=bool]
- │         │    │         ├── variable: xyu.y [type=int]
- │         │    │         └── variable: xyv.y [type=int]
- │         │    └── eq [type=bool]
- │         │         ├── variable: xyu.x [type=int]
- │         │         └── const: 1 [type=int]
- │         └── lt [type=bool]
- │              ├── variable: xyu.y [type=int]
- │              └── const: 10 [type=int]
- └── projections
-      ├── variable: xyu.x [type=int]
-      ├── variable: xyu.y [type=int]
-      ├── variable: xyu.u [type=int]
-      ├── variable: xyv.x [type=int]
-      ├── variable: xyv.y [type=int]
-      └── variable: xyv.v [type=int]
+right-join
+ ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ ├── scan
+ │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
+ ├── scan
+ │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
+ └── and [type=bool]
+      ├── and [type=bool]
+      │    ├── and [type=bool]
+      │    │    ├── eq [type=bool]
+      │    │    │    ├── variable: xyu.x [type=int]
+      │    │    │    └── variable: xyv.x [type=int]
+      │    │    └── eq [type=bool]
+      │    │         ├── variable: xyu.y [type=int]
+      │    │         └── variable: xyv.y [type=int]
+      │    └── eq [type=bool]
+      │         ├── variable: xyu.x [type=int]
+      │         └── const: 1 [type=int]
+      └── lt [type=bool]
+           ├── variable: xyu.y [type=int]
+           └── const: 10 [type=int]
 
 # Regression test for #20472: break up tuple inequalities.
 build
 SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
 project
- ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyv.v:int:null:7
+ ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.v:int:6
  ├── select
- │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    ├── inner-join
- │    │    ├── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4 xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    ├── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3 xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    ├── scan
- │    │    │    └── columns: xyu.x:int:null:1 xyu.y:int:null:2 xyu.u:int:null:3 xyu.rowid:int:4
+ │    │    │    └── columns: xyu.x:int:1 xyu.y:int:2 xyu.u:int:3
  │    │    ├── scan
- │    │    │    └── columns: xyv.x:int:null:5 xyv.y:int:null:6 xyv.v:int:null:7 xyv.rowid:int:8
+ │    │    │    └── columns: xyv.x:int:4 xyv.y:int:5 xyv.v:int:6
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: xyu.x [type=int]
@@ -2760,14 +2681,18 @@ project
 exec-ddl
 CREATE TABLE l (a INT PRIMARY KEY)
 ----
-table l
-  a int NOT NULL
+TABLE l
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
 
 exec-ddl
 CREATE TABLE r (a INT PRIMARY KEY)
 ----
-table r
-  a int NOT NULL
+TABLE r
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
 
 build
 SELECT * FROM l LEFT OUTER JOIN r ON l.a = r.a WHERE l.a = 3;
@@ -2861,14 +2786,18 @@ CREATE TABLE abcdef (
   PRIMARY KEY (a ASC, b ASC, c DESC, d ASC)
 )
 ----
-table abcdef
-  a int NOT NULL
-  b int NOT NULL
-  c int NOT NULL
-  d int NOT NULL
-  e int NULL
-  f int NULL
-  rowid int NOT NULL (hidden)
+TABLE abcdef
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ ├── d int not null
+ ├── e int
+ ├── f int
+ └── INDEX primary
+      ├── a int not null
+      ├── b int not null
+      ├── c int not null desc
+      └── d int not null
 
 exec-ddl
 CREATE TABLE abg (
@@ -2878,31 +2807,27 @@ CREATE TABLE abg (
   PRIMARY KEY (a ASC, b ASC)
 );
 ----
-table abg
-  a int NOT NULL
-  b int NOT NULL
-  g int NULL
-  rowid int NOT NULL (hidden)
+TABLE abg
+ ├── a int not null
+ ├── b int not null
+ ├── g int
+ └── INDEX primary
+      ├── a int not null
+      └── b int not null
 
 build
 SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
 project
- ├── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abg.g:int:null:10
+ ├── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abg.g:int:null:9
  ├── select
- │    ├── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abcdef.rowid:int:7 abg.a:int:8 abg.b:int:9 abg.g:int:null:10
+ │    ├── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abg.a:int:7 abg.b:int:8 abg.g:int:null:9
  │    ├── inner-join
- │    │    ├── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abcdef.rowid:int:7 abg.a:int:8 abg.b:int:9 abg.g:int:null:10
+ │    │    ├── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abg.a:int:7 abg.b:int:8 abg.g:int:null:9
  │    │    ├── scan
- │    │    │    └── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6 abcdef.rowid:int:7
- │    │    ├── project
- │    │    │    ├── columns: abg.a:int:8 abg.b:int:9 abg.g:int:null:10
- │    │    │    ├── scan
- │    │    │    │    └── columns: abg.a:int:8 abg.b:int:9 abg.g:int:null:10 abg.rowid:int:11
- │    │    │    └── projections
- │    │    │         ├── variable: abg.a [type=int]
- │    │    │         ├── variable: abg.b [type=int]
- │    │    │         └── variable: abg.g [type=int]
+ │    │    │    └── columns: abcdef.a:int:1 abcdef.b:int:2 abcdef.c:int:3 abcdef.d:int:4 abcdef.e:int:null:5 abcdef.f:int:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: abg.a:int:7 abg.b:int:8 abg.g:int:null:9
  │    │    └── and [type=bool]
  │    │         ├── eq [type=bool]
  │    │         │    ├── variable: abcdef.a [type=int]
@@ -2961,12 +2886,14 @@ CREATE TABLE foo (
   d FLOAT
 )
 ----
-table foo
-  a int NULL
-  b int NULL
-  c float NULL
-  d float NULL
-  rowid int NOT NULL (hidden)
+TABLE foo
+ ├── a int
+ ├── b int
+ ├── c float
+ ├── d float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 exec-ddl
 CREATE TABLE bar (
@@ -2976,12 +2903,14 @@ CREATE TABLE bar (
   d INT
 )
 ----
-table bar
-  a int NULL
-  b float NULL
-  c float NULL
-  d int NULL
-  rowid int NOT NULL (hidden)
+TABLE bar
+ ├── a int
+ ├── b float
+ ├── c float
+ ├── d int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 # Only a and c can be equality columns.
 build
@@ -3251,11 +3180,13 @@ CREATE TABLE t.kv (
   s STRING
 )
 ----
-table kv
-  k int NOT NULL
-  v int NULL
-  w int NULL
-  s string NULL
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── s string
+ └── INDEX primary
+      └── k int not null
 
 build
 SELECT k FROM kv, (SELECT 1 AS k)

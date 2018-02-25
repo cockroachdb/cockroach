@@ -8,11 +8,13 @@ CREATE TABLE t.kv (
   s STRING
 )
 ----
-table kv
-  k int NOT NULL
-  v int NULL
-  w int NULL
-  s string NULL
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── s string
+ └── INDEX primary
+      └── k int not null
 
 build
 SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1),
@@ -625,11 +627,13 @@ CREATE TABLE t.abc (
   d DECIMAL
 )
 ----
-table abc
-  a string NOT NULL
-  b float NULL
-  c bool NULL
-  d decimal NULL
+TABLE abc
+ ├── a string not null
+ ├── b float
+ ├── c bool
+ ├── d decimal
+ └── INDEX primary
+      └── a string not null
 
 build
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM t.abc
@@ -691,8 +695,10 @@ CREATE TABLE t.intervals (
   a INTERVAL PRIMARY KEY
 )
 ----
-table intervals
-  a interval NOT NULL
+TABLE intervals
+ ├── a interval not null
+ └── INDEX primary
+      └── a interval not null
 
 build
 SELECT SUM(a) FROM t.intervals
@@ -748,10 +754,19 @@ CREATE TABLE t.xyz (
   FAMILY (z)
 )
 ----
-table xyz
-  x int NOT NULL
-  y int NULL
-  z float NULL
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z float
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX xy
+ │    ├── x int not null
+ │    └── y int
+ └── INDEX zyx
+      ├── z float
+      ├── y int
+      └── x int not null
 
 build
 SELECT MIN(x) FROM t.xyz
@@ -913,9 +928,11 @@ group-by
 exec-ddl
 CREATE TABLE t.bools (b BOOL)
 ----
-table bools
-  b bool NULL
-  rowid int NOT NULL (hidden)
+TABLE bools
+ ├── b bool
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
@@ -954,11 +971,13 @@ project
 exec-ddl
 CREATE TABLE t.xor_bytes (a bytes, b int, c int)
 ----
-table xor_bytes
-  a bytes NULL
-  b int NULL
-  c int NULL
-  rowid int NOT NULL (hidden)
+TABLE xor_bytes
+ ├── a bytes
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM t.xor_bytes
@@ -1002,17 +1021,21 @@ CREATE TABLE t.ab (
   FAMILY (b)
 )
 ----
-table ab
-  a int NOT NULL
-  b int NULL
+TABLE ab
+ ├── a int not null
+ ├── b int
+ └── INDEX primary
+      └── a int not null
 
 exec-ddl
 CREATE TABLE t.xy(x STRING, y STRING);
 ----
-table xy
-  x string NULL
-  y string NULL
-  rowid int NOT NULL (hidden)
+TABLE xy
+ ├── x string
+ ├── y string
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 # Grouping and rendering tuples.
 build
@@ -1299,10 +1322,12 @@ error: column "kv.k" must appear in the GROUP BY clause or be used in an aggrega
 exec-ddl
 CREATE TABLE foo (bar JSON, baz JSON)
 ----
-table foo
-  bar jsonb NULL
-  baz jsonb NULL
-  rowid int NOT NULL (hidden)
+TABLE foo
+ ├── bar jsonb
+ ├── baz jsonb
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
@@ -1370,8 +1395,10 @@ project
 exec-ddl
 CREATE TABLE times (t time PRIMARY KEY)
 ----
-table times
-  t time NOT NULL
+TABLE times
+ ├── t time not null
+ └── INDEX primary
+      └── t time not null
 
 build
 SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) FROM times a, times b
