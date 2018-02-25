@@ -810,7 +810,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 			})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := client.NewDB(factory, clock)
+			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 			ctx := context.TODO()
 
 			prepWithRC := func() *client.Batch {
@@ -982,7 +982,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := client.NewDBWithContext(factory, clock, dbCtx)
+	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.
@@ -1083,5 +1083,40 @@ func TestIntentCleanupUnblocksReaders(t *testing.T) {
 		if dur > 800*time.Millisecond {
 			t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
 		}
+	}
+}
+
+// Test that a transaction can be rolled back even with a canceled context.
+// This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
+func TestCleanupWithCanceledContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	key := roachpb.Key("a")
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		cancel()
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents.
+	// TODO(andrei): It'd be better to use tracing to verify what we were and
+	// weren't blocked on. Similar in TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
 	}
 }
