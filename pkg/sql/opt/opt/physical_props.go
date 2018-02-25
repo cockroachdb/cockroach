@@ -67,21 +67,28 @@ type PhysicalProps struct {
 	// and order of result columns. If Presentation is not defined, then no
 	// particular column presentation is required or provided.
 	Presentation Presentation
+
+	// Ordering specifies the sort order of result rows. Rows can be sorted by
+	// one or more columns, each of which can be sorted in either ascending or
+	// descending order. If Ordering is not defined, then no particular ordering
+	// is required or provided.
+	Ordering Ordering
 }
 
 // Defined returns true if any physical property is defined. If none is
 // defined, then this is an instance of MinPhysProps.
 func (p *PhysicalProps) Defined() bool {
-	return p.Presentation.Defined()
+	return p.Presentation.Defined() || p.Ordering.Defined()
 }
 
 // Fingerprint returns a string that uniquely describes this set of physical
 // properties. It is suitable for use as a hash key in a map.
 func (p *PhysicalProps) Fingerprint() string {
 	hasProjection := p.Presentation.Defined()
+	hasOrdering := p.Ordering.Defined()
 
-	// Handle default properties case.
-	if !hasProjection {
+	// Handle empty properties case.
+	if !hasProjection && !hasOrdering {
 		return ""
 	}
 
@@ -90,9 +97,22 @@ func (p *PhysicalProps) Fingerprint() string {
 	if hasProjection {
 		buf.WriteString("p:")
 		p.Presentation.format(&buf)
+
+		if hasOrdering {
+			buf.WriteString(" ")
+		}
+	}
+
+	if hasOrdering {
+		buf.WriteString("o:")
+		p.Ordering.format(&buf)
 	}
 
 	return buf.String()
+}
+
+func (p *PhysicalProps) String() string {
+	return p.Fingerprint()
 }
 
 // Presentation specifies the naming, membership (including duplicates), and
@@ -143,4 +163,46 @@ func (p Presentation) format(buf *bytes.Buffer) {
 type LabeledColumn struct {
 	Label string
 	Index ColumnIndex
+}
+
+// Ordering defines the order of rows provided or required by an operator. A
+// negative value indicates descending order on the column index "-(value)".
+type Ordering []ColumnIndex
+
+// Defined is true if a particular row ordering is required or provided.
+func (o Ordering) Defined() bool {
+	return len(o) != 0
+}
+
+func (o Ordering) String() string {
+	var buf bytes.Buffer
+	o.format(&buf)
+	return buf.String()
+}
+
+func (o Ordering) format(buf *bytes.Buffer) {
+	for i, col := range o {
+		if i > 0 {
+			buf.WriteString(",")
+		}
+		if col >= 0 {
+			fmt.Fprintf(buf, "+%d", col)
+		} else {
+			fmt.Fprintf(buf, "-%d", -col)
+		}
+	}
+}
+
+// Provides returns true if the required ordering is a prefix of this ordering.
+func (o Ordering) Provides(required Ordering) bool {
+	if len(o) < len(required) {
+		return false
+	}
+
+	for i := range required {
+		if o[i] != required[i] {
+			return false
+		}
+	}
+	return true
 }
