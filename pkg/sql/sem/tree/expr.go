@@ -1015,6 +1015,31 @@ type FuncExpr struct {
 	fn *Builtin
 }
 
+// NewTypedFuncExpr returns a FuncExpr that is already well-typed and resolved.
+func NewTypedFuncExpr(
+	ref ResolvableFunctionReference,
+	aggQualifier funcType,
+	exprs TypedExprs,
+	filter TypedExpr,
+	windowDef *WindowDef,
+	typ types.T,
+	builtin *Builtin,
+) *FuncExpr {
+	f := &FuncExpr{
+		Func:           ref,
+		Type:           aggQualifier,
+		Exprs:          make(Exprs, len(exprs)),
+		Filter:         filter,
+		WindowDef:      windowDef,
+		typeAnnotation: typeAnnotation{typ: typ},
+		fn:             builtin,
+	}
+	for i, e := range exprs {
+		f.Exprs[i] = e
+	}
+	return f
+}
+
 // ResolvedFunc returns the function definition; can only be called after
 // Resolve (which happens during TypeCheck).
 func (node *FuncExpr) ResolvedFunc() *FunctionDefinition {

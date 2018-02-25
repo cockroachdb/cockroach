@@ -246,10 +246,27 @@ render     0  render  ·         ·                                             
 ·          1  ·       table     t@primary                                     ·                                  ·
 ·          1  ·       spans     ALL                                           ·                                  ·
 
-## Functions not supported yet.
-#exec-explain
-#SELECT LENGTH(s) = 2 FROM t.t
-#----
+exec-explain
+SELECT LENGTH(s) FROM t.t
+----
+render     0  render  ·         ·          (column8)                          ·
+ │         0  ·       render 0  length(s)  ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
+
+# Verify that the built function can be executed.
+exec-raw
+CREATE TABLE t.str (s STRING);
+INSERT INTO t.str VALUES ('a'), ('ab'), ('abc')
+----
+
+exec
+SELECT LENGTH(s) FROM t.str
+----
+1
+2
+3
 
 exec-explain
 SELECT j @> '{"a": 1}' FROM t.t
