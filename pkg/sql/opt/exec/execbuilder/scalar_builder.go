@@ -43,6 +43,7 @@ func init() {
 		opt.ConstOp:           (*Builder).buildTypedExpr,
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
+		opt.FunctionOp:        (*Builder).buildFunction,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 	}
 
@@ -151,6 +152,24 @@ func (b *Builder) buildBinary(ctx *buildScalarCtx, ev xform.ExprView) tree.Typed
 		b.buildScalar(ctx, ev.Child(0)),
 		b.buildScalar(ctx, ev.Child(1)),
 		ev.Logical().Scalar.Type,
+	)
+}
+
+func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	exprs := make(tree.TypedExprs, ev.ChildCount())
+	for i := range exprs {
+		exprs[i] = b.buildScalar(ctx, ev.Child(i))
+	}
+	funcDef := ev.Private().(opt.FuncDef)
+	funcRef := tree.WrapFunction(funcDef.Name)
+	return tree.NewTypedFuncExpr(
+		funcRef,
+		0, /* aggQualifier */
+		exprs,
+		nil, /* filter */
+		nil, /* windowDef */
+		ev.Logical().Scalar.Type,
+		funcDef.Overload,
 	)
 }
 
