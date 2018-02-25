@@ -103,6 +103,10 @@ type Txn struct {
 // transaction is the top level (root), or one of potentially many
 // distributed transactions (leaf).
 //
+// If the transactions is used to send any operations, CommitOrCleanup() or
+// CleanupOnError() should eventually be called to commit/rollback the
+// transaction (including stopping the heartbeat loop).
+//
 // gatewayNodeID: If != 0, this is the ID of the node on whose behalf this
 //   transaction is running. Normally this is the current node, but in the case
 //   of Txns created on remote nodes by DistSQL this will be the gateway.

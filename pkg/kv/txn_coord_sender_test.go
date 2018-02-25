@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -719,103 +718,6 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 	}
 }
 
-// TestTxnCoordSenderGCTimeout verifies that the coordinator cleans up extant
-// transactions and intents after the lastUpdateNanos exceeds the timeout.
-func TestTxnCoordSenderGCTimeout(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
-	defer s.Stop()
-
-	// Set heartbeat interval to 1ms for testing.
-	tc := s.DB.GetSender().(*TxnCoordSender)
-	tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
-
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	key := roachpb.Key("a")
-	if err := txn.Put(context.TODO(), key, []byte("value")); err != nil {
-		t.Fatal(err)
-	}
-
-	// Now, advance clock past the default client timeout.
-	// Locking the TxnCoordSender to prevent a data race.
-	tc.mu.Lock()
-	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
-	tc.mu.Unlock()
-
-	testutils.SucceedsSoon(t, func() error {
-		// Locking the TxnCoordSender to prevent a data race.
-		tc.mu.Lock()
-		done := tc.mu.txnEnd == nil
-		tc.mu.Unlock()
-		if !done {
-			return errors.Errorf("expected garbage collection")
-		}
-		return nil
-	})
-
-	verifyCleanup(key, s.Eng, t, tc)
-}
-
-// TestTxnCoordSenderGCWithCancel verifies that the coordinator cleans up extant
-// transactions and intents after transaction context is canceled.
-func TestTxnCoordSenderGCWithCancel(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s := createTestDB(t)
-	defer s.Stop()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	txn := client.NewTxn(s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-	tc := txn.Sender().(*TxnCoordSender)
-	// Set heartbeat interval to 1ms for testing.
-	tc.TxnCoordSenderFactory.heartbeatInterval = 1 * time.Millisecond
-	key := roachpb.Key("a")
-	if pErr := txn.Put(ctx, key, []byte("value")); pErr != nil {
-		t.Fatal(pErr)
-	}
-	// Wait for heartbeat to kick in after Put.
-	testutils.SucceedsSoon(t, func() error {
-		tc.mu.Lock()
-		defer tc.mu.Unlock()
-		if tc.mu.txnEnd != nil {
-			return nil
-		}
-		return errors.Errorf("expected heartbeat to start")
-	})
-
-	// Now, advance clock past the default client timeout.
-	// Locking the TxnCoordSender to prevent a data race.
-	tc.mu.Lock()
-	s.Manual.Increment(defaultClientTimeout.Nanoseconds() + 1)
-	tc.mu.Unlock()
-
-	// Verify that the transaction is alive despite the timeout having
-	// been exceeded.
-	errStillActive := errors.New("transaction is still active")
-	if err := retry.ForDuration(1*time.Second, func() error {
-		tc.mu.Lock()
-		done := tc.mu.txnEnd == nil
-		tc.mu.Unlock()
-		if done {
-			return nil
-		}
-		meta := &enginepb.MVCCMetadata{}
-		ok, _, _, err := s.Eng.GetProto(engine.MakeMVCCMetadataKey(key), meta)
-		if err != nil {
-			t.Fatalf("error getting MVCC metadata: %s", err)
-		}
-		if !ok || meta.Txn == nil {
-			return nil
-		}
-		return errStillActive
-	}); err != errStillActive {
-		t.Fatalf("expected transaction to be active, got: %v", err)
-	}
-
-	// After the context is canceled, the heartbeat should stop.
-	cancel()
-	verifyCleanup(key, s.Eng, t, tc)
-}
-
 // TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
 // cleans up extant transactions and intents after an ambiguous result error is
 // observed, even if the error is on the first request.
@@ -1349,7 +1251,6 @@ func checkTxnMetricsOnce(
 	}{
 		{"commits", metrics.Commits.Count(), commits},
 		{"commits1PC", metrics.Commits1PC.Count(), commits1PC},
-		{"abandons", metrics.Abandons.Count(), abandons},
 		{"aborts", metrics.Aborts.Count(), aborts},
 		{"durations", metrics.Durations.TotalCount(),
 			commits + abandons + aborts},
@@ -1438,134 +1339,82 @@ func TestTxnOnePhaseCommit(t *testing.T) {
 	checkTxnMetrics(t, metrics, "commit 1PC txn", 1, 1 /* 1PC */, 0, 0, 0)
 }
 
-// createNonCancelableDB returns a client DB and a sender. The sender
-// will be used for every transaction sent through the DB, so use with
-// care. The point is that every invocation of TxnCoordSender.Send will
-// be supplied a context with Done()==nil. Note that the returned
-// database will use a factory with ridiculously short client timeout
-// and heartbeat interval settings to make tests fast.
-func createNonCancelableDB(db *client.DB) (*client.DB, *TxnCoordSender) {
-	// Create the single txn coord for this test.
-	tc := db.GetSender().(*TxnCoordSender)
-	tc.TxnCoordSenderFactory.heartbeatInterval = 2 * time.Millisecond
-	tc.TxnCoordSenderFactory.clientTimeout = 1 * time.Millisecond
+// !!!
+// // createNonCancelableDB returns a client DB and a sender. The sender
+// // will be used for every transaction sent through the DB, so use with
+// // care. The point is that every invocation of TxnCoordSender.Send will
+// // be supplied a context with Done()==nil. Note that the returned
+// // database will use a factory with ridiculously short client timeout
+// // and heartbeat interval settings to make tests fast.
+// func createNonCancelableDB(db *client.DB) (*client.DB, *TxnCoordSender) {
+//   // Create the single txn coord for this test.
+//   tc := db.GetSender().(*TxnCoordSender)
+//   tc.TxnCoordSenderFactory.heartbeatInterval = 2 * time.Millisecond
+//   tc.TxnCoordSenderFactory.clientTimeout = 1 * time.Millisecond
+//
+//   // client.Txn supplies a non-cancelable context, which makes the
+//   // transaction coordinator ignore timeout-based abandonment and use the
+//   // context's lifetime instead. In this test, we are testing timeout-based
+//   // abandonment, so we need to supply a non-cancelable context.
+//   var factory client.TxnSenderFactoryFunc = func(_ client.TxnType) client.TxnSender {
+//     return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+//       return tc.Send(context.Background(), ba)
+//     })
+//   }
+//   return client.NewDB(factory, tc.TxnCoordSenderFactory.clock), tc
+// }
 
-	// client.Txn supplies a non-cancelable context, which makes the
-	// transaction coordinator ignore timeout-based abandonment and use the
-	// context's lifetime instead. In this test, we are testing timeout-based
-	// abandonment, so we need to supply a non-cancelable context.
-	var factory client.TxnSenderFactoryFunc = func(_ client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			return tc.Send(context.Background(), ba)
-		})
-	}
-	return client.NewDB(factory, tc.TxnCoordSenderFactory.clock), tc
-}
-
-func TestTxnAbandonCount(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, metrics, cleanupFn := setupMetricsTest(t)
-	defer cleanupFn()
-	value := []byte("value")
-	manual := s.Manual
-
-	ctx := context.Background()
-
-	var count int
-	doneErr := errors.New("retry on abandoned successful; exiting")
-
-	db, tc := createNonCancelableDB(s.DB)
-
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		count++
-		if count == 2 {
-			return doneErr
-		}
-		key := []byte("key-abandon")
-
-		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-			return err
-		}
-
-		if err := txn.Put(ctx, key, value); err != nil {
-			return err
-		}
-
-		testutils.SucceedsSoon(t, func() error {
-			// Note that we must bump the clock before every attempt (not just once)
-			// because otherwise there is a race in which we bump, a heartbeat happens
-			// at the new timestamp, and the transaction never expires.
-			manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
-			err := checkTxnMetricsOnce(
-				t, metrics, "abandon txn", 0, 0, 1 /* abandons */, 0, 0,
-			)
-			if err == nil {
-				return nil
-			}
-			// There's another race here: if (*TxnCoordSender).heartbeat sees the expired txn, it will
-			// asynchronously call tryAsyncAbort, which may beat the parent heartbeat loop's stats taking.
-			// In that case, we see an aborted txn.
-			return checkTxnMetricsOnce(
-				t, metrics, "abort txn", 0, 0, 0, 1 /* aborts */, 0,
-			)
-		})
-
-		return nil
-	}); err != doneErr {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-// TestTxnReadAfterAbandon checks the fix for the condition in issue #4787:
-// after a transaction is abandoned we do a read as part of that transaction
-// which should fail.
-func TestTxnReadAfterAbandon(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, metrics, cleanupFn := setupMetricsTest(t)
-	manual := s.Manual
-	defer cleanupFn()
-
-	value := []byte("value")
-
-	var count int
-	doneErr := errors.New("retry on abandoned successful; exiting")
-	db, tc := createNonCancelableDB(s.DB)
-	err := db.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
-		count++
-		if count == 2 {
-			return doneErr
-		}
-		key := []byte("key-abandon")
-
-		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := txn.Put(ctx, key, value); err != nil {
-			t.Fatal(err)
-		}
-
-		testutils.SucceedsSoon(t, func() error {
-			// See #22762 for very similar code and an explanation.
-			manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
-			err := checkTxnMetricsOnce(t, metrics, "abandon txn", 0, 0, 1 /* abandons */, 0, 0)
-			if err == nil {
-				return nil
-			}
-			return checkTxnMetricsOnce(t, metrics, "abort txn", 0, 0, 0, 1 /* aborts */, 0)
-		})
-
-		_, err := txn.Get(ctx, key)
-		if !testutils.IsError(err, "txn aborted") {
-			t.Fatalf("unexpected error from Get on abandoned txn: %v", err)
-		}
-		return err // appease compiler
-	})
-
-	if err == nil {
-		t.Fatalf("abandoned txn didn't fail")
-	}
-}
+// !!!
+// // TestTxnReadAfterAbandon checks the fix for the condition in issue #4787:
+// // after a transaction is abandoned we do a read as part of that transaction
+// // which should fail.
+// func TestTxnReadAfterAbandon(t *testing.T) {
+//   defer leaktest.AfterTest(t)()
+//   s, metrics, cleanupFn := setupMetricsTest(t)
+//   manual := s.Manual
+//   defer cleanupFn()
+//
+//   value := []byte("value")
+//
+//   var count int
+//   doneErr := errors.New("retry on abandoned successful; exiting")
+//   db, tc := createNonCancelableDB(s.DB)
+//   err := db.Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
+//     count++
+//     if count == 2 {
+//       return doneErr
+//     }
+//     key := []byte("key-abandon")
+//
+//     if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
+//       t.Fatal(err)
+//     }
+//
+//     if err := txn.Put(ctx, key, value); err != nil {
+//       t.Fatal(err)
+//     }
+//
+//     testutils.SucceedsSoon(t, func() error {
+//       // See #22762 for very similar code and an explanation.
+//       manual.Increment(int64(tc.TxnCoordSenderFactory.clientTimeout + tc.TxnCoordSenderFactory.heartbeatInterval*2))
+//       err := checkTxnMetricsOnce(t, metrics, "abandon txn", 0, 0, 1 [> abandons <], 0, 0)
+//       if err == nil {
+//         return nil
+//       }
+//       return checkTxnMetricsOnce(t, metrics, "abort txn", 0, 0, 0, 1 [> aborts <], 0)
+//     })
+//
+//     _, err := txn.Get(ctx, key)
+//     if !testutils.IsError(err, "txn aborted") {
+//       t.Fatalf("unexpected error from Get on abandoned txn: %v", err)
+//     }
+//     return err // appease compiler
+//   })
+//
+//   if err == nil {
+//     t.Fatalf("abandoned txn didn't fail")
+//   }
+// }
 
 func TestTxnAbortCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
