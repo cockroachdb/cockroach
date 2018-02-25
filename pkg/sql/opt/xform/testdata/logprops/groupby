@@ -1,0 +1,30 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ ├── z float not null
+ └── INDEX primary
+      └── x int not null
+
+build
+SELECT a.y, SUM(a.z), a.x, False FROM a GROUP BY a.x, a.y
+----
+project
+ ├── columns: a.y:int:null:2 column4:float:null:4 a.x:int:1 column5:bool:null:5
+ ├── group-by
+ │    ├── columns: a.x:int:1 a.y:int:null:2 column4:float:null:4
+ │    ├── scan
+ │    │    └── columns: a.x:int:1 a.y:int:null:2 a.z:float:3
+ │    ├── groupings
+ │    │    ├── variable: a.x [type=int]
+ │    │    └── variable: a.y [type=int]
+ │    └── aggregations
+ │         └── function: sum [type=float]
+ │              └── variable: a.z [type=float]
+ └── projections
+      ├── variable: a.y [type=int]
+      ├── variable: column4 [type=float]
+      ├── variable: a.x [type=int]
+      └── false [type=bool]

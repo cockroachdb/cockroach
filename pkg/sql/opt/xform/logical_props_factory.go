@@ -163,9 +163,14 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	// Output columns are the union of columns from grouping and aggregate
 	// projection lists.
 	groupings := ev.Child(1)
-	props.Relational.OutputCols = opt.ColListToSet(*groupings.Private().(*opt.ColList))
+	groupingsCols := opt.ColListToSet(*groupings.Private().(*opt.ColList))
+	props.Relational.OutputCols = groupingsCols
 	aggs := ev.Child(2)
 	props.Relational.OutputCols.UnionWith(opt.ColListToSet(*aggs.Private().(*opt.ColList)))
+
+	// Propagate not null setting from grouping columns.
+	props.Relational.NotNullCols = ev.Child(0).Logical().Relational.NotNullCols.Copy()
+	props.Relational.NotNullCols.IntersectionWith(groupingsCols)
 
 	return props
 }

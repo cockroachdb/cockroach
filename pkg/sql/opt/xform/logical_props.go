@@ -60,35 +60,58 @@ type ScalarProps struct {
 	Type types.T
 }
 
-func (p *LogicalProps) format(mem *memo, tp treeprinter.Node) {
+func (p *LogicalProps) format(md *opt.Metadata, tp treeprinter.Node) {
 	if p.Relational != nil {
-		p.formatOutputCols(mem, tp)
+		p.formatOutputCols(md, tp)
 	} else {
 		tp.Child(fmt.Sprintf("type: %s", p.Scalar.Type))
 	}
 }
 
-func (p *LogicalProps) formatOutputCols(mem *memo, tp treeprinter.Node) {
-	if !p.Relational.OutputCols.Empty() {
+func (p *LogicalProps) formatOutputCols(md *opt.Metadata, tp treeprinter.Node) {
+	p.formatColSet("columns:", p.Relational.OutputCols, md, tp)
+}
+
+func (p *LogicalProps) formatColSet(
+	heading string, colSet opt.ColSet, md *opt.Metadata, tp treeprinter.Node,
+) {
+	if !colSet.Empty() {
 		var buf bytes.Buffer
-		buf.WriteString("columns:")
-		p.Relational.OutputCols.ForEach(func(i int) {
-			p.formatCol(mem, &buf, opt.ColumnIndex(i))
+		buf.WriteString(heading)
+		colSet.ForEach(func(i int) {
+			p.formatCol("", opt.ColumnIndex(i), md, &buf)
 		})
 		tp.Child(buf.String())
 	}
 }
 
-func (p *LogicalProps) formatCol(mem *memo, buf *bytes.Buffer, colIndex opt.ColumnIndex) {
-	label := mem.metadata.ColumnLabel(colIndex)
-	typ := mem.metadata.ColumnType(colIndex)
+func (p *LogicalProps) formatColList(
+	heading string, colList opt.ColList, md *opt.Metadata, tp treeprinter.Node,
+) {
+	if len(colList) > 0 {
+		var buf bytes.Buffer
+		buf.WriteString(heading)
+		for _, col := range colList {
+			p.formatCol("", col, md, &buf)
+		}
+		tp.Child(buf.String())
+	}
+}
+
+func (p *LogicalProps) formatCol(
+	label string, index opt.ColumnIndex, md *opt.Metadata, buf *bytes.Buffer,
+) {
+	if label == "" {
+		label = md.ColumnLabel(index)
+	}
+	typ := md.ColumnType(index)
 	buf.WriteByte(' ')
 	buf.WriteString(label)
 	buf.WriteByte(':')
 	buf.WriteString(typ.String())
 	buf.WriteByte(':')
-	if !p.Relational.NotNullCols.Contains(int(colIndex)) {
+	if !p.Relational.NotNullCols.Contains(int(index)) {
 		buf.WriteString("null:")
 	}
-	fmt.Fprintf(buf, "%d", colIndex)
+	fmt.Fprintf(buf, "%d", index)
 }

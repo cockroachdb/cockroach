@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -31,9 +30,17 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/comp"
 //   ...
 func TestRules(t *testing.T) {
-	paths, err := filepath.Glob("testdata/rules/*")
+	runDataDrivenTest(t, "testdata/rules/*")
+}
+
+// runDataDrivenTest
+func runDataDrivenTest(t *testing.T, testdataGlob string) {
+	paths, err := filepath.Glob(testdataGlob)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatalf("no testfiles found matching: %s", testdataGlob)
 	}
 
 	for _, path := range paths {
@@ -41,29 +48,25 @@ func TestRules(t *testing.T) {
 			catalog := testutils.NewTestCatalog()
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+				if d.Cmd == "exec-ddl" {
+					return testutils.ExecuteTestDDL(t, d.Input, catalog)
+				}
+
 				stmt, err := parser.ParseOne(d.Input)
 				if err != nil {
 					d.Fatalf(t, "%v", err)
 				}
 
 				switch d.Cmd {
-				case "exec-ddl":
-					if stmt.StatementType() != tree.DDL {
-						d.Fatalf(t, "statement type is not DDL: %v", stmt.StatementType())
+				case "build", "opt":
+					// build command disables optimizations, opt enables them.
+					var steps OptimizeSteps
+					if d.Cmd == "build" {
+						steps = OptimizeNone
+					} else {
+						steps = OptimizeAll
 					}
-
-					switch stmt := stmt.(type) {
-					case *tree.CreateTable:
-						tbl := catalog.CreateTable(stmt)
-						return tbl.String()
-
-					default:
-						d.Fatalf(t, "expected CREATE TABLE statement but found: %v", stmt)
-						return ""
-					}
-
-				case "opt":
-					o := NewOptimizer(catalog, OptimizeAll)
+					o := NewOptimizer(catalog, steps)
 					b := optbuilder.New(context.Background(), o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {

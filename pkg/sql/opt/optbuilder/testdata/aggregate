@@ -115,9 +115,9 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY k
 ----
 project
- ├── columns: column5:int:null:5 kv.k:int:null:1
+ ├── columns: column5:int:null:5 kv.k:int:1
  ├── group-by
- │    ├── columns: kv.k:int:null:1 column5:int:null:5
+ │    ├── columns: kv.k:int:1 column5:int:null:5
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
@@ -133,9 +133,9 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY 2
 ----
 project
- ├── columns: column5:int:null:5 kv.k:int:null:1
+ ├── columns: column5:int:null:5 kv.k:int:1
  ├── group-by
- │    ├── columns: kv.k:int:null:1 column5:int:null:5
+ │    ├── columns: kv.k:int:1 column5:int:null:5
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
@@ -376,7 +376,7 @@ SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
 project
  ├── columns: column5:int:null:5 column6:int:null:6
  ├── group-by
- │    ├── columns: kv.k:int:null:1 kv.v:int:null:2 column5:int:null:5
+ │    ├── columns: kv.k:int:1 kv.v:int:null:2 column5:int:null:5
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
@@ -956,7 +956,7 @@ SELECT 1 FROM t.kv GROUP BY kv.*;
 project
  ├── columns: column5:int:null:5
  ├── group-by
- │    ├── columns: kv.k:int:null:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings
@@ -1044,7 +1044,7 @@ SELECT (b, a) FROM t.ab GROUP BY (b, a)
 project
  ├── columns: column3:tuple{int, int}:null:3
  ├── group-by
- │    ├── columns: ab.a:int:null:1 ab.b:int:null:2
+ │    ├── columns: ab.a:int:1 ab.b:int:null:2
  │    ├── scan
  │    │    └── columns: ab.a:int:1 ab.b:int:null:2
  │    ├── groupings
@@ -1063,7 +1063,7 @@ SELECT MIN(y), (b, a)
 project
  ├── columns: column6:string:null:6 column7:tuple{int, int}:null:7
  ├── group-by
- │    ├── columns: ab.a:int:null:1 ab.b:int:null:2 xy.x:string:null:3 column6:string:null:6
+ │    ├── columns: ab.a:int:1 ab.b:int:null:2 xy.x:string:null:3 column6:string:null:6
  │    ├── inner-join
  │    │    ├── columns: ab.a:int:1 ab.b:int:null:2 xy.x:string:null:3 xy.y:string:null:4 xy.rowid:int:5
  │    │    ├── scan
@@ -1264,7 +1264,7 @@ SELECT CONCAT(CONCAT(s, a), a) FROM kv, abc GROUP BY CONCAT(s, a), a
 project
  ├── columns: column10:string:null:10
  ├── group-by
- │    ├── columns: abc.a:string:null:5 column9:string:null:9
+ │    ├── columns: abc.a:string:5 column9:string:null:9
  │    ├── inner-join
  │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
  │    │    ├── scan
@@ -1504,7 +1504,7 @@ SELECT +k * (-w) FROM kv GROUP BY k, w
 project
  ├── columns: column5:int:null:5
  ├── group-by
- │    ├── columns: kv.k:int:null:1 kv.w:int:null:3
+ │    ├── columns: kv.k:int:1 kv.w:int:null:3
  │    ├── scan
  │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    ├── groupings

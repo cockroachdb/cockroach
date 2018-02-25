@@ -226,7 +226,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 
 	fmt.Fprintf(&buf, "%v", ev.op)
 
-	logicalProps := ev.Logical()
+	logProps := ev.Logical()
 
 	tp = tp.Child(buf.String())
 
@@ -237,31 +237,21 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	case opt.ProjectOp:
 		// Get the list of columns from the ProjectionsOp, which has the correct
 		// order.
-		projections := ev.Child(1)
-		formatColList(ev.mem, logicalProps, *projections.Private().(*opt.ColList), tp)
+		colList := *ev.Child(1).Private().(*opt.ColList)
+		logProps.formatColList("columns:", colList, ev.Metadata(), tp)
 
 	case opt.ValuesOp:
-		formatColList(ev.mem, logicalProps, *ev.Private().(*opt.ColList), tp)
+		colList := *ev.Private().(*opt.ColList)
+		logProps.formatColList("columns:", colList, ev.Metadata(), tp)
 
 	default:
 		// Fall back to writing output columns in column index order, with best
 		// guess label.
-		logicalProps.formatOutputCols(ev.mem, tp)
+		logProps.formatOutputCols(ev.Metadata(), tp)
 	}
 
 	for i := 0; i < ev.ChildCount(); i++ {
 		child := ev.Child(i)
 		child.format(tp)
-	}
-}
-
-func formatColList(mem *memo, logicalProps *LogicalProps, cols opt.ColList, tp treeprinter.Node) {
-	if len(cols) > 0 {
-		var buf bytes.Buffer
-		buf.WriteString("columns:")
-		for _, col := range cols {
-			logicalProps.formatCol(mem, &buf, col)
-		}
-		tp.Child(buf.String())
 	}
 }
