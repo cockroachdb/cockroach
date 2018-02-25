@@ -914,10 +914,10 @@ func TestDumpSequence(t *testing.T) {
 
 	const create = `
 	CREATE DATABASE d;
-	CREATE SEQUENCE d.s1; -- test one sequence right at its minval
-	CREATE SEQUENCE d.s2; -- test another that's been incremented
+	CREATE SEQUENCE d.s1 INCREMENT 123; -- test one sequence right at its minval
+	CREATE SEQUENCE d.s2 INCREMENT 456; -- test another that's been incremented
 	SELECT nextval('d.s2'); -- 1
-	SELECT nextval('d.s2'); -- 2
+	SELECT nextval('d.s2'); -- 457
 `
 	if createOut, err := c.RunWithCaptureArgs([]string{"sql", "-e", create}); err != nil {
 		t.Fatal(err)
@@ -927,13 +927,13 @@ func TestDumpSequence(t *testing.T) {
 
 	// Dump the database.
 
-	const expectSQL = `CREATE SEQUENCE s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+	const expectSQL = `CREATE SEQUENCE s1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 123 START 1;
 
-CREATE SEQUENCE s2 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+CREATE SEQUENCE s2 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 456 START 1;
 
 SELECT setval('s1', 1, false);
 
-SELECT setval('s2', 3, false);
+SELECT setval('s2', 913, false);
 `
 
 	dumpOut, err := c.RunWithCaptureArgs([]string{"dump", "d"})
@@ -1003,7 +1003,7 @@ SELECT setval('s2', 3, false);
 	}
 	incOutValueS2 := removeFirstLine(incOutS2)
 	const expectedOutValueS2 = `nextval
-3
+913
 `
 	if incOutValueS2 != expectedOutValueS2 {
 		t.Fatalf("expected: %s\ngot: %s", expectedOutValueS2, incOutValueS2)

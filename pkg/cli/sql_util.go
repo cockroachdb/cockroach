@@ -359,6 +359,19 @@ func (c *sqlConn) QueryRow(query string, args []driver.Value) ([]driver.Value, e
 	defer func() { _ = rows.Close() }()
 	vals := make([]driver.Value, len(rows.Columns()))
 	err = rows.Next(vals)
+
+	// Assert that there is just one row.
+	if err == nil {
+		nextVals := make([]driver.Value, len(rows.Columns()))
+		nextErr := rows.Next(nextVals)
+		if nextErr != io.EOF {
+			if nextErr != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("programming error: %q: expected just 1 row of result, got more", query)
+		}
+	}
+
 	return vals, err
 }
 

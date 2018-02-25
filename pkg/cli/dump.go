@@ -395,8 +395,19 @@ func dumpSequenceData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMet
 	seqVal := vals[0].(int64)
 
 	// Get sequence increment.
+	// TODO(knz,vilterp): This could use a shortcut via crdb_internal.
 	vals2, err := conn.QueryRow(fmt.Sprintf(
-		"SELECT seqincrement FROM pg_catalog.pg_sequence AS OF SYSTEM TIME %s",
+		`SELECT inc
+       FROM (SELECT s.seqincrement AS inc
+               FROM %[1]s.pg_catalog.pg_namespace n, %[1]s.pg_catalog.pg_class c, %[1]s.pg_catalog.pg_sequence s
+              WHERE n.nspname = %[2]s
+                AND n.oid = c.relnamespace
+                AND c.relname = %[3]s
+                AND c.oid = s.seqrelid)
+     AS OF SYSTEM TIME %[4]s`,
+		&bmd.name.CatalogName,
+		lex.EscapeSQLString(bmd.name.Schema()),
+		lex.EscapeSQLString(bmd.name.Table()),
 		lex.EscapeSQLString(clusterTS),
 	), nil)
 	if err != nil {
