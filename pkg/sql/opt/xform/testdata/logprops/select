@@ -1,0 +1,52 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+TABLE b
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM a WHERE x=1
+----
+select
+ ├── columns: a.x:int:1 a.y:int:null:2
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── eq [type=bool]
+      ├── variable: a.x [type=int]
+      └── const: 1 [type=int]
+
+build
+SELECT * FROM a,b WHERE a.x=b.x
+----
+project
+ ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4
+ ├── select
+ │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    ├── inner-join
+ │    │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    │    ├── scan
+ │    │    │    └── columns: a.x:int:1 a.y:int:null:2
+ │    │    ├── scan
+ │    │    │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    │    └── true [type=bool]
+ │    └── eq [type=bool]
+ │         ├── variable: a.x [type=int]
+ │         └── variable: b.x [type=int]
+ └── projections
+      ├── variable: a.x [type=int]
+      ├── variable: a.y [type=int]
+      ├── variable: b.x [type=int]
+      └── variable: b.z [type=int]

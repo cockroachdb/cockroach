@@ -51,6 +51,8 @@ CREATE TABLE t.c (
     PRIMARY KEY (x, y DESC),
     UNIQUE INDEX myindex (x DESC, z) STORING (i),
     INDEX (x) STORING(i),
+    INDEX (y) STORING(x),
+    UNIQUE INDEX (y) STORING(i, x),
     INDEX (z)
 )
 ----
@@ -74,6 +76,13 @@ TABLE c
  ├── INDEX c_x_idx
  │    ├── x string not null
  │    ├── y decimal not null
+ │    └── i int not null (storing)
+ ├── INDEX c_y_idx
+ │    ├── y decimal not null
+ │    └── x string not null
+ ├── INDEX c_y_key
+ │    ├── y decimal not null
+ │    ├── x string not null (storing)
  │    └── i int not null (storing)
  └── INDEX c_z_idx
       ├── z float

@@ -17,7 +17,6 @@ package testutils
 import (
 	"context"
 
-	"bytes"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
@@ -118,7 +117,11 @@ func (tt *TestTable) FindOrdinal(name string) int {
 type TestIndex struct {
 	Name    string
 	Columns []optbase.IndexColumn
-	Storing int
+
+	// Unique is the number of columns that make up the unique key for the
+	// index. The columns are always a non-empty prefix of the Columns
+	// collection, so Unique is > 0 and < len(Columns). Note that
+	Unique int
 }
 
 // IdxName is part of the optbase.Index interface.
@@ -133,8 +136,7 @@ func (ti *TestIndex) ColumnCount() int {
 
 // UniqueColumnCount is part of the optbase.Index interface.
 func (ti *TestIndex) UniqueColumnCount() int {
-	// Stored columns (explicit or implicit) are not part of the unique key.
-	return len(ti.Columns) - ti.Storing
+	return ti.Unique
 }
 
 // Column is part of the optbase.Index interface.
@@ -151,31 +153,6 @@ type TestColumn struct {
 }
 
 var _ optbase.Column = &TestColumn{}
-
-func (tc *TestColumn) String() string {
-	var buf bytes.Buffer
-	tc.Format(&buf)
-	return buf.String()
-}
-
-// Format performs pretty-printing of the TestColumn into a bytes buffer.
-func (tc *TestColumn) Format(buf *bytes.Buffer) {
-	buf.WriteString(tc.Name)
-	buf.WriteByte(' ')
-	buf.WriteString(tc.Type.String())
-
-	if tc.Nullable {
-		buf.WriteString(" NULL")
-	} else {
-		buf.WriteString(" NOT NULL")
-	}
-
-	if tc.Hidden {
-		buf.WriteString(" (hidden)")
-	}
-
-	buf.WriteString("\n")
-}
 
 // IsNullable is part of the optbase.Column interface.
 func (tc *TestColumn) IsNullable() bool {

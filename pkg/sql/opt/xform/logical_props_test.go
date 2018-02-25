@@ -15,64 +15,20 @@
 package xform
 
 import (
-	"bytes"
-	"context"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func TestLogicalProps(t *testing.T) {
-	catalog := testutils.NewTestCatalog()
-
-	datadriven.RunTest(t, "testdata/logical_props", func(d *datadriven.TestData) string {
-		stmt, err := parser.ParseOne(d.Input)
-		if err != nil {
-			d.Fatalf(t, "%v", err)
-		}
-
-		switch d.Cmd {
-		case "exec-ddl":
-			if stmt.StatementType() != tree.DDL {
-				d.Fatalf(t, "statement type is not DDL: %v", stmt.StatementType())
-			}
-
-			switch stmt := stmt.(type) {
-			case *tree.CreateTable:
-				tbl := catalog.CreateTable(stmt)
-				return tbl.String()
-
-			default:
-				d.Fatalf(t, "expected CREATE TABLE statement but found: %v", stmt)
-				return ""
-			}
-
-		case "props":
-			f := newFactory(createLogPropsCatalog(), 0)
-			b := optbuilder.New(context.Background(), f, stmt)
-			root, _, err := b.Build()
-			if err != nil {
-				d.Fatalf(t, "%v", err)
-			}
-			return formatProps(f, root)
-
-		default:
-			d.Fatalf(t, "unsupported command: %s", d.Cmd)
-			return ""
-		}
-	})
+	runDataDrivenTest(t, "testdata/logprops/*")
 }
 
+// Test joins that cannot yet be tested using SQL syntax + optimizer.
 func TestLogicalJoinProps(t *testing.T) {
-	cat := createLogPropsCatalog()
+	cat := createLogPropsCatalog(t)
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 	b := f.Metadata().AddTable(cat.Table("b"))
@@ -90,13 +46,9 @@ func TestLogicalJoinProps(t *testing.T) {
 		testLogicalProps(t, f, joinGroup, expected)
 	}
 
-	joinFunc(opt.InnerJoinOp, "columns: a.x:int:1 a.y:int:null:2 b.x:int:3 b.z:int:4\n")
 	joinFunc(opt.InnerJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2 b.x:int:3 b.z:int:4\n")
-	joinFunc(opt.LeftJoinOp, "columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4\n")
 	joinFunc(opt.LeftJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4\n")
-	joinFunc(opt.RightJoinOp, "columns: a.x:int:null:1 a.y:int:null:2 b.x:int:3 b.z:int:4\n")
 	joinFunc(opt.RightJoinApplyOp, "columns: a.x:int:null:1 a.y:int:null:2 b.x:int:3 b.z:int:4\n")
-	joinFunc(opt.FullJoinOp, "columns: a.x:int:null:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4\n")
 	joinFunc(opt.FullJoinApplyOp, "columns: a.x:int:null:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4\n")
 	joinFunc(opt.SemiJoinOp, "columns: a.x:int:1 a.y:int:null:2\n")
 	joinFunc(opt.SemiJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2\n")
@@ -105,7 +57,7 @@ func TestLogicalJoinProps(t *testing.T) {
 }
 
 func TestLogicalSetProps(t *testing.T) {
-	cat := createLogPropsCatalog()
+	cat := createLogPropsCatalog(t)
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 	b := f.Metadata().AddTable(cat.Table("b"))
@@ -129,7 +81,7 @@ func TestLogicalSetProps(t *testing.T) {
 }
 
 func TestLogicalValuesProps(t *testing.T) {
-	cat := createLogPropsCatalog()
+	cat := createLogPropsCatalog(t)
 	f := newFactory(cat, 0)
 	a := f.Metadata().AddTable(cat.Table("a"))
 
@@ -148,7 +100,7 @@ func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected stri
 	t.Helper()
 
 	tp := treeprinter.New()
-	f.mem.lookupGroup(group).logical.format(f.mem, tp)
+	f.mem.lookupGroup(group).logical.format(f.Metadata(), tp)
 	actual := tp.String()
 
 	if actual != expected {
@@ -156,46 +108,9 @@ func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected stri
 	}
 }
 
-func formatProps(f *factory, group opt.GroupID) string {
-	tp := treeprinter.New()
-	md := f.Metadata()
-	logical := f.mem.lookupGroup(group).logical
-
-	if logical.Relational != nil {
-		nd := tp.Child("relational")
-		nd.Child(fmt.Sprintf("columns:%s", formatCols(md, logical.Relational.OutputCols)))
-		nd.Child(fmt.Sprintf("not null:%s", formatCols(md, logical.Relational.NotNullCols)))
-	}
-
-	return tp.String()
-}
-
-func formatCols(md *opt.Metadata, cols opt.ColSet) string {
-	var buf bytes.Buffer
-	cols.ForEach(func(i int) {
-		colIndex := opt.ColumnIndex(i)
-		label := md.ColumnLabel(colIndex)
-		fmt.Fprintf(&buf, " %s:%d", label, colIndex)
-	})
-	return buf.String()
-}
-
-func createLogPropsCatalog() *testutils.TestCatalog {
+func createLogPropsCatalog(t *testing.T) *testutils.TestCatalog {
 	cat := testutils.NewTestCatalog()
-
-	// CREATE TABLE a (x INT PRIMARY KEY, y INT)
-	a := &testutils.TestTable{Name: "a"}
-	x := &testutils.TestColumn{Name: "x", Type: types.Int}
-	y := &testutils.TestColumn{Name: "y", Type: types.Int, Nullable: true}
-	a.Columns = append(a.Columns, x, y)
-	cat.AddTable(a)
-
-	// CREATE TABLE b (x INT, z INT NOT NULL, FOREIGN KEY (x) REFERENCES a (x))
-	b := &testutils.TestTable{Name: "b"}
-	x = &testutils.TestColumn{Name: "x", Type: types.Int}
-	y = &testutils.TestColumn{Name: "z", Type: types.Int}
-	b.Columns = append(b.Columns, x, y)
-	cat.AddTable(b)
-
+	testutils.ExecuteTestDDL(t, "CREATE TABLE a (x INT PRIMARY KEY, y INT)", cat)
+	testutils.ExecuteTestDDL(t, "CREATE TABLE b (x INT PRIMARY KEY, z INT NOT NULL)", cat)
 	return cat
 }

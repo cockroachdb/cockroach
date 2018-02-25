@@ -8,14 +8,13 @@ TABLE a
       └── x int not null
 
 exec-ddl
-CREATE TABLE b (x INT, z INT NOT NULL, FOREIGN KEY (x) REFERENCES a (x))
+CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL)
 ----
 TABLE b
- ├── x int
- ├── z int not null
- ├── rowid int not null (hidden)
+ ├── x string not null
+ ├── z decimal not null
  └── INDEX primary
-      └── rowid int not null (hidden)
+      └── x string not null
 
 # Variable
 build
