@@ -197,7 +197,7 @@ func (b *Builder) buildPhysicalProps(scope *scope) *opt.PhysicalProps {
 		col := &scope.cols[i]
 		presentation[i] = opt.LabeledColumn{Label: string(col.name), Index: col.index}
 	}
-	return &opt.PhysicalProps{Presentation: presentation}
+	return &opt.PhysicalProps{Presentation: presentation, Ordering: scope.ordering}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -523,10 +523,10 @@ func (b *Builder) buildSelect(
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
 	case *tree.ParenSelect:
-		return b.buildSelect(t.Select, inScope)
+		out, outScope = b.buildSelect(t.Select, inScope)
 
 	case *tree.SelectClause:
-		return b.buildSelectClause(stmt, inScope)
+		out, outScope = b.buildSelectClause(stmt, inScope)
 
 	// TODO(rytaft): Add support for union clause and values clause.
 
@@ -534,9 +534,18 @@ func (b *Builder) buildSelect(
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
 	}
 
-	// TODO(rytaft): Add support for ORDER BY expression.
+	// TODO(rytaft): Add full support for ORDER BY expression. This simple
+	// version only supports ordering by projected columns. It does not support
+	// order by expressions, or ordering by FROM columns. Also, take care to
+	// correctly handle cases like `SELECT a FROM t ORDER BY c`. The ordered
+	// property can only contain refs to output columns, so the `c` column
+	// must be retained in the projection (and presentation property then omits
+	// it.
+	outScope.ordering = b.buildOrderBy(stmt.OrderBy, outScope)
+
 	// TODO(rytaft): Support FILTER expression.
 	// TODO(peter): stmt.Limit
+	return out, outScope
 }
 
 // buildSelectClause builds a set of memo groups that represent the given
@@ -566,11 +575,7 @@ func (b *Builder) buildSelectClause(
 		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 	}
 
-	if stmt.OrderBy != nil {
-		// TODO(rytaft): Build Order By. Order By relies on the existence of
-		// ordering physical properties.
-		panic(errorf("ORDER BY not yet supported: %s", stmt.String()))
-	}
+	// TODO(rytaft): Handle Order By that can depend on from columns.
 
 	// Don't add an unnecessary "pass through" project expression.
 	if !projectionsScope.hasSameColumns(outScope) {
@@ -1319,6 +1324,36 @@ func (b *Builder) constructList(
 	}
 
 	panic(fmt.Sprintf("unexpected operator: %s", op))
+}
+
+// buildOrderBy builds an Ordering physical property from the ORDER BY clause.
+// ORDER BY is not a relational expression, but instead a required physical
+// property on the output. The Ordering property returned by buildOrderBy is
+// set on the scope and later becomes part of the required physical properties
+// returned by Build.
+// TODO(rytaft): Add support for ORDER BY clause that uses more than simple
+// column references.
+func (b *Builder) buildOrderBy(orderBy tree.OrderBy, inScope *scope) opt.Ordering {
+	if orderBy == nil {
+		return nil
+	}
+
+	ordering := make(opt.Ordering, 0, len(orderBy))
+
+	for i, order := range orderBy {
+		props, ok := inScope.resolveType(order.Expr, types.Any).(*columnProps)
+		if !ok {
+			panic(errorf("ORDER BY only supports simple column references at this time"))
+		}
+
+		index := props.index
+		if orderBy[i].Direction == tree.Descending {
+			index = -index
+		}
+		ordering = append(ordering, index)
+	}
+
+	return ordering
 }
 
 // buildDistinct builds a set of memo groups that represent a DISTINCT
