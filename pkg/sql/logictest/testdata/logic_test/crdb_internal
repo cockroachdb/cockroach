@@ -3,7 +3,7 @@
 query error database "crdb_internal" does not exist
 ALTER DATABASE crdb_internal RENAME TO not_crdb_internal
 
-statement error unsupported schema specification
+statement error schema cannot be modified: "crdb_internal"
 CREATE TABLE crdb_internal.t (x INT)
 
 query error database "crdb_internal" does not exist

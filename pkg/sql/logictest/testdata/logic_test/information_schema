@@ -5,7 +5,7 @@
 query error database "information_schema" does not exist
 ALTER DATABASE information_schema RENAME TO not_information_schema
 
-statement error unsupported schema specification
+statement error schema cannot be modified: "information_schema"
 CREATE TABLE information_schema.t (x INT)
 
 query error database "information_schema" does not exist
