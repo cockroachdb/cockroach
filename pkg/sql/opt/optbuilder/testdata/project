@@ -1,17 +1,21 @@
 exec-ddl
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
 ----
-table a
-  x int NOT NULL
-  y float NULL
+TABLE a
+ ├── x int not null
+ ├── y float
+ └── INDEX primary
+      └── x int not null
 
 exec-ddl
 CREATE TABLE t.b (x INT, y FLOAT)
 ----
-table b
-  x int NULL
-  y float NULL
-  rowid int NOT NULL (hidden)
+TABLE b
+ ├── x int
+ ├── y float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT 5
@@ -184,10 +188,12 @@ project
 exec-ddl
 CREATE TABLE c (x INT, y FLOAT)
 ----
-table c
-  x int NULL
-  y float NULL
-  rowid int NOT NULL (hidden)
+TABLE c
+ ├── x int
+ ├── y float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 build
 SELECT rowid FROM b, c
