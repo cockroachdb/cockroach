@@ -16,6 +16,7 @@ package xform
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -31,6 +32,14 @@ import (
 //   ...
 func TestRules(t *testing.T) {
 	runDataDrivenTest(t, "testdata/rules/*")
+}
+
+// PhysProps files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalProps/ordering"
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalProps/presentation"
+//   ...
+func TestPhysicalProps(t *testing.T) {
+	runDataDrivenTest(t, "testdata/physprops/*")
 }
 
 // runDataDrivenTest
@@ -58,7 +67,7 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 				}
 
 				switch d.Cmd {
-				case "build", "opt":
+				case "build", "opt", "memo":
 					// build command disables optimizations, opt enables them.
 					var steps OptimizeSteps
 					if d.Cmd == "build" {
@@ -73,6 +82,10 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 						d.Fatalf(t, "%v", err)
 					}
 					exprView := o.Optimize(root, props)
+
+					if d.Cmd == "memo" {
+						return fmt.Sprintf("[%d: \"%s\"]\n%s", root, props.String(), o.mem.String())
+					}
 					return exprView.String()
 
 				default:

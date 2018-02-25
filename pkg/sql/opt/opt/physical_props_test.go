@@ -46,6 +46,31 @@ func TestPhysicalProps(t *testing.T) {
 	if presentation.Provides(Presentation{}) {
 		t.Error("presentation should not provide the empty presentation")
 	}
+
+	// Add Ordering props.
+	ordering := Ordering{ColumnIndex(1), ColumnIndex(5)}
+	props.Ordering = ordering
+	testPhysicalProps(t, props, "p:a:1,b:2 o:+1,+5")
+
+	if !ordering.Defined() {
+		t.Error("ordering should be defined")
+	}
+
+	if !ordering.Provides(ordering) {
+		t.Error("ordering should provide itself")
+	}
+
+	if !ordering.Provides(Ordering{ColumnIndex(1)}) {
+		t.Error("ordering should provide the prefix ordering")
+	}
+
+	if (Ordering{}).Provides(ordering) {
+		t.Error("empty ordering should not provide ordering")
+	}
+
+	if !ordering.Provides(Ordering{}) {
+		t.Error("ordering should provide the empty ordering")
+	}
 }
 
 func testPhysicalProps(t *testing.T, physProps *PhysicalProps, expected string) {
