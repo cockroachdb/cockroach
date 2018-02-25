@@ -281,7 +281,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &s.nodeIDContainer
-	s.db = client.NewDBWithContext(s.tcsFactory, s.clock, dbCtx)
+	s.db = client.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
 
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
@@ -453,7 +453,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Settings:       st,
 		DB:             s.db,
 		Executor:       internalExecutor,
-		FlowDB:         client.NewDB(s.tcsFactory, s.clock),
+		FlowDB:         client.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
 		NodeID:         &s.nodeIDContainer,

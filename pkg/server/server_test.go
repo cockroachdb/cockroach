@@ -670,13 +670,18 @@ func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
 		}
 		break
 	}
-	if _, err := nodeLiveness.SetDecommissioning(context.Background(), ts.nodeIDContainer.Get(), true); err != nil {
+	ctx := context.Background()
+	log.Infof(ctx, "test starting decomissioning")
+	var err error
+	if _, err = nodeLiveness.SetDecommissioning(
+		ctx, ts.nodeIDContainer.Get(), true, /* decomission */
+	); err != nil {
 		t.Fatal(err)
 	}
 
 	// Node should realize it is decommissioning after next heartbeat update.
 	testutils.SucceedsSoon(t, func() error {
-		nodeLiveness.PauseHeartbeat(false) // trigger immediate heartbeat
+		nodeLiveness.PauseHeartbeat(false /* pause */) // trigger immediate heartbeat
 		if liveness, err := nodeLiveness.Self(); err != nil {
 			// Record must exist at this point, so any error is fatal now.
 			t.Fatal(err)
