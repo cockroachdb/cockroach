@@ -12,10 +12,19 @@ CREATE TABLE t.xyz (
   FAMILY (z)
 )
 ----
-table xyz
-  x int NOT NULL
-  y int NULL
-  z float NULL
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z float
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX xy
+ │    ├── x int not null
+ │    └── y int
+ └── INDEX zyx
+      ├── z float
+      ├── y int
+      └── x int not null
 
 build
 SELECT y, z FROM t.xyz

@@ -1,17 +1,21 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-table a
-  x int NOT NULL
-  y int NULL
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
 
 exec-ddl
 CREATE TABLE b (x INT, z INT NOT NULL, FOREIGN KEY (x) REFERENCES a (x))
 ----
-table b
-  x int NULL
-  z int NOT NULL
-  rowid int NOT NULL (hidden)
+TABLE b
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
 
 props
 SELECT * FROM a
