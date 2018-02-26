@@ -162,23 +162,38 @@ func (jr *joinReader) getOutputTypes() []sqlbase.ColumnType {
 // The rows that will be non-empty when fetched from the row fetcher. Used so
 // extra information doesn't need to be sent over the wire.
 func (jr *joinReader) rowFetcherColumns() util.FastIntSet {
+	// Collect the columns needed for the output as well as for evaluating the
+	// on condition.
+	neededColIdxs := jr.out.neededColumns()
+	for _, v := range jr.onCond.vars.GetIndexedVars() {
+		if v.Used {
+			neededColIdxs.Add(v.Idx)
+		}
+	}
+
+	// Choose the columns from the right side.
 	offset := 0
 	if jr.isLookupJoin() {
 		offset = len(jr.input.OutputTypes())
 	}
-	neededColIdxs := jr.out.neededColumns()
-	neededColIdxs = neededColIdxs.Shift(-1 * offset)
-	leftCols := util.MakeFastIntSet()
-	leftCols.AddRange(0, len(jr.desc.Columns)-1)
+	rightCols := util.MakeFastIntSet()
+	rightCols.AddRange(offset, offset+len(jr.desc.Columns)-1)
+	neededColIdxs = neededColIdxs.Intersection(rightCols)
 
-	neededColIdxs = neededColIdxs.Intersection(leftCols)
+	// Shift the right columns down so the indexes are with respect to the right
+	// side.
+	neededColIdxs = neededColIdxs.Shift(-1 * offset)
 
 	neededCols := util.MakeFastIntSet()
 	if jr.indexMap != nil {
+		// If there is an index map, map back the column indexes to the row they
+		// represent.
 		neededColIdxs.ForEach(func(idx int) {
 			neededCols.Add(int(jr.indexMap[idx]))
 		})
 	} else {
+		// If no indexMap is present, the columnIDs are the same as the column
+		// indexes.
 		neededCols = neededColIdxs
 	}
 
