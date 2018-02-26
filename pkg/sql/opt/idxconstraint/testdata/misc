@@ -233,3 +233,10 @@ index-constraints vars=(int, int) index=(@1, @2)
 (@1,@2) IN ((1, 2)) AND @1 = 1
 ----
 [/1/2 - /1/2]
+
+# Function call.
+index-constraints vars=(string) index=(@1)
+@1 > 'a' AND length(@1) = 2
+----
+[/e'a\x00' - ]
+Remaining filter: length(@1) = 2
