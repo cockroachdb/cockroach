@@ -8,11 +8,13 @@ CREATE TABLE t.kv (
   s STRING
 )
 ----
-table kv
-  k int NOT NULL
-  v int NULL
-  w int NULL
-  s string NULL
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── s string
+ └── INDEX primary
+      └── k int not null
 
 # Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
 build

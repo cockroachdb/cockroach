@@ -1,0 +1,23 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+build
+SELECT a.y, a.x+1, 1, a.x FROM a
+----
+project
+ ├── columns: a.y:int:null:2 column3:int:null:3 column4:int:null:4 a.x:int:1
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── projections
+      ├── variable: a.y [type=int]
+      ├── plus [type=int]
+      │    ├── variable: a.x [type=int]
+      │    └── const: 1 [type=int]
+      ├── const: 1 [type=int]
+      └── variable: a.x [type=int]

@@ -1,17 +1,20 @@
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, y INT)
 ----
-table a
-  x int NOT NULL
-  y int NULL
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
 
 exec-ddl
-CREATE TABLE b (x INT, z INT NOT NULL, FOREIGN KEY (x) REFERENCES a (x))
+CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL)
 ----
-table b
-  x int NULL
-  z int NOT NULL
-  rowid int NOT NULL (hidden)
+TABLE b
+ ├── x string not null
+ ├── z decimal not null
+ └── INDEX primary
+      └── x string not null
 
 # Variable
 build

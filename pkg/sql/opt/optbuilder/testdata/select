@@ -1,9 +1,11 @@
 exec-ddl
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
 ----
-table a
-  x int NOT NULL
-  y float NULL
+TABLE a
+ ├── x int not null
+ ├── y float
+ └── INDEX primary
+      └── x int not null
 
 build
 SELECT * FROM t.a

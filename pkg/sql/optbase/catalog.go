@@ -139,16 +139,16 @@ func FormatCatalogTable(tbl Table, tp treeprinter.Node) {
 		child.Child(buf.String())
 	}
 
-	FormatCatalogIndex(tbl.Primary(), child)
+	formatCatalogIndex(tbl.Primary(), child)
 
 	for i := 0; i < tbl.SecondaryCount(); i++ {
-		FormatCatalogIndex(tbl.Secondary(i), child)
+		formatCatalogIndex(tbl.Secondary(i), child)
 	}
 }
 
-// FormatCatalogIndex nicely formats a catalog index using a treeprinter for
+// formatCatalogIndex nicely formats a catalog index using a treeprinter for
 // debugging and testing.
-func FormatCatalogIndex(idx Index, tp treeprinter.Node) {
+func formatCatalogIndex(idx Index, tp treeprinter.Node) {
 	child := tp.Childf("INDEX %s", idx.IdxName())
 
 	var buf bytes.Buffer
