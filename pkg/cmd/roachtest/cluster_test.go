@@ -46,7 +46,7 @@ func TestClusterNodes(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			nodes := c.makeNodes(tc.opts)
+			nodes := c.makeNodes(tc.opts...)
 			if tc.expected != nodes {
 				t.Fatalf("expected %s, but found %s", tc.expected, nodes)
 			}
