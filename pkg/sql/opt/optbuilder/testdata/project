@@ -193,3 +193,24 @@ build
 SELECT rowid FROM b, c
 ----
 error: column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
+
+build
+SELECT rowid::string FROM b
+----
+project
+ ├── columns: column4:string:null:4
+ ├── scan
+ │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
+ └── projections
+      └── cast: string [type=string]
+           └── variable: b.rowid [type=int]
+
+build
+SELECT (x, y)::timestamp FROM b
+----
+error: invalid cast: tuple{int, float} -> TIMESTAMP
+
+build
+SELECT CAST(x AS int[]) FROM b
+----
+error: invalid cast: int -> INT[]

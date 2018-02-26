@@ -215,6 +215,9 @@ type Factory interface {
 	// ConstructUnaryComplement constructs an expression for the UnaryComplement operator.
 	ConstructUnaryComplement(input GroupID) GroupID
 
+	// ConstructCast constructs an expression for the Cast operator.
+	ConstructCast(input GroupID, typ PrivateID) GroupID
+
 	// ConstructFunction constructs an expression for the Function operator.
 	// Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 	// arguments. The private field is an opt.FuncDef struct that provides the name

@@ -71,3 +71,20 @@ project
  └── projections
       ├── variable: a.x [type=int]
       └── variable: a.y [type=float]
+
+build
+SELECT * FROM t.a WHERE (x > 10)::bool
+----
+select
+ ├── columns: a.x:int:1 a.y:float:null:2
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:float:null:2
+ └── cast: bool [type=bool]
+      └── gt [type=bool]
+           ├── variable: a.x [type=int]
+           └── const: 10 [type=int]
+
+build
+SELECT * FROM t.a WHERE (x > 10)::INT[]
+----
+error: invalid cast: bool -> INT[]

@@ -61,6 +61,94 @@ group-by
            └── variable: column25 [type=bytes]
 
 build
+SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v),
+  VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
+----
+group-by
+ ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7 column8:int:null:8 column9:decimal:null:9 column10:decimal:null:10 column11:decimal:null:11 column12:decimal:null:12 column13:bool:null:13 column14:bool:null:14 column15:bytes:null:15
+ ├── scan
+ │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ ├── groupings
+ └── aggregations
+      ├── function: min [type=int]
+      │    └── variable: kv.v [type=int]
+      ├── function: max [type=int]
+      │    └── variable: kv.v [type=int]
+      ├── function: count [type=int]
+      │    └── variable: kv.v [type=int]
+      ├── function: sum_int [type=int]
+      │    └── const: 1 [type=int]
+      ├── function: avg [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── function: sum [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── function: stddev [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── function: variance [type=decimal]
+      │    └── variable: kv.v [type=int]
+      ├── function: bool_and [type=bool]
+      │    └── eq [type=bool]
+      │         ├── variable: kv.v [type=int]
+      │         └── const: 1 [type=int]
+      ├── function: bool_and [type=bool]
+      │    └── eq [type=bool]
+      │         ├── variable: kv.v [type=int]
+      │         └── const: 1 [type=int]
+      └── function: xor_agg [type=bytes]
+           └── cast: bytes [type=bytes]
+                └── variable: kv.s [type=string]
+
+build
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1),
+  VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+----
+project
+ ├── columns: column1:int:null:1 column2:int:null:2 column3:int:null:3 column4:int:null:4 column6:float:null:6 column7:decimal:null:7 column8:decimal:null:8 column10:float:null:10 column11:bool:null:11 column12:bool:null:12 column14:string:null:14
+ ├── group-by
+ │    ├── columns: column1:int:null:1 column2:int:null:2 column3:int:null:3 column4:int:null:4 column5:decimal:null:5 column7:decimal:null:7 column8:decimal:null:8 column9:decimal:null:9 column11:bool:null:11 column12:bool:null:12 column13:bytes:null:13
+ │    ├── values
+ │    │    └── tuple [type=tuple{}]
+ │    ├── groupings
+ │    └── aggregations
+ │         ├── function: min [type=int]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: count [type=int]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: max [type=int]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: sum_int [type=int]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: avg [type=decimal]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: sum [type=decimal]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: stddev [type=decimal]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: variance [type=decimal]
+ │         │    └── const: 1 [type=int]
+ │         ├── function: bool_and [type=bool]
+ │         │    └── true [type=bool]
+ │         ├── function: bool_or [type=bool]
+ │         │    └── true [type=bool]
+ │         └── function: xor_agg [type=bytes]
+ │              └── const: '\x01' [type=bytes]
+ └── projections
+      ├── variable: column1 [type=int]
+      ├── variable: column2 [type=int]
+      ├── variable: column3 [type=int]
+      ├── variable: column4 [type=int]
+      ├── cast: float [type=float]
+      │    └── variable: column5 [type=decimal]
+      ├── variable: column7 [type=decimal]
+      ├── variable: column8 [type=decimal]
+      ├── cast: float [type=float]
+      │    └── variable: column9 [type=decimal]
+      ├── variable: column11 [type=bool]
+      ├── variable: column12 [type=bool]
+      └── function: to_hex [type=string]
+           └── variable: column13 [type=bytes]
+
+build
 SELECT ARRAY_AGG(1) FROM t.kv
 ----
 group-by
@@ -122,6 +210,44 @@ project
  │    └── aggregations
  └── projections
       └── const: 1 [type=int]
+
+# This should ideally return {NULL}, but this is a pathological case, and
+# Postgres has the same behavior, so it's sufficient for now.
+build
+SELECT ARRAY_AGG(NULL)
+----
+----
+error: ambiguous call: array_agg(NULL), candidates are:
+array_agg(int) -> int[]
+array_agg(float) -> float[]
+array_agg(decimal) -> decimal[]
+array_agg(string) -> string[]
+array_agg(bytes) -> bytes[]
+array_agg(date) -> date[]
+array_agg(time) -> time[]
+array_agg(timestamp) -> timestamp[]
+array_agg(timestamptz) -> timestamptz[]
+array_agg(interval) -> interval[]
+array_agg(uuid) -> uuid[]
+array_agg(inet) -> inet[]
+array_agg(oid) -> oid[]
+array_agg(bool) -> bool[]
+
+----
+----
+# With an explicit cast, this works as expected.
+build
+SELECT ARRAY_AGG(NULL::TEXT)
+----
+group-by
+ ├── columns: column1:string[]:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ ├── groupings
+ └── aggregations
+      └── function: array_agg [type=string[]]
+           └── cast: string [type=string]
+                └── const: NULL [type=NULL]
 
 build
 SELECT COUNT(*), k FROM t.kv
@@ -631,6 +757,23 @@ project
            └── variable: column6 [type=int]
 
 build
+SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+----
+group-by
+ ├── columns: column1:int:null:1 column2:int:null:2
+ ├── values
+ │    └── tuple [type=tuple{}]
+ ├── groupings
+ └── aggregations
+      ├── function: count [type=int]
+      │    └── cast: int [type=int]
+      │         └── const: NULL [type=NULL]
+      └── function: count [type=int]
+           └── tuple [type=tuple{NULL, NULL}]
+                ├── const: NULL [type=NULL]
+                └── const: NULL [type=NULL]
+
+build
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv
 ----
 group-by
@@ -726,6 +869,81 @@ group-by
       │    └── variable: kv.k [type=int]
       └── function: sum [type=decimal]
            └── variable: kv.v [type=int]
+
+build
+SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
+----
+group-by
+ ├── columns: column5:decimal:null:5 column6:decimal:null:6 column7:decimal:null:7 column8:decimal:null:8
+ ├── scan
+ │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ ├── groupings
+ └── aggregations
+      ├── function: avg [type=decimal]
+      │    └── cast: decimal [type=decimal]
+      │         └── variable: kv.k [type=int]
+      ├── function: avg [type=decimal]
+      │    └── cast: decimal [type=decimal]
+      │         └── variable: kv.v [type=int]
+      ├── function: sum [type=decimal]
+      │    └── cast: decimal [type=decimal]
+      │         └── variable: kv.k [type=int]
+      └── function: sum [type=decimal]
+           └── cast: decimal [type=decimal]
+                └── variable: kv.v [type=int]
+
+build
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
+----
+project
+ ├── columns: column7:decimal:null:7
+ ├── group-by
+ │    ├── columns: column5:decimal:null:5 column6:int:null:6
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── groupings
+ │    └── aggregations
+ │         ├── function: avg [type=decimal]
+ │         │    └── variable: kv.k [type=int]
+ │         └── function: max [type=int]
+ │              └── variable: kv.v [type=int]
+ └── projections
+      └── plus [type=decimal]
+           ├── mult [type=decimal]
+           │    ├── variable: column5 [type=decimal]
+           │    └── const: 2.0 [type=decimal]
+           └── cast: decimal [type=decimal]
+                └── variable: column6 [type=int]
+
+build
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
+----
+project
+ ├── columns: column7:decimal:null:7
+ ├── group-by
+ │    ├── columns: column5:decimal:null:5 column6:int:null:6
+ │    ├── select
+ │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── eq [type=bool]
+ │    │         ├── mult [type=int]
+ │    │         │    ├── variable: kv.w [type=int]
+ │    │         │    └── const: 2 [type=int]
+ │    │         └── variable: kv.k [type=int]
+ │    ├── groupings
+ │    └── aggregations
+ │         ├── function: avg [type=decimal]
+ │         │    └── variable: kv.k [type=int]
+ │         └── function: max [type=int]
+ │              └── variable: kv.v [type=int]
+ └── projections
+      └── plus [type=decimal]
+           ├── mult [type=decimal]
+           │    ├── variable: column5 [type=decimal]
+           │    └── const: 2.0 [type=decimal]
+           └── cast: decimal [type=decimal]
+                └── variable: column6 [type=int]
 
 exec-ddl
 CREATE TABLE t.abc (
@@ -1011,6 +1229,31 @@ group-by
 # VARIANCE/STDDEV
 
 build
+SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
+----
+project
+ ├── columns: column4:decimal:null:4 column5:decimal:null:5 column7:float:null:7
+ ├── group-by
+ │    ├── columns: column4:decimal:null:4 column5:decimal:null:5 column6:float:null:6
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    ├── groupings
+ │    └── aggregations
+ │         ├── function: variance [type=decimal]
+ │         │    └── variable: xyz.x [type=int]
+ │         ├── function: variance [type=decimal]
+ │         │    └── cast: decimal [type=decimal]
+ │         │         └── variable: xyz.y [type=int]
+ │         └── function: variance [type=float]
+ │              └── variable: xyz.z [type=float]
+ └── projections
+      ├── variable: column4 [type=decimal]
+      ├── variable: column5 [type=decimal]
+      └── function: round [type=float]
+           ├── variable: column6 [type=float]
+           └── const: 14 [type=int]
+
+build
 SELECT VARIANCE(x) FROM t.xyz WHERE x = 10
 ----
 group-by
@@ -1031,6 +1274,31 @@ group-by
            └── variable: xyz.x [type=int]
 
 build
+SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
+----
+project
+ ├── columns: column4:decimal:null:4 column5:decimal:null:5 column7:float:null:7
+ ├── group-by
+ │    ├── columns: column4:decimal:null:4 column5:decimal:null:5 column6:float:null:6
+ │    ├── scan
+ │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    ├── groupings
+ │    └── aggregations
+ │         ├── function: stddev [type=decimal]
+ │         │    └── variable: xyz.x [type=int]
+ │         ├── function: stddev [type=decimal]
+ │         │    └── cast: decimal [type=decimal]
+ │         │         └── variable: xyz.y [type=int]
+ │         └── function: stddev [type=float]
+ │              └── variable: xyz.z [type=float]
+ └── projections
+      ├── variable: column4 [type=decimal]
+      ├── variable: column5 [type=decimal]
+      └── function: round [type=float]
+           ├── variable: column6 [type=float]
+           └── const: 14 [type=int]
+
+build
 SELECT STDDEV(x) FROM t.xyz WHERE x = 1
 ----
 group-by
@@ -1049,6 +1317,110 @@ group-by
  └── aggregations
       └── function: stddev [type=decimal]
            └── variable: xyz.x [type=int]
+
+build
+SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
+----
+project
+ ├── columns: column2:float:null:2 column4:float:null:4 column6:float:null:6
+ ├── group-by
+ │    ├── columns: column1:decimal:null:1 column3:float:null:3 column5:decimal:null:5
+ │    ├── values
+ │    │    └── tuple [type=tuple{}]
+ │    ├── groupings
+ │    └── aggregations
+ │         ├── function: avg [type=decimal]
+ │         │    └── cast: int [type=int]
+ │         │         └── const: 1 [type=int]
+ │         ├── function: avg [type=float]
+ │         │    └── cast: float [type=float]
+ │         │         └── const: 2.0 [type=float]
+ │         └── function: avg [type=decimal]
+ │              └── cast: decimal [type=decimal]
+ │                   └── const: 3 [type=decimal]
+ └── projections
+      ├── cast: float [type=float]
+      │    └── variable: column1 [type=decimal]
+      ├── cast: float [type=float]
+      │    └── variable: column3 [type=float]
+      └── cast: float [type=float]
+           └── variable: column5 [type=decimal]
+
+build
+SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
+----
+group-by
+ ├── columns: column1:int:null:1 column2:int:null:2 column3:int:null:3
+ ├── values
+ │    └── tuple [type=tuple{}]
+ ├── groupings
+ └── aggregations
+      ├── function: count [type=int]
+      │    └── cast: int [type=int]
+      │         └── const: 2 [type=int]
+      ├── function: count [type=int]
+      │    └── cast: float [type=float]
+      │         └── const: 3.0 [type=float]
+      └── function: count [type=int]
+           └── cast: decimal [type=decimal]
+                └── const: 4 [type=decimal]
+
+build
+SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
+----
+group-by
+ ├── columns: column1:decimal:null:1 column2:float:null:2 column3:decimal:null:3
+ ├── values
+ │    └── tuple [type=tuple{}]
+ ├── groupings
+ └── aggregations
+      ├── function: sum [type=decimal]
+      │    └── cast: int [type=int]
+      │         └── const: 1 [type=int]
+      ├── function: sum [type=float]
+      │    └── cast: float [type=float]
+      │         └── const: 2.0 [type=float]
+      └── function: sum [type=decimal]
+           └── cast: decimal [type=decimal]
+                └── const: 3 [type=decimal]
+
+build
+SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
+----
+group-by
+ ├── columns: column1:decimal:null:1 column2:float:null:2 column3:decimal:null:3
+ ├── values
+ │    └── tuple [type=tuple{}]
+ ├── groupings
+ └── aggregations
+      ├── function: variance [type=decimal]
+      │    └── cast: int [type=int]
+      │         └── const: 1 [type=int]
+      ├── function: variance [type=float]
+      │    └── cast: float [type=float]
+      │         └── const: 1.0 [type=float]
+      └── function: variance [type=decimal]
+           └── cast: decimal [type=decimal]
+                └── const: 1 [type=decimal]
+
+build
+SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
+----
+group-by
+ ├── columns: column1:decimal:null:1 column2:float:null:2 column3:decimal:null:3
+ ├── values
+ │    └── tuple [type=tuple{}]
+ ├── groupings
+ └── aggregations
+      ├── function: stddev [type=decimal]
+      │    └── cast: int [type=int]
+      │         └── const: 1 [type=int]
+      ├── function: stddev [type=float]
+      │    └── cast: float [type=float]
+      │         └── const: 1.0 [type=float]
+      └── function: stddev [type=decimal]
+           └── cast: decimal [type=decimal]
+                └── const: 1 [type=decimal]
 
 exec-ddl
 CREATE TABLE t.bools (b BOOL)
