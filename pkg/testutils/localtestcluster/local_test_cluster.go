@@ -111,6 +111,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		dbCtx := client.DefaultDBContext()
 		ltc.DBContext = &dbCtx
 	}
+	ltc.DBContext.NodeID.Set(context.Background(), nodeID)
 	ltc.DB = client.NewDBWithContext(factory, ltc.Clock, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which

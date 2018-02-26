@@ -109,15 +109,24 @@ type Txn struct {
 //   If 0 is passed, then no value is going to be filled in the batches sent
 //   through this txn. This will have the effect that the DistSender will fill
 //   in the batch with the current node's ID.
+//   If the gatewayNodeID is set and this is a root transaction, we optimize
+//   away any clock uncertainty for our own node, as our clock is accessible.
 func NewTxn(db *DB, gatewayNodeID roachpb.NodeID, typ TxnType) *Txn {
-	return NewTxnWithProto(db, gatewayNodeID, typ, roachpb.MakeTransaction(
+	now := db.clock.Now()
+	txn := roachpb.MakeTransaction(
 		"unnamed",
 		nil, // baseKey
 		roachpb.NormalUserPriority,
 		enginepb.SERIALIZABLE,
-		db.clock.Now(),
+		now,
 		db.clock.MaxOffset().Nanoseconds(),
-	))
+	)
+	// Ensure the gateway node ID is marked as free from clock offset
+	// if this is a root transaction.
+	if gatewayNodeID != 0 && typ == RootTxn {
+		txn.UpdateObservedTimestamp(gatewayNodeID, now)
+	}
+	return NewTxnWithProto(db, gatewayNodeID, typ, txn)
 }
 
 // NewTxnWithProto is like NewTxn, except it returns a new txn with the provided

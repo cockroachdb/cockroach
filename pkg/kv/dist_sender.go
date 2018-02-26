@@ -495,39 +495,6 @@ func (ds *DistSender) initAndVerifyBatch(
 		ba.Timestamp = ds.clock.Now()
 	}
 
-	if ba.Txn != nil {
-		// Make a copy here since the code below modifies it in different places.
-		// TODO(tschottdorf): be smarter about this - no need to do it for
-		// requests that don't get split.
-		txnClone := ba.Txn.Clone()
-		ba.Txn = &txnClone
-
-		if len(ba.Txn.ObservedTimestamps) == 0 {
-			// Ensure the local NodeID is marked as free from clock offset;
-			// the transaction's timestamp was taken off the local clock.
-			// TODO(andrei): This is broken when Txn.OrigTimestamp has not been, in
-			// fact, taken off this node's clock. This happens when the transaction
-			// was created remotely and is being run through the ExternalClient. I
-			// think we shold move this initialization to client.Txn.
-			if nDesc := ds.getNodeDescriptor(); nDesc != nil {
-				// TODO(tschottdorf): future refactoring should move this to txn
-				// creation in TxnCoordSender, which is currently unaware of the
-				// NodeID (and wraps *DistSender through client.Sender since it
-				// also needs test compatibility with *LocalSender).
-				//
-				// Taking care below to not modify any memory referenced from
-				// our BatchRequest which may be shared with others.
-				//
-				// We already have a clone of our txn (see above), so we can
-				// modify it freely.
-
-				// OrigTimestamp is the HLC timestamp at which the Txn started, so
-				// this effectively means no more uncertainty on this node.
-				ba.Txn.UpdateObservedTimestamp(nDesc.NodeID, ba.Txn.OrigTimestamp)
-			}
-		}
-	}
-
 	if len(ba.Requests) < 1 {
 		return roachpb.NewErrorf("empty batch")
 	}
