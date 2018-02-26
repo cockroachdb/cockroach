@@ -91,6 +91,12 @@ SELECT x FROM test WHERE y IN (4, 5, 6, 7, 8)
 statement error division by zero
 SELECT x FROM test WHERE y = 1/z
 
+# Set a cluster setting to make it show up below. Which one is set
+# does not matter.
+statement ok
+SET CLUSTER SETTING debug.panic_on_failed_assertions = true; RESET CLUSTER SETTING debug.panic_on_failed_assertions
+
+
 statement ok
 SET application_name = ''; RESET distsql
 
@@ -99,18 +105,20 @@ SELECT key,flags
   FROM test.crdb_internal.node_statement_statistics
  WHERE application_name = 'valuetest' ORDER BY key, flags
 ----
-key                                                           flags
-INSERT INTO test VALUES (_, _, _)                             ·
-SELECT ROW(_, _, _, _, _) FROM test WHERE _                   ·
-SELECT key FROM test.crdb_internal.node_statement_statistics  ·
-SELECT sin(_)                                                 ·
-SELECT sqrt(-_)                                               !
-SELECT x FROM (VALUES (_, _, _)) AS t (x)                     ·
-SELECT x FROM test WHERE y = (_ / z)                          !+
-SELECT x FROM test WHERE y IN (_, _)                          ·
-SELECT x FROM test WHERE y IN (_, _)                          +
-SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)             ·
-SELECT x FROM test WHERE y NOT IN (_, _)                      ·
+key                                                               flags
+INSERT INTO test VALUES (_, _, _)                                 ·
+SELECT ROW(_, _, _, _, _) FROM test WHERE _                       ·
+SELECT key FROM test.crdb_internal.node_statement_statistics      ·
+SELECT sin(_)                                                     ·
+SELECT sqrt(-_)                                                   !
+SELECT x FROM (VALUES (_, _, _)) AS t (x)                         ·
+SELECT x FROM test WHERE y = (_ / z)                              !+
+SELECT x FROM test WHERE y IN (_, _)                              ·
+SELECT x FROM test WHERE y IN (_, _)                              +
+SELECT x FROM test WHERE y IN (_, _, _ + x, _, _)                 ·
+SELECT x FROM test WHERE y NOT IN (_, _)                          ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT  ·
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        ·
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved, but not the db prefix (#22700)
@@ -131,6 +139,8 @@ SELECT _ FROM _ WHERE _ IN (_, _)
 SELECT _ FROM _ WHERE _ IN (_, _)
 SELECT _ FROM _ WHERE _ IN (_, _, _ + _, _, _)
 SELECT _ FROM _ WHERE _ NOT IN (_, _)
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = DEFAULT
+SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _
 
 # Check that the latency measurements looks reasonable, protecting
 # against failure to measure (#22877).
