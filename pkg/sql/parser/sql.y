@@ -2188,7 +2188,7 @@ privilege_list:
 // Any privileges above `col_name_keyword` should be listed here.
 // The full list is in sql/privilege/privilege.go.
 privilege:
-	name
+  name
 | CREATE
 | GRANT
 | SELECT
@@ -2871,7 +2871,7 @@ show_tables_stmt:
   {
     $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
         // Note: the schema name may be interpreted as database name,
-	// see name_resolution.go.
+        // see name_resolution.go.
         SchemaName: tree.Name($4),
         ExplicitSchema: true,
     }}
