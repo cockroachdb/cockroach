@@ -154,65 +154,74 @@ func eventInternal(ctx context.Context, isErr, withTags bool, format string, arg
 // message to it. If no Trace is found, it looks for an EventLog in the context
 // and logs the message to it. If neither is found, does nothing.
 func Event(ctx context.Context, msg string) {
-	eventInternal(ctx, false /*isErr*/, true /*withTags*/, msg)
+	eventInternal(ctx, false /* isErr */, true /* withTags */, msg)
 }
 
 // Eventf looks for an opentracing.Trace in the context and formats and logs
 // the given message to it. If no Trace is found, it looks for an EventLog in
 // the context and logs the message to it. If neither is found, does nothing.
 func Eventf(ctx context.Context, format string, args ...interface{}) {
-	eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
+	eventInternal(ctx, false /* isErr */, true /* withTags */, format, args...)
 }
 
-// ErrEvent looks for an opentracing.Trace in the context and logs the given
-// message to it. If no Trace is found, it looks for an EventLog in the context
-// and logs the message to it (as an error). If neither is found, does nothing.
-func ErrEvent(ctx context.Context, msg string) {
-	eventInternal(ctx, true /*isErr*/, true /*withTags*/, msg)
-}
-
-// ErrEventf looks for an opentracing.Trace in the context and formats and logs
-// the given message to it. If no Trace is found, it looks for an EventLog in
-// the context and formats and logs the message to it (as an error). If neither
-// is found, does nothing.
-func ErrEventf(ctx context.Context, format string, args ...interface{}) {
-	eventInternal(ctx, true /*isErr*/, true /*withTags*/, format, args...)
+func vEventf(
+	ctx context.Context, isErr bool, depth int, level int32, format string, args ...interface{},
+) {
+	if VDepth(level, 1+depth) {
+		// Log the message (which also logs an event).
+		sev := Severity_INFO
+		if isErr {
+			sev = Severity_ERROR
+		}
+		logDepth(ctx, 1+depth, sev, format, args)
+	} else {
+		eventInternal(ctx, isErr, true /* withTags */, format, args...)
+	}
 }
 
 // VEvent either logs a message to the log files (which also outputs to the
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
 func VEvent(ctx context.Context, level int32, msg string) {
-	if VDepth(level, 1) {
-		// Log to INFO (which also logs an event).
-		logDepth(ctx, 1, Severity_INFO, "", []interface{}{msg})
-	} else {
-		eventInternal(ctx, false /*isErr*/, true /*withTags*/, msg)
-	}
+	vEventf(ctx, false /* isErr */, 1, level, msg)
 }
 
 // VEventf either logs a message to the log files (which also outputs to the
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
 func VEventf(ctx context.Context, level int32, format string, args ...interface{}) {
-	if VDepth(level, 1) {
-		// Log to INFO (which also logs an event).
-		logDepth(ctx, 1, Severity_INFO, format, args)
-	} else {
-		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
-	}
+	vEventf(ctx, false /* isErr */, 1, level, format, args...)
 }
 
 // VEventfDepth performs the same as VEventf but checks the verbosity level
 // at the given depth in the call stack.
 func VEventfDepth(ctx context.Context, depth int, level int32, format string, args ...interface{}) {
-	if VDepth(level, 1+depth) {
-		// Log to INFO (which also logs an event).
-		logDepth(ctx, 1+depth, Severity_INFO, format, args)
-	} else {
-		eventInternal(ctx, false /*isErr*/, true /*withTags*/, format, args...)
-	}
+	vEventf(ctx, false /* isErr */, 1+depth, level, format, args...)
 }
+
+// VErrEvent either logs an error message to the log files (which also outputs
+// to the active trace or event log) or to the trace/event log alone, depending
+// on whether the specified verbosity level is active.
+func VErrEvent(ctx context.Context, level int32, msg string) {
+	vEventf(ctx, true /* isErr */, 1, level, msg)
+}
+
+// VErrEventf either logs an error message to the log files (which also outputs
+// to the active trace or event log) or to the trace/event log alone, depending
+// on whether the specified verbosity level is active.
+func VErrEventf(ctx context.Context, level int32, format string, args ...interface{}) {
+	vEventf(ctx, true /* isErr */, 1, level, format, args...)
+}
+
+// VErrEventfDepth performs the same as VErrEventf but checks the verbosity
+// level at the given depth in the call stack.
+func VErrEventfDepth(
+	ctx context.Context, depth int, level int32, format string, args ...interface{},
+) {
+	vEventf(ctx, true /* isErr */, 1+depth, level, format, args...)
+}
+
+var _ = VErrEventfDepth // silence unused warning
 
 // HasSpanOrEvent returns true if the context has a span or event that should
 // be logged to.

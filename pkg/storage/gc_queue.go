@@ -574,7 +574,7 @@ func (gcq *gcQueue) processImpl(
 				ba.Add(&gcArgs)
 				log.Eventf(ctx, "sending batch %d of %d", i+1, len(batches))
 				if _, pErr := repl.Send(ctx, ba); pErr != nil {
-					log.ErrEvent(ctx, pErr.String())
+					log.VErrEvent(ctx, 2, pErr.String())
 					return pErr.GoError()
 				}
 			}
