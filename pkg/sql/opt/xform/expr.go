@@ -178,7 +178,7 @@ func (ev ExprView) formatScalar(tp treeprinter.Node) {
 	ev.formatPrivate(&buf, ev.Private())
 
 	switch ev.Operator() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.GroupingsOp:
+	case opt.ProjectionsOp, opt.AggregationsOp:
 		// Don't show the type of these ops because they are simply tuple types
 		// of their children's types, and the types of children are already
 		// listed.
@@ -209,7 +209,7 @@ func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		colIndex := private.(opt.ColumnIndex)
 		private = ev.mem.metadata.ColumnLabel(colIndex)
 
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.GroupingsOp:
+	case opt.ProjectionsOp, opt.AggregationsOp:
 		// The private data of these ops was already used to print the output
 		// columns for their containing op (Project or GroupBy), so no need to
 		// print again.
@@ -238,10 +238,15 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 		// Get the list of columns from the ProjectionsOp, which has the correct
 		// order.
 		projections := ev.Child(1)
-		formatColList(ev.mem, logicalProps, *projections.Private().(*opt.ColList), tp)
+		logicalProps.formatColList("columns:", *projections.Private().(*opt.ColList), ev.mem, tp)
+
+	case opt.GroupByOp:
+		logicalProps.formatColSet("grouping columns:", *ev.Private().(*opt.ColSet), ev.mem, tp)
+		aggregations := ev.Child(1)
+		logicalProps.formatColList("aggregation columns:", *aggregations.Private().(*opt.ColList), ev.mem, tp)
 
 	case opt.ValuesOp:
-		formatColList(ev.mem, logicalProps, *ev.Private().(*opt.ColList), tp)
+		logicalProps.formatColList("columns:", *ev.Private().(*opt.ColList), ev.mem, tp)
 
 	default:
 		// Fall back to writing output columns in column index order, with best
@@ -250,18 +255,6 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	}
 
 	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		child.format(tp)
-	}
-}
-
-func formatColList(mem *memo, logicalProps *LogicalProps, cols opt.ColList, tp treeprinter.Node) {
-	if len(cols) > 0 {
-		var buf bytes.Buffer
-		buf.WriteString("columns:")
-		for _, col := range cols {
-			logicalProps.formatCol(mem, &buf, col)
-		}
-		tp.Child(buf.String())
+		ev.Child(i).format(tp)
 	}
 }
