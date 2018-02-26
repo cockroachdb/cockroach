@@ -40,6 +40,12 @@ func TestZoneConfigValidate(t *testing.T) {
 		},
 		{
 			ZoneConfig{
+				NumReplicas: -1,
+			},
+			"at least one replica is required",
+		},
+		{
+			ZoneConfig{
 				NumReplicas: 2,
 			},
 			"at least 3 replicas are required for multi-replica configurations",
@@ -55,13 +61,31 @@ func TestZoneConfigValidate(t *testing.T) {
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
 			},
+			"GC.TTLSeconds 0 less than minimum allowed",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+			},
 			"",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMinBytes: -1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+			},
+			"RangeMinBytes -1 less than minimum allowed",
 		},
 		{
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMinBytes: DefaultZoneConfig().RangeMaxBytes,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 			},
 			"is greater than or equal to RangeMaxBytes",
 		},
@@ -69,6 +93,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{Constraints: []Constraint{{Value: "a", Type: Constraint_DEPRECATED_POSITIVE}}},
 				},
@@ -79,6 +104,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}}},
 				},
@@ -89,6 +115,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}},
@@ -102,6 +129,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
@@ -115,6 +143,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   3,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
@@ -128,6 +157,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
@@ -145,6 +175,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   3,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
