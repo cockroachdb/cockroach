@@ -107,6 +107,7 @@ var defaultVals = map[string][]string{
 	"date":        dateInputs,
 	"time":        timeInputs,
 	"inet":        inetInputs,
+	"uuid[]":      arrayUUIDInputs,
 }
 
 var decimalInputs = []string{
@@ -214,6 +215,12 @@ var inetInputs = []string{
 	"192/10",
 	"192.168/23",
 	"192.168./10",
+}
+
+var arrayUUIDInputs = []string{
+	"{00000000-0000-0000-0000-000000000000}",
+	"{9753b405-88c0-4e93-b6c3-4e49fff11b57}",
+	"{be18196d-b20a-4df2-8a2b-259c22842ee8,e0794335-6d39-47d9-b836-1f2ff349bf5d}",
 }
 
 func makeEncodingFunc(typName string) generateEnc {

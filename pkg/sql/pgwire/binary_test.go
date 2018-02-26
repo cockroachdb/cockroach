@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -161,6 +162,17 @@ func TestBinaryInet(t *testing.T) {
 			t.Fatal(err)
 		}
 		return ipAddr
+	})
+}
+
+func TestBinaryUUIDArray(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "uuid_array", func(val string) tree.Datum {
+		ary, err := tree.ParseDArrayFromString(tree.NewTestingEvalContext(nil), val, coltypes.UUID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ary
 	})
 }
 

@@ -485,8 +485,10 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				return nil, err
 			}
 			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
-		case oid.T__int2, oid.T__int4, oid.T__int8, oid.T__text, oid.T__name:
-			return decodeBinaryArray(b, code)
+		default:
+			if _, ok := types.ArrayOids[id]; ok {
+				return decodeBinaryArray(b, code)
+			}
 		}
 	default:
 		return nil, errors.Errorf("unsupported format code: %s", code)
