@@ -256,7 +256,33 @@ func (nl *NodeLiveness) SetDecommissioning(
 			<-sem
 		}()
 
-		oldLiveness, err := nl.GetLiveness(nodeID) // need new liveness in each iteration
+		// We need the current liveness in each iteration.
+		//
+		// We ignore any liveness record in Gossip because we may have to fall back
+		// to the KV store anyway. The scenario in which this is needed is:
+		// - kill node 2 and stop node 1
+		// - wait for node 2's liveness record's Gossip entry to expire on all surviving nodes
+		// - restart node 1; it'll never see node 2 in `GetLiveness` unless the whole
+		//   node liveness span gets regossiped (unlikely if it wasn't the lease holder
+		//   for that span)
+		// - can't decommission node 2 from node 1 without KV fallback.
+		//
+		// See #20863.
+		//
+		// NB: this also de-flakes TestNodeLivenessDecommissionAbsent; running
+		// decommissioning commands in a tight loop on different nodes sometimes
+		// results in unintentional no-ops (due to the Gossip lag); this could be
+		// observed by users in principle, too.
+		dummyLiveness := &Liveness{NodeID: nodeID} // always catches condition failed
+		var oldLiveness *Liveness
+		err := nl.updateLiveness(ctx, dummyLiveness, dummyLiveness, func(actual Liveness) error {
+			if (actual == Liveness{}) {
+				return ErrNoLivenessRecord
+			}
+			oldLiveness = &actual
+			return nil
+		})
+
 		if err != nil {
 			return false, errors.Wrap(err, "unable to get liveness")
 		}
