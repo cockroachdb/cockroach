@@ -560,16 +560,14 @@ func (c *cliState) refreshDatabaseName() (string, bool) {
 // preparePrompts computes a full and short prompt for the interactive
 // CLI.
 func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt string) {
-	// Default prompt is part of the connection URL. eg: "marc@localhost>"
-	// continued statement prompt is: "        -> "
+	// If parsing fails, we'll keep the entire URL. The Open call succeeded, and that
+	// is the important part.
 	promptPrefix = dbURL
 	if parsedURL, err := url.Parse(dbURL); err == nil {
 		username := ""
 		if parsedURL.User != nil {
 			username = parsedURL.User.Username()
 		}
-		// If parsing fails, we keep the entire URL. The Open call succeeded, and that
-		// is the important part.
 		promptPrefix = fmt.Sprintf("%s@%s", username, parsedURL.Host)
 	}
 
@@ -577,6 +575,8 @@ func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt stri
 		promptPrefix = " "
 	}
 
+	// Default prompt is part of the connection URL. eg: "marc@localhost>"
+	// continued statement prompt is: "        -> "
 	continuePrompt = strings.Repeat(" ", len(promptPrefix)-1) + "-> "
 	fullPrompt = promptPrefix + "> "
 
