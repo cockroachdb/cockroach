@@ -30,6 +30,9 @@ const (
 	// modeOperational is intended for completely initialized server
 	// and thus allows all RPC methods.
 	modeOperational
+	// modeDraining is intended for an operational server in the process of
+	// shutting down. The difference is that readiness checks will fail.
+	modeDraining
 )
 
 type serveMode int32
@@ -58,6 +61,11 @@ func (s *serveMode) set(mode serveMode) {
 	atomic.StoreInt32((*int32)(s), int32(mode))
 }
 
+func (s *serveMode) get() serveMode {
+	return serveMode(atomic.LoadInt32((*int32)(s)))
+}
+
 func (s *serveMode) operational() bool {
-	return atomic.LoadInt32((*int32)(s)) == int32(modeOperational)
+	sMode := s.get()
+	return sMode == modeOperational || sMode == modeDraining
 }
