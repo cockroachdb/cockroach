@@ -1297,7 +1297,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	for i, tc := range testCases {
 		result, details := a.RebalanceTarget(
 			ctx,
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil, /* raftStatus */
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
@@ -1366,7 +1366,7 @@ func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 		log.Infof(ctx, "case #%d", i)
 		result, details := a.RebalanceTarget(
 			ctx,
-			nil, /* constraints */
+			config.ZoneConfig{},
 			nil, /* raftStatus */
 			testRangeInfo(tc.existing, firstRange),
 			storeFilterThrottled,
