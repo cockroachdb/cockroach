@@ -617,10 +617,10 @@ func (s *Server) Start(ctx context.Context) error {
 	m := cmux.New(ln)
 
 	// Inject an initialization listener that will intercept all
-	// connections while the cluster is initializing.
+	// HTTP connections while the cluster is initializing.
 	initLActive := int32(0)
-	initL := m.Match(func(_ io.Reader) bool {
-		return atomic.LoadInt32(&initLActive) != 0
+	initL := m.Match(func(r io.Reader) bool {
+		return atomic.LoadInt32(&initLActive) != 0 && !pgwire.Match(r)
 	})
 
 	pgL := m.Match(pgwire.Match)
