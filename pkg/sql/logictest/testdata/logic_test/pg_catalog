@@ -5,12 +5,48 @@
 query error database "pg_catalog" does not exist
 ALTER DATABASE pg_catalog RENAME TO not_pg_catalog
 
-statement error unsupported schema specification: "pg_catalog.t"
+statement error schema cannot be modified: "pg_catalog"
 CREATE TABLE pg_catalog.t (x INT)
 
 query error database "pg_catalog" does not exist
 DROP DATABASE pg_catalog
 
+query T
+SHOW TABLES FROM pg_catalog
+----
+pg_am
+pg_attrdef
+pg_attribute
+pg_auth_members
+pg_class
+pg_collation
+pg_constraint
+pg_database
+pg_depend
+pg_description
+pg_enum
+pg_extension
+pg_foreign_data_wrapper
+pg_foreign_server
+pg_foreign_table
+pg_index
+pg_indexes
+pg_inherits
+pg_namespace
+pg_operator
+pg_proc
+pg_range
+pg_rewrite
+pg_roles
+pg_sequence
+pg_settings
+pg_tables
+pg_tablespace
+pg_trigger
+pg_type
+pg_user
+pg_user_mapping
+pg_views
 
 # Verify "pg_catalog" is a regular db name
 

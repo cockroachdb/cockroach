@@ -604,7 +604,7 @@ SET DATABASE = ""
 statement error pq: syntax error at or near "@"
 GRANT ALL ON a.t@xyz TO readwrite
 
-statement error pq: pattern "\*" did not match any valid database or schema
+statement error pq: "\*" does not match any valid database or schema
 GRANT ALL ON * TO readwrite
 
 statement error pgcode 42P01 relation "a.tt" does not exist

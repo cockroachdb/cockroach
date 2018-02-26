@@ -151,6 +151,7 @@ show_stmt ::=
 	| show_jobs_stmt
 	| show_queries_stmt
 	| show_roles_stmt
+	| show_schemas_stmt
 	| show_session_stmt
 	| show_sessions_stmt
 	| show_stats_stmt
@@ -457,6 +458,10 @@ show_queries_stmt ::=
 show_roles_stmt ::=
 	'SHOW' 'ROLES'
 
+show_schemas_stmt ::=
+	'SHOW' 'SCHEMAS' 'FROM' name
+	| 'SHOW' 'SCHEMAS'
+
 show_session_stmt ::=
 	'SHOW' session_var
 	| 'SHOW' 'SESSION' session_var
@@ -719,6 +724,8 @@ unreserved_keyword ::=
 	| 'STATUS'
 	| 'SAVEPOINT'
 	| 'SCATTER'
+	| 'SCHEMA'
+	| 'SCHEMAS'
 	| 'SCRUB'
 	| 'SEARCH'
 	| 'SECOND'
@@ -1766,8 +1773,10 @@ over_clause ::=
 func_expr_common_subexpr ::=
 	'CURRENT_DATE'
 	| 'CURRENT_SCHEMA'
+	| 'CURRENT_CATALOG'
 	| 'CURRENT_TIMESTAMP'
 	| 'CURRENT_USER'
+	| 'CURRENT_ROLE'
 	| 'SESSION_USER'
 	| 'USER'
 	| 'CAST' '(' a_expr 'AS' cast_target ')'

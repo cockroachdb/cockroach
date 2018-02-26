@@ -513,7 +513,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   RELEASE RESET RESTORE RESTRICT RESUME RETURNING REVOKE RIGHT
 %token <str>   ROLE ROLES ROLLBACK ROLLUP ROW ROWS RSHIFT
 
-%token <str>   SAVEPOINT SCATTER SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
+%token <str>   SAVEPOINT SCATTER SCHEMA SCHEMAS SCRUB SEARCH SECOND SELECT SEQUENCE SEQUENCES
 %token <str>   SERIAL SERIAL2 SERIAL4 SERIAL8
 %token <str>   SERIALIZABLE SESSION SESSIONS SESSION_USER SET SETTING SETTINGS
 %token <str>   SHOW SIMILAR SIMPLE SMALLINT SMALLSERIAL SNAPSHOT SOME SPLIT SQL
@@ -687,6 +687,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> show_jobs_stmt
 %type <tree.Statement> show_queries_stmt
 %type <tree.Statement> show_roles_stmt
+%type <tree.Statement> show_schemas_stmt
 %type <tree.Statement> show_session_stmt
 %type <tree.Statement> show_sessions_stmt
 %type <tree.Statement> show_stats_stmt
@@ -2426,18 +2427,31 @@ generic_set:
 set_rest_more:
 // Generic SET syntaxes:
    generic_set
-// Special syntaxes mandated by SQL standard:
+// Special SET syntax forms in addition to the generic form.
+// See: https://www.postgresql.org/docs/10/static/sql-set.html
+//
+// "SET TIME ZONE value is an alias for SET timezone TO value."
 | TIME ZONE zone_value
   {
     /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "timezone", Values: tree.Exprs{$3.expr()}}
   }
-| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
+// "SET SCHEMA 'value' is an alias for SET search_path TO value. Only
+// one schema can be specified using this syntax."
+| SCHEMA var_value
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetVar{Name: "search_path", Values: tree.Exprs{$2.expr()}}
+  }
+// See comment for the non-terminal for SET NAMES below.
 | set_names
+| var_name FROM CURRENT { return unimplemented(sqllex, "set from current") }
 | error // SHOW HELP: SET SESSION
 
 // SET NAMES is the SQL standard syntax for SET client_encoding.
-// See https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
+// "SET NAMES value is an alias for SET client_encoding TO value."
+// See https://www.postgresql.org/docs/10/static/sql-set.html
+// Also see https://www.postgresql.org/docs/9.6/static/multibyte.html#AEN39236
 set_names:
   NAMES var_value
   {
@@ -2573,6 +2587,7 @@ show_stmt:
 | show_jobs_stmt            // EXTEND WITH HELP: SHOW JOBS
 | show_queries_stmt         // EXTEND WITH HELP: SHOW QUERIES
 | show_roles_stmt           // EXTEND WITH HELP: SHOW ROLES
+| show_schemas_stmt         // EXTEND WITH HELP: SHOW SCHEMAS
 | show_session_stmt         // EXTEND WITH HELP: SHOW SESSION
 | show_sessions_stmt        // EXTEND WITH HELP: SHOW SESSIONS
 | show_stats_stmt           // EXTEND WITH HELP: SHOW STATISTICS
@@ -2845,17 +2860,41 @@ show_sessions_stmt:
 show_tables_stmt:
   SHOW TABLES FROM name '.' name
   {
-    $$.val = &tree.ShowTables{Database: tree.Name($4), Schema: tree.Name($6)}
+    $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
+        CatalogName: tree.Name($4),
+        ExplicitCatalog: true,
+        SchemaName: tree.Name($6),
+        ExplicitSchema: true,
+    }}
   }
 | SHOW TABLES FROM name
   {
-    $$.val = &tree.ShowTables{Database: tree.Name($4), Schema: tree.PublicSchemaName}
+    $$.val = &tree.ShowTables{TableNamePrefix:tree.TableNamePrefix{
+        // Note: the schema name may be interpreted as database name,
+	// see name_resolution.go.
+        SchemaName: tree.Name($4),
+        ExplicitSchema: true,
+    }}
   }
 | SHOW TABLES
   {
-    $$.val = &tree.ShowTables{Schema: tree.PublicSchemaName}
+    $$.val = &tree.ShowTables{}
   }
 | SHOW TABLES error // SHOW HELP: SHOW TABLES
+
+// %Help: SHOW SCHEMAS - list schemas
+// %Category: DDL
+// %Text: SHOW SCHEMAS [FROM <databasename> ]
+show_schemas_stmt:
+  SHOW SCHEMAS FROM name
+  {
+    $$.val = &tree.ShowSchemas{Database: tree.Name($4)}
+  }
+| SHOW SCHEMAS
+  {
+    $$.val = &tree.ShowSchemas{}
+  }
+| SHOW SCHEMAS error // SHOW HELP: SHOW SCHEMAS
 
 // %Help: SHOW SYNTAX - analyze SQL syntax
 // %Category: Misc
@@ -6356,14 +6395,25 @@ func_expr_common_subexpr:
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
+// Special identifier current_catalog is equivalent to current_database().
+// https://www.postgresql.org/docs/10/static/functions-info.html
+| CURRENT_CATALOG
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_database")}
+  }
 | CURRENT_TIMESTAMP
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
   }
-| CURRENT_ROLE { return unimplemented(sqllex, "current role") }
 | CURRENT_USER
   {
     $$.val = &tree.FuncExpr{Func: tree.WrapFunction($1)}
+  }
+// Special identifier current_role is equivalent to current_user.
+// https://www.postgresql.org/docs/10/static/functions-info.html
+| CURRENT_ROLE
+  {
+    $$.val = &tree.FuncExpr{Func: tree.WrapFunction("current_user")}
   }
 | SESSION_USER
   {
@@ -7476,6 +7526,8 @@ unreserved_keyword:
 | STATUS
 | SAVEPOINT
 | SCATTER
+| SCHEMA
+| SCHEMAS
 | SCRUB
 | SEARCH
 | SECOND
