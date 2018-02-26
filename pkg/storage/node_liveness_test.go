@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -795,6 +796,72 @@ func TestNodeLivenessSetDecommissioning(t *testing.T) {
 	testNodeLivenessSetDecommissioning(t, 0)
 	// Set another node to decommissioning.
 	testNodeLivenessSetDecommissioning(t, 1)
+}
+
+// TestNodeLivenessDecommissionAbsent exercises a scenario in which a node is
+// asked to decommission another node whose liveness record is not gossiped any
+// more.
+//
+// See (*NodeLiveness).SetDecommissioning for details.
+func TestNodeLivenessDecommissionAbsent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	mtc := &multiTestContext{}
+	defer mtc.Stop()
+	mtc.Start(t, 3)
+	mtc.initGossipNetwork()
+
+	verifyLiveness(t, mtc)
+
+	ctx := context.Background()
+	const goneNodeID = roachpb.NodeID(10000)
+
+	// When the node simply never existed, expect an error.
+	if _, err := mtc.nodeLivenesses[0].SetDecommissioning(
+		ctx, goneNodeID, true,
+	); errors.Cause(err) != storage.ErrNoLivenessRecord {
+		t.Fatal(err)
+	}
+
+	// Pretend the node was once there but isn't gossiped anywhere.
+	if err := mtc.dbs[0].CPut(ctx, keys.NodeLivenessKey(goneNodeID), &storage.Liveness{
+		NodeID:     goneNodeID,
+		Epoch:      1,
+		Expiration: hlc.LegacyTimestamp(mtc.clock.Now()),
+	}, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	// Decommission from second node.
+	if committed, err := mtc.nodeLivenesses[1].SetDecommissioning(ctx, goneNodeID, true); err != nil {
+		t.Fatal(err)
+	} else if !committed {
+		t.Fatal("no change committed")
+	}
+	// Re-decommission from first node.
+	if committed, err := mtc.nodeLivenesses[0].SetDecommissioning(ctx, goneNodeID, true); err != nil {
+		t.Fatal(err)
+	} else if committed {
+		t.Fatal("spurious change committed")
+	}
+	// Recommission from first node.
+	if committed, err := mtc.nodeLivenesses[0].SetDecommissioning(ctx, goneNodeID, false); err != nil {
+		t.Fatal(err)
+	} else if !committed {
+		t.Fatal("no change committed")
+	}
+	// Decommission from second node (a second time).
+	if committed, err := mtc.nodeLivenesses[1].SetDecommissioning(ctx, goneNodeID, true); err != nil {
+		t.Fatal(err)
+	} else if !committed {
+		t.Fatal("no change committed")
+	}
+	// Recommission from third node.
+	if committed, err := mtc.nodeLivenesses[2].SetDecommissioning(ctx, goneNodeID, false); err != nil {
+		t.Fatal(err)
+	} else if !committed {
+		t.Fatal("no change committed")
+	}
 }
 
 func TestNodeLivenessLivenessStatus(t *testing.T) {
