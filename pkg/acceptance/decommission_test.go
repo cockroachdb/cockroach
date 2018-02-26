@@ -122,7 +122,8 @@ func testDecommissionInner(
 		}
 	}
 
-	withDB(1, "SET CLUSTER SETTING server.remote_debugging.mode = 'any'")
+	withDB(1, "SET CLUSTER SETTING server.remote_debugging.mode = 'any';"+
+		"SET CLUSTER SETTING server.shutdown.drain_wait='0s'")
 
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)

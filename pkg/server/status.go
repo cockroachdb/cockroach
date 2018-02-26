@@ -523,7 +523,8 @@ func (s *statusServer) Details(
 		return resp, nil
 	}
 
-	if !s.admin.server.operational() {
+	serveMode := s.admin.server.serveMode.get()
+	if serveMode != modeOperational {
 		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
 
