@@ -88,8 +88,8 @@ var (
 	// for a graceful shutdown.
 	GracefulDrainModes = []serverpb.DrainMode{serverpb.DrainMode_CLIENT, serverpb.DrainMode_LEASES}
 
-	settingDrainMaxWait = settings.RegisterDurationSetting(
-		"server.drain_max_wait",
+	subsystemDrainMaxWait = settings.RegisterDurationSetting(
+		"server.drain.subsystem_max_wait",
 		"the amount of time subsystems wait for work to finish before shutting down",
 		10*time.Second,
 	)
@@ -1372,7 +1372,7 @@ func (s *Server) doDrain(
 					return nil
 				}
 
-				drainMaxWait := settingDrainMaxWait.Get(&s.st.SV)
+				drainMaxWait := subsystemDrainMaxWait.Get(&s.st.SV)
 				if err := s.pgServer.Drain(drainMaxWait); err != nil {
 					return err
 				}
