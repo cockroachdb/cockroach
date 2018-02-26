@@ -107,6 +107,7 @@ var defaultVals = map[string][]string{
 	"date":        dateInputs,
 	"time":        timeInputs,
 	"inet":        inetInputs,
+	"jsonb":       jsonbInputs,
 }
 
 var decimalInputs = []string{
@@ -214,6 +215,20 @@ var inetInputs = []string{
 	"192/10",
 	"192.168/23",
 	"192.168./10",
+}
+
+var jsonbInputs = []string{
+	`123`,
+	`"hello"`,
+	`{}`,
+	`[]`,
+	`0`,
+	`0.0000`,
+	`""`,
+	`"\uD83D\uDE80"`,
+	`{"\uD83D\uDE80": "hello"}`,
+	`[1, 2, 3]`,
+	`{"foo": 123}`,
 }
 
 func makeEncodingFunc(typName string) generateEnc {
