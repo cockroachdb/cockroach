@@ -374,6 +374,12 @@ func (b *writeBuffer) writeBinaryDatum(
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
 		}
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
+	case *tree.DJSON:
+		s := v.JSON.String()
+		b.putInt32(int32(len(s) + 1))
+		// Postgres version number, as of writing, `1` is the only valid value.
+		b.writeByte(1)
+		b.writeString(s)
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
