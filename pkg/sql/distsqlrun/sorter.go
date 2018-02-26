@@ -124,7 +124,7 @@ type sortAllProcessor struct {
 	// sortAllProcessor first calls Next() on its input stream to completion before
 	// outputting a single row. Thus when it receives ProducerMetadata, it has to
 	// cache it and output the rows its received so far, before emitting that metadata.
-	meta *ProducerMetadata
+	meta []ProducerMetadata
 }
 
 var _ Processor = &sortAllProcessor{}
@@ -203,12 +203,12 @@ func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 // TODO(arjun): This is unnecessary. Metadata can be emitted immediately.
 // This should be refactored away.
 func (s *sortAllProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.close()
-	if s.meta != nil {
-		meta := s.meta
-		s.meta = nil
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
 		return nil, meta
 	}
+	s.close()
 	return nil, nil
 }
 
@@ -218,7 +218,7 @@ func (s *sortAllProcessor) fill() error {
 	// memory error, fall back to use disk.
 	row, meta, err := s.fillWithContainer(ctx, s.rows)
 	if meta != nil {
-		s.meta = meta
+		s.meta = append(s.meta, *meta)
 	} else if err != nil {
 		// TODO(asubiotto): A memory error could also be returned if a limit other
 		// than the COCKROACH_WORK_MEM was reached. We should distinguish between
@@ -267,7 +267,7 @@ func (s *sortAllProcessor) fill() error {
 			// if we encounter metadata, we have to be careful: we can't return it
 			// right away. We save it for sending after we send all the rows we've
 			// already buffered.
-			s.meta = meta
+			s.meta = append(s.meta, *meta)
 		} else if err != nil {
 			return err
 		}
@@ -390,7 +390,7 @@ type sortTopKProcessor struct {
 	rowContainerMon *mon.BytesMonitor
 	k               int64
 
-	meta *ProducerMetadata
+	meta []ProducerMetadata
 }
 
 var _ Processor = &sortTopKProcessor{}
@@ -419,7 +419,7 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		for {
 			row, meta := s.input.Next()
 			if meta != nil {
-				s.meta = meta
+				s.meta = append(s.meta, *meta)
 				continue
 			}
 			if row == nil {
@@ -523,12 +523,12 @@ func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
 // trailingMetadata() returns any cached metadata to output to Next(), and evicts
 // its cache so that subsequent calls return nil.
 func (s *sortTopKProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.close()
-	if s.meta != nil {
-		meta := s.meta
-		s.meta = nil
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
 		return nil, meta
 	}
+	s.close()
 	return nil, nil
 }
 
@@ -545,7 +545,7 @@ type sortChunksProcessor struct {
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
 	prefix       sqlbase.EncDatumRow
 	nextChunkRow sqlbase.EncDatumRow
-	meta         *ProducerMetadata
+	meta         []ProducerMetadata
 }
 
 var _ Processor = &sortChunksProcessor{}
@@ -638,7 +638,7 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			if err != nil {
 				return nil, s.producerMeta(err)
 			} else if meta != nil {
-				s.meta = meta
+				s.meta = append(s.meta, *meta)
 			}
 			// If that didn't result in an active chunk, we are done.
 			if s.rows.Len() == 0 {
@@ -662,12 +662,12 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 }
 
 func (s *sortChunksProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.close()
-	if s.meta != nil {
-		meta := s.meta
-		s.meta = nil
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
 		return nil, meta
 	}
+	s.close()
 	return nil, nil
 }
 
