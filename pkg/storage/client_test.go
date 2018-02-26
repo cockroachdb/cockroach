@@ -994,15 +994,13 @@ func (m *multiTestContext) restart() {
 	}
 }
 
-// changeReplicasLocked performs a ChangeReplicas operation, retrying
-// until the destination store has been addded or removed. m.mu must
-// be locked in read mode. Returns the range's NextReplicaID, which
-// is the ID of the newly-added replica if this is an add.
-func (m *multiTestContext) changeReplicasLocked(
-	rangeID roachpb.RangeID, dest int, changeType roachpb.ReplicaChangeType,
+// changeReplicas performs a ChangeReplicas operation, retrying until the
+// destination store has been addded or removed. Returns the range's
+// NextReplicaID, which is the ID of the newly-added replica if this is an add.
+func (m *multiTestContext) changeReplicas(
+	startKey roachpb.RKey, dest int, changeType roachpb.ReplicaChangeType,
 ) (roachpb.ReplicaID, error) {
 	ctx := context.Background()
-	startKey := m.findStartKeyLocked(rangeID)
 
 	// Perform a consistent read to get the updated range descriptor (as
 	// opposed to just going to one of the stores), to make sure we have
@@ -1064,14 +1062,13 @@ func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int)
 // replicateRangeNonFatal replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests ...int) error {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	startKey := m.findStartKeyLocked(rangeID)
+	m.mu.RUnlock()
 
 	expectedReplicaIDs := make([]roachpb.ReplicaID, len(dests))
 	for i, dest := range dests {
 		var err error
-		expectedReplicaIDs[i], err = m.changeReplicasLocked(rangeID, dest, roachpb.ADD_REPLICA)
+		expectedReplicaIDs[i], err = m.changeReplicas(startKey, dest, roachpb.ADD_REPLICA)
 		if err != nil {
 			return err
 		}
@@ -1110,9 +1107,10 @@ func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
 // Returns an error rather than calling m.t.Fatal upon error.
 func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, dest int) error {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
+	startKey := m.findStartKeyLocked(rangeID)
+	m.mu.RUnlock()
 
-	_, err := m.changeReplicasLocked(rangeID, dest, roachpb.REMOVE_REPLICA)
+	_, err := m.changeReplicas(startKey, dest, roachpb.REMOVE_REPLICA)
 	return err
 }
 
