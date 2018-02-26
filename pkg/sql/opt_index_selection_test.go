@@ -23,7 +23,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -81,18 +86,32 @@ func makeSpans(
 	desc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	sel *renderNode,
-) (logicalSpans opt.LogicalSpans, spans roachpb.Spans) {
+) (logicalSpans idxconstraint.LogicalSpans, spans roachpb.Spans) {
 	expr := parseAndNormalizeExpr(t, p, sql, sel)
 
 	c := &indexInfo{
 		desc:  desc,
 		index: index,
 	}
-	optExpr, err := opt.BuildScalarExpr(expr, p.EvalContext())
+	o := xform.NewOptimizer(nil /* Catalog */, xform.OptimizeAll)
+	colNames := make([]string, len(desc.Columns))
+	colTypes := make([]types.T, len(desc.Columns))
+	for i := range desc.Columns {
+		colNames[i] = desc.Columns[i].Name
+		colTypes[i] = desc.Columns[i].Type.ToDatumType()
+	}
+	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	bld := optbuilder.NewScalar(
+		context.Background(), &semaCtx, &evalCtx, o.Factory(), colNames, colTypes,
+	)
+	bld.AllowUnsupportedExpr = true
+	filterGroup, err := bld.Build(expr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = c.makeIndexConstraints(optExpr, p.EvalContext())
+	filterExpr := o.Optimize(filterGroup, &opt.PhysicalProps{})
+	err = c.makeIndexConstraints(o, filterExpr, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +122,7 @@ func makeSpans(
 		t.Fatal(err)
 	}
 	if !ok {
-		logicalSpans = opt.LogicalSpans{opt.MakeFullSpan()}
+		logicalSpans = idxconstraint.LogicalSpans{idxconstraint.MakeFullSpan()}
 	}
 	return logicalSpans, spans
 }
@@ -328,7 +347,7 @@ func TestExactPrefix(t *testing.T) {
 			sel := makeSelectNode(t, p)
 			desc, index := makeTestIndexFromStr(t, d.columns)
 			logicalSpans, _ := makeSpans(t, p, d.expr, desc, index, sel)
-			prefix := opt.ExactPrefix(logicalSpans, p.EvalContext())
+			prefix := idxconstraint.ExactPrefix(logicalSpans, p.EvalContext())
 			if d.expected != prefix {
 				t.Errorf("%s: expected %d, but found %d", d.expr, d.expected, prefix)
 			}
