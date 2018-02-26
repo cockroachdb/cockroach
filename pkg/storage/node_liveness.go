@@ -256,10 +256,36 @@ func (nl *NodeLiveness) SetDecommissioning(
 			<-sem
 		}()
 
-		oldLiveness, err := nl.GetLiveness(nodeID) // need new liveness in each iteration
-		if err != nil {
+		// We need the current liveness in each iteration.
+		//
+		// We ignore any liveness record in Gossip because we may have to fall back
+		// to the KV store anyway. The scenario in which this is needed is:
+		// - kill node 2 and stop node 1
+		// - wait for node 2's liveness record's Gossip entry to expire on all surviving nodes
+		// - restart node 1; it'll never see node 2 in `GetLiveness` unless the whole
+		//   node liveness span gets regossiped (unlikely if it wasn't the lease holder
+		//   for that span)
+		// - can't decommission node 2 from node 1 without KV fallback.
+		//
+		// See #20863.
+		//
+		// NB: this also de-flakes TestNodeLivenessDecommissionAbsent; running
+		// decommissioning commands in a tight loop on different nodes sometimes
+		// results in unintentional no-ops (due to the Gossip lag); this could be
+		// observed by users in principle, too.
+		oldLiveness := &Liveness{}
+		if err := nl.db.GetProto(ctx, keys.NodeLivenessKey(nodeID), oldLiveness); err != nil {
 			return false, errors.Wrap(err, "unable to get liveness")
 		}
+		if (*oldLiveness == Liveness{}) {
+			return false, ErrNoLivenessRecord
+		}
+		// We may have discovered a Liveness not yet received via Gossip. Offer it
+		// to make sure that when we actually try to update the liveness, the
+		// previous view is correct. This, too, is required to de-flake
+		// TestNodeLivenessDecommissionAbsent.
+		nl.maybeUpdate(*oldLiveness)
+
 		return nl.setDecommissioningInternal(ctx, nodeID, oldLiveness, decommission)
 	}
 
