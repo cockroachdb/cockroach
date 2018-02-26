@@ -1163,6 +1163,226 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 }
 
+func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+
+	// Set up 8 stores -- 2 in each of the first 2 localities, and 4 in the third.
+	// Because of the desire for diversity, the nodes in the small localities end
+	// up being fuller than the nodes in the large locality. In the past this has
+	// caused an over-eagerness to rebalance to nodes in the large locality, and
+	// not enough willingness to rebalance within the small localities. This test
+	// verifies that we compare fairly amongst stores that will givve the store
+	// an optimal diversity score, not considering the fullness of those that
+	// will make for worse diversity.
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID: 1,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(1),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "1"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(50, 50),
+		},
+		{
+			StoreID: 2,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(2),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "1"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(40, 60),
+		},
+		{
+			StoreID: 3,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(3),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "2"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(50, 50),
+		},
+		{
+			StoreID: 4,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(4),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "2"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(40, 60),
+		},
+		{
+			StoreID: 5,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(5),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "3"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(90, 10),
+		},
+		{
+			StoreID: 6,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(6),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "3"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(80, 20),
+		},
+		{
+			StoreID: 7,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(7),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "3"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(80, 20),
+		},
+		{
+			StoreID: 8,
+			Node: roachpb.NodeDescriptor{
+				NodeID: roachpb.NodeID(8),
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "locale", Value: "3"}},
+				},
+			},
+			Capacity: testStoreCapacitySetup(80, 20),
+		},
+	}
+
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	replicas := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		res := make([]roachpb.ReplicaDescriptor, len(storeIDs))
+		for i, storeID := range storeIDs {
+			res[i].NodeID = roachpb.NodeID(storeID)
+			res[i].StoreID = storeID
+		}
+		return res
+	}
+
+	testCases := []struct {
+		existing []roachpb.ReplicaDescriptor
+		expected roachpb.StoreID // 0 if no rebalance is expected
+	}{
+		{replicas(1, 3, 5), 0},
+		{replicas(2, 3, 5), 1},
+		{replicas(1, 4, 5), 3},
+		{replicas(1, 3, 6), 5},
+		{replicas(1, 5, 6), 3},
+		{replicas(2, 5, 6), 3},
+		{replicas(3, 5, 6), 1},
+		{replicas(4, 5, 6), 1},
+	}
+
+	for i, tc := range testCases {
+		result, details := a.RebalanceTarget(
+			ctx,
+			nil, /* constraints */
+			nil, /* raftStatus */
+			testRangeInfo(tc.existing, firstRange),
+			storeFilterThrottled,
+			false,
+		)
+		var resultID roachpb.StoreID
+		if result != nil {
+			resultID = result.StoreID
+		}
+		if resultID != tc.expected {
+			t.Errorf("%d: RebalanceTarget(%v) expected s%d; got %v: %s", i, tc.existing, tc.expected, result, details)
+		}
+	}
+
+	// Add a couple less full nodes in a fourth locality, then run a few more tests:
+	stores = append(stores, &roachpb.StoreDescriptor{
+		StoreID: 9,
+		Node: roachpb.NodeDescriptor{
+			NodeID: roachpb.NodeID(9),
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "locale", Value: "4"}},
+			},
+		},
+		Capacity: testStoreCapacitySetup(70, 30),
+	})
+	stores = append(stores, &roachpb.StoreDescriptor{
+		StoreID: 10,
+		Node: roachpb.NodeDescriptor{
+			NodeID: roachpb.NodeID(10),
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{{Key: "locale", Value: "4"}},
+			},
+		},
+		Capacity: testStoreCapacitySetup(60, 40),
+	})
+
+	sg.GossipStores(stores, t)
+
+	testCases2 := []struct {
+		existing []roachpb.ReplicaDescriptor
+		expected []roachpb.StoreID
+	}{
+		{replicas(1, 3, 5), []roachpb.StoreID{9}},
+		{replicas(2, 3, 5), []roachpb.StoreID{9}},
+		{replicas(1, 4, 5), []roachpb.StoreID{9}},
+		{replicas(1, 3, 6), []roachpb.StoreID{9}},
+		{replicas(1, 5, 6), []roachpb.StoreID{9}},
+		{replicas(2, 5, 6), []roachpb.StoreID{9}},
+		{replicas(3, 5, 6), []roachpb.StoreID{9}},
+		{replicas(4, 5, 6), []roachpb.StoreID{9}},
+		{replicas(5, 6, 7), []roachpb.StoreID{9}},
+		{replicas(1, 5, 9), nil},
+		{replicas(3, 5, 9), nil},
+		{replicas(1, 3, 9), []roachpb.StoreID{5, 6, 7, 8}},
+		{replicas(1, 3, 10), []roachpb.StoreID{5, 6, 7, 8}},
+		// This last case is a bit more interesting - the difference in range count
+		// between s10 an s9 is significant enough to motivate a rebalance if they
+		// were the only two valid options, but they're both considered underful
+		// relative to the other equally valid placement options (s3 and s4), so
+		// the system doesn't consider it helpful to rebalance between them. It'd
+		// prefer to move replicas onto both s9 and s10 from other stores.
+		{replicas(1, 5, 10), nil},
+	}
+
+	for i, tc := range testCases2 {
+		log.Infof(ctx, "case #%d", i)
+		result, details := a.RebalanceTarget(
+			ctx,
+			nil, /* constraints */
+			nil, /* raftStatus */
+			testRangeInfo(tc.existing, firstRange),
+			storeFilterThrottled,
+			false,
+		)
+		var gotExpected bool
+		if result == nil {
+			gotExpected = (tc.expected == nil)
+		} else {
+			for _, expectedStoreID := range tc.expected {
+				if result.StoreID == expectedStoreID {
+					gotExpected = true
+					break
+				}
+			}
+		}
+		if !gotExpected {
+			t.Errorf("%d: RebalanceTarget(%v) expected store in %v; got %v: %s",
+				i, tc.existing, tc.expected, result, details)
+		}
+	}
+}
+
 func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ true)
