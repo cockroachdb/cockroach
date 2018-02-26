@@ -29,6 +29,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -1769,7 +1770,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 10
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	ctx, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 	const dir = "nodelocal:///"
 
@@ -1784,10 +1785,16 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE data.teller (id INT PRIMARY KEY, name STRING)`)
 	sqlDB.Exec(t, `INSERT INTO data.teller VALUES (1, 'alice'), (7, 'bob'), (3, 'eve')`)
 
-	sqlDB.Exec(t, `BEGIN`)
-	sqlDB.Exec(t, `UPDATE data.bank SET balance = 2`)
-	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[2])
-	sqlDB.Exec(t, `COMMIT`)
+	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+		_, err := sqlDB.DB.Exec(`UPDATE data.bank SET balance = 2`)
+		if err != nil {
+			return err
+		}
+		return sqlDB.DB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&ts[2])
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	fullBackup, latestBackup := filepath.Join(dir, "full"), filepath.Join(dir, "latest")
 	sqlDB.Exec(t,
