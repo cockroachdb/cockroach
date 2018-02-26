@@ -317,6 +317,8 @@ func TestContextualHelp(t *testing.T) {
 		{`SET CLUSTER ??`, `SET CLUSTER SETTING`},
 		{`SET CLUSTER SETTING blah = 42 ??`, `SET CLUSTER SETTING`},
 
+		{`USE ??`, `USE`},
+
 		{`RESET blah ??`, `RESET`},
 		{`RESET SESSION ??`, `RESET`},
 		{`RESET CLUSTER SETTING ??`, `RESET CLUSTER SETTING`},
