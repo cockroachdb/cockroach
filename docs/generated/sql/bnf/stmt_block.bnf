@@ -135,6 +135,7 @@ set_stmt ::=
 	set_session_stmt
 	| set_csetting_stmt
 	| set_transaction_stmt
+	| use_stmt
 
 show_stmt ::=
 	show_backup_stmt
@@ -407,6 +408,9 @@ set_csetting_stmt ::=
 set_transaction_stmt ::=
 	'SET' 'TRANSACTION' transaction_mode_list
 	| 'SET' 'SESSION' 'TRANSACTION' transaction_mode_list
+
+use_stmt ::=
+	'USE' var_value
 
 show_backup_stmt ::=
 	'SHOW' 'BACKUP' string_or_placeholder
