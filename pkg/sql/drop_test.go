@@ -664,6 +664,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 				<-blockSchemaChanges
 				return nil
 			},
+			AsyncExecQuickly: true,
 		},
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
 			DisableBackfillMigrations: true,
