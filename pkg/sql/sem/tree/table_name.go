@@ -57,8 +57,7 @@ type TableNamePrefix struct {
 
 // Format implements the NodeFormatter interface.
 func (tp *TableNamePrefix) Format(ctx *FmtCtx) {
-	f := ctx.flags
-	alwaysFormat := f.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
+	alwaysFormat := ctx.alwaysFormatTablePrefix()
 	if tp.ExplicitSchema || alwaysFormat {
 		if tp.ExplicitCatalog || alwaysFormat {
 			ctx.FormatNode(&tp.CatalogName)
@@ -83,8 +82,7 @@ func (tp *TableNamePrefix) Catalog() string {
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
 	t.TableNamePrefix.Format(ctx)
-	alwaysFormatPrefix := ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
-	if t.ExplicitSchema || alwaysFormatPrefix {
+	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
 	}
 	ctx.FormatNode(&t.TableName)

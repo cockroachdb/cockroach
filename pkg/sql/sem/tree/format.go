@@ -355,3 +355,7 @@ func (f *FmtCtxWithBuf) CloseAndGetString() string {
 	f.Close()
 	return s
 }
+
+func (ctx *FmtCtx) alwaysFormatTablePrefix() bool {
+	return ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
+}

@@ -162,7 +162,7 @@ func (node *ShowSessions) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowSchemas represents a SHOW TABLES statement.
+// ShowSchemas represents a SHOW SCHEMAS statement.
 type ShowSchemas struct {
 	Database Name
 }
