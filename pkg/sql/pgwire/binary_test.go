@@ -164,6 +164,17 @@ func TestBinaryInet(t *testing.T) {
 	})
 }
 
+func TestBinaryJSONB(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testBinaryDatumType(t, "jsonb", func(val string) tree.Datum {
+		j, err := tree.ParseDJSON(val)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return j
+	})
+}
+
 func TestBinaryIntArray(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	buf := writeBuffer{bytecount: metric.NewCounter(metric.Metadata{})}
