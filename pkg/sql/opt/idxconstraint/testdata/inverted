@@ -26,4 +26,3 @@ index-constraints vars=(jsonb, int) inverted-index=@1
 ----
 [/'{"a": 1}' - /'{"a": 1}']
 Remaining filter: (@2 = 1) AND (@1 @> '{"b": 1}')
-
