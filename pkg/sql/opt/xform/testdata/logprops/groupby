@@ -12,10 +12,10 @@ build
 SELECT a.y, SUM(a.z), a.x, False FROM a GROUP BY a.x, a.y
 ----
 project
- ├── columns: a.y:int:null:2 column4:float:null:4 a.x:int:1 column5:bool:null:5
+ ├── columns: y:int:null:2 column4:float:null:4 x:int:1 column5:bool:null:5
  ├── group-by
+ │    ├── columns: a.x:int:1 a.y:int:null:2 column4:float:null:4
  │    ├── grouping columns: a.x:int:1 a.y:int:null:2
- │    ├── aggregation columns: column4:float:null:4
  │    ├── scan
  │    │    └── columns: a.x:int:1 a.y:int:null:2 a.z:float:3
  │    └── aggregations
