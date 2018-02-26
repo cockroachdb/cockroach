@@ -43,3 +43,7 @@
       clusters without primary keys will succeed with incorrect results.
     - TableReader was extended to support physical checks. Old versions would not
       recognize these new fields.
+- Version: 10 (MinAcceptedVersion: 6)
+    - The AlgebraicSetOp processor was removed, as it is not used. It was never
+      used in plans, but its absence does change the ProcessorCoreUnion message,
+      so a version bump is required.
