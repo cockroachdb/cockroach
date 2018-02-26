@@ -22,9 +22,14 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -125,14 +130,28 @@ func (p *planner) selectIndex(
 		c.init(s)
 	}
 
+	var optimizer *xform.Optimizer
+
 	if s.filter != nil {
-		filterExpr, err := opt.BuildScalarExpr(s.filter, p.EvalContext())
+		colNames := make([]string, len(s.resultColumns))
+		colTypes := make([]types.T, len(s.resultColumns))
+		for i := range s.resultColumns {
+			colNames[i] = s.resultColumns[i].Name
+			colTypes[i] = s.resultColumns[i].Typ
+		}
+		optimizer = xform.NewOptimizer(nil /* Catalog */, xform.OptimizeAll)
+		bld := optbuilder.NewScalar(
+			ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory(), colNames, colTypes,
+		)
+		bld.AllowUnsupportedExpr = true
+		filterGroup, err := bld.Build(s.filter)
 		if err != nil {
 			return nil, err
 		}
+		filterExpr := optimizer.Optimize(filterGroup, &opt.PhysicalProps{})
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
-				filterExpr, p.EvalContext(),
+				optimizer, filterExpr, p.EvalContext(),
 			); err != nil {
 				return nil, err
 			}
@@ -210,22 +229,13 @@ func (p *planner) selectIndex(
 
 	s.origFilter = s.filter
 	if s.filter != nil {
-		s.filter = c.ic.RemainingFilter(&s.filterVars)
-
-		// Constraint propagation may have produced new constant sub-expressions.
-		// Propagate them and check if s.filter can be applied prematurely.
-		if s.filter != nil {
-			var err error
-			s.filter, err = p.extendedEvalCtx.NormalizeExpr(s.filter)
-			if err != nil {
-				return nil, err
-			}
-			switch s.filter {
-			case tree.DBoolFalse, tree.DNull:
-				return &zeroNode{}, nil
-			case tree.DBoolTrue:
-				s.filter = nil
-			}
+		remGroup := c.ic.RemainingFilter()
+		remEv := optimizer.Optimize(remGroup, &opt.PhysicalProps{})
+		if remEv.Operator() == opt.TrueOp {
+			s.filter = nil
+		} else {
+			execBld := execbuilder.New(nil /* execFactory */, remEv)
+			s.filter = execBld.BuildScalar(&s.filterVars)
 		}
 	}
 	s.filterVars.Rebind(s.filter, true, false)
@@ -261,7 +271,7 @@ type indexInfo struct {
 	reverse     bool
 	exactPrefix int
 
-	ic opt.IndexConstraints
+	ic idxconstraint.Instance
 }
 
 func (v *indexInfo) init(s *scanNode) {
@@ -377,7 +387,9 @@ func (v indexInfoByCost) Sort() {
 // makeIndexConstraints uses the opt code to generate index
 // constraints. Initializes v.ic, as well as v.exactPrefix and v.cost (with a
 // baseline cost for the index).
-func (v *indexInfo) makeIndexConstraints(filter *opt.Expr, evalCtx *tree.EvalContext) error {
+func (v *indexInfo) makeIndexConstraints(
+	optimizer *xform.Optimizer, filter xform.ExprView, evalCtx *tree.EvalContext,
+) error {
 	numIndexCols := len(v.index.ColumnIDs)
 
 	numExtraCols := 0
@@ -396,7 +408,7 @@ func (v *indexInfo) makeIndexConstraints(filter *opt.Expr, evalCtx *tree.EvalCon
 	}
 
 	// Set up the IndexColumnInfo structures.
-	colInfos := make([]opt.IndexColumnInfo, 0, numIndexCols+numExtraCols)
+	colInfos := make([]idxconstraint.IndexColumnInfo, 0, numIndexCols+numExtraCols)
 	for i := 0; i < numIndexCols+numExtraCols; i++ {
 		var colID sqlbase.ColumnID
 		var dir encoding.Direction
@@ -421,25 +433,21 @@ func (v *indexInfo) makeIndexConstraints(filter *opt.Expr, evalCtx *tree.EvalCon
 		}
 
 		colDesc := &v.desc.Columns[idx]
-		colInfos = append(colInfos, opt.IndexColumnInfo{
-			VarIdx:    idx,
+		colInfos = append(colInfos, idxconstraint.IndexColumnInfo{
+			VarIdx:    opt.ColumnIndex(idx + 1),
 			Typ:       colDesc.Type.ToDatumType(),
 			Direction: dir,
 			Nullable:  colDesc.Nullable,
 		})
 	}
-	var spans opt.LogicalSpans
-	var ok bool
-	if filter != nil {
-		v.ic.Init(filter, colInfos, isInverted, evalCtx)
-		spans, ok = v.ic.Spans()
-	}
+	v.ic.Init(filter, colInfos, isInverted, evalCtx, optimizer.Factory())
+	spans, ok := v.ic.Spans()
 	if !ok {
 		// The index isn't being restricted at all, bump the cost significantly to
 		// make any index which does restrict the keys more desirable.
 		v.cost *= 1000
 	} else {
-		v.exactPrefix = opt.ExactPrefix(spans, evalCtx)
+		v.exactPrefix = idxconstraint.ExactPrefix(spans, evalCtx)
 		// Find the number of columns that are restricted in all spans.
 		numCols := len(colInfos)
 		for _, sp := range spans {
@@ -475,7 +483,7 @@ func unconstrainedSpans(
 func spansFromLogicalSpans(
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-	logicalSpans opt.LogicalSpans,
+	logicalSpans idxconstraint.LogicalSpans,
 	logicalSpansOk bool,
 ) (roachpb.Spans, error) {
 	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
@@ -502,7 +510,7 @@ func spansFromLogicalSpans(
 
 	if !logicalSpansOk {
 		// Encode a full span.
-		sp, err := spanFromLogicalSpan(tableDesc, index, opt.MakeFullSpan(), interstices)
+		sp, err := spanFromLogicalSpan(tableDesc, index, idxconstraint.MakeFullSpan(), interstices)
 		if err != nil {
 			return nil, err
 		}
@@ -573,7 +581,7 @@ func encodeLogicalKey(
 func spanFromLogicalSpan(
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
-	ls opt.LogicalSpan,
+	ls idxconstraint.LogicalSpan,
 	interstices [][]byte,
 ) (roachpb.Span, error) {
 	var s roachpb.Span

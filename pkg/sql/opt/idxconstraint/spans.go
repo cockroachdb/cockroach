@@ -163,8 +163,6 @@ func ExactPrefix(spans LogicalSpans, evalCtx *tree.EvalContext) int {
 	}
 }
 
-var _ = ExactPrefix
-
 // IndexColumnInfo encompasses the information for index columns, needed for
 // index constraints.
 type IndexColumnInfo struct {
