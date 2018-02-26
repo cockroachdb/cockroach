@@ -3,3 +3,4 @@ set_stmt ::=
 	| 'SET' ( 'SESSION' | ) var_name '=' var_value ( ( ',' var_value ) )*
 	| set_csetting_stmt
 	| set_transaction_stmt
+	| use_stmt
