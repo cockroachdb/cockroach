@@ -431,13 +431,13 @@ func TestReportUsage(t *testing.T) {
 			`SELECT _ / $1`,
 			`SELECT _ / _`,
 			`SELECT crdb_internal.force_error(_, $1)`,
-			`SET CLUSTER SETTING _ = _`,
-			`SET CLUSTER SETTING _ = _`, // these are scrubbed to same key.
+			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
+			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
 			`UPDATE _ SET _ = _ + _`,
-			`SET CLUSTER SETTING _ = _`,
+			`SET CLUSTER SETTING "cluster.organization" = _`,
 		},
 	} {
 		hashedAppName := sql.HashForReporting(clusterSecret, appName)
