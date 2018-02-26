@@ -180,7 +180,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
-		target, _ := rq.allocator.RebalanceTarget(ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled, false)
+		target, _ := rq.allocator.RebalanceTarget(ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled, false)
 		if target != nil {
 			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 			return true, 0
@@ -270,7 +270,7 @@ func (rq *replicateQueue) processOneChange(
 		log.VEventf(ctx, 1, "adding a new replica")
 		newStore, details, err := rq.allocator.AllocateTarget(
 			ctx,
-			zone.Constraints,
+			zone,
 			desc.Replicas,
 			rangeInfo,
 			disableStatsBasedRebalancing,
@@ -305,7 +305,7 @@ func (rq *replicateQueue) processOneChange(
 			})
 			_, _, err := rq.allocator.AllocateTarget(
 				ctx,
-				zone.Constraints,
+				zone,
 				oldPlusNewReplicas,
 				rangeInfo,
 				disableStatsBasedRebalancing,
@@ -344,7 +344,7 @@ func (rq *replicateQueue) processOneChange(
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
 				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
-		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone.Constraints, candidates, rangeInfo, disableStatsBasedRebalancing)
+		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
 		if err != nil {
 			return false, err
 		}
@@ -458,7 +458,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone.Constraints, repl.RaftStatus(), rangeInfo, storeFilterThrottled, disableStatsBasedRebalancing)
+				ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled, disableStatsBasedRebalancing)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {
