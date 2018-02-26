@@ -41,14 +41,11 @@ func ProcessInboundStream(
 	// as the last record that the producer gets.
 	if err != nil {
 		log.VEventf(ctx, 1, "inbound stream error: %s", err)
-		dst.Push(nil, &ProducerMetadata{Err: err})
-		dst.ProducerDone()
 		return err
 	}
 	log.VEventf(ctx, 1, "inbound stream done")
-	dst.ProducerDone()
-	// The consumer is now done. The producer, if it's still around, will
-	// receive an EOF error over its side of the stream.
+	// We are now done. The producer, if it's still around, will receive an EOF
+	// error over its side of the stream.
 	return nil
 }
 
@@ -62,46 +59,32 @@ func processInboundStreamHelper(
 	var finalErr error
 	draining := false
 	var sd StreamDecoder
-	for {
-		var msg *ProducerMessage
-		if firstMsg != nil {
-			msg = firstMsg
-			firstMsg = nil
-		} else {
-			// Check for context cancellation before recv()ing the next message.
-			select {
-			case <-f.Ctx.Done():
-				// This will error out the FlowStream(), and also cancel
-				// the flow context on the producer.
-				return sqlbase.NewQueryCanceledError()
-			default:
-			}
-			var err error
-			msg, err = stream.Recv()
-			if err != nil {
-				if err != io.EOF {
-					// Communication error.
-					return errors.Wrap(
-						err, log.MakeMessage(ctx, "communication error", nil /* args */))
-				}
-				// End of the stream.
-				return finalErr
-			}
-		}
 
-		err := sd.AddMessage(msg)
+	sendErrToConsumer := func(err error) {
 		if err != nil {
-			return errors.Wrap(err, log.MakeMessage(ctx, "decoding error", nil /* args */))
+			dst.Push(nil, &ProducerMetadata{Err: err})
+		}
+		dst.ProducerDone()
+	}
+
+	// processProducerMessage is a helper function to read data from the producer
+	// and send it along to the consumer. If err is set, the caller must return
+	// the error to the producer. If useFinalErr is set, the caller must return
+	// finalErr, even if it's nil.
+	processProducerMessage := func(msg *ProducerMessage) (err error, useFinalErr bool) {
+		err = sd.AddMessage(msg)
+		if err != nil {
+			return errors.Wrap(err, log.MakeMessage(ctx, "decoding error", nil /* args */)), false
 		}
 		var types []sqlbase.ColumnType
 		for {
 			row, meta, err := sd.GetRow(nil /* rowBuf */)
 			if err != nil {
-				return err
+				return err, false
 			}
 			if row == nil && meta == nil {
 				// No more rows in the last message.
-				break
+				return nil, false
 			}
 
 			if log.V(3) {
@@ -140,9 +123,76 @@ func processInboundStreamHelper(
 					}
 				}
 			case ConsumerClosed:
-				return finalErr
+				return finalErr, true
 			}
 		}
+	}
+
+	if firstMsg != nil {
+		if err, useFinalErr := processProducerMessage(firstMsg); err != nil {
+			sendErrToConsumer(err)
+			return err
+		} else if useFinalErr {
+			sendErrToConsumer(finalErr)
+			return finalErr
+		}
+	}
+
+	// If the main goroutine detects a context cancellation just before
+	// the RPC-receiving goroutine sends an error, the error won't be consumed,
+	// and the RPC goroutine will deadlock. To prevent this, make errChan a
+	// buffered channel.
+	errChan := make(chan error, 1)
+
+	f.waitGroup.Add(1)
+	go func() {
+		defer f.waitGroup.Done()
+		for {
+			msg, err := stream.Recv()
+			if err != nil {
+				if err != io.EOF {
+					if f.Ctx.Err() != nil {
+						// The query was canceled, and FlowStream has errored out as a
+						// result.
+						err = sqlbase.NewQueryCanceledError()
+					} else {
+						// Communication error.
+						err = errors.Wrap(
+							err, log.MakeMessage(ctx, "communication error", nil /* args */))
+					}
+					sendErrToConsumer(err)
+					errChan <- err
+					return
+				}
+				// End of the stream.
+				sendErrToConsumer(finalErr)
+				errChan <- finalErr
+				return
+			}
+
+			if err, useFinalErr := processProducerMessage(msg); err != nil {
+				sendErrToConsumer(err)
+				errChan <- err
+				return
+			} else if useFinalErr {
+				sendErrToConsumer(finalErr)
+				errChan <- finalErr
+				return
+			}
+		}
+	}()
+
+	// Check for context cancellation while recv()ing the FlowStream on another
+	// goroutine.
+	select {
+	case <-f.Ctx.Done():
+		// The flow's context is canceled. Error out the RPC to make the outbox on
+		// the producer node cancel its own flow context.
+		return sqlbase.NewQueryCanceledError()
+	case err := <-errChan:
+		// The producer is done, or the RPC errored out. Return the error to close
+		// the stream.
+		return err
 	}
 }
 
