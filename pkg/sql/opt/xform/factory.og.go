@@ -1144,6 +1144,24 @@ func (_f *factory) ConstructUnaryComplement(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
 }
 
+// ConstructCast constructs an expression for the Cast operator.
+func (_f *factory) ConstructCast(
+	input opt.GroupID,
+	typ opt.PrivateID,
+) opt.GroupID {
+	_castExpr := makeCastExpr(input, typ)
+	_group := _f.mem.lookupGroupByFingerprint(_castExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_castExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_castExpr)))
+}
+
 // ConstructFunction constructs an expression for the Function operator.
 // Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 // arguments. The private field is an opt.FuncDef struct that provides the name
@@ -1619,7 +1637,7 @@ func (_f *factory) ConstructExcept(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [78]dynConstructLookupFunc
+var dynConstructLookup [79]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1895,6 +1913,11 @@ func init() {
 	// UnaryComplementOp
 	dynConstructLookup[opt.UnaryComplementOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructUnaryComplement(children[0])
+	}
+
+	// CastOp
+	dynConstructLookup[opt.CastOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructCast(children[0], private)
 	}
 
 	// FunctionOp

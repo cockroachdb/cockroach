@@ -52,6 +52,7 @@ func init() {
 		opt.ExistsOp:          typeAsBool,
 		opt.FunctionOp:        typeFunction,
 		opt.CoalesceOp:        typeCoalesce,
+		opt.CastOp:            typeCast,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -174,4 +175,8 @@ func typeCoalesce(ev ExprView) types.T {
 	}
 
 	return typ
+}
+
+func typeCast(ev ExprView) types.T {
+	return ev.Private().(types.T)
 }
