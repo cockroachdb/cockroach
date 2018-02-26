@@ -115,4 +115,3 @@ index-constraints vars=(int, int) index=(@1, @2)
 ----
 (/1/NULL - /5]
 Remaining filter: @2 != 2
-

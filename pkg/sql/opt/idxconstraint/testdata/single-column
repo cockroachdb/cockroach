@@ -149,4 +149,3 @@ index-constraints vars=(bool) index=(@1)
 NOT @1
 ----
 [/false - /false]
-

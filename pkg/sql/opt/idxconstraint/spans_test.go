@@ -410,3 +410,68 @@ result: %t
 		}
 	}
 }
+
+func TestConsolidateSpans(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testData := []struct {
+		s string
+		// expected value
+		e string
+	}{
+		{
+			s: "[/1 - /2], [/3 - /5], [/7 - /9]",
+			e: "[/1 - /5], [/7 - /9]",
+		},
+		{
+			s: "[/1 - /2], (/3 - /5], [/7 - /9]",
+			e: "[/1 - /2], (/3 - /5], [/7 - /9]",
+		},
+		{
+			s: "[/1 - /2), [/3 - /5], [/7 - /9]",
+			e: "[/1 - /2), [/3 - /5], [/7 - /9]",
+		},
+		{
+			s: "[/1 - /2), (/3 - /5], [/7 - /9]",
+			e: "[/1 - /2), (/3 - /5], [/7 - /9]",
+		},
+		{
+			s: "[/1/1 - /1/3], [/1/4 - /2]",
+			e: "[/1/1 - /2]",
+		},
+		{
+			s: "[/1/1/5 - /1/1/3], [/1/1/2 - /1/1/1]",
+			e: "[/1/1/5 - /1/1/1]",
+		},
+		{
+			s: "[/1/1/5 - /1/1/3], [/1/2/2 - /1/2/1]",
+			e: "[/1/1/5 - /1/1/3], [/1/2/2 - /1/2/1]",
+		},
+		{
+			s: "[/1 - /2], [/3 - /4], [/5 - /6], [/8 - /9], [/10 - /11], [/12 - /13], [/15 - /16]",
+			e: "[/1 - /6], [/8 - /13], [/15 - /16]",
+		},
+	}
+
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := indexConstraintCtx{
+				colInfos: []IndexColumnInfo{
+					{Direction: encoding.Ascending},
+					{Direction: encoding.Ascending},
+					{Direction: encoding.Descending},
+				},
+				evalCtx: &evalCtx,
+			}
+			s := parseSpans(tc.s)
+			consolidated := c.consolidateSpans(0 /* offset */, s)
+			res := spansStr(consolidated)
+			if res != tc.e {
+				t.Errorf("expected  %s  got  %s", tc.e, res)
+			}
+		})
+	}
+}
