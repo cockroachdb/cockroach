@@ -64,8 +64,7 @@ type AllTablesSelector struct {
 // Format implements the NodeFormatter interface.
 func (at *AllTablesSelector) Format(ctx *FmtCtx) {
 	at.TableNamePrefix.Format(ctx)
-	alwaysFormatPrefix := ctx.flags.HasFlags(FmtAlwaysQualifyTableNames) || ctx.tableNameFormatter != nil
-	if at.ExplicitSchema || alwaysFormatPrefix {
+	if at.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
 	}
 	ctx.WriteByte('*')
