@@ -56,10 +56,11 @@ func init() {
 		c.Start(ctx, c.Range(start+1, end))
 
 		c.Run(ctx, 1, `./workload init kv`)
-		m = newMonitor(ctx, c, c.All())
 		for node := 1; node <= end; node++ {
 			node := node
-			m.Go(func(ctx context.Context) error {
+			// TODO(dan): Ideally, the test would fail if this queryload failed,
+			// but we can't put it in monitor as-is because the test deadlocks.
+			go func() {
 				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128`
 				l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
@@ -67,9 +68,10 @@ func init() {
 				}
 				defer l.close()
 				c.RunL(ctx, l, node, cmd)
-				return nil
-			})
+			}()
 		}
+
+		m = newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			return waitForRebalance(ctx, c.l, db)

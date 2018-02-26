@@ -329,6 +329,7 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 			c.l.errorf("%s", err)
 		}
 	}
+	c.status("running test")
 	return c
 }
 
