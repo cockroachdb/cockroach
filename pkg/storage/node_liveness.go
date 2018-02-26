@@ -508,6 +508,13 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 		newLiveness.Expiration = hlc.LegacyTimestamp(
 			nl.clock.Now().Add((nl.livenessThreshold + maxOffset).Nanoseconds(), 0))
+		// This guards against the system clock moving backwards. As long
+		// as the cockroach process is running, checks inside hlc.Clock
+		// will ensure that the clock never moves backwards, but these
+		// checks don't work across process restarts.
+		if liveness != nil && newLiveness.Expiration.Less(liveness.Expiration) {
+			return errors.Errorf("proposed liveness update expires earlier than previous record")
+		}
 	}
 	if err := nl.updateLiveness(ctx, &newLiveness, liveness, func(actual Liveness) error {
 		// Update liveness to actual value on mismatch.
