@@ -31,7 +31,7 @@ setting is to be used. For example, to add an "enterprise" flag, adding into
 license_check.go:
 
 var enterpriseEnabled = settings.RegisterBoolSetting(
-   "enterprise.enabled", "some doc for the setting", false,
+  "enterprise.enabled", "some doc for the setting", false,
 )
 
 Then use with `if enterpriseEnabled.Get() ...`
@@ -46,15 +46,23 @@ then use a migration to write an explicit `true`: in practice you'd still expect
 to read `true` unless a preference is expressed, but in the rare cases where you
 read a default, you don't risk ignoring an expressed opt-out.
 
-Ideally, when passing configuration into some structure or subsystem, e.g.
-a rate limit into a client or something, passing a `*FooSetting` rather than a
+Ideally, when passing configuration into some structure or subsystem, e.g. a
+rate limit into a client or something, passing a `*FooSetting` rather than a
 `Foo` and waiting to call `.Get()` until the value is actually used ensures
 observing the latest value.
 
-Settings may become irrelevant over time, especially when introduced
-to provide a workaround to a system limitation which is later corrected. To
-remove a setting, write a SQL migration which removes the setting from the
-system setting table. See #21070 and #21078 for examples.
+Settings may become irrelevant over time, especially when introduced to provide
+a workaround to a system limitation which is later corrected. When deleting a
+setting's registration from the codebase, add its name to the list of
+`retiredSettings` in settings/registry.go -- this ensures the name cannot be
+accidentally reused, and suppresses log spam about the existing value.
+
+That list of retired settings can periodically (i.e. in major versions) be
+"flushed" by adding a migration that deletes all stored values for those keys
+at which point the key would be available for reuse in a later version. Is is
+only safe to run such a migration after the cluster upgrade process ensures no
+older nodes are still using the values for those old settings though, so such a
+migration needs to be version gated.
 
 Existing/off-the-shelf systems generally will not be defined in terms of our
 settings, but if they can either be swapped at runtime or expose some `setFoo`
