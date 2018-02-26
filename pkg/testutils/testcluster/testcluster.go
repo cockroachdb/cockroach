@@ -155,13 +155,15 @@ func StartTestCluster(t testing.TB, nodes int, args base.TestClusterArgs) *TestC
 		if err := tc.doAddServer(t, serverArgs); err != nil {
 			t.Fatal(err)
 		}
+		// We want to wait for stores for each server in order to have predictable
+		// store IDs. Otherwise, stores can be asynchronously bootstrapped in an
+		// unexpected order (#22342).
+		tc.WaitForStores(t, tc.Servers[0].Gossip())
 	}
 
 	// Create a closer that will stop the individual server stoppers when the
 	// cluster stopper is stopped.
 	tc.stopper.AddCloser(stop.CloserFn(tc.stopServers))
-
-	tc.WaitForStores(t, tc.Servers[0].Gossip())
 
 	if tc.replicationMode == base.ReplicationAuto {
 		if err := tc.WaitForFullReplication(); err != nil {
