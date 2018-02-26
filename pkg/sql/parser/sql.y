@@ -2224,13 +2224,18 @@ reset_csetting_stmt:
 | RESET CLUSTER error // SHOW HELP: RESET CLUSTER SETTING
 
 // USE is the MSSQL/MySQL equivalent of SET DATABASE. Alias it for convenience.
+// %Help: USE - set the current database
+// %Category: Cfg
+// %Text: USE <dbname>
+//
+// "USE <dbname>" is an alias for "SET [SESSION] database = <dbname>".
+// %SeeAlso: SET SESSION, WEBDOCS/set-vars.html
 use_stmt:
   USE var_value
   {
-    /* SKIP DOC */
     $$.val = &tree.SetVar{Name: "database", Values: tree.Exprs{$2.expr()}}
   }
-| USE error // SHOW HELP: SET SESSION
+| USE error // SHOW HELP: USE
 
 // SET SESSION / SET CLUSTER SETTING / SET TRANSACTION
 set_stmt:
@@ -2238,7 +2243,7 @@ set_stmt:
 | set_csetting_stmt    // EXTEND WITH HELP: SET CLUSTER SETTING
 | set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
 | set_exprs_internal   { /* SKIP DOC */ }
-| use_stmt             { /* SKIP DOC */ }
+| use_stmt             // EXTEND WITH HELP: USE
 | SET LOCAL error { return unimplemented(sqllex, "set local") }
 
 // %Help: SCRUB - run checks against databases or tables
