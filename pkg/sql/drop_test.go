@@ -489,13 +489,6 @@ func TestDropIndexInterleaved(t *testing.T) {
 func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	params.Knobs = base.TestingKnobs{
-		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			// Disable the asynchronous path so that the table data left
-			// behind is not cleaned up.
-			AsyncExecNotification: asyncSchemaChangerDisabled,
-		},
-	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	ctx := context.TODO()
