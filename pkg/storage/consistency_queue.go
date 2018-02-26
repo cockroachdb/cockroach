@@ -75,7 +75,7 @@ func (q *consistencyQueue) shouldQueue(
 	if !repl.store.cfg.TestingKnobs.DisableLastProcessedCheck {
 		lpTS, err := repl.getQueueLastProcessed(ctx, q.name)
 		if err != nil {
-			log.ErrEventf(ctx, "consistency queue last processed timestamp: %s", err)
+			return false, 0
 		}
 		if shouldQ, priority = shouldQueueAgain(now, lpTS, interval); !shouldQ {
 			return false, 0
@@ -85,7 +85,7 @@ func (q *consistencyQueue) shouldQueue(
 	if repl.store.cfg.NodeLiveness != nil {
 		for _, rep := range repl.Desc().Replicas {
 			if live, err := repl.store.cfg.NodeLiveness.IsLive(rep.NodeID); err != nil {
-				log.ErrEventf(ctx, "node %d liveness failed: %s", rep.NodeID, err)
+				log.VErrEventf(ctx, 3, "node %d liveness failed: %s", rep.NodeID, err)
 				return false, 0
 			} else if !live {
 				return false, 0
@@ -113,7 +113,7 @@ func (q *consistencyQueue) process(
 	}
 	// Update the last processed time for this queue.
 	if err := repl.setQueueLastProcessed(ctx, q.name, repl.store.Clock().Now()); err != nil {
-		log.ErrEventf(ctx, "failed to update last processed time: %v", err)
+		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 	return nil
 }

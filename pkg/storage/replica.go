@@ -1488,7 +1488,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					defer r.store.metrics.SlowLeaseRequests.Dec(1)
 				case <-ctx.Done():
 					llHandle.Cancel()
-					log.ErrEventf(ctx, "lease acquisition failed: %s", ctx.Err())
+					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
 					return roachpb.NewError(newNotLeaseHolderError(nil, r.store.StoreID(), r.Desc()))
 				case <-r.store.Stopper().ShouldStop():
 					llHandle.Cancel()
@@ -1692,9 +1692,11 @@ func (r *Replica) getQueueLastProcessed(ctx context.Context, queue string) (hlc.
 	if r.store != nil {
 		_, err := engine.MVCCGetProto(ctx, r.store.Engine(), key, hlc.Timestamp{}, true, nil, &timestamp)
 		if err != nil {
+			log.VErrEventf(ctx, 2, "last processed timestamp unavailable: %s", err)
 			return hlc.Timestamp{}, err
 		}
 	}
+	log.VEventf(ctx, 2, "last processed timestamp: %s", timestamp)
 	return timestamp, nil
 }
 
@@ -1824,7 +1826,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	if err := r.withRaftGroupLocked(shouldCampaignOnCreation, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
-		log.ErrEventf(ctx, "unable to initialize raft group: %s", err)
+		log.VErrEventf(ctx, 1, "unable to initialize raft group: %s", err)
 	}
 }
 
@@ -2538,7 +2540,7 @@ func (r *Replica) executeReadOnlyBatch(
 		}
 	}
 	if pErr != nil {
-		log.ErrEvent(ctx, pErr.String())
+		log.VErrEvent(ctx, 3, pErr.String())
 	} else {
 		log.Event(ctx, "read completed")
 	}
@@ -2995,7 +2997,6 @@ func (r *Replica) propose(
 	if err := ctx.Err(); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
-		log.ErrEvent(ctx, errStr)
 		return nil, nil, noop, roachpb.NewError(err)
 	}
 
