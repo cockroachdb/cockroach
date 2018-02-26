@@ -177,13 +177,17 @@ func NewSpanResolver(
 	}
 }
 
+// oracleQueryState encapsulates the history of assignments of ranges to nodes
+// done by an oracle on behalf of one particular query.
 type oracleQueryState struct {
-	rangesPerNode map[roachpb.NodeID]int
+	rangesPerNode  map[roachpb.NodeID]int
+	assignedRanges map[roachpb.RangeID]kv.ReplicaInfo
 }
 
 func makeOracleQueryState() oracleQueryState {
 	return oracleQueryState{
-		rangesPerNode: make(map[roachpb.NodeID]int),
+		rangesPerNode:  make(map[roachpb.NodeID]int),
+		assignedRanges: make(map[roachpb.RangeID]kv.ReplicaInfo),
 	}
 }
 
@@ -201,8 +205,7 @@ type spanResolverIterator struct {
 	curSpan roachpb.RSpan
 	// dir is the direction set by the last Seek()
 	dir kv.ScanDirection
-	// queryState accumulates information about the nodes that are lease holders
-	// for ranges resolved already by the iterator.
+	// queryState accumulates information about the assigned lease holders.
 	queryState oracleQueryState
 
 	err error
@@ -336,6 +339,7 @@ func (it *spanResolverIterator) ReplicaInfo(ctx context.Context) (kv.ReplicaInfo
 		repl = leaseHolder
 	}
 	it.queryState.rangesPerNode[repl.NodeID]++
+	it.queryState.assignedRanges[it.it.Desc().RangeID] = repl
 	return repl, nil
 }
 
@@ -398,10 +402,16 @@ var _ leaseHolderOracle = &binPackingOracle{}
 func (o *binPackingOracle) ChoosePreferredLeaseHolder(
 	desc roachpb.RangeDescriptor, queryState oracleQueryState,
 ) (kv.ReplicaInfo, error) {
+	// If we've assigned the range before, return that assignment.
+	if repl, ok := queryState.assignedRanges[desc.RangeID]; ok {
+		return repl, nil
+	}
+
 	replicas, err := replicaSliceOrErr(desc, o.gossip)
 	if err != nil {
 		return kv.ReplicaInfo{}, err
 	}
+
 	replicas.OptimizeReplicaOrder(&o.nodeDesc, nil /* TODO(andrei): plumb rpc context and remote clocks for latency */)
 
 	// Look for a replica that has been assigned some ranges, but it's not yet full.
