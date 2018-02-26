@@ -15,6 +15,8 @@
 package testutils
 
 import (
+	"testing"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -55,4 +57,27 @@ func ParseScalarExpr(sql string, ivc tree.IndexedVarContainer) (tree.TypedExpr, 
 	sema.IVarContainer = ivc
 
 	return expr.TypeCheck(&sema, types.Any)
+}
+
+// ExecuteTestDDL parses the given DDL SQL statement and creates objects in the
+// test catalog. This is used to test without spinning up a cluster.
+func ExecuteTestDDL(t *testing.T, sql string, catalog *TestCatalog) string {
+	stmt, err := parser.ParseOne(sql)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+
+	if stmt.StatementType() != tree.DDL {
+		t.Fatalf("statement type is not DDL: %v", stmt.StatementType())
+	}
+
+	switch stmt := stmt.(type) {
+	case *tree.CreateTable:
+		tbl := catalog.CreateTable(stmt)
+		return tbl.String()
+
+	default:
+		t.Fatalf("expected CREATE TABLE statement but found: %v", stmt)
+		return ""
+	}
 }

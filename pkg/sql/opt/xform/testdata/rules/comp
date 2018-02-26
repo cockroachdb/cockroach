@@ -1,12 +1,14 @@
 exec-ddl
 CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
-table a
-  k int NOT NULL
-  i int NULL
-  f float NULL
-  s string NULL
-  j jsonb NULL
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
 
 #
 # NormalizeVar

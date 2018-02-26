@@ -161,24 +161,7 @@ func TestBuilder(t *testing.T) {
 					return exprView.String()
 
 				case "exec-ddl":
-					stmt, err := parser.ParseOne(d.Input)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-
-					if stmt.StatementType() != tree.DDL {
-						d.Fatalf(t, "statement type is not DDL: %v", stmt.StatementType())
-					}
-
-					switch stmt := stmt.(type) {
-					case *tree.CreateTable:
-						tbl := catalog.CreateTable(stmt)
-						return tbl.String()
-
-					default:
-						d.Fatalf(t, "expected CREATE TABLE statement but found: %v", stmt)
-						return ""
-					}
+					return testutils.ExecuteTestDDL(t, d.Input, catalog)
 
 				default:
 					d.Fatalf(t, "unsupported command: %s", d.Cmd)
