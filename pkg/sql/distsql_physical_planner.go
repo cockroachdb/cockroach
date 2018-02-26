@@ -1035,9 +1035,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 
 	inputTypes := p.ResultTypes
 
-	groupCols := make([]uint32, n.numGroupCols)
-	for i := 0; i < n.numGroupCols; i++ {
-		groupCols[i] = uint32(p.planToStreamColMap[i])
+	groupCols := make([]uint32, len(n.groupCols))
+	for i, idx := range n.groupCols {
+		groupCols[i] = uint32(p.planToStreamColMap[idx])
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
