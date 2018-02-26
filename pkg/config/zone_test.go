@@ -40,6 +40,12 @@ func TestZoneConfigValidate(t *testing.T) {
 		},
 		{
 			ZoneConfig{
+				NumReplicas: -1,
+			},
+			"at least one replica is required",
+		},
+		{
+			ZoneConfig{
 				NumReplicas: 2,
 			},
 			"at least 3 replicas are required for multi-replica configurations",
@@ -55,13 +61,31 @@ func TestZoneConfigValidate(t *testing.T) {
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
 			},
+			"GC.TTLSeconds 0 less than minimum allowed",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+			},
 			"",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMinBytes: -1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+			},
+			"RangeMinBytes -1 less than minimum allowed",
 		},
 		{
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMinBytes: DefaultZoneConfig().RangeMaxBytes,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 			},
 			"is greater than or equal to RangeMaxBytes",
 		},
@@ -69,6 +93,7 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{Constraints: []Constraint{{Value: "a", Type: Constraint_DEPRECATED_POSITIVE}}},
 				},
@@ -79,32 +104,60 @@ func TestZoneConfigValidate(t *testing.T) {
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
-					{
-						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
-						NumReplicas: 2,
-					},
+					{Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}}},
 				},
 			},
-			"the number of replicas specified in constraints .+ does not equal",
-		},
-		{
-			ZoneConfig{
-				NumReplicas:   3,
-				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
-				Constraints: []Constraints{
-					{
-						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
-						NumReplicas: 2,
-					},
-				},
-			},
-			"the number of replicas specified in constraints .+ does not equal",
+			"",
 		},
 		{
 			ZoneConfig{
 				NumReplicas:   1,
 				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_PROHIBITED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+			"",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			"the number of replicas specified in constraints .+ cannot be greater than",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   3,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+				},
+			},
+			"",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
 				Constraints: []Constraints{
 					{
 						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
@@ -117,6 +170,24 @@ func TestZoneConfigValidate(t *testing.T) {
 				},
 			},
 			"constraints must apply to at least one replica",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   3,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				Constraints: []Constraints{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+						NumReplicas: 2,
+					},
+					{
+						Constraints: []Constraint{{Value: "b", Type: Constraint_PROHIBITED}},
+						NumReplicas: 1,
+					},
+				},
+			},
+			"only required constraints .+ can be applied to a subset of replicas",
 		},
 	}
 

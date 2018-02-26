@@ -276,7 +276,7 @@ func (a *Allocator) ComputeAction(
 			// we'll up-replicate to, just an indication that such a target exists.
 			if _, _, err := a.AllocateTarget(
 				ctx,
-				zone.Constraints,
+				zone,
 				liveReplicas,
 				rangeInfo,
 				disableStatsBasedRebalancing,
@@ -330,7 +330,7 @@ type decisionDetails struct {
 // a store.
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	disableStatsBasedRebalancing bool,
@@ -338,7 +338,7 @@ func (a *Allocator) AllocateTarget(
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, constraints)
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	candidates := allocateCandidates(
 		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
@@ -364,7 +364,7 @@ func (a *Allocator) AllocateTarget(
 		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
 	return nil, "", &allocatorError{
-		constraints:     constraints,
+		constraints:     zone.Constraints,
 		aliveStoreCount: aliveStoreCount,
 	}
 }
@@ -372,7 +372,7 @@ func (a *Allocator) AllocateTarget(
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	disableStatsBasedRebalancing bool,
@@ -386,7 +386,7 @@ func (a Allocator) simulateRemoveTarget(
 	defer func() {
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
 	}()
-	return a.RemoveTarget(ctx, constraints, candidates, rangeInfo, disableStatsBasedRebalancing)
+	return a.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -396,7 +396,7 @@ func (a Allocator) simulateRemoveTarget(
 // replicas.
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	disableStatsBasedRebalancing bool,
@@ -413,7 +413,7 @@ func (a Allocator) RemoveTarget(
 	sl, _, _ := a.storePool.getStoreListFromIDs(existingStoreIDs, roachpb.RangeID(0), storeFilterNone)
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, constraints)
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	rankedCandidates := removeCandidates(
 		sl,
@@ -464,7 +464,7 @@ func (a Allocator) RemoveTarget(
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	raftStatus *raft.Status,
 	rangeInfo RangeInfo,
 	filter storeFilter,
@@ -501,7 +501,7 @@ func (a Allocator) RebalanceTarget(
 	}
 
 	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, constraints)
+		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
 	options := a.scorerOptions(disableStatsBasedRebalancing)
 	results := rebalanceCandidates(
 		ctx,
@@ -556,7 +556,7 @@ func (a Allocator) RebalanceTarget(
 		removeReplica, removeDetails, err := a.simulateRemoveTarget(
 			ctx,
 			target.store.StoreID,
-			constraints,
+			zone,
 			replicaCandidates,
 			rangeInfo,
 			disableStatsBasedRebalancing)

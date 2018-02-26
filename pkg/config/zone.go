@@ -303,24 +303,38 @@ func (z *ZoneConfig) Validate() error {
 			return err
 		}
 	}
-	switch z.NumReplicas {
-	case 0:
+
+	switch {
+	case z.NumReplicas < 0:
+		return fmt.Errorf("at least one replica is required")
+	case z.NumReplicas == 0:
 		if len(z.Subzones) > 0 {
 			// NumReplicas == 0 is allowed when this ZoneConfig is a subzone
 			// placeholder. See IsSubzonePlaceholder.
 			return nil
 		}
 		return fmt.Errorf("at least one replica is required")
-	case 2:
+	case z.NumReplicas == 2:
 		return fmt.Errorf("at least 3 replicas are required for multi-replica configurations")
 	}
+
 	if z.RangeMaxBytes < minRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
 			z.RangeMaxBytes, minRangeMaxBytes)
 	}
+
+	if z.RangeMinBytes < 0 {
+		return fmt.Errorf("RangeMinBytes %d less than minimum allowed 0", z.RangeMinBytes)
+	}
 	if z.RangeMinBytes >= z.RangeMaxBytes {
 		return fmt.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
 			z.RangeMinBytes, z.RangeMaxBytes)
+	}
+
+	// Reserve the value 0 to potentially have some special meaning in the future,
+	// such as to disable GC.
+	if z.GC.TTLSeconds < 1 {
+		return fmt.Errorf("GC.TTLSeconds %d less than minimum allowed 1", z.GC.TTLSeconds)
 	}
 
 	for _, constraints := range z.Constraints {
@@ -343,22 +357,21 @@ func (z *ZoneConfig) Validate() error {
 			}
 			numConstrainedRepls += int64(constraints.NumReplicas)
 			for _, constraint := range constraints.Constraints {
+				// TODO(a-robinson): Relax this constraint to allow prohibited replicas,
+				// as discussed on #23014.
 				if constraint.Type != Constraint_REQUIRED && constraints.NumReplicas != z.NumReplicas {
 					return fmt.Errorf(
 						"only required constraints (prefixed with a '+') can be applied to a subset of replicas")
 				}
-				if strings.Contains(constraint.Key, ":") || strings.Contains(constraint.Value, ":") {
-					return fmt.Errorf("the ':' character is not allowed in constraint keys or values")
-				}
 			}
 		}
-		// TODO(a-robinson): Relax this constraint, as discussed on #22412.
-		if numConstrainedRepls != int64(z.NumReplicas) {
-			return fmt.Errorf(
-				"the number of replicas specified in constraints (%d) does not equal the number of replicas configured for the zone (%d)",
+		if numConstrainedRepls > int64(z.NumReplicas) {
+			return fmt.Errorf("the number of replicas specified in constraints (%d) cannot be greater "+
+				"than the number of replicas configured for the zone (%d)",
 				numConstrainedRepls, z.NumReplicas)
 		}
 	}
+
 	return nil
 }
 
