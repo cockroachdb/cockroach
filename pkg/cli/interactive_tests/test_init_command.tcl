@@ -29,7 +29,7 @@ expect {
     "pg_class" {}
     # Hopefully this broad regex will match any errors we log
     # (Currently, everything I've seen begins with "Error:")
-    -re "(?i)err|warn" {
+    -re "(?i)err" {
         set prefix $expect_out(buffer)
         # Read next line to finish the error message.
         # TODO(bdarnell): Surely there's a smarter way to do this.

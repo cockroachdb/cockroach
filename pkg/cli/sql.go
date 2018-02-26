@@ -569,6 +569,12 @@ func preparePrompts(dbURL string) (promptPrefix, fullPrompt, continuePrompt stri
 			username = parsedURL.User.Username()
 		}
 		promptPrefix = fmt.Sprintf("%s@%s", username, parsedURL.Host)
+
+		if parsedURL.Path == "" {
+			// Attempt to be helpful to new users.
+			fmt.Fprintln(stderr, "warning: no current database set."+
+				" Use SET database = <dbname> to change, CREATE DATABASE to make a new database.")
+		}
 	}
 
 	if len(promptPrefix) == 0 {
