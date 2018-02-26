@@ -23,6 +23,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
+	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -198,15 +199,14 @@ import (
 //
 // At the highest level, there's connExecutor.run() that takes a context. That
 // context is supposed to represent "the connection's context": its lifetime is
-// the client connection's lifetime and it is assigned to connEx.connCtx.
-// Below that, every SQL transaction has its own derived context because that's
-// the level at which we trace operations. The lifetime of SQL transactions is
-// determined by the txnState: the state machine decides when transactions start
-// and end in txnState.performStateTransition(). When we're inside a SQL
-// transaction, most operations are considered to happen in the context of that
-// txn. When there's no SQL transaction (i.e. stateNoTxn), everything happens in
-// the connection's context.
-// TODO(andrei): mention sessionEventf().
+// the client connection's lifetime and it is assigned to
+// connEx.ctxHolder.connCtx. Below that, every SQL transaction has its own
+// derived context because that's the level at which we trace operations. The
+// lifetime of SQL transactions is determined by the txnState: the state machine
+// decides when transactions start and end in txnState.performStateTransition().
+// When we're inside a SQL transaction, most operations are considered to happen
+// in the context of that txn. When there's no SQL transaction (i.e.
+// stateNoTxn), everything happens in the connection's context.
 //
 // High-level code in connExecutor is agnostic of whether it currently is inside
 // a txn or not. To deal with both cases, such methods don't explicitly take a
@@ -470,6 +470,14 @@ func (s *Server) ServeConn(
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
 	ex.dataMutator.sessionTracing.ex = &ex
 
+	if traceSessionEventLogEnabled.Get(&s.cfg.Settings.SV) {
+		remoteStr := "<admin>"
+		if ex.sessionData.RemoteAddr != nil {
+			remoteStr = ex.sessionData.RemoteAddr.String()
+		}
+		ex.eventLog = trace.NewEventLog(fmt.Sprintf("sql session [%s]", args.User), remoteStr)
+	}
+
 	defer func() {
 		r := recover()
 		ex.closeWrapper(ctx, r)
@@ -517,7 +525,7 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 }
 
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
-	log.VEvent(ctx, 2, "finishing connExecutor")
+	ex.sessionEventf(ctx, "finishing connExecutor")
 
 	// Make sure that no statements remain in the ParallelizeQueue. If no statements
 	// are in the queue, this will be a no-op. If there are statements in the
@@ -557,6 +565,11 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		if err := ex.dataMutator.StopSessionTracing(); err != nil {
 			log.Warningf(ctx, "error stopping tracing: %s", err)
 		}
+	}
+
+	if ex.eventLog != nil {
+		ex.eventLog.Finish()
+		ex.eventLog = nil
 	}
 
 	if closeType == normalClose {
@@ -605,6 +618,10 @@ type connExecutor struct {
 	// the machine's ExtendedState.
 	state         txnState2
 	transitionCtx transitionCtx
+
+	// eventLog for SQL statements and other important session events. Will be set
+	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
+	eventLog trace.EventLog
 
 	// extraTxnState groups fields scoped to a SQL txn that are not handled by
 	// ex.state, above. The rule of thumb is that, if the state influences state
@@ -860,7 +877,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			}
 			return err
 		}
-		log.VEventf(ex.Ctx(), 2, "[%s pos:%d] connEx executing cmd %s",
+		ex.sessionEventf(ex.Ctx(), "[%s pos:%d] executing %s",
 			ex.machine.CurState(), pos, cmd)
 
 		var ev fsm.Event
@@ -1020,6 +1037,9 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			resErr := res.Err()
 
 			pe, ok := payload.(payloadWithError)
+			if ok {
+				ex.sessionEventf(ex.Ctx(), "execution error: %s", pe.errorCause())
+			}
 			if resErr == nil && ok {
 				ex.server.recordError(pe.errorCause())
 				// Depending on whether the result has the error already or not, we have
@@ -1757,6 +1777,15 @@ func (ex *connExecutor) serialize() serverpb.Session {
 func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 	return connExPrepStmtsAccessor{
 		ex: ex,
+	}
+}
+
+// sessionEventf logs a message to the session event log (if any).
+func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args ...interface{}) {
+	str := fmt.Sprintf(format, args...)
+	log.VEvent(ex.Ctx(), 2, str)
+	if ex.eventLog != nil {
+		ex.eventLog.Printf("%s", str)
 	}
 }
 
