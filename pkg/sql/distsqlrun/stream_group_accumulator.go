@@ -30,8 +30,7 @@ type streamGroupAccumulator struct {
 	srcConsumed bool
 	ordering    sqlbase.ColumnOrdering
 
-	// curGroup maintains the rows accumulated in the current group. The client
-	// reads them with advanceGroup().
+	// curGroup maintains the rows accumulated in the current group.
 	curGroup   []sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
@@ -43,24 +42,6 @@ func makeStreamGroupAccumulator(
 		src:      src,
 		types:    src.OutputTypes(),
 		ordering: ordering,
-	}
-}
-
-// advanceGroup returns all rows of the current group and advances the internal
-// state to the next group.
-func (s *streamGroupAccumulator) advanceGroup(
-	evalCtx *tree.EvalContext, metadataSink RowReceiver,
-) ([]sqlbase.EncDatumRow, error) {
-	for {
-		batch, meta := s.nextGroup(evalCtx)
-		if meta != nil {
-			if meta.Err != nil {
-				return nil, meta.Err
-			}
-			_ = metadataSink.Push(nil /* row */, meta)
-			continue
-		}
-		return batch, nil
 	}
 }
 

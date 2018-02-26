@@ -44,7 +44,6 @@
 		AggregatorSpec
 		BackfillerSpec
 		FlowSpec
-		AlgebraicSetOpSpec
 		JobProgress
 		ReadCSVSpec
 		SSTWriterSpec
