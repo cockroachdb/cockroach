@@ -289,6 +289,11 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 1
 	},
 
+	// CastOp
+	func(ev ExprView) int {
+		return 1
+	},
+
 	// FunctionOp
 	func(ev ExprView) int {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
@@ -1107,6 +1112,18 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
+	// CastOp
+	func(ev ExprView, n int) opt.GroupID {
+		castExpr := (*castExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return castExpr.input()
+		default:
+			panic("child index out of range")
+		}
+	},
+
 	// FunctionOp
 	func(ev ExprView, n int) opt.GroupID {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
@@ -1719,6 +1736,12 @@ var privateLookup = [...]privateLookupFunc{
 		return 0
 	},
 
+	// CastOp
+	func(ev ExprView) opt.PrivateID {
+		castExpr := (*castExpr)(ev.mem.lookupExpr(ev.loc))
+		return castExpr.typ()
+	},
+
 	// FunctionOp
 	func(ev ExprView) opt.PrivateID {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
@@ -1903,6 +1926,7 @@ var isScalarLookup = [...]bool{
 	true,  // UnaryPlusOp
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
+	true,  // CastOp
 	true,  // FunctionOp
 	true,  // CoalesceOp
 	true,  // UnsupportedExprOp
@@ -1986,6 +2010,7 @@ var isConstValueLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2069,6 +2094,7 @@ var isBooleanLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2152,6 +2178,7 @@ var isComparisonLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2235,6 +2262,7 @@ var isBinaryLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2318,6 +2346,7 @@ var isUnaryLookup = [...]bool{
 	true,  // UnaryPlusOp
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2401,6 +2430,7 @@ var isRelationalLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2484,6 +2514,7 @@ var isJoinLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2567,6 +2598,7 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2650,6 +2682,7 @@ var isEnforcerLookup = [...]bool{
 	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
+	false, // CastOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -4030,6 +4063,31 @@ func (m *memoExpr) asUnaryComplement() *unaryComplementExpr {
 		return nil
 	}
 	return (*unaryComplementExpr)(m)
+}
+
+type castExpr memoExpr
+
+func makeCastExpr(input opt.GroupID, typ opt.PrivateID) castExpr {
+	return castExpr{op: opt.CastOp, state: exprState{uint32(input), uint32(typ)}}
+}
+
+func (e *castExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *castExpr) typ() opt.PrivateID {
+	return opt.PrivateID(e.state[1])
+}
+
+func (e *castExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asCast() *castExpr {
+	if m.op != opt.CastOp {
+		return nil
+	}
+	return (*castExpr)(m)
 }
 
 // functionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given
