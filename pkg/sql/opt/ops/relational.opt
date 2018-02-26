@@ -156,11 +156,16 @@ define AntiJoinApply {
     On    Expr
 }
 
+# GroupBy is an operator that is used for performing aggregations (for queries
+# with aggregate functions, HAVING clauses and/or group by expressions). It
+# groups results that are equal on the grouping columns and computes
+# aggregations as described by Aggregations (which is always an Aggregations
+# operator). The arguments of the aggregations are columns from the input.
 [Relational]
 define GroupBy {
-    Input        Expr
-    Groupings    Expr
-    Aggregations Expr
+    Input           Expr
+    Aggregations    Expr
+    GroupingColumns ColSet
 }
 
 [Relational]

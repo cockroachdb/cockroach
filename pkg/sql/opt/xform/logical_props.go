@@ -69,12 +69,31 @@ func (p *LogicalProps) format(mem *memo, tp treeprinter.Node) {
 }
 
 func (p *LogicalProps) formatOutputCols(mem *memo, tp treeprinter.Node) {
-	if !p.Relational.OutputCols.Empty() {
+	p.formatColSet("columns:", p.Relational.OutputCols, mem, tp)
+}
+
+func (p *LogicalProps) formatColSet(
+	heading string, colSet opt.ColSet, mem *memo, tp treeprinter.Node,
+) {
+	if !colSet.Empty() {
 		var buf bytes.Buffer
-		buf.WriteString("columns:")
-		p.Relational.OutputCols.ForEach(func(i int) {
+		buf.WriteString(heading)
+		colSet.ForEach(func(i int) {
 			p.formatCol(mem, &buf, opt.ColumnIndex(i))
 		})
+		tp.Child(buf.String())
+	}
+}
+
+func (p *LogicalProps) formatColList(
+	heading string, colList opt.ColList, mem *memo, tp treeprinter.Node,
+) {
+	if len(colList) > 0 {
+		var buf bytes.Buffer
+		buf.WriteString(heading)
+		for _, col := range colList {
+			p.formatCol(mem, &buf, col)
+		}
 		tp.Child(buf.String())
 	}
 }
