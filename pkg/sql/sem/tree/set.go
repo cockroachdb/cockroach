@@ -52,7 +52,11 @@ type SetClusterSetting struct {
 // Format implements the NodeFormatter interface.
 func (node *SetClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SET CLUSTER SETTING ")
-	ctx.FormatNameP(&node.Name)
+	// Cluster setting names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 	ctx.WriteString(" = ")
 	ctx.FormatNode(node.Value)
 }
