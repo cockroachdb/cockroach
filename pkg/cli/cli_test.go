@@ -329,6 +329,7 @@ func TestQuit(t *testing.T) {
 	c := newCLITest(cliTestParams{t: t})
 	defer c.cleanup()
 
+	c.RunWithArgs([]string{"sql", "-e", "set cluster setting server.shutdown.drain_wait = '0s'"})
 	c.Run("quit")
 	// Wait until this async command cleanups the server.
 	<-c.Stopper().IsStopped()
