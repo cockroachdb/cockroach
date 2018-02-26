@@ -1289,6 +1289,16 @@ func (_f *factory) ConstructProject(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr))
 	}
 
+	// [EliminateProject]
+	{
+		if _f.hasSameProjectionCols(input, projections) {
+			_f.reportOptimization()
+			_group = input
+			_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr)))
 }
 

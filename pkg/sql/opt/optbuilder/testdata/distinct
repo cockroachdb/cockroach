@@ -30,7 +30,7 @@ build
 SELECT y, z FROM t.xyz
 ----
 project
- ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
+ ├── columns: y:int:null:2 z:float:null:3
  ├── scan
  │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  └── projections
@@ -41,6 +41,7 @@ build
 SELECT DISTINCT y, z FROM t.xyz
 ----
 group-by
+ ├── columns: y:int:null:2 z:float:null:3
  ├── grouping columns: xyz.y:int:null:2 xyz.z:float:null:3
  ├── project
  │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
@@ -55,8 +56,9 @@ build
 SELECT y FROM (SELECT DISTINCT y, z FROM t.xyz)
 ----
 project
- ├── columns: xyz.y:int:null:2
+ ├── columns: y:int:null:2
  ├── group-by
+ │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
  │    ├── grouping columns: xyz.y:int:null:2 xyz.z:float:null:3
  │    ├── project
  │    │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
@@ -73,6 +75,7 @@ build
 SELECT DISTINCT (y,z) FROM t.xyz
 ----
 group-by
+ ├── columns: column4:tuple{int, float}:null:4
  ├── grouping columns: column4:tuple{int, float}:null:4
  ├── project
  │    ├── columns: column4:tuple{int, float}:null:4
@@ -88,9 +91,10 @@ build
 SELECT COUNT(*) FROM (SELECT DISTINCT y FROM t.xyz)
 ----
 group-by
- ├── aggregation columns: column4:int:null:4
+ ├── columns: column4:int:null:4
  ├── project
  │    ├── group-by
+ │    │    ├── columns: xyz.y:int:null:2
  │    │    ├── grouping columns: xyz.y:int:null:2
  │    │    ├── project
  │    │    │    ├── columns: xyz.y:int:null:2
@@ -107,6 +111,7 @@ build
 SELECT DISTINCT x FROM t.xyz WHERE x > 0
 ----
 group-by
+ ├── columns: x:int:1
  ├── grouping columns: xyz.x:int:1
  ├── project
  │    ├── columns: xyz.x:int:1
@@ -125,6 +130,7 @@ build
 SELECT DISTINCT z FROM t.xyz WHERE x > 0
 ----
 group-by
+ ├── columns: z:float:null:3
  ├── grouping columns: xyz.z:float:null:3
  ├── project
  │    ├── columns: xyz.z:float:null:3
@@ -143,12 +149,13 @@ build
 SELECT DISTINCT MAX(x) FROM xyz GROUP BY x
 ----
 group-by
+ ├── columns: column4:int:null:4
  ├── grouping columns: column4:int:null:4
  ├── project
  │    ├── columns: column4:int:null:4
  │    ├── group-by
+ │    │    ├── columns: xyz.x:int:1 column4:int:null:4
  │    │    ├── grouping columns: xyz.x:int:1
- │    │    ├── aggregation columns: column4:int:null:4
  │    │    ├── project
  │    │    │    ├── columns: xyz.x:int:1 xyz.x:int:1
  │    │    │    ├── scan
@@ -167,6 +174,7 @@ build
 SELECT DISTINCT x+y FROM xyz
 ----
 group-by
+ ├── columns: column4:int:null:4
  ├── grouping columns: column4:int:null:4
  ├── project
  │    ├── columns: column4:int:null:4
@@ -182,6 +190,7 @@ build
 SELECT DISTINCT 3 FROM xyz
 ----
 group-by
+ ├── columns: column4:int:null:4
  ├── grouping columns: column4:int:null:4
  ├── project
  │    ├── columns: column4:int:null:4
@@ -195,6 +204,7 @@ build
 SELECT DISTINCT 3
 ----
 group-by
+ ├── columns: column1:int:null:1
  ├── grouping columns: column1:int:null:1
  ├── project
  │    ├── columns: column1:int:null:1
@@ -208,14 +218,15 @@ build
 SELECT DISTINCT MAX(z), x+y, 3 FROM xyz GROUP BY x, y HAVING y > 4
 ----
 group-by
+ ├── columns: column4:float:null:4 column5:int:null:5 column6:int:null:6
  ├── grouping columns: column4:float:null:4 column5:int:null:5 column6:int:null:6
  ├── project
  │    ├── columns: column4:float:null:4 column5:int:null:5 column6:int:null:6
  │    ├── select
  │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 column4:float:null:4
  │    │    ├── group-by
+ │    │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 column4:float:null:4
  │    │    │    ├── grouping columns: xyz.x:int:1 xyz.y:int:null:2
- │    │    │    ├── aggregation columns: column4:float:null:4
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  │    │    │    └── aggregations

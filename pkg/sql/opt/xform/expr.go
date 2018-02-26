@@ -77,23 +77,32 @@ type ExprView struct {
 
 // makeExprView creates a new ExprView instance that references the expression
 // in the specified group that satisfies the required properties at the lowest
-// cost.
-// NOTE: While the minPhysPropsID property set always works, other property
+// cost. NormPhysPropsID is a special set of required properties that yields a
+// view over the normalized, logical expression tree. This will contain no
+// enforcers and is not necessarily the lowest cost expression.
+//
+// Think of a PhysicalPropsID as selecting one tree out of the memo forest.
+// That tree can consist of all normalized expressions (i.e. first expression
+// in each group), or it can consist of lowest cost expressions (i.e.
+// expressions from bestExprs), or any other criteria we decide is useful.
+//
+// NOTE: While the NormPhysPropsID property set always works, other property
 //       sets will only work once the optimizer has been invoked with that set,
 //       so that it's had an opportunity to compute the lowest cost path.
 func makeExprView(mem *memo, group opt.GroupID, required opt.PhysicalPropsID) ExprView {
 	mgrp := mem.lookupGroup(group)
 
-	if required == opt.MinPhysPropsID {
-		return ExprView{
-			mem:      mem,
-			loc:      memoLoc{group: group, expr: normExprID},
-			op:       mgrp.lookupExpr(normExprID).op,
-			required: required,
-		}
+	// TODO(andyk): For now, always use the normalized expression, because the
+	// only property that's currently supported is Presentation, which is only
+	// applied at the root and is provided by every relational operator. In the
+	// future, this code needs to be changed to use lowest cost expression
+	// lookup.
+	return ExprView{
+		mem:      mem,
+		loc:      memoLoc{group: group, expr: normExprID},
+		op:       mgrp.lookupExpr(normExprID).op,
+		required: required,
 	}
-
-	panic("physical property sets other than min are not yet implemented")
 }
 
 // Operator returns the type of the expression.
@@ -104,6 +113,12 @@ func (ev ExprView) Operator() opt.Operator {
 // Logical returns the set of logical properties that this expression provides.
 func (ev ExprView) Logical() *LogicalProps {
 	return &ev.mem.lookupGroup(ev.loc.group).logical
+}
+
+// Physical returns the physical properties required of this expression, such
+// as the ordering of result rows.
+func (ev ExprView) Physical() *opt.PhysicalProps {
+	return ev.mem.lookupPhysicalProps(ev.required)
 }
 
 // Group returns the memo group containing this expression.
@@ -121,11 +136,15 @@ func (ev ExprView) ChildCount() int {
 // It panics if the requested child does not exist.
 func (ev ExprView) Child(nth int) ExprView {
 	group := ev.ChildGroup(nth)
-	if ev.required == opt.MinPhysPropsID {
-		return makeExprView(ev.mem, group, opt.MinPhysPropsID)
-	}
 
-	panic("physical properties other than min are not yet implemented")
+	// TODO(andyk): For now, always use the normalized child expression. In
+	// the future, this code needs to be changed to use lowest cost expression
+	// lookup.
+	//
+	// NormPhysPropsID is the special id used to traverse the expression
+	// tree before it's been fully explored and costed (and bestExprs has
+	// been populated).
+	return makeExprView(ev.mem, group, opt.NormPhysPropsID)
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent
@@ -227,36 +246,54 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	fmt.Fprintf(&buf, "%v", ev.op)
 
 	logProps := ev.Logical()
+	physProps := ev.Physical()
 
 	tp = tp.Child(buf.String())
-
 	buf.Reset()
 
-	// Special handling to improve the columns display for certain ops.
-	switch ev.Operator() {
-	case opt.ProjectOp:
-		// Get the list of columns from the ProjectionsOp, which has the correct
-		// order.
-		colList := *ev.Child(1).Private().(*opt.ColList)
-		logProps.formatColList("columns:", colList, ev.Metadata(), tp)
+	// If a particular column presentation is required of the expression, then
+	// print columns using that information.
+	if physProps.Presentation.Defined() {
+		ev.formatPresentation(physProps.Presentation, tp)
+	} else {
+		// Special handling to improve the columns display for certain ops.
+		switch ev.Operator() {
+		case opt.ProjectOp:
+			// Get the list of columns from the ProjectionsOp, which has the correct
+			// order.
+			colList := *ev.Child(1).Private().(*opt.ColList)
+			logProps.formatColList("columns:", colList, ev.Metadata(), tp)
 
-	case opt.GroupByOp:
+		case opt.ValuesOp:
+			colList := *ev.Private().(*opt.ColList)
+			logProps.formatColList("columns:", colList, ev.Metadata(), tp)
+
+		default:
+			// Fall back to writing output columns in column index order, with best
+			// guess label.
+			logProps.formatOutputCols(ev.Metadata(), tp)
+		}
+	}
+
+	// Special-case handling for GroupBy private; print grouping columns in
+	// addition to full set of columns.
+	if ev.Operator() == opt.GroupByOp {
 		groupingColSet := *ev.Private().(*opt.ColSet)
 		logProps.formatColSet("grouping columns:", groupingColSet, ev.Metadata(), tp)
-		aggColList := *ev.Child(1).Private().(*opt.ColList)
-		logProps.formatColList("aggregation columns:", aggColList, ev.Metadata(), tp)
-
-	case opt.ValuesOp:
-		colList := *ev.Private().(*opt.ColList)
-		logProps.formatColList("columns:", colList, ev.Metadata(), tp)
-
-	default:
-		// Fall back to writing output columns in column index order, with best
-		// guess label.
-		logProps.formatOutputCols(ev.Metadata(), tp)
 	}
 
 	for i := 0; i < ev.ChildCount(); i++ {
 		ev.Child(i).format(tp)
 	}
+}
+
+func (ev ExprView) formatPresentation(presentation opt.Presentation, tp treeprinter.Node) {
+	logProps := ev.Logical()
+
+	var buf bytes.Buffer
+	buf.WriteString("columns:")
+	for _, col := range presentation {
+		logProps.formatCol(col.Label, col.Index, ev.Metadata(), &buf)
+	}
+	tp.Child(buf.String())
 }

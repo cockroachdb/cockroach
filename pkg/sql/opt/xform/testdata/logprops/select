@@ -21,7 +21,7 @@ build
 SELECT * FROM a WHERE x=1
 ----
 select
- ├── columns: a.x:int:1 a.y:int:null:2
+ ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── eq [type=bool]
@@ -32,7 +32,7 @@ build
 SELECT * FROM a,b WHERE a.x=b.x
 ----
 project
- ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4
+ ├── columns: x:int:1 y:int:null:2 x:int:null:3 z:int:4
  ├── select
  │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
  │    ├── inner-join

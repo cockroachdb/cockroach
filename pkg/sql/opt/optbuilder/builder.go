@@ -169,12 +169,9 @@ func (b *Builder) Build() (root opt.GroupID, required *opt.PhysicalProps, err er
 		}
 	}()
 
-	out, _ := b.buildStmt(b.stmt, &scope{builder: b})
+	out, outScope := b.buildStmt(b.stmt, &scope{builder: b})
 	root = out
-
-	// TODO(rytaft): Add physical properties that are required of the root memo
-	// group.
-	required = &opt.PhysicalProps{}
+	required = b.buildPhysicalProps(outScope)
 	return root, required, nil
 }
 
@@ -190,6 +187,17 @@ type builderError struct {
 func errorf(format string, a ...interface{}) builderError {
 	err := fmt.Errorf(format, a...)
 	return builderError{err}
+}
+
+// buildPhysicalProps construct a set of required physical properties from the
+// given scope.
+func (b *Builder) buildPhysicalProps(scope *scope) *opt.PhysicalProps {
+	presentation := make(opt.Presentation, len(scope.cols))
+	for i := range scope.cols {
+		col := &scope.cols[i]
+		presentation[i] = opt.LabeledColumn{Label: string(col.name), Index: col.index}
+	}
+	return &opt.PhysicalProps{Presentation: presentation}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

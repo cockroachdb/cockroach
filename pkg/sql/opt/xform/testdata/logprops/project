@@ -11,7 +11,7 @@ build
 SELECT a.y, a.x+1, 1, a.x FROM a
 ----
 project
- ├── columns: a.y:int:null:2 column3:int:null:3 column4:int:null:4 a.x:int:1
+ ├── columns: y:int:null:2 column3:int:null:3 column4:int:null:4 x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections

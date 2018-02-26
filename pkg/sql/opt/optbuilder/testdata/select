@@ -11,13 +11,13 @@ build
 SELECT * FROM t.a
 ----
 scan
- └── columns: a.x:int:1 a.y:float:null:2
+ └── columns: x:int:1 y:float:null:2
 
 build
 SELECT * FROM t.a WHERE x > 10
 ----
 select
- ├── columns: a.x:int:1 a.y:float:null:2
+ ├── columns: x:int:1 y:float:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── gt [type=bool]
@@ -28,7 +28,7 @@ build
 SELECT * FROM t.a WHERE (x > 10 AND (x < 20 AND x != 13))
 ----
 select
- ├── columns: a.x:int:1 a.y:float:null:2
+ ├── columns: x:int:1 y:float:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── and [type=bool]
@@ -47,7 +47,7 @@ build
 SELECT * FROM t.a WHERE x IN (1, 2, 3)
 ----
 select
- ├── columns: a.x:int:1 a.y:float:null:2
+ ├── columns: x:int:1 y:float:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
  └── in [type=bool]
@@ -61,7 +61,7 @@ build
 SELECT * FROM t.a AS A(X, Y)
 ----
 scan
- └── columns: a.x:int:1 a.y:float:null:2
+ └── columns: x:int:1 y:float:null:2
 
 build
 SELECT @1, @2 FROM t.a
