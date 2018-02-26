@@ -10,20 +10,20 @@ SET tracing = on; BEGIN; SELECT 1; COMMIT; SELECT 2; SET tracing = off;
 # This also checks that the span column properly reports separate
 # SQL transactions.
 query ITT
-SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%SPAN START%' OR message LIKE '%connEx executing%';
+SELECT span, message, operation FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
-0  === SPAN START: sql txn ===                                      sql txn
-1  === SPAN START: session recording ===                            session recording
-1  [NoTxn pos:6] connEx executing cmd ExecStmt: BEGIN TRANSACTION   session recording
-2  === SPAN START: sql txn ===                                      sql txn
-2  [Open pos:7] connEx executing cmd ExecStmt: SELECT 1             sql txn
-2  [Open pos:8] connEx executing cmd ExecStmt: COMMIT TRANSACTION   sql txn
-1  [NoTxn pos:9] connEx executing cmd ExecStmt: SELECT 2            session recording
-3  === SPAN START: sql txn ===                                      sql txn
-3  [Open pos:9] connEx executing cmd ExecStmt: SELECT 2             sql txn
-1  [NoTxn pos:10] connEx executing cmd ExecStmt: SET tracing = off  session recording
-4  === SPAN START: sql txn ===                                      sql txn
-4  [Open pos:10] connEx executing cmd ExecStmt: SET tracing = off   sql txn
+0  === SPAN START: sql txn ===                           sql txn
+1  === SPAN START: session recording ===                 session recording
+1  [NoTxn pos:6] executing ExecStmt: BEGIN TRANSACTION   session recording
+2  === SPAN START: sql txn ===                           sql txn
+2  [Open pos:7] executing ExecStmt: SELECT 1             sql txn
+2  [Open pos:8] executing ExecStmt: COMMIT TRANSACTION   sql txn
+1  [NoTxn pos:9] executing ExecStmt: SELECT 2            session recording
+3  === SPAN START: sql txn ===                           sql txn
+3  [Open pos:9] executing ExecStmt: SELECT 2             sql txn
+1  [NoTxn pos:10] executing ExecStmt: SET tracing = off  session recording
+4  === SPAN START: sql txn ===                           sql txn
+4  [Open pos:10] executing ExecStmt: SET tracing = off   sql txn
 
 # Same, with SHOW TRACE FOR.
 # This also tests that sub-spans are reported properly.
