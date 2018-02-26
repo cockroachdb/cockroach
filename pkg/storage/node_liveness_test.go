@@ -389,14 +389,19 @@ func TestNodeLivenessSelf(t *testing.T) {
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
-
-	// Verify liveness of all nodes for all nodes.
-	pauseNodeLivenessHeartbeats(mtc, true)
 	g := mtc.gossips[0]
-	liveness, err := mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
-	if err != nil {
-		t.Fatal(err)
-	}
+
+	pauseNodeLivenessHeartbeats(mtc, true)
+
+	// Verify liveness is properly initialized. This needs to be wrapped in a
+	// SucceedsSoon because node liveness gets initialized via an async gossip
+	// callback.
+	var liveness *storage.Liveness
+	testutils.SucceedsSoon(t, func() error {
+		var err error
+		liveness, err = mtc.nodeLivenesses[0].GetLiveness(g.NodeID.Get())
+		return err
+	})
 	if err := mtc.nodeLivenesses[0].Heartbeat(context.Background(), liveness); err != nil {
 		t.Fatal(err)
 	}
