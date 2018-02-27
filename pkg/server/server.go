@@ -945,6 +945,19 @@ func (s *Server) Start(ctx context.Context) error {
 	s.gossip.Start(unresolvedAdvertAddr, filtered)
 	log.Event(ctx, "started gossip")
 
+	defer time.AfterFunc(30*time.Second, func() {
+		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try
+
+- starting the other nodes, if you haven't already
+- double-checking that the '--join' and '--host' flags are set up correctly
+- running the 'cockroach init' command if you are trying to initialize a new cluster
+
+If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.html") + "."
+
+		log.Shout(context.Background(), log.Severity_WARNING,
+			msg)
+	}).Stop()
+
 	if len(bootstrappedEngines) > 0 {
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
@@ -1026,19 +1039,6 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "inspecting engines")
 	}
-
-	defer time.AfterFunc(30*time.Second, func() {
-		msg := `The server appears to be unable to contact the other nodes in the cluster. Please try
-
-- starting the other nodes, if you haven't already
-- double-checking that the '--join' and '--host' flags are set up correctly
-- not using the '--background' flag.
-
-If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.html") + "."
-
-		log.Shout(context.Background(), log.Severity_WARNING,
-			msg)
-	}).Stop()
 
 	// Initialize grpc-gateway mux and context.
 	jsonpb := &protoutil.JSONPb{
