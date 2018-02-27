@@ -135,7 +135,7 @@ func TestBuilder(t *testing.T) {
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					root, props, err := b.Build()
 					if err != nil {
-						return fmt.Sprintf("error: %v\n", err)
+						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}
 					exprView := o.Optimize(root, props)
 					return exprView.String()
@@ -155,7 +155,7 @@ func TestBuilder(t *testing.T) {
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					group, err := b.Build(typedExpr)
 					if err != nil {
-						return fmt.Sprintf("error: %v\n", err)
+						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}
 					exprView := o.Optimize(group, &opt.PhysicalProps{})
 					return exprView.String()
