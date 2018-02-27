@@ -10,6 +10,7 @@ Requires the following environment variables:
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -45,7 +46,8 @@ def collect_build_results(build_id):
                                             locator='count:100,status:FAILURE,build:(id:{0})'.format(build_id),
                                             fields='testOccurrence(details,name,duration,build(buildType(name)))')))
     for o in test_data.findall('./testOccurrence'):
-        test_name = '{0}/{1}'.format(o.find('build/buildType').attrib['name'], o.attrib['name'])
+        test_name = re.split(r"[/:]", o.attrib['name'])[0]  # remove subtests, if present
+        test_name = '{0}/{1}'.format(o.find('build/buildType').attrib['name'], test_name)
 
         test_log = '--- FAIL: {0}/{1} ({2:.3f}s)\n{3}\n'.format(
             o.find("build/buildType").attrib["name"],
@@ -63,7 +65,7 @@ def create_issue(build_id, failed_tests):
     """
     return {
         'title': 'teamcity: failed tests on {0}: {1}'.format(os.environ['TC_BUILD_BRANCH'],
-                                                             ', '.join(t[0] for t in failed_tests)),
+                                                             ', '.join(set(t[0] for t in failed_tests))),
         'body': '''\
 The following tests appear to have failed:
 
