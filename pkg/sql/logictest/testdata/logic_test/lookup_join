@@ -1,0 +1,260 @@
+# LogicTest: 5node-distsql
+
+########################
+#  LOOKUP JOIN FORCED  #
+########################
+statement ok
+SET experimental_force_lookup_join = true;
+
+statement ok
+CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data TESTING_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c, d FROM
+   GENERATE_SERIES(1, 10) AS A(a),
+   GENERATE_SERIES(1, 10) AS B(b),
+   GENERATE_SERIES(1, 10) AS C(c),
+   GENERATE_SERIES(1, 10) AS D(d)
+
+
+statement ok
+CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c)); INSERT INTO distsql_lookup_test_1 VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
+
+
+statement ok
+CREATE TABLE distsql_lookup_test_2 (d INT, e INT, f INT, PRIMARY KEY (f, e)); INSERT INTO distsql_lookup_test_2 VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+1  1  2  NULL  2  1
+2  1  1  NULL  2  1
+
+
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b AND a > 1 AND e > 1
+----
+2  1  1  NULL  2  1
+
+
+# Filter right side of a lookup join with a restriction on an indexed column.
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = a WHERE f > 1
+----
+2  1  1  1  1  2
+2  NULL  2  1  1  2
+
+
+# Test lookup join with restriction relating the left and right side.
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+
+# Test lookup join with restriction relating the left and right side.
+query IIIIII rowsort
+SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b AND a >= e
+----
+1  1  2  2  1  1
+2  1  1  2  1  1
+2  1  1  NULL  2  1
+
+
+# Test lookup join with selecting a subset of the columns.
+query III rowsort
+SELECT a, b, e FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a >= e
+----
+1  1  1
+2  1  1
+2  1  2
+
+
+# Ensure lookup join is planned.
+query T rowsort
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkc9Kw0AQh-8-hcx5hCa1Hva013popXiTENbsUBbTzLozAaXk3SXZg22h0R7nz_fLl9kjdOxp4w4kYN6gAIQVVAgxcUMinMZ2Xlr7LzALhNDFXsd2hdBwIjBH0KAtgYENP3AEBE_qQjstDQjc6y8i6vYEZjngSWwxH_vq3lvakfOUzsIhpnBw6dv6ICqfbd0yf_SxVhKtx3_Z9mrubYG2RLuEay7FLS7PHLpbVcpLFbSPaFdon646lWdOf5x9RxK5E_rX5RdDhUB-T_lphfvU0EviZvpMLrcTNzU8iebpMhfrLo9GwVO4mIXLebichRcXcDXc_QQAAP__D3vm2w==
+
+
+query T rowsort
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WHERE a > 1 AND e > 1]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkT1rwzAQhvf-CnPzFfzRdNCkqZAOSQnZWhNc6wiijk-VTtAS_N-LraFJIG4z3sdzesR7hJ4NrZoDBVCvUADCAmoE57mlENiP7bS0NF-gcgTbuyhju0Zo2ROoI4iVjkDBiu_ZAYIhaWw3LQ0IHOUXCdLsCVQ14MnZYv7stnnvaEONIX92HJy3h8Z_a2ODhM9u1zF_RLcTCrIb_7KOojJdoC5RV3DNpbjF5Zltf6tKCQhPthPyKtOL7C3meUVZoZRarraXmqgfUC9QP171Lc98_4hkQ8FxH-hfqeRDjUBmTyn2wNG39OK5nZ5J5XripoahIGlapWLZp9EoeAoXs3A5D5ezcH4B18PdTwAAAP__g_HuUw==
+
+
+# Ensure lookup join is planned on a multi-node cluster.
+query T rowsort
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM data JOIN data AS data2 on data.b = data2.a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElL1qwzAUhfc-RTnzLUS281NPWtMhKaFb8aBal2BILCPJ0BL87sX2kCYkcmggHvXz-Tsci3tAaTSv1J4d0k8IECIQYhASEKbICJU1OTtnbHulB5b6G-mEUJRV7dvtjJAby0gP8IXfMVJ8qK8db1hptiBo9qrYdZLKFntlf6RWXoGwrn36LAXJiGRMMkHWEEztj192Xm0ZqWjodvubKcp_yElOSc5IzkkurgaJrgY5-uvSWM2W9Yk-ay5EXZkXU51duyyOT8Ri1P4H7I_rPxq1hgH742qIR61hwP64GpJRaxiwjzOULgTZsKtM6fimqTNphxbrLfcTzpna5vxuTd5p-uW647oNzc73p6JfLMv-qA34FxZBODqBxTkchc0D6jhIJ2E4uSf3NAjPwubZPeZ5EF6EzYt7zK_hfzUZeCbhR3buzpqn3wAAAP__4BLZeQ==
+
+
+# Ensure join performs properly on input that has more than 100 rows.
+query I
+SELECT COUNT(*) FROM data as d1 NATURAL JOIN data as d2
+----
+10000
+
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM data as d1 NATURAL JOIN data as d2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzElc-KqzAYxff3KS7fqheyaNT2tq4cZtWBqUP_MItBSsZ8iNAaSSLMUHz3QV10KjVpacVlEk9-x5NDcoRMcFyyAyrwP4ACAQcIuEDAAwITiAjkUsSolJDVJ41gwb_AHxNIs7zQ1XREIBYSwT-CTvUewYcN-9zjChlHCQQ4apbua0gu0wOT3wFnmgGBsND-34CSwCGBSwIPopKAKPRpZ6VZguDTklxPfxFpdi28k-jcQnxKEokJ06JFfA63y81uFb6vR_86SW4n6QQoMiE5SuRn-0flDV7W29fdYrkZBbTbindmhQ56yBZ6D4dsIT7wkJ1Bk7XQe0jWQnxgsu6gyVroPSRrIT4wWW_QZC30HpK1EHu68i-QVqhykSlsXf2Xdx5XTwLyBJv3Q4lCxvgmRVxjmmFY6-oJjko3q7QZLLJmqTL4W0yNYscsdoxi90xM22LXbHtqRntG9cQsnhjFFvL0np_-bxTPzOSZUTw3i-f32KaWjtlKZm4ZtdSM3tUzaimaZ4Gbm0YtVaPmrrW9R-WfnwAAAP__97zbsQ==
+
+
+statement ok
+CREATE TABLE foo (a int, b int); INSERT INTO foo VALUES (0, 1), (0, 2), (1, 1)
+
+statement ok
+CREATE TABLE bar (a int PRIMARY KEY, c int); INSERT INTO bar VALUES (0, 1), (1, 2), (2, 1)
+
+query III rowsort
+SELECT * FROM foo NATURAL JOIN bar
+----
+0  1  1
+0  2  1
+1  1  2
+
+
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM foo NATURAL JOIN bar]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkT1PwzAQhnd-BXrnQ0pSWDxlLUOLKjaUwY2PylLqs2xHAlX57yjxQINUA-N9PO9jnS9wYninzxyh3lCD8ISO4IP0HKOEuZ2XtuYDqiJY58c0tztCL4GhLkg2DQyFnTyIB8Fw0nZYliaCjOkbiUmfGGoz0VVsXY591ceBD6wNh1U4fLBnHT7bdxEQ9mNS921NbYNb2vo_2mexrmQ96rCyUvt4U9ysxL-c8cDRi4v8p0tWU0dgc-L8VVHG0PNLkH7R5HK_cEvDcEx5usnF1uXR_MBruC7CTRluinD1A-6mu68AAAD__6w41Xo=
+
+
+# Ensure lookup join is not planned when no index is available.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM bar NATURAL JOIN foo]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyskjFrwzAQhff-inJTCypEjrsICh6bDkkJ3YoHxbo4AkdnTjK0BP_3YmtIbGonhW7S3X333hM6gSODa31ED-oTJAh4hlxAzVSg98RdOQ6tzBeohQDr6iZ05VxAQYygThBsqBAUrOmJahBgMGhb9UOtAGrCGfFBlwgqbcXFWjm_9kPvKtyiNsiD5VCzPWr-zna6a2yaoO4zKbIEpmTlv8ruiW6TTSZlz2qNIzbIaMbvd33kF--v2h_eyLqx9Qr34SGTjy9sy0N_GiQQWToZYjkIceUnbNHX5Dze9BkWXQI0JcYX8dRwge9MRS8Tr5ue6wsGfYjdNF5WLrY6g5ewnIWXA1iO4eQPcDKGl7PwYmQ7b-9-AgAA__81cSn3
+
+
+statement ok
+CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition)); INSERT INTO books VALUES ('SICP', 1, 2), ('Intro to Algo', 1, 1), ('Intro to Algo', 2, 1), ('Intro to Algo', 3, 2), ('Art of Computer Programming', 1, 2), ('Art of Computer Programming', 2, 2)
+
+
+statement ok
+CREATE TABLE authors (name STRING, book STRING); INSERT INTO authors VALUES ('Hal Abelson', 'SICP'), ('Geral Jay Sussman', 'SICP'), ('Thomas H Cormen', 'Intro to Algo'), ('Charles E Leiserson', 'Intro to Algo'), ('Ronald Rivest', 'Intro to Algo'), ('Clifford Stein', 'Intro to Algo'), ('Donald Knuth', 'Art of Computer Programming')
+
+
+query T rowsort
+SELECT DISTINCT(b1.title) FROM books as b1 JOIN books as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
+----
+Intro to Algo
+
+
+# Filter on a column that is not returned or in the equality columns.
+query T rowsort
+SELECT DISTINCT(b1.title) FROM books as b1 JOIN books as b2 USING(title) WHERE b1.shelf <> b2.shelf
+----
+Intro to Algo
+
+
+query T rowsort
+SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+Thomas H Cormen
+Charles E Leiserson
+Ronald Rivest
+Clifford Stein
+
+query T rowsort
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyskjFr8zAQhvfvV3zclIAKkR1nMBQ8dGg6JCV0KxkU65qIOjojnaEl5L8X20NiUysxdNTpnnteTjqBJY0rdUQP6TtIEJDAVkDpKEfvydXltmmpvyCdCTC2rLgubwXk5BDSE7DhAiGFFT1QCQI0sjJF03QWQBVfEM9qj5AuzuJqrAyPfVO7AjeoNLrOcCidOSr3namKD3VWAeuK0_-ZFFkEQ2r5p-od0WdHHA-KozHiFzJ2hHdQGg9KL67KktPoUPef7nbLL8mflT_U6fvJC_zgSRZNH53ZH3iSyekd8edjdvZkPBubc9cbmJ50pt_43Bv0JVmPd_3vWb0Z1HtsN-2pcjm-OsobTXtcN1xT0Oi5vV20h6Vtr-qA17AMwvMOLPtwFITjsDkeYY768DwIJ2FzEoRnPXh7_vcTAAD__-Ppmes=
+
+
+query TTT
+EXPLAIN (EXPRS) SELECT DISTINCT(authors.name) FROM authors, books AS b1, books AS b2 WHERE b1.title = b2.title AND authors.book = b1.title AND b1.shelf <> b2.shelf
+----
+distinct                  ·               ·
+ └── render               ·               ·
+      │                   render 0        "name"
+      └── join            ·               ·
+           │              type            inner
+           │              equality        (book) = (title)
+           ├── scan       ·               ·
+           │              table           authors@primary
+           │              spans           ALL
+           └── join       ·               ·
+                │         type            inner
+                │         equality        (title) = (title)
+                │         mergeJoinOrder  +"(title=title)"
+                │         pred            b1.shelf != b2.shelf
+                ├── scan  ·               ·
+                │         table           books@primary
+                │         spans           ALL
+                └── scan  ·               ·
+·                         table           books@primary
+·                         spans           ALL
+
+
+# Ensure lookup join preserves sort from the left side.
+query T
+SELECT DISTINCT(a.name) FROM (SELECT * FROM authors ORDER BY name) AS a JOIN books AS b1 ON a.book = b1.title
+----
+Charles E Leiserson
+Clifford Stein
+Ronald Rivest
+Thomas H Cormen
+Donald Knuth
+Geral Jay Sussman
+Hal Abelson
+
+
+# Cross joins should not be planned as lookup joins.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM books as b1 CROSS JOIN books as b2]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkrFOwzAQhneeAt18SHWSMnjySBlaVLGhDG58KhGpL7IdCVTl3VHioY1FUpgYfb7v_s_WncGyoa0-kQf5BgIQ1lAitI4r8p7dUI5NG_MJcoVQ27YLQ7lEqNgRyDOEOjQEErb8wC0gGAq6bsamHoG7cEF80EcCWfR4NVYsj33Vh4b2pA25yXBoXX3S7ksdmD88IOy6IO-VQJWhymEuW_xjdjabfYnsLDtDjkz6k7dbfnjAk_bvz1zb1H_ii6pAtUb1OCueT8Rv7MGefMvW069WYTVYkzlS_AXPnavoxXE1xsTjbuTGgiEf4m0RDxsbrwbBa1gswvkEFimc_QHOUjhfhFeJdtnffQcAAP__ALIo4A==
+
+
+# Outer joins should not be planned as lookup joins.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM books as b1 LEFT OUTER JOIN books as b2 ON b1.title = b2.title]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzEksFKw0AQhu8-RZiT4gjdpPWwIOylQos2UuJJekizYwymmbC7AUvpu0uyh7bBpnrytjsz3_zzD7ODijUt0g1ZkG8gAGECK4TacEbWsmnDvmimv0COEIqqblwbXiFkbAjkDlzhSgIJC77jGhA0ubQou6I9AjfugFiX5gRyvMejtmK4bZKuS1pSqsmcNIfaFJvUbNWa-dMCQtw4GSiBKkQVwTlt8Y_a4Vntg2RTsdFkSPc3ebnkBwPPZHKac1H1DSTbmmTwNH1Mgvg1mS6DeTxbAEJJ7-5aidubB1PkH_7Z94dqjGqC6v6s0ejE6IW7WZKtubL0q9MZtS5J5-S3ZrkxGb0YzjoZ_407rgtoss5nx_4zq3yqHfAYFoNwdAKLPhz-AQ77cDQIj3pjr_ZX3wEAAP__G2E2Mg==
+
+
+query T rowsort
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books ON books.edition = 1 WHERE books.title = authors.book]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyUkTFrwzAQhff-CnPzFSw7WQQFTQV3cErIVjwo1pGKOj4jydAS_N-LraFxIWoz6t197z1OF-jZUK3P5EG-gQCELTQIg-OWvGc3y3GpMp8gcwTbD2OY5QahZUcgLxBs6Agk1PzIAyAYCtp2y9KEwGP4QXzQJwJZTnhlK9K2B33saE_akFuZw-DsWbsvpcfwPndF2I1BZkqgKuBWtLgn-oVtn0o-Mn_Muc-2C-RkpjbZUyaklFV9WNVBVaLaoNre7FWsev1x6T35gXtP_zp2PjUIZE4Uf9Pz6Fp6ddwuMfG5W7hFMORDnJbxUfVxNBe8hkUSLtJwkYTzX3AzPXwHAAD__6X031A=
+
+
+statement ok
+SET experimental_force_lookup_join = false;
+
+
+##########################
+#  LOOKUP JOIN DISABLED  #
+##########################
+
+
+# Simple joins should no longer be planned as lookup joins.
+query T
+SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT * FROM foo JOIN bar USING(a)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html?eJyskjFrwzAQhff-inJTCypEjrsICh6bDkkJ3YoHxbo4AkdnTjK0BP_3YmtIbGonhW7S6b5774k7gSODa31ED-oTJAh4hlxAzVSg98RdOTatzBeohQDr6iZ05VxAQYygThBsqBAUrOmJahBgMGhb9U2tAGrCGfFBlwgqbcXFWDk_9kPvKtyiNsiD4VCzPWr-zvZEIGDTBHWfSZElMCUr_1V2p_k22WRS9qzWOGKDjGb8f9dbfvH-qv3hjawbW69wHx4y-fjCtjz0p0ECkaWTIZaDEFc2YYu-JufxpmVYdAnQlBh_xFPDBb4zFb1MvG56ri8Y9CG-pvGycvGpM3gJy1l4OYDlGE7-ACdjeDkLL0a28_buJwAA__88ain3
