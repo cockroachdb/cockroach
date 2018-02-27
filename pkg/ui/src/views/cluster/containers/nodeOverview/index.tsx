@@ -7,11 +7,11 @@ import _ from "lodash";
 import "./nodeOverview.styl";
 
 import {
-  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector,
+  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { nodeIDAttr } from "src/util/constants";
 import { AdminUIState } from "src/redux/state";
-import { refreshNodes } from "src/redux/apiReducers";
+import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { NodeStatus$Properties, MetricConstants, StatusMetrics } from  "src/util/proto";
 import { Bytes, Percentage } from "src/util/format";
 import { LongToMoment } from "src/util/convert";
@@ -23,6 +23,8 @@ interface NodeOverviewProps extends RouterState {
   node: NodeStatus$Properties;
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
+  refreshLiveness: typeof refreshLiveness;
+  nodesSummaryValid: boolean;
 }
 
 /**
@@ -32,12 +34,14 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
   componentWillMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNodes();
+    this.props.refreshNodes();
   }
 
   componentWillReceiveProps(props: NodeOverviewProps) {
     // Refresh nodes status query when props are received; this will immediately
     // trigger a new request if previous results are invalidated.
     props.refreshNodes();
+    props.refreshLiveness();
   }
 
   render() {
@@ -180,9 +184,11 @@ export default connect(
     return {
       node: currentNode(state, ownProps),
       nodesSummary: nodesSummarySelector(state),
+      nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
   {
     refreshNodes,
+    refreshLiveness,
   },
 )(NodeOverview);

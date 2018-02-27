@@ -240,3 +240,11 @@ export const nodesSummarySelector = createSelector(
 
 const nodesSummaryType = nullOfReturnType(nodesSummarySelector);
 export type NodesSummary = typeof nodesSummaryType;
+
+// selectNodesSummaryValid is a selector that returns true if the current
+// nodesSummary is "valid" (i.e. based on acceptably recent data). This is
+// included in the redux-connected state of some pages in order to support
+// automatically refreshing data.
+export function selectNodesSummaryValid (state: AdminUIState) {
+  return state.cachedData.nodes.valid && state.cachedData.liveness.valid;
+}
