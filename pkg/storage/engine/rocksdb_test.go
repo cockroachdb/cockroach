@@ -759,6 +759,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 	}
 
 	batch := rocksdb.NewBatch()
+	defer batch.Close()
 
 	// Make a time bounded iterator that skips the SSTable containing our writes.
 	func() {

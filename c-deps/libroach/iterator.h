@@ -14,13 +14,18 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
-#include "chunked_buffer.h"
-#include "encoding.h"
 #include <rocksdb/iterator.h>
 #include <rocksdb/write_batch.h>
+#include "chunked_buffer.h"
+#include "encoding.h"
 
 struct DBIterator {
+  DBIterator(std::atomic<int64_t>* iters) : iters_count(iters) { ++(*iters_count); }
+  ~DBIterator() { --(*iters_count); }
+
+  std::atomic<int64_t>* const iters_count;
   std::unique_ptr<rocksdb::Iterator> rep;
   std::unique_ptr<cockroach::chunkedBuffer> kvs;
   std::unique_ptr<rocksdb::WriteBatch> intents;
