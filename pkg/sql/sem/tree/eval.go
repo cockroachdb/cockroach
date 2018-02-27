@@ -1712,8 +1712,8 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 
 	IsNotDistinctFrom: {
 		CmpOp{
-			LeftType:     types.Null,
-			RightType:    types.Null,
+			LeftType:     types.Unknown,
+			RightType:    types.Unknown,
 			fn:           cmpOpScalarIsFn,
 			nullableArgs: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
@@ -3311,7 +3311,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp types.T, d Datum) error {
-	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Null) ||
+	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Unknown) ||
 		d.ResolvedType().Equivalent(exp)) {
 		return errors.Errorf("expected return type %q, got: %q", exp, d.ResolvedType())
 	}

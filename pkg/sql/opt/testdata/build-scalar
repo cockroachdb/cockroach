@@ -155,7 +155,7 @@ build-scalar,semtree-expr vars=(int, int)
 ----
 is (type: bool)
  ├── variable (@1) (type: int)
- └── const (NULL) (type: NULL)
+ └── const (NULL) (type: unknown)
 @1 IS NULL
 
 build-scalar,semtree-expr vars=(int, int)
@@ -163,7 +163,7 @@ build-scalar,semtree-expr vars=(int, int)
 ----
 is (type: bool)
  ├── variable (@1) (type: int)
- └── const (NULL) (type: NULL)
+ └── const (NULL) (type: unknown)
 @1 IS NULL
 
 build-scalar,semtree-expr vars=(int, int)
@@ -179,7 +179,7 @@ build-scalar,semtree-expr vars=(int, int)
 ----
 is-not (type: bool)
  ├── variable (@1) (type: int)
- └── const (NULL) (type: NULL)
+ └── const (NULL) (type: unknown)
 @1 IS NOT NULL
 
 build-scalar,semtree-expr vars=(int, int)
@@ -187,7 +187,7 @@ build-scalar,semtree-expr vars=(int, int)
 ----
 is-not (type: bool)
  ├── variable (@1) (type: int)
- └── const (NULL) (type: NULL)
+ └── const (NULL) (type: unknown)
 @1 IS NOT NULL
 
 build-scalar,semtree-expr vars=(int, int)

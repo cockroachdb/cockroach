@@ -86,14 +86,14 @@ NULL
 query IT
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
-1  NULL
+1  unknown
 2  int
 
 query IT
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
 1  int
-2  NULL
+2  unknown
 
 statement ok
 CREATE TABLE uniontest (

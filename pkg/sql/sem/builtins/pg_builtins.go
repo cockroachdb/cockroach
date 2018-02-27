@@ -279,11 +279,10 @@ var pgBuiltins = map[string][]tree.Builtin{
 	},
 
 	"pg_typeof": {
-		// TODO(knz): This is a proof-of-concept until types.Any works
-		// properly.
 		tree.Builtin{
-			Types:      tree.ArgTypes{{"val", types.Any}},
-			ReturnType: tree.FixedReturnType(types.String),
+			Types:        tree.ArgTypes{{"val", types.Any}},
+			NullableArgs: true,
+			ReturnType:   tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().String()), nil
 			},
