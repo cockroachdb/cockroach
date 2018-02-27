@@ -44,6 +44,7 @@ func init() {
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,
+		opt.CastOp:            (*Builder).buildCast,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 	}
 
@@ -171,6 +172,17 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 		ev.Logical().Scalar.Type,
 		funcDef.Overload,
 	)
+}
+
+func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	expr, err := tree.NewTypedCastExpr(
+		b.buildScalar(ctx, ev.Child(0)),
+		ev.Logical().Scalar.Type,
+	)
+	if err != nil {
+		panic(err)
+	}
+	return expr
 }
 
 func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
