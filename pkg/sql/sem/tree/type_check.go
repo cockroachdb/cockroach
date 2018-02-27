@@ -136,7 +136,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Null) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Unknown) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -173,7 +173,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == types.Null || rightReturn == types.Null {
+	if leftReturn == types.Unknown || rightReturn == types.Unknown {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -378,7 +378,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t == types.Null {
+	if types.IsStringType(t) || t == types.Unknown {
 		expr.Expr = subExpr
 		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
@@ -472,7 +472,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 		}
 		if !handledNull {
 			for _, expr := range typedSubExprs {
-				if expr.ResolvedType() == types.Null {
+				if expr.ResolvedType() == types.Unknown {
 					return DNull, nil
 				}
 			}
@@ -722,7 +722,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn == types.Null {
+		if exprReturn == types.Unknown {
 			return DNull, nil
 		}
 	}
@@ -997,7 +997,7 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ == types.Null || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ == types.Unknown || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -1061,7 +1061,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType() == types.Null || retType == types.Null {
+		if leftTyped.ResolvedType() == types.Unknown || retType == types.Unknown {
 			return leftTyped, rightTyped, CmpOp{}, true /* alwaysNull */, nil
 		}
 	} else {
@@ -1093,7 +1093,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft == types.Null || rightReturn == types.Null {
+		if cmpTypeLeft == types.Unknown || rightReturn == types.Unknown {
 			return leftTyped, rightTyped, CmpOp{}, true /* alwaysNull */, nil
 		}
 
@@ -1230,7 +1230,7 @@ func typeCheckComparisonOp(
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == types.Null || rightReturn == types.Null {
+	if leftReturn == types.Unknown || rightReturn == types.Unknown {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1320,28 +1320,28 @@ func TypeCheckSameTypedExprs(
 		return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 	default:
 		firstValidIdx := -1
-		firstValidType := types.Null
+		firstValidType := types.Unknown
 		for i, j := range resolvableIdxs {
 			typedExpr, err := exprs[j].TypeCheck(ctx, desired)
 			if err != nil {
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType != types.Null {
+			if returnType := typedExpr.ResolvedType(); returnType != types.Unknown {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType == types.Null {
+		if firstValidType == types.Unknown {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
 			case len(placeholderIdxs) > 0:
 				return nil, nil, placeholderTypeAmbiguityError{s.exprs[placeholderIdxs[0]].(*Placeholder)}
 			default:
-				return typedExprs, types.Null, nil
+				return typedExprs, types.Unknown, nil
 			}
 		}
 
@@ -1350,7 +1350,7 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == types.Null) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == types.Unknown) {
 				return nil, nil, unexpectedTypeError{exprs[i], firstValidType, typ}
 			}
 			typedExprs[i] = typedExpr

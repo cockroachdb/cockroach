@@ -37,18 +37,18 @@ func TestResultColumnsTypesEqual(t *testing.T) {
 			equal: false,
 		},
 		{
-			r:     ResultColumns{{Typ: types.Null}},
+			r:     ResultColumns{{Typ: types.Unknown}},
 			o:     ResultColumns{{Typ: types.Int}},
 			equal: false,
 		},
 		{
 			r:     ResultColumns{{Typ: types.Int}},
-			o:     ResultColumns{{Typ: types.Null}},
+			o:     ResultColumns{{Typ: types.Unknown}},
 			equal: true,
 		},
 		{
-			r:     ResultColumns{{Typ: types.Null}},
-			o:     ResultColumns{{Typ: types.Null}},
+			r:     ResultColumns{{Typ: types.Unknown}},
+			o:     ResultColumns{{Typ: types.Unknown}},
 			equal: true,
 		},
 		{
@@ -58,7 +58,7 @@ func TestResultColumnsTypesEqual(t *testing.T) {
 		},
 		{
 			r:     ResultColumns{},
-			o:     ResultColumns{{Typ: types.Null}},
+			o:     ResultColumns{{Typ: types.Unknown}},
 			equal: false,
 		},
 	}

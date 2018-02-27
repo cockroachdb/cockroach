@@ -89,7 +89,7 @@ CREATE TABLE foo2 (x) AS (VALUES(ROW()))
 statement error pq: value type setof tuple{int} cannot be used for table columns
 CREATE TABLE foo2 (x) AS (VALUES(generate_series(1,3)))
 
-statement error pq: value type NULL cannot be used for table columns
+statement error pq: value type unknown cannot be used for table columns
 CREATE TABLE foo2 (x) AS (VALUES(NULL))
 
 # Check nulls are handled properly (#13921)

@@ -245,7 +245,7 @@ func (t TOidWrapper) Oid() oid.Oid { return t.oid }
 // WrapTypeWithOid wraps a T with a custom Oid.
 func WrapTypeWithOid(t T, oid oid.Oid) T {
 	switch v := t.(type) {
-	case tNull, tAny, TOidWrapper:
+	case tUnknown, tAny, TOidWrapper:
 		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "cannot wrap %T with an Oid", v))
 	}
 	return TOidWrapper{

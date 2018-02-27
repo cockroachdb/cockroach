@@ -265,10 +265,10 @@ select
       │         └── const: 4 [type=int]
       ├── is-not [type=bool]
       │    ├── variable: a.i [type=int]
-      │    └── const: NULL [type=NULL]
+      │    └── const: NULL [type=unknown]
       └── is [type=bool]
            ├── variable: a.i [type=int]
-           └── const: NULL [type=NULL]
+           └── const: NULL [type=unknown]
 
 # Like comparisons.
 opt
