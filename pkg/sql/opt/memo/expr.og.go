@@ -35,6 +35,7 @@ var opLayoutTable = [...]opLayout{
 	opt.LimitOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
 	opt.OffsetOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/),
 	opt.SubqueryOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/),
+	opt.AnyOp:             makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/),
 	opt.VariableOp:        makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
 	opt.ConstOp:           makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
 	opt.NullOp:            makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/),
@@ -127,6 +128,7 @@ var isEnforcerLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -219,6 +221,7 @@ var isRelationalLookup = [...]bool{
 	opt.LimitOp:           true,
 	opt.OffsetOp:          true,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -311,6 +314,7 @@ var isJoinLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -403,6 +407,7 @@ var isJoinApplyLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -495,6 +500,7 @@ var isScalarLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        true,
+	opt.AnyOp:             true,
 	opt.VariableOp:        true,
 	opt.ConstOp:           true,
 	opt.NullOp:            true,
@@ -587,6 +593,7 @@ var isConstValueLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           true,
 	opt.NullOp:            true,
@@ -679,6 +686,7 @@ var isBooleanLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -771,6 +779,7 @@ var isComparisonLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -863,6 +872,7 @@ var isBinaryLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -955,6 +965,7 @@ var isUnaryLookup = [...]bool{
 	opt.LimitOp:           false,
 	opt.OffsetOp:          false,
 	opt.SubqueryOp:        false,
+	opt.AnyOp:             false,
 	opt.VariableOp:        false,
 	opt.ConstOp:           false,
 	opt.NullOp:            false,
@@ -1915,6 +1926,43 @@ func (e *Expr) AsOffset() *OffsetExpr {
 	return (*OffsetExpr)(e)
 }
 
+// SubqueryExpr is a subquery in a single-row context such as
+// `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
+// In a single-row context, the outer query is only valid if the subquery
+// returns at most one row.
+//
+// Subqueries in a multi-row context such as
+// `SELECT 1 IN (SELECT c FROM t)` or `SELECT (1, 'a') IN (SELECT 1, 'a')`
+// can be transformed to a single row context using the Any operator. (Note that
+// this is different from the SQL ANY operator. See the comment above the Any
+// operator for more details.)
+//
+// We use the following transformations:
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// `<var> IN (<subquery>)`
+//    ==> `Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
+//
+// `<var> NOT IN (<subquery>)`
+//    ==> `NOT Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
+//
+// `<var> <comp> {SOME|ANY}(<subquery>)`
+//    ==> `Any(SELECT <var> <comp> x FROM (<subquery>) AS q(x))`
+//
+// `<var> <comp> ALL(<subquery>)`
+//    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+//
+// The Input field contains the subquery itself, and the Projection field
+// contains a single column representing the output of the subquery. For
+// example, `(SELECT 1, 'a')` would be represented by the following structure:
+//
+// (Subquery
+//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+//   (Variable 3)
+// )
+//
+// Here Variable 3 refers to the projection from the Input,
+// (Tuple (Const 1) (Const 'a')).
 type SubqueryExpr Expr
 
 func MakeSubqueryExpr(input GroupID, projection GroupID) SubqueryExpr {
@@ -1938,6 +1986,36 @@ func (e *Expr) AsSubquery() *SubqueryExpr {
 		return nil
 	}
 	return (*SubqueryExpr)(e)
+}
+
+// AnyExpr is a special operator that does not exist in SQL. However, it is very
+// similar to the SQL ANY, and can be converted to the SQL ANY operator using
+// the following transformation:
+//  `Any(<subquery>)` ==> `True = ANY(<subquery>)`
+//
+// Any expects the subquery to return a single boolean column. The semantics
+// are equivalent to the SQL ANY expression above on the right: Any returns true
+// if any of the values returned by the subquery are true, else returns NULL
+// if any of the values are NULL, else returns false.
+type AnyExpr Expr
+
+func MakeAnyExpr(input GroupID) AnyExpr {
+	return AnyExpr{op: opt.AnyOp, state: exprState{uint32(input)}}
+}
+
+func (e *AnyExpr) Input() GroupID {
+	return GroupID(e.state[0])
+}
+
+func (e *AnyExpr) Fingerprint() Fingerprint {
+	return Fingerprint(*e)
+}
+
+func (e *Expr) AsAny() *AnyExpr {
+	if e.op != opt.AnyOp {
+		return nil
+	}
+	return (*AnyExpr)(e)
 }
 
 // VariableExpr is the typed scalar value of a column in the query. The private
@@ -3313,7 +3391,7 @@ func (e *Expr) AsCast() *CastExpr {
 //
 // The Case operator evaluates <Input> (if not provided, Input is set to True),
 // then picks the WHEN branch where <condval> is equal to
-// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// <Input>, then evaluates and returns the corresponding THEN expression. If no
 // WHEN branch matches, the ELSE expression is evaluated and returned, if any.
 // Otherwise, NULL is returned.
 //

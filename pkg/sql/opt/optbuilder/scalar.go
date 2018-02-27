@@ -153,24 +153,28 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		out = b.factory.ConstructCoalesce(b.factory.InternList(args))
 
 	case *tree.ComparisonExpr:
-		left := b.buildScalar(t.TypedLeft(), inScope)
-		right := b.buildScalar(t.TypedRight(), inScope)
-
-		// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
-		// and All to various formulations of the opt Exists operator. For now,
-		// avoid an 'unused' linter complaint.
-		_ = tree.NewTypedComparisonExprWithSubOp
-
-		fn := comparisonOpMap[t.Operator]
-		if fn != nil {
-			// Most comparison ops map directly to a factory method.
-			out = fn(b.factory, left, right)
-		} else if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+		if sub, ok := t.Right.(*subquery); ok && sub.multiRow {
+			out, _ = b.buildMultiRowSubquery(t, inScope)
 		} else {
-			// TODO(rytaft): remove this check when we are confident that
-			// all operators are included in comparisonOpMap.
-			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
+			left := b.buildScalar(t.TypedLeft(), inScope)
+			right := b.buildScalar(t.TypedRight(), inScope)
+
+			// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
+			// and All to various formulations of the opt Exists operator. For now,
+			// avoid an 'unused' linter complaint.
+			_ = tree.NewTypedComparisonExprWithSubOp
+
+			fn := comparisonOpMap[t.Operator]
+			if fn != nil {
+				// Most comparison ops map directly to a factory method.
+				out = fn(b.factory, left, right)
+			} else if b.AllowUnsupportedExpr {
+				out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+			} else {
+				// TODO(rytaft): remove this check when we are confident that
+				// all operators are included in comparisonOpMap.
+				panic(errorf("not yet implemented: operator %s", t.Operator.String()))
+			}
 		}
 
 	case *tree.DTuple:
@@ -220,6 +224,9 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		from := b.buildScalar(t.TypedFrom(), inScope)
 		to := b.buildScalar(t.TypedTo(), inScope)
 		out = b.buildRangeCond(t.Not, t.Symmetric, input, from, to)
+
+	case *subquery:
+		out, _ = b.buildSingleRowSubquery(t, inScope)
 
 	case *tree.Tuple:
 		list := make([]memo.GroupID, len(t.Exprs))

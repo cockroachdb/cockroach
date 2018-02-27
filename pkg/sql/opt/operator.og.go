@@ -187,7 +187,55 @@ const (
 	// Scalar Operators
 	// ------------------------------------------------------------
 
+	// SubqueryOp is a subquery in a single-row context such as
+	// `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
+	// In a single-row context, the outer query is only valid if the subquery
+	// returns at most one row.
+	//
+	// Subqueries in a multi-row context such as
+	// `SELECT 1 IN (SELECT c FROM t)` or `SELECT (1, 'a') IN (SELECT 1, 'a')`
+	// can be transformed to a single row context using the Any operator. (Note that
+	// this is different from the SQL ANY operator. See the comment above the Any
+	// operator for more details.)
+	//
+	// We use the following transformations:
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	// `<var> IN (<subquery>)`
+	//    ==> `Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
+	//
+	// `<var> NOT IN (<subquery>)`
+	//    ==> `NOT Any(SELECT <var> = x FROM (<subquery>) AS q(x))`
+	//
+	// `<var> <comp> {SOME|ANY}(<subquery>)`
+	//    ==> `Any(SELECT <var> <comp> x FROM (<subquery>) AS q(x))`
+	//
+	// `<var> <comp> ALL(<subquery>)`
+	//    ==> `NOT Any(SELECT NOT(<var> <comp> x) FROM (<subquery>) AS q(x))`
+	// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+	//
+	// The Input field contains the subquery itself, and the Projection field
+	// contains a single column representing the output of the subquery. For
+	// example, `(SELECT 1, 'a')` would be represented by the following structure:
+	//
+	// (Subquery
+	//   (Project (Values (Tuple)) (Projections (Tuple (Const 1) (Const 'a'))))
+	//   (Variable 3)
+	// )
+	//
+	// Here Variable 3 refers to the projection from the Input,
+	// (Tuple (Const 1) (Const 'a')).
 	SubqueryOp
+
+	// AnyOp is a special operator that does not exist in SQL. However, it is very
+	// similar to the SQL ANY, and can be converted to the SQL ANY operator using
+	// the following transformation:
+	//  `Any(<subquery>)` ==> `True = ANY(<subquery>)`
+	//
+	// Any expects the subquery to return a single boolean column. The semantics
+	// are equivalent to the SQL ANY expression above on the right: Any returns true
+	// if any of the values returned by the subquery are true, else returns NULL
+	// if any of the values are NULL, else returns false.
+	AnyOp
 
 	// VariableOp is the typed scalar value of a column in the query. The private
 	// field is a Metadata.ColumnID that references the column by index.
@@ -361,7 +409,7 @@ const (
 	//
 	// The Case operator evaluates <Input> (if not provided, Input is set to True),
 	// then picks the WHEN branch where <condval> is equal to
-	// <cond>, then evaluates and returns the corresponding THEN expression. If no
+	// <Input>, then evaluates and returns the corresponding THEN expression. If no
 	// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
 	// Otherwise, NULL is returned.
 	//
@@ -390,9 +438,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
+const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsubqueryanyvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
 
-var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 274, 278, 282, 287, 298, 303, 314, 326, 332, 339, 342, 344, 347, 349, 351, 353, 355, 357, 359, 361, 367, 371, 379, 385, 395, 405, 419, 428, 441, 452, 467, 469, 475, 483, 489, 494, 500, 504, 509, 513, 516, 525, 528, 531, 537, 544, 551, 560, 570, 584, 599, 610, 626, 630, 634, 638, 646, 654, 670}
+var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 264, 272, 277, 281, 285, 290, 301, 306, 317, 329, 335, 342, 345, 347, 350, 352, 354, 356, 358, 360, 362, 364, 370, 374, 382, 388, 398, 408, 422, 431, 444, 455, 470, 472, 478, 486, 492, 497, 503, 507, 512, 516, 519, 528, 531, 534, 540, 547, 554, 563, 573, 587, 602, 613, 629, 633, 637, 641, 649, 657, 673}
 
 var EnforcerOperators = [...]Operator{
 	SortOp,
@@ -452,6 +500,7 @@ var JoinApplyOperators = [...]Operator{
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
+	AnyOp,
 	VariableOp,
 	ConstOp,
 	NullOp,

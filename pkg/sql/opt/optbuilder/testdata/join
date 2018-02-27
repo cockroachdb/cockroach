@@ -1,11 +1,5 @@
-# LogicTest: default parallel-stmts distsql distsql-disk
+# tests adapted from logictest -- join
 
-# The join condition logic is tricky to get right with NULL
-# values. Simple implementations can deal well with NULLs on the first
-# or last row but fail to handle them in the middle. So the test table
-# must contain at least 3 rows with a null in the middle. This test
-# table also contains the pair 44/42 so that a test with a non-trivial
-# ON condition can be written.
 exec-ddl
 CREATE TABLE onecolumn (x INT)
 ----
@@ -3328,38 +3322,39 @@ project
  └── projections
       └── variable: k [type=int]
 
-# TODO(rytaft): This test case will fail until we implement subquery
-# replacement.
-# build
-# select * from (select 1 as k), (select 2 as k) where 1 in (select k from kv)
-# ----
-# select
-#  ├── columns: k:int:null:1 k:int:null:2
-#  ├── inner-join
-#  │    ├── columns: k:int:null:1 k:int:null:2
-#  │    ├── project
-#  │    │    ├── columns: k:int:null:1
-#  │    │    ├── values
-#  │    │    │    └── tuple [type=tuple{}]
-#  │    │    └── projections
-#  │    │         └── const: 1 [type=int]
-#  │    ├── project
-#  │    │    ├── columns: k:int:null:2
-#  │    │    ├── values
-#  │    │    │    └── tuple [type=tuple{}]
-#  │    │    └── projections
-#  │    │         └── const: 2 [type=int]
-#  │    └── true [type=bool]
-#  └── in [type=bool]
-#       ├── const: 1 [type=int]
-#       └── subquery [type=unknown]
-#            ├── project
-#            │    ├── columns: kv.k:int:3
-#            │    ├── scan
-#            │    │    └── columns: kv.k:int:3 kv.v:int:null:4 kv.w:int:null:5 kv.s:string:null:6
-#            │    └── projections
-#            │         └── variable: kv.k [type=int]
-#            └── variable: kv.k [type=int]
+build
+select * from (select 1 as k), (select 2 as k) where 1 in (select k from kv)
+----
+select
+ ├── columns: k:1(int) k:2(int)
+ ├── inner-join
+ │    ├── columns: k:1(int) k:2(int)
+ │    ├── project
+ │    │    ├── columns: k:1(int)
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    └── projections
+ │    │         └── const: 1 [type=int]
+ │    ├── project
+ │    │    ├── columns: k:2(int)
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    └── projections
+ │    │         └── const: 2 [type=int]
+ │    └── true [type=bool]
+ └── any [type=bool]
+      └── project
+           ├── columns: column7:7(bool)
+           ├── project
+           │    ├── columns: kv.k:3(int!null)
+           │    ├── scan kv
+           │    │    └── columns: kv.k:3(int!null) kv.v:4(int) kv.w:5(int) kv.s:6(string)
+           │    └── projections
+           │         └── variable: kv.k [type=int]
+           └── projections
+                └── eq [type=bool]
+                     ├── const: 1 [type=int]
+                     └── variable: kv.k [type=int]
 
 # Test natural outer join when the left side has unknown type
 build
