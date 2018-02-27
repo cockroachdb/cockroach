@@ -26,14 +26,8 @@ void chunkedBuffer::Put(const rocksdb::Slice& key, const rocksdb::Slice& value) 
   const uint32_t key_size = key.size();
   const uint32_t val_size = value.size();
   const uint8_t size_buf[sizeof(uint64_t)] = {
-    uint8_t(val_size),
-    uint8_t(val_size >> 8),
-    uint8_t(val_size >> 16),
-    uint8_t(val_size >> 24),
-    uint8_t(key_size),
-    uint8_t(key_size >> 8),
-    uint8_t(key_size >> 16),
-    uint8_t(key_size >> 24),
+      uint8_t(val_size), uint8_t(val_size >> 8), uint8_t(val_size >> 16), uint8_t(val_size >> 24),
+      uint8_t(key_size), uint8_t(key_size >> 8), uint8_t(key_size >> 16), uint8_t(key_size >> 24),
   };
   put((const char*)size_buf, sizeof(size_buf), key.size() + value.size());
   put(key.data(), key.size(), value.size());
@@ -55,8 +49,7 @@ void chunkedBuffer::Clear() {
 // indicate that the required size of this buffer will soon be
 // len+next_size_hint, to prevent excessive resize operations.
 void chunkedBuffer::put(const char* data, int len, int next_size_hint) {
-  const int avail = bufs_.empty() ? 0 :
-      (bufs_.back().len - (buf_ptr_ - bufs_.back().data));
+  const int avail = bufs_.empty() ? 0 : (bufs_.back().len - (buf_ptr_ - bufs_.back().data));
   if (len > avail) {
     // If it's bigger than the last buf's capacity, we fill the last buf,
     // allocate a new one, and write the remainder to the new one.  Our new
