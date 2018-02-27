@@ -502,7 +502,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   OF OFF OFFSET OID ON ONLY OPTION OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
-%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
+%token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PG_CATALOG PHYSICAL PLACING
 %token <str>   PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
 
 %token <str>   QUERIES QUERY
@@ -867,14 +867,14 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> explain_option_name
 %type <[]string> explain_option_list
 
-%type <coltypes.T> typename simple_typename const_typename
+%type <coltypes.T> typename simple_typename prefixed_simple_typename const_typename prefixed_const_typename
 %type <coltypes.T> numeric opt_numeric_modifiers
 %type <*tree.NumVal> opt_float
 %type <coltypes.T> character_with_length character_without_length
 %type <coltypes.T> const_datetime const_interval const_json
 %type <coltypes.T> bit_with_length bit_without_length
 %type <coltypes.T> character_base
-%type <coltypes.CastTargetType> postgres_oid
+%type <coltypes.CastTargetType> postgres_oid simple_postgres_oid
 %type <coltypes.CastTargetType> cast_target
 %type <str> extract_arg
 %type <empty> opt_varying
@@ -5296,7 +5296,7 @@ where_clause:
 //   - thomas 1997-10-10
 
 typename:
-  simple_typename opt_array_bounds
+  prefixed_simple_typename opt_array_bounds
   {
     if bounds := $2.int32s(); bounds != nil {
       var err error
@@ -5311,7 +5311,7 @@ typename:
   }
   // SQL standard syntax, currently only one-dimensional
   // Undocumented but support for potential Postgres compat
-| simple_typename ARRAY '[' ICONST ']' {
+| prefixed_simple_typename ARRAY '[' ICONST ']' {
     /* SKIP DOC */
     var err error
     $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
@@ -5320,7 +5320,7 @@ typename:
       return 1
     }
   }
-| simple_typename ARRAY {
+| prefixed_simple_typename ARRAY {
     var err error
     $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
     if err != nil {
@@ -5365,6 +5365,15 @@ const_json:
     $$.val = coltypes.JSONB
   }
 
+prefixed_simple_typename:
+  simple_typename
+// TODO(knz): this can be extended to support more prefixes once
+// CockroachDB supports user-defined types.
+| PG_CATALOG '.' simple_typename
+  {
+    $$.val = $3.colType()
+  }
+
 simple_typename:
   const_typename
 | bit_with_length
@@ -5372,15 +5381,25 @@ simple_typename:
 | const_interval opt_interval // TODO(pmattis): Support opt_interval?
 | const_interval '(' ICONST ')' { return unimplemented(sqllex, "simple_type const_interval") }
 
-// We have a separate const_typename to allow defaulting fixed-length types
-// such as CHAR() and BIT() to an unspecified length. SQL9x requires that these
-// default to a length of one, but this makes no sense for constructs like CHAR
-// 'hi' and BIT '0101', where there is an obvious better choice to make. Note
-// that const_interval is not included here since it must be pushed up higher
-// in the rules to accommodate the postfix options (e.g. INTERVAL '1'
-// YEAR). Likewise, we have to handle the generic-type-name case in
-// a_expr_const to avoid premature reduce/reduce conflicts against function
-// names.
+// We have a separate {prefixed_,}const_typename to allow defaulting
+// fixed-length types such as CHAR() and BIT() to an unspecified
+// length. SQL9x requires that these default to a length of one, but
+// this makes no sense for constructs like CHAR 'hi' and BIT '0101',
+// where there is an obvious better choice to make. Note that
+// const_interval is not included here since it must be pushed up
+// higher in the rules to accommodate the postfix options
+// (e.g. INTERVAL '1' YEAR). Likewise, we have to handle the
+// generic-type-name case in a_expr_const to avoid premature
+// reduce/reduce conflicts against function names.
+prefixed_const_typename:
+  const_typename
+// TODO(knz): this can be extended to support more prefixes once
+// CockroachDB supports user-defined types.
+| PG_CATALOG '.' const_typename
+  {
+    $$.val = $3.colType()
+  }
+
 const_typename:
   numeric
 | bit_without_length
@@ -5574,6 +5593,13 @@ numeric:
 
 // Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 postgres_oid:
+  simple_postgres_oid
+| PG_CATALOG '.' simple_postgres_oid
+  {
+    $$.val = $3.colType()
+  }
+
+simple_postgres_oid:
   REGPROC
   {
     $$.val = coltypes.RegProc
@@ -7107,7 +7133,7 @@ a_expr_const:
     $$.val = tree.NewBytesStrVal($1)
   }
 | func_name '(' expr_list opt_sort_clause ')' SCONST { return unimplemented(sqllex, "func const") }
-| const_typename SCONST
+| prefixed_const_typename SCONST
   {
     $$.val = &tree.CastExpr{Expr: tree.NewStrVal($2), Type: $1.colType(), SyntaxMode: tree.CastPrepend}
   }
@@ -7684,6 +7710,7 @@ type_func_name_keyword:
 | NATURAL
 | OUTER
 | OVERLAPS
+| PG_CATALOG
 | RIGHT
 | SIMILAR
 

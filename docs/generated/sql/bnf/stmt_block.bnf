@@ -920,8 +920,8 @@ cast_target ::=
 	| postgres_oid
 
 typename ::=
-	simple_typename opt_array_bounds
-	| simple_typename 'ARRAY'
+	prefixed_simple_typename opt_array_bounds
+	| prefixed_simple_typename 'ARRAY'
 
 collation_name ::=
 	unrestricted_name
@@ -957,7 +957,7 @@ a_expr_const ::=
 	| 'FCONST'
 	| 'SCONST'
 	| 'BCONST'
-	| const_typename 'SCONST'
+	| prefixed_const_typename 'SCONST'
 	| interval
 	| 'TRUE'
 	| 'FALSE'
@@ -1255,17 +1255,12 @@ case_expr ::=
 	'CASE' case_arg when_clause_list case_default 'END'
 
 postgres_oid ::=
-	'REGPROC'
-	| 'REGPROCEDURE'
-	| 'REGCLASS'
-	| 'REGTYPE'
-	| 'REGNAMESPACE'
+	simple_postgres_oid
+	| 'PG_CATALOG' '.' simple_postgres_oid
 
-simple_typename ::=
-	const_typename
-	| bit_with_length
-	| character_with_length
-	| const_interval opt_interval
+prefixed_simple_typename ::=
+	simple_typename
+	| 'PG_CATALOG' '.' simple_typename
 
 opt_array_bounds ::=
 	'[' ']'
@@ -1289,28 +1284,9 @@ math_op ::=
 	| 'GREATER_EQUALS'
 	| 'NOT_EQUALS'
 
-const_typename ::=
-	numeric
-	| bit_without_length
-	| character_without_length
-	| const_datetime
-	| const_json
-	| 'BLOB'
-	| 'BYTES'
-	| 'BYTEA'
-	| 'TEXT'
-	| 'NAME'
-	| 'SERIAL'
-	| 'SERIAL2'
-	| 'SERIAL4'
-	| 'SERIAL8'
-	| 'SMALLSERIAL'
-	| 'UUID'
-	| 'INET'
-	| 'BIGSERIAL'
-	| 'OID'
-	| 'INT2VECTOR'
-	| 'identifier'
+prefixed_const_typename ::=
+	const_typename
+	| 'PG_CATALOG' '.' const_typename
 
 interval ::=
 	const_interval 'SCONST' opt_interval
@@ -1396,6 +1372,7 @@ type_func_name_keyword ::=
 	| 'NATURAL'
 	| 'OUTER'
 	| 'OVERLAPS'
+	| 'PG_CATALOG'
 	| 'RIGHT'
 	| 'SIMILAR'
 
@@ -1575,11 +1552,41 @@ case_default ::=
 	'ELSE' a_expr
 	| 
 
-bit_with_length ::=
-	'BIT' opt_varying '(' iconst64 ')'
+simple_postgres_oid ::=
+	'REGPROC'
+	| 'REGPROCEDURE'
+	| 'REGCLASS'
+	| 'REGTYPE'
+	| 'REGNAMESPACE'
 
-character_with_length ::=
-	character_base '(' iconst64 ')'
+simple_typename ::=
+	const_typename
+	| bit_with_length
+	| character_with_length
+	| const_interval opt_interval
+
+const_typename ::=
+	numeric
+	| bit_without_length
+	| character_without_length
+	| const_datetime
+	| const_json
+	| 'BLOB'
+	| 'BYTES'
+	| 'BYTEA'
+	| 'TEXT'
+	| 'NAME'
+	| 'SERIAL'
+	| 'SERIAL2'
+	| 'SERIAL4'
+	| 'SERIAL8'
+	| 'SMALLSERIAL'
+	| 'UUID'
+	| 'INET'
+	| 'BIGSERIAL'
+	| 'OID'
+	| 'INT2VECTOR'
+	| 'identifier'
 
 const_interval ::=
 	'INTERVAL'
@@ -1599,45 +1606,6 @@ opt_interval ::=
 	| 'HOUR' 'TO' interval_second
 	| 'MINUTE' 'TO' interval_second
 	| 
-
-numeric ::=
-	'INT'
-	| 'INT2'
-	| 'INT4'
-	| 'INT8'
-	| 'INT64'
-	| 'INTEGER'
-	| 'SMALLINT'
-	| 'BIGINT'
-	| 'REAL'
-	| 'FLOAT4'
-	| 'FLOAT8'
-	| 'FLOAT' opt_float
-	| 'DOUBLE' 'PRECISION'
-	| 'DECIMAL' opt_numeric_modifiers
-	| 'DEC' opt_numeric_modifiers
-	| 'NUMERIC' opt_numeric_modifiers
-	| 'BOOLEAN'
-	| 'BOOL'
-
-bit_without_length ::=
-	'BIT' opt_varying
-
-character_without_length ::=
-	character_base
-
-const_datetime ::=
-	'DATE'
-	| 'TIME'
-	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMESTAMP'
-	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
-	| 'TIMESTAMPTZ'
-	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
-
-const_json ::=
-	'JSON'
-	| 'JSONB'
 
 scrub_option ::=
 	'INDEX' 'ALL'
@@ -1805,27 +1773,53 @@ opt_slice_bound ::=
 when_clause ::=
 	'WHEN' a_expr 'THEN' a_expr
 
-opt_varying ::=
-	'VARYING'
-	| 
+bit_with_length ::=
+	'BIT' opt_varying '(' iconst64 ')'
 
-character_base ::=
-	'CHARACTER' opt_varying
-	| 'CHAR' opt_varying
-	| 'VARCHAR'
-	| 'STRING'
+character_with_length ::=
+	character_base '(' iconst64 ')'
+
+numeric ::=
+	'INT'
+	| 'INT2'
+	| 'INT4'
+	| 'INT8'
+	| 'INT64'
+	| 'INTEGER'
+	| 'SMALLINT'
+	| 'BIGINT'
+	| 'REAL'
+	| 'FLOAT4'
+	| 'FLOAT8'
+	| 'FLOAT' opt_float
+	| 'DOUBLE' 'PRECISION'
+	| 'DECIMAL' opt_numeric_modifiers
+	| 'DEC' opt_numeric_modifiers
+	| 'NUMERIC' opt_numeric_modifiers
+	| 'BOOLEAN'
+	| 'BOOL'
+
+bit_without_length ::=
+	'BIT' opt_varying
+
+character_without_length ::=
+	character_base
+
+const_datetime ::=
+	'DATE'
+	| 'TIME'
+	| 'TIME' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMP'
+	| 'TIMESTAMP' 'WITHOUT' 'TIME' 'ZONE'
+	| 'TIMESTAMPTZ'
+	| 'TIMESTAMP' 'WITH' 'TIME' 'ZONE'
+
+const_json ::=
+	'JSON'
+	| 'JSONB'
 
 interval_second ::=
 	'SECOND'
-
-opt_float ::=
-	'(' 'ICONST' ')'
-	| 
-
-opt_numeric_modifiers ::=
-	'(' iconst64 ')'
-	| '(' iconst64 ',' iconst64 ')'
-	| 
 
 from_list ::=
 	( table_ref ) ( ( ',' table_ref ) )*
@@ -1938,6 +1932,25 @@ window_specification ::=
 
 window_name ::=
 	name
+
+opt_varying ::=
+	'VARYING'
+	| 
+
+character_base ::=
+	'CHARACTER' opt_varying
+	| 'CHAR' opt_varying
+	| 'VARCHAR'
+	| 'STRING'
+
+opt_float ::=
+	'(' 'ICONST' ')'
+	| 
+
+opt_numeric_modifiers ::=
+	'(' iconst64 ')'
+	| '(' iconst64 ',' iconst64 ')'
+	| 
 
 window_definition ::=
 	window_name 'AS' window_specification

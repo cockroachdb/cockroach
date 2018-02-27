@@ -1009,6 +1009,16 @@ func TestParse2(t *testing.T) {
 		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
 		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
 
+		// Ensure that types can be qualified in pg_catalog (pg compat).
+		{`SELECT PG_CATALOG.BOOL 'foo'`,
+			`SELECT BOOL 'foo'`},
+		{`SELECT 'foo'::PG_CATALOG.BOOL`,
+			`SELECT 'foo'::BOOL`},
+		{`SELECT 'foo'::PG_CATALOG.REGCLASS::OID`,
+			`SELECT 'foo'::REGCLASS::OID`},
+		{`CREATE TABLE a (a PG_CATALOG.INT)`,
+			`CREATE TABLE a (a INT)`},
+
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
 		// prefer escaping ' and \, so we do that.
