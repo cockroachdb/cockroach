@@ -455,6 +455,9 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 		tree.Builtin{
 			Types:      tree.ArgTypes{{"seconds", types.Float}},
 			ReturnType: tree.FixedReturnType(types.Bool),
+			// pg_sleep is marked as impure so it doesn't get executed during
+			// normalization.
+			Impure: true,
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				durationNanos := int64(float64(*args[0].(*tree.DFloat)) * float64(1000000000))
 				dur := time.Duration(durationNanos)
