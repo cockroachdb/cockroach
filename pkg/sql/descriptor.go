@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -36,10 +37,10 @@ import (
 //
 
 var (
-	errEmptyDatabaseName = errors.New("empty database name")
-	errNoDatabase        = errors.New("no database specified")
-	errNoTable           = errors.New("no table specified")
-	errNoMatch           = errors.New("no object matched")
+	errEmptyDatabaseName = pgerror.NewError(pgerror.CodeSyntaxError, "empty database name")
+	errNoDatabase        = pgerror.NewError(pgerror.CodeInvalidNameError, "no database specified")
+	errNoTable           = pgerror.NewError(pgerror.CodeInvalidNameError, "no table specified")
+	errNoMatch           = pgerror.NewError(pgerror.CodeUndefinedObjectError, "no object matched")
 )
 
 type descriptorAlreadyExistsErr struct {
