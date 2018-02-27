@@ -441,7 +441,9 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 			a := act[i]
 			if e.ReplicaDescriptor.StoreID != a.ReplicaDescriptor.StoreID || e.rngDesc.RangeID != a.rngDesc.RangeID {
 				return errors.Errorf(
-					"expected replica's store : %d but got: %d", e.ReplicaDescriptor.StoreID, a.ReplicaDescriptor.StoreID)
+					"expected replica (%d,%d) but got: (%d,%d)",
+					e.ReplicaDescriptor.StoreID, e.rngDesc.RangeID,
+					a.ReplicaDescriptor.StoreID, a.rngDesc.RangeID)
 			}
 		}
 	}
