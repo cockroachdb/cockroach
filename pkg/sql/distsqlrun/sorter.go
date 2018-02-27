@@ -124,7 +124,7 @@ type sortAllProcessor struct {
 	// sortAllProcessor first calls Next() on its input stream to completion before
 	// outputting a single row. Thus when it receives ProducerMetadata, it has to
 	// cache it and output the rows its received so far, before emitting that metadata.
-	meta *ProducerMetadata
+	meta []ProducerMetadata
 }
 
 var _ Processor = &sortAllProcessor{}
@@ -171,10 +171,8 @@ func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	for {
-		if ok, err := s.i.Valid(); err != nil {
+		if ok, err := s.i.Valid(); err != nil || !ok {
 			return nil, s.producerMeta(err)
-		} else if !ok {
-			return s.trailingMetadata()
 		}
 
 		row, err := s.i.Row()
@@ -194,30 +192,13 @@ func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-// Sort processors read all their input before outputting a single output. Thus
-// they can't stop sending results when they encounter metadata. Instead they
-// must cache metadata, and output it after outputting all their non-metadata rows.
-// trailingMetadata() returns any cached metadata to output to Next(), and evicts
-// its cache so that subsequent calls return nil.
-// TODO(arjun): This is unnecessary. Metadata can be emitted immediately.
-// This should be refactored away.
-func (s *sortAllProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.close()
-	if s.meta != nil {
-		meta := s.meta
-		s.meta = nil
-		return nil, meta
-	}
-	return nil, nil
-}
-
 func (s *sortAllProcessor) fill() error {
 	ctx := s.evalCtx.Ctx()
 	// Attempt an in memory implementation of a sort. If this run fails with a
 	// memory error, fall back to use disk.
 	row, meta, err := s.fillWithContainer(ctx, s.rows)
 	if meta != nil {
-		s.meta = meta
+		s.meta = append(s.meta, *meta)
 	} else if err != nil {
 		// TODO(asubiotto): A memory error could also be returned if a limit other
 		// than the COCKROACH_WORK_MEM was reached. We should distinguish between
@@ -266,7 +247,7 @@ func (s *sortAllProcessor) fill() error {
 			// if we encounter metadata, we have to be careful: we can't return it
 			// right away. We save it for sending after we send all the rows we've
 			// already buffered.
-			s.meta = meta
+			s.meta = append(s.meta, *meta)
 		} else if err != nil {
 			return err
 		}
@@ -349,18 +330,24 @@ func (s *sortAllProcessor) ConsumerClosed() {
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
 func (s *sortAllProcessor) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
 	if !s.closed {
+		var meta *ProducerMetadata
 		if err != nil {
 			meta = &ProducerMetadata{Err: err}
+			// We need to close as soon as we send error metadata as we're done
+			// sending rows. The consumer is allowed to not call ConsumerDone().
 		} else if trace := getTraceData(s.ctx); trace != nil {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
 		s.close()
+		return meta
 	}
-	return meta
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
+		return meta
+	}
+	return nil
 }
 
 // sortTopKProcessor creates a max-heap in its wrapped rows and keeps
@@ -389,7 +376,7 @@ type sortTopKProcessor struct {
 	rowContainerMon *mon.BytesMonitor
 	k               int64
 
-	meta *ProducerMetadata
+	meta []ProducerMetadata
 }
 
 var _ Processor = &sortTopKProcessor{}
@@ -417,7 +404,7 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		for {
 			row, meta := s.input.Next()
 			if meta != nil {
-				s.meta = meta
+				s.meta = append(s.meta, *meta)
 				continue
 			}
 			if row == nil {
@@ -445,11 +432,8 @@ func (s *sortTopKProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		s.rows.Sort(ctx)
 	}
 
-	if s.closed {
+	if s.closed || s.rows.Len() == 0 {
 		return nil, s.producerMeta(nil /* err */)
-	}
-	if s.rows.Len() == 0 {
-		return s.trailingMetadata()
 	}
 
 	for {
@@ -501,33 +485,24 @@ func (s *sortTopKProcessor) ConsumerClosed() {
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
 func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
 	if !s.closed {
+		var meta *ProducerMetadata
 		if err != nil {
+			// We need to close as soon as we send error metadata as we're done
+			// sending rows. The consumer is allowed to not call ConsumerDone().
 			meta = &ProducerMetadata{Err: err}
 		} else if trace := getTraceData(s.ctx); trace != nil {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
 		s.close()
+		return meta
 	}
-	return meta
-}
-
-// Sort processors read all their input before outputting a single output. Thus
-// they can't stop sending results when they encounter metadata. Instead they
-// must cache metadata, and output it after outputting all their non-metadata rows.
-// trailingMetadata() returns any cached metadata to output to Next(), and evicts
-// its cache so that subsequent calls return nil.
-func (s *sortTopKProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.close()
-	if s.meta != nil {
-		meta := s.meta
-		s.meta = nil
-		return nil, meta
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
+		return meta
 	}
-	return nil, nil
+	return nil
 }
 
 // If we're scanning an index with a prefix matching an ordering prefix, we only accumulate values
@@ -543,7 +518,7 @@ type sortChunksProcessor struct {
 	// encounters a row that is greater. It stores that greater row in nextChunkRow
 	prefix       sqlbase.EncDatumRow
 	nextChunkRow sqlbase.EncDatumRow
-	meta         *ProducerMetadata
+	meta         []ProducerMetadata
 }
 
 var _ Processor = &sortChunksProcessor{}
@@ -632,14 +607,11 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		if s.rows.Len() == 0 {
 			s.rows.Clear(s.rows.evalCtx.Ctx())
 			meta, err := s.fill()
-			if err != nil {
+			// If that errored or didn't result in an active chunk, we are done.
+			if err != nil || s.rows.Len() == 0 {
 				return nil, s.producerMeta(err)
 			} else if meta != nil {
-				s.meta = meta
-			}
-			// If that didn't result in an active chunk, we are done.
-			if s.rows.Len() == 0 {
-				return s.trailingMetadata()
+				s.meta = append(s.meta, *meta)
 			}
 		}
 
@@ -656,16 +628,6 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		return nil, s.producerMeta(err)
 	}
-}
-
-func (s *sortChunksProcessor) trailingMetadata() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	s.close()
-	if s.meta != nil {
-		meta := s.meta
-		s.meta = nil
-		return nil, meta
-	}
-	return nil, nil
 }
 
 func (s *sortChunksProcessor) Run(wg *sync.WaitGroup) {
@@ -702,16 +664,22 @@ func (s *sortChunksProcessor) ConsumerClosed() {
 // processor ran out of rows or encountered an error. It is ok for err to be
 // nil indicating that we're done producing rows even though no error occurred.
 func (s *sortChunksProcessor) producerMeta(err error) *ProducerMetadata {
-	var meta *ProducerMetadata
 	if !s.closed {
+		var meta *ProducerMetadata
 		if err != nil {
 			meta = &ProducerMetadata{Err: err}
+			// We need to close as soon as we send error metadata as we're done
+			// sending rows. The consumer is allowed to not call ConsumerDone().
 		} else if trace := getTraceData(s.ctx); trace != nil {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
-		// We need to close as soon as we send producer metadata as we're done
-		// sending rows. The consumer is allowed to not call ConsumerDone().
 		s.close()
+		return meta
 	}
-	return meta
+	if len(s.meta) > 0 {
+		meta := &s.meta[0]
+		s.meta = s.meta[1:]
+		return meta
+	}
+	return nil
 }
