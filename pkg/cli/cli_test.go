@@ -1853,12 +1853,11 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	if nodeCtx.statusShowRanges || nodeCtx.statusShowAll {
 		testcases = append(testcases,
 			testCase{"leader_ranges", baseIdx, 3},
-			testCase{"repl_ranges", baseIdx + 1, 3},
-			testCase{"avail_ranges", baseIdx + 2, 3},
+			testCase{"leaseholder_ranges", baseIdx + 1, 3},
+			testCase{"ranges", baseIdx + 2, 20},
+			testCase{"unavailable_ranges", baseIdx + 3, 0},
+			testCase{"underreplicated_ranges", baseIdx + 4, 0},
 		)
-
-		// Ranges actually adds 5 fields, but we only need to check
-		// the 3 above.
 		baseIdx += len(statusNodesColumnHeadersForRanges)
 	}
 
