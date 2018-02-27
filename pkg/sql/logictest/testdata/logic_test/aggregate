@@ -323,8 +323,8 @@ EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
 group           0  group   ·            ·                                    (count, "k + v")                ·
  │              0  ·       aggregate 0  count_rows()                         ·                               ·
- │              0  ·       aggregate 1  test.public.kv.k + test.public.kv.v  ·                               ·
- │              0  ·       group by     @1-@1                                ·                               ·
+ │              0  ·       aggregate 1  k + v                                ·                               ·
+ │              0  ·       group by     @1                                   ·                               ·
  └── render     1  render  ·            ·                                    ("k + v")                       ·
       │         1  ·       render 0     test.public.kv.k + test.public.kv.v  ·                               ·
       └── scan  2  scan    ·            ·                                    (k, v, w[omitted], s[omitted])  k!=NULL; key(k)
@@ -347,12 +347,12 @@ query TITTTTT
 EXPLAIN (VERBOSE) SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 render               0  render  ·            ·                 (count, "k + v")                ·
- │                   0  ·       render 0     count_rows        ·                               ·
- │                   0  ·       render 1     k + v             ·                               ·
- └── group           1  group   ·            ·                 (count_rows, k, v)              ·
+ │                   0  ·       render 0     agg0              ·                               ·
+ │                   0  ·       render 1     agg1 + agg2       ·                               ·
+ └── group           1  group   ·            ·                 (agg0, agg1, agg2)              ·
       │              1  ·       aggregate 0  count_rows()      ·                               ·
-      │              1  ·       aggregate 1  test.public.kv.k  ·                               ·
-      │              1  ·       aggregate 2  test.public.kv.v  ·                               ·
+      │              1  ·       aggregate 1  k                 ·                               ·
+      │              1  ·       aggregate 2  v                 ·                               ·
       │              1  ·       group by     @1-@2             ·                               ·
       └── render     2  render  ·            ·                 (k, v)                          k!=NULL; key(k)
            │         2  ·       render 0     test.public.kv.k  ·                               ·
@@ -1117,7 +1117,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  v
       │              aggregate 1  count(k)
-      │              group by     @1-@1
+      │              group by     @1
       └── render     ·            ·
            │         render 0     v
            │         render 1     k
@@ -1133,7 +1133,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  v
       │              aggregate 1  count_rows()
-      │              group by     @1-@1
+      │              group by     @1
       └── render     ·            ·
            │         render 0     v
            └── scan  ·            ·
@@ -1148,7 +1148,7 @@ sort                 ·            ·
  └── group           ·            ·
       │              aggregate 0  v
       │              aggregate 1  count(1)
-      │              group by     @1-@1
+      │              group by     @1
       └── render     ·            ·
            │         render 0     v
            │         render 1     1
@@ -1163,7 +1163,7 @@ EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 1
 group           ·            ·
  │              aggregate 0  v
  │              aggregate 1  count(1)
- │              group by     @1-@1
+ │              group by     @1
  └── render     ·            ·
       │         render 0     v
       │         render 1     1
@@ -1224,7 +1224,7 @@ EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) F
 group           ·            ·
  │              aggregate 0  count_rows() FILTER (WHERE k > 5)
  │              aggregate 1  max(k > 5) FILTER (WHERE k > 5)
- │              group by     @1-@1
+ │              group by     @1
  └── render     ·            ·
       │         render 0     v
       │         render 1     k > 5
@@ -1235,15 +1235,15 @@ group           ·            ·
 query TITTTTT
 EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
-group           0  group   ·            ·                                                               (count int)                                                    ·
- │              0  ·       aggregate 0  (count_rows() FILTER (WHERE ((k)[int] > (5)[int])[bool]))[int]  ·                                                              ·
- │              0  ·       group by     @1-@1                                                           ·                                                              ·
- └── render     1  render  ·            ·                                                               (v int, "k > 5" bool)                                          ·
-      │         1  ·       render 0     (v)[int]                                                        ·                                                              ·
-      │         1  ·       render 1     ((k)[int] > (5)[int])[bool]                                     ·                                                              ·
-      └── scan  2  scan    ·            ·                                                               (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
-·               2  ·       table        filter_test@primary                                             ·                                                              ·
-·               2  ·       spans        ALL                                                             ·                                                              ·
+group           0  group   ·            ·                                  (count int)                                                    ·
+ │              0  ·       aggregate 0  count_rows() FILTER (WHERE k > 5)  ·                                                              ·
+ │              0  ·       group by     @1                                 ·                                                              ·
+ └── render     1  render  ·            ·                                  (v int, "k > 5" bool)                                          ·
+      │         1  ·       render 0     (v)[int]                           ·                                                              ·
+      │         1  ·       render 1     ((k)[int] > (5)[int])[bool]        ·                                                              ·
+      └── scan  2  scan    ·            ·                                  (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
+·               2  ·       table        filter_test@primary                ·                                                              ·
+·               2  ·       spans        ALL                                ·                                                              ·
 
 # Tests with * inside GROUP BY.
 query TTT
@@ -1309,14 +1309,14 @@ INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
 ----
-group           0  group   ·            ·                            (min)            ·
- │              0  ·       aggregate 0  min(test.public.opt_test.v)  ·                ·
- └── render     1  render  ·            ·                            (v)              v!=NULL; +v
-      │         1  ·       render 0     test.public.opt_test.v       ·                ·
-      └── scan  2  scan    ·            ·                            (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
-·               2  ·       table        opt_test@v                   ·                ·
-·               2  ·       spans        /!NULL-                      ·                ·
-·               2  ·       limit        1                            ·                ·
+group           0  group   ·            ·                       (min)            ·
+ │              0  ·       aggregate 0  min(v)                  ·                ·
+ └── render     1  render  ·            ·                       (v)              v!=NULL; +v
+      │         1  ·       render 0     test.public.opt_test.v  ·                ·
+      └── scan  2  scan    ·            ·                       (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
+·               2  ·       table        opt_test@v              ·                ·
+·               2  ·       spans        /!NULL-                 ·                ·
+·               2  ·       limit        1                       ·                ·
 
 # Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
 query I
@@ -1334,14 +1334,14 @@ SELECT MIN(v) FROM opt_test@primary
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
 ----
-group           0  group   ·            ·                            (min)   ·
- │              0  ·       aggregate 0  min(test.public.opt_test.v)  ·       ·
- └── render     1  render  ·            ·                            (v)     v!=NULL; +v
-      │         1  ·       render 0     test.public.opt_test.v       ·       ·
-      └── scan  2  scan    ·            ·                            (k, v)  k!=NULL; v!=NULL; key(k,v); +v
-·               2  ·       table        opt_test@v                   ·       ·
-·               2  ·       spans        /!NULL-                      ·       ·
-·               2  ·       filter       k != 4                       ·       ·
+group           0  group   ·            ·                       (min)   ·
+ │              0  ·       aggregate 0  min(v)                  ·       ·
+ └── render     1  render  ·            ·                       (v)     v!=NULL; +v
+      │         1  ·       render 0     test.public.opt_test.v  ·       ·
+      └── scan  2  scan    ·            ·                       (k, v)  k!=NULL; v!=NULL; key(k,v); +v
+·               2  ·       table        opt_test@v              ·       ·
+·               2  ·       spans        /!NULL-                 ·       ·
+·               2  ·       filter       k != 4                  ·       ·
 
 query I
 SELECT MIN(v) FROM opt_test WHERE k <> 4
@@ -1354,25 +1354,25 @@ SELECT MIN(v) FROM opt_test WHERE k <> 4
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
 ----
-group           0  group   ·            ·                                (min)            ·
- │              0  ·       aggregate 0  min(test.public.opt_test.v + 1)  ·                ·
- └── render     1  render  ·            ·                                ("v + 1")        ·
-      │         1  ·       render 0     test.public.opt_test.v + 1       ·                ·
-      └── scan  2  scan    ·            ·                                (k[omitted], v)  k!=NULL; v!=NULL; key(k)
-·               2  ·       table        opt_test@primary                 ·                ·
-·               2  ·       spans        -/3/# /5-                        ·                ·
-·               2  ·       filter       (v + 1) IS NOT NULL              ·                ·
+group           0  group   ·            ·                           (min)            ·
+ │              0  ·       aggregate 0  min(v + 1)                  ·                ·
+ └── render     1  render  ·            ·                           ("v + 1")        ·
+      │         1  ·       render 0     test.public.opt_test.v + 1  ·                ·
+      └── scan  2  scan    ·            ·                           (k[omitted], v)  k!=NULL; v!=NULL; key(k)
+·               2  ·       table        opt_test@primary            ·                ·
+·               2  ·       spans        -/3/# /5-                   ·                ·
+·               2  ·       filter       (v + 1) IS NOT NULL         ·                ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
 ----
-group      0  group  ·            ·                            (min)   ·
- │         0  ·      aggregate 0  min(test.public.opt_test.v)  ·       ·
- │         0  ·      group by     @1-@1                        ·       ·
- └── scan  1  scan   ·            ·                            (k, v)  k!=NULL; key(k)
-·          1  ·      table        opt_test@primary             ·       ·
-·          1  ·      spans        ALL                          ·       ·
+group      0  group  ·            ·                 (min)   ·
+ │         0  ·      aggregate 0  min(v)            ·       ·
+ │         0  ·      group by     @1                ·       ·
+ └── scan  1  scan   ·            ·                 (k, v)  k!=NULL; key(k)
+·          1  ·      table        opt_test@primary  ·       ·
+·          1  ·      spans        ALL               ·       ·
 
 query I rowsort
 SELECT MIN(v) FROM opt_test GROUP BY k
@@ -1437,7 +1437,7 @@ query TTT
 EXPLAIN(EXPRS) SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 render               ·            ·
- │                   render 0     (b, a)
+ │                   render 0     (agg0, agg1)
  └── group           ·            ·
       │              aggregate 0  b
       │              aggregate 1  a
@@ -1464,8 +1464,8 @@ EXPLAIN(EXPRS)
      FROM ab, xy GROUP BY (x, (a, b))
 ----
 render                    ·            ·
- │                        render 0     min
- │                        render 1     (b, a)
+ │                        render 0     agg0
+ │                        render 1     (agg1, agg2)
  └── group                ·            ·
       │                   aggregate 0  min(y)
       │                   aggregate 1  b

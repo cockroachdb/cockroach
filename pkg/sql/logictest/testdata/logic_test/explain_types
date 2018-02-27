@@ -85,46 +85,46 @@ values  0  values  ·              ·                  (column1 int, column2 int
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
-render                    0  render  ·            ·                                                                          (z int, v int)                        ·
- │                        0  ·       render 0     ((2)[int] * (count)[int])[int]                                             ·                                     ·
- │                        0  ·       render 1     (v)[int]                                                                   ·                                     ·
- └── filter               1  filter  ·            ·                                                                          (v int, count int, count int, v int)  ·
-      │                   1  ·       filter       ((count)[int] > (1)[int])[bool]                                            ·                                     ·
-      └── group           2  group   ·            ·                                                                          (v int, count int, count int, v int)  ·
-           │              2  ·       aggregate 0  (v)[int]                                                                   ·                                     ·
-           │              2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·                                     ·
-           │              2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·                                     ·
-           │              2  ·       aggregate 3  (v)[int]                                                                   ·                                     ·
-           │              2  ·       group by     @1-@1                                                                      ·                                     ·
-           └── render     3  render  ·            ·                                                                          (v int, k int)                        ·
-                │         3  ·       render 0     (v)[int]                                                                   ·                                     ·
-                │         3  ·       render 1     (k)[int]                                                                   ·                                     ·
-                └── scan  4  scan    ·            ·                                                                          (k int, v int)                        ·
-·                         4  ·       table        t@primary                                                                  ·                                     ·
-·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                                     ·
+render                    0  render  ·            ·                                                                          (z int, v int)                            ·
+ │                        0  ·       render 0     ((2)[int] * (agg2)[int])[int]                                              ·                                         ·
+ │                        0  ·       render 1     (agg3)[int]                                                                ·                                         ·
+ └── filter               1  filter  ·            ·                                                                          (agg0 int, agg1 int, agg2 int, agg3 int)  ·
+      │                   1  ·       filter       ((agg1)[int] > (1)[int])[bool]                                             ·                                         ·
+      └── group           2  group   ·            ·                                                                          (agg0 int, agg1 int, agg2 int, agg3 int)  ·
+           │              2  ·       aggregate 0  v                                                                          ·                                         ·
+           │              2  ·       aggregate 1  count(k)                                                                   ·                                         ·
+           │              2  ·       aggregate 2  count(k)                                                                   ·                                         ·
+           │              2  ·       aggregate 3  v                                                                          ·                                         ·
+           │              2  ·       group by     @1                                                                         ·                                         ·
+           └── render     3  render  ·            ·                                                                          (v int, k int)                            ·
+                │         3  ·       render 0     (v)[int]                                                                   ·                                         ·
+                │         3  ·       render 1     (k)[int]                                                                   ·                                         ·
+                └── scan  4  scan    ·            ·                                                                          (k int, v int)                            ·
+·                         4  ·       table        t@primary                                                                  ·                                         ·
+·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                                         ·
 
 
 query TITTTTT
 EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
 ----
-render                    0  render  ·            ·                                                                          (z int, v int)                        ·
- │                        0  ·       render 0     ((2)[int] * (count)[int])[int]                                             ·                                     ·
- │                        0  ·       render 1     (v)[int]                                                                   ·                                     ·
- └── filter               1  filter  ·            ·                                                                          (v int, count int, count int, v int)  count!=NULL
-      │                   1  ·       filter       ((count)[int] > (1)[int])[bool]                                            ·                                     ·
-      └── group           2  group   ·            ·                                                                          (v int, count int, count int, v int)  ·
-           │              2  ·       aggregate 0  (v)[int]                                                                   ·                                     ·
-           │              2  ·       aggregate 1  (count((k)[int]))[int]                                                     ·                                     ·
-           │              2  ·       aggregate 2  (count((k)[int]))[int]                                                     ·                                     ·
-           │              2  ·       aggregate 3  (v)[int]                                                                   ·                                     ·
-           │              2  ·       group by     @1-@1                                                                      ·                                     ·
-           └── render     3  render  ·            ·                                                                          (v int, k int)                        v!=NULL; k!=NULL; key(k)
-                │         3  ·       render 0     (v)[int]                                                                   ·                                     ·
-                │         3  ·       render 1     (k)[int]                                                                   ·                                     ·
-                └── scan  4  scan    ·            ·                                                                          (k int, v int)                        k!=NULL; v!=NULL; key(k)
-·                         4  ·       table        t@primary                                                                  ·                                     ·
-·                         4  ·       spans        ALL                                                                        ·                                     ·
-·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                                     ·
+render                    0  render  ·            ·                                                                          (z int, v int)                            ·
+ │                        0  ·       render 0     ((2)[int] * (agg2)[int])[int]                                              ·                                         ·
+ │                        0  ·       render 1     (agg3)[int]                                                                ·                                         ·
+ └── filter               1  filter  ·            ·                                                                          (agg0 int, agg1 int, agg2 int, agg3 int)  agg1!=NULL
+      │                   1  ·       filter       ((agg1)[int] > (1)[int])[bool]                                             ·                                         ·
+      └── group           2  group   ·            ·                                                                          (agg0 int, agg1 int, agg2 int, agg3 int)  ·
+           │              2  ·       aggregate 0  v                                                                          ·                                         ·
+           │              2  ·       aggregate 1  count(k)                                                                   ·                                         ·
+           │              2  ·       aggregate 2  count(k)                                                                   ·                                         ·
+           │              2  ·       aggregate 3  v                                                                          ·                                         ·
+           │              2  ·       group by     @1                                                                         ·                                         ·
+           └── render     3  render  ·            ·                                                                          (v int, k int)                            v!=NULL; k!=NULL; key(k)
+                │         3  ·       render 0     (v)[int]                                                                   ·                                         ·
+                │         3  ·       render 1     (k)[int]                                                                   ·                                         ·
+                └── scan  4  scan    ·            ·                                                                          (k int, v int)                            k!=NULL; v!=NULL; key(k)
+·                         4  ·       table        t@primary                                                                  ·                                         ·
+·                         4  ·       spans        ALL                                                                        ·                                         ·
+·                         4  ·       filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                                         ·
 
 query TITTTTT
 EXPLAIN (TYPES,NOEXPAND) DELETE FROM t WHERE v > 1
