@@ -1302,12 +1302,38 @@ func (_f *Factory) ConstructOffset(
 	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_offsetExpr)))
 }
 
+// ConstructSingleRowSubquery constructs an expression for the SingleRowSubquery operator.
+// SingleRowSubquery is a subquery in a single-row context such as
+// `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
+// In a single-row context, the outer query is only valid if the subquery
+// returns exactly one row.
+func (_f *Factory) ConstructSingleRowSubquery(
+	input memo.GroupID,
+	cols memo.PrivateID,
+) memo.GroupID {
+	_singleRowSubqueryExpr := memo.MakeSingleRowSubqueryExpr(input, cols)
+	_group := _f.mem.GroupByFingerprint(_singleRowSubqueryExpr.Fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.o.allowOptimizations() {
+		return _f.mem.MemoizeNormExpr(memo.Expr(_singleRowSubqueryExpr))
+	}
+
+	return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(_singleRowSubqueryExpr)))
+}
+
 // ConstructSubquery constructs an expression for the Subquery operator.
+// Subquery is a subquery in a multi-row context such as
+// `SELECT 1 IN (SELECT c FROM t)` or `SELECT (1, 'a') IN (SELECT 1, 'a')`.
+// In a multi-row context, the validity of the outer query does not depend on
+// the number of rows returned by the subquery.
 func (_f *Factory) ConstructSubquery(
 	input memo.GroupID,
-	projection memo.GroupID,
+	cols memo.PrivateID,
 ) memo.GroupID {
-	_subqueryExpr := memo.MakeSubqueryExpr(input, projection)
+	_subqueryExpr := memo.MakeSubqueryExpr(input, cols)
 	_group := _f.mem.GroupByFingerprint(_subqueryExpr.Fingerprint())
 	if _group != 0 {
 		return _group
@@ -4298,7 +4324,7 @@ func (_f *Factory) ConstructCast(
 //
 // The Case operator evaluates <Input> (if not provided, Input is set to True),
 // then picks the WHEN branch where <condval> is equal to
-// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// <Input>, then evaluates and returns the corresponding THEN expression. If no
 // WHEN branch matches, the ELSE expression is evaluated and returned, if any.
 // Otherwise, NULL is returned.
 //
@@ -4561,9 +4587,14 @@ func init() {
 		return f.ConstructOffset(memo.GroupID(operands[0]), memo.GroupID(operands[1]), memo.PrivateID(operands[2]))
 	}
 
+	// SingleRowSubqueryOp
+	dynConstructLookup[opt.SingleRowSubqueryOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
+		return f.ConstructSingleRowSubquery(memo.GroupID(operands[0]), memo.PrivateID(operands[1]))
+	}
+
 	// SubqueryOp
 	dynConstructLookup[opt.SubqueryOp] = func(f *Factory, operands DynamicOperands) memo.GroupID {
-		return f.ConstructSubquery(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
+		return f.ConstructSubquery(memo.GroupID(operands[0]), memo.PrivateID(operands[1]))
 	}
 
 	// VariableOp

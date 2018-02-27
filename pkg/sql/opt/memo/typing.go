@@ -84,20 +84,22 @@ var typingFuncMap [opt.NumOperators]typingFunc
 
 func init() {
 	typingFuncMap = [opt.NumOperators]typingFunc{
-		opt.VariableOp:        typeVariable,
-		opt.ConstOp:           typeAsTypedExpr,
-		opt.NullOp:            typeAsPrivate,
-		opt.PlaceholderOp:     typeAsTypedExpr,
-		opt.UnsupportedExprOp: typeAsTypedExpr,
-		opt.TupleOp:           typeAsTuple,
-		opt.ProjectionsOp:     typeAsAny,
-		opt.AggregationsOp:    typeAsAny,
-		opt.ExistsOp:          typeAsBool,
-		opt.FunctionOp:        typeFunction,
-		opt.CoalesceOp:        typeCoalesce,
-		opt.CaseOp:            typeCase,
-		opt.WhenOp:            typeWhen,
-		opt.CastOp:            typeAsPrivate,
+		opt.VariableOp:          typeVariable,
+		opt.ConstOp:             typeAsTypedExpr,
+		opt.NullOp:              typeAsPrivate,
+		opt.PlaceholderOp:       typeAsTypedExpr,
+		opt.UnsupportedExprOp:   typeAsTypedExpr,
+		opt.TupleOp:             typeAsTuple,
+		opt.ProjectionsOp:       typeAsAny,
+		opt.AggregationsOp:      typeAsAny,
+		opt.ExistsOp:            typeAsBool,
+		opt.FunctionOp:          typeFunction,
+		opt.CoalesceOp:          typeCoalesce,
+		opt.CaseOp:              typeCase,
+		opt.WhenOp:              typeWhen,
+		opt.CastOp:              typeAsPrivate,
+		opt.SingleRowSubqueryOp: typeSingleRowSubquery,
+		opt.SubqueryOp:          typeSubquery,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -221,6 +223,69 @@ func typeWhen(ev ExprView) types.T {
 // which is an instance of types.T.
 func typeAsPrivate(ev ExprView) types.T {
 	return ev.Private().(types.T)
+}
+
+// typeSingleRowSubquery returns the type of a subquery used in a single-row
+// context.
+func typeSingleRowSubquery(ev ExprView) types.T {
+	//  - If the subquery returns a single column with type "U", the type of the
+	//    subquery is the type of the column "U". For example:
+	//
+	//      SELECT 1 = (SELECT 1)
+	//
+	//    The type of the subquery is "int".
+	//
+	//  - If the subquery returns multiple columns, the type of the subquery is
+	//    "tuple{C}" where "C" expands to all of the types of the columns of the
+	//    subquery. For example:
+	//
+	//      SELECT (1, 'a') = (SELECT 1, 'a')
+	//
+	//    The type of the subquery is "tuple{int,string}"
+	//
+	var typ types.T
+	cols := *ev.Private().(*opt.ColList)
+	numCols := len(cols)
+	md := ev.Metadata()
+
+	if numCols == 1 {
+		typ = md.ColumnType(cols[0])
+	} else {
+		t := make(types.TTuple, numCols)
+		for i := 0; i < numCols; i++ {
+			t[i] = md.ColumnType(cols[i])
+		}
+		typ = t
+	}
+
+	return typ
+}
+
+// typeSubquery returns the type of a subquery used in a multi-row context.
+func typeSubquery(ev ExprView) types.T {
+	//  - If the subquery returns a single column with type "U", the type of the
+	//    subquery is the singleton tuple of type "U": "tuple{U}". For example:
+	//
+	//      SELECT 1 IN (SELECT 1)
+	//
+	//    The type of the subquery's columns is "int" and the type of the
+	//    subquery is "tuple{int}".
+	//
+	//  - If the subquery returns multiple columns, the type of the subquery is
+	//    "tuple{tuple{C}}" where "C expands to all of the types of the columns
+	//    of the subquery. For example:
+	//
+	//      SELECT (1, 'a') IN (SELECT 1, 'a')
+	//
+	//    The types of the subquery's columns are "int" and "string". These are
+	//    wrapped into "tuple{int,string}" to form the row type. And these are
+	//    wrapped again to form the subquery type "tuple{tuple{int,string}}".
+	//
+	typ := typeSingleRowSubquery(ev)
+
+	// The subquery is in a multi-row context, so wrap the type in a tuple.
+	typ = types.TTuple{typ}
+	return typ
 }
 
 // overload encapsulates information about a binary operator overload, to be

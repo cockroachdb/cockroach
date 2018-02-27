@@ -187,6 +187,16 @@ const (
 	// Scalar Operators
 	// ------------------------------------------------------------
 
+	// SingleRowSubqueryOp is a subquery in a single-row context such as
+	// `SELECT 1 = (SELECT 1)` or `SELECT (1, 'a') = (SELECT 1, 'a')`.
+	// In a single-row context, the outer query is only valid if the subquery
+	// returns exactly one row.
+	SingleRowSubqueryOp
+
+	// SubqueryOp is a subquery in a multi-row context such as
+	// `SELECT 1 IN (SELECT c FROM t)` or `SELECT (1, 'a') IN (SELECT 1, 'a')`.
+	// In a multi-row context, the validity of the outer query does not depend on
+	// the number of rows returned by the subquery.
 	SubqueryOp
 
 	// VariableOp is the typed scalar value of a column in the query. The private
@@ -361,7 +371,7 @@ const (
 	//
 	// The Case operator evaluates <Input> (if not provided, Input is set to True),
 	// then picks the WHEN branch where <condval> is equal to
-	// <cond>, then evaluates and returns the corresponding THEN expression. If no
+	// <Input>, then evaluates and returns the corresponding THEN expression. If no
 	// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
 	// Otherwise, NULL is returned.
 	//
@@ -390,9 +400,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
+const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsingle-row-subquerysubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
 
-var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 274, 278, 282, 287, 298, 303, 314, 326, 332, 339, 342, 344, 347, 349, 351, 353, 355, 357, 359, 361, 367, 371, 379, 385, 395, 405, 419, 428, 441, 452, 467, 469, 475, 483, 489, 494, 500, 504, 509, 513, 516, 525, 528, 531, 537, 544, 551, 560, 570, 584, 599, 610, 626, 630, 634, 638, 646, 654, 670}
+var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 272, 280, 288, 293, 297, 301, 306, 317, 322, 333, 345, 351, 358, 361, 363, 366, 368, 370, 372, 374, 376, 378, 380, 386, 390, 398, 404, 414, 424, 438, 447, 460, 471, 486, 488, 494, 502, 508, 513, 519, 523, 528, 532, 535, 544, 547, 550, 556, 563, 570, 579, 589, 603, 618, 629, 645, 649, 653, 657, 665, 673, 689}
 
 var EnforcerOperators = [...]Operator{
 	SortOp,
@@ -451,6 +461,7 @@ var JoinApplyOperators = [...]Operator{
 }
 
 var ScalarOperators = [...]Operator{
+	SingleRowSubqueryOp,
 	SubqueryOp,
 	VariableOp,
 	ConstOp,

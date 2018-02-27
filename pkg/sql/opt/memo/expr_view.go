@@ -256,6 +256,11 @@ func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		// columns for their containing op (Project or GroupBy), so no need to
 		// print again.
 		private = nil
+
+	case opt.SubqueryOp, opt.SingleRowSubqueryOp:
+		// The private data contains the output columns, which are redundant with
+		// the output columns of the child. No need to print again.
+		private = nil
 	}
 
 	if private != nil {

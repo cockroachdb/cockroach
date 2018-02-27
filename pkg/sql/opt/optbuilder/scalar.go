@@ -221,6 +221,19 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out memo.G
 		to := b.buildScalar(t.TypedTo(), inScope)
 		out = b.buildRangeCond(t.Not, t.Symmetric, input, from, to)
 
+	case *subquery:
+		if t.exists {
+			return b.factory.ConstructExists(t.out)
+		}
+
+		colList := colsToColList(t.cols)
+		private := b.factory.InternPrivate(&colList)
+
+		if t.multiRow {
+			return b.factory.ConstructSubquery(t.out, private)
+		}
+		return b.factory.ConstructSingleRowSubquery(t.out, private)
+
 	case *tree.Tuple:
 		list := make([]memo.GroupID, len(t.Exprs))
 		for i := range t.Exprs {
