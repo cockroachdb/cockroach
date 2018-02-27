@@ -1208,25 +1208,25 @@ func (node *CastExpr) castType() types.T {
 }
 
 var (
-	boolCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
-	intCastTypes  = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	boolCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
+	intCastTypes  = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid}
-	floatCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	floatCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
-	decimalCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
-	stringCastTypes = []types.T{types.Null, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet}
-	bytesCastTypes     = []types.T{types.Null, types.String, types.FamCollatedString, types.Bytes, types.UUID}
-	dateCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	timeCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.Time, types.Timestamp, types.TimestampTZ, types.Interval}
-	timestampCastTypes = []types.T{types.Null, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	intervalCastTypes  = []types.T{types.Null, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval}
-	oidCastTypes       = []types.T{types.Null, types.String, types.FamCollatedString, types.Int, types.Oid}
-	uuidCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.Bytes, types.UUID}
-	inetCastTypes      = []types.T{types.Null, types.String, types.FamCollatedString, types.INet}
-	arrayCastTypes     = []types.T{types.Null, types.String}
-	jsonCastTypes      = []types.T{types.Null, types.String, types.JSON}
+	bytesCastTypes     = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
+	dateCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
+	timeCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.Timestamp, types.TimestampTZ, types.Interval}
+	timestampCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
+	intervalCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval}
+	oidCastTypes       = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid}
+	uuidCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
+	inetCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.INet}
+	arrayCastTypes     = []types.T{types.Unknown, types.String}
+	jsonCastTypes      = []types.T{types.Unknown, types.String, types.JSON}
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.

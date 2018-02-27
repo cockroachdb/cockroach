@@ -40,8 +40,8 @@ func TestVariadicFunctions(t *testing.T) {
 			"string...", []variadicTestCase{
 				{[]types.T{types.String}, true},
 				{[]types.T{types.String, types.String}, true},
-				{[]types.T{types.String, types.Null}, true},
-				{[]types.T{types.String, types.Null, types.String}, true},
+				{[]types.T{types.String, types.Unknown}, true},
+				{[]types.T{types.String, types.Unknown, types.String}, true},
 				{[]types.T{types.Int}, false},
 			}},
 		{FixedTypes: []types.T{types.Int}, VarType: types.String}: {
@@ -49,7 +49,7 @@ func TestVariadicFunctions(t *testing.T) {
 				{[]types.T{types.Int}, true},
 				{[]types.T{types.Int, types.String}, true},
 				{[]types.T{types.Int, types.String, types.String}, true},
-				{[]types.T{types.Int, types.Null, types.String}, true},
+				{[]types.T{types.Int, types.Unknown, types.String}, true},
 				{[]types.T{types.String}, false},
 			}},
 		{FixedTypes: []types.T{types.Int, types.Bool}, VarType: types.String}: {
@@ -57,7 +57,7 @@ func TestVariadicFunctions(t *testing.T) {
 				{[]types.T{types.Int}, false},
 				{[]types.T{types.Int, types.Bool}, true},
 				{[]types.T{types.Int, types.Bool, types.String}, true},
-				{[]types.T{types.Int, types.Null, types.String}, true},
+				{[]types.T{types.Int, types.Unknown, types.String}, true},
 				{[]types.T{types.Int, types.Bool, types.String, types.Bool}, false},
 				{[]types.T{types.Int, types.String}, false},
 				{[]types.T{types.Int, types.String, types.String}, false},

@@ -284,7 +284,7 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 	}
 	for _, v := range expectedTypes {
 		if datums[v.fieldIndex].ResolvedType() != v.expectedType &&
-			(!v.nullable || datums[v.fieldIndex].ResolvedType() != types.Null) {
+			(!v.nullable || datums[v.fieldIndex].ResolvedType() != types.Unknown) {
 			return nil, errors.Errorf("%s returned from table statistics lookup has type %s. Expected %s",
 				v.fieldName, datums[v.fieldIndex].ResolvedType(), v.expectedType)
 		}
@@ -325,7 +325,7 @@ func parseHistogram(datums tree.Datums) (*HistogramData, error) {
 	datum := datums[0]
 
 	// Validate the input type.
-	if datum.ResolvedType() != types.Bytes && datum.ResolvedType() != types.Null {
+	if datum.ResolvedType() != types.Bytes && datum.ResolvedType() != types.Unknown {
 		return nil, errors.Errorf("histogram returned from table statistics lookup has type %s. Expected %s",
 			datum.ResolvedType(), types.Bytes)
 	}
