@@ -167,16 +167,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		workFn: upgradeTableDescsToInterleavedFormatVersion,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "remove cluster setting `kv.gc.batch_size`",
-		workFn: purgeClusterSettingKVGCBatchSize,
+		// Introduced in v2.0 alphas then folded into `retiredSettings`.
+		name: "remove cluster setting `kv.gc.batch_size`",
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		name:   "remove cluster setting `kv.transaction.max_intents`",
-		workFn: purgeClusterSettingKVTransactionMaxIntents,
+		// Introduced in v2.0 alphas then folded into `retiredSettings`.
+		name: "remove cluster setting `kv.transaction.max_intents`",
 	},
 	{
 		// Introduced in v2.0.
@@ -956,16 +952,6 @@ func upgradeTableDescsWithFn(
 		}
 	}
 	return nil
-}
-
-func purgeClusterSettingKVGCBatchSize(ctx context.Context, r runner) error {
-	// This cluster setting has been removed.
-	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.gc.batch_size'`)
-}
-
-func purgeClusterSettingKVTransactionMaxIntents(ctx context.Context, r runner) error {
-	// This cluster setting has been removed.
-	return runStmtAsRootWithRetry(ctx, r, `DELETE FROM SYSTEM.SETTINGS WHERE name='kv.transaction.max_intents'`)
 }
 
 func addDefaultSystemJobsZoneConfig(ctx context.Context, r runner) error {
