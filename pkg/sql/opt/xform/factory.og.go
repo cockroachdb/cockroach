@@ -310,9 +310,11 @@ func (_f *factory) ConstructOr(
 
 	// [EliminateSingletonOr]
 	{
-		if _f.isSingletonList(conditions) {
+		if conditions.Length == 1 {
+			_item := _f.mem.lookupList(conditions)[0]
+			item := _item
 			_f.reportOptimization()
-			_group = _f.firstListItem(conditions)
+			_group = item
 			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 			return _group
 		}
