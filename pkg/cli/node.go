@@ -278,7 +278,7 @@ func nodeStatusesToRows(
 			row = append(row,
 				strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
 				strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
-				strconv.FormatInt(int64(metricVals["ranges"]), 10),
+				strconv.FormatInt(int64(metricVals["replicas"]), 10),
 				strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
 				strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
 			)
