@@ -1468,3 +1468,31 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 		return nil
 	})
 }
+
+func BenchmarkAdminAPIReplicaMatrix(b *testing.B) {
+	testCluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServer := testCluster.Server(0)
+	sqlDB := sqlutils.MakeSQLRunner(testCluster.ServerConn(0))
+
+	sqlDB.Exec(b, `CREATE DATABASE roachblog`)
+
+	// Create a bunch of tables.
+	for i := 0; i < 200; i++ {
+		sqlDB.Exec(
+			b,
+			fmt.Sprintf(`CREATE TABLE roachblog.t%d (id INT PRIMARY KEY, title text, body text)`, i),
+		)
+		// TODO(vilterp): split to increase the number of ranges for each table
+	}
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		var resp serverpb.ReplicaMatrixResponse
+		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+			b.Fatal(err)
+		}
+	}
+	b.StopTimer()
+}
