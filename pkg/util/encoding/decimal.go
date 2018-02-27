@@ -280,42 +280,48 @@ func decodeDecimal(buf []byte, tmp []byte, invert bool) ([]byte, apd.Decimal, er
 		if err != nil {
 			return nil, apd.Decimal{}, err
 		}
-		return r, makeDecimalFromMandE(!invert, e, m, tmp2), nil
+		d, err := makeDecimalFromMandE(!invert, e, m, tmp2)
+		return r, d, err
 	case buf[0] > decimalNegLarge && buf[0] <= decimalNegMedium:
 		// Negative medium.
 		e, m, r, tmp2, err := decodeMediumNumber(true, buf, tmp)
 		if err != nil {
 			return nil, apd.Decimal{}, err
 		}
-		return r, makeDecimalFromMandE(!invert, e, m, tmp2), nil
+		d, err := makeDecimalFromMandE(!invert, e, m, tmp2)
+		return r, d, err
 	case buf[0] == decimalNegSmall:
 		// Negative small.
 		e, m, r, tmp2, err := decodeSmallNumber(true, buf, tmp)
 		if err != nil {
 			return nil, apd.Decimal{}, err
 		}
-		return r, makeDecimalFromMandE(!invert, e, m, tmp2), nil
+		d, err := makeDecimalFromMandE(!invert, e, m, tmp2)
+		return r, d, err
 	case buf[0] == decimalPosLarge:
 		// Positive large.
 		e, m, r, tmp2, err := decodeLargeNumber(false, buf, tmp)
 		if err != nil {
 			return nil, apd.Decimal{}, err
 		}
-		return r, makeDecimalFromMandE(invert, e, m, tmp2), nil
+		d, err := makeDecimalFromMandE(invert, e, m, tmp2)
+		return r, d, err
 	case buf[0] >= decimalPosMedium && buf[0] < decimalPosLarge:
 		// Positive medium.
 		e, m, r, tmp2, err := decodeMediumNumber(false, buf, tmp)
 		if err != nil {
 			return nil, apd.Decimal{}, err
 		}
-		return r, makeDecimalFromMandE(invert, e, m, tmp2), nil
+		d, err := makeDecimalFromMandE(invert, e, m, tmp2)
+		return r, d, err
 	case buf[0] == decimalPosSmall:
 		// Positive small.
 		e, m, r, tmp2, err := decodeSmallNumber(false, buf, tmp)
 		if err != nil {
 			return nil, apd.Decimal{}, err
 		}
-		return r, makeDecimalFromMandE(invert, e, m, tmp2), nil
+		d, err := makeDecimalFromMandE(invert, e, m, tmp2)
+		return r, d, err
 	default:
 		return nil, apd.Decimal{}, errors.Errorf("unknown prefix of the encoded byte slice: %q", buf)
 	}
@@ -349,7 +355,7 @@ func getDecimalLen(buf []byte) (int, error) {
 
 // makeDecimalFromMandE reconstructs the decimal from the mantissa M and
 // exponent E.
-func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) apd.Decimal {
+func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) (apd.Decimal, error) {
 	// ±dddd.
 	b := tmp[:0]
 	if n := len(m)*2 + 1; cap(b) < n {
@@ -361,6 +367,9 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) apd.Decima
 			t--
 		}
 		t /= 2
+		if t < 0 || t > 99 {
+			return apd.Decimal{}, errors.Errorf("base-100 encoded digit %d out of range [0,99]", t)
+		}
 		b = append(b, byte(t/10)+'0', byte(t%10)+'0')
 	}
 	if b[len(b)-1] == '0' {
@@ -377,11 +386,11 @@ func makeDecimalFromMandE(negative bool, e int, m []byte, tmp []byte) apd.Decima
 	s := *(*string)(unsafe.Pointer(&b))
 	_, ok := dec.Coeff.SetString(s, 10)
 	if !ok {
-		panic(fmt.Sprintf("could not set big.Int's string value: %q", s))
+		return apd.Decimal{}, errors.Errorf("could not set big.Int's string value: %q", s)
 	}
 	dec.Negative = negative
 
-	return dec
+	return dec, nil
 }
 
 // findDecimalTerminator finds the decimalTerminator in the given slice.
