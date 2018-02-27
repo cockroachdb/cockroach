@@ -1054,18 +1054,18 @@ func (c *indexConstraintCtx) simplifyFilter(
 	return ev.Group()
 }
 
-// IndexConstraints is used to generate index constraints from a scalar boolean
-// filter expression.
+// Instance is used to generate index constraints from a scalar boolean filter
+// expression.
 //
 // Sample usage:
-//   var ic IndexConstraints
+//   var ic Instance
 //   if err := ic.Init(filter, colInfos, evalCtx); err != nil {
 //     ..
 //   }
 //   spans, ok := ic.Spans()
 //   remFilterGroup := ic.RemainingFilter(&iVarHelper)
 //   remFilter := o.Optimize(remFilterGroup, &opt.PhysicalProps{})
-type IndexConstraints struct {
+type Instance struct {
 	indexConstraintCtx
 
 	filter xform.ExprView
@@ -1077,14 +1077,14 @@ type IndexConstraints struct {
 }
 
 // Init processes the filter and calculates the spans.
-func (ic *IndexConstraints) Init(
+func (ic *Instance) Init(
 	filter xform.ExprView,
 	colInfos []IndexColumnInfo,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
 	factory opt.Factory,
 ) {
-	*ic = IndexConstraints{
+	*ic = Instance{
 		filter:             filter,
 		indexConstraintCtx: makeIndexConstraintCtx(colInfos, isInverted, evalCtx, factory),
 	}
@@ -1115,7 +1115,7 @@ func (ic *IndexConstraints) Init(
 
 // Spans returns the spans created by Init. If ok is false, no constraints
 // could be generated.
-func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
+func (ic *Instance) Spans() (_ LogicalSpans, ok bool) {
 	if !ic.spansPopulated || (len(ic.consolidatedSpans) == 1 && ic.consolidatedSpans[0].IsFullSpan()) {
 		return nil, false
 	}
@@ -1124,7 +1124,7 @@ func (ic *IndexConstraints) Spans() (_ LogicalSpans, ok bool) {
 
 // RemainingFilter calculates a simplified filter that needs to be applied
 // within the returned Spans.
-func (ic *IndexConstraints) RemainingFilter() opt.GroupID {
+func (ic *Instance) RemainingFilter() opt.GroupID {
 	if !ic.spansPopulated {
 		return ic.filter.Group()
 	}
