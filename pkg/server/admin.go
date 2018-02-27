@@ -1424,6 +1424,9 @@ func (s *adminServer) ReplicaMatrix(
 
 	// Get replica counts.
 	if err := s.server.db.Txn(ctx, func(txnCtx context.Context, txn *client.Txn) error {
+		acct := s.memMonitor.MakeBoundAccount()
+		defer acct.Close(txnCtx)
+
 		kvs, err := sql.ScanMetaKVs(ctx, txn, roachpb.Span{
 			Key:    keys.UserTableDataMin,
 			EndKey: keys.MaxKey,
@@ -1435,6 +1438,9 @@ func (s *adminServer) ReplicaMatrix(
 		// Group replicas by table and node, accumulate counts.
 		var rangeDesc roachpb.RangeDescriptor
 		for _, kv := range kvs {
+			if err := acct.Grow(txnCtx, int64(len(kv.Key)+len(kv.Value.RawBytes))); err != nil {
+				return err
+			}
 			if err := kv.ValueProto(&rangeDesc); err != nil {
 				return err
 			}
