@@ -246,7 +246,7 @@ build
 SELECT ARRAY_AGG(NULL)
 ----
 ----
-error: ambiguous call: array_agg(NULL), candidates are:
+error: ambiguous call: array_agg(unknown), candidates are:
 array_agg(int) -> int[]
 array_agg(float) -> float[]
 array_agg(decimal) -> decimal[]
@@ -276,7 +276,7 @@ group-by
  │    │    └── tuple [type=tuple{}]
  │    └── projections
  │         └── cast: string [type=string]
- │              └── const: NULL [type=NULL]
+ │              └── const: NULL [type=unknown]
  └── aggregations
       └── function: array_agg [type=string[]]
            └── variable: column1 [type=string]
@@ -794,20 +794,20 @@ SELECT COUNT(NULL::int), COUNT((NULL, NULL))
 group-by
  ├── columns: column2:int:null:2 column4:int:null:4
  ├── project
- │    ├── columns: column1:int:null:1 column3:tuple{NULL, NULL}:null:3
+ │    ├── columns: column1:int:null:1 column3:tuple{unknown, unknown}:null:3
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
  │         ├── cast: int [type=int]
- │         │    └── const: NULL [type=NULL]
- │         └── tuple [type=tuple{NULL, NULL}]
- │              ├── const: NULL [type=NULL]
- │              └── const: NULL [type=NULL]
+ │         │    └── const: NULL [type=unknown]
+ │         └── tuple [type=tuple{unknown, unknown}]
+ │              ├── const: NULL [type=unknown]
+ │              └── const: NULL [type=unknown]
  └── aggregations
       ├── function: count [type=int]
       │    └── variable: column1 [type=int]
       └── function: count [type=int]
-           └── variable: column3 [type=tuple{NULL, NULL}]
+           └── variable: column3 [type=tuple{unknown, unknown}]
 
 build
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv

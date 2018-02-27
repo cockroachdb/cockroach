@@ -200,23 +200,47 @@ and the list of arguments to the function:
     Args ExprList
   }
 
-The list matcher iterates through the nodes in a list, looking for the first
-node that matches its condition. Any subsequent matching nodes are ignored by
-the matcher. However, often the replace pattern removes or modifies the first
-node so that it no longer matches. Then, when the same pattern is applied to
-the replacement expression, the list matcher will find the next matching node,
-and so on.
+There are several kinds of list matchers, each of which uses a variant of the
+list matching bracket syntax. The ellipses signify that 0 or more items can
+match at either the beginning or end of the list. The item pattern can be any
+legal match pattern, and can be bound to a variable.
 
-List matching syntax looks like this:
+  [ ... <item pattern> ... ]
+
+- ANY: matches if any item in the list matches the item pattern. If multiple
+items match, then the list matcher binds to the first match (which may be any
+item in the list).
+
+  [ ... $item:* ... ]
+
+- FIRST: Matches if the first item in the list matches the item pattern (and
+there is at least one item in the list).
+
+  [ $item:* ... ]
+
+- LAST: Matches if the last item in the list matches the item pattern (and
+there is at least one item).
+
+  [ ... $item:* ]
+
+- SINGLE: Matches if there is exactly one item in the list, and it matches the
+item pattern.
+
+  [ $item:* ]
+
+- EMPTY: Matches if there are zero items in the list.
+
+  []
+
+Following is a more complete example. The ANY list matcher in the example
+searches through the Filter child's list, looking for a Subquery node. If a
+matching node is found, then the list matcher succeeds and binds the node to
+the $item variable.
 
   (Select
     $input:*
     (Filter [ ... $item:(Subquery) ... ])
   )
-
-The list matcher searches through the Filter child's list, looking for a
-Subquery node. If a matching node is found, then the list matcher succeeds and
-binds the node to the $item variable.
 
 Custom Matching
 
@@ -378,7 +402,13 @@ grammar.
   match-custom        = match-invoke | '^' match-custom
   match-invoke        = '(' invoke-name ref* ')'
   invoke-name         = IDENT
-  match-list          = '[' '...' match-child '...' ']'
+  match-list          = match-list-any | match-list-first | match-list-last |
+                        match-list-single | match-list-empty
+  match-list-any      = '[' '...' match-child '...' ']'
+  match-list-first    = '[' match-child '...' ']'
+  match-list-last     = '[' '...' match-child ']'
+  match-list-single   = '[' match-child ']'
+  match-list-empty    = '[' ']'
   ref                 = '$' label
 
   replace             = construct | STRING | ref

@@ -200,13 +200,42 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 			g.w.nest("if false {\n")
 		}
 
-	case *lang.MatchListExpr:
+	case *lang.MatchListAnyExpr:
 		if noMatch {
-			panic("noMatch is not yet supported by the list match op")
+			panic("noMatch is not yet supported by the list match any op")
 		}
-
 		g.w.nest("for _, _item := range _f.mem.lookupList(%s) {\n", contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
+
+	case *lang.MatchListFirstExpr:
+		if noMatch {
+			panic("noMatch is not yet supported by the list match first op")
+		}
+		g.w.nest("if %s.Length > 0 {\n", contextName)
+		g.w.writeIndent("_item := _f.mem.lookupList(%s)[0]\n", contextName)
+		g.genMatch(t.MatchItem, "_item", noMatch)
+
+	case *lang.MatchListLastExpr:
+		if noMatch {
+			panic("noMatch is not yet supported by the list match first op")
+		}
+		g.w.nest("if %s.Length > 0 {\n", contextName)
+		g.w.writeIndent("_item := _f.mem.lookupList(%s)[%s.Length-1]\n", contextName, contextName)
+		g.genMatch(t.MatchItem, "_item", noMatch)
+
+	case *lang.MatchListSingleExpr:
+		if noMatch {
+			panic("noMatch is not yet supported by the list match first op")
+		}
+		g.w.nest("if %s.Length == 1 {\n", contextName)
+		g.w.writeIndent("_item := _f.mem.lookupList(%s)[0]\n", contextName)
+		g.genMatch(t.MatchItem, "_item", noMatch)
+
+	case *lang.MatchListEmptyExpr:
+		if noMatch {
+			panic("noMatch is not yet supported by the list match first op")
+		}
+		g.w.nest("if %s.Length == 0 {\n", contextName)
 
 	default:
 		panic(fmt.Sprintf("unrecognized match expression: %v", match))
