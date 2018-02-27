@@ -493,7 +493,7 @@ DBStatus DBBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 DBSlice DBBatch::BatchRepr() { return ToDBSlice(batch.GetWriteBatch()->Data()); }
 
 DBIterator* DBBatch::NewIter(rocksdb::ReadOptions* read_opts) {
-  DBIterator* iter = new DBIterator;
+  DBIterator* iter = new DBIterator(&iters);
   if (has_delete_range) {
     // TODO(peter): We don't support iterators when the batch contains
     // delete range entries.

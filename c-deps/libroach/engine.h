@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <libroach.h>
 #include <rocksdb/cache.h>
 #include <rocksdb/db.h>
@@ -23,9 +24,10 @@
 
 struct DBEngine {
   rocksdb::DB* const rep;
+  std::atomic<int64_t> iters;
 
-  DBEngine(rocksdb::DB* r) : rep(r) {}
-  virtual ~DBEngine() {}
+  DBEngine(rocksdb::DB* r) : rep(r), iters(0) {}
+  virtual ~DBEngine();
 
   virtual DBStatus Put(DBKey key, DBSlice value) = 0;
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;

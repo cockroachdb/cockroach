@@ -23,6 +23,15 @@
 
 using namespace cockroach;
 
+DBEngine::~DBEngine() {
+  const int64_t n = iters.load();
+  if (n != 0) {
+    fprintf(stderr, "%lld leaked iterators\n", n);
+    fflush(stderr);
+    exit(1);
+  }
+}
+
 DBSSTable* DBEngine::GetSSTables(int* n) {
   std::vector<rocksdb::LiveFileMetaData> metadata;
   rep->GetLiveFilesMetaData(&metadata);
@@ -148,7 +157,7 @@ DBStatus DBImpl::ApplyBatchRepr(DBSlice repr, bool sync) {
 DBSlice DBImpl::BatchRepr() { return ToDBSlice("unsupported"); }
 
 DBIterator* DBImpl::NewIter(rocksdb::ReadOptions* read_opts) {
-  DBIterator* iter = new DBIterator;
+  DBIterator* iter = new DBIterator(&iters);
   iter->rep.reset(rep->NewIterator(*read_opts));
   return iter;
 }
