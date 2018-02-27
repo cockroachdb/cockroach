@@ -414,7 +414,7 @@ func (p *planner) addGroupFilter(
 		convFunc := func(v tree.VariableExpr) (bool, tree.Expr) {
 			if iv, ok := v.(*tree.IndexedVar); ok {
 				f := g.funcs[iv.Idx]
-				if f.identAggregate {
+				if f.isIdentAggregate() {
 					return true, &tree.IndexedVar{Idx: f.argRenderIdx}
 				}
 			}

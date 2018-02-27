@@ -1010,24 +1010,23 @@ func (dsp *DistSQLPlanner) addAggregators(
 	for i, fholder := range n.funcs {
 		// An aggregateFuncHolder either contains an aggregation function or an
 		// expression that also appears as one of the GROUP BY expressions.
-		f, ok := fholder.expr.(*tree.FuncExpr)
-		if !ok || f.GetAggregateConstructor() == nil {
+		if fholder.isIdentAggregate() {
 			aggregations[i].Func = distsqlrun.AggregatorSpec_IDENT
 		} else {
 			// Convert the aggregate function to the enum value with the same string
 			// representation.
-			funcStr := strings.ToUpper(f.Func.FunctionReference.String())
+			funcStr := strings.ToUpper(fholder.function.String())
 			funcIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
 			if !ok {
 				return errors.Errorf("unknown aggregate %s", funcStr)
 			}
 			aggregations[i].Func = distsqlrun.AggregatorSpec_Func(funcIdx)
-			aggregations[i].Distinct = (f.Type == tree.DistinctFuncType)
+			aggregations[i].Distinct = fholder.isDistinct()
 		}
 		if fholder.argRenderIdx != noRenderIdx {
 			aggregations[i].ColIdx = []uint32{uint32(p.planToStreamColMap[fholder.argRenderIdx])}
 		}
-		if fholder.hasFilter {
+		if fholder.hasFilter() {
 			col := uint32(p.planToStreamColMap[fholder.filterRenderIdx])
 			aggregations[i].FilterColIdx = &col
 		}
