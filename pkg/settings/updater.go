@@ -78,6 +78,9 @@ func NewUpdater(sv *Values) Updater {
 func (u updater) Set(key, rawValue string, vt string) error {
 	d, ok := Registry[key]
 	if !ok {
+		if _, ok := retiredSettings[key]; ok {
+			return nil
+		}
 		// Likely a new setting this old node doesn't know about.
 		return errors.Errorf("unknown setting '%s'", key)
 	}

@@ -29,8 +29,20 @@ import (
 // read concurrently by different callers.
 var Registry = make(map[string]Setting)
 
+// When a setting is removed, it should be added to this list so that we cannot
+// accidentally reuse its name, potentially mis-handling older values.
+var retiredSettings = map[string]struct{}{
+	//removed as of 2.0.
+	"kv.gc.batch_size":                     {},
+	"kv.transaction.max_intents":           {},
+	"diagnostics.reporting.report_metrics": {},
+}
+
 // Register adds a setting to the registry.
 func register(key, desc string, s Setting) {
+	if _, ok := retiredSettings[key]; ok {
+		panic(fmt.Sprintf("cannot reuse previously defined setting name: %s", key))
+	}
 	if _, ok := Registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
 	}

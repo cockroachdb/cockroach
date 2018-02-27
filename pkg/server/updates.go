@@ -84,12 +84,6 @@ var diagnosticReportFrequency = settings.RegisterNonNegativeDurationSetting(
 	time.Hour,
 )
 
-var diagnosticsMetricsEnabled = settings.RegisterBoolSetting(
-	"diagnostics.reporting.report_metrics",
-	"enable collection and reporting diagnostic metrics to cockroach labs",
-	true,
-)
-
 // randomly shift `d` to be up to `jitterSec` shorter or longer.
 func addJitter(d time.Duration, jitterSec int) time.Duration {
 	j := time.Duration(rand.Intn(jitterSec*2)-jitterSec) * time.Second
@@ -143,6 +137,12 @@ func (s *Server) maybeCheckForUpdates(
 		return scheduled
 	}
 
+	// if diagnostics reporting is disabled, we should assume that means that the
+	// user doesn't want us phoning home for new-version checks either.
+	if !log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
+		return now.Add(updateCheckFrequency)
+	}
+
 	// checkForUpdates handles its own errors, but it returns a bool indicating if
 	// it succeeded, so we can schedule a re-attempt if it did not.
 	if succeeded := s.checkForUpdates(runningTime); !succeeded {
@@ -186,6 +186,9 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 // The returned boolean indicates if the check succeeded (and thus does not need
 // to be re-attempted by the scheduler after a retry-interval).
 func (s *Server) checkForUpdates(runningTime time.Duration) bool {
+	if updatesURL == nil {
+		return true // don't bother with asking for retry -- we'll never succeed.
+	}
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "checkForUpdates")
 	defer span.Finish()
 
@@ -239,7 +242,7 @@ func (s *Server) maybeReportDiagnostics(
 	// TODO(dt): we should allow tuning the reset and report intervals separately.
 	// Consider something like rand.Float() > resetFreq/reportFreq here to sample
 	// stat reset periods for reporting.
-	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) && diagnosticsMetricsEnabled.Get(&s.st.SV) {
+	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(running)
 	}
 	if !s.cfg.UseLegacyConnHandling {
@@ -343,6 +346,9 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 }
 
 func (s *Server) reportDiagnostics(runningTime time.Duration) {
+	if reportingURL == nil {
+		return
+	}
 	ctx, span := s.AnnotateCtxWithSpan(context.Background(), "usageReport")
 	defer span.Finish()
 
