@@ -245,7 +245,6 @@ project
 build
 SELECT ARRAY_AGG(NULL)
 ----
-----
 error: ambiguous call: array_agg(unknown), candidates are:
 array_agg(int) -> int[]
 array_agg(float) -> float[]
@@ -262,8 +261,6 @@ array_agg(inet) -> inet[]
 array_agg(oid) -> oid[]
 array_agg(bool) -> bool[]
 
-----
-----
 # With an explicit cast, this works as expected.
 build
 SELECT ARRAY_AGG(NULL::TEXT)

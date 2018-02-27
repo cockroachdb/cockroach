@@ -164,17 +164,13 @@ func typeAsAny(_ ExprView) types.T {
 // typeCoalesce returns the type of a coalesce expression, which is equal to
 // the type of its children.
 func typeCoalesce(ev ExprView) types.T {
-	typ := types.Unknown
 	for i := 0; i < ev.ChildCount(); i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
-		if typ == types.Unknown {
-			typ = childType
-		} else if childType != types.Unknown && !typ.Equivalent(childType) {
-			panic(fmt.Sprintf("could not find type for coalesce expression: %v", ev))
+		if childType != types.Unknown {
+			return childType
 		}
 	}
-
-	return typ
+	return types.Unknown
 }
 
 func typeCast(ev ExprView) types.T {
