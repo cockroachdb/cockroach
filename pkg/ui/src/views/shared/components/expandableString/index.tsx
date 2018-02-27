@@ -50,7 +50,7 @@ export class ExpandableString extends React.Component<ExpandableStringProps, Exp
 
     const neverCollapse = _.isNil(short) && long.length <= truncateLength + 2;
     if (neverCollapse) {
-      return <span>this.props.long</span>;
+      return <span>{ this.props.long }</span>;
     }
 
     const { expanded } = this.state;
