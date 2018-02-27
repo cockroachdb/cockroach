@@ -480,7 +480,7 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 // NULL; a filter "x > y" implies that both x and y are not NULL. It is
 // best-effort so there may be false negatives (but no false positives).
 func extractNotNullConstraints(filter tree.TypedExpr) util.FastIntSet {
-	if typ := filter.ResolvedType(); typ == types.Null {
+	if typ := filter.ResolvedType(); typ == types.Unknown {
 		return util.FastIntSet{}
 	} else if typ != types.Bool {
 		panic(fmt.Sprintf("non-bool filter expression: %s (type: %s)", filter, filter.ResolvedType()))

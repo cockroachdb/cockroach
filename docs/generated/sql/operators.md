@@ -308,7 +308,6 @@
 <table><thead>
 <tr><td><code>IS NOT DISTINCT FROM</code></td><td>Return</td></tr>
 </thead><tbody>
-<tr><td>NULL <code>IS NOT DISTINCT FROM</code> NULL</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bool.html">bool[]</a> <code>IS NOT DISTINCT FROM</code> <a href="bool.html">bool[]</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="bytes.html">bytes</a> <code>IS NOT DISTINCT FROM</code> <a href="bytes.html">bytes</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -349,6 +348,7 @@
 <tr><td><a href="timestamp.html">timestamptz</a> <code>IS NOT DISTINCT FROM</code> <a href="timestamp.html">timestamptz</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>timestamptz <code>IS NOT DISTINCT FROM</code> timestamptz</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>tuple <code>IS NOT DISTINCT FROM</code> tuple</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>unknown <code>IS NOT DISTINCT FROM</code> unknown</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid</a> <code>IS NOT DISTINCT FROM</code> <a href="uuid.html">uuid</a></td><td><a href="bool.html">bool</a></td></tr>
 <tr><td><a href="uuid.html">uuid[]</a> <code>IS NOT DISTINCT FROM</code> <a href="uuid.html">uuid[]</a></td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>

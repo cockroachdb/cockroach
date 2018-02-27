@@ -87,7 +87,7 @@ func (a ArgTypes) matchAt(typ types.T, i int) bool {
 	if typ.FamilyEqual(types.FamTuple) {
 		typ = types.FamTuple
 	}
-	return i < len(a) && (typ == types.Null || a[i].Typ.Equivalent(typ))
+	return i < len(a) && (typ == types.Unknown || a[i].Typ.Equivalent(typ))
 }
 
 func (a ArgTypes) matchLen(l int) bool {
@@ -180,9 +180,9 @@ func (v VariadicType) match(types []types.T) bool {
 
 func (v VariadicType) matchAt(typ types.T, i int) bool {
 	if i < len(v.FixedTypes) {
-		return typ == types.Null || v.FixedTypes[i].Equivalent(typ)
+		return typ == types.Unknown || v.FixedTypes[i].Equivalent(typ)
 	}
-	return typ == types.Null || v.VarType.Equivalent(typ)
+	return typ == types.Unknown || v.VarType.Equivalent(typ)
 }
 
 func (v VariadicType) matchLen(l int) bool {
@@ -537,8 +537,8 @@ func typeCheckOverloadedExprs(
 			}
 			leftType := left.ResolvedType()
 			rightType := right.ResolvedType()
-			leftIsNull := leftType == types.Null
-			rightIsNull := rightType == types.Null
+			leftIsNull := leftType == types.Unknown
+			rightIsNull := rightType == types.Unknown
 			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
 			if oneIsNull {
 				if leftIsNull {

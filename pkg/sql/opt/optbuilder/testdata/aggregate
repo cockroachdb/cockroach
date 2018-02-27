@@ -699,7 +699,7 @@ group-by
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    └── is [type=bool]
  │    │         ├── variable: kv.s [type=string]
- │    │         └── const: NULL [type=NULL]
+ │    │         └── const: NULL [type=unknown]
  │    └── projections
  │         └── variable: kv.s [type=string]
  └── aggregations
