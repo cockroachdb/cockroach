@@ -35,7 +35,7 @@ type unaryFactoryFunc func(f opt.Factory, input opt.GroupID) opt.GroupID
 type binaryFactoryFunc func(f opt.Factory, left, right opt.GroupID) opt.GroupID
 
 // Map from tree.ComparisonOperator to Factory constructor function.
-var comparisonOpMap = [...]binaryFactoryFunc{
+var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
 	tree.EQ:                (opt.Factory).ConstructEq,
 	tree.LT:                (opt.Factory).ConstructLt,
 	tree.GT:                (opt.Factory).ConstructGt,
@@ -57,20 +57,14 @@ var comparisonOpMap = [...]binaryFactoryFunc{
 	tree.IsDistinctFrom:    (opt.Factory).ConstructIsNot,
 	tree.IsNotDistinctFrom: (opt.Factory).ConstructIs,
 	tree.Contains:          (opt.Factory).ConstructContains,
-
-	// TODO(rytaft): NYI, but these need to be nil to avoid an index out of
-	// range exception if any of these functions are used.
-	tree.ContainedBy:    nil,
-	tree.JSONExists:     nil,
-	tree.JSONSomeExists: nil,
-	tree.JSONAllExists:  nil,
-	tree.Any:            nil,
-	tree.Some:           nil,
-	tree.All:            nil,
+	tree.ContainedBy: func(f opt.Factory, left, right opt.GroupID) opt.GroupID {
+		// This is just syntatic sugar that reverses the operands.
+		return f.ConstructContains(right, left)
+	},
 }
 
 // Map from tree.BinaryOperator to Factory constructor function.
-var binaryOpMap = [...]binaryFactoryFunc{
+var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
 	tree.Bitand:   (opt.Factory).ConstructBitand,
 	tree.Bitor:    (opt.Factory).ConstructBitor,
 	tree.Bitxor:   (opt.Factory).ConstructBitxor,
@@ -87,7 +81,7 @@ var binaryOpMap = [...]binaryFactoryFunc{
 }
 
 // Map from tree.UnaryOperator to Factory constructor function.
-var unaryOpMap = [...]unaryFactoryFunc{
+var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
 	tree.UnaryPlus:       (opt.Factory).ConstructUnaryPlus,
 	tree.UnaryMinus:      (opt.Factory).ConstructUnaryMinus,
 	tree.UnaryComplement: (opt.Factory).ConstructUnaryComplement,
@@ -364,10 +358,17 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		out = b.factory.ConstructAnd(conditions)
 
 	case *tree.BinaryExpr:
-		out = binaryOpMap[t.Operator](b.factory,
-			b.buildScalar(t.TypedLeft(), inScope),
-			b.buildScalar(t.TypedRight(), inScope),
-		)
+		fn := binaryOpMap[t.Operator]
+		if fn != nil {
+			out = fn(b.factory,
+				b.buildScalar(t.TypedLeft(), inScope),
+				b.buildScalar(t.TypedRight(), inScope),
+			)
+		} else if b.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
+		} else {
+			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
+		}
 
 	case *tree.CastExpr:
 		arg := b.buildScalar(inScope.resolveType(t.Expr, types.Any), inScope)
@@ -381,20 +382,12 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		if fn != nil {
 			// Most comparison ops map directly to a factory method.
 			out = fn(b.factory, left, right)
+		} else if b.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternPrivate(scalar))
 		} else {
-			// Several comparison ops need special handling.
-			// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
-			// and All to various formulations of the opt Exists operator.
-			switch t.Operator {
-			case tree.ContainedBy:
-				// This is just syntatic sugar that reverses the operands.
-				out = b.factory.ConstructContains(right, left)
-
-			default:
-				// TODO(rytaft): remove this check when we are confident that
-				// all operators are included in comparisonOpMap.
-				panic(errorf("not yet implemented: operator %s", t.Operator.String()))
-			}
+			// TODO(rytaft): remove this check when we are confident that
+			// all operators are included in comparisonOpMap.
+			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
 		}
 
 	case *tree.DTuple:
