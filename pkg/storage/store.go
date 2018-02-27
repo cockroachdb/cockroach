@@ -1036,6 +1036,7 @@ func IterateIDPrefixKeys(
 ) error {
 	rangeID := roachpb.RangeID(1)
 	iter := eng.NewIterator(false /* prefix */)
+	defer iter.Close()
 
 	for {
 		bumped := false
