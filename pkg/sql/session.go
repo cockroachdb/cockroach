@@ -760,6 +760,13 @@ func (s *Session) synchronizeParallelStmts(ctx context.Context) error {
 		s.TxnState.mu.Lock()
 		defer s.TxnState.mu.Unlock()
 
+		// If the txn has already been cleaned up, ignore any errors. This
+		// can happen if a parallel statement produced errors before the
+		// transaction was finished but the queue was never synchronized.
+		if s.TxnState.mu.txn == nil {
+			return nil
+		}
+
 		// Check that all errors are retryable. If any are not, return the
 		// first non-retryable error.
 		var retryErr *roachpb.HandledRetryableTxnError
