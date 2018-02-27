@@ -199,7 +199,7 @@ select
       │    └── variable: a.y [type=int]
       └── is [type=bool]
            ├── variable: a.x [type=int]
-           └── const: NULL [type=NULL]
+           └── const: NULL [type=unknown]
 
 # Bitand, Bitor, Bitxor
 build

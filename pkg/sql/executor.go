@@ -2395,7 +2395,7 @@ func golangFillQueryArguments(pinfo *tree.PlaceholderInfo, args []interface{}) {
 func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
 	switch types.UnwrapType(typ) {
-	case types.Null:
+	case types.Unknown:
 	case types.Bool:
 	case types.Int:
 	case types.Float:

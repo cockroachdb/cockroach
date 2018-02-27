@@ -29,9 +29,9 @@ import (
 func inferType(ev ExprView) types.T {
 	fn := typingFuncMap[ev.Operator()]
 	if fn == nil {
-		// TODO(rytaft): This should cause a panic, but for now just return NULL
+		// TODO(rytaft): This should cause a panic, but for now just return Unknown
 		// so the builder code can be implemented and tested.
-		return types.Null
+		return types.Unknown
 	}
 	return fn(ev)
 }

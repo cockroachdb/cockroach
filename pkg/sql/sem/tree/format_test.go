@@ -152,7 +152,7 @@ func TestFormatExpr(t *testing.T) {
 		expected string
 	}{
 		{`null`, tree.FmtShowTypes,
-			`(NULL)[NULL]`},
+			`(NULL)[unknown]`},
 		{`true`, tree.FmtShowTypes,
 			`(true)[bool]`},
 		{`123`, tree.FmtShowTypes,

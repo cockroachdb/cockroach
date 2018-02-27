@@ -322,7 +322,7 @@ NOT (@1 IS NULL)
 ----
 is-not (type: bool)
  ├── variable (@1) (type: int)
- └── const (NULL) (type: NULL)
+ └── const (NULL) (type: unknown)
 @1 IS NOT NULL
 
 build-scalar,normalize,semtree-expr vars=(int)
@@ -330,7 +330,7 @@ NOT (@1 IS NOT NULL)
 ----
 is (type: bool)
  ├── variable (@1) (type: int)
- └── const (NULL) (type: NULL)
+ └── const (NULL) (type: unknown)
 @1 IS NULL
 
 build-scalar,normalize,semtree-expr vars=(int, int)
