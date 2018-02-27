@@ -169,11 +169,15 @@ parse
 parse
 [Tag]
 (Op
-    (SubOp *)    # Nested match
-    "hello"      # String
-    ^(SubOp)     # Negation
-    *            # Any
-    [... * ...]  # List
+    (SubOp *)     # Nested match
+    "hello"       # String
+    ^(SubOp)      # Negation
+    *             # Any
+    [ ... * ... ] # ListAny
+    [ * ... ]     # ListFirst
+    [ ... * ]     # ListLast
+    [ * ]         # ListSingle
+    []            # ListEmpty
 )
 =>
 (Op)
@@ -203,11 +207,15 @@ parse
 						Src=<test.opt:5:5>
 					)
 					(MatchAny)
-					(MatchList MatchItem=(MatchAny) Src=<test.opt:7:5>)
+					(MatchListAny MatchItem=(MatchAny) Src=<test.opt:7:5>)
+					(MatchListFirst MatchItem=(MatchAny) Src=<test.opt:8:5>)
+					(MatchListLast MatchItem=(MatchAny) Src=<test.opt:9:5>)
+					(MatchListSingle MatchItem=(MatchAny) Src=<test.opt:10:5>)
+					(MatchListEmpty)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name="Op" Args=(List) Src=<test.opt:10:1>)
+			Replace=(Construct Name="Op" Args=(List) Src=<test.opt:14:1>)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -263,7 +271,7 @@ parse
 					(Bind Label="any" Target=(MatchAny) Src=<test.opt:6:5>)
 					(Bind
 						Label="list"
-						Target=(MatchList MatchItem=(MatchAny) Src=<test.opt:7:11>)
+						Target=(MatchListAny MatchItem=(MatchAny) Src=<test.opt:7:11>)
 						Src=<test.opt:7:5>
 					)
 				)
@@ -356,11 +364,18 @@ parse
 )
 
 #
-# Match list expression.
+# Match list expressions.
 #
 parse
 [List]
-(Op [ ... $item:[ ... $item2:(SubOp) ... ] & (Func $item) ... ]) => (Op)
+(Op
+    $any:[ ... $first:[ $item:(SubOp) ... ] & (Func $first $item) ... ]
+    $last:[ ... $item:* & ^(Func $item) ]
+    $single:[ $item:(SubOp) & (Func $item) ]
+    $empty:[]
+)
+=>
+(Op)
 ----
 (Root
 	Defines=(DefineSet)
@@ -372,39 +387,92 @@ parse
 			Match=(Match
 				Names=(OpNames OpOp)
 				Args=(List
-					(MatchList
-						MatchItem=(MatchAnd
-							Left=(Bind
-								Label="item"
-								Target=(MatchList
-									MatchItem=(Bind
-										Label="item2"
-										Target=(Match
-											Names=(OpNames SubOpOp)
-											Args=(List)
-											Src=<test.opt:2:30>
+					(Bind
+						Label="any"
+						Target=(MatchListAny
+							MatchItem=(MatchAnd
+								Left=(Bind
+									Label="first"
+									Target=(MatchListFirst
+										MatchItem=(Bind
+											Label="item"
+											Target=(Match
+												Names=(OpNames SubOpOp)
+												Args=(List)
+												Src=<test.opt:3:31>
+											)
+											Src=<test.opt:3:25>
 										)
-										Src=<test.opt:2:23>
+										Src=<test.opt:3:23>
 									)
-									Src=<test.opt:2:17>
+									Src=<test.opt:3:16>
 								)
-								Src=<test.opt:2:11>
-							)
-							Right=(MatchInvoke
-								FuncName="Func"
-								Args=(List
-									(Ref Label="item" Src=<test.opt:2:52>)
+								Right=(MatchInvoke
+									FuncName="Func"
+									Args=(List
+										(Ref Label="first" Src=<test.opt:3:53>)
+										(Ref Label="item" Src=<test.opt:3:60>)
+									)
+									Src=<test.opt:3:47>
 								)
-								Src=<test.opt:2:46>
+								Src=<test.opt:3:16>
 							)
-							Src=<test.opt:2:11>
+							Src=<test.opt:3:10>
 						)
-						Src=<test.opt:2:5>
+						Src=<test.opt:3:5>
 					)
+					(Bind
+						Label="last"
+						Target=(MatchListLast
+							MatchItem=(MatchAnd
+								Left=(Bind Label="item" Target=(MatchAny) Src=<test.opt:4:17>)
+								Right=(MatchNot
+									Input=(MatchInvoke
+										FuncName="Func"
+										Args=(List
+											(Ref Label="item" Src=<test.opt:4:34>)
+										)
+										Src=<test.opt:4:28>
+									)
+									Src=<test.opt:4:27>
+								)
+								Src=<test.opt:4:17>
+							)
+							Src=<test.opt:4:11>
+						)
+						Src=<test.opt:4:5>
+					)
+					(Bind
+						Label="single"
+						Target=(MatchListSingle
+							MatchItem=(MatchAnd
+								Left=(Bind
+									Label="item"
+									Target=(Match
+										Names=(OpNames SubOpOp)
+										Args=(List)
+										Src=<test.opt:5:21>
+									)
+									Src=<test.opt:5:15>
+								)
+								Right=(MatchInvoke
+									FuncName="Func"
+									Args=(List
+										(Ref Label="item" Src=<test.opt:5:37>)
+									)
+									Src=<test.opt:5:31>
+								)
+								Src=<test.opt:5:15>
+							)
+							Src=<test.opt:5:13>
+						)
+						Src=<test.opt:5:5>
+					)
+					(Bind Label="empty" Target=(MatchListEmpty) Src=<test.opt:6:5>)
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name="Op" Args=(List) Src=<test.opt:2:69>)
+			Replace=(Construct Name="Op" Args=(List) Src=<test.opt:9:1>)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -584,21 +652,21 @@ parse
 [Tag]
 (Op * & (Func *)) => (Op)
 
-# Expected start ellipses
-[Tag]
-(Op []) => (Op)
-
 # Expected match pattern in list
 [Tag]
 (Op [ ... 123 ... ]) => (Op)
 
-# Expected end ellipses
-[Tag]
-(Op [ ... * ]) => (Op)
-
-# Expected list end bracket
+# Expected list end bracket (any case)
 [Tag]
 (Op [ ... * ...) => (Op)
+
+# Expected list end bracket (last case)
+[Tag]
+(Op [ ... * ) => (Op)
+
+# Expected list end bracket (empty case)
+[Tag]
+(Op [ ) => (Op)
 ----
 test.opt:2:1: expected define statement or rule, found '('
 test.opt:6:7: expected operator name, found '*'
@@ -609,10 +677,10 @@ test.opt:22:9: expected custom function call, found '$'
 test.opt:26:11: expected custom function name, found '*'
 test.opt:30:19: cannot bind custom function call arguments
 test.opt:34:15: expected variable reference, found '*'
-test.opt:38:6: expected '...', found ']'
-test.opt:42:11: expected match pattern, found '1'
-test.opt:46:13: expected '...', found ']'
-test.opt:50:16: expected ']', found ')'
+test.opt:38:11: expected match pattern, found '1'
+test.opt:42:16: expected ']', found ')'
+test.opt:46:13: expected ']', found ')'
+test.opt:50:7: expected match pattern, found ')'
 
 #
 # Replace error cases + recovery cases.

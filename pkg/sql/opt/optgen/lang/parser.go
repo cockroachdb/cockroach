@@ -502,7 +502,13 @@ func (p *Parser) parseMatchInvoke() *MatchInvokeExpr {
 	}
 }
 
-// match-list = '[' '...' match-child '...' ']'
+// match-list        = match-list-any | match-list-first | match-list-last |
+//                     match-list-single | match-list-empty
+// match-list-any    = '[' '...' match-child '...' ']'
+// match-list-first  = '[' match-child '...' ']'
+// match-list-last   = '[' '...' match-child ']'
+// match-list-single = '[' match-child ']'
+// match-list-empty  = '[' ']'
 func (p *Parser) parseMatchList() Expr {
 	if !p.scanToken(LBRACKET, "'['") {
 		return nil
@@ -510,8 +516,18 @@ func (p *Parser) parseMatchList() Expr {
 
 	src := p.src
 
-	if !p.scanToken(ELLIPSES, "'...'") {
-		return nil
+	var hasStartEllipses, hasEndEllipses bool
+
+	switch p.scan() {
+	case ELLIPSES:
+		hasStartEllipses = true
+
+	case RBRACKET:
+		// Empty list case.
+		return &MatchListEmptyExpr{}
+
+	default:
+		p.unscan()
 	}
 
 	matchItem := p.parseMatchChild()
@@ -519,15 +535,28 @@ func (p *Parser) parseMatchList() Expr {
 		return nil
 	}
 
-	if !p.scanToken(ELLIPSES, "'...'") {
-		return nil
+	switch p.scan() {
+	case ELLIPSES:
+		hasEndEllipses = true
+
+	default:
+		p.unscan()
 	}
 
 	if !p.scanToken(RBRACKET, "']'") {
 		return nil
 	}
 
-	return &MatchListExpr{Src: &src, MatchItem: matchItem}
+	// Handle various combinations of start and end ellipses.
+	if hasStartEllipses {
+		if hasEndEllipses {
+			return &MatchListAnyExpr{Src: &src, MatchItem: matchItem}
+		}
+		return &MatchListLastExpr{Src: &src, MatchItem: matchItem}
+	} else if hasEndEllipses {
+		return &MatchListFirstExpr{Src: &src, MatchItem: matchItem}
+	}
+	return &MatchListSingleExpr{Src: &src, MatchItem: matchItem}
 }
 
 // replace = construct | STRING | ref

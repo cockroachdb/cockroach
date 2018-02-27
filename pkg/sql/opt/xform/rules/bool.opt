@@ -68,10 +68,10 @@
 # condition.
 [EliminateSingletonOr, Normalize]
 (Or
-    $conditions:* & (IsSingletonList $conditions)
+    $conditions:[ $item:* ]
 )
 =>
-(FirstListItem $conditions)
+$item
 
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le.
