@@ -212,23 +212,29 @@ render            ·     ·
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
 ----
-sort                                       ·         ·
- │                                         order     +ordinal_position
- └── render                                ·         ·
-      └── group                            ·         ·
-           │                               group by  @1-@5
-           └── render                      ·         ·
-                └── join                   ·         ·
-                     │                     type      left outer
-                     │                     equality  (column_name) = (column_name)
-                     ├── render            ·         ·
-                     │    └── filter       ·         ·
-                     │         └── values  ·         ·
-                     │                     size      17 columns, 729 rows
-                     └── render            ·         ·
-                          └── filter       ·         ·
-                               └── values  ·         ·
-·                                          size      13 columns, 3 rows
+sort                                       ·            ·
+ │                                         order        +ordinal_position
+ └── render                                ·            ·
+      └── group                            ·            ·
+           │                               aggregate 0  column_name
+           │                               aggregate 1  data_type
+           │                               aggregate 2  is_nullable
+           │                               aggregate 3  column_default
+           │                               aggregate 4  ordinal_position
+           │                               aggregate 5  array_agg(index_name)
+           │                               group by     @1-@5
+           └── render                      ·            ·
+                └── join                   ·            ·
+                     │                     type         left outer
+                     │                     equality     (column_name) = (column_name)
+                     ├── render            ·            ·
+                     │    └── filter       ·            ·
+                     │         └── values  ·            ·
+                     │                     size         17 columns, 729 rows
+                     └── render            ·            ·
+                          └── filter       ·            ·
+                               └── values  ·            ·
+·                                          size         13 columns, 3 rows
 
 query TTT
 EXPLAIN SHOW GRANTS ON foo

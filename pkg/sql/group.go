@@ -245,7 +245,7 @@ func (p *planner) groupBy(
 	// r as needed.
 	//
 	// "Grouping expressions" - expressions that also show up under GROUP BY - are
-	// also treated as aggregate expressions (with identAggregate).
+	// also treated as aggregate expressions ("ident" aggregation).
 	if typedHaving != nil {
 		havingNode = &filterNode{
 			source: planDataSource{plan: plan, info: &sqlbase.DataSourceInfo{}},
@@ -324,7 +324,7 @@ func (p *planner) groupBy(
 	if log.V(2) {
 		strs := make([]string, 0, len(group.funcs))
 		for _, f := range group.funcs {
-			strs = append(strs, f.expr.String())
+			strs = append(strs, fmt.Sprintf("%v", f.function))
 		}
 		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
 	}
@@ -393,7 +393,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 
 		// Feed the aggregateFuncHolders for this bucket the non-grouped values.
 		for _, f := range n.funcs {
-			if f.hasFilter && values[f.filterRenderIdx] != tree.DBoolTrue {
+			if f.hasFilter() && values[f.filterRenderIdx] != tree.DBoolTrue {
 				continue
 			}
 
@@ -559,26 +559,13 @@ func (v *extractAggregatesVisitor) addAggregation(f *aggregateFuncHolder) *tree.
 			v.groupNode.funcs, renderIdx,
 		))
 	}
-	// We care about the name of the groupNode columns as an optimization: we want
-	// them to match the post-render node's columns if the post-render expressions
-	// are trivial (so the renderNode can be elided).
-	colName, err := getRenderColName(
-		v.planner.SessionData().SearchPath, tree.SelectExpr{Expr: f.expr}, &v.preRender.ivarHelper)
-	if err != nil {
-		colName = fmt.Sprintf("agg%d", renderIdx)
-	} else if strings.ToLower(colName) == "count_rows()" {
-		// Special case: count(*) expressions are converted to count_rows(); since
-		// typical usage is count(*), use that column name instead of count_rows(),
-		// allowing elision of the renderNode.
-		// TODO(radu): remove this if #16535 is resolved.
-		colName = "count(*)"
-	}
-	typ := f.expr.ResolvedType()
+	// Make up a column name. If we need a particular name to elide a renderNode,
+	// the column will be renamed.
 	v.groupNode.columns = append(v.groupNode.columns, sqlbase.ResultColumn{
-		Name: colName,
-		Typ:  typ,
+		Name: fmt.Sprintf("agg%d", renderIdx),
+		Typ:  f.resultType,
 	})
-	return v.ivarHelper.IndexedVarWithType(renderIdx, typ)
+	return v.ivarHelper.IndexedVarWithType(renderIdx, f.resultType)
 }
 
 func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
@@ -588,11 +575,11 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 
 	if groupIdx, ok := v.groupStrs[symbolicExprStr(expr)]; ok {
 		// This expression is in the GROUP BY; it is already being rendered by the
-		// renderNode.
+		// renderNode. Set up an "ident" aggregation.
 		f := v.groupNode.newAggregateFuncHolder(
-			v.preRender.render[groupIdx],
+			nil, /* function  */
+			v.preRender.render[groupIdx].ResolvedType(),
 			groupIdx,
-			true, /* ident */
 			builtins.NewIdentAggregate,
 			v.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
@@ -608,9 +595,9 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			case 0:
 				// COUNT_ROWS has no arguments.
 				f = v.groupNode.newAggregateFuncHolder(
-					t,
+					&t.Func,
+					t.ResolvedType(),
 					noRenderIdx,
-					false, /* not ident */
 					agg,
 					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
@@ -627,7 +614,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					return false, expr
 				}
 
-				// Add a render for the argument.
+				// Add a pre-rendering for the argument.
 				col := sqlbase.ResultColumn{
 					Name: argExpr.String(),
 					Typ:  argExpr.ResolvedType(),
@@ -636,9 +623,9 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 				argRenderIdx := v.preRender.addOrReuseRender(col, argExpr, true /* reuse */)
 
 				f = v.groupNode.newAggregateFuncHolder(
-					t,
+					&t.Func,
+					t.ResolvedType(),
 					argRenderIdx,
-					false, /* not ident */
 					agg,
 					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
@@ -703,25 +690,19 @@ func (v extractAggregatesVisitor) extract(typedExpr tree.TypedExpr) (tree.TypedE
 }
 
 type aggregateFuncHolder struct {
-	// expr must either contain an aggregation function (SUM, COUNT, etc.) or an
-	// expression that also appears as one of the GROUP BY expressions (v+w in
-	// SELECT v+w FROM kvw GROUP BY v+w).
-	expr tree.TypedExpr
+	// Reference to the aggregate function. Nil if this column reproduces a bucket
+	// key unchanged.
+	function tree.FunctionReference
+
+	resultType types.T
 
 	// The argument of the function is a single value produced by the renderNode
-	// underneath.
+	// underneath. If the function has no argument (COUNT_ROWS), it is set to
+	// noRenderIdx.
 	argRenderIdx int
-	// hasFilter indicates whether this aggregate function has a FILTER
-	// clause.  If true, then the filter is in the source column indexed
-	// by filterRenderIdx below.
-	hasFilter bool
 	// If there is a filter, the result is a single value produced by the
-	// renderNode underneath.
+	// renderNode underneath. If there is no filter, it is set to noRenderIdx.
 	filterRenderIdx int
-
-	// identAggregate is true if this column reproduces the bucket key
-	// unchanged.
-	identAggregate bool
 
 	// create instantiates the built-in execution context for the
 	// aggregation function.
@@ -740,18 +721,26 @@ type aggregateFuncRun struct {
 
 const noRenderIdx = -1
 
+// newAggregateFuncHolder creates an aggregateFuncHolder.
+//
+// If function is nil, this is an "ident" aggregation (meaning that the input is
+// a group-by column and the "aggregation" returns its value)
+//
+// If the aggregation function takes no arguments (e.g. COUNT_ROWS),
+// argRenderIdx is noRenderIdx.
 func (n *groupNode) newAggregateFuncHolder(
-	expr tree.TypedExpr,
+	function tree.FunctionReference,
+	resultType types.T,
 	argRenderIdx int,
-	identAggregate bool,
 	create func(*tree.EvalContext) tree.AggregateFunc,
 	acc mon.BoundAccount,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
-		expr:           expr,
-		argRenderIdx:   argRenderIdx,
-		create:         create,
-		identAggregate: identAggregate,
+		function:        function,
+		resultType:      resultType,
+		argRenderIdx:    argRenderIdx,
+		filterRenderIdx: noRenderIdx,
+		create:          create,
 		run: aggregateFuncRun{
 			buckets:       make(map[string]tree.AggregateFunc),
 			bucketsMemAcc: acc,
@@ -760,14 +749,27 @@ func (n *groupNode) newAggregateFuncHolder(
 	return res
 }
 
+func (a *aggregateFuncHolder) isIdentAggregate() bool {
+	return a.function == nil
+}
+
 func (a *aggregateFuncHolder) setFilter(filterRenderIdx int) {
-	a.hasFilter = true
 	a.filterRenderIdx = filterRenderIdx
+}
+
+func (a *aggregateFuncHolder) hasFilter() bool {
+	return a.filterRenderIdx != noRenderIdx
 }
 
 // setDistinct causes a to ignore duplicate values of the argument.
 func (a *aggregateFuncHolder) setDistinct() {
 	a.run.seen = make(map[string]struct{})
+}
+
+// isDistinct returns true if only distinct values are aggregated,
+// e.g. SUM(DISTINCT x).
+func (a *aggregateFuncHolder) isDistinct() bool {
+	return a.run.seen != nil
 }
 
 func (a *aggregateFuncHolder) close(ctx context.Context) {

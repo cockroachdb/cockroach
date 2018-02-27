@@ -284,31 +284,48 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.plan)
 
 	case *groupNode:
-		if v.observer.expr != nil {
+		if v.observer.attr != nil {
+			inputCols := planColumns(n.plan)
 			for i, agg := range n.funcs {
-				v.expr(name, "aggregate", i, agg.expr)
-			}
-		}
-		if v.observer.attr != nil && len(n.groupCols) > 0 {
-			// Display the grouping columns as @1-@x if possible.
-			shorthand := true
-			for i, idx := range n.groupCols {
-				if idx != i {
-					shorthand = false
-					break
-				}
-			}
-			if shorthand {
-				v.observer.attr(name, "group by", fmt.Sprintf("@1-@%d", len(n.groupCols)))
-			} else {
 				var buf bytes.Buffer
-				for i, idx := range n.groupCols {
-					if i > 0 {
-						buf.WriteByte(',')
+				if agg.isIdentAggregate() {
+					buf.WriteString(inputCols[agg.argRenderIdx].Name)
+				} else {
+					fmt.Fprintf(&buf, "%s(", agg.function.String())
+					if agg.argRenderIdx != noRenderIdx {
+						if agg.isDistinct() {
+							buf.WriteString("DISTINCT ")
+						}
+						buf.WriteString(inputCols[agg.argRenderIdx].Name)
 					}
-					fmt.Fprintf(&buf, "@%d", idx+1)
+					buf.WriteByte(')')
+					if agg.filterRenderIdx != noRenderIdx {
+						fmt.Fprintf(&buf, " FILTER (WHERE %s)", inputCols[agg.filterRenderIdx].Name)
+					}
 				}
-				v.observer.attr(name, "group by", buf.String())
+				v.observer.attr(name, fmt.Sprintf("aggregate %d", i), buf.String())
+			}
+			if len(n.groupCols) > 0 {
+				// Display the grouping columns as @1-@x if possible.
+				shorthand := true
+				for i, idx := range n.groupCols {
+					if idx != i {
+						shorthand = false
+						break
+					}
+				}
+				if shorthand && len(n.groupCols) > 1 {
+					v.observer.attr(name, "group by", fmt.Sprintf("@1-@%d", len(n.groupCols)))
+				} else {
+					var buf bytes.Buffer
+					for i, idx := range n.groupCols {
+						if i > 0 {
+							buf.WriteByte(',')
+						}
+						fmt.Fprintf(&buf, "@%d", idx+1)
+					}
+					v.observer.attr(name, "group by", buf.String())
+				}
 			}
 		}
 
