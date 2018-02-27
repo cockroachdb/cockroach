@@ -32,7 +32,10 @@ var Registry = make(map[string]Setting)
 // When a setting is removed, it should be added to this list so that we cannot
 // accidentally reuse its name, potentially mis-handling older values.
 var retiredSettings = map[string]struct{}{
-	"diagnostics.reporting.report_metrics": {}, // removed as of 2.0.
+	//removed as of 2.0.
+	"kv.gc.batch_size":                     {},
+	"kv.transaction.max_intents":           {},
+	"diagnostics.reporting.report_metrics": {},
 }
 
 // Register adds a setting to the registry.
