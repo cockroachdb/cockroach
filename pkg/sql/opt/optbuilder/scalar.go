@@ -266,13 +266,20 @@ type ScalarBuilder struct {
 // from scalar expressions via IndexedVars.
 // columnNames and columnTypes must have the same length.
 func NewScalar(
-	ctx context.Context, factory opt.Factory, columnNames []string, columnTypes []types.T,
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	factory opt.Factory,
+	columnNames []string,
+	columnTypes []types.T,
 ) *ScalarBuilder {
 	sb := &ScalarBuilder{
 		Builder: Builder{
 			factory: factory,
 			colMap:  make([]columnProps, 1),
 			ctx:     ctx,
+			semaCtx: semaCtx,
+			evalCtx: evalCtx,
 		},
 	}
 	sb.scope.builder = &sb.Builder
