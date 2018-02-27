@@ -176,7 +176,7 @@ func TestIndexConstraints(t *testing.T) {
 					}
 					ev := o.Optimize(group, &opt.PhysicalProps{})
 
-					var ic IndexConstraints
+					var ic Instance
 					ic.Init(ev, colInfos, invertedIndex, &evalCtx, o.Factory())
 					spans, ok := ic.Spans()
 
