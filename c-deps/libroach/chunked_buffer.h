@@ -21,12 +21,8 @@ namespace cockroach {
 
 class chunkedBuffer {
  public:
-  chunkedBuffer() {
-    Clear();
-  }
-  ~chunkedBuffer() {
-    Clear();
-  }
+  chunkedBuffer() { Clear(); }
+  ~chunkedBuffer() { Clear(); }
 
   // Write a key/value pair to this chunkedBuffer.
   void Put(const rocksdb::Slice& key, const rocksdb::Slice& value);
@@ -34,18 +30,16 @@ class chunkedBuffer {
   // Clear this chunkedBuffer.
   void Clear();
 
-  void GetChunks(DBSlice **bufs, int32_t *len) {
+  void GetChunks(DBSlice** bufs, int32_t* len) {
     // Cap the last buffer's size to the amount that's been written to it.
-    DBSlice &last = bufs_.back();
+    DBSlice& last = bufs_.back();
     last.len = buf_ptr_ - last.data;
     *bufs = &bufs_.front();
     *len = bufs_.size();
   }
 
   // Get the number of key/value pairs written to this chunkedBuffer.
-  int Count() const {
-    return count_;
-  }
+  int Count() const { return count_; }
 
  private:
   void put(const char* data, int len, int next_size_hint);

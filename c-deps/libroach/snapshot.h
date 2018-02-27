@@ -23,7 +23,7 @@ namespace cockroach {
 struct DBSnapshot : public DBEngine {
   const rocksdb::Snapshot* snapshot;
 
-  DBSnapshot(DBEngine* db) : DBEngine(db->rep), snapshot(db->rep->GetSnapshot()) {}
+  DBSnapshot(DBEngine* db) : DBEngine(db->rep, db->iters), snapshot(db->rep->GetSnapshot()) {}
   virtual ~DBSnapshot();
 
   virtual DBStatus Put(DBKey key, DBSlice value);
