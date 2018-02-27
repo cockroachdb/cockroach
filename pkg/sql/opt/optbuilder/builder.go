@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -367,6 +368,11 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 			b.buildScalar(t.TypedLeft(), inScope),
 			b.buildScalar(t.TypedRight(), inScope),
 		)
+
+	case *tree.CastExpr:
+		arg := b.buildScalar(inScope.resolveType(t.Expr, types.Any), inScope)
+		typ := coltypes.CastTargetToDatumType(t.Type)
+		out = b.factory.ConstructCast(arg, b.factory.InternPrivate(typ))
 
 	case *tree.ComparisonExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope)

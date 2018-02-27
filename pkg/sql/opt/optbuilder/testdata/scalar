@@ -232,6 +232,35 @@ FALSE
 ----
 false [type=bool]
 
+build-scalar
+1::decimal
+----
+cast: decimal [type=decimal]
+ └── const: 1 [type=decimal]
+
+build-scalar
+1::float
+----
+cast: float [type=float]
+ └── const: 1.0 [type=float]
+
+build-scalar
+1.1::int
+----
+cast: int [type=int]
+ └── const: 1.1 [type=decimal]
+
+build-scalar
+'2010-05-12'::timestamp
+----
+const: '2010-05-12 00:00:00+00:00' [type=timestamp]
+
+build-scalar
+'123'::int
+----
+cast: int [type=int]
+ └── const: 123 [type=int]
+
 build-scalar vars=(int) allow-unsupported
 CASE WHEN @1 > 5 THEN 1 ELSE -1 END
 ----
