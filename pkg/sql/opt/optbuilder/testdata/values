@@ -1,0 +1,84 @@
+# tests adapted from logictest -- values
+
+build
+VALUES (1)
+----
+values
+ ├── columns: column1:unknown:null:1
+ └── tuple [type=tuple{int}]
+      └── const: 1 [type=int]
+
+build
+VALUES (1, 2, 3), (4, 5, 6)
+----
+values
+ ├── columns: column1:unknown:null:1 column2:unknown:null:2 column3:unknown:null:3
+ ├── tuple [type=tuple{int, int, int}]
+ │    ├── const: 1 [type=int]
+ │    ├── const: 2 [type=int]
+ │    └── const: 3 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 4 [type=int]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]
+
+build
+VALUES (1), (2, 3)
+----
+error: VALUES lists must all be the same length, expected 1 columns, found 2
+
+build
+VALUES (1), (1), (2), (3)
+----
+values
+ ├── columns: column1:unknown:null:1
+ ├── tuple [type=tuple{int}]
+ │    └── const: 1 [type=int]
+ ├── tuple [type=tuple{int}]
+ │    └── const: 1 [type=int]
+ ├── tuple [type=tuple{int}]
+ │    └── const: 2 [type=int]
+ └── tuple [type=tuple{int}]
+      └── const: 3 [type=int]
+
+build
+VALUES ('this', 'is', 'a', 'test'), (1, 2, 3, 4)
+----
+error: VALUES list type mismatch, int for string
+
+build
+VALUES ('one', 1, 1.0), ('two', 2, 2.0)
+----
+values
+ ├── columns: column1:unknown:null:1 column2:unknown:null:2 column3:unknown:null:3
+ ├── tuple [type=tuple{string, int, decimal}]
+ │    ├── const: 'one' [type=string]
+ │    ├── const: 1 [type=int]
+ │    └── const: 1.0 [type=decimal]
+ └── tuple [type=tuple{string, int, decimal}]
+      ├── const: 'two' [type=string]
+      ├── const: 2 [type=int]
+      └── const: 2.0 [type=decimal]
+
+build
+VALUES (true), (true), (false)
+----
+values
+ ├── columns: column1:unknown:null:1
+ ├── tuple [type=tuple{bool}]
+ │    └── true [type=bool]
+ ├── tuple [type=tuple{bool}]
+ │    └── true [type=bool]
+ └── tuple [type=tuple{bool}]
+      └── false [type=bool]
+
+# TODO(rytaft): uncomment these tests once subqueries are supported
+## subqueries can be evaluated in VALUES
+#build
+#VALUES ((SELECT 1)), ((SELECT 2))
+#----
+#
+## the subquery's plan must be visible in EXPLAIN
+#build
+#VALUES (1), ((SELECT 2))
+#----

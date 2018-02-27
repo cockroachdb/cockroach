@@ -148,7 +148,10 @@ func (b *Builder) buildSelect(
 	case *tree.SelectClause:
 		return b.buildSelectClause(stmt, inScope)
 
-	// TODO(rytaft): Add support for union clause and values clause.
+	case *tree.ValuesClause:
+		return b.buildValuesClause(t, inScope)
+
+	// TODO(rytaft): Add support for union clause.
 
 	default:
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
