@@ -324,6 +324,8 @@ const (
 	Any
 	Some
 	All
+
+	NumComparisonOperators
 )
 
 var comparisonOpName = [...]string{
@@ -844,6 +846,8 @@ const (
 	JSONFetchText
 	JSONFetchValPath
 	JSONFetchTextPath
+
+	NumBinaryOperators
 )
 
 var binaryOpName = [...]string{
@@ -950,6 +954,8 @@ const (
 	UnaryPlus UnaryOperator = iota
 	UnaryMinus
 	UnaryComplement
+
+	NumUnaryOperators
 )
 
 var unaryOpName = [...]string{

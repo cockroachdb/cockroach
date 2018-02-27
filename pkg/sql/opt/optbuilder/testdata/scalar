@@ -265,3 +265,15 @@ build-scalar vars=(int) allow-unsupported
 CASE WHEN @1 > 5 THEN 1 ELSE -1 END
 ----
 unsupported-expr: CASE WHEN @1 > 5 THEN 1 ELSE -1 END [type=int]
+
+build-scalar vars=(json) allow-unsupported
+@1->>'a' = 'b'
+----
+eq [type=bool]
+ ├── unsupported-expr: @1->>'a' [type=string]
+ └── const: 'b' [type=string]
+
+build-scalar vars=(json) allow-unsupported
+@1 ? 'a'
+----
+unsupported-expr: @1 ? 'a' [type=bool]
