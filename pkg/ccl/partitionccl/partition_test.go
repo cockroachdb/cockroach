@@ -1230,14 +1230,11 @@ func TestRepartitioning(t *testing.T) {
 	sqlDB, cleanup := setupPartitioningTestCluster(ctx, t)
 	defer cleanup()
 
-	for i, test := range testCases {
+	for _, test := range testCases {
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
-			// NOTE: We used to drop and recreate a database named
-			// "data" at the start of every test, but DROP DATABASE
-			// would occasionally hang forever.
-			dbName := fmt.Sprintf("data%d", i)
-			sqlDB.Exec(t, `CREATE DATABASE `+dbName)
-			sqlDB.Exec(t, `USE `+dbName)
+			sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
+			sqlDB.Exec(t, `CREATE DATABASE data`)
+			sqlDB.Exec(t, `USE data`)
 
 			{
 				if err := test.old.parse(); err != nil {
