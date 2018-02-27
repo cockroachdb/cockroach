@@ -19,13 +19,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
-var errEmptyColumnName = errors.New("empty column name")
+var errEmptyColumnName = pgerror.NewError(pgerror.CodeSyntaxError, "empty column name")
 
 // RenameColumn renames the column.
 // Privileges: CREATE on table.

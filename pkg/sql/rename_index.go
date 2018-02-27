@@ -18,13 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
-var errEmptyIndexName = errors.New("empty index name")
+var errEmptyIndexName = pgerror.NewError(pgerror.CodeSyntaxError, "empty index name")
 
 // RenameIndex renames the index.
 // Privileges: CREATE on table.
