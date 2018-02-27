@@ -42,7 +42,10 @@ package optbuilder
 import (
 	"fmt"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -298,7 +301,7 @@ func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
 //
 // The first return value `groupings` is an ordered list of top-level memo
 // groups corresponding to each GROUP BY expression. See Builder.buildStmt
-// above for a description of the remaining input and return values.
+// for a description of the remaining input and return values.
 func (b *Builder) buildGroupingList(
 	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope, outScope *scope,
 ) (groupings []opt.GroupID) {
@@ -324,7 +327,7 @@ func (b *Builder) buildGroupingList(
 // to the expression. The list generally consists of a single memo group except
 // in the case of "*", where the expression is expanded to multiple columns.
 //
-// See Builder.buildStmt above for a description of the remaining input values
+// See Builder.buildStmt for a description of the remaining input values
 // (outScope is passed as a parameter here rather than a return value because
 // the newly bound variables are appended to a growing list to be returned by
 // buildGroupingList).
@@ -357,6 +360,80 @@ func (b *Builder) buildGrouping(
 		out = append(out, b.buildScalarProjection(e, label, inScope, outScope))
 	}
 	return out
+}
+
+// colIndex takes an expression that refers to a column using an integer,
+// verifies it refers to a valid target in the SELECT list, and returns the
+// corresponding column index. For example:
+//    SELECT a from T ORDER by 1
+// Here "1" refers to the first item in the SELECT list, "a". The returned index
+// is 0.
+func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
+	ord := int64(-1)
+	switch i := expr.(type) {
+	case *tree.NumVal:
+		if i.ShouldBeInt64() {
+			val, err := i.AsInt64()
+			if err != nil {
+				panic(builderError{err})
+			}
+			ord = val
+		} else {
+			panic(errorf("non-integer constant in %s: %s", context, expr))
+		}
+	case *tree.DInt:
+		if *i >= 0 {
+			ord = int64(*i)
+		}
+	case *tree.StrVal:
+		panic(errorf("non-integer constant in %s: %s", context, expr))
+	case tree.Datum:
+		panic(errorf("non-integer constant in %s: %s", context, expr))
+	}
+	if ord != -1 {
+		if ord < 1 || ord > int64(numOriginalCols) {
+			panic(errorf("%s position %s is not in select list", context, expr))
+		}
+		ord--
+	}
+	return int(ord)
+}
+
+// flattenTuples extracts the members of tuples into a list of columns.
+func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
+	// We want to avoid allocating new slices unless strictly necessary.
+	var newExprs []tree.TypedExpr
+	for i, e := range exprs {
+		if t, ok := e.(*tree.Tuple); ok {
+			if newExprs == nil {
+				// All right, it was necessary to allocate the slices after all.
+				newExprs = make([]tree.TypedExpr, i, len(exprs))
+				copy(newExprs, exprs[:i])
+			}
+
+			newExprs = flattenTuple(t, newExprs)
+		} else if newExprs != nil {
+			newExprs = append(newExprs, e)
+		}
+	}
+	if newExprs != nil {
+		return newExprs
+	}
+	return exprs
+}
+
+// flattenTuple recursively extracts the members of a tuple into a list of
+// expressions.
+func flattenTuple(t *tree.Tuple, exprs []tree.TypedExpr) []tree.TypedExpr {
+	for _, e := range t.Exprs {
+		if eT, ok := e.(*tree.Tuple); ok {
+			exprs = flattenTuple(eT, exprs)
+		} else {
+			expr := e.(tree.TypedExpr)
+			exprs = append(exprs, expr)
+		}
+	}
+	return exprs
 }
 
 // buildAggregateFunction is called when we are building a function which is an
@@ -399,4 +476,13 @@ func (b *Builder) buildAggregateFunction(
 
 	// Replace the function call with a reference to the column.
 	return b.factory.ConstructVariable(b.factory.InternPrivate(col.index)), col
+}
+
+func isAggregate(def *tree.FunctionDefinition) bool {
+	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
+	return ok
+}
+
+func groupingError(colName string) error {
+	return errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", colName)
 }
