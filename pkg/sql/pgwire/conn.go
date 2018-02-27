@@ -138,6 +138,11 @@ func serveConn(
 	insecure bool,
 ) error {
 	sArgs.RemoteAddr = netConn.RemoteAddr()
+
+	if log.V(2) {
+		log.Infof(ctx, "new connection with options: %+v", sArgs)
+	}
+
 	c := newConn(netConn, sArgs, metrics, execCfg)
 
 	if err := c.handleAuthentication(ctx, insecure); err != nil {

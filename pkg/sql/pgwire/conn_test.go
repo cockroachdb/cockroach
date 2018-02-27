@@ -63,7 +63,7 @@ func TestConn(t *testing.T) {
 	// server that the client will connect to; we just use it on the side to
 	// execute some metadata queries that pgx sends whenever it opens a
 	// connection.
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true, UseDatabase: "system"})
 	defer s.Stopper().Stop(context.TODO())
 
 	// Start a pgwire "server".
@@ -235,6 +235,7 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 			// connection are not using prepared statements. That simplifies the
 			// scaffolding of the test.
 			PreferSimpleProtocol: true,
+			Database:             "system",
 		})
 	if err != nil {
 		return err
