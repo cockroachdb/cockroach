@@ -260,8 +260,15 @@ func nodeStatusesToRows(
 		startedAtStr := startedAt.Format(localTimeFormat)
 		build := nodeStatus.BuildInfo.Tag
 
+		// Use the range count from the store's Capacity rather than from metrics
+		// because the metrics only count ranges that the store is raft leader for,
+		// but what we want here is a count of all the ranges on a store.
+		// The same problem applies to the unavailable and underreplicated metrics,
+		// but there isn't such an easy fix for those.
+		var rangeCount int64
 		metricVals := map[string]float64{}
 		for _, storeStatus := range nodeStatus.StoreStatuses {
+			rangeCount += int64(storeStatus.Desc.Capacity.RangeCount)
 			for key, val := range storeStatus.Metrics {
 				metricVals[key] += val
 			}
@@ -278,7 +285,7 @@ func nodeStatusesToRows(
 			row = append(row,
 				strconv.FormatInt(int64(metricVals["replicas.leaders"]), 10),
 				strconv.FormatInt(int64(metricVals["replicas.leaseholders"]), 10),
-				strconv.FormatInt(int64(metricVals["ranges"]), 10),
+				strconv.FormatInt(int64(rangeCount), 10),
 				strconv.FormatInt(int64(metricVals["ranges.unavailable"]), 10),
 				strconv.FormatInt(int64(metricVals["ranges.underreplicated"]), 10),
 			)
