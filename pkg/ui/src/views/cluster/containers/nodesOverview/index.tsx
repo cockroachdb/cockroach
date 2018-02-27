@@ -6,7 +6,7 @@ import { createSelector } from "reselect";
 import _ from "lodash";
 
 import {
-  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector,
+  livenessNomenclature, LivenessStatus, NodesSummary, nodesSummarySelector, selectNodesSummaryValid,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
@@ -241,9 +241,6 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
   }
 }
 
-// Base selectors to extract data from redux state.
-const nodeQueryValid = (state: AdminUIState): boolean => state.cachedData.nodes.valid && state.cachedData.liveness.valid;
-
 /**
  * partitionedStatuses divides the list of node statuses into "live" and "dead".
  */
@@ -336,7 +333,7 @@ interface NodesMainProps {
   refreshLiveness: typeof refreshLiveness;
   // True if current status results are still valid. Needed so that this
   // component refreshes status query when it becomes invalid.
-  statusesValid: boolean;
+  nodesSummaryValid: boolean;
 }
 
 /**
@@ -373,7 +370,7 @@ class NodesMain extends React.Component<NodesMainProps, {}> {
 const NodesMainConnected = connect(
   (state: AdminUIState) => {
     return {
-      statusesValid: nodeQueryValid(state),
+      nodesSummaryValid: selectNodesSummaryValid(state),
     };
   },
   {
