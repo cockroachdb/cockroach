@@ -501,21 +501,41 @@ func (s *statusServer) Details(
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
 	}
-	if local {
-		resp := &serverpb.DetailsResponse{
-			NodeID:    s.gossip.NodeID.Get(),
-			BuildInfo: build.GetInfo(),
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
 		}
-		if addr, err := s.gossip.GetNodeIDAddress(s.gossip.NodeID.Get()); err == nil {
-			resp.Address = *addr
-		}
+		return status.Details(ctx, req)
+	}
+
+	resp := &serverpb.DetailsResponse{
+		NodeID:    s.gossip.NodeID.Get(),
+		BuildInfo: build.GetInfo(),
+	}
+	if addr, err := s.gossip.GetNodeIDAddress(s.gossip.NodeID.Get()); err == nil {
+		resp.Address = *addr
+	}
+
+	// If Ready is not set, the client doesn't want to know whether this node is
+	// ready to receive client traffic.
+	if !req.Ready {
 		return resp, nil
 	}
-	status, err := s.dialNode(ctx, nodeID)
-	if err != nil {
-		return nil, err
+
+	if !s.admin.server.operational() {
+		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
 	}
-	return status.Details(ctx, req)
+
+	isHealthy, err := s.nodeLiveness.IsHealthy(nodeID)
+	if err != nil {
+		return nil, grpcstatus.Error(codes.Internal, err.Error())
+	}
+	if !isHealthy {
+		return nil, grpcstatus.Error(codes.Unavailable, "node is not ready")
+	}
+
+	return resp, nil
 }
 
 // LogFilesList returns a list of available log files.
