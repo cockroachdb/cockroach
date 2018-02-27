@@ -26,12 +26,19 @@ Overview
 SQL query planning is often described in terms of 8 modules:
 
 1. Properties
+
 2. Stats
+
 3. Cost Model
+
 4. Memo
+
 5. Transforms
+
 6. Prep
+
 7. Rewrite
+
 8. Search
 
 Note Prep, Rewrite and Search could be considered phases, though this document
@@ -502,13 +509,13 @@ found, just as in Volcano and Cascades.
 The optimizer uses several techniques to maximize the chance that it finds the
 best plan early on:
 
-1. As with Cascades, the search is highly directed, interleaving exploration
+- As with Cascades, the search is highly directed, interleaving exploration
 with costing in order to prune parts of the tree that cannot yield a better
 plan. This contrasts with Volcano, which first generates all possible plans in
 one global phase (exploration), and then determines the lowest cost plan in
 another global phase (costing).
 
-2. The optimizer uses a simple hill climbing heuristic to make greedy progress
+- The optimizer uses a simple hill climbing heuristic to make greedy progress
 towards the best plan. During a given pass, the optimizer visits each group and
 performs costing and exploration for that group. As long as doing that yields a
 lower cost expression for the group, the optimizer will repeat those steps.

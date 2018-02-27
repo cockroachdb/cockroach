@@ -1071,20 +1071,20 @@ func (e *MatchAnyExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 
-type MatchListExpr struct {
+type MatchListAnyExpr struct {
 	MatchItem Expr
 	Src       *SourceLoc
 }
 
-func (e *MatchListExpr) Op() Operator {
-	return MatchListOp
+func (e *MatchListAnyExpr) Op() Operator {
+	return MatchListAnyOp
 }
 
-func (e *MatchListExpr) ChildCount() int {
+func (e *MatchListAnyExpr) ChildCount() int {
 	return 1
 }
 
-func (e *MatchListExpr) Child(nth int) Expr {
+func (e *MatchListAnyExpr) Child(nth int) Expr {
 	switch nth {
 	case 0:
 		return e.MatchItem
@@ -1092,7 +1092,7 @@ func (e *MatchListExpr) Child(nth int) Expr {
 	panic(fmt.Sprintf("child index %d is out of range", nth))
 }
 
-func (e *MatchListExpr) ChildName(nth int) string {
+func (e *MatchListAnyExpr) ChildName(nth int) string {
 	switch nth {
 	case 0:
 		return "MatchItem"
@@ -1100,29 +1100,235 @@ func (e *MatchListExpr) ChildName(nth int) string {
 	return ""
 }
 
-func (e *MatchListExpr) Value() interface{} {
+func (e *MatchListAnyExpr) Value() interface{} {
 	return nil
 }
 
-func (e *MatchListExpr) Visit(accept AcceptFunc) Expr {
+func (e *MatchListAnyExpr) Visit(accept AcceptFunc) Expr {
 	children := visitExprChildren(e, accept)
 	if children != nil {
-		return accept(&MatchListExpr{MatchItem: children[0], Src: e.Source()})
+		return accept(&MatchListAnyExpr{MatchItem: children[0], Src: e.Source()})
 	}
 	return accept(e)
 }
 
-func (e *MatchListExpr) Source() *SourceLoc {
+func (e *MatchListAnyExpr) Source() *SourceLoc {
 	return e.Src
 }
 
-func (e *MatchListExpr) String() string {
+func (e *MatchListAnyExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
 	return buf.String()
 }
 
-func (e *MatchListExpr) Format(buf *bytes.Buffer, level int) {
+func (e *MatchListAnyExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type MatchListFirstExpr struct {
+	MatchItem Expr
+	Src       *SourceLoc
+}
+
+func (e *MatchListFirstExpr) Op() Operator {
+	return MatchListFirstOp
+}
+
+func (e *MatchListFirstExpr) ChildCount() int {
+	return 1
+}
+
+func (e *MatchListFirstExpr) Child(nth int) Expr {
+	switch nth {
+	case 0:
+		return e.MatchItem
+	}
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MatchListFirstExpr) ChildName(nth int) string {
+	switch nth {
+	case 0:
+		return "MatchItem"
+	}
+	return ""
+}
+
+func (e *MatchListFirstExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MatchListFirstExpr) Visit(accept AcceptFunc) Expr {
+	children := visitExprChildren(e, accept)
+	if children != nil {
+		return accept(&MatchListFirstExpr{MatchItem: children[0], Src: e.Source()})
+	}
+	return accept(e)
+}
+
+func (e *MatchListFirstExpr) Source() *SourceLoc {
+	return e.Src
+}
+
+func (e *MatchListFirstExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MatchListFirstExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type MatchListLastExpr struct {
+	MatchItem Expr
+	Src       *SourceLoc
+}
+
+func (e *MatchListLastExpr) Op() Operator {
+	return MatchListLastOp
+}
+
+func (e *MatchListLastExpr) ChildCount() int {
+	return 1
+}
+
+func (e *MatchListLastExpr) Child(nth int) Expr {
+	switch nth {
+	case 0:
+		return e.MatchItem
+	}
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MatchListLastExpr) ChildName(nth int) string {
+	switch nth {
+	case 0:
+		return "MatchItem"
+	}
+	return ""
+}
+
+func (e *MatchListLastExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MatchListLastExpr) Visit(accept AcceptFunc) Expr {
+	children := visitExprChildren(e, accept)
+	if children != nil {
+		return accept(&MatchListLastExpr{MatchItem: children[0], Src: e.Source()})
+	}
+	return accept(e)
+}
+
+func (e *MatchListLastExpr) Source() *SourceLoc {
+	return e.Src
+}
+
+func (e *MatchListLastExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MatchListLastExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type MatchListSingleExpr struct {
+	MatchItem Expr
+	Src       *SourceLoc
+}
+
+func (e *MatchListSingleExpr) Op() Operator {
+	return MatchListSingleOp
+}
+
+func (e *MatchListSingleExpr) ChildCount() int {
+	return 1
+}
+
+func (e *MatchListSingleExpr) Child(nth int) Expr {
+	switch nth {
+	case 0:
+		return e.MatchItem
+	}
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MatchListSingleExpr) ChildName(nth int) string {
+	switch nth {
+	case 0:
+		return "MatchItem"
+	}
+	return ""
+}
+
+func (e *MatchListSingleExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MatchListSingleExpr) Visit(accept AcceptFunc) Expr {
+	children := visitExprChildren(e, accept)
+	if children != nil {
+		return accept(&MatchListSingleExpr{MatchItem: children[0], Src: e.Source()})
+	}
+	return accept(e)
+}
+
+func (e *MatchListSingleExpr) Source() *SourceLoc {
+	return e.Src
+}
+
+func (e *MatchListSingleExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MatchListSingleExpr) Format(buf *bytes.Buffer, level int) {
+	formatExpr(e, buf, level)
+}
+
+type MatchListEmptyExpr struct {
+}
+
+func (e *MatchListEmptyExpr) Op() Operator {
+	return MatchListEmptyOp
+}
+
+func (e *MatchListEmptyExpr) ChildCount() int {
+	return 0
+}
+
+func (e *MatchListEmptyExpr) Child(nth int) Expr {
+	panic(fmt.Sprintf("child index %d is out of range", nth))
+}
+
+func (e *MatchListEmptyExpr) ChildName(nth int) string {
+	return ""
+}
+
+func (e *MatchListEmptyExpr) Value() interface{} {
+	return nil
+}
+
+func (e *MatchListEmptyExpr) Visit(accept AcceptFunc) Expr {
+	return accept(e)
+}
+
+func (e *MatchListEmptyExpr) Source() *SourceLoc {
+	return nil
+}
+
+func (e *MatchListEmptyExpr) String() string {
+	var buf bytes.Buffer
+	e.Format(&buf, 0)
+	return buf.String()
+}
+
+func (e *MatchListEmptyExpr) Format(buf *bytes.Buffer, level int) {
 	formatExpr(e, buf, level)
 }
 

@@ -98,23 +98,6 @@ func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
 
 // ----------------------------------------------------------------------
 //
-// List functions
-//   Functions that manipulate lists.
-//
-// ----------------------------------------------------------------------
-
-// isSingletonList returns true if the list has exactly one element.
-func (f *factory) isSingletonList(list opt.ListID) bool {
-	return list.Length == 1
-}
-
-// firstListItem returns the first element from a list.
-func (f *factory) firstListItem(list opt.ListID) opt.GroupID {
-	return f.mem.lookupList(list)[0]
-}
-
-// ----------------------------------------------------------------------
-//
 // Project functions
 //   Custom match and replace functions used with project.opt rules.
 //
