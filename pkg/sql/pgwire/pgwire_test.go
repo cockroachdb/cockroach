@@ -897,7 +897,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("1").Results(true),
 			baseTest.SetArgs("2").Results(false),
 		},
-		"SELECT * FROM pg_catalog.pg_class WHERE relnamespace = $1": {
+		"SELECT * FROM d.pg_catalog.pg_class WHERE relnamespace = $1": {
 			baseTest.SetArgs(1),
 		},
 		"SELECT $1::UUID": {

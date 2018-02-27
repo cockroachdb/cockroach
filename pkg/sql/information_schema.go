@@ -55,7 +55,8 @@ var informationSchema = virtualSchema{
 		informationSchemaViewsTable,
 		informationSchemaUserPrivileges,
 	},
-	tableValidator: validateInformationSchemaTable,
+	tableValidator:             validateInformationSchemaTable,
+	validWithNoDatabaseContext: true,
 }
 
 var (

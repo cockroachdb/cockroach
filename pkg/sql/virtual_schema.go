@@ -44,6 +44,8 @@ type virtualSchema struct {
 	name           string
 	tables         []virtualSchemaTable
 	tableValidator func(*sqlbase.TableDescriptor) error // optional
+	// Some virtual tables can be used if there is no current database set; others can't.
+	validWithNoDatabaseContext bool
 }
 
 // virtualSchemaTable represents a table within a virtualSchema.
@@ -84,8 +86,9 @@ type virtualSchemaEntry struct {
 }
 
 type virtualTableEntry struct {
-	tableDef virtualSchemaTable
-	desc     *sqlbase.TableDescriptor
+	tableDef                   virtualSchemaTable
+	desc                       *sqlbase.TableDescriptor
+	validWithNoDatabaseContext bool
 }
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
@@ -113,6 +116,10 @@ func (e virtualTableEntry) getPlanInfo(
 				DatabaseLookupFlags{ctx: ctx, txn: p.Txn(), required: true})
 			if err != nil {
 				return nil, err
+			}
+		} else {
+			if !e.validWithNoDatabaseContext {
+				return nil, errNoDatabase
 			}
 		}
 
@@ -173,6 +180,7 @@ func NewVirtualSchemaHolder(
 			tables[tableDesc.Name] = virtualTableEntry{
 				tableDef: table,
 				desc:     &tableDesc,
+				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 			}
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)
 		}
