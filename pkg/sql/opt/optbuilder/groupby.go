@@ -42,7 +42,10 @@ package optbuilder
 import (
 	"fmt"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -298,7 +301,7 @@ func (b *Builder) buildHaving(having tree.Expr, inScope *scope) opt.GroupID {
 //
 // The first return value `groupings` is an ordered list of top-level memo
 // groups corresponding to each GROUP BY expression. See Builder.buildStmt
-// above for a description of the remaining input and return values.
+// for a description of the remaining input and return values.
 func (b *Builder) buildGroupingList(
 	groupBy tree.GroupBy, selects tree.SelectExprs, inScope *scope, outScope *scope,
 ) (groupings []opt.GroupID) {
@@ -324,7 +327,7 @@ func (b *Builder) buildGroupingList(
 // to the expression. The list generally consists of a single memo group except
 // in the case of "*", where the expression is expanded to multiple columns.
 //
-// See Builder.buildStmt above for a description of the remaining input values
+// See Builder.buildStmt for a description of the remaining input values
 // (outScope is passed as a parameter here rather than a return value because
 // the newly bound variables are appended to a growing list to be returned by
 // buildGroupingList).
@@ -399,4 +402,13 @@ func (b *Builder) buildAggregateFunction(
 
 	// Replace the function call with a reference to the column.
 	return b.factory.ConstructVariable(b.factory.InternPrivate(col.index)), col
+}
+
+func isAggregate(def *tree.FunctionDefinition) bool {
+	_, ok := builtins.Aggregates[strings.ToLower(def.Name)]
+	return ok
+}
+
+func groupingError(colName string) error {
+	return errorf("column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function", colName)
 }
