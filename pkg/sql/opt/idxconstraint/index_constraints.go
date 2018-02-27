@@ -93,7 +93,7 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(offset int, prefix string) Log
 // given type. We disallow mixed-type comparisons because it would result in
 // incorrect encodings (#4313).
 func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
-	return typ == types.Null || c.colInfos[offset].Typ.Equivalent(typ)
+	return typ == types.Unknown || c.colInfos[offset].Typ.Equivalent(typ)
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a
