@@ -19,9 +19,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -45,6 +47,9 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
+			ctx := context.Background()
+			semaCtx := tree.MakeSemaContext(false /* privileged */)
+			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			catalog := testutils.NewTestCatalog()
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -67,7 +72,7 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 						steps = OptimizeAll
 					}
 					o := NewOptimizer(catalog, steps)
-					b := optbuilder.New(context.Background(), o.Factory(), stmt)
+					b := optbuilder.New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
