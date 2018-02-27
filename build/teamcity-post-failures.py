@@ -51,7 +51,7 @@ def collect_build_results(build_id):
             o.find("build/buildType").attrib["name"],
             o.attrib["name"],
             int(o.attrib["duration"])/1000.,
-            o.find("details").text)
+            o.findtext("details"))
         yield (test_name, test_log)
 
 
