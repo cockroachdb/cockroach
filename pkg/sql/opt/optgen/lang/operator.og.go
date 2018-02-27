@@ -27,7 +27,11 @@ const (
 	MatchInvokeOp
 	MatchNotOp
 	MatchAnyOp
-	MatchListOp
+	MatchListAnyOp
+	MatchListFirstOp
+	MatchListLastOp
+	MatchListSingleOp
+	MatchListEmptyOp
 	ConstructOp
 	ConstructListOp
 	ListOp

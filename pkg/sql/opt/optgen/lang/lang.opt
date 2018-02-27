@@ -135,8 +135,23 @@ define MatchNot {
 define MatchAny {
 }
 
-define MatchList {
+define MatchListAny {
     MatchItem Expr
+}
+
+define MatchListFirst {
+    MatchItem Expr
+}
+
+define MatchListLast {
+    MatchItem Expr
+}
+
+define MatchListSingle {
+    MatchItem Expr
+}
+
+define MatchListEmpty {
 }
 
 define Construct {
