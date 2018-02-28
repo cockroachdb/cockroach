@@ -1787,17 +1787,24 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	const numAccounts = 1000
 
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	var beforeTs, equalTs string
 	var rowCount int
 
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
-	sqlDB.Exec(t, `BEGIN`)
-	sqlDB.Exec(t, `DELETE FROM data.bank`)
-	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&equalTs)
-	sqlDB.Exec(t, `COMMIT`)
+
+	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
+		_, err := sqlDB.DB.Exec(`DELETE FROM data.bank`)
+		if err != nil {
+			return err
+		}
+		return sqlDB.DB.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&equalTs)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
 	if expected := 0; rowCount != expected {
