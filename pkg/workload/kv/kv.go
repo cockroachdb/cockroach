@@ -123,7 +123,7 @@ func (w *kv) Tables() []workload.Table {
 func (w *kv) Ops() workload.Operations {
 	opFn := func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
 		var buf bytes.Buffer
-		buf.WriteString(`SELECT k, v FROM test.kv WHERE k IN (`)
+		buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
 		for i := 0; i < w.batchSize; i++ {
 			if i > 0 {
 				buf.WriteString(", ")
@@ -137,7 +137,7 @@ func (w *kv) Ops() workload.Operations {
 		}
 
 		buf.Reset()
-		buf.WriteString(`UPSERT INTO test. kv (k, v) VALUES`)
+		buf.WriteString(`UPSERT INTO kv (k, v) VALUES`)
 
 		for i := 0; i < w.batchSize; i++ {
 			j := i * 2

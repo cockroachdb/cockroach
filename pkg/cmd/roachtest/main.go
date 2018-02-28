@@ -65,6 +65,8 @@ func main() {
 		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
 	runCmd.Flags().StringVar(
 		&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
+	runCmd.Flags().BoolVar(
+		&clusterWipe, "wipe", true, "wipe cluster before starting test (for use with --cluster)")
 	runCmd.Flags().StringVar(
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	runCmd.Flags().StringVarP(
