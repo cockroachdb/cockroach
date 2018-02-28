@@ -14,6 +14,52 @@
 
 package execbuilder
 
+// This file is home to the execbuild tests, which are similar to the logic
+// tests.
+//
+// Each testfile contains testcases of the form
+//   <command> [<args>]...
+//   <SQL statement or expression>
+//   ----
+//   <expected results>
+//
+// The supported commands are:
+//
+//  - exec-raw
+//
+//    Runs a SQL statement against the database (not through the execbuilder).
+//
+//  - build
+//
+//    Builds a memo structure from a SQL query and outputs a representation of
+//    the "expression view" of the memo structure. Note: tests for the build
+//    process belong in the optbuilder tests; this is here only to have the
+//    expression view in the testfiles (for documentation).
+//
+//  - exec
+//
+//    Builds a memo structure from a SQL statement, then builds an
+//    execution plan and runs it, outputting the results.
+//
+//  - exec-explain
+//
+//    Builds a memo structure from a SQL statement, then builds an
+//    execution plan and outputs the details of that plan.
+//
+//  - catalog
+//
+//    Prints information about a table, retrieved through the Catalog interface.
+//
+// The supported args are:
+//
+//  - vars=(type1,type2,...)
+//
+//    Information about IndexedVar columns.
+//
+//  - allow-unsupported
+//
+//    Allows building unsupported scalar expressions into UnsupportedExprOp.
+
 import (
 	"bytes"
 	"context"
@@ -64,6 +110,17 @@ func TestBuild(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+				var allowUnsupportedExpr bool
+				for _, arg := range d.CmdArgs {
+					switch arg {
+					case "allow-unsupported":
+						allowUnsupportedExpr = true
+
+					default:
+						d.Fatalf(t, "unknown argument: %s", arg)
+					}
+				}
+
 				switch d.Cmd {
 				case "exec-raw":
 					_, err := sqlDB.Exec(d.Input)
@@ -85,7 +142,7 @@ func TestBuild(t *testing.T) {
 					// Build and optimize the opt expression tree.
 					o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
 					builder := optbuilder.New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
-					builder.AllowUnsupportedExpr = true
+					builder.AllowUnsupportedExpr = allowUnsupportedExpr
 					root, props, err := builder.Build()
 					if err != nil {
 						d.Fatalf(t, "BuildOpt: %v", err)
