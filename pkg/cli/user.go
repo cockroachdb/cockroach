@@ -150,17 +150,13 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := runQueryAndFormatResults(conn, os.Stdout,
-		makeQuery(`CREATE USER IF NOT EXISTS $1`, args[0])); err != nil {
-		return err
-	}
 	if password {
-		// TODO(asubiotto): Implement appropriate server-side authorization rules
-		// for users to be able to change their own passwords.
 		return runQueryAndFormatResults(conn, os.Stdout,
-			makeQuery(`ALTER USER $1 WITH PASSWORD $2`, args[0], pwdString))
+			makeQuery(`CREATE USER IF NOT EXISTS $1 PASSWORD $2`, args[0], pwdString),
+		)
 	}
-	return nil
+	return runQueryAndFormatResults(conn, os.Stdout,
+		makeQuery(`CREATE USER IF NOT EXISTS $1`, args[0]))
 }
 
 var userCmds = []*cobra.Command{
