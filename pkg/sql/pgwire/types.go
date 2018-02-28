@@ -369,7 +369,8 @@ func (b *writeBuffer) writeBinaryDatum(
 		subWriter.putInt32(int32(hasNulls))
 		subWriter.putInt32(int32(v.ParamTyp.Oid()))
 		subWriter.putInt32(int32(v.Len()))
-		subWriter.putInt32(int32(v.Len()))
+		// Lower bound, we only support a lower bound of 1.
+		subWriter.putInt32(1)
 		for _, elem := range v.Array {
 			subWriter.writeBinaryDatum(ctx, elem, sessionLoc)
 		}
