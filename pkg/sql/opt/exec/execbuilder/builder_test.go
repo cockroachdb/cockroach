@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -56,6 +57,9 @@ func TestBuild(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
+			semaCtx := tree.MakeSemaContext(false /* privileged */)
+			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
@@ -80,7 +84,7 @@ func TestBuild(t *testing.T) {
 
 					// Build and optimize the opt expression tree.
 					o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
-					builder := optbuilder.New(ctx, o.Factory(), stmt)
+					builder := optbuilder.New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
 					builder.AllowUnsupportedExpr = true
 					root, props, err := builder.Build()
 					if err != nil {

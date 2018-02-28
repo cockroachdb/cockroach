@@ -54,26 +54,32 @@ type Builder struct {
 
 	factory opt.Factory
 	stmt    tree.Statement
-	semaCtx tree.SemaContext
+
 	ctx     context.Context
+	semaCtx *tree.SemaContext
+	evalCtx *tree.EvalContext
 
 	// Skip index 0 in order to reserve it to indicate the "unknown" column.
 	colMap []columnProps
 }
 
 // New creates a new Builder structure initialized with the given
-// Context, Factory, and parsed SQL statement.
-func New(ctx context.Context, factory opt.Factory, stmt tree.Statement) *Builder {
-	b := &Builder{
+// parsed SQL statement.
+func New(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+	factory opt.Factory,
+	stmt tree.Statement,
+) *Builder {
+	return &Builder{
 		factory: factory,
 		stmt:    stmt,
 		colMap:  make([]columnProps, 1),
 		ctx:     ctx,
+		semaCtx: semaCtx,
+		evalCtx: evalCtx,
 	}
-
-	b.semaCtx.Placeholders = tree.MakePlaceholderInfo()
-
-	return b
 }
 
 // Build is the top-level function to build the memo structure inside
