@@ -920,6 +920,8 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 // See replica.mu.minLeaseProposedTS for the reasons why this isn't allowed.
 func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	sc := storage.TestStoreConfig(nil)
 	var leaseAcquisitionTrap atomic.Value
 	// Disable the split queue so that no ranges are split. This makes it easy
@@ -942,9 +944,17 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send a read, to acquire a lease.
 	getArgs := getArgs([]byte("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), getArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), getArgs); err != nil {
 		t.Fatal(err)
 	}
+
+	preRepl1, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preRestartLease, _ := preRepl1.GetLease()
+
+	mtc.manualClock.Increment(1E9)
 
 	// Restart the mtc. Before we do that, we're installing a callback used to
 	// assert that a new lease has been requested. The callback is installed
@@ -957,11 +967,13 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 			close(leaseAcquisitionCh)
 		})
 	})
+
+	log.Info(ctx, "restarting")
 	mtc.restart()
 
 	// Send another read and check that the pre-existing lease has not been used.
 	// Concretely, we check that a new lease is requested.
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), getArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), getArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Check that the Send above triggered a lease acquisition.
@@ -969,6 +981,26 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	case <-leaseAcquisitionCh:
 	case <-time.After(time.Second):
 		t.Fatalf("read did not acquire a new lease")
+	}
+
+	postRepl1, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postRestartLease, _ := postRepl1.GetLease()
+
+	if preRestartLease.Sequence == postRestartLease.Sequence {
+		// TODO(tschottdorf): figure out whether this is actually a problem. The concern here
+		// is that while a new lease *is* requested, it is an extension lease. This means that
+		// commands proposed before the node restarted can still apply under it. This is not
+		// likely because such a command would likely have popped out of Raft before the lease
+		// anyway (and so all waiting commands would have observed it), but in the midst of
+		// elections, it seems that these could theoretically reorder. Also, if the clock of
+		// the node jumped backwards during a restart, we could end up accidentally shortening
+		// our lease; the earlier proposal could still apply but would not be covered by the
+		// lease any more. Note that we do sleep out the MaxOffset at server start, so this
+		// clock jump would not have any correctness promised to it in the first place.
+		t.Fatalf("lease was not replaced:\nprev: %v\nnow:  %v", preRestartLease, postRestartLease)
 	}
 }
 
