@@ -255,6 +255,15 @@ func (ev ExprView) ChildCount() int {
 	case opt.ExceptOp:
 		return 2
 
+	case opt.UnionAllOp:
+		return 2
+
+	case opt.IntersectAllOp:
+		return 2
+
+	case opt.ExceptAllOp:
+		return 2
+
 	case opt.SortOp:
 		return 1
 
@@ -1132,6 +1141,42 @@ func (ev ExprView) ChildGroup(n int) opt.GroupID {
 			panic("child index out of range")
 		}
 
+	case opt.UnionAllOp:
+		unionAllExpr := (*unionAllExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return unionAllExpr.left()
+		case 1:
+			return unionAllExpr.right()
+		default:
+			panic("child index out of range")
+		}
+
+	case opt.IntersectAllOp:
+		intersectAllExpr := (*intersectAllExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return intersectAllExpr.left()
+		case 1:
+			return intersectAllExpr.right()
+		default:
+			panic("child index out of range")
+		}
+
+	case opt.ExceptAllOp:
+		exceptAllExpr := (*exceptAllExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return exceptAllExpr.left()
+		case 1:
+			return exceptAllExpr.right()
+		default:
+			panic("child index out of range")
+		}
+
 	case opt.SortOp:
 		if n == 0 {
 			return ev.loc.group
@@ -1547,12 +1592,32 @@ var privateLookup = [...]privateLookupFunc{
 
 	// IntersectOp
 	func(ev ExprView) opt.PrivateID {
-		return 0
+		intersectExpr := (*intersectExpr)(ev.mem.lookupExpr(ev.loc))
+		return intersectExpr.colMap()
 	},
 
 	// ExceptOp
 	func(ev ExprView) opt.PrivateID {
-		return 0
+		exceptExpr := (*exceptExpr)(ev.mem.lookupExpr(ev.loc))
+		return exceptExpr.colMap()
+	},
+
+	// UnionAllOp
+	func(ev ExprView) opt.PrivateID {
+		unionAllExpr := (*unionAllExpr)(ev.mem.lookupExpr(ev.loc))
+		return unionAllExpr.colMap()
+	},
+
+	// IntersectAllOp
+	func(ev ExprView) opt.PrivateID {
+		intersectAllExpr := (*intersectAllExpr)(ev.mem.lookupExpr(ev.loc))
+		return intersectAllExpr.colMap()
+	},
+
+	// ExceptAllOp
+	func(ev ExprView) opt.PrivateID {
+		exceptAllExpr := (*exceptAllExpr)(ev.mem.lookupExpr(ev.loc))
+		return exceptAllExpr.colMap()
 	},
 
 	// SortOp
@@ -1642,6 +1707,9 @@ var isScalarLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -1726,6 +1794,9 @@ var isConstValueLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -1810,6 +1881,9 @@ var isBooleanLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -1894,6 +1968,9 @@ var isComparisonLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -1978,6 +2055,9 @@ var isBinaryLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2062,6 +2142,9 @@ var isUnaryLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2146,6 +2229,9 @@ var isRelationalLookup = [...]bool{
 	true,  // UnionOp
 	true,  // IntersectOp
 	true,  // ExceptOp
+	true,  // UnionAllOp
+	true,  // IntersectAllOp
+	true,  // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2230,6 +2316,9 @@ var isJoinLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2314,6 +2403,9 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2398,6 +2490,9 @@ var isEnforcerLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	true,  // SortOp
 }
 
@@ -4360,6 +4455,11 @@ func (m *memoExpr) asGroupBy() *groupByExpr {
 	return (*groupByExpr)(m)
 }
 
+// unionExpr is an operator used to combine the Left and Right input relations into
+// a single set containing rows from both inputs. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Union with the output columns. See the comment above opt.SetOpColMap
+// for more details.
 type unionExpr memoExpr
 
 func makeUnionExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionExpr {
@@ -4389,10 +4489,17 @@ func (m *memoExpr) asUnion() *unionExpr {
 	return (*unionExpr)(m)
 }
 
+// intersectExpr is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that are also present in the Right relation. Duplicate rows are
+// discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Intersect with the output columns. See the comment above
+// opt.SetOpColMap for more details.
 type intersectExpr memoExpr
 
-func makeIntersectExpr(left opt.GroupID, right opt.GroupID) intersectExpr {
-	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right)}}
+func makeIntersectExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectExpr {
+	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
 }
 
 func (e *intersectExpr) left() opt.GroupID {
@@ -4401,6 +4508,10 @@ func (e *intersectExpr) left() opt.GroupID {
 
 func (e *intersectExpr) right() opt.GroupID {
 	return opt.GroupID(e.state[1])
+}
+
+func (e *intersectExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *intersectExpr) fingerprint() fingerprint {
@@ -4414,10 +4525,16 @@ func (m *memoExpr) asIntersect() *intersectExpr {
 	return (*intersectExpr)(m)
 }
 
+// exceptExpr is an operator used to perform a set difference between the Left and
+// Right input relations. The result consists only of rows in the Left relation
+// that are not present in the Right relation. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Except with the output columns. See the comment above opt.SetOpColMap
+// for more details.
 type exceptExpr memoExpr
 
-func makeExceptExpr(left opt.GroupID, right opt.GroupID) exceptExpr {
-	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right)}}
+func makeExceptExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptExpr {
+	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
 }
 
 func (e *exceptExpr) left() opt.GroupID {
@@ -4426,6 +4543,10 @@ func (e *exceptExpr) left() opt.GroupID {
 
 func (e *exceptExpr) right() opt.GroupID {
 	return opt.GroupID(e.state[1])
+}
+
+func (e *exceptExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *exceptExpr) fingerprint() fingerprint {
@@ -4437,4 +4558,143 @@ func (m *memoExpr) asExcept() *exceptExpr {
 		return nil
 	}
 	return (*exceptExpr)(m)
+}
+
+// unionAllExpr is an operator used to combine the Left and Right input relations
+// into a single set containing rows from both inputs. Duplicate rows are
+// not discarded. For example:
+//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       2    ->    1
+//     2       3          1
+//                        2
+//                        2
+//                        3
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the UnionAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type unionAllExpr memoExpr
+
+func makeUnionAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionAllExpr {
+	return unionAllExpr{op: opt.UnionAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *unionAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unionAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *unionAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *unionAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnionAll() *unionAllExpr {
+	if m.op != opt.UnionAllOp {
+		return nil
+	}
+	return (*unionAllExpr)(m)
+}
+
+// intersectAllExpr is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that have a corresponding row in the Right relation. Duplicate rows
+// are not discarded. This effectively creates a one-to-one mapping between the
+// Left and Right rows. For example:
+//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       1    ->    1
+//     1       2          2
+//     2       2          2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the IntersectAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type intersectAllExpr memoExpr
+
+func makeIntersectAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectAllExpr {
+	return intersectAllExpr{op: opt.IntersectAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *intersectAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *intersectAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *intersectAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *intersectAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIntersectAll() *intersectAllExpr {
+	if m.op != opt.IntersectAllOp {
+		return nil
+	}
+	return (*intersectAllExpr)(m)
+}
+
+// exceptAllExpr is an operator used to perform a set difference between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that do not have a corresponding row in the Right relation.
+// Duplicate rows are not discarded. This effectively creates a one-to-one
+// mapping between the Left and Right rows. For example:
+//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1    ->    1
+//     1       1          4
+//     1       2
+//     2       2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the ExceptAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type exceptAllExpr memoExpr
+
+func makeExceptAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptAllExpr {
+	return exceptAllExpr{op: opt.ExceptAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *exceptAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *exceptAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *exceptAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *exceptAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asExceptAll() *exceptAllExpr {
+	if m.op != opt.ExceptAllOp {
+		return nil
+	}
+	return (*exceptAllExpr)(m)
 }
