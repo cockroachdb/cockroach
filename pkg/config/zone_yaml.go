@@ -23,6 +23,34 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
+var _ yaml.Marshaler = LeasePreference{}
+var _ yaml.Unmarshaler = &LeasePreference{}
+
+// MarshalYAML implements yaml.Marshaler.
+func (l LeasePreference) MarshalYAML() (interface{}, error) {
+	short := make([]string, len(l.Constraints))
+	for i, c := range l.Constraints {
+		short[i] = c.String()
+	}
+	return short, nil
+}
+
+// UnmarshalYAML implements yaml.Unmarshaler.
+func (l *LeasePreference) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var shortConstraints []string
+	if err := unmarshal(&shortConstraints); err != nil {
+		return err
+	}
+	constraints := make([]Constraint, len(shortConstraints))
+	for i, short := range shortConstraints {
+		if err := constraints[i].FromString(short); err != nil {
+			return err
+		}
+	}
+	l.Constraints = constraints
+	return nil
+}
+
 var _ yaml.Marshaler = Constraints{}
 var _ yaml.Unmarshaler = &Constraints{}
 
@@ -160,13 +188,14 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 // auto-generated ZoneConfig type, but with []Constraints changed to
 // ConstraintsList for backwards-compatible yaml marshaling and unmarshaling.
 type marshalableZoneConfig struct {
-	RangeMinBytes int64           `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes" yaml:"range_min_bytes"`
-	RangeMaxBytes int64           `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes" yaml:"range_max_bytes"`
-	GC            GCPolicy        `protobuf:"bytes,4,opt,name=gc" json:"gc"`
-	NumReplicas   int32           `protobuf:"varint,5,opt,name=num_replicas,json=numReplicas" json:"num_replicas" yaml:"num_replicas"`
-	Constraints   ConstraintsList `protobuf:"bytes,6,rep,name=constraints" json:"constraints" yaml:"constraints,flow"`
-	Subzones      []Subzone       `protobuf:"bytes,8,rep,name=subzones" json:"subzones" yaml:"-"`
-	SubzoneSpans  []SubzoneSpan   `protobuf:"bytes,7,rep,name=subzone_spans,json=subzoneSpans" json:"subzone_spans" yaml:"-"`
+	RangeMinBytes    int64             `protobuf:"varint,2,opt,name=range_min_bytes,json=rangeMinBytes" json:"range_min_bytes" yaml:"range_min_bytes"`
+	RangeMaxBytes    int64             `protobuf:"varint,3,opt,name=range_max_bytes,json=rangeMaxBytes" json:"range_max_bytes" yaml:"range_max_bytes"`
+	GC               GCPolicy          `protobuf:"bytes,4,opt,name=gc" json:"gc"`
+	NumReplicas      int32             `protobuf:"varint,5,opt,name=num_replicas,json=numReplicas" json:"num_replicas" yaml:"num_replicas"`
+	Constraints      ConstraintsList   `protobuf:"bytes,6,rep,name=constraints" json:"constraints" yaml:"constraints,flow"`
+	LeasePreferences []LeasePreference `protobuf:"bytes,9,rep,name=lease_preferences,json=leasePreferences" json:"lease_preferences" yaml:"lease_preferences,flow"`
+	Subzones         []Subzone         `protobuf:"bytes,8,rep,name=subzones" json:"subzones" yaml:"-"`
+	SubzoneSpans     []SubzoneSpan     `protobuf:"bytes,7,rep,name=subzone_spans,json=subzoneSpans" json:"subzone_spans" yaml:"-"`
 }
 
 func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
@@ -178,6 +207,7 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 		m.NumReplicas = c.NumReplicas
 	}
 	m.Constraints = ConstraintsList(c.Constraints)
+	m.LeasePreferences = c.LeasePreferences
 	m.Subzones = c.Subzones
 	m.SubzoneSpans = c.SubzoneSpans
 	return m
@@ -190,6 +220,7 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 	c.GC = m.GC
 	c.NumReplicas = m.NumReplicas
 	c.Constraints = []Constraints(m.Constraints)
+	c.LeasePreferences = m.LeasePreferences
 	c.Subzones = m.Subzones
 	c.SubzoneSpans = m.SubzoneSpans
 	return c

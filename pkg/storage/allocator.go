@@ -605,7 +605,7 @@ func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptio
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -615,7 +615,7 @@ func (a *Allocator) TransferLeaseTarget(
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
-	sl = sl.filter(constraints)
+	sl = sl.filter(zone.Constraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
 	// the stores containing the existing replicas in place. This excludes stores
@@ -639,6 +639,23 @@ func (a *Allocator) TransferLeaseTarget(
 		}
 	}
 	sl = makeStoreList(filteredDescs)
+
+	// Determine which store(s) is preferred based on user-specified preferences.
+	// If any stores match, only consider those stores as options. If only one
+	// store matches, it's where the lease should be (unless the preferred store
+	// is the current one and checkTransferLeaseSource is false).
+	preferred := a.preferredLeaseholders(zone, existing)
+	if len(preferred) == 1 {
+		if preferred[0].StoreID == leaseStoreID {
+			if checkTransferLeaseSource {
+				return roachpb.ReplicaDescriptor{}
+			}
+		} else {
+			return preferred[0]
+		}
+	} else if len(preferred) > 1 {
+		existing = preferred
+	}
 
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
@@ -700,7 +717,7 @@ func (a *Allocator) TransferLeaseTarget(
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -710,8 +727,19 @@ func (a *Allocator) ShouldTransferLease(
 	if !ok {
 		return false
 	}
+
+	// Determine which store(s) is preferred based on user-specified preferences.
+	// If any stores match, only consider those stores as options. If only one
+	// store matches, it's where the lease should be.
+	preferred := a.preferredLeaseholders(zone, existing)
+	if len(preferred) == 1 {
+		return preferred[0].StoreID != leaseStoreID
+	} else if len(preferred) > 1 {
+		existing = preferred
+	}
+
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
-	sl = sl.filter(constraints)
+	sl = sl.filter(zone.Constraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
@@ -933,6 +961,33 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 		}
 	}
 	return false
+}
+
+func (a Allocator) preferredLeaseholders(
+	zone config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	// Go one preference at a time. As soon as we've found replicas that match a
+	// preference, we don't need to look at the later preferences, because
+	// they're meant to be ordered by priority.
+	for _, preference := range zone.LeasePreferences {
+		var preferred []roachpb.ReplicaDescriptor
+		for _, repl := range existing {
+			// TODO(a-robinson): Do all these lookups at once, up front? We could
+			// easily be passing a slice of StoreDescriptors around all the Allocator
+			// functions instead of ReplicaDescriptors.
+			storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+			if !ok {
+				continue
+			}
+			if subConstraintsCheck(storeDesc, preference.Constraints) {
+				preferred = append(preferred, repl)
+			}
+		}
+		if len(preferred) > 0 {
+			return preferred
+		}
+	}
+	return nil
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.
