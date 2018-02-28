@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1956,6 +1957,16 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			},
 		},
 		{
+			name: "forwarded timestamp with delete range",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // read key to set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				return txn.DelRange(ctx, "a", "b") // del range sets RetryOnPush, but only for SNAPSHOT
+			},
+		},
+		{
 			name: "forwarded timestamp with put in batch commit",
 			afterTxnStart: func(ctx context.Context, db *client.DB) error {
 				_, err := db.Get(ctx, "a") // set ts cache
@@ -1983,6 +1994,32 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				return txn.CommitInBatch(ctx, b)
 			},
 			// No retries, 1pc commit.
+		},
+		{
+			// If there are suitable retry conditions but we've exhausted the limit
+			// for tracking refresh spans, we'll exit with an error before getting
+			// to the end transaction.
+			name: "forwarded timestamp with too many refreshes",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				_, err := db.Get(ctx, "a") // set ts cache
+				return err
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				// Advance timestamp for retry.
+				if err := txn.Put(ctx, "a", "put"); err != nil {
+					return err
+				}
+				// Scan sufficient times to exceed the limit on refresh spans. This
+				// will propagate a failure because our timestamp has been pushed.
+				keybase := strings.Repeat("a", 1024)
+				for i := 0; ; i++ {
+					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
+					if _, err := txn.Scan(ctx, key, key.Next(), 0); err != nil {
+						return err
+					}
+				}
+			},
+			expFailure: "transaction is too large to complete; try splitting into pieces",
 		},
 		{
 			name: "write too old with put",

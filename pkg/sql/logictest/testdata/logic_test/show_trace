@@ -307,14 +307,14 @@ SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
 0  sql txn         r1: sending batch 1 Scan to (n1,s1):1
 0  sql txn         fetched: /kv/primary/1/v -> /2
 0  sql txn         Del /Table/52/2/2/0
-0  sql txn         DelRange /Table/52/1/1 - /Table/52/1/1/#
+0  sql txn         Del /Table/52/1/1/0
 2  consuming rows  output row: [1 2]
 0  sql txn         fetched: /kv/primary/2/v -> /3
 0  sql txn         Del /Table/52/2/3/0
-0  sql txn         DelRange /Table/52/1/2 - /Table/52/1/2/#
+0  sql txn         Del /Table/52/1/2/0
 2  consuming rows  output row: [2 3]
-0  sql txn         querying next range at /Table/52/1/1
-0  sql txn         r1: sending batch 2 Del, 2 DelRng, 1 BeginTxn to (n1,s1):1
+0  sql txn         querying next range at /Table/52/1/1/0
+0  sql txn         r1: sending batch 4 Del, 1 BeginTxn to (n1,s1):1
 
 query ITT
 SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
