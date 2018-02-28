@@ -193,15 +193,15 @@ func (ee *execEngine) ConstructProject(
 	return r, nil
 }
 
-// ConstructInnerJoin is part of the exec.Factory interface.
-func (ee *execEngine) ConstructInnerJoin(
-	left, right exec.Node, onCond tree.TypedExpr,
+// ConstructJoin is part of the exec.Factory interface.
+func (ee *execEngine) ConstructJoin(
+	joinType sqlbase.JoinType, left, right exec.Node, onCond tree.TypedExpr,
 ) (exec.Node, error) {
 	p := ee.planner
 	leftSrc := asDataSource(left)
 	rightSrc := asDataSource(right)
 	pred, _, err := p.makeJoinPredicate(
-		context.TODO(), leftSrc.info, rightSrc.info, sqlbase.InnerJoin, nil, /* cond */
+		context.TODO(), leftSrc.info, rightSrc.info, joinType, nil, /* cond */
 	)
 	if err != nil {
 		return nil, err
