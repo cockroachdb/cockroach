@@ -227,11 +227,87 @@ const (
 	// operator). The arguments of the aggregations are columns from the input.
 	GroupByOp
 
+	// UnionOp is an operator used to combine the Left and Right input relations into
+	// a single set containing rows from both inputs. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Union with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
 	UnionOp
 
+	// IntersectOp is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that are also present in the Right relation. Duplicate rows are
+	// discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Intersect with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
 	IntersectOp
 
+	// ExceptOp is an operator used to perform a set difference between the Left and
+	// Right input relations. The result consists only of rows in the Left relation
+	// that are not present in the Right relation. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Except with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
 	ExceptOp
+
+	// UnionAllOp is an operator used to combine the Left and Right input relations
+	// into a single set containing rows from both inputs. Duplicate rows are
+	// not discarded. For example:
+	//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       2    ->    1
+	//     2       3          1
+	//                        2
+	//                        2
+	//                        3
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the UnionAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	UnionAllOp
+
+	// IntersectAllOp is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that have a corresponding row in the Right relation. Duplicate rows
+	// are not discarded. This effectively creates a one-to-one mapping between the
+	// Left and Right rows. For example:
+	//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       1    ->    1
+	//     1       2          2
+	//     2       2          2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the IntersectAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	IntersectAllOp
+
+	// ExceptAllOp is an operator used to perform a set difference between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that do not have a corresponding row in the Right relation.
+	// Duplicate rows are not discarded. This effectively creates a one-to-one
+	// mapping between the Left and Right rows. For example:
+	//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1    ->    1
+	//     1       1          4
+	//     1       2
+	//     2       2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the ExceptAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ExceptAllOp
 
 	// ------------------------------------------------------------
 	// Enforcer Operators
@@ -248,9 +324,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsort"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 391, 399, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 618}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 391, 399, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 623, 636, 646, 650}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -398,6 +474,9 @@ var RelationalOperators = [...]Operator{
 	UnionOp,
 	IntersectOp,
 	ExceptOp,
+	UnionAllOp,
+	IntersectAllOp,
+	ExceptAllOp,
 }
 
 var JoinOperators = [...]Operator{
