@@ -134,13 +134,13 @@ var (
 		Help: "Count of intent keys"}
 	metaIntentAge = metric.Metadata{
 		Name: "intentage",
-		Help: "Cumulative age of intents"}
+		Help: "Cumulative age of intents in seconds"}
 	metaGcBytesAge = metric.Metadata{
 		Name: "gcbytesage",
-		Help: "Cumulative age of non-live data"}
+		Help: "Cumulative age of non-live data in seconds"}
 	metaLastUpdateNanos = metric.Metadata{
 		Name: "lastupdatenanos",
-		Help: "Time at which ages were last updated"}
+		Help: "Time in nanoseconds since Unix epoch at which bytes/keys/intents metrics were last updated"}
 
 	// Disk usage diagram (CR=Cockroach):
 	//                            ---------------------------------
@@ -197,7 +197,7 @@ var (
 		Help: "Number of times the bloom filter helped avoid iterator creation"}
 	metaRdbMemtableTotalSize = metric.Metadata{
 		Name: "rocksdb.memtable.total-size",
-		Help: "Current size of memtable"}
+		Help: "Current size of memtable in bytes"}
 	metaRdbFlushes = metric.Metadata{
 		Name: "rocksdb.flushes",
 		Help: "Number of table flushes"}
@@ -252,10 +252,10 @@ var (
 		Help: "Count of Raft commands applied"}
 	metaRaftLogCommitLatency = metric.Metadata{
 		Name: "raft.process.logcommit.latency",
-		Help: "Latency histogram for committing Raft log entries"}
+		Help: "Latency histogram in nanoseconds for committing Raft log entries"}
 	metaRaftCommandCommitLatency = metric.Metadata{
 		Name: "raft.process.commandcommit.latency",
-		Help: "Latency histogram for committing Raft commands"}
+		Help: "Latency histogram in nanoseconds for committing Raft commands"}
 
 	// Raft message metrics.
 	metaRaftRcvdProp = metric.Metadata{
@@ -425,7 +425,7 @@ var (
 		Help: "Number of associated distinct transactions"}
 	metaGCTransactionSpanScanned = metric.Metadata{
 		Name: "queue.gc.info.transactionspanscanned",
-		Help: "Number of entries in the transaction span scanned from the engine"}
+		Help: "Number of entries in transaction spans scanned from the engine"}
 	metaGCTransactionSpanGCAborted = metric.Metadata{
 		Name: "queue.gc.info.transactionspangcaborted",
 		Help: "Number of GC'able entries corresponding to aborted txns"}
