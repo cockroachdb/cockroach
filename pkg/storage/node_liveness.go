@@ -76,7 +76,7 @@ var (
 		Help: "Number of times this node has incremented its liveness epoch"}
 	metaHeartbeatLatency = metric.Metadata{
 		Name: "liveness.heartbeatlatency",
-		Help: "Node liveness heartbeat latency"}
+		Help: "Node liveness heartbeat latency in nanoseconds"}
 )
 
 // IsLive returns whether the node is considered live at the given time with the

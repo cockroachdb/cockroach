@@ -102,19 +102,19 @@ var (
 		Help: "Number of SQL SELECT statements"}
 	MetaSQLExecLatency = metric.Metadata{
 		Name: "sql.exec.latency",
-		Help: "Latency of SQL statement execution"}
+		Help: "Latency in nanoseconds of SQL statement execution"}
 	MetaSQLServiceLatency = metric.Metadata{
 		Name: "sql.service.latency",
-		Help: "Latency of SQL request execution"}
+		Help: "Latency in nanoseconds of SQL request execution"}
 	MetaDistSQLSelect = metric.Metadata{
 		Name: "sql.distsql.select.count",
 		Help: "Number of DistSQL SELECT statements"}
 	MetaDistSQLExecLatency = metric.Metadata{
 		Name: "sql.distsql.exec.latency",
-		Help: "Latency of DistSQL statement execution"}
+		Help: "Latency in nanoseconds of DistSQL statement execution"}
 	MetaDistSQLServiceLatency = metric.Metadata{
 		Name: "sql.distsql.service.latency",
-		Help: "Latency of DistSQL request execution"}
+		Help: "Latency in nanoseconds of DistSQL request execution"}
 	MetaUpdate = metric.Metadata{
 		Name: "sql.update.count",
 		Help: "Number of SQL UPDATE statements"}
