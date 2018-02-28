@@ -46,13 +46,13 @@ const avgLatencyMeasurementAge = 20.0
 var (
 	metaClockOffsetMeanNanos = metric.Metadata{
 		Name: "clock-offset.meannanos",
-		Help: "Mean clock offset with other nodes"}
+		Help: "Mean clock offset with other nodes in nanoseconds"}
 	metaClockOffsetStdDevNanos = metric.Metadata{
 		Name: "clock-offset.stddevnanos",
-		Help: "Stdddev clock offset with other nodes"}
+		Help: "Stdddev clock offset with other nodes in nanoseconds"}
 	metaLatencyHistogramNanos = metric.Metadata{
 		Name: "round-trip-latency",
-		Help: "Distribution of round-trip latencies with other nodes"}
+		Help: "Distribution of round-trip latencies with other nodes in nanoseconds"}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote

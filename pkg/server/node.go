@@ -69,7 +69,7 @@ const (
 var (
 	metaExecLatency = metric.Metadata{
 		Name: "exec.latency",
-		Help: "Latency of batch KV requests executed on this node"}
+		Help: "Latency in nanoseconds of batch KV requests executed on this node"}
 	metaExecSuccess = metric.Metadata{
 		Name: "exec.success",
 		Help: "Number of batch KV requests executed successfully on this node"}
