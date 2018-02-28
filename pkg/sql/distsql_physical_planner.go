@@ -1022,7 +1022,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		} else {
 			// Convert the aggregate function to the enum value with the same string
 			// representation.
-			funcStr := strings.ToUpper(fholder.function.String())
+			funcStr := strings.ToUpper(fholder.funcName)
 			funcIdx, ok := distsqlrun.AggregatorSpec_Func_value[funcStr]
 			if !ok {
 				return errors.Errorf("unknown aggregate %s", funcStr)
