@@ -42,10 +42,10 @@ column, then a CockroachDB operator could make a stored computed column
 
 ```sql
 CREATE TABLE users (
-  locality STRING AS CASE
+  locality STRING AS (CASE
     WHEN country IN ('ca', 'mx', 'us') THEN 'north_america'
     WHEN country IN ('au', 'nz') THEN 'australia'
-  END STORED,
+  END) STORED,
   id SERIAL,
   name STRING,
   country STRING,
@@ -68,7 +68,7 @@ the client to manually separate their JSON blobs from their primary keys.
 
 ```sql
 CREATE TABLE documents (
-  id STRING PRIMARY KEY AS payload->>'id' STORED,
+  id STRING PRIMARY KEY AS (payload->>'id') STORED,
   payload JSONB
 )
 ```
@@ -158,12 +158,12 @@ contains the expression used to compute the column otherwise.
   without the index selection complications.
 
 
-| Database               | Virtual                                                         | Stored                                                                   |
-| ---------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| CockroachDB (Proposed) | `inventory_value INT AS qty_available * unit_price VIRTUAL`     | `inventory_value INT AS qty_available * unit_price STORED`               |
-| MySQL                  | `inventory_value INT AS (qty_available * unit_price) [VIRTUAL]` | `inventory_value INT AS (qty_available * unit_price) <STORED|PERSISTED>` |
-| SQL Server             | `inventory_value AS qty_available * unit_price`                 | `inventory_value AS qty_available * unit_price PERSISTED`                |
-| Oracle                 | `inventory_value COMPUTED BY qty_available * unit_price`        | `inventory_value AUTOMATIC INSERT AS qty_available * unit_price`         |
+| Database               | Virtual                                                         | Stored                                                                    |
+| ---------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| CockroachDB (Proposed) | `inventory_value INT AS (qty_available * unit_price) VIRTUAL`   | `inventory_value INT AS (qty_available * unit_price) STORED`              |
+| MySQL                  | `inventory_value INT AS (qty_available * unit_price) [VIRTUAL]` | `inventory_value INT AS (qty_available * unit_price) <STORED\|PERSISTED>` |
+| SQL Server             | `inventory_value AS qty_available * unit_price`                 | `inventory_value AS qty_available * unit_price PERSISTED`                 |
+| Oracle                 | `inventory_value COMPUTED BY qty_available * unit_price`        | `inventory_value AUTOMATIC INSERT AS qty_available * unit_price`          |
 
 # Unresolved Questions
 [Partioning]: https://github.com/cockroachdb/cockroach/blob/aa61db043e9c54c0b83a405cd76ce0ec7cc6a35d/docs/RFCS/20170921_sql_partitioning.md
