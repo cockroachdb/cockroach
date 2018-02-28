@@ -67,6 +67,9 @@ type tableInfo struct {
 	// in the value part.
 	neededValueColsByIdx util.FastIntSet
 
+	// TODO(Comment)
+	neededValueCols int
+
 	// Map used to get the index for columns in cols.
 	colIdxMap map[ColumnID]int
 
@@ -159,11 +162,6 @@ type RowFetcher struct {
 	// This is only false if there are no needed columns and the (single)
 	// table has no interleave children.
 	mustDecodeIndexKey bool
-
-	// The number of needed columns from the value part of the row. Once we've
-	// seen this number of value columns for a particular row, we can stop
-	// decoding values in that row.
-	neededValueCols int
 
 	knownPrefixLength int
 
@@ -312,7 +310,7 @@ func (rf *RowFetcher) Init(
 		// The number of columns we need to read from the value part of the key.
 		// It's the total number of needed columns minus the ones we read from the
 		// index key, except for composite columns.
-		rf.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
+		table.neededValueCols = table.neededCols.Len() - neededIndexCols + len(table.index.CompositeColumnIDs)
 
 		if table.isSecondaryIndex {
 			for i := range table.cols {
@@ -813,7 +811,7 @@ func (rf *RowFetcher) processValueBytes(
 	var lastColID ColumnID
 	var typeOffset, dataOffset int
 	var typ encoding.Type
-	for len(valueBytes) > 0 && rf.valueColsFound < rf.neededValueCols {
+	for len(valueBytes) > 0 && rf.valueColsFound < table.neededValueCols {
 		typeOffset, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
@@ -1127,7 +1125,7 @@ func (rf *RowFetcher) finalizeRow() error {
 	table := rf.rowReadyTable
 	// Fill in any missing values with NULLs
 	for i := range table.cols {
-		if rf.valueColsFound == rf.neededValueCols {
+		if rf.valueColsFound == table.neededValueCols {
 			// Found all cols - done!
 			return nil
 		}
