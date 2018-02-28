@@ -13,6 +13,7 @@
 		GCPolicy
 		Constraint
 		Constraints
+		LeasePreference
 		ZoneConfig
 		Subzone
 		SubzoneSpan

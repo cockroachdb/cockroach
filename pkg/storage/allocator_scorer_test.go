@@ -307,16 +307,16 @@ func TestBetterThan(t *testing.T) {
 	}
 }
 
-func TestPreexistingReplicaCheck(t *testing.T) {
+func TestStoreHasReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	var existing []roachpb.ReplicaDescriptor
 	for i := 2; i < 10; i += 2 {
-		existing = append(existing, roachpb.ReplicaDescriptor{NodeID: roachpb.NodeID(i)})
+		existing = append(existing, roachpb.ReplicaDescriptor{StoreID: roachpb.StoreID(i)})
 	}
 	for i := 1; i < 10; i++ {
-		if e, a := i%2 != 0, preexistingReplicaCheck(roachpb.NodeID(i), existing); e != a {
-			t.Errorf("NodeID %d expected to be %t, got %t", i, e, a)
+		if e, a := i%2 == 0, storeHasReplica(roachpb.StoreID(i), existing); e != a {
+			t.Errorf("StoreID %d expected to be %t, got %t", i, e, a)
 		}
 	}
 }
