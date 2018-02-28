@@ -188,11 +188,13 @@ func TestIndexConstraints(t *testing.T) {
 						fmt.Fprintf(&buf, "%s\n", sp)
 					}
 					remainingFilter := ic.RemainingFilter()
-					remEv := o.Optimize(remainingFilter, &opt.PhysicalProps{})
-					if remEv.Operator() != opt.TrueOp {
-						execBld := execbuilder.New(nil /* execFactory */, remEv)
-						expr := execBld.BuildScalar(&iVarHelper)
-						fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
+					if remainingFilter != 0 {
+						remEv := o.Optimize(remainingFilter, &opt.PhysicalProps{})
+						if remEv.Operator() != opt.TrueOp {
+							execBld := execbuilder.New(nil /* execFactory */, remEv)
+							expr := execBld.BuildScalar(&iVarHelper)
+							fmt.Fprintf(&buf, "Remaining filter: %s\n", expr)
+						}
 					}
 					return buf.String()
 

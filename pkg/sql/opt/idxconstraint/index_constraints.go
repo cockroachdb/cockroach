@@ -1123,14 +1123,15 @@ func (ic *Instance) Spans() (_ LogicalSpans, ok bool) {
 }
 
 // RemainingFilter calculates a simplified filter that needs to be applied
-// within the returned Spans.
+// within the returned Spans. Returns 0 or a group for TrueOp if there is no
+// remaining filter.
 func (ic *Instance) RemainingFilter() opt.GroupID {
 	if !ic.spansPopulated {
 		return ic.filter.Group()
 	}
 	if ic.spansTight || len(ic.spans) == 0 {
 		// The spans are "tight", or we have a contradiction; there is no remaining filter.
-		return ic.factory.ConstructTrue()
+		return 0
 	}
 	return ic.simplifyFilter(ic.filter, ic.spans, ic.getMaxSimplifyPrefix(ic.spans))
 }
