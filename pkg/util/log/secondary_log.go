@@ -30,7 +30,6 @@ import (
 type SecondaryLogger struct {
 	logger          loggingT
 	msgCount        uint64
-	enableGc        bool
 	forceSyncWrites bool
 }
 
@@ -69,13 +68,18 @@ func NewSecondaryLogger(dirName *DirName, fileNamePrefix string, enableGc, force
 			exitFunc:         os.Exit,
 		},
 		forceSyncWrites: forceSyncWrites,
-		enableGc:        enableGc,
 	}
 
 	// Ensure the registry knows about this logger.
 	secondaryLogRegistry.mu.Lock()
 	defer secondaryLogRegistry.mu.Unlock()
 	secondaryLogRegistry.mu.loggers = append(secondaryLogRegistry.mu.loggers, l)
+
+	if enableGc {
+		// Start the log file GC for the secondary logger.
+		go l.logger.gcDaemon()
+	}
+
 	return l
 }
 
