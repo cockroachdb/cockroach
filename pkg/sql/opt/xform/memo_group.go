@@ -15,10 +15,8 @@
 package xform
 
 import (
-	"bytes"
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // exprID is the index of an expression within its group. exprID = 0 is always
@@ -33,9 +31,7 @@ const (
 // memoGroup stores a set of logically equivalent expressions. See the comments
 // on memoExpr for the definition of logical equivalency. In addition, for each
 // required set of physical properties, the group stores the expression that
-// provides those properties at the lowest known cost.
-//
-// TODO(andyk): Need to add the lowest cost expression map.
+// provides those properties at the lowest known cost in the bestExprs slice.
 type memoGroup struct {
 	// Id is the index of this group within the memo.
 	id opt.GroupID
@@ -48,6 +44,12 @@ type memoGroup struct {
 	// the group. The first expression is always the group's normalized
 	// expression.
 	exprs []memoExpr
+
+	// bestExprs remembers the lowest cost expression in the group that provides
+	// a particular set of physical properties. The FastIntMap key is an
+	// opt.PhysicalPropID, and the value is an index into bestExprs.
+	bestExprsMap util.FastIntMap
+	bestExprs    []bestExpr
 }
 
 // lookupExpr looks up an expression in the group by its index.
@@ -55,57 +57,42 @@ func (g *memoGroup) lookupExpr(eid exprID) *memoExpr {
 	return &g.exprs[eid]
 }
 
-func (g *memoGroup) memoGroupString(mem *memo) string {
-	var buf bytes.Buffer
-
-	for i, mexpr := range g.exprs {
-		if i != 0 {
-			buf.WriteByte(' ')
-		}
-
-		// Wrap the memo expr in ExprView to make it easy to get children.
-		ev := ExprView{
-			mem:      mem,
-			loc:      memoLoc{group: g.id, expr: exprID(i)},
-			op:       mexpr.op,
-			required: opt.NormPhysPropsID,
-		}
-
-		fmt.Fprintf(&buf, "[%s", ev.Operator())
-
-		private := ev.Private()
-		if private != nil {
-			switch t := private.(type) {
-			case nil:
-			case opt.TableIndex:
-				fmt.Fprintf(&buf, " %s", mem.metadata.Table(t).TabName())
-			case opt.ColumnIndex:
-				fmt.Fprintf(&buf, " %s", mem.metadata.ColumnLabel(t))
-			case *opt.ColSet, *opt.ColMap:
-				// Don't show anything, because it's mostly redundant.
-			default:
-				fmt.Fprintf(&buf, " %s", private)
-			}
-		}
-
-		if ev.ChildCount() > 0 {
-			fmt.Fprintf(&buf, " [")
-			for i := 0; i < ev.ChildCount(); i++ {
-				child := ev.ChildGroup(i)
-				if i > 0 {
-					buf.WriteString(" ")
-				}
-				if child <= 0 {
-					buf.WriteString("-")
-				} else {
-					fmt.Fprintf(&buf, "%d", child)
-				}
-			}
-			fmt.Fprintf(&buf, "]")
-		}
-
-		buf.WriteString("]")
+// lookupBestExpr looks up the bestExpr that has the lowest cost for the given
+// required properties. If no bestExpr exists yet, lookupBestExpr returns nil.
+// NOTE: The returned bestExpr reference is only valid until the next call to
+//       ensureBestExpr, which may cause a resize of the bestExprs slice.
+func (g *memoGroup) lookupBestExpr(required opt.PhysicalPropsID) *bestExpr {
+	index, ok := g.bestExprsMap.Get(int(required))
+	if !ok {
+		return nil
 	}
+	return &g.bestExprs[index]
+}
 
-	return buf.String()
+// ensureBestExpr looks up the bestExpr that has the lowest cost for the given
+// required properties. If no bestExpr exists yet, then ensureBestExpr creates
+// an empty bestExpr, adds it to bestExprsMap, and returns it.
+// NOTE: The returned bestExpr reference is only valid until the next call to
+//       ensureBestExpr, which may cause a resize of the bestExprs slice.
+func (g *memoGroup) ensureBestExpr(required opt.PhysicalPropsID) *bestExpr {
+	best := g.lookupBestExpr(required)
+	if best == nil {
+		// Add new best expression.
+		index := len(g.bestExprs)
+		g.bestExprs = append(g.bestExprs, bestExpr{})
+		g.bestExprsMap.Set(int(required), index)
+		best = &g.bestExprs[index]
+	}
+	return best
+}
+
+// forEachBestExpr iterates over the bestExpr map and calls the given function
+// for each pair of (required property set, best expression).
+// NOTE: The bestExpr references passed to the function are only valid until
+//       the next call to ensureBestExpr, which may cause a resize of the
+//       bestExprs slice.
+func (g *memoGroup) forEachBestExpr(fn func(required opt.PhysicalPropsID, best *bestExpr)) {
+	g.bestExprsMap.ForEach(func(required, index int) {
+		fn(opt.PhysicalPropsID(required), &g.bestExprs[index])
+	})
 }

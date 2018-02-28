@@ -1,0 +1,244 @@
+exec-ddl
+CREATE TABLE t.a
+(
+    x INT,
+    y FLOAT,
+    z DECIMAL,
+    s STRING NOT NULL,
+    PRIMARY KEY (x, y DESC)
+)
+----
+TABLE a
+ ├── x int not null
+ ├── y float not null
+ ├── z decimal
+ ├── s string not null
+ └── INDEX primary
+      ├── x int not null
+      └── y float not null desc
+
+# --------------------------------------------------
+# Scan operator.
+# --------------------------------------------------
+
+# Order by entire key, in same order as key.
+opt
+SELECT * FROM a ORDER BY x, y DESC
+----
+scan
+ ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ └── ordering: +1,-2
+
+# Order by prefix.
+opt
+SELECT * FROM a ORDER BY x
+----
+scan
+ ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ └── ordering: +1
+
+# Order by suffix (scan shouldn't be able to provide).
+opt
+SELECT * FROM a ORDER BY y DESC
+----
+sort
+ ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── ordering: -2
+ └── scan
+      └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+
+# Order by additional column (scan shouldn't be able to provide for now).
+opt
+SELECT * FROM a ORDER BY x, y DESC, z
+----
+sort
+ ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── ordering: +1,-2,+3
+ └── scan
+      └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+
+# --------------------------------------------------
+# Select operator (pass through).
+# --------------------------------------------------
+
+# Pass through ordering to scan operator that can support it.
+opt
+SELECT * FROM a WHERE x=1 ORDER BY x, y DESC
+----
+select
+ ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── ordering: +1,-2
+ ├── scan
+ │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    └── ordering: +1,-2
+ └── eq [type=bool]
+      ├── variable: a.x [type=int]
+      └── const: 1 [type=int]
+
+# Pass through ordering to scan operator that can't support it.
+opt
+SELECT * FROM a WHERE x=1 ORDER BY z DESC
+----
+select
+ ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── ordering: -3
+ │    └── scan
+ │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ └── eq [type=bool]
+      ├── variable: a.x [type=int]
+      └── const: 1 [type=int]
+
+# --------------------------------------------------
+# Project operator (pass through).
+# --------------------------------------------------
+
+# Pass through ordering to scan operator that can support it.
+opt
+SELECT x, y FROM a ORDER BY x, y DESC
+----
+project
+ ├── columns: x:int:1 y:float:2
+ ├── ordering: +1,-2
+ ├── scan
+ │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    └── ordering: +1,-2
+ └── projections
+      ├── variable: a.x [type=int]
+      └── variable: a.y [type=float]
+
+# Pass through ordering to scan operator that can't support it.
+opt
+SELECT y, x, z+1 FROM a ORDER BY x, y
+----
+project
+ ├── columns: y:float:2 x:int:1 column5:decimal:null:5
+ ├── ordering: +1,+2
+ ├── sort
+ │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── ordering: +1,+2
+ │    └── scan
+ │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ └── projections
+      ├── variable: a.y [type=float]
+      ├── variable: a.x [type=int]
+      └── plus [type=decimal]
+           ├── variable: a.z [type=decimal]
+           └── const: 1 [type=decimal]
+
+# Ordering cannot be passed through because it includes computed column.
+opt
+SELECT x, 1 one, y FROM a ORDER BY x, one
+----
+sort
+ ├── columns: x:int:1 one:int:null:5 y:float:2
+ ├── ordering: +1,+5
+ └── project
+      ├── columns: a.x:int:1 one:int:null:5 a.y:float:2
+      ├── scan
+      │    └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+      └── projections
+           ├── variable: a.x [type=int]
+           ├── const: 1 [type=int]
+           └── variable: a.y [type=float]
+
+# --------------------------------------------------
+# Select + Project operators (pass through both).
+# --------------------------------------------------
+
+# Pass through ordering to scan operator that can support it.
+opt
+SELECT y, x FROM a WHERE x=1 ORDER BY x, y DESC
+----
+project
+ ├── columns: y:float:2 x:int:1
+ ├── ordering: +1,-2
+ ├── select
+ │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── ordering: +1,-2
+ │    ├── scan
+ │    │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    │    └── ordering: +1,-2
+ │    └── eq [type=bool]
+ │         ├── variable: a.x [type=int]
+ │         └── const: 1 [type=int]
+ └── projections
+      ├── variable: a.y [type=float]
+      └── variable: a.x [type=int]
+
+memo
+SELECT y, x FROM a WHERE x=1 ORDER BY x, y DESC
+----
+[8: "p:y:2,x:1 o:+1,-2"]
+memo
+ ├── 8: (project 5 7)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (project 5 7)
+ │    └── "p:y:2,x:1 o:+1,-2" [cost=0.0]
+ │         └── best: (project 5 7)
+ ├── 7: (projections 6 2)
+ ├── 6: (variable a.y)
+ ├── 5: (select 1 4)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (select 1 4)
+ │    └── "o:+1,-2" [cost=0.0]
+ │         └── best: (select 1 4)
+ ├── 4: (eq 2 3)
+ ├── 3: (const 1)
+ ├── 2: (variable a.x)
+ └── 1: (scan a)
+      ├── "" [cost=0.0]
+      │    └── best: (scan a)
+      └── "o:+1,-2" [cost=0.0]
+           └── best: (scan a)
+
+# Pass through ordering to scan operator that can't support it.
+opt
+SELECT y, z FROM a WHERE x=1 ORDER BY y
+----
+project
+ ├── columns: y:float:2 z:decimal:null:3
+ ├── ordering: +2
+ ├── select
+ │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── ordering: +2
+ │    ├── sort
+ │    │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    │    ├── ordering: +2
+ │    │    └── scan
+ │    │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    └── eq [type=bool]
+ │         ├── variable: a.x [type=int]
+ │         └── const: 1 [type=int]
+ └── projections
+      ├── variable: a.y [type=float]
+      └── variable: a.z [type=decimal]
+
+memo
+SELECT y, z FROM a WHERE x=1 ORDER BY y
+----
+[9: "p:y:2,z:3 o:+2"]
+memo
+ ├── 9: (project 5 8)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (project 5 8)
+ │    └── "p:y:2,z:3 o:+2" [cost=0.0]
+ │         └── best: (project 5 8)
+ ├── 8: (projections 6 7)
+ ├── 7: (variable a.z)
+ ├── 6: (variable a.y)
+ ├── 5: (select 1 4)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (select 1 4)
+ │    └── "o:+2" [cost=0.0]
+ │         └── best: (select 1 4)
+ ├── 4: (eq 2 3)
+ ├── 3: (const 1)
+ ├── 2: (variable a.x)
+ └── 1: (scan a)
+      ├── "" [cost=0.0]
+      │    └── best: (scan a)
+      └── "o:+2" [cost=0.0]
+           └── best: (sort 1)
