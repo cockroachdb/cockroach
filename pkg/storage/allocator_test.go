@@ -1154,7 +1154,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				nil, /* constraints */
+				config.ZoneConfig{},
 				c.existing,
 				c.leaseholder,
 				0,
@@ -1428,7 +1428,7 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				nil, /* constraints */
+				config.ZoneConfig{},
 				existing,
 				c.leaseholder,
 				0,
@@ -1491,7 +1491,7 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			result := a.ShouldTransferLease(
 				context.Background(),
-				nil, /* constraints */
+				config.ZoneConfig{},
 				c.existing,
 				c.leaseholder,
 				0,
@@ -3331,7 +3331,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 			})
 			target := a.TransferLeaseTarget(
 				context.Background(),
-				nil, /* constraints */
+				config.ZoneConfig{},
 				existing,
 				c.leaseholder,
 				0,

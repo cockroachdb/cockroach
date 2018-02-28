@@ -311,6 +311,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: []
+lease_preferences: []
 `,
 		},
 		{
@@ -331,6 +332,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: [+duck=foo]
+lease_preferences: []
 `,
 		},
 		{
@@ -360,6 +362,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: [foo, +duck=foo, -duck=foo]
+lease_preferences: []
 `,
 		},
 		{
@@ -381,6 +384,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: {+duck=foo: 3}
+lease_preferences: []
 `,
 		},
 		{
@@ -411,6 +415,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: {'foo,+duck=foo,-duck=foo': 3}
+lease_preferences: []
 `,
 		},
 		{
@@ -447,6 +452,7 @@ gc:
   ttlseconds: 1
 num_replicas: 1
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
+lease_preferences: []
 `,
 		},
 	}
