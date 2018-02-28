@@ -936,12 +936,13 @@ func (s *statusServer) Ranges(
 		}
 
 		state := serverpb.RaftState{
-			ReplicaID: raftStatus.ID,
-			HardState: raftStatus.HardState,
-			Applied:   raftStatus.Applied,
-			Lead:      raftStatus.Lead,
-			State:     raftStatus.RaftState.String(),
-			Progress:  make(map[uint64]serverpb.RaftState_Progress),
+			ReplicaID:      raftStatus.ID,
+			HardState:      raftStatus.HardState,
+			Applied:        raftStatus.Applied,
+			Lead:           raftStatus.Lead,
+			State:          raftStatus.RaftState.String(),
+			Progress:       make(map[uint64]serverpb.RaftState_Progress),
+			LeadTransferee: raftStatus.LeadTransferee,
 		}
 
 		for id, progress := range raftStatus.Progress {
