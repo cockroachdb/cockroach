@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cinttypes>
 #include <google/protobuf/stubs/stringprintf.h>
 
 namespace fmt = google::protobuf;
