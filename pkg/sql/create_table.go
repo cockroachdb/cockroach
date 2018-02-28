@@ -873,7 +873,12 @@ func makeTableDescIfAs(
 func validateComputedColumnHasNoImpureFunctions(e tree.TypedExpr, colName tree.Name) error {
 	if fns := tree.ImpureFunctions(e); len(fns) != 0 {
 		var errMsg bytes.Buffer
-		errMsg.WriteString(fmt.Sprintf("computed column %s contains impure functions: ", colName))
+		errMsg.WriteString(
+			fmt.Sprintf(
+				"computed column %q contains impure functions: ",
+				colName,
+			),
+		)
 		for i, fn := range fns {
 			if i != 0 {
 				errMsg.WriteString(", ")
