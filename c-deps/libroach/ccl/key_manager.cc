@@ -54,7 +54,7 @@ rocksdb::Status KeyFromFile(rocksdb::Env* env, const std::string& path,
     break;
   default:
     return rocksdb::Status::InvalidArgument(
-        fmt::StringPrintf("file %s is %llu bytes long, it must be <key ID length (%llu)> + <key "
+        fmt::StringPrintf("file %s is %zu bytes long, it must be <key ID length (%zu)> + <key "
                           "size (16, 24, or 32)> long",
                           path.c_str(), contents.size(), kKeyIDLength));
   }
