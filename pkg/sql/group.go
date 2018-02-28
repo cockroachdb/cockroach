@@ -324,7 +324,7 @@ func (p *planner) groupBy(
 	if log.V(2) {
 		strs := make([]string, 0, len(group.funcs))
 		for _, f := range group.funcs {
-			strs = append(strs, fmt.Sprintf("%v", f.function))
+			strs = append(strs, f.funcName)
 		}
 		log.Infof(ctx, "Group: %s", strings.Join(strs, ", "))
 	}
@@ -577,7 +577,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 		// This expression is in the GROUP BY; it is already being rendered by the
 		// renderNode. Set up an "ident" aggregation.
 		f := v.groupNode.newAggregateFuncHolder(
-			nil, /* function  */
+			"", /* funcName */
 			v.preRender.render[groupIdx].ResolvedType(),
 			groupIdx,
 			builtins.NewIdentAggregate,
@@ -595,7 +595,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			case 0:
 				// COUNT_ROWS has no arguments.
 				f = v.groupNode.newAggregateFuncHolder(
-					&t.Func,
+					t.Func.String(),
 					t.ResolvedType(),
 					noRenderIdx,
 					agg,
@@ -623,7 +623,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 				argRenderIdx := v.preRender.addOrReuseRender(col, argExpr, true /* reuse */)
 
 				f = v.groupNode.newAggregateFuncHolder(
-					&t.Func,
+					t.Func.String(),
 					t.ResolvedType(),
 					argRenderIdx,
 					agg,
@@ -690,9 +690,9 @@ func (v extractAggregatesVisitor) extract(typedExpr tree.TypedExpr) (tree.TypedE
 }
 
 type aggregateFuncHolder struct {
-	// Reference to the aggregate function. Nil if this column reproduces a bucket
+	// Name of the aggregate function. Empty if this column reproduces a bucket
 	// key unchanged.
-	function tree.FunctionReference
+	funcName string
 
 	resultType types.T
 
@@ -729,14 +729,14 @@ const noRenderIdx = -1
 // If the aggregation function takes no arguments (e.g. COUNT_ROWS),
 // argRenderIdx is noRenderIdx.
 func (n *groupNode) newAggregateFuncHolder(
-	function tree.FunctionReference,
+	funcName string,
 	resultType types.T,
 	argRenderIdx int,
 	create func(*tree.EvalContext) tree.AggregateFunc,
 	acc mon.BoundAccount,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
-		function:        function,
+		funcName:        funcName,
 		resultType:      resultType,
 		argRenderIdx:    argRenderIdx,
 		filterRenderIdx: noRenderIdx,
@@ -750,7 +750,7 @@ func (n *groupNode) newAggregateFuncHolder(
 }
 
 func (a *aggregateFuncHolder) isIdentAggregate() bool {
-	return a.function == nil
+	return a.funcName == ""
 }
 
 func (a *aggregateFuncHolder) setFilter(filterRenderIdx int) {
