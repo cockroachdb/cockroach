@@ -1,12 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! which benchstat > /dev/null; then
+  cat 1>&2 <<EOF
+Requires github.com/cockroachdb/benchstat
+Run:
+  go get github.com/cockroachdb/benchstat
+EOF
+  exit 1
+fi
+
 cd "$(dirname $0)/.."
 if [ $# -ne 2 ]; then
   cat 1>&2 <<EOF
 Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch newbranch
-
-Requires golang.org/x/perf/cmd/benchstat.
 EOF
   exit 1
 fi
