@@ -12,7 +12,6 @@ import { Link } from "react-router";
 
 import { NodeStatus$Properties } from "src/util/proto";
 import { sumNodeStats } from "src/redux/nodes";
-import { cockroach } from "src/js/protos";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
@@ -22,12 +21,14 @@ import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capacityArc";
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { LongToMoment } from "src/util/convert";
-
+import { cockroach } from "src/js/protos";
 import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
+import Liveness$Properties = cockroach.storage.Liveness$Properties;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
-  liveness: { [id: string]: NodeLivenessStatus };
+  livenessStatus: { [id: string]: NodeLivenessStatus };
+  liveness: Liveness$Properties;
 }
 
 const SCALE_FACTOR = 0.6;
@@ -46,14 +47,19 @@ export class NodeView extends React.Component<NodeViewProps> {
   }
 
   getUptimeText() {
-    const { node, liveness } = this.props;
+    const { node, livenessStatus, liveness } = this.props;
 
-    const thisLiveness = liveness[node.desc.node_id];
+    const thisLiveness = livenessStatus[node.desc.node_id];
 
     switch (thisLiveness) {
       case NodeLivenessStatus.DEAD: {
-        // TODO(vilterp): pipe in how long it's been dead for
-        return "dead";
+        if (!liveness) {
+          return "no information";
+        }
+
+        const deadTime = liveness.expiration.wall_time;
+        const deadMoment = LongToMoment(deadTime);
+        return `dead for ${moment.duration(deadMoment.diff(moment())).humanize()}`;
       }
       case NodeLivenessStatus.LIVE: {
         const startTime = LongToMoment(node.started_at);
@@ -73,8 +79,8 @@ export class NodeView extends React.Component<NodeViewProps> {
   }
 
   render() {
-    const { node, liveness } = this.props;
-    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], liveness);
+    const { node, livenessStatus } = this.props;
+    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], livenessStatus);
 
     return (
       <Link
