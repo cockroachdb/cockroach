@@ -22,7 +22,7 @@ import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capa
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { LongToMoment } from "src/util/convert";
 
-type NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
+import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
@@ -44,18 +44,43 @@ export class NodeView extends React.Component<NodeViewProps> {
     return liveIcon;
   }
 
+  getUptimeText() {
+    // TODO: dedup
+    const { node, liveness } = this.props;
+
+    const thisLiveness = liveness[node.desc.node_id];
+
+    switch (thisLiveness) {
+      case NodeLivenessStatus.DEAD: {
+        // TODO(vilterp): pipe in how long it's been dead for
+        return "dead";
+      }
+      case NodeLivenessStatus.LIVE: {
+        const startTime = LongToMoment(node.started_at);
+        return "up for " + moment.duration(startTime.diff(moment())).humanize();
+      }
+      case NodeLivenessStatus.DECOMMISSIONED:
+        return "decommissioned";
+      case NodeLivenessStatus.DECOMMISSIONING:
+        return "decommissioning";
+      case NodeLivenessStatus.UNKNOWN:
+        return "unknown";
+      case NodeLivenessStatus.UNAVAILABLE:
+        return "unavailable";
+      default:
+        return ""; // idk man
+    }
+  }
+
   render() {
     const { node, liveness } = this.props;
     const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], liveness);
-
-    const startTime = LongToMoment(node.started_at);
-    const uptimeText = "up for " + moment.duration(startTime.diff(moment())).humanize();
 
     return (
       <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
         <Labels
           label={`Node ${node.desc.node_id}`}
-          subLabel={uptimeText}
+          subLabel={this.getUptimeText()}
           tooltip={node.desc.address.address_field}
         />
         <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
