@@ -320,7 +320,8 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	defer eng.Close()
 
 	o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
-	root, props, err := optbuilder.New(ctx, o.Factory(), stmt.AST).Build()
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), o.Factory(), stmt.AST)
+	root, props, err := bld.Build()
 	if err != nil {
 		return err
 	}

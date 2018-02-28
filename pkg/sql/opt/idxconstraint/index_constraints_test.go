@@ -85,6 +85,9 @@ func TestIndexConstraints(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
+			semaCtx := tree.MakeSemaContext(false /* privileged */)
+			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
 			catalog := testutils.NewTestCatalog()
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -94,9 +97,6 @@ func TestIndexConstraints(t *testing.T) {
 				var invertedIndex bool
 				var normalizeTypedExpr bool
 				normalize := true
-
-				st := cluster.MakeTestingClusterSettings()
-				evalCtx := tree.MakeTestingEvalContext(st)
 
 				for _, arg := range d.CmdArgs {
 					key := arg
@@ -168,7 +168,7 @@ func TestIndexConstraints(t *testing.T) {
 						steps = xform.OptimizeNone
 					}
 					o := xform.NewOptimizer(catalog, steps)
-					b := optbuilder.NewScalar(ctx, o.Factory(), varNames, varTypes)
+					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
 					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
 					if err != nil {

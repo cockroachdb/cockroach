@@ -77,7 +77,7 @@ func (s *scope) appendColumns(src *scope) {
 func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 	expr, _ = tree.WalkExpr(s, expr)
 	s.builder.semaCtx.IVarContainer = s
-	texpr, err := tree.TypeCheck(expr, &s.builder.semaCtx, desired)
+	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
 	if err != nil {
 		panic(builderError{err})
 	}

@@ -58,6 +58,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -88,6 +89,8 @@ func TestBuilder(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
+			semaCtx := tree.MakeSemaContext(false /* privileged */)
+			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			catalog := testutils.NewTestCatalog()
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -131,7 +134,7 @@ func TestBuilder(t *testing.T) {
 					}
 
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := New(ctx, o.Factory(), stmt)
+					b := New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					root, props, err := b.Build()
 					if err != nil {
@@ -151,7 +154,7 @@ func TestBuilder(t *testing.T) {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
 					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := NewScalar(ctx, o.Factory(), varNames, varTypes)
+					b := NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					group, err := b.Build(typedExpr)
 					if err != nil {
