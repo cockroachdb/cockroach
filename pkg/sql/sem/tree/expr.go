@@ -1259,7 +1259,7 @@ func NewTypedCastExpr(expr TypedExpr, typ types.T) (*CastExpr, error) {
 	if err != nil {
 		return nil, err
 	}
-	node := &CastExpr{Expr: expr, Type: colType}
+	node := &CastExpr{Expr: expr, Type: colType, SyntaxMode: CastShort}
 	node.typ = typ
 	return node, nil
 }
