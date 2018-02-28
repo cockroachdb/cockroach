@@ -49,6 +49,7 @@ var (
 	workload    string
 	clusterName string
 	clusterID   string
+	clusterWipe bool
 	username    = os.Getenv("ROACHPROD_USER")
 )
 
@@ -324,9 +325,12 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 		// NB: if the existing cluster is not as large as the desired cluster, the
 		// test will fail when trying to perform various operations such as putting
 		// binaries or starting the cockroach nodes.
-		c.status("wiping cluster")
-		if err := execCmd(ctx, c.l, "roachprod", "wipe", c.name); err != nil {
-			c.l.errorf("%s", err)
+		c.status("stopping cluster")
+		c.Stop(ctx, c.All())
+		if clusterWipe {
+			c.Wipe(ctx, c.All())
+		} else {
+			l.printf("skipping cluster wipe\n")
 		}
 	}
 	c.status("running test")
@@ -382,11 +386,13 @@ func (c *cluster) destroy(ctx context.Context) {
 		if err := execCmd(ctx, c.l, "roachprod", "destroy", c.name); err != nil {
 			c.l.errorf("%s", err)
 		}
-	} else {
+	} else if clusterWipe {
 		c.status("wiping cluster")
 		if err := execCmd(ctx, c.l, "roachprod", "wipe", c.name); err != nil {
 			c.l.errorf("%s", err)
 		}
+	} else {
+		c.l.printf("skipping cluster wipe\n")
 	}
 }
 
@@ -483,11 +489,6 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 		c.t.Fatal(err)
 	}
 }
-
-// TODO(pmattis): cluster.Stop and cluster.Wipe are neither used or
-// tested. Silence unused warning.
-var _ = (*cluster).Stop
-var _ = (*cluster).Wipe
 
 // Run a command on the specified node.
 func (c *cluster) Run(ctx context.Context, node int, args ...string) {

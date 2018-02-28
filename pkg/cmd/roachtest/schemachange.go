@@ -51,7 +51,7 @@ func init() {
 		})
 		m.Wait()
 
-		c.Run(ctx, 1, `./workload init kv  --drop`)
+		c.Run(ctx, 1, `./workload init kv --drop`)
 		for node := 1; node <= nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
