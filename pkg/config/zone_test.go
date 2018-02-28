@@ -189,6 +189,48 @@ func TestZoneConfigValidate(t *testing.T) {
 			},
 			"only required constraints .+ can be applied to a subset of replicas",
 		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{},
+					},
+				},
+			},
+			"every lease preference must include at least one constraint",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_DEPRECATED_POSITIVE}},
+					},
+				},
+			},
+			"lease preference constraints must either be required .+ or prohibited .+",
+		},
+		{
+			ZoneConfig{
+				NumReplicas:   1,
+				RangeMaxBytes: DefaultZoneConfig().RangeMaxBytes,
+				GC:            GCPolicy{TTLSeconds: 1},
+				LeasePreferences: []LeasePreference{
+					{
+						Constraints: []Constraint{{Value: "a", Type: Constraint_REQUIRED}},
+					},
+					{
+						Constraints: []Constraint{{Value: "b", Type: Constraint_PROHIBITED}},
+					},
+				},
+			},
+			"",
+		},
 	}
 
 	for i, c := range testCases {
@@ -300,11 +342,11 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 	}
 
 	testCases := []struct {
-		constraints []Constraints
-		expected    string
+		constraints      []Constraints
+		leasePreferences []LeasePreference
+		expected         string
 	}{
 		{
-			constraints: nil,
 			expected: `range_min_bytes: 1
 range_max_bytes: 1
 gc:
@@ -449,11 +491,89 @@ num_replicas: 1
 constraints: {'+duck=bar1,+duck=bar2': 1, +duck=foo: 2}
 `,
 		},
+		{
+			leasePreferences: []LeasePreference{},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: []
+`,
+		},
+		{
+			leasePreferences: []LeasePreference{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: []
+experimental_lease_preferences: [[+duck=foo]]
+`,
+		},
+		{
+			constraints: []Constraints{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			leasePreferences: []LeasePreference{
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar1",
+						},
+						{
+							Type:  Constraint_REQUIRED,
+							Key:   "duck",
+							Value: "bar2",
+						},
+					},
+				},
+				{
+					Constraints: []Constraint{
+						{
+							Type:  Constraint_PROHIBITED,
+							Key:   "duck",
+							Value: "foo",
+						},
+					},
+				},
+			},
+			expected: `range_min_bytes: 1
+range_max_bytes: 1
+gc:
+  ttlseconds: 1
+num_replicas: 1
+constraints: [+duck=foo]
+experimental_lease_preferences: [[+duck=bar1, +duck=bar2], [-duck=foo]]
+`,
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			original.Constraints = tc.constraints
+			original.LeasePreferences = tc.leasePreferences
 			body, err := yaml.Marshal(original)
 			if err != nil {
 				t.Fatal(err)

@@ -430,7 +430,7 @@ func allocateCandidates(
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
-		if !preexistingReplicaCheck(s.Node.NodeID, existing) {
+		if storeHasReplica(s.StoreID, existing) {
 			continue
 		}
 		constraintsOK, necessary := allocateConstraintsCheck(s, constraints)
@@ -869,7 +869,7 @@ func shouldRebalance(
 					sl.candidateWritesPerSecond.mean)
 				continue
 			}
-			if !preexistingReplicaCheck(desc.Node.NodeID, rangeInfo.Desc.Replicas) {
+			if storeHasReplica(desc.StoreID, rangeInfo.Desc.Replicas) {
 				continue
 			}
 			log.VEventf(ctx, 2,
@@ -924,15 +924,15 @@ func shouldRebalanceNoStats(
 	return false
 }
 
-// preexistingReplicaCheck returns true if no existing replica is present on
-// the candidate's node.
-func preexistingReplicaCheck(nodeID roachpb.NodeID, existing []roachpb.ReplicaDescriptor) bool {
+// storeHasReplica returns true if the provided NodeID contains an entry in
+// the provided list of existing replicas.
+func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicaDescriptor) bool {
 	for _, r := range existing {
-		if r.NodeID == nodeID {
-			return false
+		if r.StoreID == storeID {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func sameLocalityAndAttrs(s1, s2 roachpb.StoreDescriptor) bool {
@@ -1013,7 +1013,7 @@ func analyzeConstraints(
 			// is a much more stable failure state than frantically moving everything
 			// off such a node.
 			store, ok := getStoreDescFn(repl.StoreID)
-			if !ok || subConstraintsCheck(store, subConstraints) {
+			if !ok || subConstraintsCheck(store, subConstraints.Constraints) {
 				result.satisfiedBy[i] = append(result.satisfiedBy[i], store.StoreID)
 				result.satisfies[store.StoreID] = append(result.satisfies[store.StoreID], i)
 			}
@@ -1043,7 +1043,7 @@ func allocateConstraintsCheck(
 	}
 
 	for i, constraints := range analyzed.constraints {
-		if constraintsOK := subConstraintsCheck(store, constraints); constraintsOK {
+		if constraintsOK := subConstraintsCheck(store, constraints.Constraints); constraintsOK {
 			valid = true
 			matchingStores := analyzed.satisfiedBy[i]
 			if len(matchingStores) < int(constraints.NumReplicas) {
@@ -1116,7 +1116,7 @@ func rebalanceFromConstraintsCheck(
 	// of constraints with NumReplicas set to 0. This is meant to be enforced in
 	// the config package.
 	for i, constraints := range analyzed.constraints {
-		if constraintsOK := subConstraintsCheck(store, constraints); constraintsOK {
+		if constraintsOK := subConstraintsCheck(store, constraints.Constraints); constraintsOK {
 			valid = true
 			matchingStores := analyzed.satisfiedBy[i]
 			if len(matchingStores) < int(constraints.NumReplicas) ||
@@ -1152,7 +1152,7 @@ func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constr
 	}
 
 	for _, subConstraints := range constraints {
-		if constraintsOK := subConstraintsCheck(store, subConstraints); constraintsOK {
+		if constraintsOK := subConstraintsCheck(store, subConstraints.Constraints); constraintsOK {
 			return true
 		}
 	}
@@ -1162,8 +1162,8 @@ func constraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constr
 // subConstraintsCheck checks a store against a single set of constraints (out
 // of the possibly numerous sets that apply to a range), returning true iff the
 // store matches the constraints.
-func subConstraintsCheck(store roachpb.StoreDescriptor, constraints config.Constraints) bool {
-	for _, constraint := range constraints.Constraints {
+func subConstraintsCheck(store roachpb.StoreDescriptor, constraints []config.Constraint) bool {
+	for _, constraint := range constraints {
 		hasConstraint := storeHasConstraint(store, constraint)
 		switch {
 		case constraint.Type == config.Constraint_REQUIRED && !hasConstraint:
