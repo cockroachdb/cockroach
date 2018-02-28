@@ -4,7 +4,7 @@ build
 VALUES (1)
 ----
 values
- ├── columns: column1:unknown:null:1
+ ├── columns: column1:int:null:1
  └── tuple [type=tuple{int}]
       └── const: 1 [type=int]
 
@@ -12,7 +12,7 @@ build
 VALUES (1, 2, 3), (4, 5, 6)
 ----
 values
- ├── columns: column1:unknown:null:1 column2:unknown:null:2 column3:unknown:null:3
+ ├── columns: column1:int:null:1 column2:int:null:2 column3:int:null:3
  ├── tuple [type=tuple{int, int, int}]
  │    ├── const: 1 [type=int]
  │    ├── const: 2 [type=int]
@@ -31,7 +31,7 @@ build
 VALUES (1), (1), (2), (3)
 ----
 values
- ├── columns: column1:unknown:null:1
+ ├── columns: column1:int:null:1
  ├── tuple [type=tuple{int}]
  │    └── const: 1 [type=int]
  ├── tuple [type=tuple{int}]
@@ -50,7 +50,7 @@ build
 VALUES ('one', 1, 1.0), ('two', 2, 2.0)
 ----
 values
- ├── columns: column1:unknown:null:1 column2:unknown:null:2 column3:unknown:null:3
+ ├── columns: column1:string:null:1 column2:int:null:2 column3:decimal:null:3
  ├── tuple [type=tuple{string, int, decimal}]
  │    ├── const: 'one' [type=string]
  │    ├── const: 1 [type=int]
@@ -64,13 +64,60 @@ build
 VALUES (true), (true), (false)
 ----
 values
- ├── columns: column1:unknown:null:1
+ ├── columns: column1:bool:null:1
  ├── tuple [type=tuple{bool}]
  │    └── true [type=bool]
  ├── tuple [type=tuple{bool}]
  │    └── true [type=bool]
  └── tuple [type=tuple{bool}]
       └── false [type=bool]
+
+build
+VALUES (NULL)
+----
+values
+ ├── columns: column1:unknown:null:1
+ └── tuple [type=tuple{unknown}]
+      └── const: NULL [type=unknown]
+
+build
+VALUES (NULL, 1)
+----
+values
+ ├── columns: column1:unknown:null:1 column2:int:null:2
+ └── tuple [type=tuple{unknown, int}]
+      ├── const: NULL [type=unknown]
+      └── const: 1 [type=int]
+
+build
+VALUES (NULL, 1), (2, NULL)
+----
+values
+ ├── columns: column1:int:null:1 column2:int:null:2
+ ├── tuple [type=tuple{unknown, int}]
+ │    ├── const: NULL [type=unknown]
+ │    └── const: 1 [type=int]
+ └── tuple [type=tuple{int, unknown}]
+      ├── const: 2 [type=int]
+      └── const: NULL [type=unknown]
+
+build
+VALUES (NULL, 1), (2, NULL)
+----
+values
+ ├── columns: column1:int:null:1 column2:int:null:2
+ ├── tuple [type=tuple{unknown, int}]
+ │    ├── const: NULL [type=unknown]
+ │    └── const: 1 [type=int]
+ └── tuple [type=tuple{int, unknown}]
+      ├── const: 2 [type=int]
+      └── const: NULL [type=unknown]
+
+build
+VALUES (NULL, 1), (2, NULL), (NULL, 'a')
+----
+error: VALUES list type mismatch, string for int
+
 
 # TODO(rytaft): uncomment these tests once subqueries are supported
 ## subqueries can be evaluated in VALUES
