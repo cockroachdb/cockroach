@@ -92,15 +92,26 @@ type ExprView struct {
 func makeExprView(mem *memo, group opt.GroupID, required opt.PhysicalPropsID) ExprView {
 	mgrp := mem.lookupGroup(group)
 
-	// TODO(andyk): For now, always use the normalized expression, because the
-	// only property that's currently supported is Presentation, which is only
-	// applied at the root and is provided by every relational operator. In the
-	// future, this code needs to be changed to use lowest cost expression
-	// lookup.
+	if required == opt.NormPhysPropsID {
+		// NormPhysPropsID is the special id used to traverse the expression
+		// tree before it's been fully explored and costed (and bestExprs has
+		// been populated). Create the ExprView over the group's normalized
+		// expression, which is always the first expression in the group.
+		return ExprView{
+			mem:      mem,
+			loc:      memoLoc{group: group, expr: normExprID},
+			op:       mgrp.lookupExpr(normExprID).op,
+			required: required,
+		}
+	}
+
+	// Find the lowest cost expression in the group that provides the required
+	// properties. That becomes the root of the expression tree.
+	best := mgrp.lookupBestExpr(required)
 	return ExprView{
 		mem:      mem,
-		loc:      memoLoc{group: group, expr: normExprID},
-		op:       mgrp.lookupExpr(normExprID).op,
+		loc:      memoLoc{group: group, expr: best.lowest},
+		op:       best.op,
 		required: required,
 	}
 }
@@ -116,7 +127,9 @@ func (ev ExprView) Logical() *LogicalProps {
 }
 
 // Physical returns the physical properties required of this expression, such
-// as the ordering of result rows.
+// as the ordering of result rows. Note that Physical does not return the
+// properties *provided* by this expression, but those *required* of it by its
+// parent expression, or by the ExprView creator.
 func (ev ExprView) Physical() *opt.PhysicalProps {
 	return ev.mem.lookupPhysicalProps(ev.required)
 }
@@ -137,14 +150,15 @@ func (ev ExprView) ChildCount() int {
 func (ev ExprView) Child(nth int) ExprView {
 	group := ev.ChildGroup(nth)
 
-	// TODO(andyk): For now, always use the normalized child expression. In
-	// the future, this code needs to be changed to use lowest cost expression
-	// lookup.
-	//
-	// NormPhysPropsID is the special id used to traverse the expression
-	// tree before it's been fully explored and costed (and bestExprs has
-	// been populated).
-	return makeExprView(ev.mem, group, opt.NormPhysPropsID)
+	if ev.required == opt.NormPhysPropsID {
+		// NormPhysPropsID is the special id used to traverse the expression
+		// tree before it's been fully explored and costed (and bestExprs has
+		// been populated).
+		return makeExprView(ev.mem, group, opt.NormPhysPropsID)
+	}
+
+	required := ev.mem.physPropsFactory.constructChildProps(ev, nth)
+	return makeExprView(ev.mem, group, required)
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent
@@ -259,8 +273,8 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 		// Special handling to improve the columns display for certain ops.
 		switch ev.Operator() {
 		case opt.ProjectOp:
-			// Get the list of columns from the ProjectionsOp, which has the correct
-			// order.
+			// Get the list of columns from the ProjectionsOp, which has the
+			// natural order.
 			colList := *ev.Child(1).Private().(*opt.ColList)
 			logProps.formatColList("columns:", colList, ev.Metadata(), tp)
 
@@ -269,8 +283,8 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 			logProps.formatColList("columns:", colList, ev.Metadata(), tp)
 
 		default:
-			// Fall back to writing output columns in column index order, with best
-			// guess label.
+			// Fall back to writing output columns in column index order, with
+			// best guess label.
 			logProps.formatOutputCols(ev.Metadata(), tp)
 		}
 	}
@@ -280,6 +294,10 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	if ev.Operator() == opt.GroupByOp {
 		groupingColSet := *ev.Private().(*opt.ColSet)
 		logProps.formatColSet("grouping columns:", groupingColSet, ev.Metadata(), tp)
+	}
+
+	if physProps.Ordering.Defined() {
+		tp.Childf("ordering: %s", physProps.Ordering.String())
 	}
 
 	for i := 0; i < ev.ChildCount(); i++ {

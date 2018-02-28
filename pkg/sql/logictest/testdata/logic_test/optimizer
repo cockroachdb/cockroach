@@ -18,8 +18,8 @@ query II
 3  30
 
 # Select
-query error pq: ORDER BY not yet supported: SELECT \* FROM test.public.t ORDER BY t.k
-SELECT * FROM test.t ORDER BY t.k
+query error pq: ORDER BY only supports simple column references at this time
+SELECT * FROM test.t ORDER BY t.k+1
 
 # SelectClause
 query II

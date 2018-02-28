@@ -1,0 +1,76 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE t.b (x INT, y FLOAT)
+----
+TABLE b
+ ├── x int
+ ├── y float
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Scan operator.
+opt
+SELECT a.y, a.x, a.y y2 FROM a
+----
+scan
+ └── columns: y:int:null:2 x:int:1 y2:int:null:2
+
+# Select operator.
+opt
+SELECT a.y, a.x, a.y y2 FROM a WHERE x=1
+----
+select
+ ├── columns: y:int:null:2 x:int:1 y2:int:null:2
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── eq [type=bool]
+      ├── variable: a.x [type=int]
+      └── const: 1 [type=int]
+
+# Project operator.
+opt
+SELECT 1+a.y AS plus, a.x FROM a
+----
+project
+ ├── columns: plus:int:null:3 x:int:1
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── projections
+      ├── plus [type=int]
+      │    ├── const: 1 [type=int]
+      │    └── variable: a.y [type=int]
+      └── variable: a.x [type=int]
+
+# Join operator.
+opt
+SELECT b.x, rowid, a.y, a.x, a.y y2, b.y FROM a, b
+----
+inner-join
+ ├── columns: x:int:null:3 rowid:int:5 y:int:null:2 x:int:1 y2:int:null:2 y:float:null:4
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ ├── scan
+ │    └── columns: b.x:int:null:3 b.y:float:null:4 b.rowid:int:5
+ └── true [type=bool]
+
+# Groupby operator.
+opt
+SELECT MAX(y), y, y, x FROM a GROUP BY a.x, a.y
+----
+group-by
+ ├── columns: column3:int:null:3 y:int:null:2 y:int:null:2 x:int:1
+ ├── grouping columns: a.x:int:1 a.y:int:null:2
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── aggregations
+      └── function: max [type=int]
+           └── variable: a.x [type=int]

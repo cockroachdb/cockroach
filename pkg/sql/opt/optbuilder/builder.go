@@ -128,7 +128,7 @@ func (b *Builder) buildPhysicalProps(scope *scope) *opt.PhysicalProps {
 		col := &scope.cols[i]
 		presentation[i] = opt.LabeledColumn{Label: string(col.name), Index: col.index}
 	}
-	return &opt.PhysicalProps{Presentation: presentation}
+	return &opt.PhysicalProps{Presentation: presentation, Ordering: scope.ordering}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
