@@ -579,7 +579,7 @@ func init() {
 	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
 
-	go logging.flushDaemon()
+	go flushDaemon()
 }
 
 // LoggingToStderr returns true if log messages of the given severity
@@ -1072,14 +1072,26 @@ func (l *loggingT) createFile() error {
 const flushInterval = 30 * time.Second
 
 // flushDaemon periodically flushes the log file buffers.
-func (l *loggingT) flushDaemon() {
+func flushDaemon() {
 	// doesn't need to be Stop()'d as the loop never escapes
 	for range time.Tick(flushInterval) {
-		l.mu.Lock()
-		if !l.disableDaemons {
-			l.flushAll()
+		// Flush the main log.
+		logging.mu.Lock()
+		if !logging.disableDaemons {
+			logging.flushAll()
 		}
-		l.mu.Unlock()
+		logging.mu.Unlock()
+
+		// Flush the secondary logs.
+		secondaryLogRegistry.mu.Lock()
+		for _, l := range secondaryLogRegistry.mu.loggers {
+			l.logger.mu.Lock()
+			if !l.logger.disableDaemons {
+				l.logger.flushAll()
+			}
+			l.logger.mu.Unlock()
+		}
+		secondaryLogRegistry.mu.Unlock()
 	}
 }
 
