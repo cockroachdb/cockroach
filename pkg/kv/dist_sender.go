@@ -1308,6 +1308,11 @@ func (ds *DistSender) sendToReplicas(
 			ds.metrics.SlowRequestsCount.Inc(1)
 			defer ds.metrics.SlowRequestsCount.Dec(1)
 
+		case <-ctx.Done():
+			// Caller has given up.
+			log.Eventf(ctx, "context finished during distsender send: %v", ctx.Err())
+			return nil, ctx.Err()
+
 		case call := <-done:
 			if err := call.Err; err != nil {
 				// For most connection errors, we cannot tell whether or not
