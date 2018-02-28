@@ -22,21 +22,24 @@ import {
   selectLivenessRequestStatus,
   livenessStatusByNodeIDSelector,
   LivenessStatus,
+  livenessByNodeIDSelector,
 } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
-
 import { NodeCanvas } from "./nodeCanvas";
-
 import spinner from "assets/spinner.gif";
+
+import { cockroach } from "src/js/protos";
+import Liveness = cockroach.storage.Liveness;
 
 interface NodeCanvasContainerProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  liveness: { [id: string]: LivenessStatus };
+  livenessStatus: { [id: string]: LivenessStatus };
+  liveness: { [id: string]: Liveness };
   dataExists: boolean;
   dataIsValid: boolean;
   refreshNodes: typeof refreshNodes;
@@ -76,8 +79,9 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
         <NodeCanvas
           localityTree={currentLocality}
           locationTree={this.props.locationTree}
-          liveness={this.props.liveness}
           tiers={this.props.tiers}
+          livenessStatus={this.props.livenessStatus}
+          liveness={this.props.liveness}
         />
       </Loading>
     );
@@ -103,7 +107,8 @@ export default connect(
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
     locationTree: selectLocationTree(state),
-    liveness: livenessStatusByNodeIDSelector(state),
+    livenessStatus: livenessStatusByNodeIDSelector(state),
+    liveness: livenessByNodeIDSelector(state),
     dataIsValid: selectDataIsValid(state),
     dataExists: selectDataExists(state),
   }),

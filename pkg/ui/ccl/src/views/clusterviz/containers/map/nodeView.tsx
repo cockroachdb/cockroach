@@ -23,10 +23,12 @@ import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/spark
 import { LongToMoment } from "src/util/convert";
 
 import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
+import Liveness$Properties = cockroach.storage.Liveness$Properties;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
-  liveness: { [id: string]: NodeLivenessStatus };
+  livenessStatus: { [id: string]: NodeLivenessStatus };
+  liveness: Liveness$Properties;
 }
 
 const SCALE_FACTOR = 0.6;
@@ -46,14 +48,19 @@ export class NodeView extends React.Component<NodeViewProps> {
 
   getUptimeText() {
     // TODO: dedup
-    const { node, liveness } = this.props;
+    const { node, livenessStatus, liveness } = this.props;
 
-    const thisLiveness = liveness[node.desc.node_id];
+    const thisLiveness = livenessStatus[node.desc.node_id];
 
     switch (thisLiveness) {
       case NodeLivenessStatus.DEAD: {
-        // TODO(vilterp): pipe in how long it's been dead for
-        return "dead";
+        if (!liveness) {
+          return "no information";
+        }
+
+        const deadTime = liveness.expiration.wall_time;
+        const deadMoment = LongToMoment(deadTime);
+        return `dead for ${moment.duration(deadMoment.diff(moment())).humanize()}`;
       }
       case NodeLivenessStatus.LIVE: {
         const startTime = LongToMoment(node.started_at);
@@ -73,8 +80,8 @@ export class NodeView extends React.Component<NodeViewProps> {
   }
 
   render() {
-    const { node, liveness } = this.props;
-    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], liveness);
+    const { node, livenessStatus } = this.props;
+    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], livenessStatus);
 
     return (
       <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
