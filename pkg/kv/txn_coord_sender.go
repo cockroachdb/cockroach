@@ -178,7 +178,7 @@ var (
 		Help: "Number of abandoned KV transactions"}
 	metaDurationsHistograms = metric.Metadata{
 		Name: "txn.durations",
-		Help: "KV transaction durations"}
+		Help: "KV transaction durations in nanoseconds"}
 	metaRestartsHistogram = metric.Metadata{
 		Name: "txn.restarts",
 		Help: "Number of restarted KV transactions"}

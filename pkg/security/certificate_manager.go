@@ -33,10 +33,10 @@ import (
 var (
 	metaCAExpiration = metric.Metadata{
 		Name: "security.certificate.expiration.ca",
-		Help: "Expiration timestamp for the CA certificate. 0 means no certificate or error."}
+		Help: "Expiration timestamp in seconds since Unix epoch for the CA certificate. 0 means no certificate or error."}
 	metaNodeExpiration = metric.Metadata{
 		Name: "security.certificate.expiration.node",
-		Help: "Expiration timestamp for the node certificate. 0 means no certificate or error."}
+		Help: "Expiration timestamp in seconds since Unix epoch for the node certificate. 0 means no certificate or error."}
 )
 
 // CertificateManager lives for the duration of the process and manages certificates and keys.
