@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Node represents a node in the execution tree (currently maps to a
@@ -52,5 +53,5 @@ type Factory interface {
 	// ConstructInnerJoin returns a node that runs a hash-join between the results
 	// of two input nodes. The expression can refer to columns from both inputs
 	// using IndexedVars (first the left columns, then the right columns).
-	ConstructInnerJoin(left, right Node, onCond tree.TypedExpr) (Node, error)
+	ConstructJoin(joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr) (Node, error)
 }
