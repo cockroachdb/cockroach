@@ -321,11 +321,48 @@ type Factory interface {
 	ConstructGroupBy(input GroupID, aggregations GroupID, groupingColumns PrivateID) GroupID
 
 	// ConstructUnion constructs an expression for the Union operator.
+	// Union is an operator used to represent a UNION between the Left and Right
+	// relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. It is used to identify
+	// which columns contribute to each column in the result set. For example, if
+	// Left has column indexes [1, 2] and Right has column indexes [3, 4], ColMap
+	// would contain {1:3, 2:4}. This means that the first output column contains
+	// values from columns 1 and 3, and the second output column contains values
+	// from columns 2 and 4.
 	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
 
 	// ConstructIntersect constructs an expression for the Intersect operator.
-	ConstructIntersect(left GroupID, right GroupID) GroupID
+	// Intersect is an operator used to represent an INTERSECT between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
+	ConstructIntersect(left GroupID, right GroupID, colMap PrivateID) GroupID
 
 	// ConstructExcept constructs an expression for the Except operator.
-	ConstructExcept(left GroupID, right GroupID) GroupID
+	// Except is an operator used to represent an EXCEPT between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
+	ConstructExcept(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructUnionAll constructs an expression for the UnionAll operator.
+	// UnionAll is an operator used to represent a UNION ALL between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
+	ConstructUnionAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+	// IntersectAll is an operator used to represent an INTERSECT ALL between the
+	// Left and Right relations. ColMap is a mapping from the column indexes in the
+	// Left relation to the column indexes in the Right relation. See the comment
+	// above Union for more details.
+	ConstructIntersectAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructExceptAll constructs an expression for the ExceptAll operator.
+	// ExceptAll is an operator used to represent an EXCEPT ALL between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
+	ConstructExceptAll(left GroupID, right GroupID, colMap PrivateID) GroupID
 }

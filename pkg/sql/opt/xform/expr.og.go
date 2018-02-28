@@ -412,6 +412,21 @@ var childCountLookup = [...]childCountLookupFunc{
 		return 2
 	},
 
+	// UnionAllOp
+	func(ev ExprView) int {
+		return 2
+	},
+
+	// IntersectAllOp
+	func(ev ExprView) int {
+		return 2
+	},
+
+	// ExceptAllOp
+	func(ev ExprView) int {
+		return 2
+	},
+
 	// SortOp
 	func(ev ExprView) int {
 		return 1
@@ -1443,6 +1458,48 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		}
 	},
 
+	// UnionAllOp
+	func(ev ExprView, n int) opt.GroupID {
+		unionAllExpr := (*unionAllExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return unionAllExpr.left()
+		case 1:
+			return unionAllExpr.right()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// IntersectAllOp
+	func(ev ExprView, n int) opt.GroupID {
+		intersectAllExpr := (*intersectAllExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return intersectAllExpr.left()
+		case 1:
+			return intersectAllExpr.right()
+		default:
+			panic("child index out of range")
+		}
+	},
+
+	// ExceptAllOp
+	func(ev ExprView, n int) opt.GroupID {
+		exceptAllExpr := (*exceptAllExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return exceptAllExpr.left()
+		case 1:
+			return exceptAllExpr.right()
+		default:
+			panic("child index out of range")
+		}
+	},
+
 	// SortOp
 	func(ev ExprView, n int) opt.GroupID {
 		if n == 0 {
@@ -1855,12 +1912,32 @@ var privateLookup = [...]privateLookupFunc{
 
 	// IntersectOp
 	func(ev ExprView) opt.PrivateID {
-		return 0
+		intersectExpr := (*intersectExpr)(ev.mem.lookupExpr(ev.loc))
+		return intersectExpr.colMap()
 	},
 
 	// ExceptOp
 	func(ev ExprView) opt.PrivateID {
-		return 0
+		exceptExpr := (*exceptExpr)(ev.mem.lookupExpr(ev.loc))
+		return exceptExpr.colMap()
+	},
+
+	// UnionAllOp
+	func(ev ExprView) opt.PrivateID {
+		unionAllExpr := (*unionAllExpr)(ev.mem.lookupExpr(ev.loc))
+		return unionAllExpr.colMap()
+	},
+
+	// IntersectAllOp
+	func(ev ExprView) opt.PrivateID {
+		intersectAllExpr := (*intersectAllExpr)(ev.mem.lookupExpr(ev.loc))
+		return intersectAllExpr.colMap()
+	},
+
+	// ExceptAllOp
+	func(ev ExprView) opt.PrivateID {
+		exceptAllExpr := (*exceptAllExpr)(ev.mem.lookupExpr(ev.loc))
+		return exceptAllExpr.colMap()
 	},
 
 	// SortOp
@@ -1950,6 +2027,9 @@ var isScalarLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2034,6 +2114,9 @@ var isConstValueLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2118,6 +2201,9 @@ var isBooleanLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2202,6 +2288,9 @@ var isComparisonLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2286,6 +2375,9 @@ var isBinaryLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2370,6 +2462,9 @@ var isUnaryLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2454,6 +2549,9 @@ var isRelationalLookup = [...]bool{
 	true,  // UnionOp
 	true,  // IntersectOp
 	true,  // ExceptOp
+	true,  // UnionAllOp
+	true,  // IntersectAllOp
+	true,  // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2538,6 +2636,9 @@ var isJoinLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2622,6 +2723,9 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	false, // SortOp
 }
 
@@ -2706,6 +2810,9 @@ var isEnforcerLookup = [...]bool{
 	false, // UnionOp
 	false, // IntersectOp
 	false, // ExceptOp
+	false, // UnionAllOp
+	false, // IntersectAllOp
+	false, // ExceptAllOp
 	true,  // SortOp
 }
 
@@ -4668,6 +4775,14 @@ func (m *memoExpr) asGroupBy() *groupByExpr {
 	return (*groupByExpr)(m)
 }
 
+// unionExpr is an operator used to represent a UNION between the Left and Right
+// relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. It is used to identify
+// which columns contribute to each column in the result set. For example, if
+// Left has column indexes [1, 2] and Right has column indexes [3, 4], ColMap
+// would contain {1:3, 2:4}. This means that the first output column contains
+// values from columns 1 and 3, and the second output column contains values
+// from columns 2 and 4.
 type unionExpr memoExpr
 
 func makeUnionExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionExpr {
@@ -4697,10 +4812,14 @@ func (m *memoExpr) asUnion() *unionExpr {
 	return (*unionExpr)(m)
 }
 
+// intersectExpr is an operator used to represent an INTERSECT between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
 type intersectExpr memoExpr
 
-func makeIntersectExpr(left opt.GroupID, right opt.GroupID) intersectExpr {
-	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right)}}
+func makeIntersectExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectExpr {
+	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
 }
 
 func (e *intersectExpr) left() opt.GroupID {
@@ -4709,6 +4828,10 @@ func (e *intersectExpr) left() opt.GroupID {
 
 func (e *intersectExpr) right() opt.GroupID {
 	return opt.GroupID(e.state[1])
+}
+
+func (e *intersectExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *intersectExpr) fingerprint() fingerprint {
@@ -4722,10 +4845,14 @@ func (m *memoExpr) asIntersect() *intersectExpr {
 	return (*intersectExpr)(m)
 }
 
+// exceptExpr is an operator used to represent an EXCEPT between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
 type exceptExpr memoExpr
 
-func makeExceptExpr(left opt.GroupID, right opt.GroupID) exceptExpr {
-	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right)}}
+func makeExceptExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptExpr {
+	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
 }
 
 func (e *exceptExpr) left() opt.GroupID {
@@ -4734,6 +4861,10 @@ func (e *exceptExpr) left() opt.GroupID {
 
 func (e *exceptExpr) right() opt.GroupID {
 	return opt.GroupID(e.state[1])
+}
+
+func (e *exceptExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
 }
 
 func (e *exceptExpr) fingerprint() fingerprint {
@@ -4745,4 +4876,103 @@ func (m *memoExpr) asExcept() *exceptExpr {
 		return nil
 	}
 	return (*exceptExpr)(m)
+}
+
+// unionAllExpr is an operator used to represent a UNION ALL between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
+type unionAllExpr memoExpr
+
+func makeUnionAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionAllExpr {
+	return unionAllExpr{op: opt.UnionAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *unionAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unionAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *unionAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *unionAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnionAll() *unionAllExpr {
+	if m.op != opt.UnionAllOp {
+		return nil
+	}
+	return (*unionAllExpr)(m)
+}
+
+// intersectAllExpr is an operator used to represent an INTERSECT ALL between the
+// Left and Right relations. ColMap is a mapping from the column indexes in the
+// Left relation to the column indexes in the Right relation. See the comment
+// above Union for more details.
+type intersectAllExpr memoExpr
+
+func makeIntersectAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectAllExpr {
+	return intersectAllExpr{op: opt.IntersectAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *intersectAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *intersectAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *intersectAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *intersectAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIntersectAll() *intersectAllExpr {
+	if m.op != opt.IntersectAllOp {
+		return nil
+	}
+	return (*intersectAllExpr)(m)
+}
+
+// exceptAllExpr is an operator used to represent an EXCEPT ALL between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
+type exceptAllExpr memoExpr
+
+func makeExceptAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptAllExpr {
+	return exceptAllExpr{op: opt.ExceptAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *exceptAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *exceptAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *exceptAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *exceptAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asExceptAll() *exceptAllExpr {
+	if m.op != opt.ExceptAllOp {
+		return nil
+	}
+	return (*exceptAllExpr)(m)
 }

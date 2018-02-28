@@ -206,3 +206,11 @@ func flattenTuple(t *tree.Tuple, exprs []tree.TypedExpr) []tree.TypedExpr {
 func symbolicExprStr(expr tree.Expr) string {
 	return tree.AsStringWithFlags(expr, tree.FmtCheckEquivalence)
 }
+
+func colsToColList(cols []columnProps) opt.ColList {
+	colList := make(opt.ColList, len(cols))
+	for i := range cols {
+		colList[i] = cols[i].index
+	}
+	return colList
+}
