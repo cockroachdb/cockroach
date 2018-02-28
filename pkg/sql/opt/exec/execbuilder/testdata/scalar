@@ -289,12 +289,12 @@ render     0  render  ·         ·                (column8)                    
 exec-explain
 SELECT CAST(a AS string), b::float FROM t.t
 ----
-render     0  render  ·         ·                  (column8, column9)                 ·
- │         0  ·       render 0  CAST(a AS STRING)  ·                                  ·
- │         0  ·       render 1  CAST(b AS FLOAT)   ·                                  ·
- └── scan  1  scan    ·         ·                  (a, b, c, d, j, s, rowid[hidden])  ·
-·          1  ·       table     t@primary          ·                                  ·
-·          1  ·       spans     ALL                ·                                  ·
+render     0  render  ·         ·          (column8, column9)                 ·
+ │         0  ·       render 0  a::STRING  ·                                  ·
+ │         0  ·       render 1  b::FLOAT   ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
 
 exec
 SELECT LENGTH(s)::float, s FROM t.str
