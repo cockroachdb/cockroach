@@ -626,3 +626,31 @@ WHERE table_name = 'x' and generation_expression = ''
 # TODO(justin): #22652
 statement error adding a computed column via ALTER not supported
 ALTER TABLE x ADD COLUMN c INT AS (4) STORED
+
+statement ok
+DROP TABLE x
+
+# Regression test for #23109
+statement ok
+CREATE TABLE x (
+  a INT DEFAULT 1,
+  b INT AS (2) STORED
+)
+
+statement ok
+INSERT INTO x (a) SELECT 1
+
+statement ok
+DROP TABLE x
+
+statement ok
+CREATE TABLE x (
+  b INT AS (2) STORED,
+  a INT DEFAULT 1
+)
+
+statement ok
+INSERT INTO x (a) SELECT 1
+
+statement ok
+DROP TABLE x
