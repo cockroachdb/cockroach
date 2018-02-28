@@ -1040,12 +1040,12 @@ func (s *adminServer) Cluster(
 func (s *adminServer) Health(
 	ctx context.Context, req *serverpb.HealthRequest,
 ) (*serverpb.HealthResponse, error) {
-	isHealthy, err := s.server.nodeLiveness.IsHealthy(s.server.NodeID())
+	isLive, err := s.server.nodeLiveness.IsLive(s.server.NodeID())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, err.Error())
 	}
-	if !isHealthy {
-		return nil, status.Errorf(codes.Unavailable, "node is not healthy")
+	if !isLive {
+		return nil, status.Errorf(codes.Unavailable, "node is not live")
 	}
 	return &serverpb.HealthResponse{}, nil
 }
