@@ -15,6 +15,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -36,7 +38,8 @@ func (b *Builder) buildValuesClause(
 	// Synthesize correct number of unknown-typed columns.
 	outScope = inScope.push()
 	for i := 0; i < numCols; i++ {
-		b.synthesizeColumn(outScope, "", types.Unknown)
+		label := fmt.Sprintf("column%d", i+1)
+		b.synthesizeColumn(outScope, label, types.Unknown)
 	}
 
 	rows := make([]opt.GroupID, 0, len(values.Tuples))

@@ -143,6 +143,22 @@ func (md *Metadata) ColumnType(index ColumnIndex) types.T {
 	return md.cols[index].typ
 }
 
+// SetColumnType updates the SQL scalar type of the given column. This is
+// needed for the case when a synthesized column initially has unknown type,
+// but the type is determined later from the context. For example, consider
+// the following query:
+//   SELECT NULL UNION ALL SELECT 1
+// The left side of the query initially has a single column with unknown type.
+// The right side has a single column of type int, so after the union the
+// resulting column must have type int.
+func (md *Metadata) SetColumnType(index ColumnIndex, typ types.T) {
+	if index == 0 {
+		panic("uninitialized column id 0")
+	}
+
+	md.cols[index].typ = typ
+}
+
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table indexes (e.g. in
 // a self-join query).

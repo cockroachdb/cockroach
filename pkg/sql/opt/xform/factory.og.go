@@ -1605,8 +1605,9 @@ func (_f *factory) ConstructUnion(
 func (_f *factory) ConstructIntersect(
 	left opt.GroupID,
 	right opt.GroupID,
+	colMap opt.PrivateID,
 ) opt.GroupID {
-	_intersectExpr := makeIntersectExpr(left, right)
+	_intersectExpr := makeIntersectExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_intersectExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1623,8 +1624,9 @@ func (_f *factory) ConstructIntersect(
 func (_f *factory) ConstructExcept(
 	left opt.GroupID,
 	right opt.GroupID,
+	colMap opt.PrivateID,
 ) opt.GroupID {
-	_exceptExpr := makeExceptExpr(left, right)
+	_exceptExpr := makeExceptExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1637,9 +1639,66 @@ func (_f *factory) ConstructExcept(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr)))
 }
 
+// ConstructUnionAll constructs an expression for the UnionAll operator.
+func (_f *factory) ConstructUnionAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_unionAllExpr := makeUnionAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_unionAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr)))
+}
+
+// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+func (_f *factory) ConstructIntersectAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_intersectAllExpr := makeIntersectAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_intersectAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr)))
+}
+
+// ConstructExceptAll constructs an expression for the ExceptAll operator.
+func (_f *factory) ConstructExceptAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_exceptAllExpr := makeExceptAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_exceptAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr)))
+}
+
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [79]dynConstructLookupFunc
+var dynConstructLookup [82]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -2029,12 +2088,27 @@ func init() {
 
 	// IntersectOp
 	dynConstructLookup[opt.IntersectOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructIntersect(children[0], children[1])
+		return f.ConstructIntersect(children[0], children[1], private)
 	}
 
 	// ExceptOp
 	dynConstructLookup[opt.ExceptOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructExcept(children[0], children[1])
+		return f.ConstructExcept(children[0], children[1], private)
+	}
+
+	// UnionAllOp
+	dynConstructLookup[opt.UnionAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnionAll(children[0], children[1], private)
+	}
+
+	// IntersectAllOp
+	dynConstructLookup[opt.IntersectAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIntersectAll(children[0], children[1], private)
+	}
+
+	// ExceptAllOp
+	dynConstructLookup[opt.ExceptAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructExceptAll(children[0], children[1], private)
 	}
 
 }

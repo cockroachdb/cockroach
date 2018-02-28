@@ -324,8 +324,17 @@ type Factory interface {
 	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
 
 	// ConstructIntersect constructs an expression for the Intersect operator.
-	ConstructIntersect(left GroupID, right GroupID) GroupID
+	ConstructIntersect(left GroupID, right GroupID, colMap PrivateID) GroupID
 
 	// ConstructExcept constructs an expression for the Except operator.
-	ConstructExcept(left GroupID, right GroupID) GroupID
+	ConstructExcept(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructUnionAll constructs an expression for the UnionAll operator.
+	ConstructUnionAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+	ConstructIntersectAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructExceptAll constructs an expression for the ExceptAll operator.
+	ConstructExceptAll(left GroupID, right GroupID, colMap PrivateID) GroupID
 }

@@ -179,10 +179,33 @@ define Union {
 define Intersect {
     Left  Expr
     Right Expr
+    ColMap ColMap
 }
 
 [Relational]
 define Except {
     Left  Expr
     Right Expr
+    ColMap ColMap
+}
+
+[Relational]
+define UnionAll {
+    Left   Expr
+    Right  Expr
+    ColMap ColMap
+}
+
+[Relational]
+define IntersectAll {
+    Left  Expr
+    Right Expr
+    ColMap ColMap
+}
+
+[Relational]
+define ExceptAll {
+    Left  Expr
+    Right Expr
+    ColMap ColMap
 }
