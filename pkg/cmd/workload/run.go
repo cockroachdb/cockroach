@@ -350,6 +350,9 @@ func runRun(gen workload.Generator, args []string) error {
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)
 			printTotalHist := func(t workload.HistogramTick) {
+				if t.Ops == 0 {
+					return
+				}
 				fmt.Printf("%7.1fs %8d %14d %14.1f %8.1f %8.1f %8.1f %8.1f %8.1f  %s\n",
 					startElapsed.Seconds(), numErr,
 					t.Ops, float64(t.Ops)/startElapsed.Seconds(),
