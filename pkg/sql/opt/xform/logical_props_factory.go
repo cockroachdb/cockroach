@@ -61,7 +61,8 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 		return f.constructJoinProps(ev)
 
-	case opt.UnionOp:
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
+		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return f.constructSetProps(ev)
 
 	case opt.GroupByOp:

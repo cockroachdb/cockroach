@@ -30,7 +30,7 @@ SELECT * FROM test.t
 3 30
 
 # UnionClause
-query error pq: not yet implemented: select statement: \*tree.UnionClause
+query error pq: unsupported relational op union
 SELECT * FROM test.t UNION SELECT * FROM test.t
 
 # Insert

@@ -1583,6 +1583,14 @@ func (_f *factory) ConstructGroupBy(
 }
 
 // ConstructUnion constructs an expression for the Union operator.
+// Union is an operator used to represent a UNION between the Left and Right
+// relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. It is used to identify
+// which columns contribute to each column in the result set. For example, if
+// Left has column indexes [1, 2] and Right has column indexes [3, 4], ColMap
+// would contain {1:3, 2:4}. This means that the first output column contains
+// values from columns 1 and 3, and the second output column contains values
+// from columns 2 and 4.
 func (_f *factory) ConstructUnion(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1602,11 +1610,16 @@ func (_f *factory) ConstructUnion(
 }
 
 // ConstructIntersect constructs an expression for the Intersect operator.
+// Intersect is an operator used to represent an INTERSECT between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
 func (_f *factory) ConstructIntersect(
 	left opt.GroupID,
 	right opt.GroupID,
+	colMap opt.PrivateID,
 ) opt.GroupID {
-	_intersectExpr := makeIntersectExpr(left, right)
+	_intersectExpr := makeIntersectExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_intersectExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1620,11 +1633,16 @@ func (_f *factory) ConstructIntersect(
 }
 
 // ConstructExcept constructs an expression for the Except operator.
+// Except is an operator used to represent an EXCEPT between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
 func (_f *factory) ConstructExcept(
 	left opt.GroupID,
 	right opt.GroupID,
+	colMap opt.PrivateID,
 ) opt.GroupID {
-	_exceptExpr := makeExceptExpr(left, right)
+	_exceptExpr := makeExceptExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1637,9 +1655,78 @@ func (_f *factory) ConstructExcept(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr)))
 }
 
+// ConstructUnionAll constructs an expression for the UnionAll operator.
+// UnionAll is an operator used to represent a UNION ALL between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
+func (_f *factory) ConstructUnionAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_unionAllExpr := makeUnionAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_unionAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr)))
+}
+
+// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+// IntersectAll is an operator used to represent an INTERSECT ALL between the
+// Left and Right relations. ColMap is a mapping from the column indexes in the
+// Left relation to the column indexes in the Right relation. See the comment
+// above Union for more details.
+func (_f *factory) ConstructIntersectAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_intersectAllExpr := makeIntersectAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_intersectAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr)))
+}
+
+// ConstructExceptAll constructs an expression for the ExceptAll operator.
+// ExceptAll is an operator used to represent an EXCEPT ALL between the Left and
+// Right relations. ColMap is a mapping from the column indexes in the Left
+// relation to the column indexes in the Right relation. See the comment above
+// Union for more details.
+func (_f *factory) ConstructExceptAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_exceptAllExpr := makeExceptAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_exceptAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr)))
+}
+
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [79]dynConstructLookupFunc
+var dynConstructLookup [82]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -2029,12 +2116,27 @@ func init() {
 
 	// IntersectOp
 	dynConstructLookup[opt.IntersectOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructIntersect(children[0], children[1])
+		return f.ConstructIntersect(children[0], children[1], private)
 	}
 
 	// ExceptOp
 	dynConstructLookup[opt.ExceptOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructExcept(children[0], children[1])
+		return f.ConstructExcept(children[0], children[1], private)
+	}
+
+	// UnionAllOp
+	dynConstructLookup[opt.UnionAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnionAll(children[0], children[1], private)
+	}
+
+	// IntersectAllOp
+	dynConstructLookup[opt.IntersectAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIntersectAll(children[0], children[1], private)
+	}
+
+	// ExceptAllOp
+	dynConstructLookup[opt.ExceptAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructExceptAll(children[0], children[1], private)
 	}
 
 }

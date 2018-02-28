@@ -168,6 +168,14 @@ define GroupBy {
     GroupingColumns ColSet
 }
 
+# Union is an operator used to represent a UNION between the Left and Right
+# relations. ColMap is a mapping from the column indexes in the Left
+# relation to the column indexes in the Right relation. It is used to identify
+# which columns contribute to each column in the result set. For example, if
+# Left has column indexes [1, 2] and Right has column indexes [3, 4], ColMap
+# would contain {1:3, 2:4}. This means that the first output column contains
+# values from columns 1 and 3, and the second output column contains values
+# from columns 2 and 4.
 [Relational]
 define Union {
     Left   Expr
@@ -175,14 +183,57 @@ define Union {
     ColMap ColMap
 }
 
+# Intersect is an operator used to represent an INTERSECT between the Left and
+# Right relations. ColMap is a mapping from the column indexes in the Left
+# relation to the column indexes in the Right relation. See the comment above
+# Union for more details.
 [Relational]
 define Intersect {
     Left  Expr
     Right Expr
+    ColMap ColMap
 }
 
+# Except is an operator used to represent an EXCEPT between the Left and
+# Right relations. ColMap is a mapping from the column indexes in the Left
+# relation to the column indexes in the Right relation. See the comment above
+# Union for more details.
 [Relational]
 define Except {
     Left  Expr
     Right Expr
+    ColMap ColMap
+}
+
+# UnionAll is an operator used to represent a UNION ALL between the Left and
+# Right relations. ColMap is a mapping from the column indexes in the Left
+# relation to the column indexes in the Right relation. See the comment above
+# Union for more details.
+[Relational]
+define UnionAll {
+    Left   Expr
+    Right  Expr
+    ColMap ColMap
+}
+
+# IntersectAll is an operator used to represent an INTERSECT ALL between the
+# Left and Right relations. ColMap is a mapping from the column indexes in the
+# Left relation to the column indexes in the Right relation. See the comment
+# above Union for more details.
+[Relational]
+define IntersectAll {
+    Left  Expr
+    Right Expr
+    ColMap ColMap
+}
+
+# ExceptAll is an operator used to represent an EXCEPT ALL between the Left and
+# Right relations. ColMap is a mapping from the column indexes in the Left
+# relation to the column indexes in the Right relation. See the comment above
+# Union for more details.
+[Relational]
+define ExceptAll {
+    Left  Expr
+    Right Expr
+    ColMap ColMap
 }

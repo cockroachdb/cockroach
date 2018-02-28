@@ -227,11 +227,45 @@ const (
 	// operator). The arguments of the aggregations are columns from the input.
 	GroupByOp
 
+	// UnionOp is an operator used to represent a UNION between the Left and Right
+	// relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. It is used to identify
+	// which columns contribute to each column in the result set. For example, if
+	// Left has column indexes [1, 2] and Right has column indexes [3, 4], ColMap
+	// would contain {1:3, 2:4}. This means that the first output column contains
+	// values from columns 1 and 3, and the second output column contains values
+	// from columns 2 and 4.
 	UnionOp
 
+	// IntersectOp is an operator used to represent an INTERSECT between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
 	IntersectOp
 
+	// ExceptOp is an operator used to represent an EXCEPT between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
 	ExceptOp
+
+	// UnionAllOp is an operator used to represent a UNION ALL between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
+	UnionAllOp
+
+	// IntersectAllOp is an operator used to represent an INTERSECT ALL between the
+	// Left and Right relations. ColMap is a mapping from the column indexes in the
+	// Left relation to the column indexes in the Right relation. See the comment
+	// above Union for more details.
+	IntersectAllOp
+
+	// ExceptAllOp is an operator used to represent an EXCEPT ALL between the Left and
+	// Right relations. ColMap is a mapping from the column indexes in the Left
+	// relation to the column indexes in the Right relation. See the comment above
+	// Union for more details.
+	ExceptAllOp
 
 	// ------------------------------------------------------------
 	// Enforcer Operators
@@ -248,9 +282,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptsort"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 391, 399, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 618}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 391, 399, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 623, 636, 646, 650}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -398,6 +432,9 @@ var RelationalOperators = [...]Operator{
 	UnionOp,
 	IntersectOp,
 	ExceptOp,
+	UnionAllOp,
+	IntersectAllOp,
+	ExceptAllOp,
 }
 
 var JoinOperators = [...]Operator{

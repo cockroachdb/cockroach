@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type execPlan struct {
@@ -97,7 +98,7 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 		return b.buildJoin(ev, sqlbase.LeftAntiJoin)
 
 	default:
-		panic(fmt.Sprintf("unsupported relational op %s", ev.Operator()))
+		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
 }
 
