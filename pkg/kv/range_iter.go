@@ -145,12 +145,12 @@ func (ri *RangeIterator) Next(ctx context.Context) {
 
 // Seek positions the iterator at the specified key.
 func (ri *RangeIterator) Seek(ctx context.Context, key roachpb.RKey, scanDir ScanDirection) {
-	if log.HasSpanOrEvent(ctx) {
+	if log.V(2) {
 		rev := ""
 		if scanDir == Descending {
 			rev = " (rev)"
 		}
-		log.Eventf(ctx, "querying next range at %s%s", key, rev)
+		log.Infof(ctx, "querying next range at %s%s", key, rev)
 	}
 	ri.scanDir = scanDir
 	ri.init = true // the iterator is now initialized
