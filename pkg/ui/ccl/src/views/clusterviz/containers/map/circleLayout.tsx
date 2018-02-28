@@ -14,13 +14,16 @@ import { getChildLocalities } from "src/util/localities";
 import { LocalityView } from "./localityView";
 import { NodeView } from "./nodeView";
 import { LivenessStatus } from "src/redux/nodes";
+import { cockroach } from "src/js/protos";
+import Liveness = cockroach.storage.Liveness;
 
 const MIN_RADIUS = 150;
 const PADDING = 150;
 
 interface CircleLayoutProps {
   localityTree: LocalityTree;
-  liveness: { [id: string]: LivenessStatus };
+  livenessStatus: { [id: string]: LivenessStatus };
+  liveness: { [id: string]: Liveness };
   viewportSize: [number, number];
 }
 
@@ -53,7 +56,7 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
         {
           childLocalities.map((locality, i) => (
             <g transform={`translate(${this.coordsFor(i, total, radius)})`}>
-              <LocalityView localityTree={locality} liveness={this.props.liveness} />
+              <LocalityView localityTree={locality} liveness={this.props.livenessStatus} />
             </g>
           ))
         }
@@ -63,7 +66,8 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
               <g transform={`translate(${this.coordsFor(i + childLocalities.length, total, radius)})`}>
                 <NodeView
                   node={node}
-                  liveness={this.props.liveness}
+                  livenessStatus={this.props.livenessStatus}
+                  liveness={this.props.liveness[node.desc.node_id]}
                 />
               </g>
             );

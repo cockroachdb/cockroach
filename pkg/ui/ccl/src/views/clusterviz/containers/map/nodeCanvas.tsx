@@ -21,13 +21,16 @@ import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
+import { cockroach } from "src/js/protos";
+import Liveness = cockroach.storage.Liveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
 interface NodeCanvasProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  liveness: { [id: string]: LivenessStatus };
+  livenessStatus: { [id: string]: LivenessStatus };
+  liveness: { [id: string]: Liveness };
   tiers: LocalityTier[];
 }
 
@@ -72,22 +75,23 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const { localityTree, locationTree, liveness } = this.props;
+    const { localityTree, locationTree, livenessStatus, liveness } = this.props;
     const { viewportSize } = this.state;
 
     if (renderAsMap(locationTree, localityTree)) {
       return <MapLayout
         localityTree={localityTree}
         locationTree={locationTree}
-        liveness={liveness}
+        livenessStatus={livenessStatus}
         viewportSize={viewportSize}
       />;
     }
 
     return <CircleLayout
-      localityTree={localityTree}
-      liveness={liveness}
       viewportSize={viewportSize}
+      localityTree={localityTree}
+      livenessStatus={livenessStatus}
+      liveness={liveness}
     />;
   }
 
