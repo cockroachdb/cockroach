@@ -1533,9 +1533,6 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 		iter.Rewind()
 		maxSize := storageccl.MaxImportBatchSize(sp.settings)
 		for i, span := range sp.spec.Spans {
-			specSpan := roachpb.Span{
-				EndKey: span.End,
-			}
 			// Since we sampled the CSVs, it is possible for an SST to end up larger
 			// than the max raft command size. Split them up into correctly sized chunks.
 			contentCh := make(chan sstContent)
@@ -1548,9 +1545,6 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 				chunk := -1
 				for sst := range contentCh {
 					chunk++
-					if chunk == 0 {
-						specSpan.Key = sst.span.Key
-					}
 
 					var checksum []byte
 					name := span.Name
@@ -1569,10 +1563,7 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 
 						log.VEventf(gCtx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
 						scatterReq := &roachpb.AdminScatterRequest{
-							Span: roachpb.Span{
-								Key:    end,
-								EndKey: roachpb.Key(end).Next(),
-							},
+							Span: sst.span,
 						}
 						if _, pErr := client.SendWrapped(gCtx, sp.db.GetSender(), scatterReq); pErr != nil {
 							// TODO(dan): Unfortunately, Scatter is still too unreliable to
