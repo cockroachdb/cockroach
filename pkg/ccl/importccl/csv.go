@@ -1530,6 +1530,7 @@ func (sp *sstWriter) Run(wg *sync.WaitGroup) {
 
 		// Fetch all the keys in each span and write them to storage.
 		iter := store.NewIterator()
+		defer iter.Close()
 		iter.Rewind()
 		maxSize := storageccl.MaxImportBatchSize(sp.settings)
 		for i, span := range sp.spec.Spans {
