@@ -847,10 +847,100 @@ https://cockroachdb.github.io/distsqlplan/decode.html?eJzsl0GL2kAUx-_9FPJOLZ2Ck0
 # Regression test for #22655.
 
 statement ok
-CREATE TABLE a (a string, b string, primary key (a, b))
+CREATE TABLE a (a STRING, b STRING, PRIMARY KEY (a, b))
 
 statement ok
-CREATE TABLE b (a string, b string, primary key (a, b)) interleave in parent a (a, b)
+CREATE TABLE b (a STRING, b STRING, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT a (a, b)
 
 statement ok
 SELECT * FROM a JOIN b ON a.a=b.a AND a.b=b.b WHERE a.a='foo'
+
+subtest ParentChildDifferentSize
+# Regression test for #22647. Test when child is a few columns larger than parent.
+statement ok
+CREATE TABLE small_parent (a STRING PRIMARY KEY, b STRING); INSERT INTO small_parent VALUES ('first', 'second')
+
+statement ok
+CREATE TABLE large_child (a STRING PRIMARY KEY, c STRING, d STRING, e STRING, f STRING) INTERLEAVE IN PARENT small_parent (a)
+
+statement ok
+INSERT INTO large_child VALUES ('first', 'second_child', 'third_child', 'fourth_child', 'fifth_child')
+
+query TTTTTT
+SELECT * FROM large_child JOIN small_parent USING (a)
+----
+first  second_child  third_child  fourth_child  fifth_child second
+
+# Test with composite keys.
+statement ok
+CREATE TABLE small_parent_ck (a STRING, b STRING, c STRING, PRIMARY KEY (a, b)); INSERT INTO small_parent_ck VALUES ('first', 'second', 'third')
+
+statement ok
+CREATE TABLE large_child_ck (a STRING, b STRING, d STRING, e STRING, f STRING, PRIMARY KEY (a, b, d)) INTERLEAVE IN PARENT small_parent_ck (a, b)
+
+statement ok
+INSERT INTO large_child_ck VALUES ('first', 'second', 'third_child', 'fourth_child', 'fifth_child')
+
+query TTTTTTT
+SELECT * FROM large_child_ck JOIN small_parent_ck USING (a)
+----
+first  second  third_child  fourth_child  fifth_child  second  third
+
+
+# Test with families.
+statement ok
+CREATE TABLE small_parent_fam (a STRING, b STRING, c STRING, PRIMARY KEY (a, b)); INSERT INTO small_parent_fam VALUES ('first', 'second', 'third')
+
+statement ok
+CREATE TABLE large_child_fam (
+   a STRING,
+   b STRING,
+   d STRING,
+   e STRING,
+   f STRING,
+   PRIMARY KEY (a, b, d),
+   FAMILY f1 (a, b, d, e),
+   FAMILY f2 (f)
+) INTERLEAVE IN PARENT small_parent_fam (a, b)
+
+statement ok
+INSERT INTO large_child_fam VALUES ('first', 'second', 'third_child', 'fourth_child', 'fifth_child')
+
+query TTTTTTT
+SELECT * FROM large_child_fam JOIN small_parent_fam USING (a)
+----
+first  second  third_child  fourth_child  fifth_child  second  third
+
+
+# Test with parent being much larger than child.
+statement ok
+CREATE TABLE large_parent_fam (
+  a STRING,
+  b STRING,
+  c STRING,
+  d STRING,
+  e STRING,
+  f STRING,
+  PRIMARY KEY (a, b),
+  FAMILY f1 (a, b, c, d),
+  FAMILY f2 (e, f)
+)
+
+statement ok
+INSERT INTO large_parent_fam VALUES ('first', 'second', 'third', 'fourth', 'fifth', 'sixth')
+
+statement ok
+CREATE TABLE small_child_fam (
+   a STRING,
+   b STRING,
+   g STRING,
+   PRIMARY KEY (a, b)
+) INTERLEAVE IN PARENT large_parent_fam (a, b)
+
+statement ok
+INSERT INTO small_child_fam VALUES ('first', 'second', 'third_child')
+
+query TTTTTTTT
+SELECT * FROM small_child_fam JOIN large_parent_fam USING (a)
+----
+first  second  third_child  second  third  fourth  fifth  sixth
