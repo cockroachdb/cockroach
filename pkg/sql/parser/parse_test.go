@@ -1009,6 +1009,12 @@ func TestParse2(t *testing.T) {
 		{`SELECT b >>= c`, `SELECT inet_contains_or_equals(b, c)`},
 		{`SELECT b && c`, `SELECT inet_contains_or_contained_by(b, c)`},
 
+		// Ensure that cast types can be qualified in pg_catalog (pg compat).
+		{`SELECT 'foo'::PG_CATALOG.BOOL`,
+			`SELECT 'foo'::BOOL`},
+		{`SELECT 'foo'::PG_CATALOG.REGCLASS::OID`,
+			`SELECT 'foo'::REGCLASS::OID`},
+
 		// Escaped string literals are not always escaped the same because
 		// '''' and e'\'' scan to the same token. It's more convenient to
 		// prefer escaping ' and \, so we do that.
@@ -1660,9 +1666,9 @@ HINT: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
-			`syntax error at or near "notatype"
+			`syntax error at or near ")"
 SELECT CAST(1.2+2.3 AS notatype)
-                       ^
+                               ^
 `,
 		},
 		{
@@ -1751,9 +1757,9 @@ SELECT 1 + ANY ARRAY[1, 2, 3]
 		},
 		{
 			`SELECT 'f'::"blah"`,
-			`syntax error at or near "blah"
+			`syntax error at or near "EOF"
 SELECT 'f'::"blah"
-            ^
+                  ^
 `,
 		},
 		{

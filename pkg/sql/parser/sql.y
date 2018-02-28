@@ -875,7 +875,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <coltypes.T> bit_with_length bit_without_length
 %type <coltypes.T> character_base
 %type <coltypes.CastTargetType> postgres_oid
-%type <coltypes.CastTargetType> cast_target
+%type <coltypes.CastTargetType> cast_target unprefixed_cast_target
 %type <str> extract_arg
 %type <empty> opt_varying
 
@@ -5330,6 +5330,20 @@ typename:
   }
 
 cast_target:
+  unprefixed_cast_target
+// We support the syntax ::pg_catalog.<type> as an alias for ::<type>.
+// This is for compatibility with some tools like e.g. PsqlForks.
+// This rule should be extended when the grammar is adjusted to support
+// arbitrarily qualified type names (i.e. when user-defined types are supported).
+| IDENT '.' unprefixed_cast_target
+  {
+    if $1 != "pg_catalog" {
+      return unimplemented(sqllex, "prefixed type names")
+    }
+    $$.val = $3.castTargetType()
+  }
+
+unprefixed_cast_target:
   typename
   {
     $$.val = $1.colType()

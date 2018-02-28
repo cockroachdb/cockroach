@@ -916,8 +916,7 @@ c_expr ::=
 	| 'EXISTS' select_with_parens
 
 cast_target ::=
-	typename
-	| postgres_oid
+	unprefixed_cast_target
 
 typename ::=
 	simple_typename opt_array_bounds
@@ -1254,12 +1253,9 @@ array_subscripts ::=
 case_expr ::=
 	'CASE' case_arg when_clause_list case_default 'END'
 
-postgres_oid ::=
-	'REGPROC'
-	| 'REGPROCEDURE'
-	| 'REGCLASS'
-	| 'REGTYPE'
-	| 'REGNAMESPACE'
+unprefixed_cast_target ::=
+	typename
+	| postgres_oid
 
 simple_typename ::=
 	const_typename
@@ -1574,6 +1570,13 @@ when_clause_list ::=
 case_default ::=
 	'ELSE' a_expr
 	| 
+
+postgres_oid ::=
+	'REGPROC'
+	| 'REGPROCEDURE'
+	| 'REGCLASS'
+	| 'REGTYPE'
+	| 'REGNAMESPACE'
 
 bit_with_length ::=
 	'BIT' opt_varying '(' iconst64 ')'
