@@ -118,6 +118,10 @@ VALUES (NULL, 1), (2, NULL), (NULL, 'a')
 ----
 error: VALUES list type mismatch, string for int
 
+build
+SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
+----
+
 
 # TODO(rytaft): uncomment these tests once subqueries are supported
 ## subqueries can be evaluated in VALUES
