@@ -316,6 +316,11 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				}
 			}
 			return out, nil
+		case oid.T_jsonb:
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return tree.ParseDJSON(string(b))
 		}
 		if _, ok := types.ArrayOids[id]; ok {
 			// Arrays come in in their string form, so we parse them as such and later
@@ -487,6 +492,13 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
 		case oid.T__int2, oid.T__int4, oid.T__int8, oid.T__text, oid.T__name:
 			return decodeBinaryArray(b, code)
+		case oid.T_jsonb:
+			// Skip over the version number `1`.
+			b = b[1:]
+			if err := validateStringBytes(b); err != nil {
+				return nil, err
+			}
+			return tree.ParseDJSON(string(b))
 		}
 	default:
 		return nil, errors.Errorf("unsupported format code: %s", code)
@@ -494,7 +506,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 
 	// Types with identical text/binary handling.
 	switch id {
-	case oid.T_text, oid.T_varchar, oid.T_jsonb:
+	case oid.T_text, oid.T_varchar:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}

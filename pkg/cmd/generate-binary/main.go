@@ -61,7 +61,6 @@ func main() {
 	var buf bytes.Buffer
 	buf.WriteString("[\n")
 	for i, input := range inputs {
-		input = strings.Trim(input, `"`)
 		enc, err := generator(*postgresAddr, input)
 		if err != nil {
 			panic(fmt.Errorf("%s: %s", input, err))
@@ -71,9 +70,9 @@ func main() {
 `)
 		}
 		buf.WriteString(`	{
-		"In": "`)
-		buf.WriteString(input)
-		buf.WriteString(`",
+		"In": `)
+		fmt.Fprintf(&buf, "%q", input)
+		buf.WriteString(`,
 		"Expect": [`)
 		for i, e := range enc {
 			if i > 0 {
@@ -107,6 +106,7 @@ var defaultVals = map[string][]string{
 	"date":        dateInputs,
 	"time":        timeInputs,
 	"inet":        inetInputs,
+	"jsonb":       jsonbInputs,
 }
 
 var decimalInputs = []string{
@@ -214,6 +214,25 @@ var inetInputs = []string{
 	"192/10",
 	"192.168/23",
 	"192.168./10",
+}
+
+var jsonbInputs = []string{
+	`123`,
+	`"hello"`,
+	`{}`,
+	`[]`,
+	`0`,
+	`0.0000`,
+	`""`,
+	`"\uD83D\uDE80"`,
+	`{"\uD83D\uDE80": "hello"}`,
+	`[1, 2, 3]`,
+	`{"foo": 123}`,
+	`{"foo": {"bar": true}}`,
+	`true`,
+	`false`,
+	`null`,
+	`[[[[true, false, null]]]]`,
 }
 
 func makeEncodingFunc(typName string) generateEnc {
