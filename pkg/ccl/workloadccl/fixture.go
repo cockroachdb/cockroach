@@ -395,13 +395,22 @@ func MakeFixture(
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
 // license is required to have been set in the cluster.
 func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, database string) error {
+	g, gCtx := errgroup.WithContext(ctx)
 	for _, table := range fixture.Tables {
-		// The IMPORT ... CSV DATA command generates a backup with the table in
-		// database `csv`.
-		importStmt := fmt.Sprintf(`RESTORE csv.%s FROM $1 WITH into_db=$2`, table.TableName)
-		if _, err := sqlDB.ExecContext(ctx, importStmt, table.BackupURI, database); err != nil {
-			return err
-		}
+		table := table
+		g.Go(func() error {
+			// The IMPORT ... CSV DATA command generates a backup with the table in
+			// database `csv`.
+			importStmt := fmt.Sprintf(`RESTORE csv.%s FROM $1 WITH into_db=$2`, table.TableName)
+			if _, err := sqlDB.ExecContext(gCtx, importStmt, table.BackupURI, database); err != nil {
+				return err
+			}
+			log.Infof(gCtx, `loaded %s`, table.TableName)
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return err
 	}
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range fixture.Generator.Tables() {
