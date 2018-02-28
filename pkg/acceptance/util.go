@@ -19,10 +19,8 @@ import (
 	gosql "database/sql"
 	"os"
 	"os/signal"
-	"strings"
 	"testing"
 
-	"github.com/docker/docker/pkg/namesgenerator"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 
@@ -49,21 +47,6 @@ func RunTests(m *testing.M) {
 		}
 	}()
 	os.Exit(m.Run())
-}
-
-// getRandomName generates a random, human-readable name to ease identification
-// of different test resources.
-func getRandomName() string {
-	// Remove characters that aren't allowed in hostnames for machines allocated
-	// by Terraform.
-	return strings.Replace(namesgenerator.GetRandomName(0), "_", "", -1)
-}
-
-// SkipUnlessRemote calls t.Skip if not running against a remote cluster.
-func SkipUnlessRemote(t testing.TB) {
-	if !*flagRemote {
-		t.Skip("skipping since not run against remote cluster")
-	}
 }
 
 func makePGClient(t *testing.T, dest string) *gosql.DB {

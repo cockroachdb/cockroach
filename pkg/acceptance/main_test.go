@@ -19,5 +19,5 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	MainTest(m)
+	RunTests(m)
 }
