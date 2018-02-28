@@ -302,3 +302,68 @@ SELECT LENGTH(s)::float, s FROM t.str
 1.0  a
 2.0  ab
 3.0  abc
+
+exec-explain
+SELECT COALESCE(1, 2)
+----
+render       0  render  ·         ·                 (column1)  ·
+ │           0  ·       render 0  COALESCE(1, 2)    ·          ·
+ └── values  1  values  ·         ·                 ()         ·
+·            1  ·       size      0 columns, 1 row  ·          ·
+
+exec
+SELECT COALESCE(1, 2)
+----
+1
+
+exec-explain
+SELECT COALESCE(1, 2, 3)
+----
+render       0  render  ·         ·                  (column1)  ·
+ │           0  ·       render 0  COALESCE(1, 2, 3)  ·          ·
+ └── values  1  values  ·         ·                  ()         ·
+·            1  ·       size      0 columns, 1 row   ·          ·
+
+exec
+SELECT COALESCE(1, 2, 3)
+----
+1
+
+exec-explain
+SELECT COALESCE(NULL, 2)
+----
+render       0  render  ·         ·                  (column1)  ·
+ │           0  ·       render 0  COALESCE(NULL, 2)  ·          ·
+ └── values  1  values  ·         ·                  ()         ·
+·            1  ·       size      0 columns, 1 row   ·          ·
+
+exec
+SELECT COALESCE(NULL, 2)
+----
+2
+
+exec-explain
+SELECT COALESCE(NULL, NULL, 3)
+----
+render       0  render  ·         ·                        (column1)  ·
+ │           0  ·       render 0  COALESCE(NULL, NULL, 3)  ·          ·
+ └── values  1  values  ·         ·                        ()         ·
+·            1  ·       size      0 columns, 1 row         ·          ·
+
+exec
+SELECT COALESCE(NULL, NULL, 3)
+----
+3
+
+exec-explain
+SELECT COALESCE(NULL, NULL)
+----
+render       0  render  ·         ·                     (column1)  ·
+ │           0  ·       render 0  COALESCE(NULL, NULL)  ·          ·
+ └── values  1  values  ·         ·                     ()         ·
+·            1  ·       size      0 columns, 1 row      ·          ·
+
+exec
+SELECT COALESCE(NULL, NULL)
+----
+NULL
