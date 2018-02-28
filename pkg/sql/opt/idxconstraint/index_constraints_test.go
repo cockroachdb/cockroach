@@ -205,77 +205,85 @@ func TestIndexConstraints(t *testing.T) {
 	}
 }
 
-//func BenchmarkIndexConstraints(b *testing.B) {
-//	testCases := []struct {
-//		name, varTypes, indexInfo, expr string
-//	}{
-//		{
-//			name:      "point-lookup",
-//			varTypes:  "int",
-//			indexInfo: "@1",
-//			expr:      "@1 = 1",
-//		},
-//		{
-//			name:      "no-constraints",
-//			varTypes:  "int, int",
-//			indexInfo: "@2",
-//			expr:      "@1 = 1",
-//		},
-//		{
-//			name:      "range",
-//			varTypes:  "int",
-//			indexInfo: "@1",
-//			expr:      "@1 >= 1 AND @1 <= 10",
-//		},
-//		{
-//			name:      "range-2d",
-//			varTypes:  "int, int",
-//			indexInfo: "@1, @2",
-//			expr:      "@1 >= 1 AND @1 <= 10 AND @2 >= 1 AND @2 <= 10",
-//		},
-//		{
-//			name:      "many-columns",
-//			varTypes:  "int, int, int, int, int",
-//			indexInfo: "@1, @2, @3, @4, @5",
-//			expr:      "@1 = 1 AND @2 >= 2 AND @2 <= 4 AND (@3, @4, @5) IN ((3, 4, 5), (6, 7, 8))",
-//		},
-//	}
-//
-//	for _, tc := range testCases {
-//		b.Run(tc.name, func(b *testing.B) {
-//			varTypes, err := testutils.ParseTypes(strings.Split(tc.varTypes, ", "))
-//			if err != nil {
-//				b.Fatal(err)
-//			}
-//			colInfos, err := parseIndexColumns(varTypes, strings.Split(tc.indexInfo, ", "))
-//			if err != nil {
-//				b.Fatal(err)
-//			}
-//
-//			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-//
-//			typedExpr, err := testutils.ParseScalarExpr(tc.expr, &iVarHelper)
-//			if err != nil {
-//				b.Fatal(err)
-//			}
-//
-//			evalCtx := tree.MakeTestingEvalContext()
-//			e, err := BuildScalarExpr(typedExpr, &evalCtx)
-//			if err != nil {
-//				b.Fatal(err)
-//			}
-//
-//			b.ResetTimer()
-//			for i := 0; i < b.N; i++ {
-//				var ic IndexConstraints
-//
-//				ic.Init(e, colInfos, false /*isInverted */, &evalCtx)
-//				_, _ = ic.Spans()
-//				// _ = ic.RemainingFilter(&iVarHelper)
-//			}
-//		})
-//	}
-//}
+func BenchmarkIndexConstraints(b *testing.B) {
+	testCases := []struct {
+		name, varTypes, indexInfo, expr string
+	}{
+		{
+			name:      "point-lookup",
+			varTypes:  "int",
+			indexInfo: "@1",
+			expr:      "@1 = 1",
+		},
+		{
+			name:      "no-constraints",
+			varTypes:  "int, int",
+			indexInfo: "@2",
+			expr:      "@1 = 1",
+		},
+		{
+			name:      "range",
+			varTypes:  "int",
+			indexInfo: "@1",
+			expr:      "@1 >= 1 AND @1 <= 10",
+		},
+		{
+			name:      "range-2d",
+			varTypes:  "int, int",
+			indexInfo: "@1, @2",
+			expr:      "@1 >= 1 AND @1 <= 10 AND @2 >= 1 AND @2 <= 10",
+		},
+		{
+			name:      "many-columns",
+			varTypes:  "int, int, int, int, int",
+			indexInfo: "@1, @2, @3, @4, @5",
+			expr:      "@1 = 1 AND @2 >= 2 AND @2 <= 4 AND (@3, @4, @5) IN ((3, 4, 5), (6, 7, 8))",
+		},
+	}
+
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			varTypes, err := testutils.ParseTypes(strings.Split(tc.varTypes, ", "))
+			if err != nil {
+				b.Fatal(err)
+			}
+			colInfos, err := parseIndexColumns(varTypes, strings.Split(tc.indexInfo, ", "))
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			iVarHelper := tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+			typedExpr, err := testutils.ParseScalarExpr(tc.expr, iVarHelper.Container())
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			o := xform.NewOptimizer(nil /* catalog */, xform.OptimizeAll)
+			semaCtx := tree.MakeSemaContext(false /* privileged */)
+			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+			varNames := make([]string, len(varTypes))
+			for i := range varNames {
+				varNames[i] = fmt.Sprintf("@%d", i+1)
+			}
+			bld := optbuilder.NewScalar(
+				context.Background(), &semaCtx, &evalCtx, o.Factory(), varNames, varTypes,
+			)
+
+			group, err := bld.Build(typedExpr)
+			if err != nil {
+				b.Fatal(err)
+			}
+			ev := o.Optimize(group, &opt.PhysicalProps{})
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				var ic Instance
+				ic.Init(ev, colInfos, false /*isInverted */, &evalCtx, o.Factory())
+				_, _ = ic.Spans()
+				_ = ic.RemainingFilter()
+			}
+		})
+	}
+}
 
 // parseIndexColumns parses descriptions of index columns; each
 // string corresponds to an index column and is of the form:
