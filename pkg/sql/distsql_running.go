@@ -250,6 +250,7 @@ type distSQLReceiver struct {
 	// canceled is atomically set to an error when this distSQL receiver
 	// has been marked as canceled. Upon the next Push(), err is set to
 	// this value, and ConsumerClosed is the ConsumerStatus.
+	// It contains errWraps only.
 	canceled atomic.Value
 
 	row    tree.Datums
@@ -271,6 +272,12 @@ type distSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+}
+
+// errWrap is a container for an error, for use with atomic.Value, which
+// requires that all of things stored in it must have the same concrete type.
+type errWrap struct {
+	err error
 }
 
 // rowResultWriter is a subset of CommandResult to be used with the
@@ -337,7 +344,7 @@ func makeDistSQLReceiver(
 	// aborted, or committed), ensure the dist SQL flow is canceled.
 	if r.txn != nil {
 		r.txn.OnFinish(func(err error) {
-			r.canceled.Store(err)
+			r.canceled.Store(errWrap{err: err})
 		})
 	}
 	return r
@@ -401,7 +408,7 @@ func (r *distSQLReceiver) Push(
 	}
 	if r.resultWriter.Err() == nil && r.canceled.Load() != nil {
 		// Set the error to reflect query cancellation.
-		r.resultWriter.SetError(r.canceled.Load().(error))
+		r.resultWriter.SetError(r.canceled.Load().(errWrap).err)
 	}
 	if r.resultWriter.Err() != nil {
 		// TODO(andrei): We should drain here.
@@ -460,7 +467,7 @@ func (r *distSQLReceiver) ProducerDone() {
 
 // SetCanceled is part of the CancellableRowReceiver interface.
 func (r *distSQLReceiver) SetCanceled() {
-	r.canceled.Store(sqlbase.NewQueryCanceledError())
+	r.canceled.Store(errWrap{err: sqlbase.NewQueryCanceledError()})
 }
 
 // updateCaches takes information about some ranges that were mis-planned and
