@@ -166,7 +166,7 @@ func processProducerMessage(
 			return processMessageResult{err: nil, consumerClosed: false}
 		}
 
-		if log.V(3) {
+		if log.V(3) && row != nil {
 			if types == nil {
 				types = sd.Types()
 			}
