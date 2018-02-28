@@ -119,16 +119,15 @@ var _ exec.Factory = &execEngine{}
 func (ee *execEngine) ConstructValues(
 	rows [][]tree.TypedExpr, colTypes []types.T, colNames []string,
 ) (exec.Node, error) {
-	if len(colTypes) != 0 {
-		panic("values with columns not implemented")
+	v := &valuesNode{
+		columns: make(sqlbase.ResultColumns, len(colTypes)),
+		tuples:  rows,
 	}
-	values := ee.planner.newContainerValuesNode(sqlbase.ResultColumns{}, len(rows))
-	for range rows {
-		if _, err := values.rows.AddRow(context.TODO(), tree.Datums{}); err != nil {
-			return nil, err
-		}
+	for i := range v.columns {
+		v.columns[i].Name = colNames[i]
+		v.columns[i].Typ = colTypes[i]
 	}
-	return values, nil
+	return v, nil
 }
 
 // ConstructScan is part of the exec.Factory interface.
