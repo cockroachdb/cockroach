@@ -50,6 +50,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "raftLeader", display: "Raft Leader", compareToLeader: true },
   { variable: "vote", display: "Vote", compareToLeader: false },
   { variable: "term", display: "Term", compareToLeader: true },
+  { variable: "leadTransferee", display: "Lead Transferee", compareToLeader: false },
   { variable: "applied", display: "Applied", compareToLeader: true },
   { variable: "commit", display: "Commit", compareToLeader: true },
   { variable: "lastIndex", display: "Last Index", compareToLeader: true },
@@ -449,6 +450,10 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         )),
         vote: this.contentIf(!dormant, () => this.createContent(vote.greaterThan(0) ? vote : "-")),
         term: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.term))),
+        leadTransferee: this.contentIf(!dormant, () => {
+          const leadTransferee = FixLong(info.raft_state.lead_transferee);
+          return this.createContent(leadTransferee.greaterThan(0) ? leadTransferee : "-");
+        }),
         applied: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.applied))),
         commit: this.contentIf(!dormant, () => this.createContent(FixLong(info.raft_state.hard_state.commit))),
         lastIndex: this.createContent(FixLong(info.state.last_index)),
