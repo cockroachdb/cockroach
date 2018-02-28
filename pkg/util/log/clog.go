@@ -593,15 +593,6 @@ func LoggingToStderr(s Severity) bool {
 // user configures larger max sizes than the defaults.
 func StartGCDaemon() {
 	go logging.gcDaemon()
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		// Some loggers (e.g. the audit log) want to keep all the files.
-		if l.enableGc {
-			go l.logger.gcDaemon()
-		}
-	}
 }
 
 // Flush flushes all pending log I/O.
