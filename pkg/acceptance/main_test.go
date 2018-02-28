@@ -15,9 +15,44 @@
 package acceptance
 
 import (
+	"context"
+	gosql "database/sql"
+	"os"
+	"os/signal"
 	"testing"
+
+	// Import postgres driver.
+	_ "github.com/lib/pq"
+
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
+var stopper = stop.NewStopper()
+
+// TestMain runs the tests in a package while gracefully handling interrupts.
 func TestMain(m *testing.M) {
-	MainTest(m)
+	randutil.SeedForTests()
+	go func() {
+		// Shut down tests when interrupted (for example CTRL+C).
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt)
+		<-sig
+		select {
+		case <-stopper.ShouldStop():
+		default:
+			// There is a very tiny race here: the cluster might be closing
+			// the stopper simultaneously.
+			stopper.Stop(context.TODO())
+		}
+	}()
+	os.Exit(m.Run())
+}
+
+func makePGClient(t *testing.T, dest string) *gosql.DB {
+	db, err := gosql.Open("postgres", dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db
 }
