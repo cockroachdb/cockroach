@@ -8,6 +8,7 @@
 
 import React from "react";
 import moment from "moment";
+import { Link } from "react-router";
 
 import { NodeStatus$Properties } from "src/util/proto";
 import { sumNodeStats } from "src/redux/nodes";
@@ -52,23 +53,29 @@ export class NodeView extends React.Component<NodeViewProps> {
     const uptimeText = "up for " + moment.duration(startTime.diff(moment())).humanize();
 
     return (
-      <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
-        <Labels
-          label={`Node ${node.desc.node_id}`}
-          subLabel={uptimeText}
-          tooltip={node.desc.address.address_field}
-        />
-        <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
-        <g
-          dangerouslySetInnerHTML={trustIcon(this.getLivenessIcon(nodeCounts))}
-          transform="translate(9, 9)"
-        />
-        <CapacityArc
-          usableCapacity={capacityUsable}
-          usedCapacity={capacityUsed}
-        />
-        <Sparklines nodes={[`${node.desc.node_id}`]} />
-      </g>
+      <Link
+        to={`/node/${node.desc.node_id}`}
+        style={{ cursor: "pointer" }}
+      >
+        <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
+          <rect width={180} height={210} opacity={0} />
+          <Labels
+            label={`Node ${node.desc.node_id}`}
+            subLabel={uptimeText}
+            tooltip={node.desc.address.address_field}
+          />
+          <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
+          <g
+            dangerouslySetInnerHTML={trustIcon(this.getLivenessIcon(nodeCounts))}
+            transform="translate(9, 9)"
+          />
+          <CapacityArc
+            usableCapacity={capacityUsable}
+            usedCapacity={capacityUsed}
+          />
+          <Sparklines nodes={[`${node.desc.node_id}`]} />
+        </g>
+      </Link>
     );
   }
 }
