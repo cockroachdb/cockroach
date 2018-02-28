@@ -1850,15 +1850,19 @@ func checkNodeStatus(t *testing.T, c cliTest, output string, start time.Time) {
 	baseIdx := len(baseNodeColumnHeaders)
 
 	// Adding fields that need verification for --range flag.
+	// We have to allow up to 1 unavailable/underreplicated range because
+	// sometimes we run the `node status` command before the server has fully
+	// initialized itself and it doesn't consider itself live yet. In such cases,
+	// there will only be one range covering the entire keyspace because it won't
+	// have been able to do any splits yet.
 	if nodeCtx.statusShowRanges || nodeCtx.statusShowAll {
 		testcases = append(testcases,
 			testCase{"leader_ranges", baseIdx, 3},
-			testCase{"repl_ranges", baseIdx + 1, 3},
-			testCase{"avail_ranges", baseIdx + 2, 3},
+			testCase{"leaseholder_ranges", baseIdx + 1, 3},
+			testCase{"ranges", baseIdx + 2, 20},
+			testCase{"unavailable_ranges", baseIdx + 3, 1},
+			testCase{"underreplicated_ranges", baseIdx + 4, 1},
 		)
-
-		// Ranges actually adds 5 fields, but we only need to check
-		// the 3 above.
 		baseIdx += len(statusNodesColumnHeadersForRanges)
 	}
 
