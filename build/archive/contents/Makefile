@@ -1,3 +1,4 @@
+export GOPATH = $(CURDIR)
 export BUILDCHANNEL := source-archive
 
 .PHONY: all build buildoss check clean install test
