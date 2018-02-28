@@ -419,8 +419,11 @@ func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachp
 	err := r.withRaftGroup(func(raftGroup *raft.RawNode) (bool, error) {
 		// Only the raft leader can attempt a leadership transfer.
 		if status := raftGroup.Status(); status.RaftState == raft.StateLeader {
-			// Only attempt this if the target has all the log entries.
-			if pr, ok := status.Progress[uint64(target)]; ok && pr.Match == r.mu.lastIndex {
+			// Only attempt this if the target has all the log entries. Although
+			// TransferLeader is supposed to do the right thing if the target is not
+			// caught up, this check avoids periods of 0 QPS:
+			// https://github.com/cockroachdb/cockroach/issues/22573#issuecomment-366106118
+			if pr, ok := status.Progress[uint64(target)]; (ok && pr.Match == r.mu.lastIndex) || r.mu.draining {
 				log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", target)
 				r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
 				raftGroup.TransferLeader(uint64(target))
