@@ -653,7 +653,7 @@ type loggingT struct {
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter
-	// syncWrites if true calls file.Flush on every log write.
+	// syncWrites if true calls file.Flush and file.Sync on every log write.
 	syncWrites bool
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
@@ -936,7 +936,7 @@ func (l *loggingT) exitLocked(err error) {
 		logExitFunc(err)
 		return
 	}
-	l.flushAll()
+	l.flushAndSync(true /*doSync*/)
 	l.exitFunc(2)
 }
 
@@ -1069,16 +1069,33 @@ func (l *loggingT) createFile() error {
 	return nil
 }
 
-const flushInterval = 30 * time.Second
+// flushInterval is the delay between periodic flushes of the buffered log data.
+const flushInterval = time.Second
 
-// flushDaemon periodically flushes the log file buffers.
+// syncInterval is the multiple of flushInterval where the log is also synced to disk.
+const syncInterval = 30
+
+// flushDaemon periodically flushes and syncs the log file buffers.
+//
+// Flush propagates the in-memory buffer inside CockroachDB to the
+// in-memory buffer(s) of the OS. The flush is relatively frequent so
+// that a human operator can see "up to date" logging data in the log
+// file.
+//
+// Syncs ensure that the OS commits the data to disk. Syncs are less
+// frequent because they can incur more significant I/O costs.
 func flushDaemon() {
-	// doesn't need to be Stop()'d as the loop never escapes
+	syncCounter := 1
+
+	// This doesn't need to be Stop()'d as the loop never escapes.
 	for range time.Tick(flushInterval) {
+		doSync := syncCounter == syncInterval
+		syncCounter = (syncCounter + 1) % syncInterval
+
 		// Flush the main log.
 		logging.mu.Lock()
 		if !logging.disableDaemons {
-			logging.flushAll()
+			logging.flushAndSync(doSync)
 		}
 		logging.mu.Unlock()
 
@@ -1087,7 +1104,7 @@ func flushDaemon() {
 		for _, l := range secondaryLogRegistry.mu.loggers {
 			l.logger.mu.Lock()
 			if !l.logger.disableDaemons {
-				l.logger.flushAll()
+				l.logger.flushAndSync(doSync)
 			}
 			l.logger.mu.Unlock()
 		}
@@ -1098,7 +1115,7 @@ func flushDaemon() {
 // lockAndFlushAll is like flushAll but locks l.mu first.
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
-	l.flushAll()
+	l.flushAndSync(true /*doSync*/)
 	l.mu.Unlock()
 }
 
@@ -1109,12 +1126,15 @@ func (l *loggingT) lockAndSetSync(sync bool) {
 	l.mu.Unlock()
 }
 
-// flushAll flushes all the logs and attempts to "sync" their data to disk.
+// flushAndSync flushes the current log and, if doSync is set,
+// attempts to sync its data to disk.
 // l.mu is held.
-func (l *loggingT) flushAll() {
+func (l *loggingT) flushAndSync(doSync bool) {
 	if l.file != nil {
 		_ = l.file.Flush() // ignore error
-		_ = l.file.Sync()  // ignore error
+		if doSync {
+			_ = l.file.Sync() // ignore error
+		}
 	}
 }
 
