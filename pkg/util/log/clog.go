@@ -579,7 +579,7 @@ func init() {
 	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
 
-	go logging.flushDaemon()
+	go flushDaemon()
 }
 
 // LoggingToStderr returns true if log messages of the given severity
@@ -593,15 +593,6 @@ func LoggingToStderr(s Severity) bool {
 // user configures larger max sizes than the defaults.
 func StartGCDaemon() {
 	go logging.gcDaemon()
-
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		// Some loggers (e.g. the audit log) want to keep all the files.
-		if l.enableGc {
-			go l.logger.gcDaemon()
-		}
-	}
 }
 
 // Flush flushes all pending log I/O.
@@ -662,7 +653,7 @@ type loggingT struct {
 	mu syncutil.Mutex
 	// file holds the log file writer.
 	file flushSyncWriter
-	// syncWrites if true calls file.Flush on every log write.
+	// syncWrites if true calls file.Flush and file.Sync on every log write.
 	syncWrites bool
 	// pcs is used in V to avoid an allocation when computing the caller's PC.
 	pcs [1]uintptr
@@ -945,7 +936,7 @@ func (l *loggingT) exitLocked(err error) {
 		logExitFunc(err)
 		return
 	}
-	l.flushAll()
+	l.flushAndSync(true /*doSync*/)
 	l.exitFunc(2)
 }
 
@@ -1078,24 +1069,53 @@ func (l *loggingT) createFile() error {
 	return nil
 }
 
-const flushInterval = 30 * time.Second
+// flushInterval is the delay between periodic flushes of the buffered log data.
+const flushInterval = time.Second
 
-// flushDaemon periodically flushes the log file buffers.
-func (l *loggingT) flushDaemon() {
-	// doesn't need to be Stop()'d as the loop never escapes
+// syncInterval is the multiple of flushInterval where the log is also synced to disk.
+const syncInterval = 30
+
+// flushDaemon periodically flushes and syncs the log file buffers.
+//
+// Flush propagates the in-memory buffer inside CockroachDB to the
+// in-memory buffer(s) of the OS. The flush is relatively frequent so
+// that a human operator can see "up to date" logging data in the log
+// file.
+//
+// Syncs ensure that the OS commits the data to disk. Syncs are less
+// frequent because they can incur more significant I/O costs.
+func flushDaemon() {
+	syncCounter := 1
+
+	// This doesn't need to be Stop()'d as the loop never escapes.
 	for range time.Tick(flushInterval) {
-		l.mu.Lock()
-		if !l.disableDaemons {
-			l.flushAll()
+		doSync := syncCounter == syncInterval
+		syncCounter = (syncCounter + 1) % syncInterval
+
+		// Flush the main log.
+		logging.mu.Lock()
+		if !logging.disableDaemons {
+			logging.flushAndSync(doSync)
 		}
-		l.mu.Unlock()
+		logging.mu.Unlock()
+
+		// Flush the secondary logs.
+		secondaryLogRegistry.mu.Lock()
+		for _, l := range secondaryLogRegistry.mu.loggers {
+			l.logger.mu.Lock()
+			if !l.logger.disableDaemons {
+				l.logger.flushAndSync(doSync)
+			}
+			l.logger.mu.Unlock()
+		}
+		secondaryLogRegistry.mu.Unlock()
 	}
 }
 
 // lockAndFlushAll is like flushAll but locks l.mu first.
 func (l *loggingT) lockAndFlushAll() {
 	l.mu.Lock()
-	l.flushAll()
+	l.flushAndSync(true /*doSync*/)
 	l.mu.Unlock()
 }
 
@@ -1106,12 +1126,15 @@ func (l *loggingT) lockAndSetSync(sync bool) {
 	l.mu.Unlock()
 }
 
-// flushAll flushes all the logs and attempts to "sync" their data to disk.
+// flushAndSync flushes the current log and, if doSync is set,
+// attempts to sync its data to disk.
 // l.mu is held.
-func (l *loggingT) flushAll() {
+func (l *loggingT) flushAndSync(doSync bool) {
 	if l.file != nil {
 		_ = l.file.Flush() // ignore error
-		_ = l.file.Sync()  // ignore error
+		if doSync {
+			_ = l.file.Sync() // ignore error
+		}
 	}
 }
 
