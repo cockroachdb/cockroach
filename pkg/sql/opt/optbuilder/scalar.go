@@ -166,8 +166,17 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		out = b.buildScalar(t.TypedInnerExpr(), inScope)
 
 	case *tree.Placeholder:
-		out = b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
-		// TODO(rytaft): Do we need to update varsUsed here?
+		if b.evalCtx.HasPlaceholders() {
+			// Replace placeholders with their value.
+			d, err := t.Eval(b.evalCtx)
+			if err != nil {
+				panic(builderError{err})
+			}
+			out = b.buildDatum(d)
+		} else {
+			out = b.factory.ConstructPlaceholder(b.factory.InternPrivate(t))
+			// TODO(rytaft): Do we need to update varsUsed here?
+		}
 
 	case *tree.Tuple:
 		list := make([]opt.GroupID, len(t.Exprs))
@@ -183,14 +192,7 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
 	case tree.Datum:
-		// Map True/False datums to True/False operator.
-		if t == tree.DBoolTrue {
-			out = b.factory.ConstructTrue()
-		} else if t == tree.DBoolFalse {
-			out = b.factory.ConstructFalse()
-		} else {
-			out = b.factory.ConstructConst(b.factory.InternPrivate(t))
-		}
+		out = b.buildDatum(t)
 
 	default:
 		if b.AllowUnsupportedExpr {
@@ -212,6 +214,17 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 	}
 
 	return out
+}
+
+func (b *Builder) buildDatum(d tree.Datum) opt.GroupID {
+	if boolVal, ok := d.(*tree.DBool); ok {
+		// Map True/False datums to True/False operator.
+		if *boolVal {
+			return b.factory.ConstructTrue()
+		}
+		return b.factory.ConstructFalse()
+	}
+	return b.factory.ConstructConst(b.factory.InternPrivate(d))
 }
 
 // buildFunction builds a set of memo groups that represent a function
