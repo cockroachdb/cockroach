@@ -129,6 +129,7 @@ message RaftState {
   string state = 4;
   uint64 applied = 5;
   map<uint64, Progress> progress = 6 [(gogoproto.nullable) = false];
+  uint64 lead_transferee = 7;
 }
 
 message RangeProblems {
