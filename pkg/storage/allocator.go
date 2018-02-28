@@ -605,7 +605,7 @@ func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptio
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -615,7 +615,7 @@ func (a *Allocator) TransferLeaseTarget(
 	alwaysAllowDecisionWithoutStats bool,
 ) roachpb.ReplicaDescriptor {
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
-	sl = sl.filter(constraints)
+	sl = sl.filter(zone.Constraints)
 
 	// Filter stores that are on nodes containing existing replicas, but leave
 	// the stores containing the existing replicas in place. This excludes stores
@@ -645,11 +645,44 @@ func (a *Allocator) TransferLeaseTarget(
 		return roachpb.ReplicaDescriptor{}
 	}
 
+	// Determine which store(s) is preferred based on user-specified preferences.
+	// If any stores match, only consider those stores as options. If only one
+	// store matches, it's where the lease should be (unless the preferred store
+	// is the current one and checkTransferLeaseSource is false).
+	var preferred []roachpb.ReplicaDescriptor
+	if checkTransferLeaseSource {
+		preferred = a.preferredLeaseholders(zone, existing)
+	} else {
+		// TODO(a-robinson): Should we just always remove the source store from
+		// existing when checkTransferLeaseSource is false? I'd do it now, but
+		// it's too big a change to make right before a major release.
+		var options []roachpb.ReplicaDescriptor
+		for _, repl := range existing {
+			if repl.StoreID != leaseStoreID {
+				options = append(options, repl)
+			}
+		}
+		preferred = a.preferredLeaseholders(zone, options)
+	}
+	if len(preferred) == 1 {
+		if preferred[0].StoreID == leaseStoreID {
+			return roachpb.ReplicaDescriptor{}
+		}
+		return preferred[0]
+	} else if len(preferred) > 1 {
+		// If the current leaseholder is not preferred, set checkTransferLeaseSource
+		// to false to motivate the below logic to transfer the lease.
+		existing = preferred
+		if !storeHasReplica(leaseStoreID, preferred) {
+			checkTransferLeaseSource = false
+		}
+	}
+
 	// Only consider live, non-draining replicas.
 	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
 
 	// Short-circuit if there are no valid targets out there.
-	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {
+	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
 		return roachpb.ReplicaDescriptor{}
 	}
 
@@ -719,7 +752,7 @@ func (a *Allocator) TransferLeaseTarget(
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
-	constraints []config.Constraints,
+	zone config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -729,8 +762,24 @@ func (a *Allocator) ShouldTransferLease(
 	if !ok {
 		return false
 	}
+
+	// Determine which store(s) is preferred based on user-specified preferences.
+	// If any stores match, only consider those stores as options. If only one
+	// store matches, it's where the lease should be.
+	preferred := a.preferredLeaseholders(zone, existing)
+	if len(preferred) == 1 {
+		return preferred[0].StoreID != leaseStoreID
+	} else if len(preferred) > 1 {
+		existing = preferred
+		// If the current leaseholder isn't one of the preferred stores, then we
+		// should try to transfer the lease.
+		if !storeHasReplica(leaseStoreID, existing) {
+			return true
+		}
+	}
+
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
-	sl = sl.filter(constraints)
+	sl = sl.filter(zone.Constraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	// Only consider live, non-draining replicas.
@@ -960,6 +1009,33 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 		}
 	}
 	return false
+}
+
+func (a Allocator) preferredLeaseholders(
+	zone config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
+) []roachpb.ReplicaDescriptor {
+	// Go one preference at a time. As soon as we've found replicas that match a
+	// preference, we don't need to look at the later preferences, because
+	// they're meant to be ordered by priority.
+	for _, preference := range zone.LeasePreferences {
+		var preferred []roachpb.ReplicaDescriptor
+		for _, repl := range existing {
+			// TODO(a-robinson): Do all these lookups at once, up front? We could
+			// easily be passing a slice of StoreDescriptors around all the Allocator
+			// functions instead of ReplicaDescriptors.
+			storeDesc, ok := a.storePool.getStoreDescriptor(repl.StoreID)
+			if !ok {
+				continue
+			}
+			if subConstraintsCheck(storeDesc, preference.Constraints) {
+				preferred = append(preferred, repl)
+			}
+		}
+		if len(preferred) > 0 {
+			return preferred
+		}
+	}
+	return nil
 }
 
 // computeQuorum computes the quorum value for the given number of nodes.

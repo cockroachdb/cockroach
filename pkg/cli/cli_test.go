@@ -460,6 +460,7 @@ func Example_zone() {
 	c.Run("zone rm .system")
 	c.Run("zone rm .timeseries")
 	c.Run("zone set system.jobs@primary --file=./testdata/zone_attrs.yaml")
+	c.Run("zone set system --file=./testdata/zone_attrs_advanced.yaml")
 
 	// Output:
 	// zone ls
@@ -634,6 +635,14 @@ func Example_zone() {
 	// CONFIGURE ZONE 0
 	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
 	// pq: setting zone configs on indexes or partitions requires a CCL binary
+	// zone set system --file=./testdata/zone_attrs_advanced.yaml
+	// range_min_bytes: 1048576
+	// range_max_bytes: 134217728
+	// gc:
+	//   ttlseconds: 90000
+	// num_replicas: 3
+	// constraints: {'+us-east-1a,+ssd': 1, +us-east-1b: 1}
+	// experimental_lease_preferences: [[+us-east1b], [+us-east-1a]]
 }
 
 func Example_sql() {
