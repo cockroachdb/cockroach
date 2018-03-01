@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <libroach.h>
 #include <rocksdb/cache.h>
 #include <rocksdb/db.h>
@@ -23,10 +24,12 @@
 
 struct DBEngine {
   rocksdb::DB* const rep;
+  std::atomic<int64_t>* iters;
 
-  DBEngine(rocksdb::DB* r) : rep(r) {}
-  virtual ~DBEngine() {}
+  DBEngine(rocksdb::DB* r, std::atomic<int64_t>* iters) : rep(r), iters(iters) {}
+  virtual ~DBEngine();
 
+  virtual DBStatus AssertPreClose();
   virtual DBStatus Put(DBKey key, DBSlice value) = 0;
   virtual DBStatus Merge(DBKey key, DBSlice value) = 0;
   virtual DBStatus Delete(DBKey key) = 0;
@@ -52,6 +55,7 @@ struct DBImpl : public DBEngine {
   std::unique_ptr<rocksdb::DB> rep_deleter;
   std::shared_ptr<rocksdb::Cache> block_cache;
   std::shared_ptr<DBEventListener> event_listener;
+  std::atomic<int64_t> iters_count;
 
   // Construct a new DBImpl from the specified DB.
   // The DB and passed Envs will be deleted when the DBImpl is deleted.
@@ -60,6 +64,7 @@ struct DBImpl : public DBEngine {
          std::shared_ptr<DBEventListener> event_listener, rocksdb::Env* s_env);
   virtual ~DBImpl();
 
+  virtual DBStatus AssertPreClose();
   virtual DBStatus Put(DBKey key, DBSlice value);
   virtual DBStatus Merge(DBKey key, DBSlice value);
   virtual DBStatus Delete(DBKey key);

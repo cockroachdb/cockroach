@@ -44,7 +44,7 @@ DBSlice DBSnapshot::BatchRepr() { return ToDBSlice("unsupported"); }
 
 DBIterator* DBSnapshot::NewIter(rocksdb::ReadOptions* read_opts) {
   read_opts->snapshot = snapshot;
-  DBIterator* iter = new DBIterator;
+  DBIterator* iter = new DBIterator(iters);
   iter->rep.reset(rep->NewIterator(*read_opts));
   return iter;
 }

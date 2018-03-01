@@ -147,7 +147,13 @@ DBStatus DBDestroy(DBSlice dir) {
   return ToDBStatus(rocksdb::DestroyDB(ToString(dir), options));
 }
 
-void DBClose(DBEngine* db) { delete db; }
+DBStatus DBClose(DBEngine* db) {
+  DBStatus status = db->AssertPreClose();
+  if (status.data == nullptr) {
+    delete db;
+  }
+  return status;
+}
 
 DBStatus DBFlush(DBEngine* db) {
   rocksdb::FlushOptions options;
@@ -628,7 +634,8 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data) {
     return ToDBStatus(status);
   }
   if (sst_contents.size() != file_size) {
-    return FmtStatus("expected to read %d bytes but got %d", file_size, sst_contents.size());
+    return FmtStatus("expected to read %" PRIu64 " bytes but got %zu",
+      file_size, sst_contents.size());
   }
 
   // The contract of the SequentialFile.Read call above is that it _might_ use
