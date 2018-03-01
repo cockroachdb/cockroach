@@ -420,7 +420,7 @@ class DBBatchInserter : public rocksdb::WriteBatch::Handler {
 }  // namespace
 
 DBBatch::DBBatch(DBEngine* db)
-    : DBEngine(db->rep), updates(0), has_delete_range(false), batch(&kComparator) {}
+    : DBEngine(db->rep, db->iters), updates(0), has_delete_range(false), batch(&kComparator) {}
 
 DBBatch::~DBBatch() {}
 
@@ -493,7 +493,7 @@ DBStatus DBBatch::ApplyBatchRepr(DBSlice repr, bool sync) {
 DBSlice DBBatch::BatchRepr() { return ToDBSlice(batch.GetWriteBatch()->Data()); }
 
 DBIterator* DBBatch::NewIter(rocksdb::ReadOptions* read_opts) {
-  DBIterator* iter = new DBIterator;
+  DBIterator* iter = new DBIterator(iters);
   if (has_delete_range) {
     // TODO(peter): We don't support iterators when the batch contains
     // delete range entries.
@@ -511,7 +511,7 @@ DBString DBBatch::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBBatch::EnvWriteFile(DBSlice path, DBSlice contents) { return FmtStatus("unsupported"); }
 
-DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep), updates(0) {}
+DBWriteOnlyBatch::DBWriteOnlyBatch(DBEngine* db) : DBEngine(db->rep, db->iters), updates(0) {}
 
 DBWriteOnlyBatch::~DBWriteOnlyBatch() {}
 

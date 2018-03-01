@@ -147,7 +147,13 @@ DBStatus DBDestroy(DBSlice dir) {
   return ToDBStatus(rocksdb::DestroyDB(ToString(dir), options));
 }
 
-void DBClose(DBEngine* db) { delete db; }
+DBStatus DBClose(DBEngine* db) {
+  DBStatus status = db->AssertPreClose();
+  if (status.data == nullptr) {
+    delete db;
+  }
+  return status;
+}
 
 DBStatus DBFlush(DBEngine* db) {
   rocksdb::FlushOptions options;

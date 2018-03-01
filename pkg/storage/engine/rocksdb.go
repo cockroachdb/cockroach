@@ -67,6 +67,12 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	0*time.Millisecond,
 )
 
+// Set to true to perform expensive iterator debug leak checking. In normal
+// operation, we perform inexpensive iterator leak checking but those checks do
+// not indicate where the leak arose. The expensive checking tracks the stack
+// traces of every iterator allocated. DO NOT ENABLE in production code.
+const debugIteratorLeak = false
+
 //export rocksDBLog
 func rocksDBLog(s *C.char, n C.int) {
 	// Note that rocksdb logging is only enabled if log.V(3) is true
@@ -465,6 +471,11 @@ type RocksDB struct {
 		closed  bool
 		pending []*rocksDBBatch
 	}
+
+	iters struct {
+		syncutil.Mutex
+		m map[*rocksDBIterator][]byte
+	}
 }
 
 var _ Engine = &RocksDB{}
@@ -604,6 +615,7 @@ func (r *RocksDB) open() error {
 
 	r.commit.cond.L = &r.commit.Mutex
 	r.syncer.cond.L = &r.syncer.Mutex
+	r.iters.m = make(map[*rocksDBIterator][]byte)
 
 	// NB: The sync goroutine acts as a check that the RocksDB instance was
 	// properly closed as the goroutine will leak otherwise.
@@ -674,7 +686,16 @@ func (r *RocksDB) Close() {
 		log.Infof(context.TODO(), "closing rocksdb instance at %q", r.cfg.Dir)
 	}
 	if r.rdb != nil {
-		C.DBClose(r.rdb)
+		if err := statusToError(C.DBClose(r.rdb)); err != nil {
+			if debugIteratorLeak {
+				r.iters.Lock()
+				for _, stack := range r.iters.m {
+					fmt.Printf("%s\n", stack)
+				}
+				r.iters.Unlock()
+			}
+			panic(err)
+		}
 		r.rdb = nil
 	}
 	r.cache.Release()
@@ -876,7 +897,7 @@ func (r *RocksDB) Flush() error {
 
 // NewIterator returns an iterator over this rocksdb engine.
 func (r *RocksDB) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(r.rdb, prefix, r)
+	return newRocksDBIterator(r.rdb, prefix, r, r)
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
@@ -967,7 +988,7 @@ func (r *rocksDBReadOnly) NewIterator(prefix bool) Iterator {
 		iter = &r.prefixIter
 	}
 	if iter.rocksDBIterator.iter == nil {
-		iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
+		iter.rocksDBIterator.init(r.parent.rdb, prefix, r, r.parent)
 	}
 	if iter.inuse {
 		panic("iterator already in use")
@@ -1143,7 +1164,7 @@ func (r *rocksDBSnapshot) Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool
 // NewIterator returns a new instance of an Iterator over the
 // engine using the snapshot handle.
 func (r *rocksDBSnapshot) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(r.handle, prefix, r)
+	return newRocksDBIterator(r.handle, prefix, r, r.parent)
 }
 
 // NewTimeBoundIterator is like NewIterator, but returns a time-bound iterator.
@@ -1192,10 +1213,10 @@ func (r *distinctBatch) NewIterator(prefix bool) Iterator {
 	}
 	if iter.rocksDBIterator.iter == nil {
 		if r.writeOnly {
-			iter.rocksDBIterator.init(r.parent.rdb, prefix, r)
+			iter.rocksDBIterator.init(r.parent.rdb, prefix, r, r.parent)
 		} else {
 			r.ensureBatch()
-			iter.rocksDBIterator.init(r.batch, prefix, r)
+			iter.rocksDBIterator.init(r.batch, prefix, r, r.parent)
 		}
 	}
 	if iter.inuse {
@@ -1574,7 +1595,7 @@ func (r *rocksDBBatch) NewIterator(prefix bool) Iterator {
 	}
 	if iter.iter.iter == nil {
 		r.ensureBatch()
-		iter.iter.init(r.batch, prefix, r)
+		iter.iter.init(r.batch, prefix, r, r.parent)
 	}
 	if iter.batch != nil {
 		panic("iterator already in use")
@@ -1789,6 +1810,7 @@ type dbIteratorGetter interface {
 }
 
 type rocksDBIterator struct {
+	parent *RocksDB
 	engine Reader
 	iter   *C.DBIterator
 	valid  bool
@@ -1810,13 +1832,13 @@ var iterPool = sync.Pool{
 // instance. If snapshotHandle is not nil, uses the indicated snapshot.
 // The caller must call rocksDBIterator.Close() when finished with the
 // iterator to free up resources.
-func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Reader) Iterator {
+func newRocksDBIterator(rdb *C.DBEngine, prefix bool, engine Reader, parent *RocksDB) Iterator {
 	// In order to prevent content displacement, caching is disabled
 	// when performing scans. Any options set within the shared read
 	// options field that should be carried over needs to be set here
 	// as well.
 	r := iterPool.Get().(*rocksDBIterator)
-	r.init(rdb, prefix, engine)
+	r.init(rdb, prefix, engine, parent)
 	return r
 }
 
@@ -1824,7 +1846,14 @@ func (r *rocksDBIterator) getIter() *C.DBIterator {
 	return r.iter
 }
 
-func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader) {
+func (r *rocksDBIterator) init(rdb *C.DBEngine, prefix bool, engine Reader, parent *RocksDB) {
+	r.parent = parent
+	if debugIteratorLeak && r.parent != nil {
+		r.parent.iters.Lock()
+		r.parent.iters.m[r] = debug.Stack()
+		r.parent.iters.Unlock()
+	}
+
 	r.iter = C.DBNewIter(rdb, C.bool(prefix))
 	if r.iter == nil {
 		panic("unable to create iterator")
@@ -1847,6 +1876,11 @@ func (r *rocksDBIterator) checkEngineOpen() {
 }
 
 func (r *rocksDBIterator) destroy() {
+	if debugIteratorLeak && r.parent != nil {
+		r.parent.iters.Lock()
+		delete(r.parent.iters.m, r)
+		r.parent.iters.Unlock()
+	}
 	C.DBIterDestroy(r.iter)
 	*r = rocksDBIterator{}
 }
@@ -2351,7 +2385,7 @@ func dbIterate(
 	if !start.Less(end) {
 		return nil
 	}
-	it := newRocksDBIterator(rdb, false, engine)
+	it := newRocksDBIterator(rdb, false, engine, nil)
 	defer it.Close()
 
 	it.Seek(start)
@@ -2423,7 +2457,7 @@ func (fr *RocksDBSstFileReader) Iterate(
 
 // NewIterator returns an iterator over this sst reader.
 func (fr *RocksDBSstFileReader) NewIterator(prefix bool) Iterator {
-	return newRocksDBIterator(fr.rocksDB.rdb, prefix, fr.rocksDB)
+	return newRocksDBIterator(fr.rocksDB.rdb, prefix, fr.rocksDB, fr.rocksDB.RocksDB)
 }
 
 // Close finishes the reader.

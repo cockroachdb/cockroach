@@ -23,6 +23,12 @@
 
 using namespace cockroach;
 
+DBEngine::~DBEngine() {}
+
+DBStatus DBEngine::AssertPreClose() {
+  return kSuccess;
+}
+
 DBSSTable* DBEngine::GetSSTables(int* n) {
   std::vector<rocksdb::LiveFileMetaData> metadata;
   rep->GetLiveFilesMetaData(&metadata);
@@ -94,12 +100,13 @@ namespace cockroach {
 
 DBImpl::DBImpl(rocksdb::DB* r, rocksdb::Env* m, std::shared_ptr<rocksdb::Cache> bc,
                std::shared_ptr<DBEventListener> event_listener, rocksdb::Env* s_env)
-    : DBEngine(r),
+    : DBEngine(r, &iters_count),
       switching_env(s_env),
       memenv(m),
       rep_deleter(r),
       block_cache(bc),
-      event_listener(event_listener) {}
+      event_listener(event_listener),
+      iters_count(0) {}
 
 DBImpl::~DBImpl() {
   const rocksdb::Options& opts = rep->GetOptions();
@@ -107,6 +114,15 @@ DBImpl::~DBImpl() {
   rocksdb::Info(opts.info_log, "bloom filter utility:    %0.1f%%",
                 (100.0 * s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL)) /
                     s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_CHECKED));
+
+}
+
+DBStatus DBImpl::AssertPreClose() {
+  const int64_t n = iters_count.load();
+  if (n == 0) {
+    return kSuccess;
+  }
+  return FmtStatus("%" PRId64 " leaked iterators", n);
 }
 
 DBStatus DBImpl::Put(DBKey key, DBSlice value) {
@@ -148,7 +164,7 @@ DBStatus DBImpl::ApplyBatchRepr(DBSlice repr, bool sync) {
 DBSlice DBImpl::BatchRepr() { return ToDBSlice("unsupported"); }
 
 DBIterator* DBImpl::NewIter(rocksdb::ReadOptions* read_opts) {
-  DBIterator* iter = new DBIterator;
+  DBIterator* iter = new DBIterator(iters);
   iter->rep.reset(rep->NewIterator(*read_opts));
   return iter;
 }
