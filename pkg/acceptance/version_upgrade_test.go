@@ -110,9 +110,22 @@ func (bv binaryVersionUpgrade) checkNode(
 
 // clusterVersionUpgrade performs a cluster version upgrade to its version.
 // It waits until all nodes have seen the upgraded cluster version.
-type clusterVersionUpgrade string
+type clusterVersionUpgrade struct {
+	v string
+	// withWorkaround is true when we're working around
+	// https://github.com/cockroachdb/cockroach/issues/23155.
+	//
+	// The problem there is that `SHOW CLUSTER SETTING version` does not take into
+	// account the gossiped value of that setting but reads it straight from the
+	// KV store. This means that even though a node may report a certain version,
+	// it may not actually have processed it yet, which leads to illegal upgrades
+	// in this test. When this flag is set to true, we query
+	// `crdb_internal.cluster_settings` instead, which *does* take everything from
+	// Gossip.
+	withWorkaround bool
+}
 
-func (cv clusterVersionUpgrade) name() string { return fmt.Sprintf("cluster=%s", cv) }
+func (cv clusterVersionUpgrade) name() string { return fmt.Sprintf("cluster=%s", cv.v) }
 
 func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
 	t.Helper()
@@ -121,8 +134,8 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 		db := makePGClient(t, c.PGUrl(ctx, rand.Intn(c.NumNodes())))
 		defer db.Close()
 
-		log.Infof(ctx, "upgrading cluster version to %s", string(cv))
-		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, string(cv))); err != nil {
+		log.Infof(ctx, "upgrading cluster version to %s", cv.v)
+		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, cv.v)); err != nil {
 			t.Fatal(err)
 		}
 	}()
@@ -133,34 +146,51 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 			defer db.Close()
 
 			var version string
-			if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&version); err != nil {
-				t.Fatalf("%d: %s", i, err)
+			if !cv.withWorkaround {
+				if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&version); err != nil {
+					t.Fatalf("%d: %s", i, err)
+				}
+			} else {
+				// This uses the receiving node's Gossip and as such allows us to verify that all of the
+				// nodes have gotten wind of the version bump.
+				if err := db.QueryRow(
+					`SELECT current_value FROM crdb_internal.cluster_settings WHERE name = 'version'`,
+				).Scan(&version); err != nil {
+					t.Fatalf("%d: %s", i, err)
+				}
 			}
-			if version != string(cv) {
-				return errors.Errorf("%d: expected version %s, got %s", i, string(cv), version)
+			if version != cv.v {
+				return errors.Errorf("%d: expected version %s, got %s", i, cv.v, version)
 			}
 			return nil
 		})
 	}
+
+	log.Infof(ctx, "cluster is now at version %s", cv.v)
 
 	// TODO(nvanbenschoten): add upgrade qualification step.
 	time.Sleep(1 * time.Second)
 }
 
 func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfig) {
-	t.Skip("#22796")
+	const (
+		noWorkaround   = false
+		withWorkaround = true
+	)
 	steps := []versionStep{
 		binaryVersionUpgrade("v1.0.6"),
 		// v1.1.0 is the first binary version that knows about cluster versions,
 		// but thinks it can only support up to 1.0-3.
 		binaryVersionUpgrade("v1.1.0"),
-		clusterVersionUpgrade("1.0"),
-		clusterVersionUpgrade("1.0-3"),
+		clusterVersionUpgrade{"1.0", withWorkaround},
+		clusterVersionUpgrade{"1.0-3", withWorkaround},
 		binaryVersionUpgrade("v1.1.1"),
-		clusterVersionUpgrade("1.1"),
+		clusterVersionUpgrade{"1.1", withWorkaround},
+		// NB: any new lines with versions > 1.1.x should have `noWorkaround` as they
+		// contain the fix for said workaround.
 		binaryVersionUpgrade(sourceVersion),
-		clusterVersionUpgrade("1.1-6"),
-		clusterVersionUpgrade(clusterversion.BinaryServerVersion.String()),
+		clusterVersionUpgrade{"1.1-6", noWorkaround},
+		clusterVersionUpgrade{clusterversion.BinaryServerVersion.String(), noWorkaround},
 	}
 
 	if len(cfg.Nodes) > 3 {
