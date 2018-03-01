@@ -15,6 +15,8 @@
 package optbuilder
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -33,12 +35,10 @@ func (b *Builder) buildValuesClause(
 		numCols = len(values.Tuples[0].Exprs)
 	}
 
-	// Synthesize correct number of unknown-typed columns.
-	outScope = inScope.push()
-	for i := 0; i < numCols; i++ {
-		b.synthesizeColumn(outScope, "", types.Unknown)
+	colTypes := make([]types.T, numCols)
+	for i := range colTypes {
+		colTypes[i] = types.Unknown
 	}
-
 	rows := make([]opt.GroupID, 0, len(values.Tuples))
 
 	for _, tuple := range values.Tuples {
@@ -56,14 +56,21 @@ func (b *Builder) buildValuesClause(
 			elems[i] = b.buildScalar(texpr, inScope)
 
 			// Verify that types of each tuple match one another.
-			if outScope.cols[i].typ == types.Unknown {
-				outScope.cols[i].typ = typ
-			} else if typ != types.Unknown && !typ.Equivalent(outScope.cols[i].typ) {
-				panic(errorf("VALUES list type mismatch, %s for %s", typ, outScope.cols[i].typ))
+			if colTypes[i] == types.Unknown {
+				colTypes[i] = typ
+			} else if typ != types.Unknown && !typ.Equivalent(colTypes[i]) {
+				panic(errorf("VALUES list type mismatch, %s for %s", typ, colTypes[i]))
 			}
 		}
 
 		rows = append(rows, b.factory.ConstructTuple(b.factory.InternList(elems)))
+	}
+
+	outScope = inScope.push()
+	for i := 0; i < numCols; i++ {
+		// The column names for VALUES are column1, column2, etc.
+		label := fmt.Sprintf("column%d", i+1)
+		b.synthesizeColumn(outScope, label, colTypes[i])
 	}
 
 	colList := make(opt.ColList, len(outScope.cols))
