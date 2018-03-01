@@ -177,7 +177,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
-				if e.(BinOp).nullableArgs {
+				if e.(BinOp).NullableArgs {
 					noneAcceptNull = false
 					break
 				}
@@ -1234,7 +1234,7 @@ func typeCheckComparisonOp(
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
-				if e.(CmpOp).nullableArgs {
+				if e.(CmpOp).NullableArgs {
 					noneAcceptNull = false
 					break
 				}
