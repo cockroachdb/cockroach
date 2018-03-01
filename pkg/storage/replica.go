@@ -5440,7 +5440,10 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		// There were intents, so what we read may not be consistent. Attempt
 		// to nudge the intents in case they're expired; next time around we'll
 		// hopefully have more luck.
-		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, true /* allowSync */); err != nil {
+		// This is called from handleLocalEvalResult (with raftMu locked),
+		// so disallow synchronous processing (which blocks that mutex for
+		// too long and is a potential deadlock).
+		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
 			log.Warning(ctx, err)
 		}
 		return config.SystemConfig{}, errSystemConfigIntent
