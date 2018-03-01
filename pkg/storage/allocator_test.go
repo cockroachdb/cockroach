@@ -1170,6 +1170,80 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 	}
 }
 
+// TestAllocatorTransferLeaseTargetDraining verifies that the allocator will
+// not choose to transfer leases to a store that is draining.
+func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, storePool, nl := createTestStorePool(
+		TestTimeUntilStoreDeadOff, true /* deterministic */, NodeLivenessStatus_LIVE)
+	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
+		return 0, true
+	})
+	defer stopper.Stop(context.Background())
+
+	// 3 stores where the lease count for each store is equal to 100x the store
+	// ID. We'll be draining the store with the fewest leases on it.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 3; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(100 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	// UNAVAILABLE is the node liveness status used for a node that's draining.
+	nl.setNodeStatus(1, NodeLivenessStatus_UNAVAILABLE)
+
+	existing := []roachpb.ReplicaDescriptor{
+		{StoreID: 1},
+		{StoreID: 2},
+		{StoreID: 3},
+	}
+
+	testCases := []struct {
+		existing    []roachpb.ReplicaDescriptor
+		leaseholder roachpb.StoreID
+		check       bool
+		expected    roachpb.StoreID
+	}{
+		// No existing lease holder, nothing to do.
+		{existing: existing, leaseholder: 0, check: true, expected: 0},
+		// Store 1 is draining, so it will try to transfer its lease if
+		// checkTransferLeaseSource is false. This behavior isn't relied upon,
+		// though; leases are manually transferred when draining.
+		{existing: existing, leaseholder: 1, check: true, expected: 0},
+		{existing: existing, leaseholder: 1, check: false, expected: 2},
+		// Store 2 is not a lease transfer source.
+		{existing: existing, leaseholder: 2, check: true, expected: 0},
+		{existing: existing, leaseholder: 2, check: false, expected: 0},
+		// Store 3 is a lease transfer source, but won't transfer to
+		// node 1 because it's draining.
+		{existing: existing, leaseholder: 3, check: true, expected: 2},
+		{existing: existing, leaseholder: 3, check: false, expected: 2},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			target := a.TransferLeaseTarget(
+				context.Background(),
+				nil, /* constraints */
+				c.existing,
+				c.leaseholder,
+				0,
+				nil, /* replicaStats */
+				c.check,
+				true,  /* checkCandidateFullness */
+				false, /* alwaysAllowDecisionWithoutStats */
+			)
+			if c.expected != target.StoreID {
+				t.Fatalf("expected %d, but found %d", c.expected, target.StoreID)
+			}
+		})
+	}
+}
+
 func TestAllocatorRebalanceDifferentLocalitySizes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -1480,12 +1554,86 @@ func TestAllocatorShouldTransferLease(t *testing.T) {
 		{leaseholder: 1, existing: nil, expected: false},
 		{leaseholder: 2, existing: nil, expected: false},
 		{leaseholder: 3, existing: nil, expected: false},
+		{leaseholder: 4, existing: nil, expected: false},
 		{leaseholder: 3, existing: replicas(1), expected: true},
 		{leaseholder: 3, existing: replicas(1, 2), expected: true},
 		{leaseholder: 3, existing: replicas(2), expected: false},
 		{leaseholder: 3, existing: replicas(3), expected: false},
 		{leaseholder: 3, existing: replicas(4), expected: false},
-		{leaseholder: 4, existing: nil, expected: true},
+		{leaseholder: 4, existing: replicas(1), expected: true},
+		{leaseholder: 4, existing: replicas(2), expected: true},
+		{leaseholder: 4, existing: replicas(3), expected: true},
+		{leaseholder: 4, existing: replicas(1, 2, 3), expected: true},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			result := a.ShouldTransferLease(
+				context.Background(),
+				nil, /* constraints */
+				c.existing,
+				c.leaseholder,
+				0,
+				nil, /* replicaStats */
+			)
+			if c.expected != result {
+				t.Fatalf("expected %v, but found %v", c.expected, result)
+			}
+		})
+	}
+}
+
+func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper, g, _, storePool, nl := createTestStorePool(
+		TestTimeUntilStoreDeadOff, true /* deterministic */, NodeLivenessStatus_LIVE)
+	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
+		return 0, true
+	})
+	defer stopper.Stop(context.Background())
+
+	// 4 stores where the lease count for each store is equal to 10x the store
+	// ID.
+	var stores []*roachpb.StoreDescriptor
+	for i := 1; i <= 4; i++ {
+		stores = append(stores, &roachpb.StoreDescriptor{
+			StoreID:  roachpb.StoreID(i),
+			Node:     roachpb.NodeDescriptor{NodeID: roachpb.NodeID(i)},
+			Capacity: roachpb.StoreCapacity{LeaseCount: int32(10 * i)},
+		})
+	}
+	sg := gossiputil.NewStoreGossiper(g)
+	sg.GossipStores(stores, t)
+
+	// UNAVAILABLE is the node liveness status used for a node that's draining.
+	nl.setNodeStatus(1, NodeLivenessStatus_UNAVAILABLE)
+
+	replicas := func(storeIDs ...roachpb.StoreID) []roachpb.ReplicaDescriptor {
+		var r []roachpb.ReplicaDescriptor
+		for _, storeID := range storeIDs {
+			r = append(r, roachpb.ReplicaDescriptor{
+				StoreID: storeID,
+			})
+		}
+		return r
+	}
+
+	testCases := []struct {
+		leaseholder roachpb.StoreID
+		existing    []roachpb.ReplicaDescriptor
+		expected    bool
+	}{
+		{leaseholder: 1, existing: nil, expected: false},
+		{leaseholder: 2, existing: nil, expected: false},
+		{leaseholder: 3, existing: nil, expected: false},
+		{leaseholder: 4, existing: nil, expected: false},
+		{leaseholder: 2, existing: replicas(1), expected: false},
+		{leaseholder: 3, existing: replicas(1), expected: false},
+		{leaseholder: 3, existing: replicas(1, 2), expected: false},
+		{leaseholder: 3, existing: replicas(1, 2, 4), expected: false},
+		{leaseholder: 4, existing: replicas(1), expected: false},
+		{leaseholder: 4, existing: replicas(1, 2), expected: true},
+		{leaseholder: 4, existing: replicas(1, 3), expected: true},
+		{leaseholder: 4, existing: replicas(1, 2, 3), expected: true},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
