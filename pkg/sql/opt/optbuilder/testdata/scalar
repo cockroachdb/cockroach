@@ -261,6 +261,21 @@ build-scalar
 cast: int [type=int]
  └── const: 123 [type=int]
 
+build-scalar vars=(int, int)
+IFNULL(@1, @2)
+----
+coalesce [type=int]
+ ├── variable: @1 [type=int]
+ └── variable: @2 [type=int]
+
+build-scalar vars=(int, int, int)
+COALESCE(@1, @2, @3)
+----
+coalesce [type=int]
+ ├── variable: @1 [type=int]
+ ├── variable: @2 [type=int]
+ └── variable: @3 [type=int]
+
 build-scalar vars=(int) allow-unsupported
 CASE WHEN @1 > 5 THEN 1 ELSE -1 END
 ----

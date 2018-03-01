@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -102,16 +103,43 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
+	md := ev.Metadata()
 	cols := *ev.Private().(*opt.ColList)
-	if len(cols) > 0 {
-		return execPlan{}, fmt.Errorf("ValuesOp with columns not implemented")
+	numCols := len(cols)
+
+	colNames := make([]string, numCols)
+	colTypes := make([]types.T, numCols)
+	for i, col := range cols {
+		colNames[i] = md.ColumnLabel(col)
+		colTypes[i] = md.ColumnType(col)
 	}
+
 	rows := make([][]tree.TypedExpr, ev.ChildCount())
-	node, err := b.factory.ConstructValues(rows, nil /* colTypes */, nil /* colNames */)
+	rowBuf := make([]tree.TypedExpr, len(rows)*numCols)
+	scalarCtx := buildScalarCtx{}
+	for i := range rows {
+		row := ev.Child(i)
+		if row.ChildCount() != numCols {
+			return execPlan{}, fmt.Errorf("inconsistent row length %d vs %d", ev.ChildCount(), numCols)
+		}
+		// Chop off prefix of rowBuf and limit its capacity.
+		rows[i] = rowBuf[:numCols:numCols]
+		rowBuf = rowBuf[numCols:]
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = b.buildScalar(&scalarCtx, row.Child(j))
+		}
+	}
+
+	node, err := b.factory.ConstructValues(rows, colTypes, colNames)
 	if err != nil {
 		return execPlan{}, err
 	}
-	return execPlan{root: node}, nil
+	ep := execPlan{root: node}
+	for i, col := range cols {
+		ep.outputCols.Set(int(col), i)
+	}
+
+	return ep, nil
 }
 
 func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
