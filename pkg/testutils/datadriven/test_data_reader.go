@@ -83,7 +83,25 @@ func (r *testDataReader) Next(t *testing.T) bool {
 		cmd := fields[0]
 		r.data.Pos = fmt.Sprintf("%s:%d", r.path, r.scanner.line)
 		r.data.Cmd = cmd
-		r.data.CmdArgs = fields[1:]
+
+		for _, arg := range fields[1:] {
+			key := arg
+			var vals []string
+			if pos := strings.Index(key, "="); pos >= 0 {
+				key = arg[:pos]
+				val := arg[pos+1:]
+
+				if len(val) > 2 && val[0] == '(' && val[len(val)-1] == ')' {
+					vals = strings.Split(val[1:len(val)-1], ",")
+					for i := range vals {
+						vals[i] = strings.TrimSpace(vals[i])
+					}
+				} else {
+					vals = []string{val}
+				}
+			}
+			r.data.CmdArgs = append(r.data.CmdArgs, CmdArg{Key: key, Vals: vals})
+		}
 
 		var buf bytes.Buffer
 		var separator bool
