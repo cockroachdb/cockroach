@@ -71,3 +71,35 @@ select
       └── eq [type=bool]
            ├── variable: a.s [type=string]
            └── const: 'foo' [type=string]
+
+# --------------------------------------------------
+# FoldNullComparisonLeft, FoldNullComparisonRight
+# --------------------------------------------------
+
+# Use null::type to circumvent type checker constant folding.
+opt
+SELECT *
+FROM a
+WHERE
+    null::int = 1 AND 1 = null::int AND
+    null::int <> 1 AND 1 <> null::int AND
+    null::int > 1 AND 1 > null::int AND
+    null::int >= 1 AND 1 >= null::int AND
+    null::int < 1 AND 1 < null::int AND
+    null::int <= 1 AND 1 <= null::int AND
+    null::string LIKE 'foo' AND 'foo' LIKE null::string AND
+    null::string NOT LIKE 'foo' AND 'foo' NOT LIKE null::string AND
+    null::string ILIKE 'foo' AND 'foo' ILIKE null::string AND
+    null::string NOT ILIKE 'foo' AND 'foo' NOT ILIKE null::string AND
+    null::string SIMILAR TO 'foo' AND 'foo' SIMILAR TO null::string AND
+    null::string NOT SIMILAR TO 'foo' AND 'foo' NOT SIMILAR TO null::string AND
+    null::string ~ 'foo' AND 'foo' ~ null::string AND
+    null::string !~ 'foo' AND 'foo' !~ null::string AND
+    null::string ~* 'foo' AND 'foo' ~* null::string AND
+    null::string !~* 'foo' AND 'foo' !~* null::string
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── null [type=bool]

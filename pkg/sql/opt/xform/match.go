@@ -19,7 +19,6 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // MatchesTupleOfConstants returns true if the expression is a TupleOp with
@@ -35,10 +34,4 @@ func MatchesTupleOfConstants(ev ExprView) bool {
 		}
 	}
 	return true
-}
-
-// MatchesConstNull returns true if ev is a ConstOp with NULL value.
-// TODO(radu): perhaps add a NullOp instead.
-func MatchesConstNull(ev ExprView) bool {
-	return ev.Operator() == opt.ConstOp && ev.Private() == tree.DNull
 }

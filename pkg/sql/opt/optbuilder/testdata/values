@@ -78,7 +78,7 @@ VALUES (NULL)
 values
  ├── columns: column1:unknown:null:1
  └── tuple [type=tuple{unknown}]
-      └── const: NULL [type=unknown]
+      └── null [type=unknown]
 
 build
 VALUES (NULL, 1)
@@ -86,7 +86,7 @@ VALUES (NULL, 1)
 values
  ├── columns: column1:unknown:null:1 column2:int:null:2
  └── tuple [type=tuple{unknown, int}]
-      ├── const: NULL [type=unknown]
+      ├── null [type=unknown]
       └── const: 1 [type=int]
 
 build
@@ -95,11 +95,11 @@ VALUES (NULL, 1), (2, NULL)
 values
  ├── columns: column1:int:null:1 column2:int:null:2
  ├── tuple [type=tuple{unknown, int}]
- │    ├── const: NULL [type=unknown]
+ │    ├── null [type=unknown]
  │    └── const: 1 [type=int]
  └── tuple [type=tuple{int, unknown}]
       ├── const: 2 [type=int]
-      └── const: NULL [type=unknown]
+      └── null [type=unknown]
 
 build
 VALUES (NULL, 1), (2, NULL)
@@ -107,11 +107,11 @@ VALUES (NULL, 1), (2, NULL)
 values
  ├── columns: column1:int:null:1 column2:int:null:2
  ├── tuple [type=tuple{unknown, int}]
- │    ├── const: NULL [type=unknown]
+ │    ├── null [type=unknown]
  │    └── const: 1 [type=int]
  └── tuple [type=tuple{int, unknown}]
       ├── const: 2 [type=int]
-      └── const: NULL [type=unknown]
+      └── null [type=unknown]
 
 build
 VALUES (NULL, 1), (2, NULL), (NULL, 'a')
@@ -130,13 +130,13 @@ project
  │    │    └── const: 2 [type=int]
  │    ├── tuple [type=tuple{int, unknown}]
  │    │    ├── const: 3 [type=int]
- │    │    └── const: NULL [type=unknown]
+ │    │    └── null [type=unknown]
  │    ├── tuple [type=tuple{unknown, int}]
- │    │    ├── const: NULL [type=unknown]
+ │    │    ├── null [type=unknown]
  │    │    └── const: 4 [type=int]
  │    └── tuple [type=tuple{unknown, unknown}]
- │         ├── const: NULL [type=unknown]
- │         └── const: NULL [type=unknown]
+ │         ├── null [type=unknown]
+ │         └── null [type=unknown]
  └── projections
       └── coalesce [type=int]
            ├── variable: column1 [type=int]
