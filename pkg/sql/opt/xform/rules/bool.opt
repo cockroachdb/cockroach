@@ -74,11 +74,12 @@
 $item
 
 # NegateComparison inverts eligible comparison operators when they are negated
-# by the Not operator. For example, Eq maps to Ne, and Gt maps to Le.
+# by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
+# comparisons can be negated except for Contains.
 [NegateComparison, Normalize]
-(Not $input:(Comparison) & (CanInvertComparison $input))
+(Not $input:(Comparison $left:* $right:*) & ^(Contains))
 =>
-(InvertComparison $input)
+(InvertComparison (OpName $input) $left $right)
 
 # EliminateNot discards a doubled Not operator.
 [EliminateNot, Normalize]

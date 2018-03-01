@@ -113,7 +113,7 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 
 	g.w.writeIndent("_f.reportOptimization()\n")
 	g.w.writeIndent("_group = ")
-	g.genReplace(rule, rule.Replace)
+	g.genNestedExpr(rule.Replace)
 	g.w.newline()
 	g.w.writeIndent("_f.mem.addAltFingerprint(%s.fingerprint(), _group)\n", varName)
 	g.w.writeIndent("return _group\n")
@@ -164,8 +164,8 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 	case *lang.MatchExpr:
 		g.genMatchNameAndChildren(t, contextName, noMatch)
 
-	case *lang.MatchInvokeExpr:
-		g.genMatchInvoke(t, noMatch)
+	case *lang.CustomFuncExpr:
+		g.genMatchCustom(t, noMatch)
 
 	case *lang.MatchAndExpr:
 		if noMatch {
@@ -358,7 +358,7 @@ func (g *factoryGen) genConstantMatch(
 // which can dynamically get children by index without knowing the specific
 // type of operator.
 func (g *factoryGen) genDynamicMatch(
-	match *lang.MatchExpr, names lang.OpNamesExpr, contextName string, noMatch bool,
+	match *lang.MatchExpr, names lang.NamesExpr, contextName string, noMatch bool,
 ) {
 	// Match expression name.
 	normName := g.uniquifier.makeUnique("_norm")
@@ -393,7 +393,7 @@ func (g *factoryGen) genDynamicMatch(
 	if len(match.Args) > 0 {
 		// Construct an Expr to use for matching children.
 		exprName := g.uniquifier.makeUnique("_e")
-		g.w.writeIndent("%s := makeExprView(_f.mem, %s, defaultPhysPropsID)\n", exprName, contextName)
+		g.w.writeIndent("%s := makeExprView(_f.mem, %s, opt.NormPhysPropsID)\n", exprName, contextName)
 
 		// Match expression children in the same order as arguments to the match
 		// operator. If there are fewer arguments than there are children, then
@@ -404,50 +404,43 @@ func (g *factoryGen) genDynamicMatch(
 	}
 }
 
-// genMatchInvoke generates code to invoke a custom matching function.
-func (g *factoryGen) genMatchInvoke(matchInvoke *lang.MatchInvokeExpr, noMatch bool) {
-	funcName := unTitle(string(matchInvoke.FuncName))
-
+// genMatchCustom generates code to invoke a custom matching function.
+func (g *factoryGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool) {
 	if noMatch {
-		g.w.nest("if !_f.%s(", funcName)
+		g.w.write("if !")
 	} else {
-		g.w.nest("if _f.%s(", funcName)
+		g.w.write("if ")
 	}
 
-	for index, matchArg := range matchInvoke.Args {
-		ref := matchArg.(*lang.RefExpr)
+	g.genNestedExpr(matchCustom)
 
-		if index != 0 {
-			g.w.write(", ")
-		}
-
-		g.w.write(string(ref.Label))
-	}
-
-	g.w.write(") {\n")
+	g.w.nest(" {\n")
 }
 
-// genReplace recursively generates the replacement expression as one large Go
+// genNestedExpr recursively generates an Optgen expression as one large Go
 // expression.
-func (g *factoryGen) genReplace(rule *lang.RuleExpr, replace lang.Expr) {
-	switch t := replace.(type) {
+func (g *factoryGen) genNestedExpr(e lang.Expr) {
+	switch t := e.(type) {
 	case *lang.ConstructExpr:
-		g.genConstruct(rule, t)
+		g.genConstruct(t)
 
-	case *lang.ConstructListExpr:
-		// internList will store the list in the memo and return a ListID that can
-		// later retrieve it.
-		g.w.write("_f.mem.internList([]GroupID{")
-
-		for index, elem := range t.Items {
-			if index != 0 {
-				g.w.write(", ")
+	case *lang.CustomFuncExpr:
+		if t.Name == "OpName" {
+			// Handle OpName function that couldn't be statically resolved by
+			// looking up op name at runtime.
+			ref := t.Args[0].(*lang.RefExpr)
+			g.w.write("_f.mem.lookupNormExpr(%s).op", ref.Label)
+		} else {
+			funcName := unTitle(string(t.Name))
+			g.w.write("_f.%s(", funcName)
+			for index, arg := range t.Args {
+				if index != 0 {
+					g.w.write(", ")
+				}
+				g.genNestedExpr(arg)
 			}
-
-			g.genReplace(rule, elem)
+			g.w.write(")")
 		}
-
-		g.w.write("})")
 
 	case *lang.RefExpr:
 		g.w.write(string(t.Label))
@@ -456,49 +449,41 @@ func (g *factoryGen) genReplace(rule *lang.RuleExpr, replace lang.Expr) {
 		// Literal string expressions construct DString datums.
 		g.w.write("m.mem.internPrivate(tree.NewDString(%s))", t)
 
-	case *lang.OpNameExpr:
+	case *lang.NameExpr:
 		// OpName literal expressions construct an op identifier like SelectOp,
-		// which can be passed to a custom constructor function.
-		g.w.write(t.String())
+		// which can be passed as a function argument.
+		g.w.write("%sOp", t)
 
 	default:
-		panic(fmt.Sprintf("unrecognized replace expression: %v", replace))
+		panic(fmt.Sprintf("unhandled expression: %s", e))
 	}
 }
 
 // genConstruct generates code to invoke an op construction function or a user-
 // defined custom function.
-func (g *factoryGen) genConstruct(rule *lang.RuleExpr, construct *lang.ConstructExpr) {
+func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 	switch t := construct.Name.(type) {
-	case *lang.StringExpr:
-		name := string(*t)
-		define := g.compiled.LookupDefine(name)
-		if define != nil {
-			// Standard op construction function.
-			g.w.write("_f.Construct%s(", name)
-		} else {
-			// Custom function.
-			g.w.write("_f.%s(", unTitle(name))
-		}
+	case *lang.NameExpr:
+		// Standard op construction function.
+		g.w.write("_f.Construct%s(", *t)
 
-	case *lang.OpNameExpr:
-		g.w.write("_f.Construct%s(", string(*t))
-
-	case *lang.ConstructExpr:
-		// Must be the OpName function.
+	case *lang.CustomFuncExpr:
+		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
 		g.w.write("_f.DynamicConstruct(_f.mem.lookupNormExpr(%s).op, []GroupID{", ref.Label)
+
+	default:
+		panic(fmt.Sprintf("unexpected name expression: %s", construct.Name))
 	}
 
-	for index, elem := range construct.Args {
+	for index, arg := range construct.Args {
 		if index != 0 {
 			g.w.write(", ")
 		}
-
-		g.genReplace(rule, elem)
+		g.genNestedExpr(arg)
 	}
 
-	if construct.Name.Op() == lang.ConstructOp {
+	if construct.Name.Op() == lang.CustomFuncOp {
 		g.w.write("}, 0)")
 	} else {
 		g.w.write(")")
