@@ -1,0 +1,153 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON, arr int[])
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ ├── arr int[]
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# EliminateCoalesce
+# --------------------------------------------------
+opt
+SELECT COALESCE(i) FROM a
+----
+project
+ ├── columns: column7:int:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      └── variable: a.i [type=int]
+
+# --------------------------------------------------
+# SimplifyCoalesce
+# --------------------------------------------------
+opt
+SELECT COALESCE(NULL) FROM a
+----
+project
+ ├── columns: column7:unknown:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      └── null [type=unknown]
+
+opt
+SELECT COALESCE(NULL, 'foo', s) FROM a
+----
+project
+ ├── columns: column7:string:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      └── const: 'foo' [type=string]
+
+opt
+SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
+----
+project
+ ├── columns: column7:string:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      └── coalesce [type=string]
+           ├── variable: a.s [type=string]
+           └── concat [type=string]
+                ├── variable: a.s [type=string]
+                └── const: 'foo' [type=string]
+
+# Trailing null can't be removed.
+opt
+SELECT COALESCE(i, NULL, NULL) FROM a
+----
+project
+ ├── columns: column7:int:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      └── coalesce [type=int]
+           ├── variable: a.i [type=int]
+           ├── null [type=unknown]
+           └── null [type=unknown]
+
+# --------------------------------------------------
+# FoldNullCast
+# --------------------------------------------------
+opt
+SELECT null::int, null::timestamptz
+----
+project
+ ├── columns: column1:int:null:1 column2:timestamptz:null:2
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── null [type=int]
+      └── null [type=timestamptz]
+
+# --------------------------------------------------
+# FoldNullUnary
+# --------------------------------------------------
+opt
+SELECT +null::int, -null::int, ~null::int FROM a
+----
+project
+ ├── columns: column7:int:null:7 column8:int:null:8 column9:int:null:9
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      ├── null [type=int]
+      ├── null [type=int]
+      └── null [type=int]
+
+# --------------------------------------------------
+# FoldNullBinary
+# --------------------------------------------------
+opt
+SELECT
+    null::int & 1, 1 & null::int,
+    null::decimal + 1, 1 + null::decimal,
+    null::float % 1, 1 % null::float,
+    null::int << 4, 4 << null::int,
+    null::json || '[1, 2]', '[1, 2]' || null::json,
+
+    -- These shouldn't be folded because AllowNullArgs is true for concat with arrays.
+    arr::decimal[] || null, null || arr::string[],
+    i::decimal || null, null || i::float
+FROM a
+----
+project
+ ├── columns: column7:int:null:7 column8:int:null:8 column9:decimal:null:9 column10:decimal:null:10 column11:float:null:11 column12:float:null:12 column13:int:null:13 column14:int:null:14 column15:jsonb:null:15 column16:jsonb:null:16 column17:decimal[]:null:17 column18:string[]:null:18 column19:decimal[]:null:19 column20:float[]:null:20
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      ├── null [type=int]
+      ├── null [type=int]
+      ├── null [type=decimal]
+      ├── null [type=decimal]
+      ├── null [type=float]
+      ├── null [type=float]
+      ├── null [type=int]
+      ├── null [type=int]
+      ├── null [type=jsonb]
+      ├── null [type=jsonb]
+      ├── concat [type=decimal[]]
+      │    ├── cast: decimal[] [type=decimal[]]
+      │    │    └── variable: a.arr [type=int[]]
+      │    └── null [type=unknown]
+      ├── concat [type=string[]]
+      │    ├── null [type=unknown]
+      │    └── cast: string[] [type=string[]]
+      │         └── variable: a.arr [type=int[]]
+      ├── concat [type=decimal[]]
+      │    ├── cast: decimal [type=decimal]
+      │    │    └── variable: a.i [type=int]
+      │    └── null [type=unknown]
+      └── concat [type=float[]]
+           ├── null [type=unknown]
+           └── cast: float [type=float]
+                └── variable: a.i [type=int]
