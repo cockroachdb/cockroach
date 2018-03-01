@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
+	"github.com/pkg/errors"
 )
 
 var numOps uint64
@@ -127,6 +128,16 @@ type Options struct {
 
 // Run a test of writing synchronously to the RocksDB WAL.
 func Run(opts Options) error {
+	// Check if the directory exists.
+	_, err := os.Stat(opts.Dir)
+	if err == nil {
+		return errors.Errorf("error: supplied path '%s' must not exist", opts.Dir)
+	}
+
+	defer func() {
+		_ = os.RemoveAll(opts.Dir)
+	}()
+
 	fmt.Printf("writing to %s\n", opts.Dir)
 
 	db, err := engine.NewRocksDB(
@@ -138,9 +149,6 @@ func Run(opts Options) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = os.RemoveAll(opts.Dir)
-	}()
 
 	workers := make([]*worker, opts.Concurrency)
 
