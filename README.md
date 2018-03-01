@@ -5,7 +5,6 @@ CockroachDB is a cloud-native SQL database for building global, scalable cloud s
 
 [![TeamCity CI](https://teamcity.cockroachdb.com/guestAuth/app/rest/builds/buildType:(id:Cockroach_UnitTests)/statusIcon.svg)](https://teamcity.cockroachdb.com/viewLog.html?buildTypeId=Cockroach_UnitTests&buildId=lastFinished&guest=1)
 [![GoDoc](https://godoc.org/github.com/cockroachdb/cockroach?status.svg)](https://godoc.org/github.com/cockroachdb/cockroach)
-![Version](https://img.shields.io/badge/version-1.0-brightgreen.svg)
 [![Gitter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/cockroachdb/cockroach?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 - [What is CockroachDB?](#what-is-cockroachdb)
