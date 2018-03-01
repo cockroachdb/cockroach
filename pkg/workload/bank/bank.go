@@ -83,12 +83,12 @@ func FromConfig(rows int, payloadBytes int, ranges int) workload.Generator {
 	if ranges > rows {
 		ranges = rows
 	}
-	return &bank{
-		seed:         timeutil.Now().UnixNano(),
-		rows:         rows,
-		payloadBytes: payloadBytes,
-		ranges:       ranges,
-	}
+	b := bankMeta.New().(*bank)
+	b.seed = timeutil.Now().UnixNano()
+	b.rows = rows
+	b.payloadBytes = payloadBytes
+	b.ranges = ranges
+	return b
 }
 
 // Meta implements the Generator interface.
