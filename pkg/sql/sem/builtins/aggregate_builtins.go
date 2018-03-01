@@ -93,7 +93,7 @@ var Aggregates = map[string][]tree.Builtin{
 			},
 			newArrayAggregate,
 			"Aggregates the selected values into an array.",
-			true /* nullableArgs */)
+			true /* NullableArgs */)
 	}),
 
 	"avg": {

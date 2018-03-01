@@ -188,14 +188,14 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType   types.T
-	RightType  types.T
-	ReturnType types.T
-	fn         func(*EvalContext, Datum, Datum) (Datum, error)
+	LeftType     types.T
+	RightType    types.T
+	ReturnType   types.T
+	NullableArgs bool
+	fn           func(*EvalContext, Datum, Datum) (Datum, error)
 
-	types        TypeList
-	retType      ReturnTyper
-	nullableArgs bool
+	types   TypeList
+	retType ReturnTyper
 }
 
 func (op BinOp) params() TypeList {
@@ -259,7 +259,7 @@ func initArrayElementConcatenation() {
 			LeftType:     types.TArray{Typ: typ},
 			RightType:    typ,
 			ReturnType:   types.TArray{Typ: typ},
-			nullableArgs: true,
+			NullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return AppendToMaybeNullArray(typ, left, right)
 			},
@@ -269,7 +269,7 @@ func initArrayElementConcatenation() {
 			LeftType:     typ,
 			RightType:    types.TArray{Typ: typ},
 			ReturnType:   types.TArray{Typ: typ},
-			nullableArgs: true,
+			NullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return PrependToMaybeNullArray(typ, left, right)
 			},
@@ -307,7 +307,7 @@ func initArrayToArrayConcatenation() {
 			LeftType:     types.TArray{Typ: typ},
 			RightType:    types.TArray{Typ: typ},
 			ReturnType:   types.TArray{Typ: typ},
-			nullableArgs: true,
+			NullableArgs: true,
 			fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return ConcatArrays(typ, left, right)
 			},
@@ -1488,14 +1488,15 @@ type CmpOp struct {
 	LeftType  types.T
 	RightType types.T
 
+	// If NullableArgs is false, the operator returns NULL
+	// whenever either argument is NULL.
+	NullableArgs bool
+
 	// Datum return type is a union between *DBool and dNull.
 	fn func(*EvalContext, Datum, Datum) (Datum, error)
 
-	types TypeList
-	// If nullableArgs is false, the operator returns NULL
-	// whenever either argument is NULL.
-	nullableArgs bool
-	isPreferred  bool
+	types       TypeList
+	isPreferred bool
 }
 
 func (op CmpOp) params() TypeList {
@@ -1529,7 +1530,7 @@ func init() {
 			LeftType:     types.TArray{Typ: t},
 			RightType:    types.TArray{Typ: t},
 			fn:           cmpOpScalarIsFn,
-			nullableArgs: true,
+			NullableArgs: true,
 		})
 	}
 }
@@ -1564,21 +1565,21 @@ func makeCmpOpOverload(
 		LeftType:     a,
 		RightType:    b,
 		fn:           fn,
-		nullableArgs: nullableArgs,
+		NullableArgs: nullableArgs,
 	}
 }
 
 func makeEqFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* nullableArgs */)
+	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */)
 }
 func makeLtFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* nullableArgs */)
+	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */)
 }
 func makeLeFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* nullableArgs */)
+	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */)
 }
 func makeIsFn(a, b types.T) CmpOp {
-	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* nullableArgs */)
+	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */)
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
@@ -1715,7 +1716,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			LeftType:     types.Unknown,
 			RightType:    types.Unknown,
 			fn:           cmpOpScalarIsFn,
-			nullableArgs: true,
+			NullableArgs: true,
 			// Avoids ambiguous comparison error for NULL IS NOT DISTINCT FROM NULL>
 			isPreferred: true,
 		},
@@ -2070,7 +2071,7 @@ func makeEvalTupleIn(typ types.T) CmpOp {
 			}
 			return DBoolFalse, nil
 		},
-		nullableArgs: true,
+		NullableArgs: true,
 	}
 }
 
@@ -2534,14 +2535,14 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if left == DNull && !expr.fn.nullableArgs {
+	if left == DNull && !expr.fn.NullableArgs {
 		return DNull, nil
 	}
 	right, err := expr.Right.(TypedExpr).Eval(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if right == DNull && !expr.fn.nullableArgs {
+	if right == DNull && !expr.fn.NullableArgs {
 		return DNull, nil
 	}
 	res, err := expr.fn.fn(ctx, left, right)
@@ -3257,7 +3258,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 
 	_, newLeft, newRight, _, not := foldComparisonExpr(op, left, right)
-	if !expr.fn.nullableArgs && (newLeft == DNull || newRight == DNull) {
+	if !expr.fn.NullableArgs && (newLeft == DNull || newRight == DNull) {
 		return DNull, nil
 	}
 	d, err := expr.fn.fn(ctx, newLeft.(Datum), newRight.(Datum))
