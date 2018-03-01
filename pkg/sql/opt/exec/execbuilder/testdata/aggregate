@@ -1,0 +1,1593 @@
+# tests adapted from logictest -- aggregate
+
+exec-raw
+CREATE DATABASE t
+----
+
+exec-raw
+CREATE TABLE t.kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  s STRING
+)
+----
+
+exec-explain
+SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM t.kv
+----
+group           0  group   ·             ·                   (column6, column8, column10, column12, column14, column16, column18, column20, column22, column24, column26)  ·
+ │              0  ·       aggregate 0   min(column5)        ·                                                                                                             ·
+ │              0  ·       aggregate 1   max(column7)        ·                                                                                                             ·
+ │              0  ·       aggregate 2   count(column9)      ·                                                                                                             ·
+ │              0  ·       aggregate 3   sum_int(column11)   ·                                                                                                             ·
+ │              0  ·       aggregate 4   avg(column13)       ·                                                                                                             ·
+ │              0  ·       aggregate 5   sum(column15)       ·                                                                                                             ·
+ │              0  ·       aggregate 6   stddev(column17)    ·                                                                                                             ·
+ │              0  ·       aggregate 7   variance(column19)  ·                                                                                                             ·
+ │              0  ·       aggregate 8   bool_and(column21)  ·                                                                                                             ·
+ │              0  ·       aggregate 9   bool_and(column23)  ·                                                                                                             ·
+ │              0  ·       aggregate 10  xor_agg(column25)   ·                                                                                                             ·
+ └── render     1  render  ·             ·                   (column5, column7, column9, column11, column13, column15, column17, column19, column21, column23, column25)   ·
+      │         1  ·       render 0      1                   ·                                                                                                             ·
+      │         1  ·       render 1      1                   ·                                                                                                             ·
+      │         1  ·       render 2      1                   ·                                                                                                             ·
+      │         1  ·       render 3      1                   ·                                                                                                             ·
+      │         1  ·       render 4      1                   ·                                                                                                             ·
+      │         1  ·       render 5      1                   ·                                                                                                             ·
+      │         1  ·       render 6      1                   ·                                                                                                             ·
+      │         1  ·       render 7      1                   ·                                                                                                             ·
+      │         1  ·       render 8      true                ·                                                                                                             ·
+      │         1  ·       render 9      false               ·                                                                                                             ·
+      │         1  ·       render 10     '\x01'              ·                                                                                                             ·
+      └── scan  2  scan    ·             ·                   (k, v, w, s)                                                                                                  ·
+·               2  ·       table         kv@primary          ·                                                                                                             ·
+·               2  ·       spans         ALL                 ·                                                                                                             ·
+
+exec
+SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM t.kv
+----
+column6:int  column8:int  column10:int  column12:int  column14:decimal  column16:decimal  column18:decimal  column20:decimal  column22:bool  column24:bool  column26:bytes
+NULL         NULL         0             NULL          NULL              NULL              NULL              NULL              NULL           NULL           NULL
+
+# Aggregate functions return NULL if there are no rows.
+exec
+SELECT ARRAY_AGG(1) FROM t.kv
+----
+column6:int[]
+NULL
+
+exec
+SELECT JSON_AGG(1) FROM t.kv
+----
+column6:jsonb
+NULL
+
+exec
+SELECT JSONB_AGG(1) FROM t.kv
+----
+column6:jsonb
+NULL
+
+exec-explain
+SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM t.kv
+----
+group           0  group   ·             ·                   (column5, column6, column7, column9, column10, column11, column12, column13, column15, column17, column19)  ·
+ │              0  ·       aggregate 0   min(kv.v)           ·                                                                                                           ·
+ │              0  ·       aggregate 1   max(kv.v)           ·                                                                                                           ·
+ │              0  ·       aggregate 2   count(kv.v)         ·                                                                                                           ·
+ │              0  ·       aggregate 3   sum_int(column8)    ·                                                                                                           ·
+ │              0  ·       aggregate 4   avg(kv.v)           ·                                                                                                           ·
+ │              0  ·       aggregate 5   sum(kv.v)           ·                                                                                                           ·
+ │              0  ·       aggregate 6   stddev(kv.v)        ·                                                                                                           ·
+ │              0  ·       aggregate 7   variance(kv.v)      ·                                                                                                           ·
+ │              0  ·       aggregate 8   bool_and(column14)  ·                                                                                                           ·
+ │              0  ·       aggregate 9   bool_and(column16)  ·                                                                                                           ·
+ │              0  ·       aggregate 10  xor_agg(column18)   ·                                                                                                           ·
+ └── render     1  render  ·             ·                   ("kv.v", "kv.v", "kv.v", column8, "kv.v", "kv.v", "kv.v", "kv.v", column14, column16, column18)             ·
+      │         1  ·       render 0      v                   ·                                                                                                           ·
+      │         1  ·       render 1      v                   ·                                                                                                           ·
+      │         1  ·       render 2      v                   ·                                                                                                           ·
+      │         1  ·       render 3      1                   ·                                                                                                           ·
+      │         1  ·       render 4      v                   ·                                                                                                           ·
+      │         1  ·       render 5      v                   ·                                                                                                           ·
+      │         1  ·       render 6      v                   ·                                                                                                           ·
+      │         1  ·       render 7      v                   ·                                                                                                           ·
+      │         1  ·       render 8      v = 1               ·                                                                                                           ·
+      │         1  ·       render 9      v = 1               ·                                                                                                           ·
+      │         1  ·       render 10     s::BYTES            ·                                                                                                           ·
+      └── scan  2  scan    ·             ·                   (k, v, w, s)                                                                                                ·
+·               2  ·       table         kv@primary          ·                                                                                                           ·
+·               2  ·       spans         ALL                 ·                                                                                                           ·
+
+exec
+SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM t.kv
+----
+column5:int  column6:int  column7:int  column9:int  column10:decimal  column11:decimal  column12:decimal  column13:decimal  column15:bool  column17:bool  column19:bytes
+NULL         NULL         0            NULL         NULL              NULL              NULL              NULL              NULL           NULL           NULL
+
+exec
+SELECT ARRAY_AGG(v) FROM t.kv
+----
+column5:int[]
+NULL
+
+exec
+SELECT JSON_AGG(v) FROM t.kv
+----
+column5:jsonb
+NULL
+
+exec
+SELECT JSONB_AGG(v) FROM t.kv
+----
+column5:jsonb
+NULL
+
+# Aggregate functions trigger aggregation and computation when there is no source.
+exec-explain
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+----
+render                 0  render  ·             ·                   (column2, column4, column6, column8, column11, column13, column15, column17, column19, column21, column24)  ·
+ │                     0  ·       render 0      agg0                ·                                                                                                           ·
+ │                     0  ·       render 1      agg1                ·                                                                                                           ·
+ │                     0  ·       render 2      agg2                ·                                                                                                           ·
+ │                     0  ·       render 3      agg3                ·                                                                                                           ·
+ │                     0  ·       render 4      agg4::FLOAT         ·                                                                                                           ·
+ │                     0  ·       render 5      agg5                ·                                                                                                           ·
+ │                     0  ·       render 6      agg6                ·                                                                                                           ·
+ │                     0  ·       render 7      agg7                ·                                                                                                           ·
+ │                     0  ·       render 8      agg8                ·                                                                                                           ·
+ │                     0  ·       render 9      agg9                ·                                                                                                           ·
+ │                     0  ·       render 10     to_hex(agg10)       ·                                                                                                           ·
+ └── group             1  group   ·             ·                   (agg0, agg1, agg2, agg3, agg4, agg5, agg6, agg7, agg8, agg9, agg10)                                         ·
+      │                1  ·       aggregate 0   min(column1)        ·                                                                                                           ·
+      │                1  ·       aggregate 1   count(column3)      ·                                                                                                           ·
+      │                1  ·       aggregate 2   max(column5)        ·                                                                                                           ·
+      │                1  ·       aggregate 3   sum_int(column7)    ·                                                                                                           ·
+      │                1  ·       aggregate 4   avg(column9)        ·                                                                                                           ·
+      │                1  ·       aggregate 5   sum(column12)       ·                                                                                                           ·
+      │                1  ·       aggregate 6   stddev(column14)    ·                                                                                                           ·
+      │                1  ·       aggregate 7   variance(column16)  ·                                                                                                           ·
+      │                1  ·       aggregate 8   bool_and(column18)  ·                                                                                                           ·
+      │                1  ·       aggregate 9   bool_or(column20)   ·                                                                                                           ·
+      │                1  ·       aggregate 10  xor_agg(column22)   ·                                                                                                           ·
+      └── render       2  render  ·             ·                   (column1, column3, column5, column7, column9, column12, column14, column16, column18, column20, column22)   ·
+           │           2  ·       render 0      1                   ·                                                                                                           ·
+           │           2  ·       render 1      1                   ·                                                                                                           ·
+           │           2  ·       render 2      1                   ·                                                                                                           ·
+           │           2  ·       render 3      1                   ·                                                                                                           ·
+           │           2  ·       render 4      1                   ·                                                                                                           ·
+           │           2  ·       render 5      1                   ·                                                                                                           ·
+           │           2  ·       render 6      1                   ·                                                                                                           ·
+           │           2  ·       render 7      1                   ·                                                                                                           ·
+           │           2  ·       render 8      true                ·                                                                                                           ·
+           │           2  ·       render 9      true                ·                                                                                                           ·
+           │           2  ·       render 10     '\x01'              ·                                                                                                           ·
+           └── values  3  values  ·             ·                   ()                                                                                                          ·
+·                      3  ·       size          0 columns, 1 row    ·                                                                                                           ·
+
+exec
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+----
+column2:int  column4:int  column6:int  column8:int  column11:float  column13:decimal  column15:decimal  column17:decimal  column19:bool  column21:bool  column24:string
+1            1            1            1            1.0             1                 NULL              NULL              true           true           01
+
+# Aggregate functions triggers aggregation and computation when there is no source.
+exec
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
+----
+column2:int  column4:int  column6:int  column8:int  column11:float  column13:decimal  column15:decimal  column17:decimal  column19:bool  column21:bool  column24:string
+1            1            1            1            1.0             1                 NULL              NULL              true           true           01
+
+# Aggregate functions triggers aggregation and computation when there is no source.
+exec
+SELECT ARRAY_AGG(1)
+----
+column2:int[]
+ARRAY[1]
+
+exec
+SELECT JSON_AGG(1)
+----
+column2:jsonb
+'[1]'
+
+exec
+SELECT JSONB_AGG(1)
+----
+column2:jsonb
+'[1]'
+
+# Some aggregate functions are not normalized to NULL when given a NULL
+# argument.
+exec
+SELECT COUNT(NULL)
+----
+column2:int
+0
+
+exec
+SELECT JSON_AGG(NULL)
+----
+column2:jsonb
+'[null]'
+
+exec
+SELECT JSONB_AGG(NULL)
+----
+column2:jsonb
+'[null]'
+
+# With an explicit cast, this works as expected.
+exec
+SELECT ARRAY_AGG(NULL::TEXT)
+----
+column2:string[]
+ARRAY[NULL]
+
+# TODO(radu): Selecting from series not supported yet.
+## Check that COALESCE using aggregate results over an empty table
+## work properly.
+#exec
+#SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0)
+#----
+#0
+#
+#exec
+#SELECT COUNT_ROWS() FROM generate_series(1,100)
+#----
+#100
+#
+## Same, using arithmetic on COUNT.
+#exec
+#SELECT 1 + COUNT(*) FROM generate_series(1,0)
+#----
+#1
+
+# Same, using an empty table.
+# The following test *must* occur before the first INSERT to the tables,
+# so that it can observe an empty table.
+exec
+SELECT COUNT(*), COALESCE(MAX(k), 1) FROM t.kv
+----
+column5:int  column7:int
+0            1
+
+# TODO(radu): Subqueries not implemented yet.
+## Same, using a subquery. (#12705)
+#exec
+#SELECT (SELECT COALESCE(MAX(1), 0) FROM generate_series(1,0))
+#----
+#0
+
+exec-raw
+INSERT INTO t.kv VALUES
+(1, 2, 3, 'a'),
+(3, 4, 5, 'a'),
+(5, NULL, 5, NULL),
+(6, 2, 3, 'b'),
+(7, 2, 2, 'b'),
+(8, 4, 2, 'A')
+----
+
+# Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
+# NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
+exec
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM t.kv
+----
+column6:int  column8:int  column10:int  column12:int  column15:float  column17:decimal  column19:decimal  column22:float  column24:bool  column26:bool  column29:string
+1            6            1             6             1.0             6                 0                 0.0             true           true           00
+
+# Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
+exec
+SELECT ARRAY_AGG(1) FROM t.kv
+----
+column6:int[]
+ARRAY[1,1,1,1,1,1]
+
+exec
+SELECT JSON_AGG(1) FROM t.kv
+----
+column6:jsonb
+'[1, 1, 1, 1, 1, 1]'
+
+exec
+SELECT JSONB_AGG(1) FROM t.kv
+----
+column6:jsonb
+'[1, 1, 1, 1, 1, 1]'
+
+# Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
+exec rowsort
+SELECT 1 FROM t.kv GROUP BY v
+----
+column5:int
+1
+1
+1
+
+# Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
+exec
+SELECT 3 FROM t.kv HAVING TRUE
+----
+column5:int
+3
+
+exec rowsort
+SELECT COUNT(*), k FROM t.kv GROUP BY k
+----
+column5:int  k:int
+1            1
+1            3
+1            5
+1            6
+1            7
+1            8
+
+exec-explain
+SELECT COUNT(*), k FROM t.kv GROUP BY 2
+----
+render               0  render  ·            ·             (column5, k)    ·
+ │                   0  ·       render 0     agg0          ·               ·
+ │                   0  ·       render 1     "kv.k"        ·               ·
+ └── group           1  group   ·            ·             ("kv.k", agg0)  ·
+      │              1  ·       aggregate 0  kv.k          ·               ·
+      │              1  ·       aggregate 1  count_rows()  ·               ·
+      │              1  ·       group by     @1            ·               ·
+      └── render     2  render  ·            ·             ("kv.k")        ·
+           │         2  ·       render 0     k             ·               ·
+           └── scan  3  scan    ·            ·             (k, v, w, s)    ·
+·                    3  ·       table        kv@primary    ·               ·
+·                    3  ·       spans        ALL           ·               ·
+
+# GROUP BY specified using column index works.
+exec rowsort
+SELECT COUNT(*), k FROM t.kv GROUP BY 2
+----
+column5:int  k:int
+1            1
+1            3
+1            5
+1            6
+1            7
+1            8
+
+# Grouping by more than one column works.
+exec rowsort
+SELECT v, COUNT(*), w FROM t.kv GROUP BY v, w
+----
+v:int  column5:int  w:int
+NULL   1            5
+2      1            2
+2      2            3
+4      1            2
+4      1            5
+
+# Grouping by more than one column using column numbers works.
+exec rowsort
+SELECT v, COUNT(*), w FROM t.kv GROUP BY 1, 3
+----
+v:int  column5:int  w:int
+NULL   1            5
+2      1            2
+2      2            3
+4      1            2
+4      1            5
+
+# Selecting and grouping on a function expression works.
+exec rowsort
+SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY UPPER(s)
+----
+column6:int  column5:string
+1            NULL
+2            B
+3            A
+
+# Selecting and grouping on a constant works.
+exec
+SELECT COUNT(*) FROM t.kv GROUP BY 1+2
+----
+column6:int
+6
+
+exec
+SELECT COUNT(*) FROM t.kv GROUP BY length('abc')
+----
+column6:int
+6
+
+# Selecting a function of something which is grouped works.
+exec rowsort
+SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY s
+----
+column5:int  column6:string
+1            NULL
+1            A
+2            A
+2            B
+
+# Selecting and grouping on a more complex expression works.
+exec-explain
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
+----
+render               0  render  ·            ·             (column6, column5)  ·
+ │                   0  ·       render 0     agg0          ·                   ·
+ │                   0  ·       render 1     column5       ·                   ·
+ └── group           1  group   ·            ·             (column5, agg0)     ·
+      │              1  ·       aggregate 0  column5       ·                   ·
+      │              1  ·       aggregate 1  count_rows()  ·                   ·
+      │              1  ·       group by     @1            ·                   ·
+      └── render     2  render  ·            ·             (column5)           ·
+           │         2  ·       render 0     k + v         ·                   ·
+           └── scan  3  scan    ·            ·             (k, v, w, s)        ·
+·                    3  ·       table        kv@primary    ·                   ·
+·                    3  ·       spans        ALL           ·                   ·
+
+exec rowsort
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
+----
+column6:int  column5:int
+1            NULL
+1            3
+1            7
+1            8
+1            9
+1            12
+
+# Selecting a more complex expression, made up of things which are each grouped, works.
+exec-explain
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
+----
+render               0  render  ·            ·                (column5, column6)      ·
+ │                   0  ·       render 0     agg0             ·                       ·
+ │                   0  ·       render 1     "kv.k" + "kv.v"  ·                       ·
+ └── group           1  group   ·            ·                ("kv.k", "kv.v", agg0)  ·
+      │              1  ·       aggregate 0  kv.k             ·                       ·
+      │              1  ·       aggregate 1  kv.v             ·                       ·
+      │              1  ·       aggregate 2  count_rows()     ·                       ·
+      │              1  ·       group by     @1-@2            ·                       ·
+      └── render     2  render  ·            ·                ("kv.k", "kv.v")        ·
+           │         2  ·       render 0     k                ·                       ·
+           │         2  ·       render 1     v                ·                       ·
+           └── scan  3  scan    ·            ·                (k, v, w, s)            ·
+·                    3  ·       table        kv@primary       ·                       ·
+·                    3  ·       spans        ALL              ·                       ·
+
+exec rowsort
+SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
+----
+column5:int  column6:int
+1            NULL
+1            3
+1            7
+1            8
+1            9
+1            12
+
+# Test case from #2761.
+exec rowsort
+SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM t.kv GROUP BY kv.v + kv.w
+----
+count_1:int  lx:int
+1            NULL
+1            4
+1            6
+1            9
+2            5
+
+exec rowsort
+SELECT s, COUNT(*) FROM t.kv GROUP BY s HAVING COUNT(*) > 1
+----
+s:string  column5:int
+a         2
+b         2
+
+#TODO(radu): DISTINCT not supported yet.
+#exec rowsort
+#SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
+#----
+#column5:string  column6:int  column8:int
+#A               3            3
+#B               2            2
+
+exec rowsort
+SELECT MAX(k), MIN(v) FROM t.kv HAVING MIN(v) > 2
+----
+column6:int  column5:int
+
+exec rowsort
+SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(v) > 2
+----
+column6:int  column7:int
+8            2
+
+exec
+SELECT COUNT(*)
+----
+column1:int
+1
+
+exec
+SELECT COUNT(k) FROM t.kv
+----
+column5:int
+6
+
+exec
+SELECT COUNT(1)
+----
+column2:int
+1
+
+exec
+SELECT COUNT(1) FROM t.kv
+----
+column6:int
+6
+
+# TODO(radu): ORDER BY not implemented yet.
+#exec
+#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY v
+#----
+#NULL 1
+#2 3
+#4 2
+#
+#exec
+#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY v DESC
+#----
+#4 2
+#2 3
+#NULL 1
+#
+#exec
+#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY COUNT(k) DESC
+#----
+#2 3
+#4 2
+#NULL 1
+#
+#exec
+#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY v-COUNT(k)
+#----
+#NULL 1
+#2 3
+#4 2
+#
+#exec
+#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY 1 DESC
+#----
+#4 2
+#2 3
+#NULL 1
+
+# TODO(radu): column names should be "count".
+exec
+SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM t.kv
+----
+column5:int  column6:int  column7:int
+6            6            5
+
+exec
+SELECT COUNT(kv.*) FROM t.kv
+----
+column6:int
+6
+
+# TODO(radu): DISTINCT not supported yet.
+#exec
+#SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM t.kv
+#----
+#6 2 2
+#
+#exec rowsort
+#SELECT UPPER(s), COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM t.kv GROUP BY UPPER(s)
+#----
+#A    3 2 2
+#B    2 1 1
+#NULL 1 0 0
+#
+#
+
+exec
+SELECT COUNT((k, v)) FROM t.kv
+----
+column6:int
+6
+
+#exec
+#SELECT COUNT(DISTINCT (k, v)) FROM t.kv
+#----
+#6
+#
+#exec
+#SELECT COUNT(DISTINCT (k, (v))) FROM t.kv
+#----
+#6
+
+#TODO(radu): LIMIT not supported.
+#exec
+#SELECT COUNT((k, v)) FROM t.kv LIMIT 1
+#----
+#6
+#
+#exec
+#SELECT COUNT((k, v)) FROM t.kv OFFSET 1
+#----
+
+exec
+SELECT COUNT(k)+COUNT(kv.v) FROM t.kv
+----
+column7:int
+11
+
+exec
+SELECT COUNT(NULL::int), COUNT((NULL, NULL))
+----
+column2:int  column4:int
+0            1
+
+exec
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv
+----
+column5:int  column6:int  column7:int  column8:int
+1            8            2            4
+
+# Even if no input rows match, we expect a row (of nulls).
+exec
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv WHERE k > 8
+----
+column5:int  column6:int  column7:int  column8:int
+NULL         NULL         NULL         NULL
+
+exec
+SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM t.kv ORDER BY k)
+----
+column5:int[]       column6:string[]
+ARRAY[1,3,5,6,7,8]  ARRAY['a','a',NULL,'b','b','A']
+
+exec
+SELECT array_agg(s) FROM t.kv WHERE s IS NULL
+----
+column5:string[]
+ARRAY[NULL]
+
+exec
+SELECT JSON_AGG(s) FROM t.kv WHERE s IS NULL
+----
+column5:jsonb
+'[null]'
+
+exec
+SELECT JSONB_AGG(s) FROM t.kv WHERE s IS NULL
+----
+column5:jsonb
+'[null]'
+
+exec
+SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM t.kv
+----
+column5:decimal  column6:decimal  column7:decimal  column8:decimal
+5                2.8              30               14
+
+exec
+SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM t.kv
+----
+column6:decimal  column8:decimal  column10:decimal  column12:decimal
+5                2.8              30                14
+
+#exec
+#SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM t.kv
+#----
+#5 3 30 6
+
+exec
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM t.kv
+----
+column7:decimal
+14.0
+
+# Verify things work with distsql when some of the nodes emit no results in the
+# local stage.
+exec
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM t.kv WHERE w*2 = k
+----
+column7:decimal
+14.0
+
+exec-explain
+SELECT COUNT(k) FROM t.kv
+----
+group           0  group   ·            ·            (column5)     ·
+ │              0  ·       aggregate 0  count(kv.k)  ·             ·
+ └── render     1  render  ·            ·            ("kv.k")      ·
+      │         1  ·       render 0     k            ·             ·
+      └── scan  2  scan    ·            ·            (k, v, w, s)  ·
+·               2  ·       table        kv@primary   ·             ·
+·               2  ·       spans        ALL          ·             ·
+
+exec-explain
+SELECT COUNT(k), SUM(k), MAX(k) FROM t.kv
+----
+group           0  group   ·            ·            (column5, column6, column7)  ·
+ │              0  ·       aggregate 0  count(kv.k)  ·                            ·
+ │              0  ·       aggregate 1  sum(kv.k)    ·                            ·
+ │              0  ·       aggregate 2  max(kv.k)    ·                            ·
+ └── render     1  render  ·            ·            ("kv.k", "kv.k", "kv.k")     ·
+      │         1  ·       render 0     k            ·                            ·
+      │         1  ·       render 1     k            ·                            ·
+      │         1  ·       render 2     k            ·                            ·
+      └── scan  2  scan    ·            ·            (k, v, w, s)                 ·
+·               2  ·       table        kv@primary   ·                            ·
+·               2  ·       spans        ALL          ·                            ·
+
+exec-raw
+CREATE TABLE t.abc (
+  a CHAR PRIMARY KEY,
+  b FLOAT,
+  c BOOLEAN,
+  d DECIMAL
+)
+----
+
+exec-raw
+INSERT INTO t.abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
+----
+
+exec-explain
+SELECT MIN(a) FROM t.abc
+----
+group           0  group   ·            ·            (column5)     ·
+ │              0  ·       aggregate 0  min(abc.a)   ·             ·
+ └── render     1  render  ·            ·            ("abc.a")     ·
+      │         1  ·       render 0     a            ·             ·
+      └── scan  2  scan    ·            ·            (a, b, c, d)  ·
+·               2  ·       table        abc@primary  ·             ·
+·               2  ·       spans        ALL          ·             ·
+
+exec
+SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM t.abc
+----
+column5:string  column6:float  column7:bool  column8:decimal
+one             1.5            false         1.1
+
+exec
+SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM t.abc
+----
+column5:string  column6:float  column7:bool  column8:decimal
+two             2.0            true          5
+
+exec
+SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM t.abc
+----
+column5:float  column6:float  column7:decimal  column8:decimal
+1.75           3.5            3.05             6.1
+
+# Verify summing of intervals
+exec-raw
+CREATE TABLE t.intervals (
+  a INTERVAL PRIMARY KEY
+)
+----
+
+exec-raw
+INSERT INTO t.intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INTERVAL '2 year 3 months 4 days 5 seconds'), (INTERVAL '10000ms')
+----
+
+exec
+SELECT SUM(a) FROM t.intervals
+----
+column2:interval
+'3y5mon7d19s'
+
+exec-raw
+CREATE TABLE t.xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z FLOAT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x),
+  FAMILY (x),
+  FAMILY (y),
+  FAMILY (z)
+)
+----
+
+exec-raw
+INSERT INTO t.xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
+----
+
+exec
+SELECT MIN(x) FROM t.xyz
+----
+column4:int
+1
+
+exec-explain
+SELECT MIN(x) FROM t.xyz
+----
+group           0  group   ·            ·            (column4)  ·
+ │              0  ·       aggregate 0  min(xyz.x)   ·          ·
+ └── render     1  render  ·            ·            ("xyz.x")  ·
+      │         1  ·       render 0     x            ·          ·
+      └── scan  2  scan    ·            ·            (x, y, z)  ·
+·               2  ·       table        xyz@primary  ·          ·
+·               2  ·       spans        ALL          ·          ·
+
+exec
+SELECT MIN(x) FROM t.xyz WHERE x in (0, 4, 7)
+----
+column4:int
+4
+
+# TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
+exec-explain
+SELECT MIN(x) FROM t.xyz WHERE x in (0, 4, 7)
+----
+group                0  group   ·            ·               (column4)  ·
+ │                   0  ·       aggregate 0  min(xyz.x)      ·          ·
+ └── render          1  render  ·            ·               ("xyz.x")  ·
+      │              1  ·       render 0     x               ·          ·
+      └── filter     2  filter  ·            ·               (x, y, z)  ·
+           │         2  ·       filter       x IN (0, 4, 7)  ·          ·
+           └── scan  3  scan    ·            ·               (x, y, z)  ·
+·                    3  ·       table        xyz@primary     ·          ·
+·                    3  ·       spans        ALL             ·          ·
+
+exec
+SELECT MAX(x) FROM t.xyz
+----
+column4:int
+7
+
+# TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
+exec-explain
+SELECT MAX(x) FROM t.xyz
+----
+group           0  group   ·            ·            (column4)  ·
+ │              0  ·       aggregate 0  max(xyz.x)   ·          ·
+ └── render     1  render  ·            ·            ("xyz.x")  ·
+      │         1  ·       render 0     x            ·          ·
+      └── scan  2  scan    ·            ·            (x, y, z)  ·
+·               2  ·       table        xyz@primary  ·          ·
+·               2  ·       spans        ALL          ·          ·
+
+exec
+SELECT MIN(y) FROM t.xyz WHERE x = 1
+----
+column4:int
+2
+
+exec-explain
+SELECT MIN(y) FROM t.xyz WHERE x = 1
+----
+group                0  group   ·            ·            (column4)  ·
+ │                   0  ·       aggregate 0  min(xyz.y)   ·          ·
+ └── render          1  render  ·            ·            ("xyz.y")  ·
+      │              1  ·       render 0     y            ·          ·
+      └── filter     2  filter  ·            ·            (x, y, z)  ·
+           │         2  ·       filter       x = 1        ·          ·
+           └── scan  3  scan    ·            ·            (x, y, z)  ·
+·                    3  ·       table        xyz@primary  ·          ·
+·                    3  ·       spans        ALL          ·          ·
+
+exec
+SELECT MAX(y) FROM t.xyz WHERE x = 1
+----
+column4:int
+2
+
+exec-explain
+SELECT MAX(y) FROM t.xyz WHERE x = 1
+----
+group                0  group   ·            ·            (column4)  ·
+ │                   0  ·       aggregate 0  max(xyz.y)   ·          ·
+ └── render          1  render  ·            ·            ("xyz.y")  ·
+      │              1  ·       render 0     y            ·          ·
+      └── filter     2  filter  ·            ·            (x, y, z)  ·
+           │         2  ·       filter       x = 1        ·          ·
+           └── scan  3  scan    ·            ·            (x, y, z)  ·
+·                    3  ·       table        xyz@primary  ·          ·
+·                    3  ·       spans        ALL          ·          ·
+
+exec
+SELECT MIN(y) FROM t.xyz WHERE x = 7
+----
+column4:int
+NULL
+
+exec-explain
+SELECT MIN(y) FROM t.xyz WHERE x = 7
+----
+group                0  group   ·            ·            (column4)  ·
+ │                   0  ·       aggregate 0  min(xyz.y)   ·          ·
+ └── render          1  render  ·            ·            ("xyz.y")  ·
+      │              1  ·       render 0     y            ·          ·
+      └── filter     2  filter  ·            ·            (x, y, z)  ·
+           │         2  ·       filter       x = 7        ·          ·
+           └── scan  3  scan    ·            ·            (x, y, z)  ·
+·                    3  ·       table        xyz@primary  ·          ·
+·                    3  ·       spans        ALL          ·          ·
+
+exec
+SELECT MAX(y) FROM t.xyz WHERE x = 7
+----
+column4:int
+NULL
+
+exec-explain
+SELECT MAX(y) FROM t.xyz WHERE x = 7
+----
+group                0  group   ·            ·            (column4)  ·
+ │                   0  ·       aggregate 0  max(xyz.y)   ·          ·
+ └── render          1  render  ·            ·            ("xyz.y")  ·
+      │              1  ·       render 0     y            ·          ·
+      └── filter     2  filter  ·            ·            (x, y, z)  ·
+           │         2  ·       filter       x = 7        ·          ·
+           └── scan  3  scan    ·            ·            (x, y, z)  ·
+·                    3  ·       table        xyz@primary  ·          ·
+·                    3  ·       spans        ALL          ·          ·
+
+exec
+SELECT MIN(x) FROM t.xyz WHERE (y, z) = (2, 3.0)
+----
+column4:int
+1
+
+exec-explain
+SELECT MIN(x) FROM t.xyz WHERE (y, z) = (2, 3.0)
+----
+group                0  group   ·            ·                      (column4)  ·
+ │                   0  ·       aggregate 0  min(xyz.x)             ·          ·
+ └── render          1  render  ·            ·                      ("xyz.x")  ·
+      │              1  ·       render 0     x                      ·          ·
+      └── filter     2  filter  ·            ·                      (x, y, z)  ·
+           │         2  ·       filter       (y = 2) AND (z = 3.0)  ·          ·
+           └── scan  3  scan    ·            ·                      (x, y, z)  ·
+·                    3  ·       table        xyz@primary            ·          ·
+·                    3  ·       spans        ALL                    ·          ·
+
+exec
+SELECT MAX(x) FROM t.xyz WHERE (z, y) = (3.0, 2)
+----
+column4:int
+1
+
+exec-explain
+SELECT MAX(x) FROM t.xyz WHERE (z, y) = (3.0, 2)
+----
+group                0  group   ·            ·                      (column4)  ·
+ │                   0  ·       aggregate 0  max(xyz.x)             ·          ·
+ └── render          1  render  ·            ·                      ("xyz.x")  ·
+      │              1  ·       render 0     x                      ·          ·
+      └── filter     2  filter  ·            ·                      (x, y, z)  ·
+           │         2  ·       filter       (z = 3.0) AND (y = 2)  ·          ·
+           └── scan  3  scan    ·            ·                      (x, y, z)  ·
+·                    3  ·       table        xyz@primary            ·          ·
+·                    3  ·       spans        ALL                    ·          ·
+
+# VARIANCE/STDDEV
+
+exec
+SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM t.xyz
+----
+column4:decimal  column6:decimal  column8:float
+9                4.5              6.33333333333333
+
+exec
+SELECT VARIANCE(x) FROM t.xyz WHERE x = 10
+----
+column4:decimal
+NULL
+
+exec
+SELECT VARIANCE(x) FROM t.xyz WHERE x = 1
+----
+column4:decimal
+NULL
+
+exec-explain
+SELECT VARIANCE(x) FROM t.xyz WHERE x = 1
+----
+group                0  group   ·            ·                (column4)  ·
+ │                   0  ·       aggregate 0  variance(xyz.x)  ·          ·
+ └── render          1  render  ·            ·                ("xyz.x")  ·
+      │              1  ·       render 0     x                ·          ·
+      └── filter     2  filter  ·            ·                (x, y, z)  ·
+           │         2  ·       filter       x = 1            ·          ·
+           └── scan  3  scan    ·            ·                (x, y, z)  ·
+·                    3  ·       table        xyz@primary      ·          ·
+·                    3  ·       spans        ALL              ·          ·
+
+exec
+SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM t.xyz
+----
+column4:decimal  column6:decimal        column8:float
+3                2.1213203435596425732  2.51661147842358
+
+exec
+SELECT STDDEV(x) FROM t.xyz WHERE x = 1
+----
+column4:decimal
+NULL
+
+# Numerical stability test for VARIANCE/STDDEV.
+# See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
+# Avoid using random() since we do not have the deterministic option to specify a pseudo-random seed yet.
+# Note under distsql, this is non-deterministic since the running variance/stddev algorithms depend on
+# the local sum of squared difference values which depend on how the data is distributed across the distsql nodes.
+exec-raw
+CREATE TABLE t.mnop (
+  m INT PRIMARY KEY,
+  n FLOAT,
+  o DECIMAL,
+  p BIGINT
+)
+----
+
+exec-raw
+INSERT INTO t.mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
+  GENERATE_SERIES(1, 2e4) AS I(i)
+----
+
+exec-raw
+UPDATE t.mnop SET o = n::decimal, p = (n * 10)::bigint
+----
+
+exec
+SELECT round(VARIANCE(n), 2), round(VARIANCE(n), 2), round(VARIANCE(p)) FROM t.mnop
+----
+column6:float  column7:float  column9:decimal
+0.08           0.08           8
+
+
+exec
+SELECT round(STDDEV(n), 2), round(STDDEV(n), 2), round(STDDEV(p)) FROM t.mnop
+----
+column6:float  column7:float  column9:decimal
+0.29           0.29           3
+
+exec
+SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
+----
+column3:float  column6:float  column9:float
+1.0            2.0            3.0
+
+exec
+SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
+----
+column2:int  column4:int  column6:int
+1            1            1
+
+exec
+SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
+----
+column2:decimal  column4:float  column6:decimal
+1                2.0            3
+
+exec
+SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
+----
+column2:decimal  column4:float  column6:decimal
+NULL             NULL           NULL
+
+exec
+SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
+----
+column2:decimal  column4:float  column6:decimal
+NULL             NULL           NULL
+
+# TODO(radu): subqueries not supported yet.
+## Ensure subqueries don't trigger aggregation.
+#exec
+#SELECT x > (SELECT avg(0)) FROM t.xyz LIMIT 1
+#----
+#true
+
+exec-raw
+CREATE TABLE t.bools (b BOOL)
+----
+
+exec
+SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+----
+column3:bool  column4:bool
+NULL          NULL
+
+exec-raw
+INSERT INTO t.bools VALUES (true), (true), (true)
+----
+
+exec
+SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+----
+column3:bool  column4:bool
+true          true
+
+exec-raw
+INSERT INTO t.bools VALUES (false), (false)
+----
+
+exec
+SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+----
+column3:bool  column4:bool
+false         true
+
+exec-raw
+DELETE FROM t.bools WHERE b
+----
+
+exec
+SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+----
+column3:bool  column4:bool
+false         false
+
+exec
+SELECT CONCAT_AGG(s) FROM (SELECT s FROM t.kv ORDER BY k)
+----
+column5:string
+aabbA
+
+exec
+SELECT JSON_AGG(s) FROM (SELECT s FROM t.kv ORDER BY k)
+----
+column5:jsonb
+'["a", "a", null, "b", "b", "A"]'
+
+exec
+SELECT JSONB_AGG(s) FROM (SELECT s FROM t.kv ORDER BY k)
+----
+column5:jsonb
+'["a", "a", null, "b", "b", "A"]'
+
+## Tests for the single-row optimization.
+exec-raw
+CREATE TABLE t.ab (
+  a INT PRIMARY KEY,
+  b INT,
+  FAMILY (a),
+  FAMILY (b)
+)
+----
+
+exec-raw
+INSERT INTO t.ab VALUES
+  (1, 10),
+  (2, 20),
+  (3, 30),
+  (4, 40),
+  (5, 50)
+----
+
+# TODO(radu): we don't support the single-row optimization yet.
+#exec
+#EXPLAIN (EXPRS) SELECT MIN(a) FROM t.abc
+#----
+#group           ·            ·
+# │              aggregate 0  min(a)
+# └── render     ·            ·
+#      │         render 0     a
+#      └── scan  ·            ·
+#·               table        abc@primary
+#·               spans        ALL
+#·               limit        1
+#
+## Verify we only buffer one row.
+#exec
+#SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(a) FROM ab]
+# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+#----
+#fetched: /ab/primary/1 -> NULL
+#fetched: /ab/primary/1/b -> 10
+#output row: [1]
+#
+#exec
+#EXPLAIN (EXPRS) SELECT MAX(a) FROM t.abc
+#----
+#group              ·            ·
+# │                 aggregate 0  max(a)
+# └── render        ·            ·
+#      │            render 0     a
+#      └── revscan  ·            ·
+#·                  table        abc@primary
+#·                  spans        ALL
+#·                  limit        1
+#
+## Verify we only buffer one row.
+#exec
+#SELECT message FROM [SHOW KV TRACE FOR SELECT MAX(a) FROM ab]
+# WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+#----
+#fetched: /ab/primary/5/b -> 50
+#fetched: /ab/primary/5 -> NULL
+#output row: [5]
+
+# TODO(radu): ORDER BY not supported yet.
+#exec-explain
+#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY COUNT(k)
+#----
+#sort                 ·            ·
+# │                   order        +count
+# └── group           ·            ·
+#      │              aggregate 0  v
+#      │              aggregate 1  count(k)
+#      │              group by     @1
+#      └── render     ·            ·
+#           │         render 0     v
+#           │         render 1     k
+#           └── scan  ·            ·
+#·                    table        kv@primary
+#·                    spans        ALL
+#
+#exec-explain
+#SELECT v, COUNT(*) FROM t.kv GROUP BY v ORDER BY COUNT(*)
+#----
+#sort                 ·            ·
+# │                   order        +count
+# └── group           ·            ·
+#      │              aggregate 0  v
+#      │              aggregate 1  count_rows()
+#      │              group by     @1
+#      └── render     ·            ·
+#           │         render 0     v
+#           └── scan  ·            ·
+#·                    table        kv@primary
+#·                    spans        ALL
+#
+#exec-explain
+#SELECT v, COUNT(1) FROM t.kv GROUP BY v ORDER BY COUNT(1)
+#----
+#sort                 ·            ·
+# │                   order        +count
+# └── group           ·            ·
+#      │              aggregate 0  v
+#      │              aggregate 1  count(1)
+#      │              group by     @1
+#      └── render     ·            ·
+#           │         render 0     v
+#           │         render 1     1
+#           └── scan  ·            ·
+#·                    table        kv@primary
+#·                    spans        ALL
+
+# TODO(radu): we don't propagate filters yet.
+## Check that filters propagate through no-op aggregation.
+#exec
+#EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM t.kv GROUP BY v) WHERE v > 10
+#----
+#group           ·            ·
+# │              aggregate 0  v
+# │              aggregate 1  count(1)
+# │              group by     @1
+# └── render     ·            ·
+#      │         render 0     v
+#      │         render 1     1
+#      └── scan  ·            ·
+#·               table        kv@primary
+#·               spans        ALL
+#·               filter       v > 10
+
+# TODO(radu): FILTER not yet supported.
+## Verify that FILTER works.
+#
+#exec-raw
+#CREATE TABLE filter_test (
+#  k INT,
+#  v INT,
+#  mark BOOL
+#)
+#----
+#
+#exec-raw
+#INSERT INTO filter_test VALUES
+#(1, 2, false),
+#(3, 4, true),
+#(5, NULL, true),
+#(6, 2, true),
+#(7, 2, true),
+#(8, 4, true),
+#(NULL, 4, true)
+#----
+#
+## FILTER should eliminate some results.
+#exec rowsort
+#SELECT v, COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
+#----
+#2 2
+#4 1
+#NULL 0
+#
+## Test multiple filters
+#exec rowsort
+#SELECT v, mark, COUNT(*) FILTER (WHERE k > 5), COUNT(*), MAX(k) FILTER (WHERE k < 8) FROM filter_test GROUP BY v, mark
+#----
+#2 false 0 1 1
+#2 true 2 2 7
+#4 true 1 3 3
+#NULL true 0 1 5
+#
+## Check that filter expressions are only rendered once.
+#exec
+#EXPLAIN (EXPRS) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
+#----
+#group           ·            ·
+# │              aggregate 0  count_rows() FILTER (WHERE k > 5)
+# │              aggregate 1  max(k > 5) FILTER (WHERE k > 5)
+# │              group by     @1
+# └── render     ·            ·
+#      │         render 0     v
+#      │         render 1     k > 5
+#      └── scan  ·            ·
+#·               table        filter_test@primary
+#·               spans        ALL
+#
+#exec
+#EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
+#----
+#group           0  group   ·            ·                                  (count int)                                                    ·
+# │              0  ·       aggregate 0  count_rows() FILTER (WHERE k > 5)  ·                                                              ·
+# │              0  ·       group by     @1                                 ·                                                              ·
+# └── render     1  render  ·            ·                                  (v int, "k > 5" bool)                                          ·
+#      │         1  ·       render 0     (v)[int]                           ·                                                              ·
+#      │         1  ·       render 1     ((k)[int] > (5)[int])[bool]        ·                                                              ·
+#      └── scan  2  scan    ·            ·                                  (k int, v int, mark[omitted] bool, rowid[hidden,omitted] int)  rowid!=NULL; key(rowid)
+#·               2  ·       table        filter_test@primary                ·                                                              ·
+#·               2  ·       spans        ALL                                ·                                                              ·
+
+# Tests with * inside GROUP BY.
+exec-explain
+SELECT 1 FROM t.kv GROUP BY kv.*;
+----
+render          0  render  ·            ·           (column5)     ·
+ │              0  ·       render 0     1           ·             ·
+ └── group      1  group   ·            ·           (k, v, w, s)  ·
+      │         1  ·       aggregate 0  k           ·             ·
+      │         1  ·       aggregate 1  v           ·             ·
+      │         1  ·       aggregate 2  w           ·             ·
+      │         1  ·       aggregate 3  s           ·             ·
+      │         1  ·       group by     @1-@4       ·             ·
+      └── scan  2  scan    ·            ·           (k, v, w, s)  ·
+·               2  ·       table        kv@primary  ·             ·
+·               2  ·       spans        ALL         ·             ·
+
+exec
+SELECT 1 FROM t.kv GROUP BY kv.*;
+----
+column5:int
+1
+1
+1
+1
+1
+1
+
+exec-explain
+SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*;
+----
+render                    0  render  ·            ·            (column9)                                  ·
+ │                        0  ·       render 0     agg0         ·                                          ·
+ └── group                1  group   ·            ·            ("kv.k", "kv.v", "kv.w", "kv.s", agg0)     ·
+      │                   1  ·       aggregate 0  kv.k         ·                                          ·
+      │                   1  ·       aggregate 1  kv.v         ·                                          ·
+      │                   1  ·       aggregate 2  kv.w         ·                                          ·
+      │                   1  ·       aggregate 3  kv.s         ·                                          ·
+      │                   1  ·       aggregate 4  sum(abc.d)   ·                                          ·
+      │                   1  ·       group by     @1-@4        ·                                          ·
+      └── render          2  render  ·            ·            ("kv.k", "kv.v", "kv.w", "kv.s", "abc.d")  ·
+           │              2  ·       render 0     k            ·                                          ·
+           │              2  ·       render 1     v            ·                                          ·
+           │              2  ·       render 2     w            ·                                          ·
+           │              2  ·       render 3     s            ·                                          ·
+           │              2  ·       render 4     d            ·                                          ·
+           └── join       3  join    ·            ·            (k, v, w, s, a, b, c, d)                   ·
+                │         3  ·       type         inner        ·                                          ·
+                │         3  ·       pred         k >= d       ·                                          ·
+                ├── scan  4  scan    ·            ·            (k, v, w, s)                               ·
+                │         4  ·       table        kv@primary   ·                                          ·
+                │         4  ·       spans        ALL          ·                                          ·
+                └── scan  4  scan    ·            ·            (a, b, c, d)                               ·
+·                         4  ·       table        abc@primary  ·                                          ·
+·                         4  ·       spans        ALL          ·                                          ·
+
+exec rowsort
+SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*;
+----
+column9:decimal
+1.1
+6.1
+6.1
+6.1
+6.1
+
+# TODO(radu): single-row optimization not yet supported.
+## opt_test is used for tests around the single-row optimization for MIN/MAX.
+#exec-raw
+#CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
+#----
+#
+#exec-raw
+#INSERT INTO opt_test VALUES (1, NULL), (2, 10), (3, NULL), (4, 5)
+#----
+#
+## Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
+#exec
+#EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
+#----
+#group           0  group   ·            ·                       (min)            ·
+# │              0  ·       aggregate 0  min(v)                  ·                ·
+# └── render     1  render  ·            ·                       (v)              v!=NULL; +v
+#      │         1  ·       render 0     test.public.opt_test.v  ·                ·
+#      └── scan  2  scan    ·            ·                       (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
+#·               2  ·       table        opt_test@v              ·                ·
+#·               2  ·       spans        /!NULL-                 ·                ·
+#·               2  ·       limit        1                       ·                ·
+#
+## Without the "v IS NOT NULL" constraint, this result would incorrectly be NULL.
+#exec
+#SELECT MIN(v) FROM opt_test
+#----
+#5
+#
+## Cross-check against a query without this optimization.
+#exec
+#SELECT MIN(v) FROM opt_test@primary
+#----
+#5
+#
+## Repeat test when there is an existing filter.
+#exec
+#EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
+#----
+#group           0  group   ·            ·                       (min)   ·
+# │              0  ·       aggregate 0  min(v)                  ·       ·
+# └── render     1  render  ·            ·                       (v)     v!=NULL; +v
+#      │         1  ·       render 0     test.public.opt_test.v  ·       ·
+#      └── scan  2  scan    ·            ·                       (k, v)  k!=NULL; v!=NULL; key(k,v); +v
+#·               2  ·       table        opt_test@v              ·       ·
+#·               2  ·       spans        /!NULL-                 ·       ·
+#·               2  ·       filter       k != 4                  ·       ·
+#
+#exec
+#SELECT MIN(v) FROM opt_test WHERE k <> 4
+#----
+#10
+#
+## Check the optimization when the argument is non-trivial. The renderNode can't
+## present an ordering on v+1 so the optimization is not applied, but the IS NOT
+## NULL filter should be added.
+#exec
+#EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
+#----
+#group           0  group   ·            ·                           (min)            ·
+# │              0  ·       aggregate 0  min(v + 1)                  ·                ·
+# └── render     1  render  ·            ·                           ("v + 1")        ·
+#      │         1  ·       render 0     test.public.opt_test.v + 1  ·                ·
+#      └── scan  2  scan    ·            ·                           (k[omitted], v)  k!=NULL; v!=NULL; key(k)
+#·               2  ·       table        opt_test@primary            ·                ·
+#·               2  ·       spans        -/3/# /5-                   ·                ·
+#·               2  ·       filter       (v + 1) IS NOT NULL         ·                ·
+#
+## Verify that we don't use the optimization if there is a GROUP BY.
+#exec
+#EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
+#----
+#group      0  group  ·            ·                 (min)   ·
+# │         0  ·      aggregate 0  min(v)            ·       ·
+# │         0  ·      group by     @1                ·       ·
+# └── scan  1  scan   ·            ·                 (k, v)  k!=NULL; key(k)
+#·          1  ·      table        opt_test@primary  ·       ·
+#·          1  ·      spans        ALL               ·       ·
+#
+#exec rowsort
+#SELECT MIN(v) FROM opt_test GROUP BY k
+#----
+#NULL
+#NULL
+#5
+#10
+#
+#exec rowsort
+#SELECT MAX(v) FROM opt_test GROUP BY k
+#----
+#NULL
+#NULL
+#5
+#10
+
+exec-raw
+CREATE TABLE t.xor_bytes (a bytes, b int, c int)
+----
+
+exec-raw
+INSERT INTO t.xor_bytes VALUES
+  (b'\x01\x01', 1, 3),
+  (b'\x02\x01', 1, 1),
+  (b'\x04\x01', 2, -5),
+  (b'\x08\x01', 2, -1),
+  (b'\x10\x01', 2, 0)
+----
+
+exec
+SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM t.xor_bytes
+----
+column6:string  column7:int
+1f01            6
+
+# TODO(radu): ORDER BY not supported.
+#exec
+#SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM t.xor_bytes GROUP BY b ORDER BY b
+#----
+#0300  1   2
+#1c01  2   4
+
+exec
+SELECT MAX(true), MIN(true)
+----
+column2:bool  column4:bool
+true          true
+
+exec-raw
+DELETE FROM t.ab;
+INSERT INTO t.ab(a,b) VALUES (1,2), (3,4);
+CREATE TABLE t.xy(x STRING, y STRING);
+INSERT INTO t.xy(x, y) VALUES ('a', 'b'), ('c', 'd')
+----
+
+# Grouping and rendering tuples.
+exec rowsort
+SELECT (b, a) FROM t.ab GROUP BY (b, a)
+----
+column3:tuple{int, int}
+(2, 1)
+(4, 3)
+
+exec-explain
+SELECT (b, a) FROM t.ab GROUP BY (b, a)
+----
+render          0  render  ·            ·           (column3)  ·
+ │              0  ·       render 0     (b, a)      ·          ·
+ └── group      1  group   ·            ·           (a, b)     ·
+      │         1  ·       aggregate 0  a           ·          ·
+      │         1  ·       aggregate 1  b           ·          ·
+      │         1  ·       group by     @1-@2       ·          ·
+      └── scan  2  scan    ·            ·           (a, b)     ·
+·               2  ·       table        ab@primary  ·          ·
+·               2  ·       spans        ALL         ·          ·
+
+exec rowsort
+SELECT MIN(y), (b, a) FROM t.ab, t.xy GROUP BY (x, (a, b))
+----
+column6:string  column7:tuple{int, int}
+b               (2, 1)
+b               (4, 3)
+d               (2, 1)
+d               (4, 3)
+
+exec-explain
+SELECT MIN(y), (b, a) FROM t.ab, t.xy GROUP BY (x, (a, b))
+----
+render                    0  render  ·            ·                 (column6, column7)                ·
+ │                        0  ·       render 0     agg0              ·                                 ·
+ │                        0  ·       render 1     ("ab.b", "ab.a")  ·                                 ·
+ └── group                1  group   ·            ·                 ("ab.a", "ab.b", "xy.x", agg0)    ·
+      │                   1  ·       aggregate 0  ab.a              ·                                 ·
+      │                   1  ·       aggregate 1  ab.b              ·                                 ·
+      │                   1  ·       aggregate 2  xy.x              ·                                 ·
+      │                   1  ·       aggregate 3  min(xy.y)         ·                                 ·
+      │                   1  ·       group by     @2,@3,@1          ·                                 ·
+      └── render          2  render  ·            ·                 ("xy.x", "ab.a", "ab.b", "xy.y")  ·
+           │              2  ·       render 0     x                 ·                                 ·
+           │              2  ·       render 1     a                 ·                                 ·
+           │              2  ·       render 2     b                 ·                                 ·
+           │              2  ·       render 3     y                 ·                                 ·
+           └── join       3  join    ·            ·                 (a, b, x, y, rowid[hidden])       ·
+                │         3  ·       type         cross             ·                                 ·
+                ├── scan  4  scan    ·            ·                 (a, b)                            ·
+                │         4  ·       table        ab@primary        ·                                 ·
+                │         4  ·       spans        ALL               ·                                 ·
+                └── scan  4  scan    ·            ·                 (x, y, rowid[hidden])             ·
+·                         4  ·       table        xy@primary        ·                                 ·
+·                         4  ·       spans        ALL               ·                                 ·
