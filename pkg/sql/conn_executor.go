@@ -907,7 +907,8 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
 			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
-			ev, payload, err = ex.execStmt(ex.Ctx(), curStmt, stmtRes, nil /* pinfo */, pos)
+			ctx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
 			}
@@ -959,14 +960,16 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				ExpectedTypes: portal.Stmt.Columns,
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
-			ev, payload, err = ex.execStmt(ex.Ctx(), curStmt, stmtRes, pinfo, pos)
+			ctx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo, pos)
 			if err != nil {
 				return err
 			}
 		case PrepareStmt:
 			ex.curStmt = tcmd.Stmt
 			res = ex.clientComm.CreatePrepareResult(pos)
-			ev, payload = ex.execPrepare(ex.Ctx(), tcmd)
+			ctx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload = ex.execPrepare(ctx, tcmd)
 		case DescribeStmt:
 			descRes := ex.clientComm.CreateDescribeResult(pos)
 			res = descRes
@@ -1632,7 +1635,8 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		implicitTxn = os.ImplicitTxn.Get()
 	}
 
-	err := ex.machine.ApplyWithPayload(ex.Ctx(), ev, payload)
+	ctx := withStatement(ex.Ctx(), ex.curStmt)
+	err := ex.machine.ApplyWithPayload(ctx, ev, payload)
 	if err != nil {
 		if _, ok := err.(fsm.TransitionNotFoundError); ok {
 			panic(err)
@@ -1898,4 +1902,35 @@ func (ps connExPrepStmtsAccessor) DeleteAll(ctx context.Context) {
 		prepStmts: make(map[string]prepStmtEntry),
 		portals:   make(map[string]portalEntry),
 	}
+}
+
+// contextStatementKey is an empty type for the handle associated with the
+// statement value (see context.Value).
+type contextStatementKey struct{}
+
+// withStatement adds a SQL statement to the provided context. The statement
+// will then be included in crash reports which use that context.
+func withStatement(ctx context.Context, stmt tree.Statement) context.Context {
+	return context.WithValue(ctx, contextStatementKey{}, stmt)
+}
+
+// statementFromCtx returns the statement value from a context, or nil if unset.
+func statementFromCtx(ctx context.Context) tree.Statement {
+	stmt := ctx.Value(contextStatementKey{})
+	if stmt == nil {
+		return nil
+	}
+	return stmt.(tree.Statement)
+}
+
+func init() {
+	// Register a function to include the anonymized statement in crash reports.
+	log.RegisterTagFn("statement", func(ctx context.Context) string {
+		stmt := statementFromCtx(ctx)
+		if stmt == nil {
+			return ""
+		}
+		// Anonymize the statement for reporting.
+		return anonymizeStmtAndConstants(stmt)
+	})
 }
