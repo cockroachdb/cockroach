@@ -19,6 +19,9 @@
 /pkg/sqlmigrations           @cockroachdb/core-prs @cockroachdb/sql-wiring-prs
 
 /pkg/ccl/                    @cockroachdb/sql-ccl-prs
+/pkg/ccl/backupccl           @cockroachdb/sql-bulk-prs
+/pkg/ccl/importccl           @cockroachdb/sql-bulk-prs
+/pkg/ccl/storageccl          @cockroachdb/sql-bulk-prs
 /pkg/cli/                    @cockroachdb/cli-prs
 /pkg/cli/sql*.go             @cockroachdb/sql-ui-prs @cockroachdb/cli-prs
 
