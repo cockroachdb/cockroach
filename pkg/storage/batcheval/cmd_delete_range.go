@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -45,8 +46,9 @@ func DeleteRange(
 	)
 	if err == nil {
 		reply.Keys = deleted
-		// DeleteRange requires that we retry on push to avoid the lost delete range anomaly.
-		if h.Txn != nil {
+		// DeleteRange requires that we retry on push (for snapshot) to
+		// avoid the lost delete range anomaly.
+		if h.Txn != nil && h.Txn.Isolation == enginepb.SNAPSHOT {
 			clonedTxn := h.Txn.Clone()
 			clonedTxn.RetryOnPush = true
 			reply.Txn = &clonedTxn
