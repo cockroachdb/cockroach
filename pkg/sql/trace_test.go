@@ -41,6 +41,7 @@ func TestTrace(t *testing.T) {
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
 		"[async] storage.pendingLeaseRequest: requesting lease",
+		"request range lease",
 		"range lookup",
 	}
 
