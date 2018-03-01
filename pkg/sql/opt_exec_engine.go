@@ -16,11 +16,16 @@ package sql
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -236,4 +241,71 @@ func (ee *execEngine) ConstructJoin(
 	}
 
 	return p.makeJoinNode(leftSrc, rightSrc, pred), nil
+}
+
+// ConstructGroupBy is part of the exec.Factory interface.
+func (e *execEngine) ConstructGroupBy(
+	input exec.Node, groupCols []int, aggregations []exec.AggInfo,
+) (exec.Node, error) {
+	n := &groupNode{
+		plan:      input.(planNode),
+		funcs:     make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
+		columns:   make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
+		groupCols: groupCols,
+	}
+	inputCols := planColumns(n.plan)
+	for _, idx := range groupCols {
+		// TODO(radu): only generate the grouping columns we actually need.
+		f := n.newAggregateFuncHolder(
+			"", /* function */
+			inputCols[idx].Typ,
+			idx,
+			builtins.NewIdentAggregate,
+			e.planner.EvalContext().Mon.MakeBoundAccount(),
+		)
+		n.funcs = append(n.funcs, f)
+		n.columns = append(n.columns, inputCols[idx])
+	}
+
+	for i := range aggregations {
+		agg := &aggregations[i]
+		builtin := agg.Builtin
+		var renderIdx int
+		var aggFn func(*tree.EvalContext) tree.AggregateFunc
+
+		switch len(agg.ArgCols) {
+		case 0:
+			renderIdx = noRenderIdx
+			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{}, evalCtx)
+			}
+
+		case 1:
+			renderIdx = agg.ArgCols[0]
+			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx)
+			}
+
+		default:
+			return nil, errors.Errorf("multi-argument aggregation functions not implemented")
+		}
+
+		f := n.newAggregateFuncHolder(
+			agg.FuncName,
+			agg.ResultType,
+			renderIdx,
+			aggFn,
+			e.planner.EvalContext().Mon.MakeBoundAccount(),
+		)
+		n.funcs = append(n.funcs, f)
+		n.columns = append(n.columns, sqlbase.ResultColumn{
+			Name: fmt.Sprintf("agg%d", i),
+			Typ:  agg.ResultType,
+		})
+	}
+
+	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
+	n.run.addNullBucketIfEmpty = len(groupCols) == 0
+	n.run.buckets = make(map[string]struct{})
+	return n, nil
 }
