@@ -108,11 +108,38 @@ func RunTest(t *testing.T, path string, f func(d *TestData) string) {
 // TestData contains information about one data-driven test case that was
 // parsed from the test file.
 type TestData struct {
-	Pos      string // file and line number
-	Cmd      string
-	CmdArgs  []string
+	Pos string // file and line number
+
+	// Cmd is the first string on the directive line (up to the first whitespace).
+	Cmd string
+
+	CmdArgs []CmdArg
+
 	Input    string
 	Expected string
+}
+
+// CmdArg contains information about an argument on the directive line. An
+// argument is specified in one of the following forms:
+//  - argument
+//  - argument=value
+//  - argument=(values, ...)
+type CmdArg struct {
+	Key  string
+	Vals []string
+}
+
+func (arg *CmdArg) String() string {
+	switch len(arg.Vals) {
+	case 0:
+		return arg.Key
+
+	case 1:
+		return fmt.Sprintf("%s=%s", arg.Key, arg.Vals[0])
+
+	default:
+		return fmt.Sprintf("%s=(%s)", arg.Key, strings.Join(arg.Vals, ", "))
+	}
 }
 
 // Fatalf wraps a fatal testing error with test file position information, so

@@ -50,7 +50,11 @@ func TestOptgen(t *testing.T) {
 					return strings.NewReader(d.Input), nil
 				}
 
-				gen.run(d.CmdArgs...)
+				args := make([]string, len(d.CmdArgs))
+				for i := range args {
+					args[i] = d.CmdArgs[i].String()
+				}
+				gen.run(args...)
 
 				// Suppress DO NOT EDIT so that reviewable will still show the
 				// file by default.
