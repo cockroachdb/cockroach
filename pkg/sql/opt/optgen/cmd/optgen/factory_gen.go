@@ -373,10 +373,10 @@ func (g *factoryGen) genDynamicMatch(
 		define := g.compiled.LookupDefine(string(name))
 		if define != nil {
 			// Match operator name.
-			fmt.Fprintf(&buf, "%s.op == %sOp", normName, name)
+			fmt.Fprintf(&buf, "%s.op == opt.%sOp", normName, name)
 		} else {
 			// Match tag name.
-			fmt.Fprintf(&buf, "is%sLookup[%s.op]", name, normName)
+			fmt.Fprintf(&buf, "%s.is%s()", normName, name)
 		}
 	}
 
@@ -452,7 +452,7 @@ func (g *factoryGen) genNestedExpr(e lang.Expr) {
 	case *lang.NameExpr:
 		// OpName literal expressions construct an op identifier like SelectOp,
 		// which can be passed as a function argument.
-		g.w.write("%sOp", t)
+		g.w.write("opt.%sOp", t)
 
 	default:
 		panic(fmt.Sprintf("unhandled expression: %s", e))

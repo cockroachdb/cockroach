@@ -227,7 +227,11 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 	return out
 }
 
+// buildDatum maps certain datums to separate operators, for easier matching.
 func (b *Builder) buildDatum(d tree.Datum) opt.GroupID {
+	if d == tree.DNull {
+		return b.factory.ConstructNull(b.factory.InternPrivate(types.Unknown))
+	}
 	if boolVal, ok := d.(*tree.DBool); ok {
 		// Map True/False datums to True/False operator.
 		if *boolVal {

@@ -41,6 +41,7 @@ func init() {
 	scalarBuildFuncMap = [opt.NumOperators]buildFunc{
 		opt.VariableOp:        (*Builder).buildVariable,
 		opt.ConstOp:           (*Builder).buildTypedExpr,
+		opt.NullOp:            (*Builder).buildNull,
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,
@@ -77,6 +78,10 @@ func (b *Builder) buildScalar(ctx *buildScalarCtx, ev xform.ExprView) tree.Typed
 
 func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	return ev.Private().(tree.TypedExpr)
+}
+
+func (b *Builder) buildNull(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	return tree.DNull
 }
 
 func (b *Builder) buildVariable(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
