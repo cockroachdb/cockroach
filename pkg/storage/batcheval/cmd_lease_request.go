@@ -76,6 +76,17 @@ func RequestLease(
 		effectiveStart.Backward(prevLease.Expiration.Next())
 	}
 
+	// If the lease holder promised to not propose any commands below
+	// MinProposedTS, it must also not be allowed to extend a lease before that
+	// timestamp. This makes sure that when a node restarts, its earlier in-flight
+	// commands (which are not tracked by the command queue post restart) receive
+	// an error under the new lease (since the sequence number will increase).
+	// Note that this is unlikely to happen in practice since earlier commands
+	// usually apply before this lease will, but better safe than sorry.
+	if ts := args.MinProposedTS; ts != nil && effectiveStart.Forward(*ts) {
+		isExtension = false
+	}
+
 	if isExtension {
 		if effectiveStart.Less(prevLease.Start) {
 			rErr.Message = "extension moved start timestamp backwards"
