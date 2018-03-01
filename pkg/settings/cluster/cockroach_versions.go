@@ -47,6 +47,7 @@ const (
 	VersionReadUncommittedRangeLookups
 	VersionPerReplicaZoneConstraints
 	VersionLeasePreferences
+	Version2_0
 
 	// Add new versions here (step one of two).
 
@@ -181,6 +182,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLeasePreferences is https://github.com/cockroachdb/cockroach/pull/23202.
 		Key:     VersionLeasePreferences,
 		Version: roachpb.Version{Major: 1, Minor: 1, Unstable: 15},
+	},
+	{
+		// Version2_0 is CockroachDB v2.0. It's used for all v2.0.x patch releases.
+		Key:     Version2_0,
+		Version: roachpb.Version{Major: 2, Minor: 0},
 	},
 
 	// Add new versions here (step two of two).
