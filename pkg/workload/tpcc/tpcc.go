@@ -60,8 +60,9 @@ var tpccMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
-		g.flags.StringVar(&g.nowString, `now`, `2006-01-02 15:04:05`,
-			`Timestamp to use in data generation`)
+		// Hardcode this since it doesn't seem like anyone will want to change
+		// it and it's really noisy in the generated fixture paths.
+		g.nowString = `2006-01-02 15:04:05`
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=45,payment=43,orderStatus=4,delivery=4,stockLevel=4`,
