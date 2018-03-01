@@ -343,9 +343,13 @@ func (_f *factory) ConstructNot(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if isComparisonLookup[_norm.op] {
-			if _f.canInvertComparison(input) {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			_contains := _f.mem.lookupNormExpr(input).asContains()
+			if _contains == nil {
 				_f.reportOptimization()
-				_group = _f.invertComparison(input)
+				_group = _f.invertComparison(_f.mem.lookupNormExpr(input).op, left, right)
 				_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
 				return _group
 			}

@@ -21,10 +21,9 @@ const (
 	BindOp
 	RefOp
 	MatchOp
-	OpNamesOp
-	OpNameOp
+	NamesOp
+	NameOp
 	MatchAndOp
-	MatchInvokeOp
 	MatchNotOp
 	MatchAnyOp
 	MatchListAnyOp
@@ -36,4 +35,5 @@ const (
 	ConstructListOp
 	ListOp
 	StringOp
+	CustomFuncOp
 )
