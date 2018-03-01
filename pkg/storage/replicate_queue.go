@@ -529,7 +529,9 @@ func (rq *replicateQueue) transferLease(
 	zone config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
+	// Filter out behind and non-live replicas.
 	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas, 0 /* brandNewReplicaID */)
+	candidates, _ = rq.allocator.storePool.liveAndDeadReplicas(desc.RangeID, candidates)
 	if target := rq.allocator.TransferLeaseTarget(
 		ctx,
 		zone.Constraints,
