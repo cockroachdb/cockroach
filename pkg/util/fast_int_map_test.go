@@ -50,6 +50,10 @@ func TestFastIntMap(t *testing.T) {
 					}
 				}
 
+				if e := fm.Empty(); e != (len(m) == 0) {
+					t.Fatalf("incorrect Empty: %t expected %t (%+v %v)", e, len(m) == 0, fm, m)
+				}
+
 				if l := fm.Len(); l != len(m) {
 					t.Fatalf("incorrect Len: %d expected %d (%+v %v)", l, len(m), fm, m)
 				}

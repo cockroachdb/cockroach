@@ -18,7 +18,7 @@ package xform
 // check properties of an ExprView.
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 

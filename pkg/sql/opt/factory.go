@@ -14,7 +14,7 @@
 
 package opt
 
-//go:generate optgen -out factory.og.go ifactory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt
+//go:generate optgen -out factory.og.go ifactory ops/scalar.opt ops/relational.opt ops/enforcer.opt
 
 // GroupID identifies a memo group. Groups have numbers greater than 0; a
 // GroupID of 0 indicates an invalid group.
