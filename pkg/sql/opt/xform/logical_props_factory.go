@@ -17,7 +17,7 @@ package xform
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // logicalPropsFactory is a helper class that consolidates the code that
