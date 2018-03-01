@@ -494,6 +494,18 @@ const (
 	panicClose  closeType = false
 )
 
+// setCurStmt sets ex.curStmt and stores an anonymized version of the statement
+// in the context, which can be used in crash reports.
+func (ex *connExecutor) setCurStmt(stmt tree.Statement) {
+	ex.curStmt = stmt
+	if stmt == nil {
+		ex.state.Ctx = log.RemoveAnonymizedStatement(ex.state.Ctx)
+	} else {
+		anonStmt := tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
+		ex.state.Ctx = log.WithAnonymizedStatement(ex.state.Ctx, anonStmt)
+	}
+}
+
 func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{}) {
 	if recovered != nil {
 		// A warning header guaranteed to go to stderr. This is unanonymized.
@@ -867,7 +879,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 	ex.ctxHolder.connCtx = ctx
 	var draining bool
 	for {
-		ex.curStmt = nil
+		ex.setCurStmt(nil)
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -892,7 +904,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				res = ex.clientComm.CreateEmptyQueryResult(pos)
 				break
 			}
-			ex.curStmt = tcmd.Stmt
+			ex.setCurStmt(tcmd.Stmt)
 
 			stmtRes := ex.clientComm.CreateStatementResult(
 				tcmd.Stmt, NeedRowDesc, pos, nil /* formatCodes */, ex.sessionData.Location)
@@ -921,7 +933,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				break
 			}
 			log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.Str)
-			ex.curStmt = portal.Stmt.Statement
+			ex.setCurStmt(portal.Stmt.Statement)
 
 			pinfo := &tree.PlaceholderInfo{
 				TypeHints: portal.Stmt.TypeHints,
@@ -960,7 +972,7 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				return err
 			}
 		case PrepareStmt:
-			ex.curStmt = tcmd.Stmt
+			ex.setCurStmt(tcmd.Stmt)
 			res = ex.clientComm.CreatePrepareResult(pos)
 			ev, payload = ex.execPrepare(ex.Ctx(), tcmd)
 		case DescribeStmt:

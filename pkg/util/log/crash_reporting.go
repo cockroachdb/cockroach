@@ -434,6 +434,13 @@ func SendCrashReport(
 	tags := map[string]string{
 		"uptime": uptimeTag(timeutil.Now()),
 	}
+
+	// Add anonymized statement if set in context.
+	stmt := ctx.Value(contextStatementKeyType{})
+	if stmt != nil {
+		tags["statement"] = stmt.(string)
+	}
+
 	eventID, ch := raven.DefaultClient.Capture(packet, tags)
 	select {
 	case <-ch:
@@ -457,5 +464,27 @@ func ReportOrPanic(
 		panic(fmt.Sprintf(format, reportables...))
 	}
 	Warningf(ctx, format, reportables...)
-	SendCrashReport(ctx, sv, 0 /* depth */, format, reportables)
+	SendCrashReport(ctx, sv, 1 /* depth */, format, reportables)
+}
+
+// contextStatementKeyType is an empty type for the handle associated with the
+// statement value (see context.Value).
+type contextStatementKeyType struct{}
+
+const stmtCutoffChars = 500
+
+// WithAnonymizedStatement adds a SQL statement (which must already be
+// anonymized) to the provided context. The statement will then be included in
+// crash reports which use that context.
+func WithAnonymizedStatement(ctx context.Context, stmt string) context.Context {
+	if len(stmt) > stmtCutoffChars {
+		stmt = stmt[:stmtCutoffChars] + " [...]"
+	}
+	return context.WithValue(ctx, contextStatementKeyType{}, stmt)
+}
+
+// RemoveAnonymizedStatement removes the statement key from a context if
+// present.
+func RemoveAnonymizedStatement(ctx context.Context) context.Context {
+	return context.WithValue(ctx, contextStatementKeyType{}, nil)
 }
