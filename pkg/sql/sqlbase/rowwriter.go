@@ -896,8 +896,7 @@ type RowDeleter struct {
 	Fks                  fkDeleteHelper
 	cascader             *cascader
 	// For allocation avoidance.
-	startKey roachpb.Key
-	endKey   roachpb.Key
+	key roachpb.Key
 }
 
 // MakeRowDeleter creates a RowDeleter for the given table.
@@ -1017,23 +1016,24 @@ func (rd *RowDeleter) DeleteRow(
 		if traceKV {
 			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
 		}
-		b.Del(secondaryIndexEntry.Key)
+		b.Del(&secondaryIndexEntry.Key)
 	}
 
 	// Delete the row.
-	rd.startKey = roachpb.Key(primaryIndexKey)
-	rd.endKey = roachpb.Key(encoding.EncodeInterleavedSentinel(primaryIndexKey))
-	if traceKV {
-		log.VEventf(ctx, 2, "DelRange %s - %s",
-			keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.startKey),
-			// Although not strictly necessary, we explicitly
-			// specify that we want to print out the interleaved
-			// sentinel.
-			keys.PrettyPrint(append(rd.Helper.primIndexValDirs, 0), rd.endKey),
-		)
+	for i, family := range rd.Helper.TableDesc.Families {
+		if i > 0 {
+			// HACK: MakeFamilyKey appends to its argument, so on every loop iteration
+			// after the first, trim primaryIndexKey so nothing gets overwritten.
+			// TODO(dan): Instead of this, use something like engine.ChunkAllocator.
+			primaryIndexKey = primaryIndexKey[:len(primaryIndexKey):len(primaryIndexKey)]
+		}
+		rd.key = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
+		if traceKV {
+			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(rd.Helper.primIndexValDirs, rd.key))
+		}
+		b.Del(&rd.key)
+		rd.key = nil
 	}
-	b.DelRange(&rd.startKey, &rd.endKey, false /* returnKeys */)
-	rd.startKey, rd.endKey = nil, nil
 
 	if rd.cascader != nil {
 		if err := rd.cascader.cascadeAll(
