@@ -102,30 +102,25 @@ define Ref {
 }
 
 define Match {
-    Names OpNames
+    Names Names
     Args  List
 }
 
-# type OpNamesExpr []OpNameExpr
+# type NamesExpr []NameExpr
 [Slice]
-define OpNames {
-    Element OpName
+define Names {
+    Element Name
 }
 
-# type OpNameExpr string
+# type NameExpr string
 [Value]
-define OpName {
+define Name {
     Value string
 }
 
 define MatchAnd {
     Left  Expr
     Right Expr
-}
-
-define MatchInvoke {
-    FuncName String
-    Args     List
 }
 
 define MatchNot {
@@ -173,4 +168,14 @@ define List {
 [Value]
 define String {
     Value string
+}
+
+#
+# The below operators are never created by the parser, but are created by the
+# compiler, in order to make further processing of the tree easier.
+#
+
+define CustomFunc {
+    Name Name
+    Args List
 }

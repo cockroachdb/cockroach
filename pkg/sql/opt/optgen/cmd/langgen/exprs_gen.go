@@ -189,21 +189,21 @@ func (g *exprsGen) genValueFunc(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
-// func (e *SomeExpr) Visit(accept AcceptFunc) Expr {
-//   children := visitExprChildren*(e, accept)
+// func (e *SomeExpr) Visit(visit VisitFunc) Expr {
+//   children := visitChildren(e, visit)
 //   if children != nil {
-//     return accept(&SomeExpr{FieldName: children[0].(*FieldType)})
+//     return &SomeExpr{FieldName: children[0].(*FieldType)}
 //   }
-//   return accept(e)
+//   return e
 // }
 func (g *exprsGen) genVisitFunc(define *lang.DefineExpr) {
 	exprType := fmt.Sprintf("%sExpr", define.Name)
 
-	fmt.Fprintf(g.w, "func (e *%s) Visit(accept AcceptFunc) Expr {\n", exprType)
+	fmt.Fprintf(g.w, "func (e *%s) Visit(visit VisitFunc) Expr {\n", exprType)
 
-	// Value type definition just calls accept.
+	// Value type definition has no children.
 	if !isValueType(define) && len(define.Fields) != 0 {
-		fmt.Fprintf(g.w, "  children := visitExprChildren(e, accept)\n")
+		fmt.Fprintf(g.w, "  children := visitChildren(e, visit)\n")
 		fmt.Fprintf(g.w, "  if children != nil {\n")
 
 		if isSliceType(define) {
@@ -223,7 +223,7 @@ func (g *exprsGen) genVisitFunc(define *lang.DefineExpr) {
 				fmt.Fprintf(g.w, "    return &typedChildren\n")
 			}
 		} else {
-			fmt.Fprintf(g.w, "    return accept(&%s{", exprType)
+			fmt.Fprintf(g.w, "    return &%s{", exprType)
 
 			for i, field := range define.Fields {
 				fieldType := g.translateType(string(field.Type))
@@ -246,13 +246,13 @@ func (g *exprsGen) genVisitFunc(define *lang.DefineExpr) {
 				fmt.Fprintf(g.w, ", Src: e.Source()")
 			}
 
-			fmt.Fprintf(g.w, "})\n")
+			fmt.Fprintf(g.w, "}\n")
 		}
 
 		fmt.Fprintf(g.w, "  }\n")
 	}
 
-	fmt.Fprintf(g.w, "  return accept(e)\n")
+	fmt.Fprintf(g.w, "  return e\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
