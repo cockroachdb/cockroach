@@ -30,7 +30,7 @@ inline DBStatus ToDBStatus(const rocksdb::Status& status) {
 }
 
 // FmtStatus formats the given arguments printf-style into a DBStatus.
-__attribute__((__format__(__printf__, 1, 2)))
+__attribute__((__format__(GOOGLE_PRINTF_FORMAT, 1, 2)))
 inline DBStatus FmtStatus(const char* fmt_str, ...) {
   va_list ap;
   va_start(ap, fmt_str);
