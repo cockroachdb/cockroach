@@ -129,9 +129,13 @@ var errExistingSchemaChangeLease = errors.New(
 	"an outstanding schema change lease exists")
 var errSchemaChangeNotFirstInLine = errors.New(
 	"schema change not first in line")
+var errNotHitGCTTLDeadline = errors.New(
+	"not hit gc ttl deadline")
 
 func shouldLogSchemaChangeError(err error) bool {
-	return err != errExistingSchemaChangeLease && err != errSchemaChangeNotFirstInLine
+	return err != errExistingSchemaChangeLease &&
+		err != errSchemaChangeNotFirstInLine &&
+		err != errNotHitGCTTLDeadline
 }
 
 // AcquireLease acquires a schema change lease on the table if
@@ -313,7 +317,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 				return false, err
 			}
 			if timeRemaining < 0 {
-				return false, errors.Errorf("not hit TTL deadline: %s remaining", timeRemaining)
+				return false, errNotHitGCTTLDeadline
 			}
 		}
 		// Do all the hard work of deleting the table data and the table ID.
