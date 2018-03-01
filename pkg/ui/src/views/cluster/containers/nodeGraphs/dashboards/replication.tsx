@@ -72,21 +72,6 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
-    <LineGraph title="Keys Written per Second per Store" tooltip={`The average number of KV keys written (i.e. applied by raft) per second on each store.`}>
-      <Axis label="writes per second">
-        {
-          _.map(nodeIDs, (nid) => (
-            <Metric
-              key={nid}
-              name="cr.store.rebalancing.writespersecond"
-              title={nodeDisplayName(nodesSummary, nid)}
-              sources={storeIDsForNode(nodesSummary, nid)}
-            />
-          ))
-        }
-      </Axis>
-    </LineGraph>,
-
     <LineGraph title="Replica Quiescence" sources={storeSources}>
       <Axis label="replicas">
         <Metric name="cr.store.replicas" title="Replicas" />
