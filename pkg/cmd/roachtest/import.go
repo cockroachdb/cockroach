@@ -20,6 +20,10 @@ import (
 	"fmt"
 )
 
+const (
+	gcsTestBucket = `cockroach-tmp`
+)
+
 func init() {
 	runImportTPCC := func(t *test, warehouses, nodes int) {
 		ctx := context.Background()
@@ -39,8 +43,8 @@ func init() {
 		m.Go(func(ctx context.Context) error {
 			cmd := fmt.Sprintf(
 				`./workload fixtures store tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
-					`--gcs-bucket-override=cockroachdb-backup-testing --gcs-prefix-override=%s`,
-				warehouses, c.name)
+					`--gcs-bucket-override=%s --gcs-prefix-override=%s`,
+				warehouses, gcsTestBucket, c.name)
 			c.Run(ctx, 1, cmd)
 			return nil
 		})
