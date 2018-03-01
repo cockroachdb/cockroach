@@ -119,6 +119,13 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		typ := coltypes.CastTargetToDatumType(t.Type)
 		out = b.factory.ConstructCast(arg, b.factory.InternPrivate(typ))
 
+	case *tree.CoalesceExpr:
+		args := make([]opt.GroupID, len(t.Exprs))
+		for i := range args {
+			args[i] = b.buildScalar(t.TypedExprAt(i), inScope)
+		}
+		out = b.factory.ConstructCoalesce(b.factory.InternList(args))
+
 	case *tree.ComparisonExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope)
 		right := b.buildScalar(t.TypedRight(), inScope)
