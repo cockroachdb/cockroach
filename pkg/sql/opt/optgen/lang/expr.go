@@ -37,11 +37,11 @@ import (
 //go:generate langgen -out operator.og.go ops lang.opt
 //go:generate stringer -type=Operator operator.og.go
 
-// AcceptFunc is called by the visitor after visiting each node in a postorder
-// traversal of the expression tree. The function can return the expression
-// as-is, with no changes, or it can construct and return a replacement
-// expression that the visitor will graft into a replacement tree.
-type AcceptFunc func(expr Expr) Expr
+// VisitFunc is called by the Visit method of an expression for each child of
+// that expression. The function can return the expression as-is, with no
+// changes, or it can construct and return a replacement expression that the
+// visitor will graft into a replacement tree.
+type VisitFunc func(e Expr) Expr
 
 // Expr is implemented by all Optgen AST expressions, exposing its properties,
 // children, and string representation.
@@ -65,13 +65,24 @@ type Expr interface {
 	// types just return nil.
 	Value() interface{}
 
-	// Visit visits the subtree rooted at the expression using a postorder
-	// traversal. After visiting each child, the visitor will reconstruct the
-	// parent expression if any of the children have been replaced. The visitor
-	// then invokes the accept function with the original or replaced
-	// expression, which gives the acceptor a chance to replace it. Callers
-	// can use the Visit function to traverse and rewrite the expression tree.
-	Visit(accept AcceptFunc) Expr
+	// Visit invokes the visit function for each child of the expression. The
+	// function can return the child as-is, with no changes, or it can construct
+	// and return a replacement expression. If any children have been replaced,
+	// then Visit will construct a new instance of this expression that has the
+	// new children. Callers can use the Visit function to traverse and rewrite
+	// the expression tree, in either pre or post order. Here is a pre-order
+	// example:
+	//
+	//   myVisitFunc := func(e Expr) Expr {
+	//     // Replace SomeOp, leave everything else as-is. This check is before
+	//     // the call to Visit, so it's a pre-order traversal.
+	//     if e.Op() == SomeOp {
+	//       return &SomeOtherOp{}
+	//     }
+	//     return e.Visit(myVisitFunc)
+	//   }
+	//   newExpr := oldExpr.Visit(myVisitFunc)
+	Visit(visit VisitFunc) Expr
 
 	// Source returns the original source location of the expression, including
 	// file name, line number, and column position. If the source location is
@@ -115,16 +126,16 @@ func (e TagsExpr) Contains(tag string) bool {
 	return false
 }
 
-// visitExprChildren is a helper function called by the Visit function on AST
-// expressions. It visits each child of the specified expression and returns
-// the resulting children as a slice. If none of the children were replaced,
-// then visitExprChildren returns nil.
-func visitExprChildren(e Expr, accept AcceptFunc) []Expr {
+// visitChildren is a helper function called by the Visit function on AST
+// expressions. It invokes the visit function on each child of the specified
+// expression and returns the resulting children as a slice. If none of the
+// children were replaced, then visitChildren returns nil.
+func visitChildren(e Expr, visit VisitFunc) []Expr {
 	var children []Expr
 
 	for i := 0; i < e.ChildCount(); i++ {
 		before := e.Child(i)
-		after := before.Visit(accept)
+		after := visit(before)
 		if children == nil && before != after {
 			children = make([]Expr, e.ChildCount())
 			for j := 0; j < i; j++ {
@@ -149,9 +160,6 @@ func formatExpr(e Expr, buf *bytes.Buffer, level int) {
 			buf.WriteByte('"')
 			buf.WriteString(e.Value().(string))
 			buf.WriteByte('"')
-		} else if e.Op() == OpNameOp {
-			buf.WriteString(e.Value().(string))
-			buf.WriteString("Op")
 		} else {
 			buf.WriteString(fmt.Sprintf("%v", e.Value()))
 		}
