@@ -1011,14 +1011,6 @@ func (txn *Txn) Send(
 				// this Txn object has already aborted and restarted the txn.
 				txn.updateStateOnRetryableErrLocked(ctx, retryErr)
 			}
-		case *roachpb.TransactionReplayError:
-			if pErr.GetTxn().ID != txn.mu.Proto.ID {
-				// It is possible that a concurrent request through this Txn
-				// object has already aborted and restarted the txn. In this
-				// case, we may see a TransactionReplayError if the abort
-				// beats the original BeginTxn request to the txn record.
-				return nil, roachpb.NewError(&roachpb.TxnPrevAttemptError{})
-			}
 		}
 		// Note that unhandled retryable txn errors are allowed from leaf
 		// transactions. We pass them up through distributed SQL flows to
