@@ -112,12 +112,12 @@ func TestBuild(t *testing.T) {
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var allowUnsupportedExpr bool
 				for _, arg := range d.CmdArgs {
-					switch arg {
+					switch arg.Key {
 					case "allow-unsupported":
 						allowUnsupportedExpr = true
 
 					default:
-						d.Fatalf(t, "unknown argument: %s", arg)
+						d.Fatalf(t, "unknown argument: %s", arg.Key)
 					}
 				}
 
