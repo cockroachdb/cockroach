@@ -99,7 +99,7 @@ func (rh *rowHelper) encodeIndexes(
 func (rh *rowHelper) encodeSecondaryIndexes(
 	colIDtoRowIndex map[ColumnID]int, values []tree.Datum,
 ) (secondaryIndexEntries []IndexEntry, err error) {
-	if len(rh.indexEntries) != len(rh.Indexes) {
+	if rh.indexEntries == nil {
 		rh.indexEntries = make([]IndexEntry, len(rh.Indexes))
 	}
 	rh.indexEntries, err = EncodeSecondaryIndexes(
