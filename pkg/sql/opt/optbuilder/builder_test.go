@@ -99,16 +99,7 @@ func TestBuilder(t *testing.T) {
 				var allowUnsupportedExpr bool
 
 				for _, arg := range d.CmdArgs {
-					key := arg
-					val := ""
-					if pos := strings.Index(key, "="); pos >= 0 {
-						key = arg[:pos]
-						val = arg[pos+1:]
-					}
-					if len(val) > 2 && val[0] == '(' && val[len(val)-1] == ')' {
-						val = val[1 : len(val)-1]
-					}
-					vals := strings.Split(val, ",")
+					key, vals := arg.Key, arg.Vals
 					switch key {
 					case "vars":
 						varTypes, err = testutils.ParseTypes(vals)

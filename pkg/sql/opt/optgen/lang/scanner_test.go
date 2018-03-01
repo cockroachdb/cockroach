@@ -37,11 +37,10 @@ func TestScanner(t *testing.T) {
 		// test case.
 		count := -1
 		for _, arg := range d.CmdArgs {
-			s := strings.Split(arg, "=")
-			if s[0] != "fail" {
+			if arg.Key != "fail" || len(arg.Vals) != 1 {
 				t.FailNow()
 			}
-			count, _ = strconv.Atoi(s[1])
+			count, _ = strconv.Atoi(arg.Vals[0])
 		}
 
 		r := io.Reader(strings.NewReader(d.Input))
