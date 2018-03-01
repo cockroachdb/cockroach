@@ -96,7 +96,7 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 DBStatus DBDestroy(DBSlice dir);
 
 // Closes the database, freeing memory and other resources.
-void DBClose(DBEngine* db);
+DBStatus DBClose(DBEngine* db);
 
 // Flushes all mem-table data to disk, blocking until the operation is
 // complete.
@@ -251,7 +251,7 @@ typedef struct {
 } DBTxn;
 
 typedef struct {
-  DBSlice *bufs;
+  DBSlice* bufs;
   // len is the number of DBSlices in bufs.
   int32_t len;
   // count is the number of key/value pairs in bufs.
