@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
@@ -117,15 +118,35 @@ func (cv clusterVersionUpgrade) name() string { return fmt.Sprintf("cluster=%s",
 func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster.Cluster) {
 	t.Helper()
 
+	// hasShowSettingBug is true when we're working around
+	// https://github.com/cockroachdb/cockroach/issues/22796.
+	//
+	// The problem there is that `SHOW CLUSTER SETTING version` does not take into
+	// account the gossiped value of that setting but reads it straight from the
+	// KV store. This means that even though a node may report a certain version,
+	// it may not actually have processed it yet, which leads to illegal upgrades
+	// in this test. When this flag is set to true, we query
+	// `crdb_internal.cluster_settings` instead, which *does* take everything from
+	// Gossip.
+	v, err := roachpb.ParseVersion(string(cv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hasShowSettingBug := v.Less(roachpb.Version{Major: 1, Minor: 1, Unstable: 1})
+
 	func() {
 		db := makePGClient(t, c.PGUrl(ctx, rand.Intn(c.NumNodes())))
 		defer db.Close()
 
-		log.Infof(ctx, "upgrading cluster version to %s", string(cv))
-		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, string(cv))); err != nil {
+		log.Infof(ctx, "upgrading cluster version to %s", cv)
+		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, cv)); err != nil {
 			t.Fatal(err)
 		}
 	}()
+
+	if hasShowSettingBug {
+		log.Infof(ctx, "using workaround for upgrade to %s", cv)
+	}
 
 	for i := 0; i < c.NumNodes(); i++ {
 		testutils.SucceedsSoon(t, func() error {
@@ -133,15 +154,27 @@ func (cv clusterVersionUpgrade) run(ctx context.Context, t *testing.T, c cluster
 			defer db.Close()
 
 			var version string
-			if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&version); err != nil {
-				t.Fatalf("%d: %s", i, err)
+			if !hasShowSettingBug {
+				if err := db.QueryRow("SHOW CLUSTER SETTING version").Scan(&version); err != nil {
+					t.Fatalf("%d: %s", i, err)
+				}
+			} else {
+				// This uses the receiving node's Gossip and as such allows us to verify that all of the
+				// nodes have gotten wind of the version bump.
+				if err := db.QueryRow(
+					`SELECT current_value FROM crdb_internal.cluster_settings WHERE name = 'version'`,
+				).Scan(&version); err != nil {
+					t.Fatalf("%d: %s", i, err)
+				}
 			}
 			if version != string(cv) {
-				return errors.Errorf("%d: expected version %s, got %s", i, string(cv), version)
+				return errors.Errorf("%d: expected version %s, got %s", i, cv, version)
 			}
 			return nil
 		})
 	}
+
+	log.Infof(ctx, "cluster is now at version %s", cv)
 
 	// TODO(nvanbenschoten): add upgrade qualification step.
 	time.Sleep(1 * time.Second)
