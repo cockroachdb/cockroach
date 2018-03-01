@@ -133,8 +133,7 @@ func init() {
 				}
 				defer l.close()
 
-				c.RunL(ctx, l, nodes+1, cmd)
-				return nil
+				return c.RunL(ctx, l, nodes+1, cmd)
 			})
 			m.Wait()
 		}

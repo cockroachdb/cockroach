@@ -104,6 +104,10 @@ func (l *logger) printf(f string, args ...interface{}) {
 	fmt.Fprintf(l.stdout, f, args...)
 }
 
+func (l *logger) println(args ...interface{}) {
+	fmt.Fprintln(l.stdout, args...)
+}
+
 func (l *logger) errorf(f string, args ...interface{}) {
 	fmt.Fprintf(l.stderr, f, args...)
 }
