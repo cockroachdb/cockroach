@@ -52,3 +52,37 @@ func init() {
 		runImportTPCC(t, warehouses, nodes)
 	})
 }
+
+func init() {
+	for _, nodes := range []int{4, 8} {
+		nodes := nodes
+		tests.Add(fmt.Sprintf(`import/tpch/nodes=%d`, nodes), func(t *test) {
+			ctx := context.Background()
+			c := newCluster(ctx, t, nodes)
+			defer c.Destroy(ctx)
+
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx)
+			m := newMonitor(ctx, c)
+			m.Go(func(ctx context.Context) error {
+				c.status(`running import`)
+				c.Run(ctx, 1, `./cockroach sql --insecure -e "create database csv"`)
+				c.Run(ctx, 1, `./cockroach sql --insecure -e "
+				IMPORT TABLE csv.lineitem
+				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
+				CSV DATA (
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.1',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.2',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.3',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.4',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.5',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.6',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7',
+				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8'
+				) WITH  delimiter='|'`)
+				return nil
+			})
+			m.Wait()
+		})
+	}
+}
