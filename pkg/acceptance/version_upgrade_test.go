@@ -192,6 +192,7 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 		clusterVersionUpgrade("1.1"),
 		binaryVersionUpgrade(sourceVersion),
 		clusterVersionUpgrade("1.1-6"),
+		clusterVersionUpgrade("2.0"),
 		clusterVersionUpgrade(clusterversion.BinaryServerVersion.String()),
 	}
 
