@@ -640,8 +640,16 @@ func (a *Allocator) TransferLeaseTarget(
 	}
 	sl = makeStoreList(filteredDescs)
 
+	// Only consider live, non-draining replicas.
+	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
+
 	source, ok := a.storePool.getStoreDescriptor(leaseStoreID)
 	if !ok {
+		return roachpb.ReplicaDescriptor{}
+	}
+
+	// Short-circuit if there are no valid targets out there.
+	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {
 		return roachpb.ReplicaDescriptor{}
 	}
 
@@ -713,6 +721,14 @@ func (a *Allocator) ShouldTransferLease(
 	sl, _, _ := a.storePool.getStoreList(rangeID, storeFilterNone)
 	sl = sl.filter(constraints)
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
+
+	// Only consider live, non-draining replicas.
+	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
+
+	// Short-circuit if there are no valid targets out there.
+	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {
+		return false
+	}
 
 	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
 	var result bool
