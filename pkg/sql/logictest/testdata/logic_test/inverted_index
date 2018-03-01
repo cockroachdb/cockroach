@@ -458,3 +458,17 @@ SELECT * from d where b @> 'null' ORDER BY a;
 ----
 11  null
 27  [true, false, null, 1.23, "a"]
+
+statement ok
+CREATE TABLE users (
+  profile_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  last_updated TIMESTAMP DEFAULT now(),
+  user_profile JSONB
+);
+
+statement ok
+INSERT INTO users (user_profile) VALUES  ('{"first_name": "Lola", "last_name": "Dog", "location": "NYC", "online" : true, "friends" : 547}'),
+                                         ('{"first_name": "Ernie", "status": "Looking for treats", "location" : "Brooklyn"}');
+
+statement ok
+CREATE INVERTED INDEX dogs on users(user_profile);

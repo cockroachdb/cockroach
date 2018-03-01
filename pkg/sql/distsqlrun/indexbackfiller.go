@@ -185,6 +185,9 @@ func (ib *indexBackfiller) runChunk(
 				ib.rowVals, secondaryIndexEntries); err != nil {
 				return nil, err
 			}
+			// We're resetting the length of this slice for variable length indexes such as inverted
+			// indexes which can append entries to the end of the slice.
+			secondaryIndexEntries = secondaryIndexEntries[:len(mutations)]
 			entries = append(entries, secondaryIndexEntries...)
 		}
 		return entries, nil
