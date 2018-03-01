@@ -27,6 +27,27 @@ define Const {
     Value Datum
 }
 
+# Null is the constant SQL null value that has "unknown value" semantics. If
+# the Typ field is not types.Unknown, then the value is known to be in the
+# domain of that type. This is important for preserving correct types in
+# replacement patterns. For example:
+#   (Plus (Function ...) (Const 1))
+#
+# If the function in that expression has a static type of Int, but then it gets
+# constant folded to (Null), then its type must remain as Int. Any other type
+# violates logical equivalence of the expression, breaking type inference and
+# possibly changing the results of execution. The solution is to tag the null
+# with the correct type:
+#   (Plus (Null (Int)) (Const 1))
+#
+# Null is its own operator rather than a Const datum in order to make matching
+# and replacement easier and more efficient, as patterns can contain (Null)
+# expressions.
+[Scalar, ConstValue]
+define Null {
+    Typ Type
+}
+
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
 # value. It is a separate operator to make matching and replacement simpler and
 # more efficient, as patterns can contain (True) expressions.

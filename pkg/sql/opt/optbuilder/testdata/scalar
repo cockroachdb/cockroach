@@ -144,14 +144,14 @@ build-scalar vars=(int, int)
 ----
 is [type=bool]
  ├── variable: @1 [type=int]
- └── const: NULL [type=unknown]
+ └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS NOT DISTINCT FROM NULL
 ----
 is [type=bool]
  ├── variable: @1 [type=int]
- └── const: NULL [type=unknown]
+ └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS NOT DISTINCT FROM @2
@@ -165,14 +165,14 @@ build-scalar vars=(int, int)
 ----
 is-not [type=bool]
  ├── variable: @1 [type=int]
- └── const: NULL [type=unknown]
+ └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS DISTINCT FROM NULL
 ----
 is-not [type=bool]
  ├── variable: @1 [type=int]
- └── const: NULL [type=unknown]
+ └── null [type=unknown]
 
 build-scalar vars=(int, int)
 @1 IS DISTINCT FROM @2

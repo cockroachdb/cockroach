@@ -19,6 +19,24 @@ const (
 	// value having any datum type that's legal in the expression's context.
 	ConstOp
 
+	// NullOp is the constant SQL null value that has "unknown value" semantics. If
+	// the Typ field is not types.Unknown, then the value is known to be in the
+	// domain of that type. This is important for preserving correct types in
+	// replacement patterns. For example:
+	//   (Plus (Function ...) (Const 1))
+	//
+	// If the function in that expression has a static type of Int, but then it gets
+	// constant folded to (Null), then its type must remain as Int. Any other type
+	// violates logical equivalence of the expression, breaking type inference and
+	// possibly changing the results of execution. The solution is to tag the null
+	// with the correct type:
+	//   (Plus (Null (Int)) (Const 1))
+	//
+	// Null is its own operator rather than a Const datum in order to make matching
+	// and replacement easier and more efficient, as patterns can contain (Null)
+	// expressions.
+	NullOp
+
 	// TrueOp is the boolean true value that is equivalent to the tree.DBoolTrue datum
 	// value. It is a separate operator to make matching and replacement simpler and
 	// more efficient, as patterns can contain (True) expressions.
@@ -324,14 +342,15 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
+const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 391, 399, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 623, 636, 646, 650}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 89, 91, 94, 96, 98, 100, 102, 104, 106, 108, 114, 118, 126, 132, 142, 152, 166, 175, 188, 199, 214, 216, 222, 230, 236, 241, 247, 251, 256, 260, 263, 272, 275, 278, 284, 291, 298, 307, 317, 331, 346, 356, 367, 383, 387, 395, 403, 419, 423, 429, 435, 442, 452, 461, 471, 480, 489, 498, 514, 529, 545, 560, 575, 590, 598, 603, 612, 618, 627, 640, 650, 654}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
 	VariableOp,
 	ConstOp,
+	NullOp,
 	TrueOp,
 	FalseOp,
 	PlaceholderOp,
@@ -391,6 +410,7 @@ var ScalarOperators = [...]Operator{
 
 var ConstValueOperators = [...]Operator{
 	ConstOp,
+	NullOp,
 	TrueOp,
 	FalseOp,
 }

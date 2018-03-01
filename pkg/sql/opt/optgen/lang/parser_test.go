@@ -30,9 +30,18 @@ func TestParser(t *testing.T) {
 			t.FailNow()
 		}
 
-		p := NewParser("test.opt")
+		args := []string{"test.opt"}
+		for _, cmdArg := range d.CmdArgs {
+			// Add additional args.
+			args = append(args, cmdArg.String())
+		}
+
+		p := NewParser(args...)
 		p.SetFileResolver(func(name string) (io.Reader, error) {
-			return strings.NewReader(d.Input), nil
+			if name == "test.opt" {
+				return strings.NewReader(d.Input), nil
+			}
+			return nil, fmt.Errorf("unknown file '%s'", name)
 		})
 
 		var actual string

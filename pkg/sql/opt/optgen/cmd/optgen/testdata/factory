@@ -573,7 +573,7 @@ func (_f *factory) ConstructSelect(
 	{
 		_match := false
 		_norm := _f.mem.lookupNormExpr(input)
-		if isJoinLookup[_norm.op] || _norm.op == UnionOp {
+		if _norm.isJoin() || _norm.op == opt.UnionOp {
 			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
 			r := _e.ChildGroup(0)
 			s := _e.ChildGroup(1)
@@ -585,7 +585,7 @@ func (_f *factory) ConstructSelect(
 			for _, _item := range _f.mem.lookupList(filter) {
 				item := _item
 				_norm2 := _f.mem.lookupNormExpr(_item)
-				if isJoinLookup[_norm2.op] {
+				if _norm2.isJoin() {
 					_e2 := makeExprView(_f.mem, _item, opt.NormPhysPropsID)
 					t := _e2.ChildGroup(0)
 					u := _e2.ChildGroup(1)
@@ -1045,20 +1045,20 @@ func (_f *factory) ConstructNe(
 	// [Dynamic]
 	{
 		_norm := _f.mem.lookupNormExpr(left)
-		if _norm.op == EqOp || _norm.op == NeOp {
+		if _norm.op == opt.EqOp || _norm.op == opt.NeOp {
 			_e := makeExprView(_f.mem, left, opt.NormPhysPropsID)
 			_norm2 := _f.mem.lookupNormExpr(_e.ChildGroup(0))
-			if _norm2.op == EqOp || _norm2.op == NeOp {
+			if _norm2.op == opt.EqOp || _norm2.op == opt.NeOp {
 				_norm3 := _f.mem.lookupNormExpr(_e.ChildGroup(1))
-				if !(_norm3.op == EqOp || _norm3.op == NeOp) {
+				if !(_norm3.op == opt.EqOp || _norm3.op == opt.NeOp) {
 					_match := false
 					_norm4 := _f.mem.lookupNormExpr(right)
-					if _norm4.op == EqOp || _norm4.op == NeOp {
+					if _norm4.op == opt.EqOp || _norm4.op == opt.NeOp {
 						_e2 := makeExprView(_f.mem, right, opt.NormPhysPropsID)
 						_norm5 := _f.mem.lookupNormExpr(_e2.ChildGroup(0))
-						if _norm5.op == EqOp || _norm5.op == NeOp {
+						if _norm5.op == opt.EqOp || _norm5.op == opt.NeOp {
 							_norm6 := _f.mem.lookupNormExpr(_e2.ChildGroup(1))
-							if !(_norm6.op == EqOp || _norm6.op == NeOp) {
+							if !(_norm6.op == opt.EqOp || _norm6.op == opt.NeOp) {
 								_match = true
 							}
 						}
@@ -1362,7 +1362,7 @@ func (_f *factory) ConstructNot(
 	// [Invert]
 	{
 		_norm := _f.mem.lookupNormExpr(input)
-		if isComparisonLookup[_norm.op] {
+		if _norm.isComparison() {
 			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
 			left := _e.ChildGroup(0)
 			right := _e.ChildGroup(1)

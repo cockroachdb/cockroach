@@ -215,7 +215,7 @@ union-all
  ├── values
  │    ├── columns: column1:unknown:null:1
  │    └── tuple [type=tuple{unknown}]
- │         └── const: NULL [type=unknown]
+ │         └── null [type=unknown]
  └── values
       ├── columns: column1:int:null:2
       └── tuple [type=tuple{int}]
@@ -231,11 +231,11 @@ union-all
  ├── values
  │    ├── columns: column1:unknown:null:1
  │    └── tuple [type=tuple{unknown}]
- │         └── const: NULL [type=unknown]
+ │         └── null [type=unknown]
  └── values
       ├── columns: column1:unknown:null:2
       └── tuple [type=tuple{unknown}]
-           └── const: NULL [type=unknown]
+           └── null [type=unknown]
 
 build
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
@@ -252,7 +252,7 @@ project
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
  │    │         ├── const: 1 [type=int]
- │    │         └── const: NULL [type=unknown]
+ │    │         └── null [type=unknown]
  │    └── project
  │         ├── columns: column3:int:null:3 column4:int:null:4
  │         ├── values
@@ -287,7 +287,7 @@ project
  │         │    └── tuple [type=tuple{}]
  │         └── projections
  │              ├── const: 2 [type=int]
- │              └── const: NULL [type=unknown]
+ │              └── null [type=unknown]
  └── projections
       ├── variable: column1 [type=int]
       └── function: pg_typeof [type=string]

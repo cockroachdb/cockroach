@@ -107,11 +107,18 @@ func (g *exprsGen) genTagLookup() {
 	}
 }
 
-// genIsTag generates IsXXX tag methods on ExprView for every unique tag.
+// genIsTag generates IsXXX tag methods on ExprView and memoExpr for every
+// unique tag.
 func (g *exprsGen) genIsTag() {
 	for _, tag := range g.compiled.DefineTags {
 		fmt.Fprintf(g.w, "func (ev ExprView) Is%s() bool {\n", tag)
 		fmt.Fprintf(g.w, "  return is%sLookup[ev.op]\n", tag)
+		fmt.Fprintf(g.w, "}\n\n")
+	}
+
+	for _, tag := range g.compiled.DefineTags {
+		fmt.Fprintf(g.w, "func (me *memoExpr) is%s() bool {\n", tag)
+		fmt.Fprintf(g.w, "  return is%sLookup[me.op]\n", tag)
 		fmt.Fprintf(g.w, "}\n\n")
 	}
 }

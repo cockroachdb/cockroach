@@ -28,6 +28,8 @@ import (
 // of an operator in the ConstValue group.
 func ExtractConstDatum(ev ExprView) tree.Datum {
 	switch ev.Operator() {
+	case opt.NullOp:
+		return tree.DNull
 	case opt.TrueOp:
 		return tree.DBoolTrue
 	case opt.FalseOp:

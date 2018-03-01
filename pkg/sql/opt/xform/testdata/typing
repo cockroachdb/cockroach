@@ -38,16 +38,17 @@ project
 
 # Const
 build
-SELECT 1, TRUE, FALSE
+SELECT 1, TRUE, FALSE, NULL
 ----
 project
- ├── columns: column1:int:null:1 column2:bool:null:2 column3:bool:null:3
+ ├── columns: column1:int:null:1 column2:bool:null:2 column3:bool:null:3 column4:unknown:null:4
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
       ├── const: 1 [type=int]
       ├── true [type=bool]
-      └── false [type=bool]
+      ├── false [type=bool]
+      └── null [type=unknown]
 
 # Placeholder
 build
@@ -226,7 +227,7 @@ select
       │    └── variable: a.y [type=int]
       └── is [type=bool]
            ├── variable: a.x [type=int]
-           └── const: NULL [type=unknown]
+           └── null [type=unknown]
 
 # Bitand, Bitor, Bitxor
 build
@@ -337,9 +338,9 @@ project
       │    └── variable: unusual.arr [type=int[]]
       ├── concat [type=int[]]
       │    ├── variable: unusual.arr [type=int[]]
-      │    └── const: NULL [type=unknown]
+      │    └── null [type=unknown]
       └── concat [type=int[]]
-           ├── const: NULL [type=unknown]
+           ├── null [type=unknown]
            └── variable: unusual.arr [type=int[]]
 
 # Array Element Concat
@@ -359,9 +360,9 @@ project
       │    └── variable: unusual.x [type=int]
       ├── concat [type=int[]]
       │    ├── variable: unusual.x [type=int]
-      │    └── const: NULL [type=unknown]
+      │    └── null [type=unknown]
       └── concat [type=int[]]
-           ├── const: NULL [type=unknown]
+           ├── null [type=unknown]
            └── variable: unusual.x [type=int]
 
 # Function with fixed return type.
