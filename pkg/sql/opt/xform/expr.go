@@ -230,6 +230,10 @@ func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
 		colIndex := private.(opt.ColumnIndex)
 		private = ev.mem.metadata.ColumnLabel(colIndex)
 
+	case opt.NullOp:
+		// Private is redundant with logical type property.
+		private = nil
+
 	case opt.ProjectionsOp, opt.AggregationsOp:
 		// The private data of these ops was already used to print the output
 		// columns for their containing op (Project or GroupBy), so no need to

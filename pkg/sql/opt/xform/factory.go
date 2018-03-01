@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/bool.opt rules/comp.opt
+//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/scalar.opt rules/bool.opt rules/comp.opt rules/numeric.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -98,7 +100,42 @@ func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
 
 // ----------------------------------------------------------------------
 //
-// Project functions
+// List functions
+//   General custom match and replace functions used to test and construct
+//   lists.
+//
+// ----------------------------------------------------------------------
+
+// listOnlyHasNulls if every item in the given list is a Null op. If the list
+// is empty, listOnlyHasNulls returns false.
+func (f *factory) listOnlyHasNulls(list opt.ListID) bool {
+	if list.Length == 0 {
+		return false
+	}
+
+	for _, item := range f.mem.lookupList(list) {
+		if f.mem.lookupNormExpr(item).op != opt.NullOp {
+			return false
+		}
+	}
+	return true
+}
+
+// ----------------------------------------------------------------------
+//
+// Typing functions
+//   General custom match and replace functions used to test and construct
+//   expression data types.
+//
+// ----------------------------------------------------------------------
+
+func (f *factory) boolType() opt.PrivateID {
+	return f.InternPrivate(types.Bool)
+}
+
+// ----------------------------------------------------------------------
+//
+// Project Rules
 //   Custom match and replace functions used with project.opt rules.
 //
 // ----------------------------------------------------------------------
@@ -156,32 +193,50 @@ func (f *factory) flattenOr(conditions opt.ListID) opt.GroupID {
 	return f.ConstructOr(f.mem.internList(list))
 }
 
-// simplifyAnd removes True children from an And operator. If no children are
-// left, replaces And with True.
+// simplifyAnd removes True operands from an And operator, and eliminates the
+// And operator altogether if any operands is False. If, after simplification,
+// no operands remain, then simplifyAnd returns True.
 func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 	list := make([]opt.GroupID, 0, conditions.Length-1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
-		if itemExpr.op != opt.TrueOp {
+
+		switch itemExpr.op {
+		case opt.FalseOp:
+			// Entire And evaluates to False if any operand is False.
+			return item
+		case opt.TrueOp:
+			// And operator skips True operands.
+		default:
 			list = append(list, item)
 		}
 	}
+
 	if len(list) == 0 {
 		return f.ConstructTrue()
 	}
 	return f.ConstructAnd(f.mem.internList(list))
 }
 
-// simplifyOr removes False children from an Or operator. If no children are
-// left, replaces Or with False.
+// simplifyOr removes False operands from an Or operator, and eliminates the
+// Or operator altogether if any operands is True. If, after simplification,
+// no operands remain, then simplifyOr returns False.
 func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 	list := make([]opt.GroupID, 0, conditions.Length-1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
-		if itemExpr.op != opt.FalseOp {
+
+		switch itemExpr.op {
+		case opt.TrueOp:
+			// Entire Or evaluates to True if any operand is True.
+			return item
+		case opt.FalseOp:
+			// Or operator skips False operands.
+		default:
 			list = append(list, item)
 		}
 	}
+
 	if len(list) == 0 {
 		return f.ConstructFalse()
 	}
@@ -263,4 +318,95 @@ func (f *factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
 		conditions[i] = f.ConstructEq(leftList[i], rightList[i])
 	}
 	return f.ConstructAnd(f.InternList(conditions))
+}
+
+// ----------------------------------------------------------------------
+//
+// Scalar Rules
+//   Custom match and replace functions used with scalar.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// simplifyCoalesce discards any leading null operands, and then if the next
+// operand is a constant, replaces with that constant.
+func (f *factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
+	argList := f.mem.lookupList(args)
+	for i := 0; i < int(args.Length-1); i++ {
+		// If item is not a constant value, then its value may turn out to be
+		// null, so no more folding. Return operands from then on.
+		item := f.mem.lookupNormExpr(argList[i])
+		if !item.isConstValue() {
+			return f.ConstructCoalesce(f.InternList(argList[i:]))
+		}
+
+		if item.op != opt.NullOp {
+			return argList[i]
+		}
+	}
+
+	// All operands up to the last were null (or the last is the only operand),
+	// so return the last operand without the wrapping COALESCE function.
+	return argList[args.Length-1]
+}
+
+// allowNullArgs returns true if the binary operator with the given inputs
+// allows one of those inputs to be null. If not, then the binary operator will
+// simply be replaced by null.
+func (f *factory) allowNullArgs(op opt.Operator, left, right opt.GroupID) bool {
+	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
+	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
+	_, allowNulls := resolveBinary(op, leftType, rightType)
+	return allowNulls
+}
+
+// foldNullUnary replaces the unary operator with a typed null value having the
+// same type as the unary operator would have.
+func (f *factory) foldNullUnary(op opt.Operator, input opt.GroupID) opt.GroupID {
+	typ := f.mem.lookupGroup(input).logical.Scalar.Type
+	return f.ConstructNull(f.InternPrivate(inferUnaryType(op, typ)))
+}
+
+// foldNullBinary replaces the binary operator with a typed null value having
+// the same type as the binary operator would have.
+func (f *factory) foldNullBinary(op opt.Operator, left, right opt.GroupID) opt.GroupID {
+	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
+	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
+	return f.ConstructNull(f.InternPrivate(inferBinaryType(op, leftType, rightType)))
+}
+
+// ----------------------------------------------------------------------
+//
+// Numeric Rules
+//   Custom match and replace functions used with numeric.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// isZero returns true if the input expression is a numeric constant with a
+// value of zero.
+func (f *factory) isZero(input opt.GroupID) bool {
+	d := f.mem.lookupPrivate(f.mem.lookupNormExpr(input).asConst().value()).(tree.Datum)
+	switch t := d.(type) {
+	case *tree.DDecimal:
+		return t.Decimal.Sign() == 0
+	case *tree.DFloat:
+		return *t == 0
+	case *tree.DInt:
+		return *t == 0
+	}
+	return false
+}
+
+// isOne returns true if the input expression is a numeric constant with a
+// value of one.
+func (f *factory) isOne(input opt.GroupID) bool {
+	d := f.mem.lookupPrivate(f.mem.lookupNormExpr(input).asConst().value()).(tree.Datum)
+	switch t := d.(type) {
+	case *tree.DDecimal:
+		return t.Decimal.Cmp(&tree.DecimalOne.Decimal) == 0
+	case *tree.DFloat:
+		return *t == 1.0
+	case *tree.DInt:
+		return *t == 1
+	}
+	return false
 }

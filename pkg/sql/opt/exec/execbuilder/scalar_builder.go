@@ -41,6 +41,7 @@ func init() {
 	scalarBuildFuncMap = [opt.NumOperators]buildFunc{
 		opt.VariableOp:        (*Builder).buildVariable,
 		opt.ConstOp:           (*Builder).buildTypedExpr,
+		opt.NullOp:            (*Builder).buildTypedExpr,
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,

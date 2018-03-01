@@ -24,3 +24,24 @@
 (Eq (Tuple $left:*) (Tuple $right:*))
 =>
 (NormalizeTupleEquality $left $right)
+
+# FoldNullComparisonLeft replaces the comparison operator with null if its
+# left input is null.
+[FoldNullComparisonLeft, Normalize]
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
+    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch
+    $left:(Null)
+)
+=>
+(Null (BoolType))
+
+# FoldNullComparisonRight replaces the comparison operator with null if its
+# right input is null.
+[FoldNullComparisonRight, Normalize]
+(Eq | Ne | Ge | Gt | Le | Lt | Like | NotLike | ILike | NotILike | SimilarTo |
+    NotSimilarTo | RegMatch | NotRegMatch | RegIMatch | NotRegIMatch
+    *
+    $right:(Null)
+)
+=>
+(Null (BoolType))

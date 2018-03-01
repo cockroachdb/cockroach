@@ -3,22 +3,6 @@
 # =============================================================================
 
 
-# EliminateAnd discards the And operator if any of its operands is false.
-[EliminateAnd, Normalize]
-(And
-    $conditions:[ ... (False) ... ]
-)
-=>
-(False)
-
-# EliminateOr discards the Or operator if any of its operands is true.
-[EliminateOr, Normalize]
-(Or
-    $conditions:[ ... (True) ... ]
-)
-=>
-(True)
-
 # FlattenAnd ensures that And operators are never nested within one another. If
 # an And operator has another And as a child, then the child And is "flattened"
 # by merging its conditions into the parent And. Flattened And conditions are
@@ -46,7 +30,7 @@
 # This rule is especially important when we build a simplified filter.
 [SimplifyAnd, Normalize]
 (And
-    $conditions:[ ... (True) ... ]
+    $conditions:[ ... (True | False) ... ]
 )
 =>
 (SimplifyAnd $conditions)
@@ -56,10 +40,19 @@
 # This rule is especially important when we build a simplified filter.
 [SimplifyOr, Normalize]
 (Or
-    $conditions:[ ... (False) ... ]
+    $conditions:[ ... (True | False) ... ]
 )
 =>
 (SimplifyOr $conditions)
+
+# FoldNullAndOr replaces the operator with null if all of its operands are
+# null.
+[FoldNullAndOr, Normalize]
+(And | Or
+    $conditions:[ (Null) ... ] & (ListOnlyHasNulls $conditions)
+)
+=>
+(Null (BoolType))
 
 # TODO(radu): we don't yet eliminate singleton Ands because we assume filters
 # are always under an And.
