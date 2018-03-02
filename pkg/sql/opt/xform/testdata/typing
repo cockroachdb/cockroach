@@ -16,6 +16,15 @@ TABLE b
  └── INDEX primary
       └── x string not null
 
+exec-ddl
+CREATE TABLE unusual (x INT PRIMARY KEY, arr INT[])
+----
+TABLE unusual
+ ├── x int not null
+ ├── arr int[]
+ └── INDEX primary
+      └── x int not null
+
 # Variable
 build
 SELECT a.x FROM a
@@ -313,6 +322,47 @@ project
       │    └── variable: a.y [type=int]
       └── unary-complement [type=int]
            └── variable: a.x [type=int]
+
+# Array Concat
+build
+SELECT arr || arr, arr || NULL, NULL || arr FROM unusual
+----
+project
+ ├── columns: column3:int[]:null:3 column4:int[]:null:4 column5:int[]:null:5
+ ├── scan
+ │    └── columns: unusual.x:int:1 unusual.arr:int[]:null:2
+ └── projections
+      ├── concat [type=int[]]
+      │    ├── variable: unusual.arr [type=int[]]
+      │    └── variable: unusual.arr [type=int[]]
+      ├── concat [type=int[]]
+      │    ├── variable: unusual.arr [type=int[]]
+      │    └── const: NULL [type=unknown]
+      └── concat [type=int[]]
+           ├── const: NULL [type=unknown]
+           └── variable: unusual.arr [type=int[]]
+
+# Array Element Concat
+build
+SELECT x || arr, arr || x, x || NULL, NULL || x FROM unusual
+----
+project
+ ├── columns: column3:int[]:null:3 column4:int[]:null:4 column5:int[]:null:5 column6:int[]:null:6
+ ├── scan
+ │    └── columns: unusual.x:int:1 unusual.arr:int[]:null:2
+ └── projections
+      ├── concat [type=int[]]
+      │    ├── variable: unusual.x [type=int]
+      │    └── variable: unusual.arr [type=int[]]
+      ├── concat [type=int[]]
+      │    ├── variable: unusual.arr [type=int[]]
+      │    └── variable: unusual.x [type=int]
+      ├── concat [type=int[]]
+      │    ├── variable: unusual.x [type=int]
+      │    └── const: NULL [type=unknown]
+      └── concat [type=int[]]
+           ├── const: NULL [type=unknown]
+           └── variable: unusual.x [type=int]
 
 # Function with fixed return type.
 build
