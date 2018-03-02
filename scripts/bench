@@ -11,20 +11,33 @@ EOF
 fi
 
 cd "$(dirname $0)/.."
-if [ $# -ne 2 ]; then
+if [[ $# < 1 || $# > 2 ]]; then
   cat 1>&2 <<EOF
-Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch newbranch
+Usage: BENCHES=regexp PKG=./pkg/yourpkg $0 oldbranch [newbranch]
 EOF
   exit 1
 fi
 
+OLD=$1
+
+if [[ $# < 2 ]]; then
+  # Use the current branch.
+  REF=`git symbolic-ref -q HEAD`
+  NEW=${REF##refs/heads/}
+else
+  NEW=$2
+fi
+
+echo "Comparing $NEW (new) with $OLD (old)"
+echo ""
+
 dest=$(mktemp -d)
 echo "Writing to ${dest}"
 
-for branch in "${2}" "${1}"; do
+for branch in "$NEW" "$OLD"; do
   git checkout "${branch}"
   (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-count 10 -benchmem" > "${dest}/bench.${branch}" 2> "${dest}/log.txt")
 done
-benchstat "${dest}/bench.$1" "${dest}/bench.$2"
+benchstat "${dest}/bench.$OLD" "${dest}/bench.$NEW"
 
-git checkout "${2}"
+git checkout "$NEW"
