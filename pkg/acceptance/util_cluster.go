@@ -247,6 +247,23 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 				return nil
 			})
 		}
+
+		// If not a zero node cluster, avoid waiting on a shutdown.
+		if c.NumNodes() != 0 {
+			db, err := c.NewDB(ctx, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := db.Exec(
+				"SET CLUSTER SETTING server.shutdown.drain_wait = '0s';",
+			); err != nil && !testutils.IsError(err, "unknown cluster setting") {
+				t.Fatal(err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 
 	completed = true
