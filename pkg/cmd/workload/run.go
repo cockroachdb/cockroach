@@ -19,10 +19,8 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,16 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
-const crdbDefaultURI = `postgres://root@localhost:26257?sslmode=disable`
-
 var runCmd = &cobra.Command{
 	Use:   `run`,
 	Short: `Run a workload's operations against a cluster`,
 }
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
-var concurrency = runFlags.Int(
-	"concurrency", 2*runtime.NumCPU(), "Number of concurrent writers inserting blocks")
 var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
@@ -80,22 +74,11 @@ func init() {
 		if f, ok := gen.(workload.Flagser); ok {
 			genFlags = f.Flags().FlagSet
 		}
-		var genHooks workload.Hooks
-		if h, ok := gen.(workload.Hookser); ok {
-			genHooks = h.Hooks()
-		}
 
 		genInitCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
 		genInitCmd.Flags().AddFlagSet(initFlags)
 		genInitCmd.Flags().AddFlagSet(genFlags)
-		genInitCmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if genHooks.Validate != nil {
-				if err := genHooks.Validate(); err != nil {
-					return err
-				}
-			}
-			return runInit(gen, args)
-		}
+		genInitCmd.RunE = cmdHelper(gen, runInit)
 		initCmd.AddCommand(genInitCmd)
 
 		genRunCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
@@ -107,32 +90,54 @@ func init() {
 			f.Usage += ` (implies --init)`
 			genRunCmd.Flags().AddFlag(&f)
 		})
-		genRunCmd.RunE = func(cmd *cobra.Command, args []string) error {
-			if genHooks.Validate != nil {
-				if err := genHooks.Validate(); err != nil {
-					return err
-				}
-			}
-			return runRun(gen, args)
-		}
+		genRunCmd.RunE = cmdHelper(gen, runRun)
 		runCmd.AddCommand(genRunCmd)
 	}
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(runCmd)
 }
 
+func cmdHelper(
+	gen workload.Generator, fn func(gen workload.Generator, urls []string, dbName string) error,
+) func(*cobra.Command, []string) error {
+	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
+
+	return func(cmd *cobra.Command, args []string) error {
+		if h, ok := gen.(workload.Hookser); ok {
+			if err := h.Hooks().Validate(); err != nil {
+				return err
+			}
+		}
+
+		// HACK: Steal the dbOverride out of flags. This should go away
+		// once more of run.go moves inside workload.
+		var dbOverride string
+		if dbFlag := cmd.Flag(`db`); dbFlag != nil {
+			dbOverride = dbFlag.Value.String()
+		}
+		urls := args
+		if len(urls) == 0 {
+			urls = []string{crdbDefaultURL}
+		}
+		dbName, err := workload.SanitizeUrls(gen, dbOverride, urls)
+		if err != nil {
+			return err
+		}
+		return fn(gen, urls, dbName)
+	}
+}
+
 // numOps keeps a global count of successful operations.
 var numOps uint64
 
-type worker struct {
-	db *gosql.DB
-	op func(context.Context) error
-}
-
-// run is an infinite loop in which the worker continuously attempts to
+// workerRun is an infinite loop in which the worker continuously attempts to
 // read / write blocks of random data into a table in cockroach DB.
-func (w *worker) run(
-	ctx context.Context, errCh chan<- error, wg *sync.WaitGroup, limiter *rate.Limiter,
+func workerRun(
+	ctx context.Context,
+	errCh chan<- error,
+	wg *sync.WaitGroup,
+	limiter *rate.Limiter,
+	workFn func(context.Context) error,
 ) {
 	defer wg.Done()
 
@@ -144,7 +149,7 @@ func (w *worker) run(
 			}
 		}
 
-		if err := w.op(ctx); err != nil {
+		if err := workFn(ctx); err != nil {
 			errCh <- err
 			continue
 		}
@@ -156,113 +161,46 @@ func (w *worker) run(
 	}
 }
 
-func sanitizeDBURL(dbURL string) (string, error) {
-	parsedURL, err := url.Parse(dbURL)
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimPrefix(parsedURL.Path, "/") != "" {
-		return "", fmt.Errorf(
-			`database URL specifies database %q, but database "test" is always used`, parsedURL.Path)
-	}
-	parsedURL.Path = "test"
-
-	switch parsedURL.Scheme {
-	case "postgres", "postgresql":
-		return parsedURL.String(), nil
-	default:
-		return "", fmt.Errorf("unsupported database: %s", parsedURL.Scheme)
-	}
-}
-
-func setupCockroach(dbURLs []string) (*gosql.DB, error) {
-	if len(dbURLs) == 0 {
-		dbURLs = []string{crdbDefaultURI}
-	}
-
-	var sanitizedURLs = make([]string, len(dbURLs))
-	for i, dbURL := range dbURLs {
-		var err error
-		sanitizedURLs[i], err = sanitizeDBURL(dbURL)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	// Open connection to server and create a database.
-	db, err := gosql.Open("cockroach", strings.Join(sanitizedURLs, " "))
-	if err != nil {
-		return nil, err
-	}
-
-	// Allow a maximum of concurrency+1 connections to the database.
-	db.SetMaxOpenConns(*concurrency + 1)
-	db.SetMaxIdleConns(*concurrency + 1)
-
-	return db, nil
-}
-
-func runInit(gen workload.Generator, args []string) error {
-	db, err := setupCockroach(args)
+func runInit(gen workload.Generator, urls []string, dbName string) error {
+	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
 
-	return runInitImpl(gen, db)
+	return runInitImpl(gen, initDB, dbName)
 }
 
-func runInitImpl(gen workload.Generator, db *gosql.DB) error {
+func runInitImpl(gen workload.Generator, initDB *gosql.DB, dbName string) error {
 	if *drop {
-		if _, err := db.Exec(`DROP DATABASE IF EXISTS test`); err != nil {
+		if _, err := initDB.Exec(`DROP DATABASE IF EXISTS ` + dbName); err != nil {
 			return err
 		}
 	}
-	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+	if _, err := initDB.Exec(`CREATE DATABASE IF NOT EXISTS ` + dbName); err != nil {
 		return err
 	}
 
 	const batchSize = -1
-	_, err := workload.Setup(db, gen, batchSize)
+	_, err := workload.Setup(initDB, gen, batchSize)
 	return err
 }
 
-func runRun(gen workload.Generator, args []string) error {
+func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
-	if *concurrency < 1 {
-		return errors.Errorf(
-			"Value of 'concurrency' flag (%d) must be greater than or equal to 1", *concurrency)
+	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return err
 	}
-
-	var db *gosql.DB
-	{
-		var err error
-		for {
-			db, err = setupCockroach(args)
-			if err == nil {
-				break
-			}
-			if !*tolerateErrors {
-				return err
-			}
-		}
-	}
-
 	if *doInit || *drop {
-		var err error
 		for {
-			err = runInitImpl(gen, db)
+			err = runInitImpl(gen, initDB, dbName)
 			if err == nil {
 				break
 			}
 			if !*tolerateErrors {
 				return err
 			}
-		}
-	}
-	for _, table := range gen.Tables() {
-		if err := workload.Split(ctx, db, table, *concurrency); err != nil {
-			return err
 		}
 	}
 
@@ -273,28 +211,30 @@ func runRun(gen workload.Generator, args []string) error {
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
 	}
 
-	var ops workload.Operations
-	if o, ok := gen.(workload.Opser); ok {
-		ops = o.Ops()
-	}
-	if ops.Fn == nil {
+	o, ok := gen.(workload.Opser)
+	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
+	}
+	reg := workload.NewHistogramRegistry()
+	ops, err := o.Ops(urls, reg)
+	if err != nil {
+		return err
+	}
+
+	for _, table := range gen.Tables() {
+		splitConcurrency := len(ops.WorkerFns)
+		if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
+			return err
+		}
 	}
 
 	start := timeutil.Now()
-	reg := workload.NewHistogramRegistry()
-	workers := make([]*worker, *concurrency)
-
 	errCh := make(chan error)
 	var wg sync.WaitGroup
-	for i := range workers {
+	for _, workFn := range ops.WorkerFns {
+		workFn := workFn
 		wg.Add(1)
-		opFn, err := ops.Fn(db, reg)
-		if err != nil {
-			return err
-		}
-		workers[i] = &worker{db: db, op: opFn}
-		go workers[i].run(ctx, errCh, &wg, limiter)
+		go workerRun(ctx, errCh, &wg, limiter, workFn)
 	}
 
 	var numErr int
@@ -382,7 +322,6 @@ func runRun(gen workload.Generator, args []string) error {
 			benchmarkName := strings.Join([]string{
 				"BenchmarkWorkload",
 				fmt.Sprintf("generator=%s", gen.Meta().Name),
-				fmt.Sprintf("concurrency=%d", *concurrency),
 			}, "/")
 			if *duration != time.Duration(0) {
 				benchmarkName += `/duration=` + duration.String()
