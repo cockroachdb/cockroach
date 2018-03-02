@@ -155,7 +155,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		for {
 			for name, variations := range builtins.Builtins {
 				switch strings.ToLower(name) {
-				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal":
+				case "crdb_internal.force_panic", "crdb_internal.force_log_fatal", "pg_sleep":
 					continue
 				}
 				for _, builtin := range variations {
