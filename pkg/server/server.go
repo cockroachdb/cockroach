@@ -93,6 +93,13 @@ var (
 		"the amount of time subsystems wait for work to finish before shutting down",
 		10*time.Second,
 	)
+
+	drainWait = settings.RegisterDurationSetting(
+		"server.shutdown.drain_wait",
+		"the amount of time a server waits in an unready state before proceeding with the rest "+
+			"of the shutdown process",
+		15*time.Second,
+	)
 )
 
 // Server is the cockroach server node.
@@ -1359,7 +1366,17 @@ func (s *Server) doDrain(
 	for _, mode := range modes {
 		switch mode {
 		case serverpb.DrainMode_CLIENT:
+			if setTo {
+				s.serveMode.set(modeDraining)
+				// Wait for drainUnreadyWait. This will fail load balancer checks and
+				// delay draining so that client traffic can move off this node.
+				time.Sleep(drainWait.Get(&s.st.SV))
+			}
 			if err := func() error {
+				if !setTo {
+					// Execute this last.
+					defer func() { s.serveMode.set(modeOperational) }()
+				}
 				// Since enabling the lease manager's draining mode will prevent
 				// the acquisition of new leases, the switch must be made after
 				// the pgServer has given sessions a chance to finish ongoing
