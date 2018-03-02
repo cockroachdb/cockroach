@@ -97,7 +97,7 @@ var pgCatalog = virtualSchema{
 	validWithNoDatabaseContext: false,
 }
 
-// See: https://www.postgresql.org/docs/current/static/catalog-pg-am.html.
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-am.html.
 var pgCatalogAmTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_am (
@@ -838,7 +838,7 @@ CREATE TABLE pg_catalog.pg_extension (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/catalog-pg-foreign-data-wrapper.html
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-foreign-data-wrapper.html.
 var pgCatalogForeignDataWrapperTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_foreign_data_wrapper (
@@ -1098,28 +1098,29 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-operator.html.
 var pgCatalogOperatorTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_operator (
 	oid OID,
-  oprname NAME,
-  oprnamespace OID,
-  oprowner OID,
-  oprkind TEXT,
-  oprcanmerge BOOL,
-  oprcanhash BOOL,
-  oprleft OID,
-  oprright OID,
-  oprresult OID,
-  oprcom OID,
-  oprnegate OID,
-  oprcode OID,
-  oprrest OID,
-  oprjoin OID
+	oprname NAME,
+	oprnamespace OID,
+	oprowner OID,
+	oprkind TEXT,
+	oprcanmerge BOOL,
+	oprcanhash BOOL,
+	oprleft OID,
+	oprright OID,
+	oprresult OID,
+	oprcom OID,
+	oprnegate OID,
+	oprcode OID,
+	oprrest OID,
+	oprjoin OID
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Custom operators are not supported.
 		return nil
 	},
 }
@@ -1142,7 +1143,7 @@ var (
 	_ = proArgModeTable
 )
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-proc.html
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-proc.html.
 var pgCatalogProcTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_proc (
@@ -1319,18 +1320,18 @@ CREATE TABLE pg_catalog.pg_range (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/catalog-pg-rewrite.html.
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-rewrite.html.
 var pgCatalogRewriteTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_rewrite (
-  oid OID,
-  rulename NAME,
-  ev_class OID,
-  ev_type TEXT,
-  ev_enabled TEXT,
-  is_instead BOOL,
-  ev_qual TEXT,
-  ev_action TEXT
+	oid OID,
+	rulename NAME,
+	ev_class OID,
+	ev_type TEXT,
+	ev_enabled TEXT,
+	is_instead BOOL,
+	ev_qual TEXT,
+	ev_action TEXT
 );
 `,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1389,7 +1390,7 @@ CREATE TABLE pg_catalog.pg_roles (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/catalog-pg-sequence.html
+// See: https://www.postgresql.org/docs/10/static/catalog-pg-sequence.html.
 var pgCatalogSequencesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_sequence (
@@ -1521,16 +1522,16 @@ CREATE TABLE pg_catalog.pg_tables (
 	},
 }
 
-// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-tablespace.html
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-tablespace.html.
 var pgCatalogTablespaceTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_tablespace (
-  oid OID,
-  spcname NAME,
-  spcowner OID,
-  spclocation TEXT,
-  spcacl TEXT[],
-  spcoptions TEXT[]
+	oid OID,
+	spcname NAME,
+	spcowner OID,
+	spclocation TEXT,
+	spcacl TEXT[],
+	spcoptions TEXT[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1545,28 +1546,28 @@ CREATE TABLE pg_catalog.pg_tablespace (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/catalog-pg-trigger.html
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-trigger.html.
 var pgCatalogTriggerTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_trigger (
-  oid OID,
-  tgrelid OID,
-  tgname NAME,
-  tgfoid OID,
-  tgtype INT,
-  tgenabled TEXT,
-  tgisinternal BOOL,
-  tgconstrrelid OID,
-  tgconstrindid OID,
-  tgconstraint OID,
-  tgdeferrable BOOL,
-  tginitdeferred BOOL,
-  tgnargs INT,
-  tgattr INT2VECTOR,
-  tgargs BYTEA,
-  tgqual TEXT,
-  tgoldtable NAME,
-  tgnewtable NAME
+	oid OID,
+	tgrelid OID,
+	tgname NAME,
+	tgfoid OID,
+	tgtype INT,
+	tgenabled TEXT,
+	tgisinternal BOOL,
+	tgconstrrelid OID,
+	tgconstrindid OID,
+	tgconstraint OID,
+	tgdeferrable BOOL,
+	tginitdeferred BOOL,
+	tgnargs INT,
+	tgattr INT2VECTOR,
+	tgargs BYTEA,
+	tgqual TEXT,
+	tgoldtable NAME,
+	tgnewtable NAME
 );
 `,
 	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1730,19 +1731,19 @@ CREATE TABLE pg_catalog.pg_type (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+// See: https://www.postgresql.org/docs/9.6/static/view-pg-user.html.
 var pgCatalogUserTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_user (
-  usename NAME,
-  usesysid OID,
-  usecreatedb BOOL,
-  usesuper BOOL,
-  userepl  BOOL,
-  usebypassrls BOOL,
-  passwd TEXT,
-  valuntil TIMESTAMP,
-  useconfig TEXT[]
+	usename NAME,
+	usesysid OID,
+	usecreatedb BOOL,
+	usesuper BOOL,
+	userepl  BOOL,
+	usebypassrls BOOL,
+	passwd TEXT,
+	valuntil TIMESTAMP,
+	useconfig TEXT[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1768,14 +1769,14 @@ CREATE TABLE pg_catalog.pg_user (
 	},
 }
 
-// See: https://www.postgresql.org/docs/10/static/view-pg-user.html
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-user-mapping.html.
 var pgCatalogUserMappingTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE pg_catalog.pg_user_mapping (
-  oid OID,
-  umuser OID,
-  umserver OID,
-  umoptions TEXT[]
+	oid OID,
+	umuser OID,
+	umserver OID,
+	umoptions TEXT[]
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
