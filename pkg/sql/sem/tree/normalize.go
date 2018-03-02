@@ -129,7 +129,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	right := expr.TypedRight()
 	expectedType := expr.ResolvedType()
 
-	if !expr.fn.nullableArgs && (left == DNull || right == DNull) {
+	if !expr.fn.NullableArgs && (left == DNull || right == DNull) {
 		return DNull
 	}
 
