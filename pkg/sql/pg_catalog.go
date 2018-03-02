@@ -74,6 +74,7 @@ var pgCatalog = virtualSchema{
 		pgCatalogIndexTable,
 		pgCatalogIndexesTable,
 		pgCatalogInheritsTable,
+		pgCatalogLanguageTable,
 		pgCatalogNamespaceTable,
 		pgCatalogOperatorTable,
 		pgCatalogProcTable,
@@ -1068,6 +1069,27 @@ CREATE TABLE pg_catalog.pg_inherits (
 `,
 	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		// Table inheritance is not supported.
+		return nil
+	},
+}
+
+// See: https://www.postgresql.org/docs/9.6/static/catalog-pg-language.html.
+var pgCatalogLanguageTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE pg_catalog.pg_language (
+	oid OID,
+	lanname NAME,
+	lanowner OID,
+	lanispl BOOL,
+	lanpltrusted BOOL,
+	lanplcallfoid OID,
+	laninline OID,
+	lanvalidator OID,
+	lanacl STRING[]
+);
+`,
+	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// Languages to write functions and stored procedures are not supported.
 		return nil
 	},
 }
