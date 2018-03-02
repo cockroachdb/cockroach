@@ -45,10 +45,14 @@ type tableReader struct {
 	// trailingMetadata contains producer metadata that is sent once the consumer
 	// status is not NeedMoreRows.
 	trailingMetadata []ProducerMetadata
+
+	// pendingMetadata contains producer metadata that was not sent as soon as
+	// it was received. It is used only in NextBatch.
+	pendingMetadata *ProducerMetadata
 }
 
 var _ Processor = &tableReader{}
-var _ RowSource = &tableReader{}
+var _ RowBatchSource = &tableReader{}
 
 // newTableReader creates a tableReader.
 func newTableReader(
@@ -212,6 +216,42 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			continue
 		}
 		return nil, tr.producerMeta(err)
+	}
+}
+
+// NextBatch is part of the RowBatchSource interface.
+func (tr *tableReader) NextBatch() (RowBatch, *ProducerMetadata) {
+	batch := make(RowBatch, 0, RowBatchSize)
+	var row sqlbase.EncDatumRow
+	var meta *ProducerMetadata
+	for {
+		// Metadata received in the last call to NextBatch is stored in
+		// pendingMetadata if there was an in-progress batch at the time the
+		// metadata was received.
+		if tr.pendingMetadata != nil {
+			meta = tr.pendingMetadata
+			tr.pendingMetadata = nil
+			return nil, meta
+		}
+		if len(batch) == RowBatchSize {
+			return batch, nil
+		}
+		row, meta = tr.Next()
+		if row != nil {
+			batch = append(batch, row)
+			continue
+		}
+		if meta != nil {
+			if len(batch) > 0 {
+				tr.pendingMetadata = meta
+				return batch, nil
+			}
+			return nil, meta
+		}
+		if len(batch) > 0 {
+			return batch, nil
+		}
+		return nil, nil
 	}
 }
 

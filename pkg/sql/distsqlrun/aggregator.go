@@ -236,21 +236,37 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	if ag.accumulating {
+		inputBatchSource, batching := ag.input.(RowBatchSource)
+		var batch RowBatch
+		var row sqlbase.EncDatumRow
+		var meta *ProducerMetadata
 		for {
-			row, meta := ag.input.Next()
+			if batching {
+				batch, meta = inputBatchSource.NextBatch()
+			} else {
+				row, meta = ag.input.Next()
+			}
 			if meta != nil {
 				if meta.Err != nil {
 					return nil, ag.producerMeta(meta.Err)
 				}
 				return nil, meta
 			}
-			if row == nil {
+			if row == nil && batch == nil {
 				break
 			}
 			if ag.closed || ag.consumerStatus != NeedMoreRows {
 				continue
 			}
-			if err := ag.accumulateRow(row); err != nil {
+			if batch != nil {
+				// TODO(asubiotto): Make aggregator take better advantage of
+				// these batches.
+				for _, r := range batch {
+					if err := ag.accumulateRow(r); err != nil {
+						return nil, ag.producerMeta(err)
+					}
+				}
+			} else if err := ag.accumulateRow(row); err != nil {
 				return nil, ag.producerMeta(err)
 			}
 		}
