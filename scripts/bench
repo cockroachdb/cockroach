@@ -26,3 +26,5 @@ for branch in "${2}" "${1}"; do
   (set -x; make bench PKG="${PKG}" BENCHTIMEOUT="${BENCHTIMEOUT:-5m}" BENCHES="${BENCHES}" TESTFLAGS="-count 10 -benchmem" > "${dest}/bench.${branch}" 2> "${dest}/log.txt")
 done
 benchstat "${dest}/bench.$1" "${dest}/bench.$2"
+
+git checkout "${2}"
