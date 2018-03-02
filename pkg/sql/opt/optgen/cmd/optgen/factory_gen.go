@@ -37,7 +37,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("package xform\n\n")
 
 	g.w.nest("import (\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/opt\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.unnest(")\n\n")
 
 	g.genConstructFuncs()

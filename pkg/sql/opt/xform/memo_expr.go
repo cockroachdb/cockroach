@@ -15,7 +15,7 @@
 package xform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // exprState is 12 bytes of opaque storage used to store operator-specific

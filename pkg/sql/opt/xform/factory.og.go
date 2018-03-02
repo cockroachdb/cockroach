@@ -3,7 +3,7 @@
 package xform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // ConstructSubquery constructs an expression for the Subquery operator.

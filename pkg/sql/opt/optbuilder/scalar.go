@@ -17,7 +17,7 @@ package optbuilder
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -129,8 +129,12 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 	case *tree.ComparisonExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope)
 		right := b.buildScalar(t.TypedRight(), inScope)
+
 		// TODO(andyk): handle t.SubOperator. Do this by mapping Any, Some,
-		// and All to various formulations of the opt Exists operator.
+		// and All to various formulations of the opt Exists operator. For now,
+		// avoid an 'unused' linter complaint.
+		_ = tree.NewTypedComparisonExprWithSubOp
+
 		fn := comparisonOpMap[t.Operator]
 		if fn != nil {
 			// Most comparison ops map directly to a factory method.

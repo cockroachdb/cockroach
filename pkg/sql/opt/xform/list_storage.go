@@ -15,7 +15,7 @@
 package xform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // listStorage stores lists of memo group ids. Each list is interned, which

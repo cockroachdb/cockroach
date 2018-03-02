@@ -1059,12 +1059,6 @@ func NewTypedFuncExpr(
 	return f
 }
 
-// ResolvedFunc returns the function definition; can only be called after
-// Resolve (which happens during TypeCheck).
-func (node *FuncExpr) ResolvedFunc() *FunctionDefinition {
-	return node.Func.FunctionReference.(*FunctionDefinition)
-}
-
 // ResolvedBuiltin returns the builtin definition; can only be called after
 // Resolve (which happens during TypeCheck).
 func (node *FuncExpr) ResolvedBuiltin() *Builtin {
