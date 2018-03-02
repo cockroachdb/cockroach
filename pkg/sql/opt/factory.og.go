@@ -321,11 +321,90 @@ type Factory interface {
 	ConstructGroupBy(input GroupID, aggregations GroupID, groupingColumns PrivateID) GroupID
 
 	// ConstructUnion constructs an expression for the Union operator.
+	// Union is an operator used to combine the Left and Right input relations into
+	// a single set containing rows from both inputs. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Union with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
 	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
 
 	// ConstructIntersect constructs an expression for the Intersect operator.
-	ConstructIntersect(left GroupID, right GroupID) GroupID
+	// Intersect is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that are also present in the Right relation. Duplicate rows are
+	// discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Intersect with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructIntersect(left GroupID, right GroupID, colMap PrivateID) GroupID
 
 	// ConstructExcept constructs an expression for the Except operator.
-	ConstructExcept(left GroupID, right GroupID) GroupID
+	// Except is an operator used to perform a set difference between the Left and
+	// Right input relations. The result consists only of rows in the Left relation
+	// that are not present in the Right relation. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Except with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
+	ConstructExcept(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructUnionAll constructs an expression for the UnionAll operator.
+	// UnionAll is an operator used to combine the Left and Right input relations
+	// into a single set containing rows from both inputs. Duplicate rows are
+	// not discarded. For example:
+	//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       2    ->    1
+	//     2       3          1
+	//                        2
+	//                        2
+	//                        3
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the UnionAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructUnionAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+	// IntersectAll is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that have a corresponding row in the Right relation. Duplicate rows
+	// are not discarded. This effectively creates a one-to-one mapping between the
+	// Left and Right rows. For example:
+	//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       1    ->    1
+	//     1       2          2
+	//     2       2          2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the IntersectAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructIntersectAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructExceptAll constructs an expression for the ExceptAll operator.
+	// ExceptAll is an operator used to perform a set difference between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that do not have a corresponding row in the Right relation.
+	// Duplicate rows are not discarded. This effectively creates a one-to-one
+	// mapping between the Left and Right rows. For example:
+	//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1    ->    1
+	//     1       1          4
+	//     1       2
+	//     2       2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the ExceptAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructExceptAll(left GroupID, right GroupID, colMap PrivateID) GroupID
 }

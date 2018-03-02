@@ -50,6 +50,32 @@ func (f FuncDef) String() string {
 	return f.Name
 }
 
+// SetOpColMap defines the value of the ColMap private field of the set
+// operators: Union, Intersect, Except, UnionAll, IntersectAll and ExceptAll.
+// It matches columns from the left and right inputs of the operator
+// with the output columns, since OutputCols are not ordered and may
+// not correspond to each other.
+//
+// For example, consider the following query:
+//   SELECT y, x FROM xy UNION SELECT b, a FROM ab
+//
+// Given:
+//   col  index
+//   x    1
+//   y    2
+//   a    3
+//   b    4
+//
+// SetOpColMap will contain the following values:
+//   Left:  [2, 1]
+//   Right: [4, 3]
+//   Out:   [5, 6]  <-- synthesized output columns
+type SetOpColMap struct {
+	Left  ColList
+	Right ColList
+	Out   ColList
+}
+
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic
 // tree comparison operator type.
 var ComparisonOpReverseMap = [...]tree.ComparisonOperator{
