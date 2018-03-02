@@ -552,22 +552,26 @@ func (s *sortChunksProcessor) chunkCompleted() (bool, error) {
 }
 
 // fill one chunk of rows from the input and sort them.
-func (s *sortChunksProcessor) fill() (*ProducerMetadata, error) {
+func (s *sortChunksProcessor) fill() error {
 	ctx := s.evalCtx.Ctx()
 
 	var meta *ProducerMetadata
 
-	if s.nextChunkRow == nil {
+	for s.nextChunkRow == nil {
 		s.nextChunkRow, meta = s.input.Next()
-		if meta != nil || s.nextChunkRow == nil {
-			return meta, nil
+		if meta != nil {
+			s.meta = append(s.meta, *meta)
+			continue
+		} else if s.nextChunkRow == nil {
+			return nil
 		}
+		break
 	}
 	s.prefix = s.nextChunkRow
 
 	// Add the chunk
 	if err := s.rows.AddRow(ctx, s.nextChunkRow); err != nil {
-		return nil, err
+		return err
 	}
 
 	defer s.rows.Sort(ctx)
@@ -576,27 +580,30 @@ func (s *sortChunksProcessor) fill() (*ProducerMetadata, error) {
 	// as prefix for the first s.matchLen ordering columns.
 	for {
 		s.nextChunkRow, meta = s.input.Next()
+
 		if meta != nil {
-			return meta, nil
+			s.meta = append(s.meta, *meta)
+			continue
 		}
 		if s.nextChunkRow == nil {
 			break
 		}
 
 		chunkCompleted, err := s.chunkCompleted()
+
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if chunkCompleted {
 			break
 		}
 
 		if err := s.rows.AddRow(ctx, s.nextChunkRow); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return nil, nil
+	return nil
 }
 
 func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -609,12 +616,9 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// If we don't have an active chunk, clear and refill it.
 		if s.rows.Len() == 0 {
 			s.rows.Clear(s.rows.evalCtx.Ctx())
-			meta, err := s.fill()
 			// If that errored or didn't result in an active chunk, we are done.
-			if err != nil || s.rows.Len() == 0 {
+			if err := s.fill(); err != nil || s.rows.Len() == 0 {
 				return nil, s.producerMeta(err)
-			} else if meta != nil {
-				s.meta = append(s.meta, *meta)
 			}
 		}
 
