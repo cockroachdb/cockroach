@@ -504,3 +504,29 @@ query T
 SELECT user_profile from users where user_profile @> '{"first_name":"Ernie"}';
 ----
  {"first_name": "Ernie", "location": "Brooklyn", "status": "Looking for treats"}
+
+statement ok
+CREATE TABLE update_test (i INT, j JSONB, INVERTED INDEX(j));
+
+statement ok
+INSERT INTO update_test VALUES (1, '0');
+
+query IT
+SELECT * from update_test WHERE j @> '0';
+----
+1 0
+
+statement ok
+UPDATE update_test SET j = '{"a":"b", "c":"d"}' WHERE i = 1;
+
+query IT
+SELECT * from update_test WHERE j @> '0';
+----
+
+query IT
+SELECT * from update_test WHERE j @> '{"a":"b"}';
+----
+1 {"a": "b", "c": "d"}
+
+statement ok
+INSERT INTO update_test VALUES (2, '{"longKey1":"longValue1", "longKey2":"longValue2"}');
