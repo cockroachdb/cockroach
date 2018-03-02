@@ -418,16 +418,14 @@ var childCountLookup = [...]childCountLookupFunc{
 	},
 }
 
-type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID
+// ChildGroup returns the memo group containing the nth child of this parent
+// expression.
+func (ev ExprView) ChildGroup(n int) opt.GroupID {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childGroupLookup = [...]childGroupLookupFunc{
-	// UnknownOp
-	func(ev ExprView, n int) opt.GroupID {
-		panic("op type not initialized")
-	},
-
-	// SubqueryOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SubqueryOp:
 		subqueryExpr := (*subqueryExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -438,35 +436,23 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// VariableOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.VariableOp:
 		panic("child index out of range")
-	},
 
-	// ConstOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ConstOp:
 		panic("child index out of range")
-	},
 
-	// TrueOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.TrueOp:
 		panic("child index out of range")
-	},
 
-	// FalseOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FalseOp:
 		panic("child index out of range")
-	},
 
-	// PlaceholderOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.PlaceholderOp:
 		panic("child index out of range")
-	},
 
-	// TupleOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.TupleOp:
 		tupleExpr := (*tupleExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -474,10 +460,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(tupleExpr.elems())
 			return list[n-0]
 		}
-	},
 
-	// ProjectionsOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ProjectionsOp:
 		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -485,10 +469,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(projectionsExpr.elems())
 			return list[n-0]
 		}
-	},
 
-	// AggregationsOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.AggregationsOp:
 		aggregationsExpr := (*aggregationsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -496,10 +478,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(aggregationsExpr.aggs())
 			return list[n-0]
 		}
-	},
 
-	// ExistsOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ExistsOp:
 		existsExpr := (*existsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -508,10 +488,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// AndOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.AndOp:
 		andExpr := (*andExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -519,10 +497,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(andExpr.conditions())
 			return list[n-0]
 		}
-	},
 
-	// OrOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.OrOp:
 		orExpr := (*orExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -530,10 +506,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(orExpr.conditions())
 			return list[n-0]
 		}
-	},
 
-	// NotOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotOp:
 		notExpr := (*notExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -542,10 +516,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// EqOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.EqOp:
 		eqExpr := (*eqExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -556,10 +528,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// LtOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.LtOp:
 		ltExpr := (*ltExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -570,10 +540,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// GtOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.GtOp:
 		gtExpr := (*gtExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -584,10 +552,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// LeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.LeOp:
 		leExpr := (*leExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -598,10 +564,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// GeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.GeOp:
 		geExpr := (*geExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -612,10 +576,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NeOp:
 		neExpr := (*neExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -626,10 +588,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// InOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.InOp:
 		inExpr := (*inExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -640,10 +600,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NotInOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotInOp:
 		notInExpr := (*notInExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -654,10 +612,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// LikeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.LikeOp:
 		likeExpr := (*likeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -668,10 +624,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NotLikeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotLikeOp:
 		notLikeExpr := (*notLikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -682,10 +636,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// ILikeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ILikeOp:
 		iLikeExpr := (*iLikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -696,10 +648,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NotILikeOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotILikeOp:
 		notILikeExpr := (*notILikeExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -710,10 +660,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// SimilarToOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SimilarToOp:
 		similarToExpr := (*similarToExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -724,10 +672,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NotSimilarToOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotSimilarToOp:
 		notSimilarToExpr := (*notSimilarToExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -738,10 +684,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// RegMatchOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.RegMatchOp:
 		regMatchExpr := (*regMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -752,10 +696,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NotRegMatchOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotRegMatchOp:
 		notRegMatchExpr := (*notRegMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -766,10 +708,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// RegIMatchOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.RegIMatchOp:
 		regIMatchExpr := (*regIMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -780,10 +720,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// NotRegIMatchOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.NotRegIMatchOp:
 		notRegIMatchExpr := (*notRegIMatchExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -794,10 +732,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// IsOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.IsOp:
 		isExpr := (*isExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -808,10 +744,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// IsNotOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.IsNotOp:
 		isNotExpr := (*isNotExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -822,10 +756,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// ContainsOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ContainsOp:
 		containsExpr := (*containsExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -836,10 +768,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// BitandOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.BitandOp:
 		bitandExpr := (*bitandExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -850,10 +780,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// BitorOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.BitorOp:
 		bitorExpr := (*bitorExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -864,10 +792,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// BitxorOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.BitxorOp:
 		bitxorExpr := (*bitxorExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -878,10 +804,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// PlusOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.PlusOp:
 		plusExpr := (*plusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -892,10 +816,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// MinusOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.MinusOp:
 		minusExpr := (*minusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -906,10 +828,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// MultOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.MultOp:
 		multExpr := (*multExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -920,10 +840,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// DivOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.DivOp:
 		divExpr := (*divExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -934,10 +852,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FloorDivOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FloorDivOp:
 		floorDivExpr := (*floorDivExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -948,10 +864,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// ModOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ModOp:
 		modExpr := (*modExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -962,10 +876,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// PowOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.PowOp:
 		powExpr := (*powExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -976,10 +888,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// ConcatOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ConcatOp:
 		concatExpr := (*concatExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -990,10 +900,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// LShiftOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.LShiftOp:
 		lShiftExpr := (*lShiftExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1004,10 +912,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// RShiftOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.RShiftOp:
 		rShiftExpr := (*rShiftExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1018,10 +924,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FetchValOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FetchValOp:
 		fetchValExpr := (*fetchValExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1032,10 +936,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FetchTextOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FetchTextOp:
 		fetchTextExpr := (*fetchTextExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1046,10 +948,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FetchValPathOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FetchValPathOp:
 		fetchValPathExpr := (*fetchValPathExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1060,10 +960,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FetchTextPathOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FetchTextPathOp:
 		fetchTextPathExpr := (*fetchTextPathExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1074,10 +972,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// UnaryPlusOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.UnaryPlusOp:
 		unaryPlusExpr := (*unaryPlusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1086,10 +982,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// UnaryMinusOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.UnaryMinusOp:
 		unaryMinusExpr := (*unaryMinusExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1098,10 +992,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// UnaryComplementOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.UnaryComplementOp:
 		unaryComplementExpr := (*unaryComplementExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1110,10 +1002,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// CastOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.CastOp:
 		castExpr := (*castExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1122,10 +1012,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FunctionOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FunctionOp:
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1133,10 +1021,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(functionExpr.args())
 			return list[n-0]
 		}
-	},
 
-	// CoalesceOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.CoalesceOp:
 		coalesceExpr := (*coalesceExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1144,20 +1030,14 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(coalesceExpr.args())
 			return list[n-0]
 		}
-	},
 
-	// UnsupportedExprOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.UnsupportedExprOp:
 		panic("child index out of range")
-	},
 
-	// ScanOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ScanOp:
 		panic("child index out of range")
-	},
 
-	// ValuesOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ValuesOp:
 		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1165,10 +1045,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(valuesExpr.rows())
 			return list[n-0]
 		}
-	},
 
-	// SelectOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SelectOp:
 		selectExpr := (*selectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1179,10 +1057,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// ProjectOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ProjectOp:
 		projectExpr := (*projectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1193,10 +1069,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// InnerJoinOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.InnerJoinOp:
 		innerJoinExpr := (*innerJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1209,10 +1083,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// LeftJoinOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.LeftJoinOp:
 		leftJoinExpr := (*leftJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1225,10 +1097,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// RightJoinOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.RightJoinOp:
 		rightJoinExpr := (*rightJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1241,10 +1111,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FullJoinOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FullJoinOp:
 		fullJoinExpr := (*fullJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1257,10 +1125,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// SemiJoinOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SemiJoinOp:
 		semiJoinExpr := (*semiJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1273,10 +1139,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// AntiJoinOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.AntiJoinOp:
 		antiJoinExpr := (*antiJoinExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1289,10 +1153,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// InnerJoinApplyOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.InnerJoinApplyOp:
 		innerJoinApplyExpr := (*innerJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1305,10 +1167,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// LeftJoinApplyOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.LeftJoinApplyOp:
 		leftJoinApplyExpr := (*leftJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1321,10 +1181,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// RightJoinApplyOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.RightJoinApplyOp:
 		rightJoinApplyExpr := (*rightJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1337,10 +1195,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// FullJoinApplyOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FullJoinApplyOp:
 		fullJoinApplyExpr := (*fullJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1353,10 +1209,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// SemiJoinApplyOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SemiJoinApplyOp:
 		semiJoinApplyExpr := (*semiJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1369,10 +1223,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// AntiJoinApplyOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.AntiJoinApplyOp:
 		antiJoinApplyExpr := (*antiJoinApplyExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1385,10 +1237,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// GroupByOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.GroupByOp:
 		groupByExpr := (*groupByExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1399,10 +1249,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// UnionOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.UnionOp:
 		unionExpr := (*unionExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1413,10 +1261,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// IntersectOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.IntersectOp:
 		intersectExpr := (*intersectExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1427,10 +1273,8 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// ExceptOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.ExceptOp:
 		exceptExpr := (*exceptExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -1441,16 +1285,18 @@ var childGroupLookup = [...]childGroupLookupFunc{
 		default:
 			panic("child index out of range")
 		}
-	},
 
-	// SortOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SortOp:
 		if n == 0 {
 			return ev.loc.group
 		}
 
 		panic("child index out of range")
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
 type privateLookupFunc func(ev ExprView) opt.PrivateID

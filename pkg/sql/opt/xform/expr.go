@@ -161,12 +161,6 @@ func (ev ExprView) Child(nth int) ExprView {
 	return makeExprView(ev.mem, group, required)
 }
 
-// ChildGroup returns the memo group containing the nth child of this parent
-// expression.
-func (ev ExprView) ChildGroup(nth int) opt.GroupID {
-	return childGroupLookup[ev.op](ev, nth)
-}
-
 // Private returns any private data associated with this expression, or nil if
 // there is none.
 func (ev ExprView) Private() interface{} {
