@@ -17,19 +17,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-type childCountLookupFunc func(ev ExprView) int
+// ChildCount returns the number of expressions that are inputs to this
+// parent expression.
+func (ev ExprView) ChildCount() int {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childCountLookup = [...]childCountLookupFunc{
-	// UnknownOp
-	func(ev ExprView) int {
-		panic("op type not initialized")
-	},
-
-	// FuncCallOp
-	func(ev ExprView) int {
+	case opt.FuncCallOp:
 		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
 		return 1 + int(funcCallExpr.args().Length)
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent
@@ -120,18 +122,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-type childCountLookupFunc func(ev ExprView) int
+// ChildCount returns the number of expressions that are inputs to this
+// parent expression.
+func (ev ExprView) ChildCount() int {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childCountLookup = [...]childCountLookupFunc{
-	// UnknownOp
-	func(ev ExprView) int {
-		panic("op type not initialized")
-	},
-
-	// SortOp
-	func(ev ExprView) int {
+	case opt.SortOp:
 		return 1
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent

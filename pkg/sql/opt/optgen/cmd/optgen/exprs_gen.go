@@ -38,7 +38,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
-	g.genChildCountLookup()
+	g.genChildCount()
 	g.genChildGroup()
 	g.genPrivateFieldLookup()
 	g.genTagLookup()
@@ -56,23 +56,20 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	}
 }
 
-// genChildCountLookup generates a lookup table used to implement the ExprView
-// ChildCount method for each different kind of memo expression.
-func (g *exprsGen) genChildCountLookup() {
-	fmt.Fprintf(g.w, "type childCountLookupFunc func(ev ExprView) int\n")
-
-	fmt.Fprintf(g.w, "var childCountLookup = [...]childCountLookupFunc{\n")
-	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev ExprView) int {\n")
-	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
-	fmt.Fprintf(g.w, "  },\n\n")
+// genChildCount generates the ExprView.ChildCount method.
+func (g *exprsGen) genChildCount() {
+	fmt.Fprintf(g.w, "// ChildCount returns the number of expressions that are inputs to this\n")
+	fmt.Fprintf(g.w, "// parent expression.\n")
+	fmt.Fprintf(g.w, "func (ev ExprView) ChildCount() int {\n")
+	fmt.Fprintf(g.w, "  switch ev.op {\n")
+	fmt.Fprintf(g.w, "  case opt.UnknownOp:\n")
+	fmt.Fprintf(g.w, "    panic(\"opt type not initialized\")\n\n")
 
 	for _, define := range g.compiled.Defines {
 		exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
 		varName := exprType
 
-		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev ExprView) int {\n")
+		fmt.Fprintf(g.w, "  case opt.%sOp:\n", define.Name)
 
 		count := len(define.Fields)
 		if privateField(define) != nil {
@@ -88,8 +85,11 @@ func (g *exprsGen) genChildCountLookup() {
 			fmt.Fprintf(g.w, "    return %d\n", count)
 		}
 
-		fmt.Fprintf(g.w, "  },\n\n")
+		fmt.Fprintf(g.w, "\n")
 	}
+	fmt.Fprintf(g.w, "  default:\n")
+	fmt.Fprintf(g.w, "      panic(\"invalid op\")\n")
+	fmt.Fprintf(g.w, "  }\n\n")
 
 	fmt.Fprintf(g.w, "}\n\n")
 }
