@@ -73,7 +73,7 @@ type Flagser interface {
 // to have been created and initialized before running these.
 type Opser interface {
 	Generator
-	Ops() Operations
+	Ops(urls []string, reg *HistogramRegistry) (QueryLoad, error)
 }
 
 // Hookser returns any hooks associated with the generator.
@@ -129,17 +129,14 @@ type Table struct {
 	SplitFn func(int) []interface{}
 }
 
-// Operations represents some SQL query workload performable on a database
+// QueryLoad represents some SQL query workload performable on a database
 // initialized with the requisite tables.
-//
-// TODO(dan): Finish nailing down the invariants of Operations as more workloads
-// are ported to this framework. TPCC in particular should be informative.
-type Operations struct {
-	// Name is a name for the work performed.
-	Name string
-	// Fn returns a function to be called once per unit of work to be done.
-	// Various generator tools use this to track progress.
-	Fn func(*gosql.DB, *HistogramRegistry) (func(context.Context) error, error)
+type QueryLoad struct {
+	SQLDatabase string
+
+	// WorkerFns one function per worker. It is to be called once per unit of
+	// work to be done.
+	WorkerFns []func(context.Context) error
 
 	// ResultHist is the name of the NamedHistogram to use for the benchmark
 	// formatted results output at the end of `./workload run`. The empty string
