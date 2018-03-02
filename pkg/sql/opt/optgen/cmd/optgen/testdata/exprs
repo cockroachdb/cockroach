@@ -17,31 +17,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-type childCountLookupFunc func(ev ExprView) int
+// ChildCount returns the number of expressions that are inputs to this
+// parent expression.
+func (ev ExprView) ChildCount() int {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childCountLookup = [...]childCountLookupFunc{
-	// UnknownOp
-	func(ev ExprView) int {
-		panic("op type not initialized")
-	},
-
-	// FuncCallOp
-	func(ev ExprView) int {
+	case opt.FuncCallOp:
 		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
 		return 1 + int(funcCallExpr.args().Length)
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
-type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID
+// ChildGroup returns the memo group containing the nth child of this parent
+// expression.
+func (ev ExprView) ChildGroup(n int) opt.GroupID {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childGroupLookup = [...]childGroupLookupFunc{
-	// UnknownOp
-	func(ev ExprView, n int) opt.GroupID {
-		panic("op type not initialized")
-	},
-
-	// FuncCallOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.FuncCallOp:
 		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
 
 		switch n {
@@ -51,7 +51,11 @@ var childGroupLookup = [...]childGroupLookupFunc{
 			list := ev.mem.lookupList(funcCallExpr.args())
 			return list[n-1]
 		}
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
 type privateLookupFunc func(ev ExprView) opt.PrivateID
@@ -118,36 +122,40 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-type childCountLookupFunc func(ev ExprView) int
+// ChildCount returns the number of expressions that are inputs to this
+// parent expression.
+func (ev ExprView) ChildCount() int {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childCountLookup = [...]childCountLookupFunc{
-	// UnknownOp
-	func(ev ExprView) int {
-		panic("op type not initialized")
-	},
-
-	// SortOp
-	func(ev ExprView) int {
+	case opt.SortOp:
 		return 1
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
-type childGroupLookupFunc func(ev ExprView, n int) opt.GroupID
+// ChildGroup returns the memo group containing the nth child of this parent
+// expression.
+func (ev ExprView) ChildGroup(n int) opt.GroupID {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childGroupLookup = [...]childGroupLookupFunc{
-	// UnknownOp
-	func(ev ExprView, n int) opt.GroupID {
-		panic("op type not initialized")
-	},
-
-	// SortOp
-	func(ev ExprView, n int) opt.GroupID {
+	case opt.SortOp:
 		if n == 0 {
 			return ev.loc.group
 		}
 
 		panic("child index out of range")
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
 type privateLookupFunc func(ev ExprView) opt.PrivateID

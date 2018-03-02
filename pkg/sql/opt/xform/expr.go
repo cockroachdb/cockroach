@@ -139,12 +139,6 @@ func (ev ExprView) Group() opt.GroupID {
 	return ev.loc.group
 }
 
-// ChildCount returns the number of expressions that are inputs to this
-// parent expression.
-func (ev ExprView) ChildCount() int {
-	return childCountLookup[ev.op](ev)
-}
-
 // Child returns the nth expression that is an input to this parent expression.
 // It panics if the requested child does not exist.
 func (ev ExprView) Child(nth int) ExprView {
@@ -159,12 +153,6 @@ func (ev ExprView) Child(nth int) ExprView {
 
 	required := ev.mem.physPropsFactory.constructChildProps(ev, nth)
 	return makeExprView(ev.mem, group, required)
-}
-
-// ChildGroup returns the memo group containing the nth child of this parent
-// expression.
-func (ev ExprView) ChildGroup(nth int) opt.GroupID {
-	return childGroupLookup[ev.op](ev, nth)
 }
 
 // Private returns any private data associated with this expression, or nil if
