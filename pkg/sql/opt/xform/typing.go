@@ -139,8 +139,19 @@ func typeAsBinary(ev ExprView) types.T {
 	// right children.
 	for _, op := range tree.BinOps[binOp] {
 		o := op.(tree.BinOp)
-		if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-			return o.ReturnType
+
+		if leftType == types.Unknown {
+			if rightType.Equivalent(o.RightType) {
+				return o.ReturnType
+			}
+		} else if rightType == types.Unknown {
+			if leftType.Equivalent(o.LeftType) {
+				return o.ReturnType
+			}
+		} else {
+			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
+				return o.ReturnType
+			}
 		}
 	}
 
