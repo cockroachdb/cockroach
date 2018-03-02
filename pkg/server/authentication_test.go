@@ -110,35 +110,35 @@ func TestSSLEnforcement(t *testing.T) {
 		{"", nodeCertsContext, http.StatusOK},
 		{"", testCertsContext, http.StatusOK},
 		{"", noCertsContext, http.StatusOK},
-		{"", insecureContext, http.StatusPermanentRedirect},
+		{"", insecureContext, http.StatusTemporaryRedirect},
 
 		// /_admin/: server.adminServer: no auth.
 		{adminPrefix + "health", rootCertsContext, http.StatusOK},
 		{adminPrefix + "health", nodeCertsContext, http.StatusOK},
 		{adminPrefix + "health", testCertsContext, http.StatusOK},
 		{adminPrefix + "health", noCertsContext, http.StatusOK},
-		{adminPrefix + "health", insecureContext, http.StatusPermanentRedirect},
+		{adminPrefix + "health", insecureContext, http.StatusTemporaryRedirect},
 
 		// /debug/: server.adminServer: no auth.
 		{debug.Endpoint + "vars", rootCertsContext, http.StatusOK},
 		{debug.Endpoint + "vars", nodeCertsContext, http.StatusOK},
 		{debug.Endpoint + "vars", testCertsContext, http.StatusOK},
 		{debug.Endpoint + "vars", noCertsContext, http.StatusOK},
-		{debug.Endpoint + "vars", insecureContext, http.StatusPermanentRedirect},
+		{debug.Endpoint + "vars", insecureContext, http.StatusTemporaryRedirect},
 
 		// /_status/nodes: server.statusServer: no auth.
 		{statusPrefix + "nodes", rootCertsContext, http.StatusOK},
 		{statusPrefix + "nodes", nodeCertsContext, http.StatusOK},
 		{statusPrefix + "nodes", testCertsContext, http.StatusOK},
 		{statusPrefix + "nodes", noCertsContext, http.StatusOK},
-		{statusPrefix + "nodes", insecureContext, http.StatusPermanentRedirect},
+		{statusPrefix + "nodes", insecureContext, http.StatusTemporaryRedirect},
 
 		// /ts/: ts.Server: no auth.
 		{ts.URLPrefix, rootCertsContext, http.StatusNotFound},
 		{ts.URLPrefix, nodeCertsContext, http.StatusNotFound},
 		{ts.URLPrefix, testCertsContext, http.StatusNotFound},
 		{ts.URLPrefix, noCertsContext, http.StatusNotFound},
-		{ts.URLPrefix, insecureContext, http.StatusPermanentRedirect},
+		{ts.URLPrefix, insecureContext, http.StatusTemporaryRedirect},
 	} {
 		t.Run("", func(t *testing.T) {
 			client, err := tc.ctx.GetHTTPClient()

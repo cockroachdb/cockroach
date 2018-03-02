@@ -812,7 +812,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.stopper.RunWorker(workersCtx, func(context.Context) {
 			mux := http.NewServeMux()
 			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusPermanentRedirect)
+				http.Redirect(w, r, "https://"+r.Host+r.RequestURI, http.StatusTemporaryRedirect)
 			})
 			mux.Handle("/health", s)
 
