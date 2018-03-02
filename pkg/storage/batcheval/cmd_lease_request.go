@@ -52,6 +52,7 @@ func RequestLease(
 	if newLease.DeprecatedStartStasis == nil {
 		newLease.DeprecatedStartStasis = newLease.Expiration
 	}
+
 	isExtension := prevLease.Replica.StoreID == newLease.Replica.StoreID
 	effectiveStart := newLease.Start
 
@@ -72,6 +73,25 @@ func RequestLease(
 	// the absence of replay protection.
 	if prevLease.Replica.StoreID == 0 || isExtension {
 		effectiveStart.Backward(prevLease.Start)
+		// If the lease holder promised to not propose any commands below
+		// MinProposedTS, it must also not be allowed to extend a lease before that
+		// timestamp. We make sure that when a node restarts, its earlier in-flight
+		// commands (which are not tracked by the command queue post restart)
+		// receive an error under the new lease by making sure the sequence number
+		// of that lease is higher. This in turn is achieved by forwarding its start
+		// time here, which makes it not Equivalent() to the preceding lease for the
+		// same store.
+		//
+		// Note also that leastPostApply makes sure to update the timestamp cache in
+		// this case: even though the lease holder does not change, the the sequence
+		// number does and this triggers a low water mark bump.
+		//
+		// The bug prevented with this is unlikely to occur in practice
+		// since earlier commands usually apply before this lease will.
+		if ts := args.MinProposedTS; isExtension && ts != nil {
+			effectiveStart.Forward(*ts)
+		}
+
 	} else if prevLease.Type() == roachpb.LeaseExpiration {
 		effectiveStart.Backward(prevLease.Expiration.Next())
 	}

@@ -695,19 +695,35 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	// reloading the raft state below, it isn't safe to use the existing raft
 	// group.
 	r.mu.internalRaftGroup = nil
-	// Init the minLeaseProposedTS such that we won't use an existing lease (if
-	// any). This is so that, after a restart, we don't propose under old leases.
-	// If the replica is being created through a split, this value will be
-	// overridden.
-	if !r.store.cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
-		r.mu.minLeaseProposedTS = clock.Now()
-	}
 
 	var err error
 
 	if r.mu.state, err = r.mu.stateLoader.Load(ctx, r.store.Engine(), desc); err != nil {
 		return err
 	}
+
+	// Init the minLeaseProposedTS such that we won't use an existing lease (if
+	// any). This is so that, after a restart, we don't propose under old leases.
+	// If the replica is being created through a split, this value will be
+	// overridden.
+	//
+	// NB: we check the explicit lease to allow the initial lease to be extended.
+	// The initial lease will start at the zero timestamp; if we set a minLeaseProposedTS
+	// here,
+	if !r.store.cfg.TestingKnobs.DontPreventUseOfOldLeaseOnStart {
+		// Only do this if there was a previous lease. This shouldn't be important
+		// to do but consider that the first lease which is obtained is back-dated
+		// to a zero start timestamp (and this de-flakes some tests). If we set the
+		// min proposed TS here, this lease could not be renewed (by the semantics
+		// of minLeaseProposedTS); and since minLeaseProposedTS is copied on splits,
+		// this problem would multiply to a number of replicas at cluster bootstrap.
+		// Instead, we make the first lease special (which is OK) and the problem
+		// disappears.
+		if r.mu.state.Lease.Replica.StoreID != 0 {
+			r.mu.minLeaseProposedTS = clock.Now()
+		}
+	}
+
 	r.rangeStr.store(0, r.mu.state.Desc)
 
 	r.mu.lastIndex, err = r.mu.stateLoader.LoadLastIndex(ctx, r.store.Engine())
