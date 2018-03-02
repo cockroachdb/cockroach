@@ -17,60 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-// ChildCount returns the number of expressions that are inputs to this
-// parent expression.
-func (ev ExprView) ChildCount() int {
-	switch ev.op {
-	case opt.UnknownOp:
-		panic("opt type not initialized")
-
-	case opt.FuncCallOp:
-		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
-		return 1 + int(funcCallExpr.args().Length)
-
-	default:
-		panic("invalid op")
-	}
-
-}
-
-// ChildGroup returns the memo group containing the nth child of this parent
-// expression.
-func (ev ExprView) ChildGroup(n int) opt.GroupID {
-	switch ev.op {
-	case opt.UnknownOp:
-		panic("opt type not initialized")
-
-	case opt.FuncCallOp:
-		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
-
-		switch n {
-		case 0:
-			return funcCallExpr.name()
-		default:
-			list := ev.mem.lookupList(funcCallExpr.args())
-			return list[n-1]
-		}
-
-	default:
-		panic("invalid op")
-	}
-
-}
-
-type privateLookupFunc func(ev ExprView) opt.PrivateID
-
-var privateLookup = [...]privateLookupFunc{
-	// UnknownOp
-	func(ev ExprView) opt.PrivateID {
-		panic("op type not initialized")
-	},
-
-	// FuncCallOp
-	func(ev ExprView) opt.PrivateID {
-		funcCallExpr := (*funcCallExpr)(ev.mem.lookupExpr(ev.loc))
-		return funcCallExpr.def()
-	},
+var opLayoutTable = [...]opLayout{
+	opt.UnknownOp:  0xFF, // will cause a crash if used
+	opt.FuncCallOp: makeOpLayout(1 /*base*/, 2 /*list*/, 4 /*priv*/, 0 /*enforcer*/),
 }
 
 type funcCallExpr memoExpr
@@ -122,54 +71,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-// ChildCount returns the number of expressions that are inputs to this
-// parent expression.
-func (ev ExprView) ChildCount() int {
-	switch ev.op {
-	case opt.UnknownOp:
-		panic("opt type not initialized")
-
-	case opt.SortOp:
-		return 1
-
-	default:
-		panic("invalid op")
-	}
-
-}
-
-// ChildGroup returns the memo group containing the nth child of this parent
-// expression.
-func (ev ExprView) ChildGroup(n int) opt.GroupID {
-	switch ev.op {
-	case opt.UnknownOp:
-		panic("opt type not initialized")
-
-	case opt.SortOp:
-		if n == 0 {
-			return ev.loc.group
-		}
-
-		panic("child index out of range")
-
-	default:
-		panic("invalid op")
-	}
-
-}
-
-type privateLookupFunc func(ev ExprView) opt.PrivateID
-
-var privateLookup = [...]privateLookupFunc{
-	// UnknownOp
-	func(ev ExprView) opt.PrivateID {
-		panic("op type not initialized")
-	},
-
-	// SortOp
-	func(ev ExprView) opt.PrivateID {
-		return 0
-	},
+var opLayoutTable = [...]opLayout{
+	opt.UnknownOp: 0xFF, // will cause a crash if used
+	opt.SortOp:    makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 1 /*enforcer*/),
 }
 
 var isEnforcerLookup = [...]bool{

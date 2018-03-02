@@ -38,9 +38,8 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
-	g.genChildCount()
-	g.genChildGroup()
-	g.genPrivateFieldLookup()
+	g.genLayoutTable()
+	//g.genPrivateFieldLookup()
 	g.genTagLookup()
 	g.genIsTag()
 
@@ -56,147 +55,35 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	}
 }
 
-// genChildCount generates the ExprView.ChildCount method.
-func (g *exprsGen) genChildCount() {
-	fmt.Fprintf(g.w, "// ChildCount returns the number of expressions that are inputs to this\n")
-	fmt.Fprintf(g.w, "// parent expression.\n")
-	fmt.Fprintf(g.w, "func (ev ExprView) ChildCount() int {\n")
-	fmt.Fprintf(g.w, "  switch ev.op {\n")
-	fmt.Fprintf(g.w, "  case opt.UnknownOp:\n")
-	fmt.Fprintf(g.w, "    panic(\"opt type not initialized\")\n\n")
-
+// genLayoutTable generates the layout
+func (g *exprsGen) genLayoutTable() {
+	fmt.Fprintf(g.w, "var opLayoutTable = [...]opLayout{\n")
+	fmt.Fprintf(g.w, "  opt.UnknownOp: 0xFF, // will cause a crash if used\n")
 	for _, define := range g.compiled.Defines {
-		exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
-		varName := exprType
+		var count, listVal, privVal, enfVal int
 
-		fmt.Fprintf(g.w, "  case opt.%sOp:\n", define.Name)
-
-		count := len(define.Fields)
+		count = len(define.Fields)
 		if privateField(define) != nil {
+			privVal = count
 			count--
 		}
-
 		list := listField(define)
 		if list != nil {
-			listName := unTitle(string(list.Name))
-			fmt.Fprintf(g.w, "    %s := (*%s)(ev.mem.lookupExpr(ev.loc))\n", varName, exprType)
-			fmt.Fprintf(g.w, "    return %d + int(%s.%s().Length)\n", count-1, varName, listName)
-		} else {
-			fmt.Fprintf(g.w, "    return %d\n", count)
-		}
-
-		fmt.Fprintf(g.w, "\n")
-	}
-	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "      panic(\"invalid op\")\n")
-	fmt.Fprintf(g.w, "  }\n\n")
-
-	fmt.Fprintf(g.w, "}\n\n")
-}
-
-// genChildGroup generates the ExprView.ChildGroup method.
-func (g *exprsGen) genChildGroup() {
-	fmt.Fprintf(g.w, "// ChildGroup returns the memo group containing the nth child of this parent\n")
-	fmt.Fprintf(g.w, "// expression.\n")
-	fmt.Fprintf(g.w, "func (ev ExprView) ChildGroup(n int) opt.GroupID {\n")
-	fmt.Fprintf(g.w, "  switch ev.op {\n")
-	fmt.Fprintf(g.w, "  case opt.UnknownOp:\n")
-	fmt.Fprintf(g.w, "    panic(\"opt type not initialized\")\n\n")
-
-	for _, define := range g.compiled.Defines {
-		exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
-		varName := exprType
-
-		fmt.Fprintf(g.w, "  case opt.%sOp:\n", define.Name)
-
-		count := len(define.Fields)
-		if privateField(define) != nil {
+			listVal = count
+			if privVal != 0 {
+				// The list takes two slots; adjust the private position.
+				privVal++
+			}
 			count--
 		}
-
-		if count == 0 {
-			fmt.Fprintf(g.w, "    panic(\"child index out of range\")\n\n")
-			continue
-		}
-
 		if define.Tags.Contains("Enforcer") {
-			// Enforcers have a single child which is the same group they're in.
-			fmt.Fprintf(g.w, "    if n == 0 {\n")
-			fmt.Fprintf(g.w, "      return ev.loc.group\n")
-			fmt.Fprintf(g.w, "    }\n\n")
-
-			fmt.Fprintf(g.w, "    panic(\"child index out of range\")\n\n")
-			continue
+			enfVal = 1
 		}
-
-		fmt.Fprintf(g.w, "    %s := (*%s)(ev.mem.lookupExpr(ev.loc))\n\n", varName, exprType)
-
-		fmt.Fprintf(g.w, "    switch n {\n")
-
-		for index, field := range define.Fields {
-			fieldName := unTitle(string(field.Name))
-
-			if isPrivateType(string(field.Type)) {
-				// Don't include private field.
-				break
-			}
-
-			if isListType(string(field.Type)) {
-				fmt.Fprintf(g.w, "    default:\n")
-				fmt.Fprintf(g.w, "      list := ev.mem.lookupList(%s.%s())\n", varName, fieldName)
-				fmt.Fprintf(g.w, "      return list[n - %d]\n", index)
-				fmt.Fprintf(g.w, "    }\n")
-				break
-			}
-
-			fmt.Fprintf(g.w, "    case %d:\n", index)
-			fmt.Fprintf(g.w, "      return %s.%s()\n", varName, fieldName)
-		}
-
-		if listField(define) == nil {
-			fmt.Fprintf(g.w, "    default:\n")
-			fmt.Fprintf(g.w, "      panic(\"child index out of range\")\n")
-			fmt.Fprintf(g.w, "    }\n")
-		}
-		fmt.Fprintf(g.w, "\n")
+		fmt.Fprintf(
+			g.w, "  opt.%sOp: makeOpLayout(%d /*base*/, %d /*list*/, %d /*priv*/, %d /*enforcer*/),\n",
+			define.Name, count, listVal, privVal, enfVal,
+		)
 	}
-
-	fmt.Fprintf(g.w, "  default:\n")
-	fmt.Fprintf(g.w, "      panic(\"invalid op\")\n")
-	fmt.Fprintf(g.w, "  }\n\n")
-
-	fmt.Fprintf(g.w, "}\n\n")
-}
-
-// genPrivateFieldLookup generates a lookup table used to implement the
-// ExprView Private method for each different kind of memo expression.
-func (g *exprsGen) genPrivateFieldLookup() {
-	fmt.Fprintf(g.w, "type privateLookupFunc func(ev ExprView) opt.PrivateID\n")
-
-	fmt.Fprintf(g.w, "var privateLookup = [...]privateLookupFunc{\n")
-	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  func(ev ExprView) opt.PrivateID {\n")
-	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
-	fmt.Fprintf(g.w, "  },\n\n")
-
-	for _, define := range g.compiled.Defines {
-		exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
-		varName := unTitle(exprType)
-
-		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  func(ev ExprView) opt.PrivateID {\n")
-
-		private := privateField(define)
-		if private != nil {
-			fmt.Fprintf(g.w, "    %s := (*%s)(ev.mem.lookupExpr(ev.loc))\n", varName, exprType)
-			fmt.Fprintf(g.w, "    return %s.%s()\n", varName, unTitle(string(private.Name)))
-		} else {
-			fmt.Fprintf(g.w, "    return 0\n")
-		}
-
-		fmt.Fprintf(g.w, "  },\n\n")
-	}
-
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
