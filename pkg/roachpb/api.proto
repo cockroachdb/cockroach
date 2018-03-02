@@ -859,6 +859,10 @@ message RequestLeaseRequest {
   // The previous lease is specified by the caller to verify
   // it has not changed when executing this command.
   Lease prev_lease = 3 [(gogoproto.nullable) = false];
+  // The MinLeaseProposedTS of the proposing replica to make sure that leases
+  // issued after a node restart receive a new sequence number (instead of
+  // counting as a lease extension). See #23204.
+  util.hlc.Timestamp min_proposed_ts = 4 [(gogoproto.customname) = "MinProposedTS"];
 }
 
 // A TransferLeaseRequest represents the arguments to the TransferLease()

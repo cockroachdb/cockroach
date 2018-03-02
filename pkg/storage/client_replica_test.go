@@ -920,6 +920,8 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 // See replica.mu.minLeaseProposedTS for the reasons why this isn't allowed.
 func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	sc := storage.TestStoreConfig(nil)
 	var leaseAcquisitionTrap atomic.Value
 	// Disable the split queue so that no ranges are split. This makes it easy
@@ -942,9 +944,17 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 
 	// Send a read, to acquire a lease.
 	getArgs := getArgs([]byte("a"))
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), getArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), getArgs); err != nil {
 		t.Fatal(err)
 	}
+
+	preRepl1, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preRestartLease, _ := preRepl1.GetLease()
+
+	mtc.manualClock.Increment(1E9)
 
 	// Restart the mtc. Before we do that, we're installing a callback used to
 	// assert that a new lease has been requested. The callback is installed
@@ -957,11 +967,13 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 			close(leaseAcquisitionCh)
 		})
 	})
+
+	log.Info(ctx, "restarting")
 	mtc.restart()
 
 	// Send another read and check that the pre-existing lease has not been used.
 	// Concretely, we check that a new lease is requested.
-	if _, err := client.SendWrapped(context.Background(), rg1(mtc.stores[0]), getArgs); err != nil {
+	if _, err := client.SendWrapped(ctx, rg1(mtc.stores[0]), getArgs); err != nil {
 		t.Fatal(err)
 	}
 	// Check that the Send above triggered a lease acquisition.
@@ -969,6 +981,19 @@ func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	case <-leaseAcquisitionCh:
 	case <-time.After(time.Second):
 		t.Fatalf("read did not acquire a new lease")
+	}
+
+	postRepl1, err := mtc.stores[0].GetReplica(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	postRestartLease, _ := postRepl1.GetLease()
+
+	// Verify that not only is a new lease requested, it also gets a new sequence
+	// number. This makes sure that previously proposed commands actually fail at
+	// apply time.
+	if preRestartLease.Sequence == postRestartLease.Sequence {
+		t.Fatalf("lease was not replaced:\nprev: %v\nnow:  %v", preRestartLease, postRestartLease)
 	}
 }
 
