@@ -13,21 +13,18 @@
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
 //
-// Author: Arjun Narayan
-//
 // ZipfGenerator implements the Incrementing Zipfian Random Number Generator from
 // [1]: "Quickly Generating Billion-Record Synthetic Databases"
 // by Gray, Sundaresan, Englert, Baclawski, and Weinberger, SIGMOD 1994.
 
-package main
+package ycsb
 
 import (
 	"fmt"
 	"math"
 	"math/rand"
-	"sync"
-	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
 )
 
@@ -50,7 +47,7 @@ type ZipfGenerator struct {
 
 // ZipfGeneratorMu holds variables which must be globally synced.
 type ZipfGeneratorMu struct {
-	mu       sync.Mutex
+	mu       syncutil.Mutex
 	r        *rand.Rand
 	iMax     uint64
 	iMaxHead uint64
@@ -60,7 +57,9 @@ type ZipfGeneratorMu struct {
 
 // NewZipfGenerator constructs a new ZipfGenerator with the given parameters.
 // It returns an error if the parameters are outside the accepted range.
-func NewZipfGenerator(iMin, iMax uint64, theta float64, verbose bool) (*ZipfGenerator, error) {
+func NewZipfGenerator(
+	rng *rand.Rand, iMin, iMax uint64, theta float64, verbose bool,
+) (*ZipfGenerator, error) {
 	if iMin > iMax {
 		return nil, errors.Errorf("iMin %d > iMax %d", iMin, iMax)
 	}
@@ -71,7 +70,7 @@ func NewZipfGenerator(iMin, iMax uint64, theta float64, verbose bool) (*ZipfGene
 	z := ZipfGenerator{
 		iMin: iMin,
 		zipfGenMu: ZipfGeneratorMu{
-			r:    rand.New(rand.NewSource(int64(time.Now().UnixNano()))),
+			r:    rng,
 			iMax: iMax,
 		},
 		theta:   theta,
@@ -132,7 +131,7 @@ func (z *ZipfGenerator) Uint64() uint64 {
 		result = z.iMin + 1
 	} else {
 		spread := float64(z.zipfGenMu.iMax + 1 - z.iMin)
-		result = z.iMin + uint64(spread*math.Pow(z.zipfGenMu.eta*u-z.zipfGenMu.eta+1.0, z.alpha))
+		result = z.iMin + uint64(int64(spread*math.Pow(z.zipfGenMu.eta*u-z.zipfGenMu.eta+1.0, z.alpha)))
 	}
 	if z.verbose {
 		fmt.Printf("Uint64[%d, %d] -> %d\n", z.iMin, z.zipfGenMu.iMax, result)

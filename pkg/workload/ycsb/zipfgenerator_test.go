@@ -12,16 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License. See the AUTHORS file
 // for names of contributors.
-//
-// Author: Arjun Narayan
 
-package main
+package ycsb
 
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"sort"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 type params struct {
@@ -36,17 +37,21 @@ var gens = []params{
 
 func TestCreateZipfGenerator(t *testing.T) {
 	for _, gen := range gens {
-		_, err := NewZipfGenerator(gen.iMin, gen.iMax, gen.theta, false)
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		_, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 }
 
-var zetas = [][]float64{
-	// n, theta, zeta(n,theta)
-	{20.0, 0.99, 3.64309060779367},
-	{200.0, 0.99, 6.02031118558},
+var tests = []struct {
+	n        uint64
+	theta    float64
+	expected float64
+}{
+	{20, 0.99, 3.64309060779367},
+	{200, 0.99, 6.02031118558},
 	{1000, 0.99, 7.72895321728},
 	{2000, 0.99, 8.47398788329},
 	{10000, 0.99, 10.2243614596},
@@ -57,13 +62,13 @@ var zetas = [][]float64{
 }
 
 func TestZetaFromScratch(t *testing.T) {
-	for _, zeta := range zetas {
-		computedZeta, err := computeZetaFromScratch(uint64(zeta[0]), zeta[1])
+	for _, test := range tests {
+		computedZeta, err := computeZetaFromScratch(test.n, test.theta)
 		if err != nil {
-			t.Fatalf("Failed to compute zeta(%d,%f): %s", uint64(zeta[0]), zeta[1], err)
+			t.Fatalf("Failed to compute zeta(%d,%f): %s", test.n, test.theta, err)
 		}
-		if math.Abs(computedZeta-zeta[2]) > 0.000000001 {
-			t.Fatalf("expected %6.4f, got %6.4f", zeta[2], computedZeta)
+		if math.Abs(computedZeta-test.expected) > 0.000000001 {
+			t.Fatalf("expected %6.4f, got %6.4f", test.expected, computedZeta)
 		}
 	}
 }
@@ -71,36 +76,37 @@ func TestZetaFromScratch(t *testing.T) {
 func TestZetaIncrementally(t *testing.T) {
 	// Theta cannot be 1 by definition, so this is a safe initial value.
 	oldTheta := 1.0
-	for i, zeta := range zetas {
-		var oldZetaN float64
-		var oldN uint64
+	var oldZetaN float64
+	var oldN uint64
+	for _, test := range tests {
 		// If theta has changed, recompute from scratch
-		if zetas[i][0] != oldTheta {
+		if test.theta != oldTheta {
 			var err error
-			oldZetaN, err = computeZetaFromScratch(uint64(zeta[0]), zeta[1])
+			oldZetaN, err = computeZetaFromScratch(test.n, test.theta)
 			if err != nil {
-				t.Fatalf("Failed to compute zeta(%d,%f): %s", uint64(zeta[0]), zeta[1], err)
+				t.Fatalf("Failed to compute zeta(%d,%f): %s", test.n, test.theta, err)
 			}
-			oldN = uint64(zeta[0])
+			oldN = test.n
 			continue
 		}
 
-		computedZeta, err := computeZetaIncrementally(oldN, uint64(zeta[0]), zeta[1], oldZetaN)
+		computedZeta, err := computeZetaIncrementally(oldN, test.n, test.theta, oldZetaN)
 		if err != nil {
-			t.Fatalf("Failed to compute zeta(%d,%f) incrementally: %s", uint64(zeta[0]), zeta[1], err)
+			t.Fatalf("Failed to compute zeta(%d,%f) incrementally: %s", test.n, test.theta, err)
 		}
-		if math.Abs(computedZeta-zeta[2]) > 0.000000001 {
-			t.Fatalf("expected %6.4f, got %6.4f", zeta[2], computedZeta)
+		if math.Abs(computedZeta-test.expected) > 0.000000001 {
+			t.Fatalf("expected %6.4f, got %6.4f", test.expected, computedZeta)
 		}
 
 		oldZetaN = computedZeta
-		oldN = uint64(zeta[0])
+		oldN = test.n
 	}
 }
 
 func runZipfGenerators(t *testing.T, withIncrements bool) {
 	gen := gens[0]
-	z, err := NewZipfGenerator(gen.iMin, gen.iMax, gen.theta, false)
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	z, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
 	if err != nil {
 		t.Fatal(err)
 	}
