@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -47,8 +46,6 @@ var runCmd = &cobra.Command{
 }
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
-var concurrency = runFlags.Int(
-	"concurrency", 2*runtime.NumCPU(), "Number of concurrent writers inserting blocks")
 var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
 var maxRate = runFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
@@ -325,7 +322,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			benchmarkName := strings.Join([]string{
 				"BenchmarkWorkload",
 				fmt.Sprintf("generator=%s", gen.Meta().Name),
-				fmt.Sprintf("concurrency=%d", *concurrency),
 			}, "/")
 			if *duration != time.Duration(0) {
 				benchmarkName += `/duration=` + duration.String()
