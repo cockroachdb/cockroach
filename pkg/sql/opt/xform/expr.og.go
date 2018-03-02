@@ -6,416 +6,262 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-type childCountLookupFunc func(ev ExprView) int
+// ChildCount returns the number of expressions that are inputs to this
+// parent expression.
+func (ev ExprView) ChildCount() int {
+	switch ev.op {
+	case opt.UnknownOp:
+		panic("opt type not initialized")
 
-var childCountLookup = [...]childCountLookupFunc{
-	// UnknownOp
-	func(ev ExprView) int {
-		panic("op type not initialized")
-	},
-
-	// SubqueryOp
-	func(ev ExprView) int {
+	case opt.SubqueryOp:
 		return 2
-	},
 
-	// VariableOp
-	func(ev ExprView) int {
+	case opt.VariableOp:
 		return 0
-	},
 
-	// ConstOp
-	func(ev ExprView) int {
+	case opt.ConstOp:
 		return 0
-	},
 
-	// TrueOp
-	func(ev ExprView) int {
+	case opt.TrueOp:
 		return 0
-	},
 
-	// FalseOp
-	func(ev ExprView) int {
+	case opt.FalseOp:
 		return 0
-	},
 
-	// PlaceholderOp
-	func(ev ExprView) int {
+	case opt.PlaceholderOp:
 		return 0
-	},
 
-	// TupleOp
-	func(ev ExprView) int {
+	case opt.TupleOp:
 		tupleExpr := (*tupleExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(tupleExpr.elems().Length)
-	},
 
-	// ProjectionsOp
-	func(ev ExprView) int {
+	case opt.ProjectionsOp:
 		projectionsExpr := (*projectionsExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(projectionsExpr.elems().Length)
-	},
 
-	// AggregationsOp
-	func(ev ExprView) int {
+	case opt.AggregationsOp:
 		aggregationsExpr := (*aggregationsExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(aggregationsExpr.aggs().Length)
-	},
 
-	// ExistsOp
-	func(ev ExprView) int {
+	case opt.ExistsOp:
 		return 1
-	},
 
-	// AndOp
-	func(ev ExprView) int {
+	case opt.AndOp:
 		andExpr := (*andExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(andExpr.conditions().Length)
-	},
 
-	// OrOp
-	func(ev ExprView) int {
+	case opt.OrOp:
 		orExpr := (*orExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(orExpr.conditions().Length)
-	},
 
-	// NotOp
-	func(ev ExprView) int {
+	case opt.NotOp:
 		return 1
-	},
 
-	// EqOp
-	func(ev ExprView) int {
+	case opt.EqOp:
 		return 2
-	},
 
-	// LtOp
-	func(ev ExprView) int {
+	case opt.LtOp:
 		return 2
-	},
 
-	// GtOp
-	func(ev ExprView) int {
+	case opt.GtOp:
 		return 2
-	},
 
-	// LeOp
-	func(ev ExprView) int {
+	case opt.LeOp:
 		return 2
-	},
 
-	// GeOp
-	func(ev ExprView) int {
+	case opt.GeOp:
 		return 2
-	},
 
-	// NeOp
-	func(ev ExprView) int {
+	case opt.NeOp:
 		return 2
-	},
 
-	// InOp
-	func(ev ExprView) int {
+	case opt.InOp:
 		return 2
-	},
 
-	// NotInOp
-	func(ev ExprView) int {
+	case opt.NotInOp:
 		return 2
-	},
 
-	// LikeOp
-	func(ev ExprView) int {
+	case opt.LikeOp:
 		return 2
-	},
 
-	// NotLikeOp
-	func(ev ExprView) int {
+	case opt.NotLikeOp:
 		return 2
-	},
 
-	// ILikeOp
-	func(ev ExprView) int {
+	case opt.ILikeOp:
 		return 2
-	},
 
-	// NotILikeOp
-	func(ev ExprView) int {
+	case opt.NotILikeOp:
 		return 2
-	},
 
-	// SimilarToOp
-	func(ev ExprView) int {
+	case opt.SimilarToOp:
 		return 2
-	},
 
-	// NotSimilarToOp
-	func(ev ExprView) int {
+	case opt.NotSimilarToOp:
 		return 2
-	},
 
-	// RegMatchOp
-	func(ev ExprView) int {
+	case opt.RegMatchOp:
 		return 2
-	},
 
-	// NotRegMatchOp
-	func(ev ExprView) int {
+	case opt.NotRegMatchOp:
 		return 2
-	},
 
-	// RegIMatchOp
-	func(ev ExprView) int {
+	case opt.RegIMatchOp:
 		return 2
-	},
 
-	// NotRegIMatchOp
-	func(ev ExprView) int {
+	case opt.NotRegIMatchOp:
 		return 2
-	},
 
-	// IsOp
-	func(ev ExprView) int {
+	case opt.IsOp:
 		return 2
-	},
 
-	// IsNotOp
-	func(ev ExprView) int {
+	case opt.IsNotOp:
 		return 2
-	},
 
-	// ContainsOp
-	func(ev ExprView) int {
+	case opt.ContainsOp:
 		return 2
-	},
 
-	// BitandOp
-	func(ev ExprView) int {
+	case opt.BitandOp:
 		return 2
-	},
 
-	// BitorOp
-	func(ev ExprView) int {
+	case opt.BitorOp:
 		return 2
-	},
 
-	// BitxorOp
-	func(ev ExprView) int {
+	case opt.BitxorOp:
 		return 2
-	},
 
-	// PlusOp
-	func(ev ExprView) int {
+	case opt.PlusOp:
 		return 2
-	},
 
-	// MinusOp
-	func(ev ExprView) int {
+	case opt.MinusOp:
 		return 2
-	},
 
-	// MultOp
-	func(ev ExprView) int {
+	case opt.MultOp:
 		return 2
-	},
 
-	// DivOp
-	func(ev ExprView) int {
+	case opt.DivOp:
 		return 2
-	},
 
-	// FloorDivOp
-	func(ev ExprView) int {
+	case opt.FloorDivOp:
 		return 2
-	},
 
-	// ModOp
-	func(ev ExprView) int {
+	case opt.ModOp:
 		return 2
-	},
 
-	// PowOp
-	func(ev ExprView) int {
+	case opt.PowOp:
 		return 2
-	},
 
-	// ConcatOp
-	func(ev ExprView) int {
+	case opt.ConcatOp:
 		return 2
-	},
 
-	// LShiftOp
-	func(ev ExprView) int {
+	case opt.LShiftOp:
 		return 2
-	},
 
-	// RShiftOp
-	func(ev ExprView) int {
+	case opt.RShiftOp:
 		return 2
-	},
 
-	// FetchValOp
-	func(ev ExprView) int {
+	case opt.FetchValOp:
 		return 2
-	},
 
-	// FetchTextOp
-	func(ev ExprView) int {
+	case opt.FetchTextOp:
 		return 2
-	},
 
-	// FetchValPathOp
-	func(ev ExprView) int {
+	case opt.FetchValPathOp:
 		return 2
-	},
 
-	// FetchTextPathOp
-	func(ev ExprView) int {
+	case opt.FetchTextPathOp:
 		return 2
-	},
 
-	// UnaryPlusOp
-	func(ev ExprView) int {
+	case opt.UnaryPlusOp:
 		return 1
-	},
 
-	// UnaryMinusOp
-	func(ev ExprView) int {
+	case opt.UnaryMinusOp:
 		return 1
-	},
 
-	// UnaryComplementOp
-	func(ev ExprView) int {
+	case opt.UnaryComplementOp:
 		return 1
-	},
 
-	// CastOp
-	func(ev ExprView) int {
+	case opt.CastOp:
 		return 1
-	},
 
-	// FunctionOp
-	func(ev ExprView) int {
+	case opt.FunctionOp:
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(functionExpr.args().Length)
-	},
 
-	// CoalesceOp
-	func(ev ExprView) int {
+	case opt.CoalesceOp:
 		coalesceExpr := (*coalesceExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(coalesceExpr.args().Length)
-	},
 
-	// UnsupportedExprOp
-	func(ev ExprView) int {
+	case opt.UnsupportedExprOp:
 		return 0
-	},
 
-	// ScanOp
-	func(ev ExprView) int {
+	case opt.ScanOp:
 		return 0
-	},
 
-	// ValuesOp
-	func(ev ExprView) int {
+	case opt.ValuesOp:
 		valuesExpr := (*valuesExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(valuesExpr.rows().Length)
-	},
 
-	// SelectOp
-	func(ev ExprView) int {
+	case opt.SelectOp:
 		return 2
-	},
 
-	// ProjectOp
-	func(ev ExprView) int {
+	case opt.ProjectOp:
 		return 2
-	},
 
-	// InnerJoinOp
-	func(ev ExprView) int {
+	case opt.InnerJoinOp:
 		return 3
-	},
 
-	// LeftJoinOp
-	func(ev ExprView) int {
+	case opt.LeftJoinOp:
 		return 3
-	},
 
-	// RightJoinOp
-	func(ev ExprView) int {
+	case opt.RightJoinOp:
 		return 3
-	},
 
-	// FullJoinOp
-	func(ev ExprView) int {
+	case opt.FullJoinOp:
 		return 3
-	},
 
-	// SemiJoinOp
-	func(ev ExprView) int {
+	case opt.SemiJoinOp:
 		return 3
-	},
 
-	// AntiJoinOp
-	func(ev ExprView) int {
+	case opt.AntiJoinOp:
 		return 3
-	},
 
-	// InnerJoinApplyOp
-	func(ev ExprView) int {
+	case opt.InnerJoinApplyOp:
 		return 3
-	},
 
-	// LeftJoinApplyOp
-	func(ev ExprView) int {
+	case opt.LeftJoinApplyOp:
 		return 3
-	},
 
-	// RightJoinApplyOp
-	func(ev ExprView) int {
+	case opt.RightJoinApplyOp:
 		return 3
-	},
 
-	// FullJoinApplyOp
-	func(ev ExprView) int {
+	case opt.FullJoinApplyOp:
 		return 3
-	},
 
-	// SemiJoinApplyOp
-	func(ev ExprView) int {
+	case opt.SemiJoinApplyOp:
 		return 3
-	},
 
-	// AntiJoinApplyOp
-	func(ev ExprView) int {
+	case opt.AntiJoinApplyOp:
 		return 3
-	},
 
-	// GroupByOp
-	func(ev ExprView) int {
+	case opt.GroupByOp:
 		return 2
-	},
 
-	// UnionOp
-	func(ev ExprView) int {
+	case opt.UnionOp:
 		return 2
-	},
 
-	// IntersectOp
-	func(ev ExprView) int {
+	case opt.IntersectOp:
 		return 2
-	},
 
-	// ExceptOp
-	func(ev ExprView) int {
+	case opt.ExceptOp:
 		return 2
-	},
 
-	// SortOp
-	func(ev ExprView) int {
+	case opt.SortOp:
 		return 1
-	},
+
+	default:
+		panic("invalid op")
+	}
+
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent
