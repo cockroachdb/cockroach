@@ -61,14 +61,14 @@ func ParseScalarExpr(sql string, ivc tree.IndexedVarContainer) (tree.TypedExpr, 
 
 // ExecuteTestDDL parses the given DDL SQL statement and creates objects in the
 // test catalog. This is used to test without spinning up a cluster.
-func ExecuteTestDDL(t *testing.T, sql string, catalog *TestCatalog) string {
+func ExecuteTestDDL(tb testing.TB, sql string, catalog *TestCatalog) string {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
-		t.Fatalf("%v", err)
+		tb.Fatalf("%v", err)
 	}
 
 	if stmt.StatementType() != tree.DDL {
-		t.Fatalf("statement type is not DDL: %v", stmt.StatementType())
+		tb.Fatalf("statement type is not DDL: %v", stmt.StatementType())
 	}
 
 	switch stmt := stmt.(type) {
@@ -77,7 +77,7 @@ func ExecuteTestDDL(t *testing.T, sql string, catalog *TestCatalog) string {
 		return tbl.String()
 
 	default:
-		t.Fatalf("expected CREATE TABLE statement but found: %v", stmt)
+		tb.Fatalf("expected CREATE TABLE statement but found: %v", stmt)
 		return ""
 	}
 }
