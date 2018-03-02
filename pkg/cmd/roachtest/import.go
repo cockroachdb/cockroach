@@ -42,7 +42,7 @@ func init() {
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			cmd := fmt.Sprintf(
-				`./workload fixtures store tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
+				`./workload fixtures make tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
 					`--gcs-bucket-override=%s --gcs-prefix-override=%s`,
 				warehouses, gcsTestBucket, c.name)
 			c.Run(ctx, 1, cmd)
