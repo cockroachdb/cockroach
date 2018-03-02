@@ -19,8 +19,6 @@ if [[ ! -f ~/.ssh/id_rsa.pub ]]; then
   run ssh-keygen -q -N "" -f ~/.ssh/id_rsa
 fi
 
-# If TC_BUILD_ID is unset, as it likely is locally, we simply write artifacts
-# directly into the artifacts directory.
 artifacts=$PWD/artifacts/$(date +"%Y%m%d")-${TC_BUILD_ID}
 mkdir -p "$artifacts"
 
