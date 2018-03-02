@@ -709,7 +709,9 @@ func (r *Replica) AdminSplit(
 	if len(args.SplitKey) == 0 {
 		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
 	}
-	for retryable := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); retryable.Next(); {
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 10
+	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
 		reply, _, pErr := r.adminSplitWithDescriptor(ctx, args, r.Desc())
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
 		// command with the updated descriptor.
