@@ -1208,7 +1208,7 @@ func (m *multiTestContext) getRaftLeader(rangeID roachpb.RangeID) *storage.Repli
 				// status yet.
 				continue
 			}
-			if raftStatus.Term > latestTerm {
+			if raftStatus.Term > latestTerm || (raftLeaderRepl == nil && raftStatus.Term == latestTerm) {
 				// If we find any newer term, it means any previous election is
 				// invalid.
 				raftLeaderRepl = nil
