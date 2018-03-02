@@ -18,4 +18,5 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 )
