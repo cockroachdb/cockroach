@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/rand"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -45,7 +46,8 @@ const (
 )
 
 type bank struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	seed                       int64
 	rows, payloadBytes, ranges int
@@ -66,6 +68,7 @@ var bankMeta = workload.Meta{
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
@@ -126,36 +129,48 @@ func (b *bank) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (b *bank) Ops() workload.Operations {
-	// TODO(dan): Move the various queries in the backup/restore tests here.
-	return workload.Operations{
-		Name: `balance transfers`,
-		Fn: func(sqlDB *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
-			rng := rand.New(rand.NewSource(b.seed))
-			updateStmt, err := sqlDB.Prepare(`
-				UPDATE bank
-				SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-				WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank WHERE id = $1)
-			`)
-			if err != nil {
-				return nil, err
-			}
-			hists := reg.GetHandle()
-
-			return func(ctx context.Context) error {
-				from := rng.Intn(b.rows)
-				to := rng.Intn(b.rows - 1)
-				for from == to && b.rows != 1 {
-					to = rng.Intn(b.rows - 1)
-				}
-				amount := rand.Intn(maxTransfer)
-				start := timeutil.Now()
-				_, err := updateStmt.ExecContext(ctx, from, to, amount)
-				hists.Get(`transfer`).Record(timeutil.Since(start))
-				return err
-			}, nil
-		},
+func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+	sqlDatabase, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
+	if err != nil {
+		return workload.QueryLoad{}, err
 	}
+	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	// Allow a maximum of concurrency+1 connections to the database.
+	db.SetMaxOpenConns(b.connFlags.Concurrency + 1)
+	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
+
+	// TODO(dan): Move the various queries in the backup/restore tests here.
+	updateStmt, err := db.Prepare(`
+		UPDATE bank
+		SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+		WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank WHERE id = $1)
+	`)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	for i := 0; i < b.connFlags.Concurrency; i++ {
+		rng := rand.New(rand.NewSource(b.seed))
+		hists := reg.GetHandle()
+		workerFn := func(ctx context.Context) error {
+			from := rng.Intn(b.rows)
+			to := rng.Intn(b.rows - 1)
+			for from == to && b.rows != 1 {
+				to = rng.Intn(b.rows - 1)
+			}
+			amount := rand.Intn(maxTransfer)
+			start := timeutil.Now()
+			_, err := updateStmt.ExecContext(ctx, from, to, amount)
+			hists.Get(`transfer`).Record(timeutil.Since(start))
+			return err
+		}
+		ql.WorkerFns = append(ql.WorkerFns, workerFn)
+	}
+	return ql, nil
 }
 
 // Split creates the configured number of ranges in an already created version

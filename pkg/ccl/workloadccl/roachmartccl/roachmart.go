@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -68,7 +69,8 @@ const (
 )
 
 type roachmart struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	seed          int64
 	partition     bool
@@ -97,6 +99,7 @@ var roachmartMeta = workload.Meta{
 		g.flags.IntVar(&g.localPercent, `local-percent`, 50, `Percent (0-100) of operations that operate on local data.`)
 		g.flags.IntVar(&g.users, `users`, defaultUsers, `Initial number of accounts in users table.`)
 		g.flags.IntVar(&g.orders, `orders`, defaultOrders, `Initial number of orders in orders table.`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
@@ -182,38 +185,52 @@ func (m *roachmart) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (m *roachmart) Ops() workload.Operations {
-	return workload.Operations{
-		Name: `fetch one user's orders`,
-		Fn: func(sqlDB *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
-			const query = `SELECT * FROM orders WHERE user_zone = $1 AND user_email = $2`
-			rng := rand.New(rand.NewSource(m.seed))
-			usersTable := m.Tables()[0]
-			hists := reg.GetHandle()
-
-			return func(ctx context.Context) error {
-				wantLocal := rng.Intn(100) < m.localPercent
-
-				// Pick a random user and advance until we have one that matches
-				// our locality requirements.
-				var zone, email interface{}
-				for i := rng.Int(); ; i++ {
-					user := usersTable.InitialRowFn(i % m.users)
-					zone, email = user[0], user[1]
-					userLocal := zone == m.localZone
-					if userLocal == wantLocal {
-						break
-					}
-				}
-				start := timeutil.Now()
-				_, err := sqlDB.ExecContext(ctx, query, zone, email)
-				if wantLocal {
-					hists.Get(`local`).Record(timeutil.Since(start))
-				} else {
-					hists.Get(`remote`).Record(timeutil.Since(start))
-				}
-				return err
-			}, nil
-		},
+func (m *roachmart) Ops(
+	urls []string, reg *workload.HistogramRegistry,
+) (workload.QueryLoad, error) {
+	sqlDatabase, err := workload.SanitizeUrls(m, m.connFlags.DBOverride, urls)
+	if err != nil {
+		return workload.QueryLoad{}, err
 	}
+	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	// Allow a maximum of concurrency+1 connections to the database.
+	db.SetMaxOpenConns(m.connFlags.Concurrency + 1)
+	db.SetMaxIdleConns(m.connFlags.Concurrency + 1)
+
+	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+
+	const query = `SELECT * FROM orders WHERE user_zone = $1 AND user_email = $2`
+	for i := 0; i < m.connFlags.Concurrency; i++ {
+		rng := rand.New(rand.NewSource(m.seed))
+		usersTable := m.Tables()[0]
+		hists := reg.GetHandle()
+		workerFn := func(ctx context.Context) error {
+			wantLocal := rng.Intn(100) < m.localPercent
+
+			// Pick a random user and advance until we have one that matches
+			// our locality requirements.
+			var zone, email interface{}
+			for i := rng.Int(); ; i++ {
+				user := usersTable.InitialRowFn(i % m.users)
+				zone, email = user[0], user[1]
+				userLocal := zone == m.localZone
+				if userLocal == wantLocal {
+					break
+				}
+			}
+			start := timeutil.Now()
+			_, err := db.ExecContext(ctx, query, zone, email)
+			if wantLocal {
+				hists.Get(`local`).Record(timeutil.Since(start))
+			} else {
+				hists.Get(`remote`).Record(timeutil.Since(start))
+			}
+			return err
+		}
+		ql.WorkerFns = append(ql.WorkerFns, workerFn)
+	}
+	return ql, nil
 }
