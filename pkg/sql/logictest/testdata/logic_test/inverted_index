@@ -504,3 +504,190 @@ query T
 SELECT user_profile from users where user_profile @> '{"first_name":"Ernie"}';
 ----
  {"first_name": "Ernie", "location": "Brooklyn", "status": "Looking for treats"}
+
+statement ok
+CREATE TABLE update_test (i INT PRIMARY KEY, j JSONB, INVERTED INDEX(j));
+
+statement ok
+INSERT INTO update_test VALUES (1, '0');
+
+query IT
+SELECT * from update_test WHERE j @> '0';
+----
+1 0
+
+statement ok
+UPDATE update_test SET j = '{"a":"b", "c":"d"}' WHERE i = 1;
+
+query IT
+SELECT * from update_test WHERE j @> '0';
+----
+
+query IT
+SELECT * from update_test WHERE j @> '{"a":"b"}';
+----
+1 {"a": "b", "c": "d"}
+
+statement ok
+INSERT INTO update_test VALUES (2, '{"longKey1":"longValue1", "longKey2":"longValue2"}');
+
+statement ok
+UPDATE update_test SET j = ('"shortValue"') WHERE i = 2;
+
+query IT
+SELECT * from update_test where j @> '"shortValue"';
+----
+2 "shortValue"
+
+query IT
+SELECT * from update_test where j @> '{"longKey1":"longValue1"}}';
+----
+
+query IT
+SELECT * from update_test where j @> '{"longKey2":"longValue2"}}';
+----
+
+statement ok
+UPDATE update_test SET (i, j) = (10, '{"longKey1":"longValue1", "longKey2":"longValue2"}') WHERE i = 2;
+
+statement ok
+UPDATE update_test SET j = '{"a":"b", "a":"b"}' WHERE i = 1;
+
+statement ok
+UPDATE update_test SET (i, j) = (2, '["a", "a"]') WHERE i = 10;
+
+statement ok
+INSERT INTO update_test VALUES (3, '["a", "b", "c"]');
+
+query IT
+SELECT * from update_test where j @> '["a"]' ORDER BY i;
+----
+2 ["a", "a"]
+3 ["a", "b", "c"]
+
+statement ok
+UPDATE update_test SET j = '["b", "c", "e"]' WHERE i = 3;
+
+query IT
+SELECT * from update_test where j @> '["a"]' ORDER BY i;
+----
+2 ["a", "a"]
+
+query IT
+SELECT * from update_test where j @> '["b"]' ORDER BY i;
+----
+3 ["b", "c", "e"]
+
+
+statement ok
+INSERT INTO update_test VALUES (4, '["a", "b"]');
+
+statement ok
+UPDATE update_test SET j = '["b", "a"]' WHERE i = 4;
+
+query IT
+SELECT * from update_test where j @> '["a"]' ORDER BY i;
+----
+2 ["a", "a"]
+4 ["b", "a"]
+
+query IT
+SELECT * from update_test where j @> '["b"]' ORDER BY i;
+----
+3 ["b", "c", "e"]
+4 ["b", "a"]
+
+statement ok
+UPSERT INTO update_test VALUES (4, '["a", "b"]');
+
+query IT
+SELECT * from update_test where j @> '["a"]' ORDER BY i;
+----
+2 ["a", "a"]
+4 ["a", "b"]
+
+query IT
+SELECT * from update_test where j @> '["b"]' ORDER BY i;
+----
+3 ["b", "c", "e"]
+4 ["a", "b"]
+
+
+statement ok
+UPSERT INTO update_test VALUES (3, '["c", "e", "f"]');
+
+query IT
+SELECT * from update_test where j @> '["c"]' ORDER BY i;
+----
+3  ["c", "e", "f"]
+
+statement ok
+CREATE TABLE del_cascade_test (
+  delete_cascade INT NOT NULL REFERENCES update_test ON DELETE CASCADE
+ ,j JSONB
+ ,INVERTED INDEX(j)
+);
+
+
+statement ok
+CREATE TABLE update_cascade_test (
+ update_cascade INT NOT NULL REFERENCES update_test ON UPDATE CASCADE
+ ,j JSONB
+ ,INVERTED INDEX(j)
+);
+
+statement ok
+INSERT INTO del_cascade_test(delete_cascade, j) VALUES (1, '["a", "b"]'), (2, '{"a":"b", "c":"d"}'), (3, '["b", "c"]')
+
+
+query IT
+SELECT * from del_cascade_test ORDER BY delete_cascade;
+----
+1  ["a", "b"]
+2  {"a": "b", "c": "d"}
+3  ["b", "c"]
+
+statement ok
+DELETE FROM update_test where j @> '["c"]'
+
+query IT
+SELECT * from del_cascade_test ORDER BY delete_cascade;
+----
+1  ["a", "b"]
+2  {"a": "b", "c": "d"}
+
+query IT
+SELECT * from del_cascade_test ORDER BY delete_cascade;
+----
+1  ["a", "b"]
+2  {"a": "b", "c": "d"}
+
+statement ok
+INSERT INTO update_test VALUES (3, '["a", "b", "c"]');
+
+statement ok
+INSERT INTO update_cascade_test(update_cascade, j) VALUES (1, '["a", "b"]'), (2, '{"a":"b", "c":"d"}'), (3, '["b", "c"]')
+
+query IT
+SELECT * from update_cascade_test ORDER BY update_cascade;
+----
+1  ["a", "b"]
+2  {"a": "b", "c": "d"}
+3  ["b", "c"]
+
+statement error pq: foreign key violation: values \[1\] in columns \[i\] referenced in table "del_cascade_test"
+UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
+
+statement ok
+DROP TABLE del_cascade_test
+
+statement ok
+UPDATE update_test SET (i,j)  = (5, '{"a":"b", "a":"b"}') WHERE i = 1;
+
+
+query IT
+SELECT * from update_cascade_test ORDER BY update_cascade;
+----
+2  {"a": "b", "c": "d"}
+3  ["b", "c"]
+5  ["a", "b"]
