@@ -15,7 +15,7 @@
 package xform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // physicalPropsFactory determines what physical properties a given expression

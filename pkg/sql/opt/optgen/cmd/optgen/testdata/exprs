@@ -14,7 +14,7 @@ define FuncCall {
 package xform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 type childCountLookupFunc func(ev ExprView) int
@@ -115,7 +115,7 @@ define Sort {
 package xform
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 type childCountLookupFunc func(ev ExprView) int

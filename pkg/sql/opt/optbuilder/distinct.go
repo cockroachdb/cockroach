@@ -15,7 +15,7 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // buildDistinct builds a set of memo groups that represent a DISTINCT
