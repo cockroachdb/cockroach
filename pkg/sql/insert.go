@@ -365,7 +365,12 @@ func (n *insertNode) startExec(params runParams) error {
 
 func (n *insertNode) Next(params runParams) (bool, error) {
 	if n.run.isUpsertReturning {
-		return n.drain(params)
+		hasRows, err := n.drain(params)
+		if hasRows {
+			n.run.resultRow = n.run.rowsUpserted.At(0)
+			n.run.rowsUpserted.PopFirst()
+		}
+		return hasRows, err
 	}
 
 	return n.internalNext(params)
@@ -392,13 +397,7 @@ func (n *insertNode) Close(ctx context.Context) {
 }
 
 func (n *insertNode) Values() tree.Datums {
-	if !n.run.isUpsertReturning {
-		return n.run.resultRow
-	}
-
-	row := n.run.rowsUpserted.At(0)
-	n.run.rowsUpserted.PopFirst()
-	return row
+	return n.run.resultRow
 }
 
 // Because TableUpserter batches the upserts, we need to completely drain the
