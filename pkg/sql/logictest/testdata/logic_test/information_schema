@@ -266,6 +266,7 @@ pg_catalog          pg_foreign_table
 pg_catalog          pg_index
 pg_catalog          pg_indexes
 pg_catalog          pg_inherits
+pg_catalog          pg_language
 pg_catalog          pg_namespace
 pg_catalog          pg_operator
 pg_catalog          pg_proc
@@ -380,6 +381,7 @@ pg_foreign_table
 pg_index
 pg_indexes
 pg_inherits
+pg_language
 pg_namespace
 pg_operator
 pg_proc
@@ -501,6 +503,7 @@ system         pg_catalog          pg_foreign_table                   SYSTEM VIE
 system         pg_catalog          pg_index                           SYSTEM VIEW  1
 system         pg_catalog          pg_indexes                         SYSTEM VIEW  1
 system         pg_catalog          pg_inherits                        SYSTEM VIEW  1
+system         pg_catalog          pg_language                        SYSTEM VIEW  1
 system         pg_catalog          pg_namespace                       SYSTEM VIEW  1
 system         pg_catalog          pg_operator                        SYSTEM VIEW  1
 system         pg_catalog          pg_proc                            SYSTEM VIEW  1
