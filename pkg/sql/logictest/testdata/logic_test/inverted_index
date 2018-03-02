@@ -458,3 +458,46 @@ SELECT * from d where b @> 'null' ORDER BY a;
 ----
 11  null
 27  [true, false, null, 1.23, "a"]
+
+statement ok
+CREATE TABLE update_test (i INT, j JSONB, INVERTED INDEX(j));
+
+statement ok
+INSERT INTO update_test VALUES (1, '0');
+
+query T
+SELECT j from update_test WHERE j @> '0';
+----
+0
+
+statement ok
+UPDATE update_test SET j = '{"a":"b", "c":"d"}' WHERE i = 1;
+
+query T
+SELECT j from update_test WHERE j @> '0';
+----
+
+query T
+SELECT j from update_test WHERE j @> '{"a":"b"}';
+----
+{"a": "b", "c": "d"}
+
+statement ok
+INSERT INTO update_test VALUES (2, '{"longKey1":"longValue1", "longKey2":"longValue2"}');
+
+statement ok
+UPDATE update_test SET j = ('"shortValue"') WHERE i = 2;
+
+query T
+SELECT j from update_test where j @> '"shortValue"';
+----
+"shortValue"
+
+query T
+SELECT j from update_test where j @> '{"longKey1":"longValue1"}}';
+----
+
+query T
+SELECT j from update_test where j @> '{"longKey2":"longValue2"}}';
+----
+

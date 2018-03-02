@@ -828,27 +828,52 @@ func (ru *RowUpdater) UpdateRow(
 	}
 
 	// Update secondary indexes.
+	// Because columns with inverted indexes can have a variable number of entries for a JSON value, we're going to
+	// make sure that we iterate through all of the new entries and add them to the index, even if they're not replacing
+	// an existing KV entry.
+	var lastSeenOldEntry int
 	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
-		secondaryIndexEntry := secondaryIndexEntries[i]
+		// We're making sure that if there are more new index entries for an inverted index than old ones, we will
+		// handle the checks for insertion and deletion correctly.
+		var oldSecondaryIndexEntry IndexEntry
+		if len(secondaryIndexEntries) > i {
+			oldSecondaryIndexEntry = secondaryIndexEntries[i]
+			lastSeenOldEntry = i
+		}
+
 		var expValue interface{}
-		if !bytes.Equal(newSecondaryIndexEntry.Key, secondaryIndexEntry.Key) {
+		if !bytes.Equal(newSecondaryIndexEntry.Key, oldSecondaryIndexEntry.Key) && len(oldSecondaryIndexEntry.Key) > 0 {
 			ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID)
 			if traceKV {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], secondaryIndexEntry.Key))
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldSecondaryIndexEntry.Key))
 			}
-			batch.Del(secondaryIndexEntry.Key)
-		} else if !bytes.Equal(newSecondaryIndexEntry.Value.RawBytes, secondaryIndexEntry.Value.RawBytes) {
-			expValue = &secondaryIndexEntry.Value
+			batch.Del(oldSecondaryIndexEntry.Key)
+		} else if !bytes.Equal(newSecondaryIndexEntry.Value.RawBytes, oldSecondaryIndexEntry.Value.RawBytes) {
+			expValue = &oldSecondaryIndexEntry.Value
 		} else {
 			continue
 		}
+
 		// Do not update Indexes in the DELETE_ONLY state.
 		if _, ok := ru.deleteOnlyIndex[i]; !ok {
 			if traceKV {
 				log.VEventf(ctx, 2, "CPut %s -> %v", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newSecondaryIndexEntry.Key), newSecondaryIndexEntry.Value.PrettyPrint())
 			}
-			batch.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
+
+			// Here we're checking to see if we're replacing an existing entry. If we are we do a CPut. Otherwise in the case
+			// where there are more new index entries than old ones, we do an InitPut to add them to the KV.
+			if len(oldSecondaryIndexEntry.Key) > 0 {
+				batch.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
+			} else {
+				batch.InitPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, true)
+			}
 		}
+	}
+
+	// We're handling the case for inverted index where they could be less new entries than old entries, so we need to purge
+	// the old ones from the KV.
+	for i := lastSeenOldEntry + 1; i < len(secondaryIndexEntries); i++ {
+		batch.Del(secondaryIndexEntries[i].Key)
 	}
 
 	if ru.cascader != nil {
