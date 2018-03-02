@@ -96,7 +96,6 @@ func TestPGWire(t *testing.T) {
 	for _, insecure := range [...]bool{true, false} {
 		params := base.TestServerArgs{Insecure: insecure}
 		s, _, _ := serverutils.StartServer(t, params)
-
 		host, port, err := net.SplitHostPort(s.ServingAddr())
 		if err != nil {
 			t.Fatal(err)
@@ -218,6 +217,7 @@ func TestPGWireDrainClient(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params := base.TestServerArgs{Insecure: true}
 	s, _, _ := serverutils.StartServer(t, params)
+
 	ctx := context.TODO()
 	defer s.Stopper().Stop(ctx)
 
@@ -238,6 +238,10 @@ func TestPGWireDrainClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+
+	// Don't bother waiting before draining.
+	sqlutils.MakeSQLRunner(db).Exec(t, "SET CLUSTER SETTING server.shutdown.drain_wait = '0s'")
+
 	txn, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
