@@ -1,0 +1,681 @@
+# tests adapted from logictest -- union
+
+build
+VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
+----
+union
+ ├── columns: column1:int:null:3
+ ├── left columns: column1:int:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── values
+      ├── columns: column1:int:null:2
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 3 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
+----
+union-all
+ ├── columns: column1:int:null:3
+ ├── left columns: column1:int:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── values
+      ├── columns: column1:int:null:2
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 3 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
+----
+intersect
+ ├── columns: column1:int:null:1
+ ├── left columns: column1:int:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── values
+      ├── columns: column1:int:null:2
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 3 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
+----
+intersect-all
+ ├── columns: column1:int:null:1
+ ├── left columns: column1:int:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── values
+      ├── columns: column1:int:null:2
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 3 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
+----
+except
+ ├── columns: column1:int:null:1
+ ├── left columns: column1:int:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── values
+      ├── columns: column1:int:null:2
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 3 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
+----
+except-all
+ ├── columns: column1:int:null:1
+ ├── left columns: column1:int:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int}]
+ │    │    └── const: 2 [type=int]
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 2 [type=int]
+ └── values
+      ├── columns: column1:int:null:2
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 3 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
+----
+union
+ ├── columns: column1:int:null:5 column2:int:null:6
+ ├── left columns: column1:int:null:1 column2:int:null:2
+ ├── right columns: column1:int:null:3 column2:int:null:4
+ ├── values
+ │    ├── columns: column1:int:null:1 column2:int:null:2
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 2 [type=int]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 1 [type=int]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── const: 1 [type=int]
+ │    │    └── const: 2 [type=int]
+ │    ├── tuple [type=tuple{int, int}]
+ │    │    ├── const: 2 [type=int]
+ │    │    └── const: 1 [type=int]
+ │    └── tuple [type=tuple{int, int}]
+ │         ├── const: 2 [type=int]
+ │         └── const: 1 [type=int]
+ └── values
+      ├── columns: column1:int:null:3 column2:int:null:4
+      ├── tuple [type=tuple{int, int}]
+      │    ├── const: 1 [type=int]
+      │    └── const: 3 [type=int]
+      ├── tuple [type=tuple{int, int}]
+      │    ├── const: 3 [type=int]
+      │    └── const: 4 [type=int]
+      └── tuple [type=tuple{int, int}]
+           ├── const: 1 [type=int]
+           └── const: 1 [type=int]
+
+# UNION with NULL columns in operands works.
+build
+VALUES (NULL) UNION ALL VALUES (1)
+----
+union-all
+ ├── columns: column1:int:null:3
+ ├── left columns: column1:unknown:null:1
+ ├── right columns: column1:int:null:2
+ ├── values
+ │    ├── columns: column1:unknown:null:1
+ │    └── tuple [type=tuple{unknown}]
+ │         └── const: NULL [type=unknown]
+ └── values
+      ├── columns: column1:int:null:2
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
+
+build
+VALUES (NULL) UNION ALL VALUES (NULL)
+----
+union-all
+ ├── columns: column1:unknown:null:3
+ ├── left columns: column1:unknown:null:1
+ ├── right columns: column1:unknown:null:2
+ ├── values
+ │    ├── columns: column1:unknown:null:1
+ │    └── tuple [type=tuple{unknown}]
+ │         └── const: NULL [type=unknown]
+ └── values
+      ├── columns: column1:unknown:null:2
+      └── tuple [type=tuple{unknown}]
+           └── const: NULL [type=unknown]
+
+build
+SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
+----
+project
+ ├── columns: x:int:null:5 column7:string:null:7
+ ├── union-all
+ │    ├── columns: column1:int:null:5 column2:int:null:6
+ │    ├── left columns: column1:int:null:1 column2:unknown:null:2
+ │    ├── right columns: column3:int:null:3 column4:int:null:4
+ │    ├── project
+ │    │    ├── columns: column1:int:null:1 column2:unknown:null:2
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    └── projections
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: NULL [type=unknown]
+ │    └── project
+ │         ├── columns: column3:int:null:3 column4:int:null:4
+ │         ├── values
+ │         │    └── tuple [type=tuple{}]
+ │         └── projections
+ │              ├── const: 2 [type=int]
+ │              └── const: 4 [type=int]
+ └── projections
+      ├── variable: column1 [type=int]
+      └── function: pg_typeof [type=string]
+           └── variable: column2 [type=int]
+
+build
+SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
+----
+project
+ ├── columns: x:int:null:5 column7:string:null:7
+ ├── union-all
+ │    ├── columns: column1:int:null:5 column2:int:null:6
+ │    ├── left columns: column1:int:null:1 column2:int:null:2
+ │    ├── right columns: column3:int:null:3 column4:unknown:null:4
+ │    ├── project
+ │    │    ├── columns: column1:int:null:1 column2:int:null:2
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple{}]
+ │    │    └── projections
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: 3 [type=int]
+ │    └── project
+ │         ├── columns: column3:int:null:3 column4:unknown:null:4
+ │         ├── values
+ │         │    └── tuple [type=tuple{}]
+ │         └── projections
+ │              ├── const: 2 [type=int]
+ │              └── const: NULL [type=unknown]
+ └── projections
+      ├── variable: column1 [type=int]
+      └── function: pg_typeof [type=string]
+           └── variable: column2 [type=int]
+
+exec-ddl
+CREATE TABLE uniontest (
+  k INT,
+  v INT
+)
+----
+TABLE uniontest
+ ├── k int
+ ├── v int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT v FROM uniontest WHERE k = 1 UNION SELECT v FROM uniontest WHERE k = 2
+----
+union
+ ├── columns: v:int:null:7
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.v:int:null:5
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── select
+ │    │    ├── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.v:int:null:5
+      ├── select
+      │    ├── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    ├── scan
+      │    │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: uniontest.v [type=int]
+
+build
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
+----
+union-all
+ ├── columns: v:int:null:7
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.v:int:null:5
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── select
+ │    │    ├── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.v:int:null:5
+      ├── select
+      │    ├── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    ├── scan
+      │    │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: uniontest.v [type=int]
+
+build
+SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
+----
+intersect
+ ├── columns: v:int:null:2
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.v:int:null:5
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── select
+ │    │    ├── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.v:int:null:5
+      ├── select
+      │    ├── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    ├── scan
+      │    │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: uniontest.v [type=int]
+
+build
+SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
+----
+intersect-all
+ ├── columns: v:int:null:2
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.v:int:null:5
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── select
+ │    │    ├── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.v:int:null:5
+      ├── select
+      │    ├── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    ├── scan
+      │    │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: uniontest.v [type=int]
+
+build
+SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
+----
+except
+ ├── columns: v:int:null:2
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.v:int:null:5
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── select
+ │    │    ├── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.v:int:null:5
+      ├── select
+      │    ├── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    ├── scan
+      │    │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: uniontest.v [type=int]
+
+build
+SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
+----
+except-all
+ ├── columns: v:int:null:2
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.v:int:null:5
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── select
+ │    │    ├── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    ├── scan
+ │    │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.v:int:null:5
+      ├── select
+      │    ├── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    ├── scan
+      │    │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
+      │         └── const: 2 [type=int]
+      └── projections
+           └── variable: uniontest.v [type=int]
+
+build
+SELECT v FROM uniontest UNION SELECT k FROM uniontest
+----
+union
+ ├── columns: v:int:null:7
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.k:int:null:4
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── scan
+ │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.k:int:null:4
+      ├── scan
+      │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      └── projections
+           └── variable: uniontest.k [type=int]
+
+build
+SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
+----
+union-all
+ ├── columns: v:int:null:7
+ ├── left columns: uniontest.v:int:null:2
+ ├── right columns: uniontest.k:int:null:4
+ ├── project
+ │    ├── columns: uniontest.v:int:null:2
+ │    ├── scan
+ │    │    └── columns: uniontest.k:int:null:1 uniontest.v:int:null:2 uniontest.rowid:int:3
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
+ └── project
+      ├── columns: uniontest.k:int:null:4
+      ├── scan
+      │    └── columns: uniontest.k:int:null:4 uniontest.v:int:null:5 uniontest.rowid:int:6
+      └── projections
+           └── variable: uniontest.k [type=int]
+
+build
+SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
+----
+left-join
+ ├── columns: column1:int:null:1 column1:int:null:4
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ ├── union
+ │    ├── columns: column1:int:null:4
+ │    ├── left columns: column1:int:null:2
+ │    ├── right columns: column1:int:null:3
+ │    ├── values
+ │    │    ├── columns: column1:int:null:2
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 1 [type=int]
+ │    └── values
+ │         ├── columns: column1:int:null:3
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 2 [type=int]
+ └── eq [type=bool]
+      ├── variable: column1 [type=int]
+      └── variable: column1 [type=int]
+
+build
+SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
+----
+left-join
+ ├── columns: column1:int:null:1 column1:int:null:4
+ ├── values
+ │    ├── columns: column1:int:null:1
+ │    └── tuple [type=tuple{int}]
+ │         └── const: 1 [type=int]
+ ├── union
+ │    ├── columns: column1:int:null:4
+ │    ├── left columns: column1:int:null:2
+ │    ├── right columns: column1:int:null:3
+ │    ├── values
+ │    │    ├── columns: column1:int:null:2
+ │    │    └── tuple [type=tuple{int}]
+ │    │         └── const: 1 [type=int]
+ │    └── values
+ │         ├── columns: column1:int:null:3
+ │         └── tuple [type=tuple{int}]
+ │              └── const: 2 [type=int]
+ └── eq [type=bool]
+      ├── variable: column1 [type=int]
+      └── variable: column1 [type=int]
+
+build
+SELECT 1, 2 UNION SELECT 3
+----
+error: each UNION query must have the same number of columns: 2 vs 1
+
+build
+SELECT 1, 2 INTERSECT SELECT 3
+----
+error: each INTERSECT query must have the same number of columns: 2 vs 1
+
+build
+SELECT 1, 2 EXCEPT SELECT 3
+----
+error: each EXCEPT query must have the same number of columns: 2 vs 1
+
+build
+SELECT 1 UNION SELECT '3'
+----
+error: UNION types int and string cannot be matched
+
+build
+SELECT 1 INTERSECT SELECT '3'
+----
+error: INTERSECT types int and string cannot be matched
+
+build
+SELECT 1 EXCEPT SELECT '3'
+----
+error: EXCEPT types int and string cannot be matched
+
+build
+SELECT 1 UNION SELECT 3
+----
+union
+ ├── columns: column1:int:null:3
+ ├── left columns: column1:int:null:1
+ ├── right columns: column2:int:null:2
+ ├── project
+ │    ├── columns: column1:int:null:1
+ │    ├── values
+ │    │    └── tuple [type=tuple{}]
+ │    └── projections
+ │         └── const: 1 [type=int]
+ └── project
+      ├── columns: column2:int:null:2
+      ├── values
+      │    └── tuple [type=tuple{}]
+      └── projections
+           └── const: 3 [type=int]
+
+build
+SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']
+----
+error: not yet implemented: scalar expr: *tree.Array
+
+exec-ddl
+CREATE TABLE t.xy (x STRING NOT NULL, y STRING NOT NULL)
+----
+TABLE xy
+ ├── x string not null
+ ├── y string not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE t.abc (
+  a string,
+  b string NOT NULL,
+  c string NOT NULL
+)
+----
+TABLE abc
+ ├── a string
+ ├── b string not null
+ ├── c string not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+(SELECT x, x, y FROM xy) UNION (SELECT a, b, c FROM abc)
+----
+union
+ ├── columns: x:string:null:8 x:string:9 y:string:10
+ ├── left columns: xy.x:string:null:1 xy.x:string:null:1 xy.y:string:null:2
+ ├── right columns: abc.a:string:null:4 abc.b:string:null:5 abc.c:string:null:6
+ ├── project
+ │    ├── columns: xy.x:string:1 xy.x:string:1 xy.y:string:2
+ │    ├── scan
+ │    │    └── columns: xy.x:string:1 xy.y:string:2 xy.rowid:int:3
+ │    └── projections
+ │         ├── variable: xy.x [type=string]
+ │         ├── variable: xy.x [type=string]
+ │         └── variable: xy.y [type=string]
+ └── project
+      ├── columns: abc.a:string:null:4 abc.b:string:5 abc.c:string:6
+      ├── scan
+      │    └── columns: abc.a:string:null:4 abc.b:string:5 abc.c:string:6 abc.rowid:int:7
+      └── projections
+           ├── variable: abc.a [type=string]
+           ├── variable: abc.b [type=string]
+           └── variable: abc.c [type=string]

@@ -1583,6 +1583,11 @@ func (_f *factory) ConstructGroupBy(
 }
 
 // ConstructUnion constructs an expression for the Union operator.
+// Union is an operator used to combine the Left and Right input relations into
+// a single set containing rows from both inputs. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Union with the output columns. See the comment above opt.SetOpColMap
+// for more details.
 func (_f *factory) ConstructUnion(
 	left opt.GroupID,
 	right opt.GroupID,
@@ -1602,11 +1607,19 @@ func (_f *factory) ConstructUnion(
 }
 
 // ConstructIntersect constructs an expression for the Intersect operator.
+// Intersect is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that are also present in the Right relation. Duplicate rows are
+// discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Intersect with the output columns. See the comment above
+// opt.SetOpColMap for more details.
 func (_f *factory) ConstructIntersect(
 	left opt.GroupID,
 	right opt.GroupID,
+	colMap opt.PrivateID,
 ) opt.GroupID {
-	_intersectExpr := makeIntersectExpr(left, right)
+	_intersectExpr := makeIntersectExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_intersectExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1620,11 +1633,18 @@ func (_f *factory) ConstructIntersect(
 }
 
 // ConstructExcept constructs an expression for the Except operator.
+// Except is an operator used to perform a set difference between the Left and
+// Right input relations. The result consists only of rows in the Left relation
+// that are not present in the Right relation. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Except with the output columns. See the comment above opt.SetOpColMap
+// for more details.
 func (_f *factory) ConstructExcept(
 	left opt.GroupID,
 	right opt.GroupID,
+	colMap opt.PrivateID,
 ) opt.GroupID {
-	_exceptExpr := makeExceptExpr(left, right)
+	_exceptExpr := makeExceptExpr(left, right, colMap)
 	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -1637,9 +1657,118 @@ func (_f *factory) ConstructExcept(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr)))
 }
 
+// ConstructUnionAll constructs an expression for the UnionAll operator.
+// UnionAll is an operator used to combine the Left and Right input relations
+// into a single set containing rows from both inputs. Duplicate rows are
+// not discarded. For example:
+//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       2    ->    1
+//     2       3          1
+//                        2
+//                        2
+//                        3
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the UnionAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructUnionAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_unionAllExpr := makeUnionAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_unionAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr)))
+}
+
+// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+// IntersectAll is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that have a corresponding row in the Right relation. Duplicate rows
+// are not discarded. This effectively creates a one-to-one mapping between the
+// Left and Right rows. For example:
+//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       1    ->    1
+//     1       2          2
+//     2       2          2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the IntersectAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructIntersectAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_intersectAllExpr := makeIntersectAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_intersectAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr)))
+}
+
+// ConstructExceptAll constructs an expression for the ExceptAll operator.
+// ExceptAll is an operator used to perform a set difference between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that do not have a corresponding row in the Right relation.
+// Duplicate rows are not discarded. This effectively creates a one-to-one
+// mapping between the Left and Right rows. For example:
+//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1    ->    1
+//     1       1          4
+//     1       2
+//     2       2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the ExceptAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructExceptAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_exceptAllExpr := makeExceptAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_exceptAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr)))
+}
+
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [79]dynConstructLookupFunc
+var dynConstructLookup [82]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -2029,12 +2158,27 @@ func init() {
 
 	// IntersectOp
 	dynConstructLookup[opt.IntersectOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructIntersect(children[0], children[1])
+		return f.ConstructIntersect(children[0], children[1], private)
 	}
 
 	// ExceptOp
 	dynConstructLookup[opt.ExceptOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
-		return f.ConstructExcept(children[0], children[1])
+		return f.ConstructExcept(children[0], children[1], private)
+	}
+
+	// UnionAllOp
+	dynConstructLookup[opt.UnionAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructUnionAll(children[0], children[1], private)
+	}
+
+	// IntersectAllOp
+	dynConstructLookup[opt.IntersectAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructIntersectAll(children[0], children[1], private)
+	}
+
+	// ExceptAllOp
+	dynConstructLookup[opt.ExceptAllOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructExceptAll(children[0], children[1], private)
 	}
 
 }
