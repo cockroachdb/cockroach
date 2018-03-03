@@ -9,7 +9,7 @@
     "internal",
     "internal/optional",
     "internal/version",
-    "storage"
+    "storage",
   ]
   revision = "eaddaf6dd7ee35fd3c2420c8d27478db176b0485"
   version = "v0.15.0"
@@ -25,7 +25,7 @@
   name = "github.com/Azure/go-ansiterm"
   packages = [
     ".",
-    "winterm"
+    "winterm",
   ]
   revision = "d6e3b3328b783f23731bc4d058875b0371ff8109"
 
@@ -35,7 +35,7 @@
     "autorest",
     "autorest/adal",
     "autorest/azure",
-    "autorest/date"
+    "autorest/date",
   ]
   revision = "e90eb98af76c8cf5684aa79ecc8abce90afe484a"
   version = "v9.2.0"
@@ -148,7 +148,7 @@
     "service/s3",
     "service/s3/s3iface",
     "service/s3/s3manager",
-    "service/sts"
+    "service/sts",
   ]
   revision = "ee1f179877b2daf2aaabf71fa900773bf8842253"
   version = "v1.12.19"
@@ -193,7 +193,7 @@
   name = "github.com/client9/misspell"
   packages = [
     ".",
-    "cmd/misspell"
+    "cmd/misspell",
   ]
   revision = "59894abde931a32630d4e884a09c682ed20c5c7c"
   version = "v0.3.0"
@@ -245,7 +245,7 @@
   name = "github.com/coreos/etcd"
   packages = [
     "raft",
-    "raft/raftpb"
+    "raft/raftpb",
   ]
   revision = "ce0ad377d21819592c3d8c29417d9d7a5ac53f2f"
 
@@ -278,7 +278,7 @@
   name = "github.com/docker/distribution"
   packages = [
     "digestset",
-    "reference"
+    "reference",
   ]
   revision = "3800056b8832cf6075e78b282ac010131d8687bc"
 
@@ -307,7 +307,7 @@
     "pkg/namesgenerator",
     "pkg/stdcopy",
     "pkg/term",
-    "pkg/term/windows"
+    "pkg/term/windows",
   ]
   revision = "3ab20a87fa10360df891a67b8307399cdf1ab429"
 
@@ -316,7 +316,7 @@
   packages = [
     "nat",
     "sockets",
-    "tlsconfig"
+    "tlsconfig",
   ]
   revision = "3ede32e2033de7505e6500d6c868c2b9ed9f169d"
   version = "v0.3.0"
@@ -355,7 +355,7 @@
   name = "github.com/elastic/gosigar"
   packages = [
     ".",
-    "sys/windows"
+    "sys/windows",
   ]
   revision = "306d51981789ccc65e5f1431d5c0d78d8c368f1b"
   version = "v0.5.0"
@@ -401,7 +401,7 @@
   name = "github.com/go-ole/go-ole"
   packages = [
     ".",
-    "oleutil"
+    "oleutil",
   ]
   revision = "a41e3c4b706f6ae8dfbff342b06e40fa4d2d0506"
   version = "v1.2.1"
@@ -447,7 +447,7 @@
     "sortkeys",
     "types",
     "vanity",
-    "vanity/command"
+    "vanity/command",
   ]
   revision = "1adfc126b41513cc696b209667c8656ea7aac67c"
   version = "v1.0.0"
@@ -459,7 +459,7 @@
     ".",
     "byteutil",
     "html",
-    "linkify"
+    "linkify",
   ]
   revision = "11a7a839e723aa293cccdc353b394dbfce7c131e"
 
@@ -482,7 +482,7 @@
     "internal/importers/govend",
     "internal/importers/govendor",
     "internal/importers/gvt",
-    "internal/importers/vndr"
+    "internal/importers/vndr",
   ]
   revision = "37d9ea0ac16f0e0a05afc3b60e1ac8c364b6c329"
   version = "v0.4.1"
@@ -500,7 +500,7 @@
     "crc",
     "db",
     "memfs",
-    "table"
+    "table",
   ]
   revision = "259d9253d71996b7778a3efb4144fe4892342b18"
 
@@ -509,7 +509,7 @@
   name = "github.com/golang/lint"
   packages = [
     ".",
-    "golint"
+    "golint",
   ]
   revision = "6aaf7c34af0f4c36a57e0c429bace4d706d8e931"
 
@@ -526,7 +526,7 @@
     "ptypes/any",
     "ptypes/duration",
     "ptypes/struct",
-    "ptypes/timestamp"
+    "ptypes/timestamp",
   ]
   revision = "bbd03ef6da3a115852eaf24c8a1c46aeb39aa175"
 
@@ -570,7 +570,7 @@
     "internal/symbolizer",
     "internal/symbolz",
     "profile",
-    "third_party/svg"
+    "third_party/svg",
   ]
   revision = "2fb0552a69e2f33975f90698a2a1155e8c1a46f8"
 
@@ -579,6 +579,12 @@
   packages = ["."]
   revision = "317e0006254c44a0ac427cc52a0e083ff0b9622f"
   version = "v2.0.0"
+
+[[projects]]
+  name = "github.com/gorilla/websocket"
+  packages = ["."]
+  revision = "ea4d1f681babbce9545c9c5f3d5194a789c89f5b"
+  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/grpc-ecosystem/grpc-gateway"
@@ -590,7 +596,7 @@
     "protoc-gen-grpc-gateway/httprule",
     "runtime",
     "runtime/internal",
-    "utilities"
+    "utilities",
   ]
   revision = "07f5e79768022f9a3265235f0db4ac8c3f675fec"
   version = "v1.3.1"
@@ -633,7 +639,7 @@
     "internal/sanitize",
     "pgio",
     "pgproto3",
-    "pgtype"
+    "pgtype",
   ]
   revision = "da3231b0b66e2e74cdb779f1d46c5e958ba8be27"
   version = "v3.1.0"
@@ -654,7 +660,7 @@
   name = "github.com/jteeuwen/go-bindata"
   packages = [
     ".",
-    "go-bindata"
+    "go-bindata",
   ]
   revision = "6b667f85196e80d8420d634ca3fecca389a53207"
   source = "https://github.com/dim13/go-bindata"
@@ -664,7 +670,7 @@
   name = "github.com/kisielk/errcheck"
   packages = [
     ".",
-    "internal/errcheck"
+    "internal/errcheck",
   ]
   revision = "b1445a9dd8285a50c6d1661d16f0a9ceb08125f7"
 
@@ -673,7 +679,7 @@
   name = "github.com/kisielk/gotool"
   packages = [
     ".",
-    "internal/load"
+    "internal/load",
   ]
   revision = "d6ce6262d87e3a4e153e86023ff56ae771554a41"
 
@@ -684,7 +690,7 @@
     "common",
     "other",
     "unix",
-    "unix/sigtramp"
+    "unix/sigtramp",
   ]
   revision = "92ff7be0fe45ff74fdea05fcbcaef25467f19779"
   version = "v1.6.4"
@@ -724,7 +730,7 @@
   name = "github.com/lib/pq"
   packages = [
     ".",
-    "oid"
+    "oid",
   ]
   revision = "27ea5d92de30060e7121ddd543fe14e9a327e0cc"
 
@@ -735,7 +741,7 @@
     "collectorpb",
     "lightstep_thrift",
     "lightsteppb",
-    "thrift_0_9_2/lib/go/thrift"
+    "thrift_0_9_2/lib/go/thrift",
   ]
   revision = "ba38bae1f0ec1ece9092d35bbecbb497ee344cbc"
   version = "v0.15.0"
@@ -772,7 +778,7 @@
     "output",
     "suffixtree",
     "syntax",
-    "syntax/golang"
+    "syntax/golang",
   ]
   revision = "f008fcf5e62793d38bda510ee37aab8b0c68e76c"
   version = "v1.0.0"
@@ -796,6 +802,12 @@
   revision = "6a197d5ea61168f2ac821de2b7f011b250904900"
 
 [[projects]]
+  name = "github.com/nlopes/slack"
+  packages = ["."]
+  revision = "8ab4d0b364ef1e9af5d102531da20d5ec902b6c4"
+  version = "v0.2.0"
+
+[[projects]]
   branch = "master"
   name = "github.com/olekukonko/tablewriter"
   packages = ["."]
@@ -811,7 +823,7 @@
   name = "github.com/opencontainers/image-spec"
   packages = [
     "specs-go",
-    "specs-go/v1"
+    "specs-go/v1",
   ]
   revision = "ab7389ef9f50030c9b245bc16b981c7ddf192882"
   version = "v1.0.0"
@@ -833,7 +845,7 @@
   packages = [
     ".",
     "ext",
-    "log"
+    "log",
   ]
   revision = "1949ddbfd147afd4d964a9f00b24eb291e0e7c38"
   version = "v1.0.2"
@@ -846,16 +858,16 @@
     "thrift/gen-go/scribe",
     "thrift/gen-go/zipkincore",
     "types",
-    "wire"
+    "wire",
   ]
   revision = "45e90b00710a4c34a1a7d8a78d90f9b010b0bd4d"
   version = "v0.3.2"
 
 [[projects]]
+  branch = "master"
   name = "github.com/pelletier/go-toml"
   packages = ["."]
-  revision = "acdc4509485b587f5e675510c4f2c63e90ff68a8"
-  version = "v1.1.0"
+  revision = "05bcc0fb0d3e60da4b8dd5bd7e0ea563eb4ca943"
 
 [[projects]]
   branch = "master"
@@ -911,7 +923,7 @@
   packages = [
     "expfmt",
     "internal/bitbucket.org/ww/goautoneg",
-    "model"
+    "model",
   ]
   revision = "1bab55dd05dbff384524a6a1c99006d9eb5f139b"
 
@@ -920,7 +932,7 @@
   name = "github.com/rcrowley/go-metrics"
   packages = [
     ".",
-    "exp"
+    "exp",
   ]
   revision = "1f30fe9094a513ce4c700b9a54458bbb0c96996c"
 
@@ -970,7 +982,7 @@
   name = "github.com/spf13/cobra"
   packages = [
     ".",
-    "doc"
+    "doc",
   ]
   revision = "7b2c5ac9fc04fc5efafb60700713d4fa609b777b"
   version = "v0.0.1"
@@ -985,7 +997,7 @@
   name = "github.com/stretchr/testify"
   packages = [
     "assert",
-    "require"
+    "require",
   ]
   revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
   version = "v1.1.4"
@@ -1018,7 +1030,7 @@
     "ed25519",
     "ed25519/internal/edwards25519",
     "ssh",
-    "ssh/terminal"
+    "ssh/terminal",
   ]
   revision = "bd6f299fb381e4c3393d1c4b1f0b94f5e77650c8"
 
@@ -1036,7 +1048,7 @@
     "internal/timeseries",
     "lex/httplex",
     "proxy",
-    "trace"
+    "trace",
   ]
   revision = "c73622c77280266305273cb545f54516ced95b93"
 
@@ -1048,7 +1060,7 @@
     "google",
     "internal",
     "jws",
-    "jwt"
+    "jwt",
   ]
   revision = "bb50c06baba3d0c76f9d125c0719093e315b5b44"
 
@@ -1060,7 +1072,7 @@
     "cmd/benchstat",
     "internal/stats",
     "storage",
-    "storage/benchfmt"
+    "storage/benchfmt",
   ]
   revision = "4469e6ce8cc3920f1b42128b9d557bea2e08621a"
 
@@ -1069,7 +1081,7 @@
   name = "golang.org/x/sync"
   packages = [
     "errgroup",
-    "syncmap"
+    "syncmap",
   ]
   revision = "8e0aa688b654ef28caa72506fa5ec8dba9fc7690"
 
@@ -1078,7 +1090,7 @@
   name = "golang.org/x/sys"
   packages = [
     "unix",
-    "windows"
+    "windows",
   ]
   revision = "95c6576299259db960f6c5b9b69ea52422860fce"
 
@@ -1098,7 +1110,7 @@
     "unicode/bidi",
     "unicode/cldr",
     "unicode/norm",
-    "unicode/rangetable"
+    "unicode/rangetable",
   ]
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
@@ -1123,7 +1135,7 @@
     "go/gcimporter15",
     "go/loader",
     "go/types/typeutil",
-    "imports"
+    "imports",
   ]
   revision = "90b807ada4cc7ab5d1409d637b1f3beb5a776be7"
 
@@ -1139,7 +1151,7 @@
     "iterator",
     "option",
     "storage/v1",
-    "transport/http"
+    "transport/http",
   ]
   revision = "9ae0bf1fac9d6b6b388ab8811c3c85537b8adc10"
 
@@ -1155,7 +1167,7 @@
     "internal/modules",
     "internal/remote_api",
     "internal/urlfetch",
-    "urlfetch"
+    "urlfetch",
   ]
   revision = "150dc57a1b433e64154302bdc40b6bb8aefa313a"
   version = "v1.0.0"
@@ -1166,7 +1178,7 @@
   packages = [
     "googleapis/api/annotations",
     "googleapis/iam/v1",
-    "googleapis/rpc/status"
+    "googleapis/rpc/status",
   ]
   revision = "f676e0f3ac6395ff1a529ae59a6670878a8371a6"
 
@@ -1195,7 +1207,7 @@
     "stats",
     "status",
     "tap",
-    "transport"
+    "transport",
   ]
   revision = "6b51017f791ae1cfbec89c52efdf444b13b550ef"
   version = "v1.9.2"
@@ -1220,7 +1232,7 @@
     "ssa/ssautil",
     "staticcheck",
     "staticcheck/vrp",
-    "unused"
+    "unused",
   ]
   revision = "d73ab98e7c39fdcf9ba65062e43d34310f198353"
   version = "2017.2.2"
@@ -1228,6 +1240,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "73d626cafe2e18e573e6c81baf6e6856b236b88b0a0c6dec558b21cff107d184"
+  inputs-digest = "778e9c6d8b0060f4fe80f1325d4c80444e80bb6f04df707d1c1c6c11dd5a6853"
   solver-name = "gps-cdcl"
   solver-version = 1

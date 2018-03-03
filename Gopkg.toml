@@ -92,3 +92,7 @@ ignored = [
   [[prune.project]]
     name = "github.com/knz/go-libedit"
     unused-packages = false
+
+[[constraint]]
+  name = "github.com/nlopes/slack"
+  version = "0.2.0"
