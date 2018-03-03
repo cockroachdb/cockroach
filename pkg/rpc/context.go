@@ -500,11 +500,6 @@ func (ctx *Context) GRPCDial(target string) *Connection {
 	conn.initOnce.Do(func() {
 		var redialChan <-chan struct{}
 		conn.grpcConn, redialChan, conn.dialErr = ctx.GRPCDialRaw(target)
-		if ctx.GetLocalInternalServerForAddr(target) != nil {
-			conn.heartbeatResult.Store(heartbeatResult{err: nil, everSucceeded: true})
-			conn.setInitialHeartbeatDone()
-			return
-		}
 		if conn.dialErr == nil {
 			if err := ctx.Stopper.RunTask(
 				ctx.masterCtx, "rpc.Context: grpc heartbeat", func(masterCtx context.Context) {
