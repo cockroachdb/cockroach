@@ -145,6 +145,38 @@ const (
 
 	CastOp
 
+	// SimpleCaseOp is a CASE statement of the form:
+	//   CASE <cond>
+	//       WHEN <condval1> THEN <expr1>
+	//     [ WHEN <condvalx> THEN <exprx> ] ...
+	//     [ ELSE <expr2> ]
+	//   END
+	// Evaluates <cond>, then picks the WHEN branch where <condval> is equal to
+	// <cond>, then evaluates and returns the corresponding THEN expression. If no
+	// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+	// Otherwise, NULL is returned.
+	SimpleCaseOp
+
+	// SearchedCaseOp is a CASE statement of the form:
+	//   CASE WHEN <cond1> THEN <expr1>
+	//      [ WHEN <cond2> THEN <expr2> ] ...
+	//      [ ELSE <expr> ]
+	//   END
+	// In order, evaluates each <cond> expression; at the first <cond> expression
+	// that evaluates to TRUE, returns the result of evaluating the corresponding
+	// THEN expression. If none of the <cond> expressions evaluates to true, then
+	// evaluates and returns the value of the ELSE expression, if any, or NULL
+	// otherwise.
+	SearchedCaseOp
+
+	// WhenListOp represents the list of WHEN ... THEN ... conditions inside a CASE
+	// statement. It is used by both SimpleCase and SearchedCase.
+	WhenListOp
+
+	// WhenOp represents a single WHEN ... THEN ... condition inside a CASE statement.
+	// It is used by both SimpleCase and SearchedCase as part of WhenList.
+	WhenOp
+
 	// FunctionOp invokes a builtin SQL function like CONCAT or NOW, passing the given
 	// arguments. The private field is an opt.FuncDef struct that provides the name
 	// of the function as well as a pointer to the builtin overload definition.
@@ -324,9 +356,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
+const opNames = "unknownsubqueryvariableconsttruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastsimple-casesearched-casewhen-listwhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 391, 399, 415, 419, 425, 431, 438, 448, 457, 467, 476, 485, 494, 510, 525, 541, 556, 571, 586, 594, 599, 608, 614, 623, 636, 646, 650}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 37, 48, 53, 64, 76, 82, 85, 87, 90, 92, 94, 96, 98, 100, 102, 104, 110, 114, 122, 128, 138, 148, 162, 171, 184, 195, 210, 212, 218, 226, 232, 237, 243, 247, 252, 256, 259, 268, 271, 274, 280, 287, 294, 303, 313, 327, 342, 352, 363, 379, 383, 394, 407, 416, 420, 428, 436, 452, 456, 462, 468, 475, 485, 494, 504, 513, 522, 531, 547, 562, 578, 593, 608, 623, 631, 636, 645, 651, 660, 673, 683, 687}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -384,6 +416,10 @@ var ScalarOperators = [...]Operator{
 	UnaryMinusOp,
 	UnaryComplementOp,
 	CastOp,
+	SimpleCaseOp,
+	SearchedCaseOp,
+	WhenListOp,
+	WhenOp,
 	FunctionOp,
 	CoalesceOp,
 	UnsupportedExprOp,

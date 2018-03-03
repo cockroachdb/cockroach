@@ -237,14 +237,32 @@ render     0  render  ·         ·            (column8)                        
 ·          1  ·       table     t@primary    ·                                  ·
 ·          1  ·       spans     ALL          ·                                  ·
 
-exec-explain allow-unsupported
+exec-explain
+SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END FROM t.t
+----
+render     0  render  ·         ·                                              (column8)                          ·
+ │         0  ·       render 0  CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END  ·                                  ·
+ └── scan  1  scan    ·         ·                                              (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                      ·                                  ·
+·          1  ·       spans     ALL                                            ·                                  ·
+
+exec-explain
 SELECT CASE WHEN a = 2 THEN 1 ELSE 2 END FROM t.t
 ----
-render     0  render  ·         ·                                             (column8)                          ·
- │         0  ·       render 0  CASE WHEN t.public.t.a = 2 THEN 1 ELSE 2 END  ·                                  ·
- └── scan  1  scan    ·         ·                                             (a, b, c, d, j, s, rowid[hidden])  ·
-·          1  ·       table     t@primary                                     ·                                  ·
-·          1  ·       spans     ALL                                           ·                                  ·
+render     0  render  ·         ·                                  (column8)                          ·
+ │         0  ·       render 0  CASE WHEN a = 2 THEN 1 ELSE 2 END  ·                                  ·
+ └── scan  1  scan    ·         ·                                  (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                          ·                                  ·
+·          1  ·       spans     ALL                                ·                                  ·
+
+exec-explain
+SELECT CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END FROM t.t
+----
+render     0  render  ·         ·                                                           (column8)                          ·
+ │         0  ·       render 0  CASE a + 3 WHEN 5 * b THEN 1 % b WHEN 6 THEN 2 ELSE -1 END  ·                                  ·
+ └── scan  1  scan    ·         ·                                                           (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                                   ·                                  ·
+·          1  ·       spans     ALL                                                         ·                                  ·
 
 exec-explain
 SELECT LENGTH(s) FROM t.t

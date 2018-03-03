@@ -1187,6 +1187,15 @@ func (node *CaseExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString("END")
 }
 
+// NewTypedCaseExpr returns a new CaseExpr that is verified to be well-typed.
+func NewTypedCaseExpr(
+	expr TypedExpr, whens []*When, elseStmt TypedExpr, typ types.T,
+) (*CaseExpr, error) {
+	node := &CaseExpr{Expr: expr, Whens: whens, Else: elseStmt}
+	node.typ = typ
+	return node, nil
+}
+
 // When represents a WHEN sub-expression.
 type When struct {
 	Cond Expr

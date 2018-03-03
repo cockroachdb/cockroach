@@ -51,7 +51,11 @@ func init() {
 		opt.AggregationsOp:    typeAsAny,
 		opt.ExistsOp:          typeAsBool,
 		opt.FunctionOp:        typeFunction,
-		opt.CoalesceOp:        typeCoalesce,
+		opt.CoalesceOp:        typeAsChildType,
+		opt.SearchedCaseOp:    typeSearchedCase,
+		opt.SimpleCaseOp:      typeSimpleCase,
+		opt.WhenOp:            typeWhen,
+		opt.WhenListOp:        typeAsChildType,
 		opt.CastOp:            typeCast,
 	}
 
@@ -172,9 +176,10 @@ func typeAsAny(_ ExprView) types.T {
 	return types.Any
 }
 
-// typeCoalesce returns the type of a coalesce expression, which is equal to
-// the type of its children.
-func typeCoalesce(ev ExprView) types.T {
+// typeAsChildType returns the type of the first child found with a known
+// type. This is used for list expressions like COALESCE, where the type of the
+// expression is equal to the type of its children.
+func typeAsChildType(ev ExprView) types.T {
 	for i := 0; i < ev.ChildCount(); i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
 		if childType != types.Unknown {
@@ -182,6 +187,50 @@ func typeCoalesce(ev ExprView) types.T {
 		}
 	}
 	return types.Unknown
+}
+
+// typeSimpleCase returns the type of a simple CASE expression, which is
+// of the form:
+//   CASE <cond>
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condval2> THEN <expr2> ] ...
+//     [ ELSE <expr> ]
+//   END
+// The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
+// the type of the ELSE <expr> value if all the previous types are unknown.
+func typeSimpleCase(ev ExprView) types.T {
+	whenList := ev.Child(1)
+	whenListType := whenList.Logical().Scalar.Type
+	if whenListType != types.Unknown {
+		return whenListType
+	}
+	elseStmt := ev.Child(2)
+	return elseStmt.Logical().Scalar.Type
+}
+
+// typeSearchedCase returns the type of a searched CASE expression, which is
+// of the form:
+//   CASE WHEN <cond1> THEN <expr1>
+//      [ WHEN <cond2> THEN <expr2> ] ...
+//      [ ELSE <expr> ]
+//   END
+// The type is equal to the type of the WHEN <cond> THEN <expr> clauses, or
+// the type of the ELSE <expr> value if all the previous types are unknown.
+func typeSearchedCase(ev ExprView) types.T {
+	whenList := ev.Child(0)
+	whenListType := whenList.Logical().Scalar.Type
+	if whenListType != types.Unknown {
+		return whenListType
+	}
+	elseStmt := ev.Child(1)
+	return elseStmt.Logical().Scalar.Type
+}
+
+// typeWhen returns the type of a WHEN <cond> THEN <expr> clause inside a
+// CASE statment.
+func typeWhen(ev ExprView) types.T {
+	val := ev.Child(1)
+	return val.Logical().Scalar.Type
 }
 
 func typeCast(ev ExprView) types.T {

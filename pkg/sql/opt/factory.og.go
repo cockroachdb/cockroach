@@ -218,6 +218,42 @@ type Factory interface {
 	// ConstructCast constructs an expression for the Cast operator.
 	ConstructCast(input GroupID, typ PrivateID) GroupID
 
+	// ConstructSimpleCase constructs an expression for the SimpleCase operator.
+	// SimpleCase is a CASE statement of the form:
+	//   CASE <cond>
+	//       WHEN <condval1> THEN <expr1>
+	//     [ WHEN <condvalx> THEN <exprx> ] ...
+	//     [ ELSE <expr2> ]
+	//   END
+	// Evaluates <cond>, then picks the WHEN branch where <condval> is equal to
+	// <cond>, then evaluates and returns the corresponding THEN expression. If no
+	// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+	// Otherwise, NULL is returned.
+	ConstructSimpleCase(input GroupID, whenList GroupID, elseStmt GroupID) GroupID
+
+	// ConstructSearchedCase constructs an expression for the SearchedCase operator.
+	// SearchedCase is a CASE statement of the form:
+	//   CASE WHEN <cond1> THEN <expr1>
+	//      [ WHEN <cond2> THEN <expr2> ] ...
+	//      [ ELSE <expr> ]
+	//   END
+	// In order, evaluates each <cond> expression; at the first <cond> expression
+	// that evaluates to TRUE, returns the result of evaluating the corresponding
+	// THEN expression. If none of the <cond> expressions evaluates to true, then
+	// evaluates and returns the value of the ELSE expression, if any, or NULL
+	// otherwise.
+	ConstructSearchedCase(whenList GroupID, elseStmt GroupID) GroupID
+
+	// ConstructWhenList constructs an expression for the WhenList operator.
+	// WhenList represents the list of WHEN ... THEN ... conditions inside a CASE
+	// statement. It is used by both SimpleCase and SearchedCase.
+	ConstructWhenList(whens ListID) GroupID
+
+	// ConstructWhen constructs an expression for the When operator.
+	// When represents a single WHEN ... THEN ... condition inside a CASE statement.
+	// It is used by both SimpleCase and SearchedCase as part of WhenList.
+	ConstructWhen(cond GroupID, value GroupID) GroupID
+
 	// ConstructFunction constructs an expression for the Function operator.
 	// Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 	// arguments. The private field is an opt.FuncDef struct that provides the name

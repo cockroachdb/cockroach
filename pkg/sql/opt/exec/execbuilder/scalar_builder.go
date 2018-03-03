@@ -44,6 +44,8 @@ func init() {
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,
+		opt.SimpleCaseOp:      (*Builder).buildSimpleCase,
+		opt.SearchedCaseOp:    (*Builder).buildSearchedCase,
 		opt.CastOp:            (*Builder).buildCast,
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
@@ -173,6 +175,40 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 		ev.Logical().Scalar.Type,
 		funcDef.Overload,
 	)
+}
+
+func (b *Builder) buildWhenList(ctx *buildScalarCtx, ev xform.ExprView) []*tree.When {
+	whens := make([]*tree.When, ev.ChildCount())
+	for i := 0; i < ev.ChildCount(); i++ {
+		whenEv := ev.Child(i)
+		cond := b.buildScalar(ctx, whenEv.Child(0))
+		val := b.buildScalar(ctx, whenEv.Child(1))
+		whens[i] = &tree.When{Cond: cond, Val: val}
+	}
+	return whens
+}
+
+func (b *Builder) buildSearchedCase(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	whens := b.buildWhenList(ctx, ev.Child(0))
+	elseStmt := b.buildScalar(ctx, ev.Child(1))
+
+	expr, err := tree.NewTypedCaseExpr(nil, whens, elseStmt, ev.Logical().Scalar.Type)
+	if err != nil {
+		panic(err)
+	}
+	return expr
+}
+
+func (b *Builder) buildSimpleCase(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	arg := b.buildScalar(ctx, ev.Child(0))
+	whens := b.buildWhenList(ctx, ev.Child(1))
+	elseStmt := b.buildScalar(ctx, ev.Child(2))
+
+	expr, err := tree.NewTypedCaseExpr(arg, whens, elseStmt, ev.Logical().Scalar.Type)
+	if err != nil {
+		panic(err)
+	}
+	return expr
 }
 
 func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {

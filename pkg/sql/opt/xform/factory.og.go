@@ -1168,6 +1168,102 @@ func (_f *factory) ConstructCast(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_castExpr)))
 }
 
+// ConstructSimpleCase constructs an expression for the SimpleCase operator.
+// SimpleCase is a CASE statement of the form:
+//   CASE <cond>
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condvalx> THEN <exprx> ] ...
+//     [ ELSE <expr2> ]
+//   END
+// Evaluates <cond>, then picks the WHEN branch where <condval> is equal to
+// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+// Otherwise, NULL is returned.
+func (_f *factory) ConstructSimpleCase(
+	input opt.GroupID,
+	whenList opt.GroupID,
+	elseStmt opt.GroupID,
+) opt.GroupID {
+	_simpleCaseExpr := makeSimpleCaseExpr(input, whenList, elseStmt)
+	_group := _f.mem.lookupGroupByFingerprint(_simpleCaseExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_simpleCaseExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_simpleCaseExpr)))
+}
+
+// ConstructSearchedCase constructs an expression for the SearchedCase operator.
+// SearchedCase is a CASE statement of the form:
+//   CASE WHEN <cond1> THEN <expr1>
+//      [ WHEN <cond2> THEN <expr2> ] ...
+//      [ ELSE <expr> ]
+//   END
+// In order, evaluates each <cond> expression; at the first <cond> expression
+// that evaluates to TRUE, returns the result of evaluating the corresponding
+// THEN expression. If none of the <cond> expressions evaluates to true, then
+// evaluates and returns the value of the ELSE expression, if any, or NULL
+// otherwise.
+func (_f *factory) ConstructSearchedCase(
+	whenList opt.GroupID,
+	elseStmt opt.GroupID,
+) opt.GroupID {
+	_searchedCaseExpr := makeSearchedCaseExpr(whenList, elseStmt)
+	_group := _f.mem.lookupGroupByFingerprint(_searchedCaseExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_searchedCaseExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_searchedCaseExpr)))
+}
+
+// ConstructWhenList constructs an expression for the WhenList operator.
+// WhenList represents the list of WHEN ... THEN ... conditions inside a CASE
+// statement. It is used by both SimpleCase and SearchedCase.
+func (_f *factory) ConstructWhenList(
+	whens opt.ListID,
+) opt.GroupID {
+	_whenListExpr := makeWhenListExpr(whens)
+	_group := _f.mem.lookupGroupByFingerprint(_whenListExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_whenListExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_whenListExpr)))
+}
+
+// ConstructWhen constructs an expression for the When operator.
+// When represents a single WHEN ... THEN ... condition inside a CASE statement.
+// It is used by both SimpleCase and SearchedCase as part of WhenList.
+func (_f *factory) ConstructWhen(
+	cond opt.GroupID,
+	value opt.GroupID,
+) opt.GroupID {
+	_whenExpr := makeWhenExpr(cond, value)
+	_group := _f.mem.lookupGroupByFingerprint(_whenExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_whenExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_whenExpr)))
+}
+
 // ConstructFunction constructs an expression for the Function operator.
 // Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 // arguments. The private field is an opt.FuncDef struct that provides the name
@@ -1772,7 +1868,7 @@ func (_f *factory) ConstructExceptAll(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [82]dynConstructLookupFunc
+var dynConstructLookup [86]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -2053,6 +2149,26 @@ func init() {
 	// CastOp
 	dynConstructLookup[opt.CastOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructCast(children[0], private)
+	}
+
+	// SimpleCaseOp
+	dynConstructLookup[opt.SimpleCaseOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructSimpleCase(children[0], children[1], children[2])
+	}
+
+	// SearchedCaseOp
+	dynConstructLookup[opt.SearchedCaseOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructSearchedCase(children[0], children[1])
+	}
+
+	// WhenListOp
+	dynConstructLookup[opt.WhenListOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructWhenList(f.InternList(children))
+	}
+
+	// WhenOp
+	dynConstructLookup[opt.WhenOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructWhen(children[0], children[1])
 	}
 
 	// FunctionOp

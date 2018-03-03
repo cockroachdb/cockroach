@@ -183,6 +183,19 @@ func (ev ExprView) ChildCount() int {
 	case opt.CastOp:
 		return 1
 
+	case opt.SimpleCaseOp:
+		return 3
+
+	case opt.SearchedCaseOp:
+		return 2
+
+	case opt.WhenListOp:
+		whenListExpr := (*whenListExpr)(ev.mem.lookupExpr(ev.loc))
+		return 0 + int(whenListExpr.whens().Length)
+
+	case opt.WhenOp:
+		return 2
+
 	case opt.FunctionOp:
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 		return 0 + int(functionExpr.args().Length)
@@ -868,6 +881,53 @@ func (ev ExprView) ChildGroup(n int) opt.GroupID {
 			panic("child index out of range")
 		}
 
+	case opt.SimpleCaseOp:
+		simpleCaseExpr := (*simpleCaseExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return simpleCaseExpr.input()
+		case 1:
+			return simpleCaseExpr.whenList()
+		case 2:
+			return simpleCaseExpr.elseStmt()
+		default:
+			panic("child index out of range")
+		}
+
+	case opt.SearchedCaseOp:
+		searchedCaseExpr := (*searchedCaseExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return searchedCaseExpr.whenList()
+		case 1:
+			return searchedCaseExpr.elseStmt()
+		default:
+			panic("child index out of range")
+		}
+
+	case opt.WhenListOp:
+		whenListExpr := (*whenListExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		default:
+			list := ev.mem.lookupList(whenListExpr.whens())
+			return list[n-0]
+		}
+
+	case opt.WhenOp:
+		whenExpr := (*whenExpr)(ev.mem.lookupExpr(ev.loc))
+
+		switch n {
+		case 0:
+			return whenExpr.cond()
+		case 1:
+			return whenExpr.value()
+		default:
+			panic("child index out of range")
+		}
+
 	case opt.FunctionOp:
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
 
@@ -1479,6 +1539,26 @@ var privateLookup = [...]privateLookupFunc{
 		return castExpr.typ()
 	},
 
+	// SimpleCaseOp
+	func(ev ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// SearchedCaseOp
+	func(ev ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// WhenListOp
+	func(ev ExprView) opt.PrivateID {
+		return 0
+	},
+
+	// WhenOp
+	func(ev ExprView) opt.PrivateID {
+		return 0
+	},
+
 	// FunctionOp
 	func(ev ExprView) opt.PrivateID {
 		functionExpr := (*functionExpr)(ev.mem.lookupExpr(ev.loc))
@@ -1684,6 +1764,10 @@ var isScalarLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	true,  // CastOp
+	true,  // SimpleCaseOp
+	true,  // SearchedCaseOp
+	true,  // WhenListOp
+	true,  // WhenOp
 	true,  // FunctionOp
 	true,  // CoalesceOp
 	true,  // UnsupportedExprOp
@@ -1771,6 +1855,10 @@ var isConstValueLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -1858,6 +1946,10 @@ var isBooleanLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -1945,6 +2037,10 @@ var isComparisonLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2032,6 +2128,10 @@ var isBinaryLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2119,6 +2219,10 @@ var isUnaryLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2206,6 +2310,10 @@ var isRelationalLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2293,6 +2401,10 @@ var isJoinLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2380,6 +2492,10 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2467,6 +2583,10 @@ var isEnforcerLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // SimpleCaseOp
+	false, // SearchedCaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -3875,6 +3995,130 @@ func (m *memoExpr) asCast() *castExpr {
 		return nil
 	}
 	return (*castExpr)(m)
+}
+
+// simpleCaseExpr is a CASE statement of the form:
+//   CASE <cond>
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condvalx> THEN <exprx> ] ...
+//     [ ELSE <expr2> ]
+//   END
+// Evaluates <cond>, then picks the WHEN branch where <condval> is equal to
+// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+// Otherwise, NULL is returned.
+type simpleCaseExpr memoExpr
+
+func makeSimpleCaseExpr(input opt.GroupID, whenList opt.GroupID, elseStmt opt.GroupID) simpleCaseExpr {
+	return simpleCaseExpr{op: opt.SimpleCaseOp, state: exprState{uint32(input), uint32(whenList), uint32(elseStmt)}}
+}
+
+func (e *simpleCaseExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *simpleCaseExpr) whenList() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *simpleCaseExpr) elseStmt() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *simpleCaseExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSimpleCase() *simpleCaseExpr {
+	if m.op != opt.SimpleCaseOp {
+		return nil
+	}
+	return (*simpleCaseExpr)(m)
+}
+
+// searchedCaseExpr is a CASE statement of the form:
+//   CASE WHEN <cond1> THEN <expr1>
+//      [ WHEN <cond2> THEN <expr2> ] ...
+//      [ ELSE <expr> ]
+//   END
+// In order, evaluates each <cond> expression; at the first <cond> expression
+// that evaluates to TRUE, returns the result of evaluating the corresponding
+// THEN expression. If none of the <cond> expressions evaluates to true, then
+// evaluates and returns the value of the ELSE expression, if any, or NULL
+// otherwise.
+type searchedCaseExpr memoExpr
+
+func makeSearchedCaseExpr(whenList opt.GroupID, elseStmt opt.GroupID) searchedCaseExpr {
+	return searchedCaseExpr{op: opt.SearchedCaseOp, state: exprState{uint32(whenList), uint32(elseStmt)}}
+}
+
+func (e *searchedCaseExpr) whenList() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *searchedCaseExpr) elseStmt() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *searchedCaseExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSearchedCase() *searchedCaseExpr {
+	if m.op != opt.SearchedCaseOp {
+		return nil
+	}
+	return (*searchedCaseExpr)(m)
+}
+
+// whenListExpr represents the list of WHEN ... THEN ... conditions inside a CASE
+// statement. It is used by both SimpleCase and SearchedCase.
+type whenListExpr memoExpr
+
+func makeWhenListExpr(whens opt.ListID) whenListExpr {
+	return whenListExpr{op: opt.WhenListOp, state: exprState{whens.Offset, whens.Length}}
+}
+
+func (e *whenListExpr) whens() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *whenListExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asWhenList() *whenListExpr {
+	if m.op != opt.WhenListOp {
+		return nil
+	}
+	return (*whenListExpr)(m)
+}
+
+// whenExpr represents a single WHEN ... THEN ... condition inside a CASE statement.
+// It is used by both SimpleCase and SearchedCase as part of WhenList.
+type whenExpr memoExpr
+
+func makeWhenExpr(cond opt.GroupID, value opt.GroupID) whenExpr {
+	return whenExpr{op: opt.WhenOp, state: exprState{uint32(cond), uint32(value)}}
+}
+
+func (e *whenExpr) cond() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *whenExpr) value() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *whenExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asWhen() *whenExpr {
+	if m.op != opt.WhenOp {
+		return nil
+	}
+	return (*whenExpr)(m)
 }
 
 // functionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given

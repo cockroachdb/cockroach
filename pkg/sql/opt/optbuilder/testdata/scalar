@@ -193,7 +193,14 @@ plus [type=int]
 build-scalar vars=(int, int)
 CASE WHEN @1 = 2 THEN 1 ELSE 2 END
 ----
-error: not yet implemented: scalar expr: *tree.CaseExpr
+searched-case [type=int]
+ ├── when-list [type=int]
+ │    └── when [type=int]
+ │         ├── eq [type=bool]
+ │         │    ├── variable: @1 [type=int]
+ │         │    └── const: 2 [type=int]
+ │         └── const: 1 [type=int]
+ └── const: 2 [type=int]
 
 
 build-scalar vars=(string)
@@ -276,10 +283,69 @@ coalesce [type=int]
  ├── variable: @2 [type=int]
  └── variable: @3 [type=int]
 
-build-scalar vars=(int) allow-unsupported
+build-scalar vars=(int)
 CASE WHEN @1 > 5 THEN 1 ELSE -1 END
 ----
-unsupported-expr: CASE WHEN @1 > 5 THEN 1 ELSE -1 END [type=int]
+searched-case [type=int]
+ ├── when-list [type=int]
+ │    └── when [type=int]
+ │         ├── gt [type=bool]
+ │         │    ├── variable: @1 [type=int]
+ │         │    └── const: 5 [type=int]
+ │         └── const: 1 [type=int]
+ └── unary-minus [type=int]
+      └── const: 1 [type=int]
+
+build-scalar vars=(int)
+CASE WHEN @1 > 5 THEN 1 WHEN @1 < 0 THEN 2 ELSE -1 END
+----
+searched-case [type=int]
+ ├── when-list [type=int]
+ │    ├── when [type=int]
+ │    │    ├── gt [type=bool]
+ │    │    │    ├── variable: @1 [type=int]
+ │    │    │    └── const: 5 [type=int]
+ │    │    └── const: 1 [type=int]
+ │    └── when [type=int]
+ │         ├── lt [type=bool]
+ │         │    ├── variable: @1 [type=int]
+ │         │    └── const: 0 [type=int]
+ │         └── const: 2 [type=int]
+ └── unary-minus [type=int]
+      └── const: 1 [type=int]
+
+build-scalar vars=(int)
+CASE @1 WHEN 5 THEN 1 ELSE -1 END
+----
+simple-case [type=int]
+ ├── variable: @1 [type=int]
+ ├── when-list [type=int]
+ │    └── when [type=int]
+ │         ├── const: 5 [type=int]
+ │         └── const: 1 [type=int]
+ └── unary-minus [type=int]
+      └── const: 1 [type=int]
+
+build-scalar vars=(int, int)
+CASE @1 + 3 WHEN 5 * @2 THEN 1 % @2 WHEN 6 THEN 2 ELSE -1 END
+----
+simple-case [type=int]
+ ├── plus [type=int]
+ │    ├── variable: @1 [type=int]
+ │    └── const: 3 [type=int]
+ ├── when-list [type=int]
+ │    ├── when [type=int]
+ │    │    ├── mult [type=int]
+ │    │    │    ├── const: 5 [type=int]
+ │    │    │    └── variable: @2 [type=int]
+ │    │    └── mod [type=int]
+ │    │         ├── const: 1 [type=int]
+ │    │         └── variable: @2 [type=int]
+ │    └── when [type=int]
+ │         ├── const: 6 [type=int]
+ │         └── const: 2 [type=int]
+ └── unary-minus [type=int]
+      └── const: 1 [type=int]
 
 build-scalar vars=(json) allow-unsupported
 @1->>'a' = 'b'
