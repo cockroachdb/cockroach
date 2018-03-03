@@ -63,6 +63,9 @@ var opLayoutTable = [...]opLayout{
 	opt.UnaryMinusOp:      makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.UnaryComplementOp: makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.CastOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 2 /*priv*/, 0 /*enforcer*/),
+	opt.CaseOp:            makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.WhenListOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.WhenOp:            makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.FunctionOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.CoalesceOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.UnsupportedExprOp: makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
@@ -150,6 +153,9 @@ var isScalarLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	true,  // CastOp
+	true,  // CaseOp
+	true,  // WhenListOp
+	true,  // WhenOp
 	true,  // FunctionOp
 	true,  // CoalesceOp
 	true,  // UnsupportedExprOp
@@ -237,6 +243,9 @@ var isConstValueLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -324,6 +333,9 @@ var isBooleanLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -411,6 +423,9 @@ var isComparisonLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -498,6 +513,9 @@ var isBinaryLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -585,6 +603,9 @@ var isUnaryLookup = [...]bool{
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -672,6 +693,9 @@ var isRelationalLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -759,6 +783,9 @@ var isJoinLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -846,6 +873,9 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -933,6 +963,9 @@ var isEnforcerLookup = [...]bool{
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
+	false, // CaseOp
+	false, // WhenListOp
+	false, // WhenOp
 	false, // FunctionOp
 	false, // CoalesceOp
 	false, // UnsupportedExprOp
@@ -2341,6 +2374,96 @@ func (m *memoExpr) asCast() *castExpr {
 		return nil
 	}
 	return (*castExpr)(m)
+}
+
+// caseExpr is a CASE statement of the form:
+//   CASE [ <Input> ]
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condval2> THEN <expr2> ] ...
+//     [ ELSE <ElseExpr> ]
+//   END
+// The Case operator evaluates <Input> (if not provided, Input is set to True),
+// then picks the WHEN branch where <condval> is equal to
+// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+// Otherwise, NULL is returned.
+type caseExpr memoExpr
+
+func makeCaseExpr(input opt.GroupID, whenList opt.GroupID, elseExpr opt.GroupID) caseExpr {
+	return caseExpr{op: opt.CaseOp, state: exprState{uint32(input), uint32(whenList), uint32(elseExpr)}}
+}
+
+func (e *caseExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *caseExpr) whenList() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *caseExpr) elseExpr() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *caseExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asCase() *caseExpr {
+	if m.op != opt.CaseOp {
+		return nil
+	}
+	return (*caseExpr)(m)
+}
+
+// whenListExpr represents the list of WHEN ... THEN ... conditions inside a CASE
+// statement.
+type whenListExpr memoExpr
+
+func makeWhenListExpr(whens opt.ListID) whenListExpr {
+	return whenListExpr{op: opt.WhenListOp, state: exprState{whens.Offset, whens.Length}}
+}
+
+func (e *whenListExpr) whens() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *whenListExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asWhenList() *whenListExpr {
+	if m.op != opt.WhenListOp {
+		return nil
+	}
+	return (*whenListExpr)(m)
+}
+
+// whenExpr represents a single WHEN ... THEN ... condition inside a CASE statement.
+// It is the type of each list item in WhenList.
+type whenExpr memoExpr
+
+func makeWhenExpr(cond opt.GroupID, value opt.GroupID) whenExpr {
+	return whenExpr{op: opt.WhenOp, state: exprState{uint32(cond), uint32(value)}}
+}
+
+func (e *whenExpr) cond() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *whenExpr) value() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *whenExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asWhen() *whenExpr {
+	if m.op != opt.WhenOp {
+		return nil
+	}
+	return (*whenExpr)(m)
 }
 
 // functionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given

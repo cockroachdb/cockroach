@@ -1168,6 +1168,75 @@ func (_f *factory) ConstructCast(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_castExpr)))
 }
 
+// ConstructCase constructs an expression for the Case operator.
+// Case is a CASE statement of the form:
+//   CASE [ <Input> ]
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condval2> THEN <expr2> ] ...
+//     [ ELSE <ElseExpr> ]
+//   END
+// The Case operator evaluates <Input> (if not provided, Input is set to True),
+// then picks the WHEN branch where <condval> is equal to
+// <cond>, then evaluates and returns the corresponding THEN expression. If no
+// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+// Otherwise, NULL is returned.
+func (_f *factory) ConstructCase(
+	input opt.GroupID,
+	whenList opt.GroupID,
+	elseExpr opt.GroupID,
+) opt.GroupID {
+	_caseExpr := makeCaseExpr(input, whenList, elseExpr)
+	_group := _f.mem.lookupGroupByFingerprint(_caseExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_caseExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_caseExpr)))
+}
+
+// ConstructWhenList constructs an expression for the WhenList operator.
+// WhenList represents the list of WHEN ... THEN ... conditions inside a CASE
+// statement.
+func (_f *factory) ConstructWhenList(
+	whens opt.ListID,
+) opt.GroupID {
+	_whenListExpr := makeWhenListExpr(whens)
+	_group := _f.mem.lookupGroupByFingerprint(_whenListExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_whenListExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_whenListExpr)))
+}
+
+// ConstructWhen constructs an expression for the When operator.
+// When represents a single WHEN ... THEN ... condition inside a CASE statement.
+// It is the type of each list item in WhenList.
+func (_f *factory) ConstructWhen(
+	cond opt.GroupID,
+	value opt.GroupID,
+) opt.GroupID {
+	_whenExpr := makeWhenExpr(cond, value)
+	_group := _f.mem.lookupGroupByFingerprint(_whenExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_whenExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_whenExpr)))
+}
+
 // ConstructFunction constructs an expression for the Function operator.
 // Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 // arguments. The private field is an opt.FuncDef struct that provides the name
@@ -1772,7 +1841,7 @@ func (_f *factory) ConstructExceptAll(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [82]dynConstructLookupFunc
+var dynConstructLookup [85]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -2053,6 +2122,21 @@ func init() {
 	// CastOp
 	dynConstructLookup[opt.CastOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructCast(children[0], private)
+	}
+
+	// CaseOp
+	dynConstructLookup[opt.CaseOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructCase(children[0], children[1], children[2])
+	}
+
+	// WhenListOp
+	dynConstructLookup[opt.WhenListOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructWhenList(f.InternList(children))
+	}
+
+	// WhenOp
+	dynConstructLookup[opt.WhenOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructWhen(children[0], children[1])
 	}
 
 	// FunctionOp

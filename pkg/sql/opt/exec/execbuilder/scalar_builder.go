@@ -44,6 +44,7 @@ func init() {
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,
+		opt.CaseOp:            (*Builder).buildCase,
 		opt.CastOp:            (*Builder).buildCast,
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
@@ -173,6 +174,34 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 		ev.Logical().Scalar.Type,
 		funcDef.Overload,
 	)
+}
+
+func (b *Builder) buildWhenList(ctx *buildScalarCtx, ev xform.ExprView) []*tree.When {
+	whens := make([]*tree.When, ev.ChildCount())
+	for i := 0; i < ev.ChildCount(); i++ {
+		whenEv := ev.Child(i)
+		cond := b.buildScalar(ctx, whenEv.Child(0))
+		val := b.buildScalar(ctx, whenEv.Child(1))
+		whens[i] = &tree.When{Cond: cond, Val: val}
+	}
+	return whens
+}
+
+func (b *Builder) buildCase(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	input := b.buildScalar(ctx, ev.Child(0))
+	whens := b.buildWhenList(ctx, ev.Child(1))
+	elseExpr := b.buildScalar(ctx, ev.Child(2))
+
+	// A searched CASE statement is represented by the optimizer with input=True.
+	// The executor expects searched CASE statements to have nil inputs.
+	if input == tree.DBoolTrue {
+		input = nil
+	}
+	expr, err := tree.NewTypedCaseExpr(input, whens, elseExpr, ev.Logical().Scalar.Type)
+	if err != nil {
+		panic(err)
+	}
+	return expr
 }
 
 func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
