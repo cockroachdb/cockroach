@@ -1,3 +1,433 @@
+# tests adapted from logictest -- select
+
+# SELECT with no table.
+
+build
+SELECT 1
+----
+project
+ ├── columns: column1:int:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── const: 1 [type=int]
+
+build
+SELECT NULL
+----
+project
+ ├── columns: column1:unknown:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── null [type=unknown]
+
+build
+SELECT 1+1 AS two, 2+2 AS four
+----
+project
+ ├── columns: two:int:null:1 four:int:null:2
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      ├── const: 2 [type=int]
+      └── const: 4 [type=int]
+
+# SELECT expression tests.
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT * FROM abc WHERE 'hello'
+----
+error: could not parse "hello" as type bool: invalid bool value
+
+build
+SELECT * FROM abc
+----
+scan
+ └── columns: a:int:1 b:int:null:2 c:int:null:3
+
+build
+SELECT NULL, * FROM abc
+----
+project
+ ├── columns: column4:unknown:null:4 a:int:1 b:int:null:2 c:int:null:3
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── projections
+      ├── null [type=unknown]
+      ├── variable: abc.a [type=int]
+      ├── variable: abc.b [type=int]
+      └── variable: abc.c [type=int]
+
+
+# synonym for SELECT * FROM abc
+build
+TABLE abc
+----
+scan
+ └── columns: a:int:1 b:int:null:2 c:int:null:3
+
+build
+SELECT * FROM abc WHERE NULL
+----
+select
+ ├── columns: a:int:1 b:int:null:2 c:int:null:3
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── null [type=unknown]
+
+build
+SELECT * FROM abc WHERE a = NULL
+----
+select
+ ├── columns: a:int:1 b:int:null:2 c:int:null:3
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── null [type=unknown]
+
+build
+SELECT *,* FROM abc
+----
+project
+ ├── columns: a:int:1 b:int:null:2 c:int:null:3 a:int:1 b:int:null:2 c:int:null:3
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── projections
+      ├── variable: abc.a [type=int]
+      ├── variable: abc.b [type=int]
+      ├── variable: abc.c [type=int]
+      ├── variable: abc.a [type=int]
+      ├── variable: abc.b [type=int]
+      └── variable: abc.c [type=int]
+
+build
+SELECT a,a,a,a FROM abc
+----
+project
+ ├── columns: a:int:1 a:int:1 a:int:1 a:int:1
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── projections
+      ├── variable: abc.a [type=int]
+      ├── variable: abc.a [type=int]
+      ├── variable: abc.a [type=int]
+      └── variable: abc.a [type=int]
+
+build
+SELECT a,c FROM abc
+----
+project
+ ├── columns: a:int:1 c:int:null:3
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── projections
+      ├── variable: abc.a [type=int]
+      └── variable: abc.c [type=int]
+
+build
+SELECT a+b+c AS foo FROM abc
+----
+project
+ ├── columns: foo:int:null:4
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── projections
+      └── plus [type=int]
+           ├── plus [type=int]
+           │    ├── variable: abc.a [type=int]
+           │    └── variable: abc.b [type=int]
+           └── variable: abc.c [type=int]
+
+build allow-unsupported
+SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
+----
+project
+ ├── columns: a:int:1 b:int:null:2
+ ├── select
+ │    ├── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    ├── scan
+ │    │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── unsupported-expr: CASE WHEN abc.a != 0 THEN (abc.b / abc.a) > 1.5 ELSE false END [type=bool]
+ └── projections
+      ├── variable: abc.a [type=int]
+      └── variable: abc.b [type=int]
+
+# SELECT of NULL value.
+
+exec-ddl
+CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
+----
+TABLE kv
+ ├── k string not null
+ ├── v string
+ └── INDEX primary
+      └── k string not null
+
+build
+SELECT * FROM kv
+----
+scan
+ └── columns: k:string:1 v:string:null:2
+
+build
+SELECT k,v FROM kv
+----
+scan
+ └── columns: k:string:1 v:string:null:2
+
+build
+SELECT v||'foo' FROM kv
+----
+project
+ ├── columns: column3:string:null:3
+ ├── scan
+ │    └── columns: kv.k:string:1 kv.v:string:null:2
+ └── projections
+      └── concat [type=string]
+           ├── variable: kv.v [type=string]
+           └── const: 'foo' [type=string]
+
+build
+SELECT LOWER(v) FROM kv
+----
+project
+ ├── columns: column3:string:null:3
+ ├── scan
+ │    └── columns: kv.k:string:1 kv.v:string:null:2
+ └── projections
+      └── function: lower [type=string]
+           └── variable: kv.v [type=string]
+
+build
+SELECT k FROM kv
+----
+project
+ ├── columns: k:string:1
+ ├── scan
+ │    └── columns: kv.k:string:1 kv.v:string:null:2
+ └── projections
+      └── variable: kv.k [type=string]
+
+build
+SELECT kv.K,KV.v FROM kv
+----
+scan
+ └── columns: k:string:1 v:string:null:2
+
+build
+SELECT kv.* FROM kv
+----
+scan
+ └── columns: k:string:1 v:string:null:2
+
+build
+SELECT (kv.*) FROM kv
+----
+project
+ ├── columns: column3:tuple{string, string}:null:3
+ ├── scan
+ │    └── columns: kv.k:string:1 kv.v:string:null:2
+ └── projections
+      └── tuple [type=tuple{string, string}]
+           ├── variable: kv.k [type=string]
+           └── variable: kv.v [type=string]
+
+build
+SELECT foo.* FROM kv
+----
+error: no data source named "foo"
+
+build
+SELECT *
+----
+error: cannot use "*" without a FROM clause
+
+build
+SELECT kv.* AS foo FROM kv
+----
+error: "kv.*" cannot be aliased
+
+build
+SELECT bar.kv.* FROM kv
+----
+error: no data source named "bar.kv"
+
+# Don't panic with invalid names (#8024)
+build
+SELECT kv.*[1] FROM kv
+----
+error: cannot subscript type tuple{string, string} because it is not an array
+
+build
+SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
+----
+project
+ ├── columns: k:string:1
+ ├── select
+ │    ├── columns: kv.k:string:1 kv.v:string:null:2
+ │    ├── scan
+ │    │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    └── eq [type=bool]
+ │         ├── variable: kv.k [type=string]
+ │         └── const: 'a' [type=string]
+ └── projections
+      └── variable: kv.k [type=string]
+
+build
+SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
+----
+project
+ ├── columns: v:string:null:2
+ ├── select
+ │    ├── columns: kv.k:string:1 kv.v:string:null:2
+ │    ├── scan
+ │    │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    └── eq [type=bool]
+ │         ├── variable: kv.k [type=string]
+ │         └── const: 'a' [type=string]
+ └── projections
+      └── variable: kv.v [type=string]
+
+exec-ddl
+CREATE TABLE kw ("from" INT PRIMARY KEY)
+----
+TABLE kw
+ ├── from int not null
+ └── INDEX primary
+      └── from int not null
+
+build
+SELECT *, "from", kw."from" FROM kw
+----
+project
+ ├── columns: from:int:1 from:int:1 from:int:1
+ ├── scan
+ │    └── columns: kw.from:int:1
+ └── projections
+      ├── variable: kw.from [type=int]
+      ├── variable: kw.from [type=int]
+      └── variable: kw.from [type=int]
+
+exec-ddl
+CREATE TABLE boolean_table (
+  id INTEGER PRIMARY KEY NOT NULL,
+  value BOOLEAN
+)
+----
+TABLE boolean_table
+ ├── id int not null
+ ├── value bool
+ └── INDEX primary
+      └── id int not null
+
+build
+SELECT value FROM boolean_table
+----
+project
+ ├── columns: value:bool:null:2
+ ├── scan
+ │    └── columns: boolean_table.id:int:1 boolean_table.value:bool:null:2
+ └── projections
+      └── variable: boolean_table.value [type=bool]
+
+build allow-unsupported
+SELECT CASE WHEN NULL THEN 1 ELSE 2 END
+----
+project
+ ├── columns: column1:int:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── unsupported-expr: CASE WHEN NULL THEN 1 ELSE 2 END [type=int]
+
+build
+SELECT 0 * b, b % 1, 0 % b from abc
+----
+project
+ ├── columns: column4:int:null:4 column5:int:null:5 column6:int:null:6
+ ├── scan
+ │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ └── projections
+      ├── mult [type=int]
+      │    ├── const: 0 [type=int]
+      │    └── variable: abc.b [type=int]
+      ├── mod [type=int]
+      │    ├── variable: abc.b [type=int]
+      │    └── const: 1 [type=int]
+      └── mod [type=int]
+           ├── const: 0 [type=int]
+           └── variable: abc.b [type=int]
+
+# Regression tests for #22670.
+build
+SELECT 1 IN (1, 2)
+----
+project
+ ├── columns: column1:bool:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── in [type=bool]
+           ├── const: 1 [type=int]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+build
+SELECT NULL IN (1, 2)
+----
+project
+ ├── columns: column1:bool:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── in [type=bool]
+           ├── null [type=unknown]
+           └── tuple [type=tuple{int, int}]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
+
+build
+SELECT 1 IN (NULL, 2)
+----
+project
+ ├── columns: column1:bool:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── in [type=bool]
+           ├── const: 1 [type=int]
+           └── tuple [type=tuple{unknown, int}]
+                ├── null [type=unknown]
+                └── const: 2 [type=int]
+
+build
+SELECT (1, NULL) IN ((1, 1))
+----
+project
+ ├── columns: column1:bool:null:1
+ ├── values
+ │    └── tuple [type=tuple{}]
+ └── projections
+      └── in [type=bool]
+           ├── tuple [type=tuple{int, unknown}]
+           │    ├── const: 1 [type=int]
+           │    └── null [type=unknown]
+           └── tuple [type=tuple{tuple{int, int}}]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 1 [type=int]
+
 exec-ddl
 CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT)
 ----

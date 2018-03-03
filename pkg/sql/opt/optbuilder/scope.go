@@ -368,12 +368,35 @@ func (s *scope) Resolve(
 		"column name %q not found", tree.ErrString(tree.NewColumnItem(prefix, colName)))
 }
 
+func makeUntypedTuple(texprs []tree.TypedExpr) *tree.Tuple {
+	exprs := make(tree.Exprs, len(texprs))
+	for i, e := range texprs {
+		exprs[i] = e
+	}
+	return &tree.Tuple{Exprs: exprs}
+}
+
 // VisitPre is part of the Visitor interface.
 //
 // NB: This code is adapted from sql/select_name_resolution.go and
 // sql/subquery.go.
 func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
+	case *tree.AllColumnsSelector:
+		// AllColumnsSelector at the top level of a SELECT clause are
+		// replaced when the select's renders are prepared. If we
+		// encounter one here during expression analysis, it's being used
+		// as an argument to an inner expression/function. In that case,
+		// treat it as a tuple of the expanded columns.
+		//
+		// Hence:
+		//    SELECT kv.* FROM kv                 -> SELECT k, v FROM kv
+		//    SELECT (kv.*) FROM kv               -> SELECT (k, v) FROM kv
+		//    SELECT COUNT(DISTINCT kv.*) FROM kv -> SELECT COUNT(DISTINCT (k, v)) FROM kv
+		//
+		exprs := s.builder.expandStar(expr, s)
+		return false, makeUntypedTuple(exprs)
+
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
 		if err != nil {
