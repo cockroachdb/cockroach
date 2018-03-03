@@ -16,14 +16,19 @@ package builtins
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // This file contains builtin functions that we implement primarily for
@@ -172,6 +177,248 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Builtin {
 		},
 		Info: notUsableInfo,
 	}
+}
+
+// argTypeOpts is similar to tree.ArgTypes, but represents arguments that can
+// accept multiple types.
+type argTypeOpts []struct {
+	Name string
+	Typ  []types.T
+}
+
+var strOrOidTypes = []types.T{types.String, types.Oid}
+
+// makePGPrivilegeInquiryDef constructs all variations of a specific PG access
+// privilege inquiry function. Each variant has a different signature.
+//
+// The function takes a list of "object specification" arguments options. Each
+// of these options can specify one or more valid types that it can accept. This
+// is *not* the full list of arguments, but is only the list of arguments that
+// differs between each privilege inquiry function. It also takes an info string
+// that is used to construct the full function description.
+func makePGPrivilegeInquiryDef(
+	infoDetail string,
+	objSpecArgs argTypeOpts,
+	fn func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error),
+) []tree.Builtin {
+	// Collect the different argument type variations.
+	//
+	// 1. variants can begin with an optional "user" argument, which if used
+	//    can be specified using a STRING or an OID. Postgres also allows the
+	//    'public' pseudo-role to be used, but this is not supported here. If
+	//    the argument omitted, the value of current_user is assumed.
+	argTypes := []tree.ArgTypes{
+		{}, // no user
+	}
+	for _, typ := range strOrOidTypes {
+		argTypes = append(argTypes, tree.ArgTypes{{"user", typ}})
+	}
+	// 2. variants have one or more object identification arguments, which each
+	//    accept multiple types.
+	for _, objSpecArg := range objSpecArgs {
+		prevArgTypes := argTypes
+		argTypes = make([]tree.ArgTypes, 0, len(argTypes)*len(objSpecArg.Typ))
+		for _, argType := range prevArgTypes {
+			for _, typ := range objSpecArg.Typ {
+				argTypeVariant := append(argType, tree.ArgTypes{{objSpecArg.Name, typ}}...)
+				argTypes = append(argTypes, argTypeVariant)
+			}
+		}
+	}
+	// 3. variants all end with a "privilege" argument which can only
+	//    be a string. See parsePrivilegeStr for details on how this
+	//    argument is parsed and used.
+	for i, argType := range argTypes {
+		argTypes[i] = append(argType, tree.ArgTypes{{"privilege", types.String}}...)
+	}
+
+	var variants []tree.Builtin
+	for _, argType := range argTypes {
+		withUser := argType[0].Name == "user"
+
+		infoFmt := "does current user have privilege for %s"
+		if withUser {
+			infoFmt = "does user have privilege for %s"
+		}
+
+		variants = append(variants, tree.Builtin{
+			Types:            argType,
+			DistsqlBlacklist: true,
+			ReturnType:       tree.FixedReturnType(types.Bool),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				var user string
+				if withUser {
+					var err error
+					user, err = getNameForArg(ctx, args[0], "pg_roles", "rolname")
+					if err != nil {
+						return nil, err
+					}
+					if user == "" {
+						if _, ok := args[0].(*tree.DOid); ok {
+							// Postgres returns falseifn no matching user is
+							// found when given an OID.
+							return tree.DBoolFalse, nil
+						}
+						return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+							"role %s does not exist", args[0])
+					}
+
+					// Remove the first argument.
+					args = args[1:]
+				} else {
+					if len(ctx.SessionData.User) == 0 {
+						// Wut... is this possible?
+						return tree.DNull, nil
+					}
+					user = ctx.SessionData.User
+				}
+				return fn(ctx, args, user)
+			},
+			Info: fmt.Sprintf(infoFmt, infoDetail),
+		})
+	}
+	return variants
+}
+
+// getNameForArg determines the object name for the specified argument, which
+// should be either a STRING or an OID. If the object is not found, the returned
+// string will be empty.
+func getNameForArg(ctx *tree.EvalContext, arg tree.Datum, pgTable, pgCol string) (string, error) {
+	var query string
+	switch t := arg.(type) {
+	case *tree.DString:
+		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE %s = $1 LIMIT 1", pgCol, pgTable, pgCol)
+	case *tree.DOid:
+		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
+	default:
+		log.Fatalf(ctx.Ctx(), "expected arg type %T", t)
+	}
+	r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, arg)
+	if err != nil || r == nil {
+		return "", err
+	}
+	return string(tree.MustBeDString(r[0])), nil
+}
+
+// getTableNameForArg determines the qualified table name for the specified
+// argument, which should be either a STRING or an OID. If the table is not
+// found, the returned pointer will be nil.
+func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName, error) {
+	switch t := arg.(type) {
+	case *tree.DString:
+		tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), string(*t))
+		if err != nil {
+			return nil, err
+		}
+		if err := ctx.Planner.ResolveTableName(ctx.Ctx(), tn); err != nil {
+			return nil, err
+		}
+		if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
+			// Postgres does not allow cross-database references in these
+			// functions, so we don't either.
+			return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				"cross-database references are not implemented: %s", tn)
+		}
+		return tn, nil
+	case *tree.DOid:
+		r, err := ctx.Planner.QueryRow(ctx.Ctx(), `
+			SELECT n.nspname, c.relname FROM pg_class c
+			JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+			WHERE c.oid = $1`, t)
+		if err != nil || r == nil {
+			return nil, err
+		}
+		db := tree.Name(ctx.SessionData.Database)
+		schema := tree.Name(tree.MustBeDString(r[0]))
+		table := tree.Name(tree.MustBeDString(r[1]))
+		tn := tree.MakeTableNameWithSchema(db, schema, table)
+		return &tn, nil
+	default:
+		log.Fatalf(ctx.Ctx(), "expected arg type %T", t)
+	}
+	return nil, nil
+}
+
+// TODO(nvanbenschoten): give this a comment.
+type pgPrivList map[string]func(withGrantOpt bool) (tree.Datum, error)
+
+// parsePrivilegeStr parses the provided privilege string and calls into the
+// privilege option map for each specified privielge.
+func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error) {
+	// Postgres allows WITH GRANT OPTION to be added to a privilege type to
+	// test whether the privilege is held with grant option.
+	for priv, fn := range availOpts {
+		fn := fn
+		availOpts[priv+" WITH GRANT OPTION"] = func(_ bool) (tree.Datum, error) {
+			return fn(true /* withGrantOpt */) // Override withGrantOpt
+		}
+	}
+
+	argStr := string(tree.MustBeDString(arg))
+	privs := strings.Split(argStr, ",")
+	for i, priv := range privs {
+		// Privileges are case-insensitive.
+		priv = strings.ToUpper(priv)
+		// Extra whitespace is allowed between but not within privilege names.
+		privs[i] = strings.TrimSpace(priv)
+	}
+	// Check that all privileges are allowed.
+	for _, priv := range privs {
+		if _, ok := availOpts[priv]; !ok {
+			return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				"unrecognized privilege type: %q", priv)
+		}
+	}
+	// Perform all privilege checks.
+	for _, priv := range privs {
+		d, err := availOpts[priv](false /* withGrantOpt */)
+		if err != nil {
+			return nil, errors.Wrapf(err, "error checking privilege %q", priv)
+		}
+		switch d {
+		case tree.DNull, tree.DBoolFalse:
+			return d, nil
+		case tree.DBoolTrue:
+			continue
+		default:
+			panic(fmt.Sprintf("unexpected privilege check result %v", d))
+		}
+	}
+	return tree.DBoolTrue, nil
+}
+
+// evalPrivilegeCheck performs a privilege check for the specified privilege.
+// The function takes an information_schema table name for which to run a query
+// against, along with an arbitrary predicate to run against the table and the
+// user to perform the check on. It also takes a flag as to whether the
+// privilege check should also test whether the privilege is held with grant
+// option.
+func evalPrivilegeCheck(
+	ctx *tree.EvalContext, infoTable, user, pred string, priv privilege.Kind, withGrantOpt bool,
+) (tree.Datum, error) {
+	privChecks := []privilege.Kind{priv}
+	if withGrantOpt {
+		privChecks = append(privChecks, privilege.GRANT)
+	}
+	for _, p := range privChecks {
+		query := fmt.Sprintf(`
+			SELECT bool_or(privilege_type IN ('%s', '%s')) IS TRUE 
+			FROM information_schema.%s WHERE grantee = $1 AND %s`,
+			privilege.ALL, p, infoTable, pred)
+		r, err := ctx.Planner.QueryRow(ctx.Ctx(), query, user)
+		if err != nil {
+			return nil, err
+		}
+		switch r[0] {
+		case tree.DBoolFalse:
+			return tree.DBoolFalse, nil
+		case tree.DBoolTrue:
+			continue
+		default:
+			panic(fmt.Sprintf("unexpected privilege check result %v", r[0]))
+		}
+	}
+	return tree.DBoolTrue, nil
 }
 
 var pgBuiltins = map[string][]tree.Builtin{
@@ -473,6 +720,566 @@ FROM pg_catalog.pg_sequence WHERE seqrelid=$1`, args[0])
 				"double precision, so fractional-second delays can be specified.",
 		},
 	},
+
+	// Access Privilege Inquiry Functions allow users to query object access
+	// privileges programmatically. Each function has a number of variants,
+	// which differ based on their function signatures. These signatures have
+	// the following structure:
+	// - optional "user" argument
+	//   - if used, can be a STRING or an OID type
+	//   - if not used, current_user is assumed
+	// - series of one or more object specifier arguments
+	//   - each can accept multiple types
+	// - a "privilege" argument
+	//   - must be a STRING
+	//   - parsed as a comma-separated list of privilege
+	//
+	// See https://www.postgresql.org/docs/9.6/static/functions-info.html#FUNCTIONS-INFO-ACCESS-TABLE.
+	"has_any_column_privilege": makePGPrivilegeInquiryDef(
+		"any column of table",
+		argTypeOpts{{"table", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			tn, err := getTableNameForArg(ctx, args[0])
+			if err != nil {
+				return nil, err
+			}
+			pred := ""
+			retNull := false
+			if tn == nil {
+				// Postgres returns NULL if no matching table is found
+				// when given an OID.
+				retNull = true
+			} else {
+				pred = fmt.Sprintf(
+					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
+					tn.CatalogName, tn.SchemaName, tn.TableName)
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.INSERT, withGrantOpt)
+				},
+				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.UPDATE, withGrantOpt)
+				},
+				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+			})
+		},
+	),
+	"has_column_privilege": makePGPrivilegeInquiryDef(
+		"column",
+		argTypeOpts{{"table", strOrOidTypes}, {"column", []types.T{types.String, types.Int}}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			tn, err := getTableNameForArg(ctx, args[0])
+			if err != nil {
+				return nil, err
+			}
+			pred := ""
+			retNull := false
+			if tn == nil {
+				// Postgres returns NULL if no matching table is found
+				// when given an OID.
+				retNull = true
+			} else {
+				pred = fmt.Sprintf(
+					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
+					tn.CatalogName, tn.SchemaName, tn.TableName)
+
+				// Verify that the column exists in the table.
+				var colPred string
+				switch t := args[1].(type) {
+				case *tree.DString:
+					colPred = "column_name = $1"
+				case *tree.DInt:
+					colPred = "ordinal_position = $1"
+				default:
+					log.Fatalf(ctx.Ctx(), "expected arg type %T", t)
+				}
+
+				if r, err := ctx.Planner.QueryRow(ctx.Ctx(), fmt.Sprintf(`
+					SELECT column_name FROM information_schema.columns
+					WHERE %s AND %s`, pred, colPred), args[1]); err != nil {
+					return nil, err
+				} else if r == nil {
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+						"column %s of relation %s does not exist", args[1], args[0])
+				}
+			}
+
+			return parsePrivilegeStr(args[2], pgPrivList{
+				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.INSERT, withGrantOpt)
+				},
+				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.UPDATE, withGrantOpt)
+				},
+				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+			})
+		},
+	),
+	"has_database_privilege": makePGPrivilegeInquiryDef(
+		"database",
+		argTypeOpts{{"database", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			db, err := getNameForArg(ctx, args[0], "pg_database", "datname")
+			if err != nil {
+				return nil, err
+			}
+			retNull := false
+			if db == "" {
+				switch args[0].(type) {
+				case *tree.DString:
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidCatalogNameError,
+						"database %s does not exist", args[0])
+				case *tree.DOid:
+					// Postgres returns NULL if no matching language is found
+					// when given an OID.
+					retNull = true
+				}
+			}
+
+			pred := fmt.Sprintf("table_catalog = '%s'", db)
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "schema_privileges",
+						user, pred, privilege.CREATE, withGrantOpt)
+				},
+				"CONNECT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					// All users have CONNECT privileges for all databases.
+					return tree.DBoolTrue, nil
+				},
+				"TEMPORARY": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "schema_privileges",
+						user, pred, privilege.CREATE, withGrantOpt)
+				},
+				"TEMP": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "schema_privileges",
+						user, pred, privilege.CREATE, withGrantOpt)
+				},
+			})
+		},
+	),
+	"has_foreign_data_wrapper_privilege": makePGPrivilegeInquiryDef(
+		"foreign-data wrapper",
+		argTypeOpts{{"fdw", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			fdw, err := getNameForArg(ctx, args[0], "pg_foreign_data_wrapper", "fdwname")
+			if err != nil {
+				return nil, err
+			}
+			if fdw == "" {
+				switch args[0].(type) {
+				case *tree.DString:
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+						"foreign-data wrapper %s does not exist", args[0])
+				case *tree.DOid:
+					// Unlike most of the functions, Postgres does not return
+					// NULL when an OID does not match.
+				}
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					// All users have USAGE privileges for all foreign-data wrappers.
+					return tree.DBoolTrue, nil
+				},
+			})
+		},
+	),
+	"has_function_privilege": makePGPrivilegeInquiryDef(
+		"function",
+		argTypeOpts{{"function", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			// When specifying a function by a text string rather than by OID,
+			// the allowed input is the same as for the regprocedure data type.
+			var oid tree.Datum
+			switch t := args[0].(type) {
+			case *tree.DString:
+				var err error
+				oid, err = tree.PerformCast(ctx, t, coltypes.RegProcedure)
+				if err != nil {
+					return nil, err
+				}
+			case *tree.DOid:
+				oid = t
+			}
+
+			fn, err := getNameForArg(ctx, oid, "pg_proc", "proname")
+			if err != nil {
+				return nil, err
+			}
+			retNull := false
+			if fn == "" {
+				// Postgres returns NULL if no matching function is found
+				// when given an OID.
+				retNull = true
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"EXECUTE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					// All users have access to all functions.
+					return tree.DBoolTrue, nil
+				},
+			})
+		},
+	),
+	"has_language_privilege": makePGPrivilegeInquiryDef(
+		"language",
+		argTypeOpts{{"language", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			lang, err := getNameForArg(ctx, args[0], "pg_language", "lanname")
+			if err != nil {
+				return nil, err
+			}
+			retNull := false
+			if lang == "" {
+				switch args[0].(type) {
+				case *tree.DString:
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+						"language %s does not exist", args[0])
+				case *tree.DOid:
+					// Postgres returns NULL if no matching language is found
+					// when given an OID.
+					retNull = true
+				}
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					// All users have access to all languages.
+					return tree.DBoolTrue, nil
+				},
+			})
+		},
+	),
+	"has_schema_privilege": makePGPrivilegeInquiryDef(
+		"schema",
+		argTypeOpts{{"schema", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			schema, err := getNameForArg(ctx, args[0], "pg_namespace", "nspname")
+			if err != nil {
+				return nil, err
+			}
+			retNull := false
+			if schema == "" {
+				switch args[0].(type) {
+				case *tree.DString:
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+						"schema %s does not exist", args[0])
+				case *tree.DOid:
+					// Postgres returns NULL if no matching schema is found
+					// when given an OID.
+					retNull = true
+				}
+			}
+			if len(ctx.SessionData.Database) == 0 {
+				// If no database is set, return NULL.
+				retNull = true
+			}
+
+			pred := fmt.Sprintf("table_catalog = '%s' AND table_schema = '%s'",
+				ctx.SessionData.Database, schema)
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "schema_privileges",
+						user, pred, privilege.CREATE, withGrantOpt)
+				},
+				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "schema_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+			})
+		},
+	),
+	"has_sequence_privilege": makePGPrivilegeInquiryDef(
+		"sequence",
+		argTypeOpts{{"sequence", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			tn, err := getTableNameForArg(ctx, args[0])
+			if err != nil {
+				return nil, err
+			}
+			pred := ""
+			retNull := false
+			if tn == nil {
+				// Postgres returns NULL if no matching table is found
+				// when given an OID.
+				retNull = true
+			} else {
+				// Verify that the table name is actually a sequence.
+				if r, err := ctx.Planner.QueryRow(ctx.Ctx(), `
+					SELECT sequence_name FROM information_schema.sequences
+					WHERE sequence_catalog = $1 AND sequence_schema = $2 AND sequence_name = $3`,
+					tn.CatalogName, tn.SchemaName, tn.TableName); err != nil {
+					return nil, err
+				} else if r == nil {
+					return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+						"%s is not a sequence", args[0])
+				}
+
+				pred = fmt.Sprintf(
+					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
+					tn.CatalogName, tn.SchemaName, tn.TableName)
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.UPDATE, withGrantOpt)
+				},
+			})
+		},
+	),
+	"has_server_privilege": makePGPrivilegeInquiryDef(
+		"foreign server",
+		argTypeOpts{{"server", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			server, err := getNameForArg(ctx, args[0], "pg_foreign_server", "srvname")
+			if err != nil {
+				return nil, err
+			}
+			if server == "" {
+				switch args[0].(type) {
+				case *tree.DString:
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+						"server %s does not exist", args[0])
+				case *tree.DOid:
+					// Unlike most of the functions, Postgres does not return
+					// NULL when an OID does not match.
+				}
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					// All users have USAGE privileges for all foreign servers.
+					return tree.DBoolTrue, nil
+				},
+			})
+		},
+	),
+	"has_table_privilege": makePGPrivilegeInquiryDef(
+		"table",
+		argTypeOpts{{"table", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			tn, err := getTableNameForArg(ctx, args[0])
+			if err != nil {
+				return nil, err
+			}
+			pred := ""
+			retNull := false
+			if tn == nil {
+				// Postgres returns NULL if no matching table is found
+				// when given an OID.
+				retNull = true
+			} else {
+				pred = fmt.Sprintf(
+					"table_catalog = '%s' AND table_schema = '%s' AND table_name = '%s'",
+					tn.CatalogName, tn.SchemaName, tn.TableName)
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"SELECT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+				"INSERT": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.INSERT, withGrantOpt)
+				},
+				"UPDATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.UPDATE, withGrantOpt)
+				},
+				"DELETE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.DELETE, withGrantOpt)
+				},
+				"TRUNCATE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.DELETE, withGrantOpt)
+				},
+				"REFERENCES": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.SELECT, withGrantOpt)
+				},
+				"TRIGGER": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					return evalPrivilegeCheck(ctx, "table_privileges",
+						user, pred, privilege.CREATE, withGrantOpt)
+				},
+			})
+		},
+	),
+	"has_tablespace_privilege": makePGPrivilegeInquiryDef(
+		"tablespace",
+		argTypeOpts{{"tablespace", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			tablespace, err := getNameForArg(ctx, args[0], "pg_tablespace", "spcname")
+			if err != nil {
+				return nil, err
+			}
+			if tablespace == "" {
+				switch args[0].(type) {
+				case *tree.DString:
+					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+						"tablespace %s does not exist", args[0])
+				case *tree.DOid:
+					// Unlike most of the functions, Postgres does not return
+					// NULL when an OID does not match.
+				}
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"CREATE": func(withGrantOpt bool) (tree.Datum, error) {
+					// All users have CREATE privileges in all tablespaces.
+					return tree.DBoolTrue, nil
+				},
+			})
+		},
+	),
+	"has_type_privilege": makePGPrivilegeInquiryDef(
+		"type",
+		argTypeOpts{{"type", strOrOidTypes}},
+		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
+			// When specifying a type by a text string rather than by OID, the
+			// allowed input is the same as for the regtype data type.
+			var oid tree.Datum
+			switch t := args[0].(type) {
+			case *tree.DString:
+				var err error
+				oid, err = tree.PerformCast(ctx, t, coltypes.RegType)
+				if err != nil {
+					return nil, err
+				}
+			case *tree.DOid:
+				oid = t
+			}
+
+			typ, err := getNameForArg(ctx, oid, "pg_type", "typname")
+			if err != nil {
+				return nil, err
+			}
+			retNull := false
+			if typ == "" {
+				// Postgres returns NULL if no matching type is found
+				// when given an OID.
+				retNull = true
+			}
+
+			return parsePrivilegeStr(args[1], pgPrivList{
+				"USAGE": func(withGrantOpt bool) (tree.Datum, error) {
+					if retNull {
+						return tree.DNull, nil
+					}
+					// All users have access to all types.
+					return tree.DBoolTrue, nil
+				},
+			})
+		},
+	),
 
 	// inet_{client,server}_{addr,port} return either an INet address or integer
 	// port that corresponds to either the client or server side of the current
