@@ -26,7 +26,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -111,13 +110,16 @@ func (r *registry) Run(filter []string) int {
 		parallelism = len(tests)
 	}
 
-	var running struct {
+	var status struct {
 		syncutil.Mutex
-		m map[*test]struct{}
+		running map[*test]struct{}
+		pass    map[*test]struct{}
+		fail    map[*test]struct{}
 	}
-	running.m = make(map[*test]struct{})
+	status.running = make(map[*test]struct{})
+	status.pass = make(map[*test]struct{})
+	status.fail = make(map[*test]struct{})
 
-	var pass, fail int32
 	go func() {
 		sem := make(chan struct{}, parallelism)
 		for i := range tests {
@@ -125,18 +127,18 @@ func (r *registry) Run(filter []string) int {
 			sem <- struct{}{}
 			fmt.Fprintf(r.out, "=== RUN   %s\n", t.name)
 			t.Status("starting")
-			running.Lock()
-			running.m[t] = struct{}{}
-			running.Unlock()
+			status.Lock()
+			status.running[t] = struct{}{}
+			status.Unlock()
 			t.run(r.out, func(failed bool) {
+				status.Lock()
+				delete(status.running, t)
 				if failed {
-					atomic.AddInt32(&fail, 1)
+					status.fail[t] = struct{}{}
 				} else {
-					atomic.AddInt32(&pass, 1)
+					status.pass[t] = struct{}{}
 				}
-				running.Lock()
-				delete(running.m, t)
-				running.Unlock()
+				status.Unlock()
 				wg.Done()
 				<-sem
 			})
@@ -160,7 +162,10 @@ func (r *registry) Run(filter []string) int {
 	for i := 1; ; i++ {
 		select {
 		case <-done:
-			if fail > 0 {
+			status.Lock()
+			defer status.Unlock()
+			postSlackReport(status.pass, status.fail, len(r.m)-len(tests))
+			if len(status.fail) > 0 {
 				fmt.Fprintln(r.out, "FAIL")
 				return 1
 			}
@@ -168,9 +173,9 @@ func (r *registry) Run(filter []string) int {
 			return 0
 
 		case <-ticker.C:
-			running.Lock()
-			runningTests := make([]*test, 0, len(running.m))
-			for t := range running.m {
+			status.Lock()
+			runningTests := make([]*test, 0, len(status.running))
+			for t := range status.running {
 				runningTests = append(runningTests, t)
 			}
 			sort.Slice(runningTests, func(i, j int) bool {
@@ -190,7 +195,7 @@ func (r *registry) Run(filter []string) int {
 				}
 			}
 			fmt.Fprint(r.out, buf.String())
-			running.Unlock()
+			status.Unlock()
 
 		case <-sig:
 			destroyAllClusters()
@@ -203,6 +208,7 @@ type test struct {
 	fn     func(*test)
 	runner string
 	start  time.Time
+	end    time.Time
 	mu     struct {
 		syncutil.RWMutex
 		done       bool
@@ -283,6 +289,10 @@ func (t *test) decorate(s string) string {
 	return buf.String()
 }
 
+func (t *test) duration() time.Duration {
+	return t.end.Sub(t.start)
+}
+
 func (t *test) Failed() bool {
 	t.mu.RLock()
 	failed := t.mu.failed
@@ -307,7 +317,7 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 		t.runner = callerName()
 
 		defer func() {
-			duration := timeutil.Now().Sub(t.start)
+			t.end = timeutil.Now()
 
 			if err := recover(); err != nil {
 				t.Fatal(err)
@@ -318,7 +328,7 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			t.mu.Unlock()
 
 			if !dryrun {
-				dstr := fmt.Sprintf("%.2fs", duration.Seconds())
+				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 				if t.Failed() {
 					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.name, dstr, t.mu.output)
 				} else {
