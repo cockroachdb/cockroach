@@ -400,9 +400,9 @@ refers to the name of the node bound to that variable:
 In this pattern, Join is a tag that refers to a group of nodes. The replace
 expression will construct a node having the same name as the matched join node.
 
-OpName Parameter
+Name Parameters
 
-The OpName builtin function can also be a parameter to a custom match or
+The OpName built-in function can also be a parameter to a custom match or
 replace function which needs to know which name matched. For example:
 
   [FoldBinaryNull]
@@ -421,6 +421,17 @@ a custom replace function and the OpName function with an argument:
 
 As described in the previous section, adding the argument enables OpName to
 return a name that was matched deeper in the pattern.
+
+In addition to a name returned by the OpName function, custom match and replace
+functions can accept literal operator names as parameters. The Minus operator
+name is passed as a parameter to two functions in this example:
+
+  [FoldMinus]
+  (UnaryMinus
+    (Minus $left $right) & (OverloadExists Minus $right $left)
+  )
+  =>
+  (ConstructBinary Minus $right $left)
 
 Syntax
 
@@ -446,7 +457,8 @@ grammar.
   bind                = '$' label ':' match-and
   ref                 = '$' label
   match-and           = match-item ('&' match-and)
-  match-item          = match | match-not | match-list | match-any | STRING
+  match-item          = match | match-not | match-list | match-any | name |
+                        STRING
   match-not           = '^' match-item
   match-list          = match-list-any | match-list-first | match-list-last |
                         match-list-single | match-list-empty
@@ -457,7 +469,7 @@ grammar.
   match-list-empty    = '[' ']'
   match-any           = '*'
 
-  replace             = construct | STRING | ref
+  replace             = construct | ref | STRING
   construct           = '(' construct-name replace* ')'
   construct-name      = name | construct
 
