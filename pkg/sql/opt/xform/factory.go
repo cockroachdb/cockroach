@@ -188,29 +188,12 @@ func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 	return f.ConstructOr(f.mem.internList(list))
 }
 
-// canInvertComparison returns true if the given comparison op can be negated
-// by the invertComparison function. The op must already have been verified
-// to be one of the comparison ops.
-func (f *factory) canInvertComparison(comparison opt.GroupID) bool {
-	// Group was already verified to be a comparison op by the pattern, so just
-	// exclude comparisons that can't be inverted.
-	switch f.mem.lookupNormExpr(comparison).op {
-	case opt.ContainsOp:
-		return false
-	}
-	return true
-}
-
 // invertComparison negates a comparison op like:
 //   a.x = 5
 // to:
 //   a.x <> 5
-func (f *factory) invertComparison(comparison opt.GroupID) opt.GroupID {
-	ev := makeExprView(f.mem, comparison, opt.NormPhysPropsID)
-	left := ev.ChildGroup(0)
-	right := ev.ChildGroup(1)
-
-	switch ev.Operator() {
+func (f *factory) invertComparison(cmp opt.Operator, left, right opt.GroupID) opt.GroupID {
+	switch cmp {
 	case opt.EqOp:
 		return f.ConstructNe(left, right)
 	case opt.NeOp:
@@ -252,7 +235,7 @@ func (f *factory) invertComparison(comparison opt.GroupID) opt.GroupID {
 	case opt.IsNotOp:
 		return f.ConstructIs(left, right)
 	default:
-		panic(fmt.Sprintf("unexpected operator: %v", ev))
+		panic(fmt.Sprintf("unexpected operator: %v", cmp))
 	}
 }
 

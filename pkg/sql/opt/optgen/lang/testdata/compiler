@@ -31,7 +31,7 @@ define Join {
 			Name="CommuteJoin"
 			Tags=(Tags)
 			Match=(Match
-				Names=(OpNames JoinOp)
+				Names=(Names Join)
 				Args=(List
 					(Bind Label="left" Target=(MatchAny) Src=<test.opt:9:7>)
 					(Bind Label="right" Target=(MatchAny) Src=<test.opt:9:15>)
@@ -39,7 +39,7 @@ define Join {
 				Src=<test.opt:9:1>
 			)
 			Replace=(Construct
-				Name="Join"
+				Name=Join
 				Args=(List
 					(Ref Label="right" Src=<test.opt:9:34>)
 					(Ref Label="left" Src=<test.opt:9:41>)
@@ -72,7 +72,7 @@ define Project {
 
 # Name rule comment.
 [Name]
-(Join | Project) => ((OpName))
+(Join | Project * & (Func (OpName))) => ((OpName) (OpName))
 ----
 (Compiled
 	(Defines
@@ -112,11 +112,24 @@ define Project {
 			Name="Name"
 			Tags=(Tags)
 			Match=(Match
-				Names=(OpNames InnerJoinOp)
-				Args=(List)
+				Names=(Names InnerJoin)
+				Args=(List
+					(MatchAnd
+						Left=(MatchAny)
+						Right=(CustomFunc
+							Name=Func
+							Args=(List InnerJoin)
+						)
+						Src=<test.opt:17:17>
+					)
+				)
 				Src=<test.opt:17:1>
 			)
-			Replace=(Construct Name=InnerJoinOp Args=(List) Src=<test.opt:17:21>)
+			Replace=(Construct
+				Name=InnerJoin
+				Args=(List InnerJoin)
+				Src=<test.opt:17:41>
+			)
 			Src=<test.opt:16:1>
 		)
 		(Rule
@@ -124,11 +137,24 @@ define Project {
 			Name="Name"
 			Tags=(Tags)
 			Match=(Match
-				Names=(OpNames LeftJoinOp)
-				Args=(List)
+				Names=(Names LeftJoin)
+				Args=(List
+					(MatchAnd
+						Left=(MatchAny)
+						Right=(CustomFunc
+							Name=Func
+							Args=(List LeftJoin)
+						)
+						Src=<test.opt:17:17>
+					)
+				)
 				Src=<test.opt:17:1>
 			)
-			Replace=(Construct Name=LeftJoinOp Args=(List) Src=<test.opt:17:21>)
+			Replace=(Construct
+				Name=LeftJoin
+				Args=(List LeftJoin)
+				Src=<test.opt:17:41>
+			)
 			Src=<test.opt:16:1>
 		)
 		(Rule
@@ -136,11 +162,24 @@ define Project {
 			Name="Name"
 			Tags=(Tags)
 			Match=(Match
-				Names=(OpNames ProjectOp)
-				Args=(List)
+				Names=(Names Project)
+				Args=(List
+					(MatchAnd
+						Left=(MatchAny)
+						Right=(CustomFunc
+							Name=Func
+							Args=(List Project)
+						)
+						Src=<test.opt:17:17>
+					)
+				)
 				Src=<test.opt:17:1>
 			)
-			Replace=(Construct Name=ProjectOp Args=(List) Src=<test.opt:17:21>)
+			Replace=(Construct
+				Name=Project
+				Args=(List Project)
+				Src=<test.opt:17:41>
+			)
 			Src=<test.opt:16:1>
 		)
 	)
@@ -157,10 +196,10 @@ define SubOp1 {}
 define SubOp2 {}
 
 [SingleName]
-(Op $input:(SubOp1)) => ((OpName $input))
+(Op $input:(SubOp1) & ^(Func (OpName $input))) => ((OpName $input))
 
 [MultipleNames]
-(Op $input:(SubOp1 | SubOp2)) => ((OpName $input))
+(Op $input:(SubOp1 | SubOp2) & (Func (OpName $input))) => ((OpName $input))
 ----
 (Compiled
 	(Defines
@@ -182,13 +221,30 @@ define SubOp2 {}
 			Name="SingleName"
 			Tags=(Tags)
 			Match=(Match
-				Names=(OpNames OpOp)
+				Names=(Names Op)
 				Args=(List
 					(Bind
 						Label="input"
-						Target=(Match
-							Names=(OpNames SubOp1Op)
-							Args=(List)
+						Target=(MatchAnd
+							Left=(Match
+								Names=(Names SubOp1)
+								Args=(List)
+								Src=<test.opt:8:12>
+							)
+							Right=(MatchNot
+								Input=(CustomFunc
+									Name=Func
+									Args=(List
+										(CustomFunc
+											Name=OpName
+											Args=(List
+												(Ref Label="input" Src=<test.opt:8:38>)
+											)
+										)
+									)
+								)
+								Src=<test.opt:8:23>
+							)
 							Src=<test.opt:8:12>
 						)
 						Src=<test.opt:8:5>
@@ -196,7 +252,17 @@ define SubOp2 {}
 				)
 				Src=<test.opt:8:1>
 			)
-			Replace=(Construct Name=SubOp1Op Args=(List) Src=<test.opt:8:25>)
+			Replace=(Construct
+				Name=(CustomFunc
+					Name=OpName
+					Args=(List
+						(Ref Label="input" Src=<test.opt:8:60>)
+					)
+					Src=<test.opt:8:52>
+				)
+				Args=(List)
+				Src=<test.opt:8:51>
+			)
 			Src=<test.opt:7:1>
 		)
 		(Rule
@@ -204,13 +270,27 @@ define SubOp2 {}
 			Name="MultipleNames"
 			Tags=(Tags)
 			Match=(Match
-				Names=(OpNames OpOp)
+				Names=(Names Op)
 				Args=(List
 					(Bind
 						Label="input"
-						Target=(Match
-							Names=(OpNames SubOp1Op SubOp2Op)
-							Args=(List)
+						Target=(MatchAnd
+							Left=(Match
+								Names=(Names SubOp1 SubOp2)
+								Args=(List)
+								Src=<test.opt:11:12>
+							)
+							Right=(CustomFunc
+								Name=Func
+								Args=(List
+									(CustomFunc
+										Name=OpName
+										Args=(List
+											(Ref Label="input" Src=<test.opt:11:46>)
+										)
+									)
+								)
+							)
 							Src=<test.opt:11:12>
 						)
 						Src=<test.opt:11:5>
@@ -219,17 +299,141 @@ define SubOp2 {}
 				Src=<test.opt:11:1>
 			)
 			Replace=(Construct
-				Name=(Construct
-					Name="OpName"
+				Name=(CustomFunc
+					Name=OpName
 					Args=(List
-						(Ref Label="input" Src=<test.opt:11:43>)
+						(Ref Label="input" Src=<test.opt:11:68>)
 					)
-					Src=<test.opt:11:35>
+					Src=<test.opt:11:60>
 				)
 				Args=(List)
-				Src=<test.opt:11:34>
+				Src=<test.opt:11:59>
 			)
 			Src=<test.opt:10:1>
+		)
+	)
+)
+
+#
+# Compile custom match function.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[CustomFunc]
+(Op $input:* & (Func $input (SubFunc $input (SubSubFunc)))) => $input
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="CustomFunc"
+			Tags=(Tags)
+			Match=(Match
+				Names=(Names Op)
+				Args=(List
+					(Bind
+						Label="input"
+						Target=(MatchAnd
+							Left=(MatchAny)
+							Right=(CustomFunc
+								Name=Func
+								Args=(List
+									(Ref Label="input" Src=<test.opt:6:22>)
+									(CustomFunc
+										Name=SubFunc
+										Args=(List
+											(Ref Label="input" Src=<test.opt:6:38>)
+											(CustomFunc Name=SubSubFunc Args=(List))
+										)
+									)
+								)
+							)
+							Src=<test.opt:6:12>
+						)
+						Src=<test.opt:6:5>
+					)
+				)
+				Src=<test.opt:6:1>
+			)
+			Replace=(Ref Label="input" Src=<test.opt:6:64>)
+			Src=<test.opt:5:1>
+		)
+	)
+)
+
+#
+# Use string expressions with op matcher, construct, and custom functions.
+#
+compile
+define Op {
+    Input Expr
+}
+
+[Strings]
+(Op $left:"foo" & (Func "bar")) => (Op "foo" (Func "bar"))
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Op"
+			Fields=(DefineFields
+				(DefineField Name="Input" Type="Expr" Src=<test.opt:2:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+		(Rule
+			Comments=(Comments)
+			Name="Strings"
+			Tags=(Tags)
+			Match=(Match
+				Names=(Names Op)
+				Args=(List
+					(Bind
+						Label="left"
+						Target=(MatchAnd
+							Left="foo"
+							Right=(CustomFunc
+								Name=Func
+								Args=(List "bar")
+							)
+							Src=<test.opt:6:11>
+						)
+						Src=<test.opt:6:5>
+					)
+				)
+				Src=<test.opt:6:1>
+			)
+			Replace=(Construct
+				Name=Op
+				Args=(List
+					"foo"
+					(CustomFunc
+						Name=Func
+						Args=(List "bar")
+						Src=<test.opt:6:46>
+					)
+				)
+				Src=<test.opt:6:36>
+			)
+			Src=<test.opt:5:1>
 		)
 	)
 )
@@ -238,6 +442,7 @@ define SubOp2 {}
 # Compile errors.
 #
 compile
+[Tag]
 define Op {
     Input Expr
 }
@@ -248,32 +453,64 @@ define Op {
 [UnrecognizedName]
 (Unknown) => (Unknown)
 
-[UnrecognizedNestedName]
-(Op (Unknown)) => (Op)
-
 [TooManyOpNameArgs]
 (Op) => ((OpName "foo" "bar"))
 
 [InvalidOpNameArg]
 (Op) => ((OpName "foo"))
 
-[InvalidOpNameArg2]
-(Op $input:"foo") => ((OpName $input))
-
 [DuplicateLabel]
 (Op $input:"foo" $input:"bar") => (Op)
 
+[UnrecognizedLabel]
+(Op $input:* & (Func $unknown)) => (Op)
+
 [DuplicateName]
 (Op) => (Op)
 
 [DuplicateName]
 (Op) => (Op)
+
+[MatchRef]
+(Op $ref) => (Op)
+
+[CustomMultiNames]
+(Op (Func | Func2)) => (Op)
+
+[CustomBind]
+(Op (Func $bind:(SubFunc))) => (Op)
+
+[CustomList]
+(Op (Func [])) => (Op)
+
+[CustomList2]
+(Op (Func [ ... (SubFunc) ... ])) => (Op)
+
+[CustomBool]
+(Op (Func (SubFunc) & (SubFunc))) => (Op)
+
+[CustomWildcard]
+(Op (Func *)) => (Op)
+
+[OpInCustom]
+(Op (Func (Op))) => (Op)
+
+[ConstructTag]
+(Op) => (Tag)
 ----
-test.opt:4:1: duplicate 'Op' define statement
-test.opt:9:1: unrecognized match name 'Unknown'
-test.opt:12:5: unrecognized match name 'Unknown'
-test.opt:15:10: too many arguments to OpName function
-test.opt:18:10: invalid OpName argument: argument must be a variable reference
-test.opt:21:31: invalid OpName argument: $input must be bound to a match expression
-test.opt:24:18: duplicate bind label 'input'
-test.opt:29:1: duplicate rule name 'DuplicateName'
+test.opt:5:1: duplicate 'Op' define statement
+test.opt:10:1: unrecognized match name 'Unknown'
+test.opt:13:10: too many arguments to OpName function
+test.opt:16:10: invalid OpName argument: argument must be a variable reference
+test.opt:19:18: duplicate bind label 'input'
+test.opt:22:22: unrecognized variable name 'unknown'
+test.opt:27:1: duplicate rule name 'DuplicateName'
+test.opt:31:5: match pattern cannot use variable references
+test.opt:34:5: custom function cannot have multiple names
+test.opt:37:11: custom match function cannot bind arguments
+test.opt:40:5: custom match function cannot use lists
+test.opt:43:11: custom match function cannot use lists
+test.opt:46:11: custom match function cannot use boolean expressions
+test.opt:49:5: custom match function cannot use wildcard matcher
+test.opt:52:11: custom function name cannot be an operator name
+test.opt:55:9: construct name cannot be a tag
