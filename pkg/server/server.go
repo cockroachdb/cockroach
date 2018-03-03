@@ -98,7 +98,7 @@ var (
 		"server.shutdown.drain_wait",
 		"the amount of time a server waits in an unready state before proceeding with the rest "+
 			"of the shutdown process",
-		15*time.Second,
+		0*time.Second,
 	)
 )
 

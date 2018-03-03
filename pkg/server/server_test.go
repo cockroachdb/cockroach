@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -594,13 +593,10 @@ func TestListenerFileCreation(t *testing.T) {
 
 func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 	nodeLiveness := ts.nodeLiveness
-
-	// Don't bother waiting before draining.
-	sqlutils.MakeSQLRunner(db).Exec(t, "SET CLUSTER SETTING server.shutdown.drain_wait = '0s'")
 
 	for {
 		// Morally this loop only runs once. However, early in the boot
