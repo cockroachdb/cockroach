@@ -742,7 +742,21 @@ group-by
 build
 SELECT COUNT(kv.*) FROM t.kv
 ----
-error: count(): cannot use "kv.*" in this context
+group-by
+ ├── columns: column6:int:null:6
+ ├── project
+ │    ├── columns: column5:tuple{int, int, int, string}:null:5
+ │    ├── scan
+ │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    └── projections
+ │         └── tuple [type=tuple{int, int, int, string}]
+ │              ├── variable: kv.k [type=int]
+ │              ├── variable: kv.v [type=int]
+ │              ├── variable: kv.w [type=int]
+ │              └── variable: kv.s [type=string]
+ └── aggregations
+      └── function: count [type=int]
+           └── variable: column5 [type=tuple{int, int, int, string}]
 
 build
 SELECT COUNT((k, v)) FROM t.kv

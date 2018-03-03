@@ -23,13 +23,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// expandStarAndResolveType expands expr into a list of columns if expr
-// corresponds to a "*" or "<table>.*". Otherwise, expandStarAndResolveType
-// resolves the type of expr and returns it as a []TypedExpr.
-func (b *Builder) expandStarAndResolveType(
+// expandStar expands expr into a list of columns if expr
+// corresponds to a "*" or "<table>.*".
+func (b *Builder) expandStar(
 	expr tree.Expr, inScope *scope,
 ) (exprs []tree.TypedExpr) {
-	// NB: The case statements are sorted lexicographically.
+	if len(inScope.cols) == 0 {
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"cannot use %q without a FROM clause", tree.ErrString(expr))})
+	}
+
 	switch t := expr.(type) {
 	case *tree.AllColumnsSelector:
 		tn, err := tree.NormalizeTableName(&t.TableName)
@@ -60,9 +63,20 @@ func (b *Builder) expandStarAndResolveType(
 				exprs = append(exprs, &col)
 			}
 		}
-		if len(exprs) == 0 {
-			panic(errorf("failed to expand *"))
-		}
+	}
+
+	return exprs
+}
+
+// expandStarAndResolveType expands expr into a list of columns if expr
+// corresponds to a "*" or "<table>.*". Otherwise, expandStarAndResolveType
+// resolves the type of expr and returns it as a []TypedExpr.
+func (b *Builder) expandStarAndResolveType(
+	expr tree.Expr, inScope *scope,
+) (exprs []tree.TypedExpr) {
+	switch t := expr.(type) {
+	case *tree.AllColumnsSelector, tree.UnqualifiedStar:
+		exprs = b.expandStar(expr, inScope)
 
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
