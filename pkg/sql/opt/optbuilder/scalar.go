@@ -114,6 +114,32 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 			panic(errorf("not yet implemented: operator %s", t.Operator.String()))
 		}
 
+	case *tree.CaseExpr:
+		var condType types.T
+		var input opt.GroupID
+		if t.Expr != nil {
+			condType = types.Any
+			input = b.buildScalar(inScope.resolveType(t.Expr, types.Any), inScope)
+		} else {
+			condType = types.Bool
+			input = b.factory.ConstructTrue()
+		}
+
+		whens := make([]opt.GroupID, 0, len(t.Whens)+1)
+		for i := range t.Whens {
+			cond := b.buildScalar(inScope.resolveType(t.Whens[i].Cond, condType), inScope)
+			val := b.buildScalar(inScope.resolveType(t.Whens[i].Val, types.Any), inScope)
+			whens = append(whens, b.factory.ConstructWhen(cond, val))
+		}
+		// Add the ELSE expression to the end of whens as a raw scalar expression.
+		if t.Else != nil {
+			elseExpr := b.buildScalar(inScope.resolveType(t.Else, types.Any), inScope)
+			whens = append(whens, elseExpr)
+		} else {
+			whens = append(whens, b.buildDatum(tree.DNull))
+		}
+		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
+
 	case *tree.CastExpr:
 		arg := b.buildScalar(inScope.resolveType(t.Expr, types.Any), inScope)
 		typ := coltypes.CastTargetToDatumType(t.Type)
