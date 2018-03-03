@@ -49,7 +49,7 @@ func newLogger(name, filename, prefix string, stdout, stderr io.Writer) (*logger
 		return nil, err
 	}
 
-	f, err := os.Create(path)
+	f, err := os.Create(path + ".log")
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func rootLogger(name string) (*logger, error) {
 		stdout = os.Stdout
 		stderr = os.Stderr
 	}
-	return newLogger(name, "log", "" /* prefix */, stdout, stderr)
+	return newLogger(name, "test", "" /* prefix */, stdout, stderr)
 }
 
 func (l *logger) close() {
