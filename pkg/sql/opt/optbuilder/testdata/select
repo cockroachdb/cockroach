@@ -157,7 +157,18 @@ project
  │    ├── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
  │    ├── scan
  │    │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
- │    └── unsupported-expr: CASE WHEN abc.a != 0 THEN (abc.b / abc.a) > 1.5 ELSE false END [type=bool]
+ │    └── case [type=bool]
+ │         ├── true [type=bool]
+ │         ├── when [type=bool]
+ │         │    ├── ne [type=bool]
+ │         │    │    ├── variable: abc.a [type=int]
+ │         │    │    └── const: 0 [type=int]
+ │         │    └── gt [type=bool]
+ │         │         ├── div [type=decimal]
+ │         │         │    ├── variable: abc.b [type=int]
+ │         │         │    └── variable: abc.a [type=int]
+ │         │         └── const: 1.5 [type=decimal]
+ │         └── false [type=bool]
  └── projections
       ├── variable: abc.a [type=int]
       └── variable: abc.b [type=int]
@@ -348,7 +359,12 @@ project
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
-      └── unsupported-expr: CASE WHEN NULL THEN 1 ELSE 2 END [type=int]
+      └── case [type=int]
+           ├── true [type=bool]
+           ├── when [type=int]
+           │    ├── null [type=unknown]
+           │    └── const: 1 [type=int]
+           └── const: 2 [type=int]
 
 build
 SELECT 0 * b, b % 1, 0 % b from abc
