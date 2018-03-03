@@ -188,7 +188,11 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	r.mu.Unlock()
 
 	iAmTheLeaseHolder := newLease.Replica.ReplicaID == replicaID
-	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID
+	// NB: in the case in which a node restarts, minLeaseProposedTS forces it to
+	// get a new lease and we make sure it gets a new sequence number, thus
+	// causing the right half of the disjunction to fire so that we update the
+	// timestamp cache.
+	leaseChangingHands := prevLease.Replica.StoreID != newLease.Replica.StoreID || prevLease.Sequence != newLease.Sequence
 
 	if iAmTheLeaseHolder {
 		// Always log lease acquisition for epoch-based leases which are
