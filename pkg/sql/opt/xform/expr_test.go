@@ -58,6 +58,7 @@ func BenchmarkExprView(b *testing.B) {
 				for len(stack) > 0 {
 					ev := stack[len(stack)-1]
 					stack = stack[:len(stack)-1]
+					_ = ev.Private()
 					for i, n := 0, ev.ChildCount(); i < n; i++ {
 						stack = append(stack, ev.Child(i))
 					}
