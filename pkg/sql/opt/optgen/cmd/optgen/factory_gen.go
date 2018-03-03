@@ -407,14 +407,14 @@ func (g *factoryGen) genDynamicMatch(
 // genMatchCustom generates code to invoke a custom matching function.
 func (g *factoryGen) genMatchCustom(matchCustom *lang.CustomFuncExpr, noMatch bool) {
 	if noMatch {
-		g.w.write("if !")
+		g.w.nest("if !")
 	} else {
-		g.w.write("if ")
+		g.w.nest("if ")
 	}
 
 	g.genNestedExpr(matchCustom)
 
-	g.w.nest(" {\n")
+	g.w.write(" {\n")
 }
 
 // genNestedExpr recursively generates an Optgen expression as one large Go
@@ -452,7 +452,7 @@ func (g *factoryGen) genNestedExpr(e lang.Expr) {
 	case *lang.NameExpr:
 		// OpName literal expressions construct an op identifier like SelectOp,
 		// which can be passed as a function argument.
-		g.w.write("%sOp", t)
+		g.w.write("opt.%sOp", t)
 
 	default:
 		panic(fmt.Sprintf("unhandled expression: %s", e))
