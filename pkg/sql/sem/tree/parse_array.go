@@ -138,7 +138,7 @@ func (p *parseState) parseElement() error {
 		}
 	}
 
-	d, err := performCast(p.evalCtx, NewDString(next), p.t)
+	d, err := PerformCast(p.evalCtx, NewDString(next), p.t)
 	if err != nil {
 		return err
 	}
