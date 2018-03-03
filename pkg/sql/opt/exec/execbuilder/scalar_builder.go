@@ -45,6 +45,7 @@ func init() {
 		opt.PlaceholderOp:     (*Builder).buildTypedExpr,
 		opt.TupleOp:           (*Builder).buildTuple,
 		opt.FunctionOp:        (*Builder).buildFunction,
+		opt.CaseOp:            (*Builder).buildCase,
 		opt.CastOp:            (*Builder).buildCast,
 		opt.CoalesceOp:        (*Builder).buildCoalesce,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
@@ -178,6 +179,37 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 		ev.Logical().Scalar.Type,
 		funcDef.Overload,
 	)
+}
+
+func (b *Builder) buildCase(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+	input := b.buildScalar(ctx, ev.Child(0))
+
+	// A searched CASE statement is represented by the optimizer with input=True.
+	// The executor expects searched CASE statements to have nil inputs.
+	if input == tree.DBoolTrue {
+		input = nil
+	}
+
+	// Extract the list of WHEN ... THEN ... clauses.
+	whens := make([]*tree.When, ev.ChildCount()-2)
+	for i := 1; i < ev.ChildCount()-1; i++ {
+		whenEv := ev.Child(i)
+		cond := b.buildScalar(ctx, whenEv.Child(0))
+		val := b.buildScalar(ctx, whenEv.Child(1))
+		whens[i-1] = &tree.When{Cond: cond, Val: val}
+	}
+
+	// The last child in ev is the ELSE expression.
+	elseExpr := b.buildScalar(ctx, ev.Child(ev.ChildCount()-1))
+	if elseExpr == tree.DNull {
+		elseExpr = nil
+	}
+
+	expr, err := tree.NewTypedCaseExpr(input, whens, elseExpr, ev.Logical().Scalar.Type)
+	if err != nil {
+		panic(err)
+	}
+	return expr
 }
 
 func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
