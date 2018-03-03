@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -297,6 +298,7 @@ func NewScalar(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	catalog optbase.Catalog,
 	factory opt.Factory,
 	columnNames []string,
 	columnTypes []types.T,
@@ -308,6 +310,7 @@ func NewScalar(
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
+			catalog: catalog,
 		},
 	}
 	sb.scope.builder = &sb.Builder

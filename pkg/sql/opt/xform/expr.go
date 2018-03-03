@@ -99,7 +99,7 @@ func makeExprView(mem *memo, group opt.GroupID, required opt.PhysicalPropsID) Ex
 		// expression, which is always the first expression in the group.
 		return ExprView{
 			mem:      mem,
-			loc:      memoLoc{group: group, expr: normExprID},
+			loc:      makeNormLoc(group),
 			op:       mgrp.lookupExpr(normExprID).op,
 			required: required,
 		}

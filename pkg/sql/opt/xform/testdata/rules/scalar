@@ -76,6 +76,21 @@ project
            └── null [type=unknown]
 
 # --------------------------------------------------
+# EliminateCast
+# --------------------------------------------------
+opt
+SELECT i::int, arr::int[], '[1, 2]'::json::json FROM a
+----
+project
+ ├── columns: column7:int:null:7 column8:int[]:null:8 column9:jsonb:null:9
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5 a.arr:int[]:null:6
+ └── projections
+      ├── variable: a.i [type=int]
+      ├── variable: a.arr [type=int[]]
+      └── const: '[1, 2]' [type=jsonb]
+
+# --------------------------------------------------
 # FoldNullCast
 # --------------------------------------------------
 opt

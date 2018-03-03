@@ -1,13 +1,37 @@
 exec-ddl
-CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, d DECIMAL)
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, d DECIMAL, t TIME)
 ----
 TABLE a
  ├── k int not null
  ├── i int
  ├── f float
  ├── d decimal
+ ├── t time
  └── INDEX primary
       └── k int not null
+
+# --------------------------------------------------
+# NormalizePlusMultConst
+# --------------------------------------------------
+opt
+SELECT 1+f, 5*length('foo')*(i*i) FROM a
+----
+project
+ ├── columns: column6:float:null:6 column7:int:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ └── projections
+      ├── plus [type=float]
+      │    ├── variable: a.f [type=float]
+      │    └── const: 1.0 [type=float]
+      └── mult [type=int]
+           ├── mult [type=int]
+           │    ├── variable: a.i [type=int]
+           │    └── variable: a.i [type=int]
+           └── mult [type=int]
+                ├── const: 5 [type=int]
+                └── function: length [type=int]
+                     └── const: 'foo' [type=string]
 
 # --------------------------------------------------
 # FoldPlusZero, FoldZeroPlus
@@ -22,9 +46,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column5:int:null:5 column6:int:null:6 column7:float:null:7 column8:float:null:8 column9:decimal:null:9 column10:decimal:null:10
+ ├── columns: column6:int:null:6 column7:int:null:7 column8:float:null:8 column9:float:null:9 column10:decimal:null:10 column11:decimal:null:11
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
  └── projections
       ├── plus [type=int]
       │    ├── variable: a.i [type=int]
@@ -58,9 +82,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column5:int:null:5 column6:int:null:6 column7:float:null:7 column8:float:null:8 column9:decimal:null:9 column10:decimal:null:10
+ ├── columns: column6:int:null:6 column7:int:null:7 column8:float:null:8 column9:float:null:9 column10:decimal:null:10 column11:decimal:null:11
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
  └── projections
       ├── plus [type=int]
       │    ├── variable: a.i [type=int]
@@ -93,10 +117,88 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column5:decimal:null:5 column6:float:null:6 column7:decimal:null:7
+ ├── columns: column6:decimal:null:6 column7:float:null:7 column8:decimal:null:8
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
  └── projections
       ├── variable: a.i [type=int]
       ├── variable: a.f [type=float]
       └── variable: a.d [type=decimal]
+
+# --------------------------------------------------
+# FoldUnaryMinusZero
+# --------------------------------------------------
+
+# Add typecast to prevent type checker from doing the folding.
+opt
+SELECT
+    -0::int,
+    -0.0::decimal,
+
+    -- Don't fold floats.
+    -0e0::float
+FROM a
+----
+project
+ ├── columns: column6:int:null:6 column7:decimal:null:7 column8:float:null:8
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ └── projections
+      ├── const: 0 [type=int]
+      ├── const: 0.0 [type=decimal]
+      └── unary-minus [type=float]
+           └── const: 0.0 [type=float]
+
+# --------------------------------------------------
+# InvertMinus
+# --------------------------------------------------
+opt
+SELECT
+    -(a.f - a.f),
+    -(a.d - a.i),
+    -(a.t - a.t)
+FROM a
+----
+project
+ ├── columns: column6:float:null:6 column7:decimal:null:7 column8:interval:null:8
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ └── projections
+      ├── minus [type=float]
+      │    ├── variable: a.f [type=float]
+      │    └── variable: a.f [type=float]
+      ├── minus [type=decimal]
+      │    ├── variable: a.i [type=int]
+      │    └── variable: a.d [type=decimal]
+      └── minus [type=interval]
+           ├── variable: a.t [type=time]
+           └── variable: a.t [type=time]
+
+# --------------------------------------------------
+# EliminateUnaryPlus
+# --------------------------------------------------
+opt
+SELECT +a.i::int, +(a.f + a.f) FROM a
+----
+project
+ ├── columns: column6:int:null:6 column7:float:null:7
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ └── projections
+      ├── variable: a.i [type=int]
+      └── plus [type=float]
+           ├── variable: a.f [type=float]
+           └── variable: a.f [type=float]
+
+# --------------------------------------------------
+# EliminateUnaryMinus
+# --------------------------------------------------
+opt
+SELECT -(-a.i::int) FROM a
+----
+project
+ ├── columns: column6:int:null:6
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ └── projections
+      └── variable: a.i [type=int]

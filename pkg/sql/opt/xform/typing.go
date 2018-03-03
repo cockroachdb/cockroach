@@ -22,6 +22,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
+// overload encapsulates information about a binary operator overload, to be
+// used for type inference and null folding. The tree.BinOp struct does not
+// work well for this use case, because it is quite large, and was not defined
+// in a way allowing it to be passed by reference (without extra allocation).
+type overload struct {
+	// returnType of the overload. This depends on the argument types.
+	returnType types.T
+
+	// allowNullArgs is true if the operator allows null arguments, and cannot
+	// therefore be folded away to null.
+	allowNullArgs bool
+}
+
 // inferType derives the type of the given scalar expression. Depending upon
 // the operator, the type may be fixed, or it may be dependent upon the
 // operands. inferType is called during initial construction of the expression,
@@ -52,8 +65,11 @@ func inferUnaryType(op opt.Operator, inputType types.T) types.T {
 // inferBinaryType infers the return type of a binary operator, given the type
 // of its inputs.
 func inferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
-	returnType, _ := resolveBinary(op, leftType, rightType)
-	return returnType
+	overload, ok := findBinaryOverload(op, leftType, rightType)
+	if !ok {
+		panic(fmt.Sprintf("could not find type for binary expression %s", op))
+	}
+	return overload.returnType
 }
 
 type typingFunc func(ev ExprView) types.T
@@ -106,6 +122,11 @@ func typeVariable(ev ExprView) types.T {
 	return typ
 }
 
+// typeAsUnknown returns the fixed unknown type.
+func typeAsUnknown(_ ExprView) types.T {
+	return types.Unknown
+}
+
 // typeAsBool returns the fixed boolean type.
 func typeAsBool(_ ExprView) types.T {
 	return types.Bool
@@ -139,8 +160,7 @@ func typeAsUnary(ev ExprView) types.T {
 func typeAsBinary(ev ExprView) types.T {
 	leftType := ev.Child(0).Logical().Scalar.Type
 	rightType := ev.Child(1).Logical().Scalar.Type
-	typ, _ := resolveBinary(ev.Operator(), leftType, rightType)
-	return typ
+	return inferBinaryType(ev.Operator(), leftType, rightType)
 }
 
 // typeFunction returns the type of a function expression by extracting it from
@@ -175,32 +195,31 @@ func typeAsPrivate(ev ExprView) types.T {
 	return ev.Private().(types.T)
 }
 
-// resolveBinary finds the correct type signature overload for the specified
-// binary operator, given the types of its inputs. resolveBinary returns the
-// overloads's return type, as well as a boolean indicating whether it allows
-// null values to be passed as inputs (if not, the operator can just be folded
-// to null).
-func resolveBinary(op opt.Operator, leftType, rightType types.T) (typ types.T, allowNulls bool) {
+// findBinaryOverload finds the correct type signature overload for the
+// specified binary operator, given the types of its inputs. If an overload is
+// found, findBinaryOverload returns true, plus information about the overload.
+// If an overload is not found, findBinaryOverload returns false.
+func findBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ overload, ok bool) {
 	binOp := opt.BinaryOpReverseMap[op]
 
 	// Find the binary op that matches the type of the expression's left and
 	// right children.
-	for _, op := range tree.BinOps[binOp] {
-		o := op.(tree.BinOp)
+	for _, binOverloads := range tree.BinOps[binOp] {
+		o := binOverloads.(tree.BinOp)
 
 		if leftType == types.Unknown {
 			if rightType.Equivalent(o.RightType) {
-				return o.ReturnType, o.NullableArgs
+				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
 			}
 		} else if rightType == types.Unknown {
 			if leftType.Equivalent(o.LeftType) {
-				return o.ReturnType, o.NullableArgs
+				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
 			}
 		} else {
 			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return o.ReturnType, o.NullableArgs
+				return overload{returnType: o.ReturnType, allowNullArgs: o.NullableArgs}, true
 			}
 		}
 	}
-	panic(fmt.Sprintf("could not find type for binary expression %s", op))
+	return overload{}, false
 }

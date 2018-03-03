@@ -319,8 +319,8 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	eng := newExecEngine(p, nil)
 	defer eng.Close()
 
-	o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), o.Factory(), stmt.AST)
+	o := xform.NewOptimizer(p.EvalContext(), xform.OptimizeAll)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), eng.Catalog(), o.Factory(), stmt.AST)
 	root, props, err := bld.Build()
 	if err != nil {
 		return err
