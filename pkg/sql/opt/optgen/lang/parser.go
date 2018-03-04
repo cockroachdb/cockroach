@@ -365,7 +365,7 @@ func (p *Parser) parseMatchAnd() Expr {
 	return &MatchAndExpr{Src: src, Left: left, Right: right}
 }
 
-// match-item = match | match-not | match-list | match-any | STRING
+// match-item = match | match-not | match-list | match-any | name | STRING
 func (p *Parser) parseMatchItem() Expr {
 	switch p.scan() {
 	case LPAREN:
@@ -382,6 +382,10 @@ func (p *Parser) parseMatchItem() Expr {
 
 	case ASTERISK:
 		return &MatchAnyExpr{}
+
+	case IDENT:
+		name := NameExpr(p.s.Literal())
+		return &name
 
 	case STRING:
 		p.unscan()
@@ -465,20 +469,24 @@ func (p *Parser) parseMatchList() Expr {
 	return &MatchListSingleExpr{Src: &src, MatchItem: matchItem}
 }
 
-// replace = construct | STRING | ref
+// replace = construct | ref | name | STRING
 func (p *Parser) parseReplace() Expr {
 	switch p.scan() {
 	case LPAREN:
 		p.unscan()
 		return p.parseConstruct()
 
-	case STRING:
-		p.unscan()
-		return p.parseString()
-
 	case DOLLAR:
 		p.unscan()
 		return p.parseRef()
+
+	case IDENT:
+		name := NameExpr(p.s.Literal())
+		return &name
+
+	case STRING:
+		p.unscan()
+		return p.parseString()
 
 	default:
 		p.addExpectedTokenErr("replace pattern")
