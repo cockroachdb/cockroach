@@ -683,6 +683,8 @@ func (a *Allocator) TransferLeaseTarget(
 	// Fall back to logic that doesn't take request counts and latency into
 	// account if the counts/latency-based logic couldn't pick a best replica.
 	candidates := make([]roachpb.ReplicaDescriptor, 0, len(existing))
+	var bestOption roachpb.ReplicaDescriptor
+	bestOptionLeaseCount := int32(math.MaxInt32)
 	for _, repl := range existing {
 		if leaseStoreID == repl.StoreID {
 			continue
@@ -693,9 +695,18 @@ func (a *Allocator) TransferLeaseTarget(
 		}
 		if !checkCandidateFullness || float64(storeDesc.Capacity.LeaseCount) < sl.candidateLeases.mean-0.5 {
 			candidates = append(candidates, repl)
+		} else if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
+			bestOption = repl
+			bestOptionLeaseCount = storeDesc.Capacity.LeaseCount
 		}
 	}
 	if len(candidates) == 0 {
+		// If we aren't supposed to be considering the current leaseholder (e.g.
+		// because we need to remove this replica for some reason), return
+		// our best option if it we otherwise wouldn't want to do anything.
+		if !checkTransferLeaseSource {
+			return bestOption
+		}
 		return roachpb.ReplicaDescriptor{}
 	}
 	a.randGen.Lock()

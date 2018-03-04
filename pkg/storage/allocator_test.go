@@ -1142,7 +1142,7 @@ func TestAllocatorTransferLeaseTarget(t *testing.T) {
 		{existing: existing, leaseholder: 0, check: true, expected: 0},
 		// Store 1 is not a lease transfer source.
 		{existing: existing, leaseholder: 1, check: true, expected: 0},
-		{existing: existing, leaseholder: 1, check: false, expected: 0},
+		{existing: existing, leaseholder: 1, check: false, expected: 2},
 		// Store 2 is not a lease transfer source.
 		{existing: existing, leaseholder: 2, check: true, expected: 0},
 		{existing: existing, leaseholder: 2, check: false, expected: 1},
@@ -1218,7 +1218,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		{existing: existing, leaseholder: 1, check: false, expected: 2},
 		// Store 2 is not a lease transfer source.
 		{existing: existing, leaseholder: 2, check: true, expected: 0},
-		{existing: existing, leaseholder: 2, check: false, expected: 0},
+		{existing: existing, leaseholder: 2, check: false, expected: 3},
 		// Store 3 is a lease transfer source, but won't transfer to
 		// node 1 because it's draining.
 		{existing: existing, leaseholder: 3, check: true, expected: 2},
@@ -1494,9 +1494,12 @@ func TestAllocatorTransferLeaseTargetMultiStore(t *testing.T) {
 		check       bool
 		expected    roachpb.StoreID
 	}{
-		{leaseholder: 1, check: false, expected: 0},
+		{leaseholder: 1, check: false, expected: 3},
+		{leaseholder: 1, check: true, expected: 0},
 		{leaseholder: 3, check: false, expected: 1},
+		{leaseholder: 3, check: true, expected: 0},
 		{leaseholder: 5, check: false, expected: 1},
+		{leaseholder: 5, check: true, expected: 1},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
