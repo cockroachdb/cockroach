@@ -53,6 +53,6 @@ type memoExpr struct {
 type fingerprint memoExpr
 
 // fingerprint returns this memo expression's unique fingerprint.
-func (me memoExpr) fingerprint() fingerprint {
-	return fingerprint(me)
+func (me *memoExpr) fingerprint() fingerprint {
+	return fingerprint(*me)
 }
