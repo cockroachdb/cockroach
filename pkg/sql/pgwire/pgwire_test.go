@@ -239,9 +239,6 @@ func TestPGWireDrainClient(t *testing.T) {
 	}
 	defer db.Close()
 
-	// Don't bother waiting before draining.
-	sqlutils.MakeSQLRunner(db).Exec(t, "SET CLUSTER SETTING server.shutdown.drain_wait = '0s'")
-
 	txn, err := db.Begin()
 	if err != nil {
 		t.Fatal(err)
