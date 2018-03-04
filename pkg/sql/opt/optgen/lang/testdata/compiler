@@ -497,6 +497,18 @@ define Op {
 
 [ConstructTag]
 (Op) => (Tag)
+
+[MatchLiteralName]
+(Op (Op $bind:Op)) => (Op Op (Func Op))
+
+[IllegalLiteralName]
+(Op) => (Op Op (Func Unknown))
+
+[IllegalLiteralName2]
+(Op) => (Op Op (Func Op) Unknown)
+
+[LiteralNameReplacement]
+(Op) => Op
 ----
 test.opt:5:1: duplicate 'Op' define statement
 test.opt:10:1: unrecognized match name 'Unknown'
@@ -514,3 +526,7 @@ test.opt:46:11: custom match function cannot use boolean expressions
 test.opt:49:5: custom match function cannot use wildcard matcher
 test.opt:52:11: custom function name cannot be an operator name
 test.opt:55:9: construct name cannot be a tag
+test.opt:58:9: cannot match literal name
+test.opt:61:16: Unknown is not an operator name
+test.opt:64:9: Unknown is not an operator name
+test.opt:66:1: replace pattern cannot be a literal name

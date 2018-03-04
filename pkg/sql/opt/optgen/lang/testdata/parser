@@ -333,11 +333,11 @@ parse
 )
 
 #
-# Match invoke expression.
+# Match nested custom functions with literal name argument.
 #
 parse
 [Invoke]
-(Op $left:* $right:* & (Invoke $right $left)) => (Op)
+(Op $left:* $right:* & (Invoke $right (Invoke2 $left SomeOp))) => (Op)
 ----
 (Root
 	Defines=(DefineSet)
@@ -358,7 +358,14 @@ parse
 								Names=(Names Invoke)
 								Args=(List
 									(Ref Label="right" Src=<test.opt:2:32>)
-									(Ref Label="left" Src=<test.opt:2:39>)
+									(Match
+										Names=(Names Invoke2)
+										Args=(List
+											(Ref Label="left" Src=<test.opt:2:48>)
+											SomeOp
+										)
+										Src=<test.opt:2:39>
+									)
 								)
 								Src=<test.opt:2:24>
 							)
@@ -369,7 +376,7 @@ parse
 				)
 				Src=<test.opt:2:1>
 			)
-			Replace=(Construct Name=Op Args=(List) Src=<test.opt:2:50>)
+			Replace=(Construct Name=Op Args=(List) Src=<test.opt:2:67>)
 			Src=<test.opt:1:1>
 		)
 	)
@@ -551,7 +558,7 @@ parse
 #
 parse
 [Construct]
-(Op $input:*) => (Op $input (SubOp "foo"))
+(Op $input:*) => (Op $input (SubOp "foo" AnotherOp))
 ----
 (Root
 	Defines=(DefineSet)
@@ -573,7 +580,7 @@ parse
 					(Ref Label="input" Src=<test.opt:2:22>)
 					(Construct
 						Name=SubOp
-						Args=(List "foo")
+						Args=(List "foo" AnotherOp)
 						Src=<test.opt:2:29>
 					)
 				)

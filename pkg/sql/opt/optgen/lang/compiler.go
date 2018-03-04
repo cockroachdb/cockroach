@@ -255,7 +255,71 @@ func (c *ruleCompiler) expandRule(opName NameExpr) {
 		Match:    match,
 		Replace:  replace,
 	}
+
+	c.checkLiteralNames(newRule)
+
 	c.compiled.Rules = append(c.compiled.Rules, newRule)
+}
+
+// checkLiteralNames traverses the expression tree and verifies that each
+// literal name expressions is in a legal location (i.e. not in match pattern),
+// and that it matches an operator name.
+func (c *ruleCompiler) checkLiteralNames(rule *RuleExpr) {
+	allowLiteralName := false
+	src := rule.Src
+
+	var fn func(Expr) Expr
+	fn = func(e Expr) Expr {
+		// Save current value of allowLiteralName and restore after visit.
+		saveName := allowLiteralName
+
+		// Remember source information.
+		saveSrc := src
+		if e.Source() != nil {
+			src = e.Source()
+		}
+
+		// Only visit the arguments of the Match, Construct, and CustomFunc
+		// expressions, since literal names are allowed in their name operands.
+		switch t := e.(type) {
+		case *MatchExpr:
+			allowLiteralName = false
+			t.Args.Visit(fn)
+
+		case *ConstructExpr:
+			allowLiteralName = true
+			t.Args.Visit(fn)
+
+		case *CustomFuncExpr:
+			allowLiteralName = true
+			t.Args.Visit(fn)
+
+		case *NameExpr:
+			if !allowLiteralName {
+				c.compiler.addErr(src, errors.New("cannot match literal name"))
+			} else {
+				define := c.compiler.compiled.LookupDefine(string(*t))
+				if define == nil {
+					c.compiler.addErr(src, fmt.Errorf("%s is not an operator name", *t))
+				}
+			}
+
+		default:
+			// Recurse into every child of other kinds of expressions.
+			e.Visit(fn)
+		}
+
+		allowLiteralName = saveName
+		src = saveSrc
+		return e
+	}
+
+	if _, ok := rule.Replace.(*NameExpr); ok {
+		c.compiler.addErr(src, errors.New("replace pattern cannot be a literal name"))
+		return
+	}
+
+	rule.Visit(fn)
 }
 
 // findMatchingDefines returns the set of define expressions which either
