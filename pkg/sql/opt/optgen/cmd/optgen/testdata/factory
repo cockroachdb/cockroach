@@ -41,10 +41,10 @@ func (_f *factory) ConstructNot(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notExpr)))
 }
 
 // ConstructFuncCall constructs an expression for the FuncCall operator.
@@ -60,10 +60,10 @@ func (_f *factory) ConstructFuncCall(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_funcCallExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_funcCallExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_funcCallExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_funcCallExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -127,7 +127,7 @@ func (_f *factory) ConstructInnerJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr))
 	}
 
 	// [CommuteJoin]
@@ -140,7 +140,7 @@ func (_f *factory) ConstructInnerJoin(
 		return _group
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -229,7 +229,7 @@ func (_f *factory) ConstructEq(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_eqExpr))
 	}
 
 	// [NormalizeVarPlus]
@@ -256,7 +256,7 @@ func (_f *factory) ConstructEq(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_eqExpr)))
 }
 
 // ConstructLt constructs an expression for the Lt operator.
@@ -271,7 +271,7 @@ func (_f *factory) ConstructLt(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_ltExpr))
 	}
 
 	// [NormalizeVarPlus]
@@ -298,7 +298,7 @@ func (_f *factory) ConstructLt(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_ltExpr)))
 }
 
 // ConstructPlus constructs an expression for the Plus operator.
@@ -313,10 +313,10 @@ func (_f *factory) ConstructPlus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_plusExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_plusExpr)))
 }
 
 // ConstructMinus constructs an expression for the Minus operator.
@@ -331,10 +331,10 @@ func (_f *factory) ConstructMinus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_minusExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_minusExpr)))
 }
 
 // ConstructConst constructs an expression for the Const operator.
@@ -346,10 +346,10 @@ func (_f *factory) ConstructConst() opt.GroupID {
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_constExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_constExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_constExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_constExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -435,7 +435,7 @@ func (_f *factory) ConstructFunc(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_funcExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_funcExpr))
 	}
 
 	// [Concat]
@@ -456,7 +456,7 @@ func (_f *factory) ConstructFunc(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_funcExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_funcExpr)))
 }
 
 // ConstructVariable constructs an expression for the Variable operator.
@@ -470,10 +470,10 @@ func (_f *factory) ConstructVariable(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_variableExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_variableExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -566,7 +566,7 @@ func (_f *factory) ConstructSelect(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_selectExpr))
 	}
 
 	// [Test]
@@ -598,7 +598,7 @@ func (_f *factory) ConstructSelect(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_selectExpr)))
 }
 
 // ConstructInnerJoin constructs an expression for the InnerJoin operator.
@@ -613,10 +613,10 @@ func (_f *factory) ConstructInnerJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
 }
 
 // ConstructFullJoin constructs an expression for the FullJoin operator.
@@ -631,10 +631,10 @@ func (_f *factory) ConstructFullJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr)))
 }
 
 // ConstructUnion constructs an expression for the Union operator.
@@ -649,10 +649,10 @@ func (_f *factory) ConstructUnion(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unionExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionExpr)))
 }
 
 // ConstructAnd constructs an expression for the And operator.
@@ -667,10 +667,10 @@ func (_f *factory) ConstructAnd(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_andExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_andExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_andExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -761,7 +761,7 @@ func (_f *factory) ConstructList(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_listExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_listExpr))
 	}
 
 	// [List]
@@ -802,7 +802,7 @@ func (_f *factory) ConstructList(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_listExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_listExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -869,10 +869,10 @@ func (_f *factory) ConstructList(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_listExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_listExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_listExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_listExpr)))
 }
 
 // ConstructOp constructs an expression for the Op operator.
@@ -887,7 +887,7 @@ func (_f *factory) ConstructOp(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_opExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_opExpr))
 	}
 
 	// [ListNot]
@@ -908,7 +908,7 @@ func (_f *factory) ConstructOp(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_opExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_opExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -990,7 +990,7 @@ func (_f *factory) ConstructEq(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_eqExpr))
 	}
 
 	// [Constant]
@@ -1024,7 +1024,7 @@ func (_f *factory) ConstructEq(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_eqExpr)))
 }
 
 // ConstructNe constructs an expression for the Ne operator.
@@ -1039,7 +1039,7 @@ func (_f *factory) ConstructNe(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_neExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_neExpr))
 	}
 
 	// [Dynamic]
@@ -1075,7 +1075,7 @@ func (_f *factory) ConstructNe(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_neExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -1153,7 +1153,7 @@ func (_f *factory) ConstructPlus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_plusExpr))
 	}
 
 	// [Fold]
@@ -1169,7 +1169,7 @@ func (_f *factory) ConstructPlus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_plusExpr)))
 }
 
 // ConstructMinus constructs an expression for the Minus operator.
@@ -1184,7 +1184,7 @@ func (_f *factory) ConstructMinus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_minusExpr))
 	}
 
 	// [Fold]
@@ -1200,7 +1200,7 @@ func (_f *factory) ConstructMinus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_minusExpr)))
 }
 
 // ConstructNull constructs an expression for the Null operator.
@@ -1212,10 +1212,10 @@ func (_f *factory) ConstructNull() opt.GroupID {
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_nullExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_nullExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_nullExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_nullExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
@@ -1303,10 +1303,10 @@ func (_f *factory) ConstructLt(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_ltExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_ltExpr)))
 }
 
 // ConstructGt constructs an expression for the Gt operator.
@@ -1321,10 +1321,10 @@ func (_f *factory) ConstructGt(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_gtExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_gtExpr)))
 }
 
 // ConstructContains constructs an expression for the Contains operator.
@@ -1339,10 +1339,10 @@ func (_f *factory) ConstructContains(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_containsExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_containsExpr)))
 }
 
 // ConstructNot constructs an expression for the Not operator.
@@ -1356,7 +1356,7 @@ func (_f *factory) ConstructNot(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notExpr))
 	}
 
 	// [Invert]
@@ -1378,7 +1378,7 @@ func (_f *factory) ConstructNot(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
