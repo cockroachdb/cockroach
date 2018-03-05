@@ -22,7 +22,8 @@ import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
-import Liveness = cockroach.storage.Liveness;
+
+type Liveness = cockroach.storage.Liveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
