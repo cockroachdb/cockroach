@@ -19,8 +19,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"math"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 func TestIPAddrParseInet(t *testing.T) {
