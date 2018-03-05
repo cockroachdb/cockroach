@@ -302,19 +302,18 @@ SELECT span, operation, regexp_replace(regexp_replace(message, 'wall_time:\d+', 
 query ITT
 SELECT span, operation, message FROM [SHOW KV TRACE FOR DELETE FROM t.kv]
 ----
-0  sql txn         Scan /Table/52/{1-2}
-3  dist sender     querying next range at /Table/52/1
-3  dist sender     r1: sending batch 1 Scan to (n1,s1):1
-0  sql txn         fetched: /kv/primary/1/v -> /2
-0  sql txn         Del /Table/52/2/2/0
-0  sql txn         Del /Table/52/1/1/0
-2  consuming rows  output row: [1 2]
-0  sql txn         fetched: /kv/primary/2/v -> /3
-0  sql txn         Del /Table/52/2/3/0
-0  sql txn         Del /Table/52/1/2/0
-2  consuming rows  output row: [2 3]
-5  dist sender     querying next range at /Table/52/1/1/0
-5  dist sender     r1: sending batch 4 Del, 1 BeginTxn to (n1,s1):1
+1  starting plan   Scan /Table/52/{1-2}
+2  dist sender     querying next range at /Table/52/1
+2  dist sender     r1: sending batch 1 Scan to (n1,s1):1
+1  starting plan   fetched: /kv/primary/1/v -> /2
+1  starting plan   Del /Table/52/2/2/0
+1  starting plan   Del /Table/52/1/1/0
+1  starting plan   fetched: /kv/primary/2/v -> /3
+1  starting plan   Del /Table/52/2/3/0
+1  starting plan   Del /Table/52/1/2/0
+4  dist sender     querying next range at /Table/52/1/1/0
+4  dist sender     r1: sending batch 4 Del, 1 BeginTxn to (n1,s1):1
+7  consuming rows  fast path - rows affected: 2
 
 query ITT
 SELECT span, operation, regexp_replace(regexp_replace(message, 'mutationJobs:<[^>]*>', 'mutationJobs:<...>'), 'wall_time:\d+', 'wall_time:...') as message
@@ -711,13 +710,9 @@ fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/4/9 -> NULL
-output row: [4 9]
 fetched: /ab/primary/5/10 -> NULL
-output row: [5 10]
 fetched: /ab/primary/43/51 -> NULL
-output row: [43 51]
 fetched: /ab/primary/44/52 -> NULL
-output row: [44 52]
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR DELETE FROM ab]

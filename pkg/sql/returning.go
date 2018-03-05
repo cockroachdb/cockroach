@@ -24,6 +24,59 @@ import (
 	"github.com/pkg/errors"
 )
 
+// resultsNeeded determines whether a statement that has a RETURNING
+// clause needs to provide values for result rows for a downstream
+// plan.
+func resultsNeeded(r tree.ReturningClause) rowsNeeded {
+	switch t := r.(type) {
+	case *tree.ReturningExprs:
+		return needValues
+	case *tree.ReturningNothing, *tree.NoReturningClause:
+		return discardValues
+	default:
+		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
+	}
+}
+
+type rowsNeeded bool
+
+const needValues rowsNeeded = true
+const discardValues rowsNeeded = false
+
+// Returning wraps the given source node in a way suitable for the
+// given RETURNING specification.
+func (p *planner) Returning(
+	ctx context.Context,
+	source batchedPlanNode,
+	r tree.ReturningClause,
+	desiredTypes []types.T,
+	tn *tree.TableName,
+) (planNode, error) {
+	// serialize the data-modifying plan to ensure that no data is
+	// observed that hasn't been committed/checked first.
+
+	switch t := r.(type) {
+	case *tree.ReturningNothing, *tree.NoReturningClause:
+		// We could use serializeNode here, but using rowCountNode is an
+		// optimization that saves on calls to Next() by the caller.
+		return &rowCountNode{source: source}, nil
+
+	case *tree.ReturningExprs:
+		serialized := &serializeNode{source: source}
+		info := sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(source))
+		r := &renderNode{
+			source:     planDataSource{info: info, plan: serialized},
+			sourceInfo: sqlbase.MultiSourceInfo{info},
+		}
+		r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.source.info.SourceColumns))
+		err := p.initTargets(ctx, r, tree.SelectExprs(*t), desiredTypes)
+		return r, err
+
+	default:
+		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
+	}
+}
+
 // returningHelper implements the logic used for statements with RETURNING clauses. It accumulates
 // result rows, one for each call to append().
 type returningHelper struct {

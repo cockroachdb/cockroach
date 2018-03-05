@@ -189,8 +189,10 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &testingRelocateNode{}
 var _ planNode = &renderNode{}
+var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
+var _ planNode = &serializeNode{}
 var _ planNode = &showRangesNode{}
 var _ planNode = &showFingerprintsNode{}
 var _ planNode = &sortNode{}
@@ -203,11 +205,13 @@ var _ planNode = &windowNode{}
 var _ planNode = &CreateUserNode{}
 var _ planNode = &DropUserNode{}
 
+var _ planNodeFastPath = &CreateUserNode{}
+var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
 var _ planNodeFastPath = &createTableNode{}
-var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &deleteNode{}
-var _ planNodeFastPath = &DropUserNode{}
+var _ planNodeFastPath = &rowCountNode{}
+var _ planNodeFastPath = &serializeNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 
 // planTop is the struct that collects the properties

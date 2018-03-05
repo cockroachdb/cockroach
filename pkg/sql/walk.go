@@ -409,17 +409,16 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *deleteNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "from", n.tableDesc.Name)
+			v.observer.attr(name, "from", n.run.td.tableDesc().Name)
 		}
-		if v.observer.expr != nil {
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
-			}
-			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
-				v.expr(name, d, i, e)
-			})
-		}
-		v.visit(n.run.rows)
+		// A deleter has no sub-expressions, so nothing special to do here.
+		v.visit(n.source)
+
+	case *serializeNode:
+		v.visit(n.source)
+
+	case *rowCountNode:
+		v.visit(n.source)
 
 	case *createTableNode:
 		if n.n.As() {
@@ -560,10 +559,12 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&ordinalityNode{}):           "ordinality",
 	reflect.TypeOf(&testingRelocateNode{}):      "testingRelocate",
 	reflect.TypeOf(&renderNode{}):               "render",
+	reflect.TypeOf(&rowCountNode{}):             "count",
 	reflect.TypeOf(&scanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",
 	reflect.TypeOf(&sequenceSelectNode{}):       "sequence select",
+	reflect.TypeOf(&serializeNode{}):            "run",
 	reflect.TypeOf(&setVarNode{}):               "set",
 	reflect.TypeOf(&setClusterSettingNode{}):    "set cluster setting",
 	reflect.TypeOf(&setZoneConfigNode{}):        "configure zone",
