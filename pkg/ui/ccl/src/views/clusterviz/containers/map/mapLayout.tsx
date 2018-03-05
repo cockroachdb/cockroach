@@ -25,7 +25,7 @@ import "./mapLayout.styl";
 interface MapLayoutProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatus: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: LivenessStatus };
   viewportSize: [number, number];
 }
 
@@ -98,7 +98,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
 
       return (
         <g transform={`translate(${center})`}>
-          <LocalityView localityTree={locality} liveness={this.props.livenessStatus} />
+          <LocalityView localityTree={locality} livenessStatuses={this.props.livenessStatuses} />
         </g>
       );
     });
