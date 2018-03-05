@@ -75,9 +75,6 @@ type commandResult struct {
 	// case for queries executed through the simple protocol). Otherwise, it needs
 	// to have an entry for every column.
 	formatCodes []pgwirebase.FormatCode
-
-	// finishedCallback, if set, will be called on Close/CloseWithErr/Discard.
-	finishedCallback func()
 }
 
 func (c *conn) makeCommandResult(
@@ -113,13 +110,12 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		panic("expected err to be set on result by Close, but wasn't")
 	}
 
-	defer func() {
-		if f := r.finishedCallback; f != nil {
-			f()
-		}
-	}()
-
 	r.conn.writerState.fi.registerCmd(r.pos)
+	if r.err != nil {
+		// TODO(andrei): I'm not sure this is the best place to do error conversion.
+		r.conn.bufferErr(convertToErrWithPGCode(r.err))
+		return
+	}
 
 	if r.err == nil &&
 		r.limit != 0 &&
@@ -130,12 +126,6 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.err = errors.Errorf("execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
 		r.conn.bufferErr(convertToErrWithPGCode(r.err))
-	}
-
-	if r.err != nil {
-		// If there was an error, we have already sent it. We're not sending another
-		// code.
-		return
 	}
 
 	// Send a completion message, specific to the type of result.
@@ -177,16 +167,10 @@ func (r *commandResult) CloseWithErr(err error) {
 	r.err = err
 	// TODO(andrei): I'm not sure this is the best place to do error conversion.
 	r.conn.bufferErr(convertToErrWithPGCode(err))
-	if f := r.finishedCallback; f != nil {
-		f()
-	}
 }
 
 // Discard is part of the CommandResult interface.
 func (r *commandResult) Discard() {
-	if f := r.finishedCallback; f != nil {
-		f()
-	}
 }
 
 // Err is part of the CommandResult interface.
@@ -195,15 +179,27 @@ func (r *commandResult) Err() error {
 }
 
 // SetError is part of the CommandResult interface.
+//
+// We're not going to write any bytes to the buffer in order to support future
+// OverwriteError() calls. The error will only be serialized at Close() time.
 func (r *commandResult) SetError(err error) {
-	r.conn.writerState.fi.registerCmd(r.pos)
+	if r.err != nil {
+		panic(fmt.Sprintf("can't overwrite err: %s with err: %s", r.err, err))
+	}
 	r.err = err
-	// TODO(andrei): I'm not sure this is the best place to do error conversion.
-	r.conn.bufferErr(convertToErrWithPGCode(err))
+}
+
+// OverwriteError is part of the CommandResult interface.
+func (r *commandResult) OverwriteError(err error) {
+	r.err = err
 }
 
 // AddRow is part of the CommandResult interface.
 func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	if r.err != nil {
+		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
+			r.err))
+	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if err := r.conn.GetErr(); err != nil {
 		return err
@@ -271,9 +267,4 @@ func (r *commandResult) SetLimit(n int) {
 func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.stmtType = stmt.StatementType()
 	r.cmdCompleteTag = stmt.StatementTag()
-}
-
-// SetFinishedCallback is part of the CommandResult interface.
-func (r *commandResult) SetFinishedCallback(callback func()) {
-	r.finishedCallback = callback
 }

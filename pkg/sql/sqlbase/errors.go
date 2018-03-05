@@ -223,14 +223,17 @@ func NewStatementCompletionUnknownError(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
 }
 
+var queryCanceledError error = pgerror.NewErrorf(
+	pgerror.CodeQueryCanceledError, "query execution canceled")
+
 // NewQueryCanceledError creates a query cancellation error.
 func NewQueryCanceledError() error {
-	return pgerror.NewErrorf(pgerror.CodeQueryCanceledError, "query execution canceled")
+	return queryCanceledError
 }
 
 // IsQueryCanceledError checks whether this is a query canceled error.
 func IsQueryCanceledError(err error) bool {
-	return errHasCode(err, pgerror.CodeQueryCanceledError) || strings.Contains(err.Error(), "query execution canceled")
+	return errHasCode(err, pgerror.CodeQueryCanceledError)
 }
 
 func errHasCode(err error, code string) bool {
