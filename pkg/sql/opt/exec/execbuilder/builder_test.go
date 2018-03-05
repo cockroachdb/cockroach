@@ -66,6 +66,7 @@ import (
 	"flag"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -111,11 +112,17 @@ func TestBuild(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				var allowUnsupportedExpr bool
+				var allowUnsupportedExpr, rowSort bool
+
 				for _, arg := range d.CmdArgs {
 					switch arg.Key {
 					case "allow-unsupported":
 						allowUnsupportedExpr = true
+
+					case "rowsort":
+						// We will sort the resulting rows before comparing with the
+						// expected result.
+						rowSort = true
 
 					default:
 						d.Fatalf(t, "unknown argument: %s", arg.Key)
@@ -174,6 +181,18 @@ func TestBuild(t *testing.T) {
 					}
 					if err != nil {
 						d.Fatalf(t, "Exec: %v", err)
+					}
+
+					if rowSort {
+						sort.Slice(results, func(i, j int) bool {
+							for k := range results[i] {
+								cmp := results[i][k].Compare(&evalCtx, results[j][k])
+								if cmp != 0 {
+									return cmp < 0
+								}
+							}
+							return false
+						})
 					}
 
 					// Format the results.
