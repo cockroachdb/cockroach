@@ -29,6 +29,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/google/go-github/github"
+	version "github.com/hashicorp/go-version"
 	"github.com/pkg/errors"
 	"github.com/tebeka/go2xunit/lib"
 )
@@ -64,7 +65,25 @@ func main() {
 		&oauth2.Token{AccessToken: token},
 	)))
 
-	if err := runGH(ctx, os.Stdin, client.Issues.Create, client.Search.Issues, client.Issues.CreateComment, client.Repositories.ListCommits); err != nil {
+	getLatestTag := func() (string, error) {
+		cmd := exec.Command("git", "describe", "--abbrev=0", "--tags")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(out)), nil
+	}
+
+	if err := runGH(
+		ctx,
+		os.Stdin,
+		client.Issues.Create,
+		client.Search.Issues,
+		client.Issues.CreateComment,
+		client.Repositories.ListCommits,
+		client.Issues.ListMilestones,
+		getLatestTag,
+	); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -176,6 +195,47 @@ func getAssignee(
 	return assignee, nil
 }
 
+func getProbableMilestone(
+	ctx context.Context,
+	getLatestTag func() (string, error),
+	listMilestones func(ctx context.Context, owner string, repo string, opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error),
+) *int {
+	tag, err := getLatestTag()
+	if err != nil {
+		log.Printf("unable to get latest tag: %s", err)
+		log.Printf("issues will be posted without milestone")
+		return nil
+	}
+
+	v, err := version.NewVersion(tag)
+	if err != nil {
+		log.Printf("unable to parse version from tag: %s", err)
+		log.Printf("issues will be posted without milestone")
+		return nil
+	}
+	if len(v.Segments()) < 2 {
+		log.Printf("version %s has less than two components; issues will be posted without milestone", tag)
+		return nil
+	}
+	vstring := fmt.Sprintf("%d.%d", v.Segments()[0], v.Segments()[1])
+
+	milestones, _, err := listMilestones(ctx, githubUser, githubRepo, &github.MilestoneListOptions{
+		State: "open",
+	})
+	if err != nil {
+		log.Printf("unable to list milestones: %s", err)
+		log.Printf("issues will be posted without milestone")
+		return nil
+	}
+
+	for _, m := range milestones {
+		if m.GetTitle() == vstring {
+			return m.Number
+		}
+	}
+	return nil
+}
+
 func runGH(
 	ctx context.Context,
 	input io.Reader,
@@ -183,6 +243,8 @@ func runGH(
 	searchIssues func(ctx context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error),
 	createComment func(ctx context.Context, owner string, repo string, number int, comment *github.IssueComment) (*github.IssueComment, *github.Response, error),
 	listCommits func(ctx context.Context, owner string, repo string, opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error),
+	listMilestones func(ctx context.Context, owner string, repo string, opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error),
+	getLatestTag func() (string, error),
 ) error {
 	sha, ok := os.LookupEnv(teamcityVCSNumberEnv)
 	if !ok {
@@ -231,6 +293,8 @@ Parameters:
 
 Stress build found a failed test: %s`
 
+	milestone := getProbableMilestone(ctx, getLatestTag, listMilestones)
+
 	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
 		title := fmt.Sprintf("%s: %s failed under stress",
 			strings.TrimPrefix(packageName, cockroachPkgPrefix), testName)
@@ -243,10 +307,11 @@ Stress build found a failed test: %s`
 		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
 
 		return &github.IssueRequest{
-			Title:    &title,
-			Body:     &body,
-			Labels:   &issueLabels,
-			Assignee: &assignee,
+			Title:     &title,
+			Body:      &body,
+			Labels:    &issueLabels,
+			Assignee:  &assignee,
+			Milestone: milestone,
 		}
 	}
 
