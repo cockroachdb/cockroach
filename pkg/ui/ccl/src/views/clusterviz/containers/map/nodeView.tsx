@@ -27,7 +27,7 @@ import Liveness$Properties = cockroach.storage.Liveness$Properties;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
-  livenessStatus: { [id: string]: NodeLivenessStatus };
+  livenessStatuses: { [id: string]: NodeLivenessStatus };
   liveness: Liveness$Properties;
 }
 
@@ -47,9 +47,9 @@ export class NodeView extends React.Component<NodeViewProps> {
   }
 
   getUptimeText() {
-    const { node, livenessStatus, liveness } = this.props;
+    const { node, livenessStatuses, liveness } = this.props;
 
-    const thisLiveness = livenessStatus[node.desc.node_id];
+    const thisLiveness = livenessStatuses[node.desc.node_id];
 
     switch (thisLiveness) {
       case NodeLivenessStatus.DEAD: {
@@ -79,8 +79,8 @@ export class NodeView extends React.Component<NodeViewProps> {
   }
 
   render() {
-    const { node, livenessStatus } = this.props;
-    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], livenessStatus);
+    const { node, livenessStatuses } = this.props;
+    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], livenessStatuses);
 
     return (
       <Link

@@ -22,8 +22,8 @@ const PADDING = 150;
 
 interface CircleLayoutProps {
   localityTree: LocalityTree;
-  livenessStatus: { [id: string]: LivenessStatus };
-  liveness: { [id: string]: Liveness };
+  livenessStatuses: { [id: string]: LivenessStatus };
+  livenesses: { [id: string]: Liveness };
   viewportSize: [number, number];
 }
 
@@ -56,7 +56,10 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
         {
           childLocalities.map((locality, i) => (
             <g transform={`translate(${this.coordsFor(i, total, radius)})`}>
-              <LocalityView localityTree={locality} liveness={this.props.livenessStatus} />
+              <LocalityView
+                localityTree={locality}
+                livenessStatuses={this.props.livenessStatuses}
+              />
             </g>
           ))
         }
@@ -66,8 +69,8 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
               <g transform={`translate(${this.coordsFor(i + childLocalities.length, total, radius)})`}>
                 <NodeView
                   node={node}
-                  livenessStatus={this.props.livenessStatus}
-                  liveness={this.props.liveness[node.desc.node_id]}
+                  livenessStatuses={this.props.livenessStatuses}
+                  liveness={this.props.livenesses[node.desc.node_id]}
                 />
               </g>
             );

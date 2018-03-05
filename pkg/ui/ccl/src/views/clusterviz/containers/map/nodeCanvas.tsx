@@ -29,8 +29,8 @@ const BACK_BUTTON_OFFSET = 26;
 interface NodeCanvasProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatus: { [id: string]: LivenessStatus };
-  liveness: { [id: string]: Liveness };
+  livenessStatuses: { [id: string]: LivenessStatus };
+  livenesses: { [id: string]: Liveness };
   tiers: LocalityTier[];
 }
 
@@ -75,14 +75,14 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const { localityTree, locationTree, livenessStatus, liveness } = this.props;
+    const { localityTree, locationTree, livenessStatuses, livenesses } = this.props;
     const { viewportSize } = this.state;
 
     if (renderAsMap(locationTree, localityTree)) {
       return <MapLayout
         localityTree={localityTree}
         locationTree={locationTree}
-        livenessStatus={livenessStatus}
+        livenessStatuses={livenessStatuses}
         viewportSize={viewportSize}
       />;
     }
@@ -90,8 +90,8 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     return <CircleLayout
       viewportSize={viewportSize}
       localityTree={localityTree}
-      livenessStatus={livenessStatus}
-      liveness={liveness}
+      livenessStatuses={livenessStatuses}
+      livenesses={livenesses}
     />;
   }
 
