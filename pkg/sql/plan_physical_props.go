@@ -37,6 +37,12 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return planPhysicalProps(n.source)
 	case *indexJoinNode:
 		return planPhysicalProps(n.index)
+	case *serializeNode:
+		return planPhysicalProps(n.source)
+	case *deleteNode:
+		if n.run.rowsNeeded {
+			return planPhysicalProps(n.source)
+		}
 
 	case *filterNode:
 		return n.props
@@ -52,8 +58,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *unionNode:
 		// TODO(knz): this can be ordered if the source is ordered already.
 	case *insertNode:
-		// TODO(knz): RETURNING is ordered by the PK.
-	case *deleteNode:
 		// TODO(knz): RETURNING is ordered by the PK.
 	case *updateNode, *upsertNode:
 		// After an update, the original order may have been destroyed.

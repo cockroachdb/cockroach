@@ -2736,7 +2736,7 @@ statement ok
 TRUNCATE a, b1, b2, b3, b4;
 
 statement ok
-INSERT INTO a VALUES ('delete_me'), ('untouched');
+INSERT INTO a VALUES ('delete_me'), ('untouched'), ('b2-default'), ('b3-default'), ('b4-default');
 INSERT INTO b1 VALUES ('b1-pk1', 'untouched'), ('b1-pk2', 'untouched');
 INSERT INTO b2 VALUES ('b2-pk1', 'untouched'), ('b2-pk2', 'delete_me');
 INSERT INTO b3 VALUES ('b3-pk1', 'delete_me'), ('b3-pk2', 'untouched');

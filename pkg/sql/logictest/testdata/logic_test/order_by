@@ -778,11 +778,14 @@ insert              0  insert    ·     ·        (b)     ·
 query TITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b
 ----
-delete     0  delete  ·      ·          (b)        ·
- │         0  ·       from   t          ·          ·
- └── scan  1  scan    ·      ·          (a, b, c)  a=CONST; key()
-·          1  ·       table  t@primary  ·          ·
-·          1  ·       spans  /3-/3/#    ·          ·
+render                    0  render  ·      ·          (b)        key()
+ └── spool                1  spool   ·      ·          (a, b, c)  a=CONST; key()
+      └── run             2  run     ·      ·          (a, b, c)  a=CONST; key()
+           └── delete     3  delete  ·      ·          (a, b, c)  a=CONST; key()
+                │         3  ·       from   t          ·          ·
+                └── scan  4  scan    ·      ·          (a, b, c)  a=CONST; key()
+·                         4  ·       table  t@primary  ·          ·
+·                         4  ·       spans  /3-/3/#    ·          ·
 
 query TITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
