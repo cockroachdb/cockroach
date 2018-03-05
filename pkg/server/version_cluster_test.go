@@ -126,16 +126,16 @@ func setupMixedCluster(
 	return twh
 }
 
-func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
+func TestClusterVersionUpgrade1_0To2_0(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
 	dir, finish := testutils.TempDir(t)
 	defer finish()
 
-	// Four nodes that are all compatible with 1.0, but are really 1.2. This is
-	// what the official v1.2 binary will look like.
-	versions := [][2]string{{"1.0", "1.2"}, {"1.0", "1.2"}, {"1.0", "1.2"}, {"1.0", "1.2"}}
+	// Four nodes that are all compatible with 1.0, but are really 2.0. This is
+	// what the official v2.0 binary will look like.
+	versions := [][2]string{{"1.0", "2.0"}, {"1.0", "2.0"}, {"1.0", "2.0"}, {"1.0", "2.0"}}
 
 	// Start by running 1.0.
 	bootstrapVersion := cluster.ClusterVersion{
@@ -161,7 +161,7 @@ func TestClusterVersionUpgrade1_0To1_2(t *testing.T) {
 
 	// Put some legacy tombstones down. We're going to test the migration for
 	// removing those in the negative: the tombstones are to be removed only after
-	// a node at *cluster version* v1.2 boots up. We don't restart nodes in this
+	// a node at *cluster version* v2.0 boots up. We don't restart nodes in this
 	// test while the versions are bumped, so the only boot is at the initial
 	// version v1.0, and we verify that the tombstones remain. The rewrite
 	// functionality is tested in TestStoreInitAndBootstrap.
