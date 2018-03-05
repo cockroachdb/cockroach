@@ -143,13 +143,14 @@ k v
 query TTT colnames
 EXPLAIN DELETE FROM unindexed
 ----
-Tree            Field  Description
-delete          ·      ·
- │              from   unindexed
- └── render     ·      ·
-      └── scan  ·      ·
-·               table  unindexed@primary
-·               spans  ALL
+Tree                 Field  Description
+count                ·      ·
+ └── delete          ·      ·
+      │              from   unindexed
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  unindexed@primary
+·                    spans  ALL
 
 query II colnames,rowsort
 SELECT k, v FROM unindexed
@@ -182,13 +183,14 @@ INSERT INTO unindexed VALUES (1, 9), (8, 2), (3, 7), (6, 4)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
-delete          ·      ·
- │              from   unindexed
- └── nosort     ·      ·
-      │         order  +v
-      └── scan  ·      ·
-·               table  unindexed@primary
-·               spans  ALL
+count                ·      ·
+ └── delete          ·      ·
+      │              from   unindexed
+      └── nosort     ·      ·
+           │         order  +v
+           └── scan  ·      ·
+·                    table  unindexed@primary
+·                    spans  ALL
 
 query II
 DELETE FROM unindexed WHERE k > 1 AND v < 7 ORDER BY v DESC RETURNING v,k
@@ -210,13 +212,14 @@ INSERT INTO unindexed VALUES (1, 2), (3, 4), (5, 6), (7, 8)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-delete               ·      ·
- │                   from   unindexed
- └── limit           ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  unindexed@primary
-·                    spans  ALL
+count                     ·      ·
+ └── delete               ·      ·
+      │                   from   unindexed
+      └── limit           ·      ·
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  unindexed@primary
+·                         spans  ALL
 
 query I
 SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 2 RETURNING v]
@@ -236,37 +239,41 @@ SELECT COUNT(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
 ----
-delete               ·      ·
- │                   from   indexed
- └── limit           ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  indexed@indexed_value_idx
-·                    spans  /5-/6
-·                    limit  10
+count                     ·      ·
+ └── delete               ·      ·
+      │                   from   indexed
+      └── limit           ·      ·
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  indexed@indexed_value_idx
+·                         spans  /5-/6
+·                         limit  10
 
 query TTT
 EXPLAIN DELETE FROM indexed LIMIT 10
 ----
-delete               ·      ·
- │                   from   indexed
- └── limit           ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  indexed@primary
-·                    spans  ALL
-·                    limit  10
+count                     ·      ·
+ └── delete               ·      ·
+      │                   from   indexed
+      └── limit           ·      ·
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  indexed@primary
+·                         spans  ALL
+·                         limit  10
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10 RETURNING id
 ----
-delete                ·      ·
- │                    from   indexed
- └── limit            ·      ·
-      └── index-join  ·      ·
-           ├── scan   ·      ·
-           │          table  indexed@indexed_value_idx
-           │          spans  /5-/6
-           │          limit  10
-           └── scan   ·      ·
-·                     table  indexed@primary
+render                          ·      ·
+ └── run                        ·      ·
+      └── delete                ·      ·
+           │                    from   indexed
+           └── limit            ·      ·
+                └── index-join  ·      ·
+                     ├── scan   ·      ·
+                     │          table  indexed@indexed_value_idx
+                     │          spans  /5-/6
+                     │          limit  10
+                     └── scan   ·      ·
+·                               table  indexed@primary
