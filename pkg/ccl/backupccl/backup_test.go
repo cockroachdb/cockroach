@@ -1013,9 +1013,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		csvURLs := strings.Join(urls, ", ")
 		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
 
-		if _, err := run(t, "pause", query); !testutils.IsError(err, "job paused") {
-			t.Fatalf("expected 'job paused' error, but got %+v", err)
-		}
 		jobID, err := run(t, "PAUSE", query)
 		if !testutils.IsError(err, "job paused") {
 			t.Fatalf("unexpected: %v", err)
