@@ -11,64 +11,22 @@ TABLE a
       └── k int not null
 
 # --------------------------------------------------
-# EliminateAnd
-# --------------------------------------------------
-opt
-SELECT * FROM a WHERE k=1 AND False AND f=3.5
-----
-select
- ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
- ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── false [type=bool]
-
-opt
-SELECT * FROM a WHERE False AND s='foo'
-----
-select
- ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
- ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── false [type=bool]
-
-# --------------------------------------------------
-# EliminateOr
-# --------------------------------------------------
-opt
-SELECT * FROM a WHERE k=1 OR (i=2 OR True)
-----
-select
- ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
- ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── true [type=bool]
-
-opt
-SELECT * FROM a WHERE k=1 OR True OR f=3.5
-----
-select
- ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
- ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── true [type=bool]
-
-# --------------------------------------------------
 # FlattenAnd
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE k=1 AND i=2 AND f=3.5
+SELECT * FROM a WHERE k>1 AND k<5 AND f=3.5
 ----
 select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
  └── and [type=bool]
-      ├── eq [type=bool]
+      ├── gt [type=bool]
       │    ├── variable: a.k [type=int]
       │    └── const: 1 [type=int]
-      ├── eq [type=bool]
-      │    ├── variable: a.i [type=int]
-      │    └── const: 2 [type=int]
+      ├── lt [type=bool]
+      │    ├── variable: a.k [type=int]
+      │    └── const: 5 [type=int]
       └── eq [type=bool]
            ├── variable: a.f [type=float]
            └── const: 3.5 [type=float]
@@ -128,6 +86,36 @@ select
 # SimplifyAnd
 # --------------------------------------------------
 opt
+SELECT * FROM a WHERE k=1 AND False AND f=3.5
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── false [type=bool]
+
+opt
+SELECT * FROM a WHERE False AND s='foo'
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── false [type=bool]
+
+opt
+SELECT * FROM a WHERE true AND k=1
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool]
+      └── eq [type=bool]
+           ├── variable: a.k [type=int]
+           └── const: 1 [type=int]
+
+opt
 SELECT * FROM a WHERE k=1 AND i=2 AND true
 ----
 select
@@ -152,8 +140,37 @@ select
  └── true [type=bool]
 
 # --------------------------------------------------
-# SimplifyOr
+# SimplifyOr + EliminateSingletonOr
 # --------------------------------------------------
+opt
+SELECT * FROM a WHERE k=1 OR (i=2 OR True)
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── true [type=bool]
+
+opt
+SELECT * FROM a WHERE k=1 OR True OR f=3.5
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── true [type=bool]
+
+opt
+SELECT * FROM a WHERE false OR k=1
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── eq [type=bool]
+      ├── variable: a.k [type=int]
+      └── const: 1 [type=int]
+
 opt
 SELECT * FROM a WHERE k=1 OR i=2 OR false
 ----
@@ -197,18 +214,50 @@ select
            └── const: 2 [type=int]
 
 # --------------------------------------------------
-# SimplifyOr + EliminateOr
+# FoldNullAndOr
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE k=1 OR false
+SELECT * FROM a WHERE null and null
 ----
 select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── eq [type=bool]
-      ├── variable: a.k [type=int]
-      └── const: 1 [type=int]
+ └── null [type=bool]
+
+opt
+SELECT * FROM a WHERE null or null
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── null [type=bool]
+
+opt
+SELECT * FROM a WHERE null or (null and null and null) or null
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── null [type=bool]
+
+# Don't fold.
+opt
+SELECT * FROM a WHERE null or (null and k=1)
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── or [type=bool]
+      ├── null [type=unknown]
+      └── and [type=bool]
+           ├── null [type=unknown]
+           └── eq [type=bool]
+                ├── variable: a.k [type=int]
+                └── const: 1 [type=int]
 
 # --------------------------------------------------
 # NegateComparison
@@ -265,10 +314,10 @@ select
       │         └── const: 4 [type=int]
       ├── is-not [type=bool]
       │    ├── variable: a.i [type=int]
-      │    └── const: NULL [type=unknown]
+      │    └── null [type=unknown]
       └── is [type=bool]
            ├── variable: a.i [type=int]
-           └── const: NULL [type=unknown]
+           └── null [type=unknown]
 
 # Like comparisons.
 opt

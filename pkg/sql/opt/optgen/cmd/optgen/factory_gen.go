@@ -378,10 +378,10 @@ func (g *factoryGen) genDynamicMatch(
 		define := g.compiled.LookupDefine(string(name))
 		if define != nil {
 			// Match operator name.
-			fmt.Fprintf(&buf, "%s.op == %sOp", normName, name)
+			fmt.Fprintf(&buf, "%s.op == opt.%sOp", normName, name)
 		} else {
 			// Match tag name.
-			fmt.Fprintf(&buf, "is%sLookup[%s.op]", name, normName)
+			fmt.Fprintf(&buf, "%s.is%s()", normName, name)
 		}
 	}
 

@@ -85,5 +85,9 @@ var isEnforcerLookup = [...]bool{
 func (ev ExprView) IsEnforcer() bool {
 	return isEnforcerLookup[ev.op]
 }
+
+func (me *memoExpr) isEnforcer() bool {
+	return isEnforcerLookup[me.op]
+}
 ----
 ----

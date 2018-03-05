@@ -723,3 +723,12 @@ parse
 (Op)
 ----
 test.opt:2:5: expected '=>', found EOF
+
+#
+# Error opening file. Ensure that file error is last error, with no recovery
+# attempted.
+#
+parse unknown.opt
+define Empty {}
+----
+unknown file 'unknown.opt'

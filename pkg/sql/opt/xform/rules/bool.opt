@@ -3,22 +3,6 @@
 # =============================================================================
 
 
-# EliminateAnd discards the And operator if any of its operands is false.
-[EliminateAnd, Normalize]
-(And
-    $conditions:[ ... (False) ... ]
-)
-=>
-(False)
-
-# EliminateOr discards the Or operator if any of its operands is true.
-[EliminateOr, Normalize]
-(Or
-    $conditions:[ ... (True) ... ]
-)
-=>
-(True)
-
 # FlattenAnd ensures that And operators are never nested within one another. If
 # an And operator has another And as a child, then the child And is "flattened"
 # by merging its conditions into the parent And. Flattened And conditions are
@@ -41,25 +25,36 @@
 =>
 (FlattenOr $conditions)
 
-# SimplifyAnd removes True children of an And. If all children are True,
-# replaces the And node with True.
+# SimplifyAnd removes True operands from an And operator, and eliminates the
+# And operator altogether if any operand is False. If, after simplification,
+# no operands remain, then simplifyAnd returns True.
 # This rule is especially important when we build a simplified filter.
 [SimplifyAnd, Normalize]
 (And
-    $conditions:[ ... (True) ... ]
+    $conditions:[ ... (True | False) ... ]
 )
 =>
 (SimplifyAnd $conditions)
 
-# SimplifyOr removes False children of an Or. If all children are False,
-# replaces the Or node with False.
+# SimplifyOr removes False operands from an Or operator, and eliminates the
+# Or operator altogether if any operand is True. If, after simplification,
+# no operands remain, then simplifyOr returns False.
 # This rule is especially important when we build a simplified filter.
 [SimplifyOr, Normalize]
 (Or
-    $conditions:[ ... (False) ... ]
+    $conditions:[ ... (True | False) ... ]
 )
 =>
 (SimplifyOr $conditions)
+
+# FoldNullAndOr replaces the operator with null if all of its operands are
+# null.
+[FoldNullAndOr, Normalize]
+(And | Or
+    $conditions:[ (Null) ... ] & (ListOnlyHasNulls $conditions)
+)
+=>
+(Null (BoolType))
 
 # TODO(radu): we don't yet eliminate singleton Ands because we assume filters
 # are always under an And.

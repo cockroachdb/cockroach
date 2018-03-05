@@ -647,8 +647,8 @@ func (p *Parser) scan() Token {
 			p.file++
 
 			if !p.openScanner() {
-				// Error opening file.
-				return ERROR
+				// Error opening file, don't try to recover.
+				return EOF
 			}
 
 		case ERROR:
