@@ -286,7 +286,7 @@ render     0  render  ·         ·                         (column8)           
 exec-explain allow-unsupported
 SELECT a FROM t.t WHERE a IS OF (INT)
 ----
-render          0  render  ·         ·                         ("t.a")                            ·
+render          0  render  ·         ·                         (a)                                ·
  │              0  ·       render 0  a                         ·                                  ·
  └── filter     1  filter  ·         ·                         (a, b, c, d, j, s, rowid[hidden])  ·
       │         1  ·       filter    t.public.t.a IS OF (INT)  ·                                  ·
@@ -357,7 +357,7 @@ render     0  render  ·         ·                      (column8)              
 exec
 SELECT LENGTH(s)::float, s FROM t.str
 ----
-column3:float  str.s:string
+column3:float  s:string
 1.0            a
 2.0            ab
 3.0            abc
