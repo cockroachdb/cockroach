@@ -16,11 +16,10 @@
 package tpcc
 
 import (
-	"context"
 	gosql "database/sql"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -32,12 +31,13 @@ type tpcc struct {
 	interleaved bool
 	nowString   string
 
-	mix     string
-	doWaits bool
+	mix        string
+	doWaits    bool
+	workers    int
+	dbOverride string
 
 	txs         []tx
 	totalWeight int
-	workers     int64 // Access only via atomic
 }
 
 func init() {
@@ -53,8 +53,10 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`mix`:  {RuntimeOnly: true},
-			`wait`: {RuntimeOnly: true},
+			`db`:      {RuntimeOnly: true},
+			`mix`:     {RuntimeOnly: true},
+			`wait`:    {RuntimeOnly: true},
+			`workers`: {RuntimeOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -68,6 +70,10 @@ var tpccMeta = workload.Meta{
 			`newOrder=45,payment=43,orderStatus=4,delivery=4,stockLevel=4`,
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
 		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
+		g.flags.StringVar(&g.dbOverride, `db`, ``,
+			`Override for the SQL database to use. If empty, defaults to the generator name`)
+		g.flags.IntVar(&g.workers, `workers`, 0,
+			`Number of concurrent workers. Defaults to --warehouses * 10`)
 
 		return g
 	},
@@ -83,8 +89,13 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			// TODO(dan): When doWaits is true, verify that the concurrency
-			// matches what is expected given the number of warehouses used.
+			if w.workers == 0 {
+				w.workers = w.warehouses * numWorkersPerWarehouse
+			}
+			if w.doWaits && w.workers != w.warehouses*numWorkersPerWarehouse {
+				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
+					w.warehouses, w.warehouses*numWorkersPerWarehouse)
+			}
 
 			return initializeMix(w)
 		},
@@ -164,26 +175,40 @@ func (w *tpcc) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *tpcc) Ops() workload.Operations {
-	ops := workload.Operations{
-		Name: `tpmC`,
-		Fn: func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
-			idx := int(atomic.AddInt64(&w.workers, 1)) - 1
-			warehouse := idx / numWorkersPerWarehouse
-			worker := &worker{
-				config:    w,
-				hists:     reg.GetHandle(),
-				idx:       idx,
-				db:        db,
-				warehouse: warehouse,
-			}
-			return worker.run, nil
-		},
+func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	nConns := w.warehouses / len(urls)
+	dbs := make([]*gosql.DB, len(urls))
+	for i, url := range urls {
+		dbs[i], err = gosql.Open(`postgres`, url)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		// Allow a maximum of concurrency+1 connections to the database.
+		dbs[i].SetMaxOpenConns(nConns)
+		dbs[i].SetMaxIdleConns(nConns)
+	}
+
+	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
+		warehouse := workerIdx / numWorkersPerWarehouse
+		db := dbs[warehouse%len(dbs)]
+		worker := &worker{
+			config:    w,
+			hists:     reg.GetHandle(),
+			idx:       workerIdx,
+			db:        db,
+			warehouse: warehouse,
+		}
+		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
 	if w.doWaits {
 		// TODO(dan): doWaits is currently our catch-all for "run this to spec".
 		// It should probably be renamed to match.
-		ops.ResultHist = `newOrder`
+		ql.ResultHist = `newOrder`
 	}
-	return ops
+	return ql, nil
 }

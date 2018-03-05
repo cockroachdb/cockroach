@@ -19,6 +19,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"github.com/pkg/errors"
@@ -79,9 +80,6 @@ func init() {
 	_ = fixturesCmd.PersistentFlags().MarkHidden(`gcs-prefix-override`)
 }
 
-var fixturesLoadDB = fixturesLoadCmd.PersistentFlags().String(
-	`into-db`, `workload`, `SQL database to load fixture into`)
-
 const storageError = `failed to create google cloud client ` +
 	`(You may need to setup the GCS application default credentials: ` +
 	`'gcloud auth application-default login --project=cockroach-shared')`
@@ -118,13 +116,7 @@ func init() {
 			Args: cobra.RangeArgs(0, 1),
 		}
 		genMakeCmd.Flags().AddFlagSet(genFlags)
-		genMakeCmd.RunE = func(_ *cobra.Command, args []string) error {
-			crdb := crdbDefaultURI
-			if len(args) > 0 {
-				crdb = args[0]
-			}
-			return fixturesMake(gen, crdb)
-		}
+		genMakeCmd.RunE = cmdHelper(gen, fixturesMake)
 		fixturesMakeCmd.AddCommand(genMakeCmd)
 
 		genLoadCmd := &cobra.Command{
@@ -132,13 +124,7 @@ func init() {
 			Args: cobra.RangeArgs(0, 1),
 		}
 		genLoadCmd.Flags().AddFlagSet(genFlags)
-		genLoadCmd.RunE = func(_ *cobra.Command, args []string) error {
-			crdb := crdbDefaultURI
-			if len(args) > 0 {
-				crdb = args[0]
-			}
-			return fixturesLoad(gen, crdb)
-		}
+		genLoadCmd.RunE = cmdHelper(gen, fixturesLoad)
 		fixturesLoadCmd.AddCommand(genLoadCmd)
 	}
 	fixturesCmd.AddCommand(fixturesListCmd)
@@ -164,7 +150,7 @@ func fixturesList(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func fixturesMake(gen workload.Generator, crdbURI string) error {
+func fixturesMake(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 	gcs, err := getStorage(ctx)
 	if err != nil {
@@ -172,7 +158,7 @@ func fixturesMake(gen workload.Generator, crdbURI string) error {
 	}
 	defer func() { _ = gcs.Close() }()
 
-	sqlDB, err := gosql.Open(`postgres`, crdbURI)
+	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
@@ -186,7 +172,7 @@ func fixturesMake(gen workload.Generator, crdbURI string) error {
 	return nil
 }
 
-func fixturesLoad(gen workload.Generator, crdbURI string) error {
+func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 	gcs, err := getStorage(ctx)
 	if err != nil {
@@ -194,11 +180,11 @@ func fixturesLoad(gen workload.Generator, crdbURI string) error {
 	}
 	defer func() { _ = gcs.Close() }()
 
-	sqlDB, err := gosql.Open(`postgres`, crdbURI)
+	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
-	if _, err := sqlDB.Exec(`CREATE DATABASE IF NOT EXISTS ` + *fixturesLoadDB); err != nil {
+	if _, err := sqlDB.Exec(`CREATE DATABASE IF NOT EXISTS ` + dbName); err != nil {
 		return err
 	}
 
@@ -206,7 +192,7 @@ func fixturesLoad(gen workload.Generator, crdbURI string) error {
 	if err != nil {
 		return errors.Wrap(err, `finding fixture`)
 	}
-	if err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, *fixturesLoadDB); err != nil {
+	if err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName); err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
 	for _, table := range fixture.Tables {
