@@ -130,7 +130,7 @@ class RangesMain extends React.Component<RangesMainProps, RangesMainState> {
       errors.push(this.props.state.lastError.message);
     }
 
-    if (this.props.state.inFlight) {
+    if (!this.props.state.data) {
       content = <div className="section">Loading...</div>;
     } else if (statuses) {
       errors = errors.concat(statuses.errors.map(err => err.message));
