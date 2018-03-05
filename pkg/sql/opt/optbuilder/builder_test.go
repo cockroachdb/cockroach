@@ -124,8 +124,8 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
-					b := New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
+					o := xform.NewOptimizer(&evalCtx, xform.OptimizeNone)
+					b := New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt)
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					root, props, err := b.Build()
 					if err != nil {
@@ -144,7 +144,7 @@ func TestBuilder(t *testing.T) {
 					for i := range varNames {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
-					o := xform.NewOptimizer(catalog, xform.OptimizeNone)
+					o := xform.NewOptimizer(&evalCtx, xform.OptimizeNone)
 					b := NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					group, err := b.Build(typedExpr)

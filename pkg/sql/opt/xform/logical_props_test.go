@@ -17,8 +17,10 @@ package xform
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -28,9 +30,11 @@ func TestLogicalProps(t *testing.T) {
 
 // Test joins that cannot yet be tested using SQL syntax + optimizer.
 func TestLogicalJoinProps(t *testing.T) {
-	cat := createLogPropsCatalog(t)
-	f := newFactory(cat, 0)
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	f := newFactory(&evalCtx, 0)
 
+	cat := createLogPropsCatalog(t)
 	a := f.Metadata().AddTable(cat.Table("a"))
 	b := f.Metadata().AddTable(cat.Table("b"))
 

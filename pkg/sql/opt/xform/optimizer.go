@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -56,14 +56,13 @@ type Optimizer struct {
 	mem *memo
 }
 
-// NewOptimizer constructs an instance of the optimizer. Input expressions can
-// use metadata from the specified catalog. The maxSteps parameter limits the
-// number of normalization and exploration transformations that will be applied
-// by the optimizer. If maxSteps is zero, then the unaltered input expression
-// tree becomes the output expression tree (because no transformations are
-// applied).
-func NewOptimizer(cat optbase.Catalog, maxSteps OptimizeSteps) *Optimizer {
-	f := newFactory(cat, maxSteps)
+// NewOptimizer constructs an instance of the optimizer. The maxSteps parameter
+// limits the number of normalization and exploration transformations that will
+// be applied by the optimizer. If maxSteps is zero, then the unaltered input
+// expression tree becomes the output expression tree (because no transforms
+// are applied).
+func NewOptimizer(evalCtx *tree.EvalContext, maxSteps OptimizeSteps) *Optimizer {
+	f := newFactory(evalCtx, maxSteps)
 	return &Optimizer{f: f, mem: f.mem}
 }
 

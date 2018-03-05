@@ -3,15 +3,102 @@
 # =============================================================================
 
 
-# NormalizeVar ensures that variable references are on the left side of
-# equality and inequality operators.
-[NormalizeVar, Normalize]
-(Eq | Ne
+# CommuteVarInequality is similar to CommuteVar (in scalar.opt), except it
+# handles inequality comparison operators that need special handling to commute
+# operands.
+[CommuteVarInequality, Normalize]
+(Le | Lt | Ge | Gt
     $left:^(Variable)
     $right:(Variable)
 )
 =>
-((OpName) $right $left)
+(CommuteInequality (OpName) $left $right)
+
+# CommuteConstInequality is similar to CommuteConst (in scalar.opt), except
+# that it handles inequality comparison operators that need special handling to
+# commute operands.
+[CommuteConstInequality, Normalize]
+(Le | Lt | Ge | Gt
+    $left:* & (OnlyConstants $left)
+    $right:* & ^(OnlyConstants $right)
+)
+=>
+(CommuteInequality (OpName) $left $right)
+
+# NormalizeCmpPlusConst builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#       cmp          cmp
+#      /   \        /   \
+#    [+]    2  ->  a   [-]
+#   /   \             /   \
+#  a     1           2     1
+#
+# See the NormalizeConstEqNe pattern for the definition of constant expression
+# tree. Also, the NormalizePlusMult pattern ensures that constant expression
+# trees are on the right side of the expression, so no "flipped" pattern is
+# necessary. Other patterns will fold new constant expressions further.
+[NormalizeCmpPlusConst]
+(Eq | Ge | Gt | Le | Lt
+    (Plus
+        $leftLeft:* & ^(OnlyConstants $leftLeft)
+        $leftRight:* & (OnlyConstants $leftRight)
+    )
+    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $right $leftRight)
+)
+=>
+((OpName)
+    $leftLeft
+    (Minus $right $leftRight)
+)
+
+# NormalizeCmpMinusConst builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#      cmp         cmp
+#      /  \        /  \
+#    [-]   2  ->  a  [+]
+#   /   \           /   \
+#  a     1         2     1
+#
+# See the NormalizeConstEqNe pattern for the definition of constant expression
+# tree. Other patterns will fold new constant expressions further.
+[NormalizeCmpMinusConst]
+(Eq | Ge | Gt | Le | Lt
+    (Minus
+        $leftLeft:* & ^(OnlyConstants $leftLeft)
+        $leftRight:* & (OnlyConstants $leftRight)
+    )
+    $right:* & (OnlyConstants $right) & (CanConstructBinary Plus $right $leftRight)
+)
+=>
+((OpName)
+    $leftLeft
+    (Plus $right $leftRight)
+)
+
+# NormalizeCmpConstMinus builds up constant expression trees on one side of the
+# comparison, in cases like this:
+#      cmp          cmp
+#      /  \         /  \
+#    [-]   2  ->  [-]   a
+#   /   \        /   \
+#  1     a      1     2
+#
+# See the NormalizeConstEqNe pattern for the definition of constant expression
+# tree. Other patterns will switch the constant to the right side and fold the
+# constant expression if possible.
+[NormalizeCmpConstMinus]
+(Eq | Ge | Gt | Le | Lt
+    (Minus
+        $leftLeft:* & (OnlyConstants $leftLeft)
+        $leftRight:* & ^(OnlyConstants $leftRight)
+    )
+    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $leftLeft $right)
+)
+=>
+((OpName)
+    (Minus $leftLeft $right)
+    $leftRight
+)
 
 # NormalizeTupleEquality breaks up expressions like:
 #   (a, b, c) = (x, y, z)

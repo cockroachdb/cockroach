@@ -74,7 +74,7 @@ $item
 [NegateComparison, Normalize]
 (Not $input:(Comparison $left:* $right:*) & ^(Contains))
 =>
-(InvertComparison (OpName $input) $left $right)
+(NegateComparison (OpName $input) $left $right)
 
 # EliminateNot discards a doubled Not operator.
 [EliminateNot, Normalize]
