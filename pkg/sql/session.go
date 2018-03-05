@@ -1937,6 +1937,10 @@ func (m *sessionDataMutator) SetReadOnly(val bool) {
 	*m.curTxnReadOnly = val
 }
 
+func (m *sessionDataMutator) SetStmtTimeout(timeout int) {
+	m.data.StmtTimeout = timeout
+}
+
 func (m *sessionDataMutator) StopSessionTracing() error {
 	return m.sessionTracing.StopTracing()
 }

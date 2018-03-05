@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -111,6 +112,15 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.server.StatementCounters.incrementCount(stmt.AST)
 	os := ex.machine.CurState().(stateOpen)
 
+	queryTimedOut := false
+	overwriteErrWithCancelErr := func(res RestrictedCommandResult) {
+		if queryTimedOut {
+			res.OverwriteError(sqlbase.NewQueryTimeoutError())
+		} else {
+			res.OverwriteError(sqlbase.NewQueryCanceledError())
+		}
+	}
+
 	defer func() {
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
@@ -119,21 +129,46 @@ func (ex *connExecutor) execStmtInOpenState(
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
 		if ctx.Err() != nil {
-			res.OverwriteError(sqlbase.NewQueryCanceledError())
+			overwriteErrWithCancelErr(res)
 		}
 	}()
+
+	var timeoutTicker *time.Timer
+	doneAfterFunc := make(chan struct{}, 1)
 
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
 	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	stopTickerAndUnregisterFn := func() {
+		if timeoutTicker != nil {
+			// The timeout callback assumes the query is still active, so we need to
+			// stop the timer before unregistering the query.
+			if !timeoutTicker.Stop() {
+				<-doneAfterFunc
+			}
+		}
+		unregisterFn()
+	}
 	// Generally we want to unregister after the auto-commit below. However, in
 	// case we'll execute the statement through the parallel execution queue,
 	// we'll pass the responsibility for unregistering to the queue.
 	defer func() {
-		if unregisterFn != nil {
-			unregisterFn()
+		if stopTickerAndUnregisterFn != nil {
+			stopTickerAndUnregisterFn()
 		}
 	}()
+
+	if ex.sessionData.StmtTimeout > 0 {
+		if _, ok := stmt.AST.(tree.HiddenFromShowQueries); !ok {
+			timeoutTicker = time.AfterFunc(
+				time.Duration(ex.sessionData.StmtTimeout)*time.Millisecond,
+				func() {
+					ex.cancelQuery(stmt.queryID)
+					queryTimedOut = true
+					doneAfterFunc <- struct{}{}
+				})
+		}
+	}
 
 	defer func() {
 		if filter := ex.server.cfg.TestingKnobs.StatementFilter; retErr == nil && filter != nil {
@@ -325,8 +360,9 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFn)
-		unregisterFn = nil
+		cols, err := ex.execStmtInParallel(
+			ctx, stmt, p, stopTickerAndUnregisterFn, overwriteErrWithCancelErr)
+		stopTickerAndUnregisterFn = nil
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -405,6 +441,7 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // queries, so this method can only be used with local SQL.
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context, stmt Statement, planner *planner, unregisterQuery func(),
+	overwriteErrWithCancelErr func(RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
 	params := runParams{
 		ctx:             ctx,
@@ -456,7 +493,7 @@ func (ex *connExecutor) execStmtInParallel(
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before.
 		if ctx.Err() != nil {
-			res.OverwriteError(sqlbase.NewQueryCanceledError())
+			overwriteErrWithCancelErr(res)
 		}
 
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()

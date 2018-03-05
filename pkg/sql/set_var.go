@@ -138,6 +138,26 @@ func getStringVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExp
 	return datumAsString(evalCtx, name, values[0])
 }
 
+func datumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (int, error) {
+	val, err := value.Eval(evalCtx)
+	if err != nil {
+		return -1, err
+	}
+	s, ok := tree.AsDInt(val)
+	if !ok {
+		return -1, fmt.Errorf("set %s: requires an int value: %s is a %s",
+			name, value, val.ResolvedType())
+	}
+	return int(s), nil
+}
+
+func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) (int, error) {
+	if len(values) != 1 {
+		return -1, fmt.Errorf("set %s: requires a single int value", name)
+	}
+	return datumAsInt(evalCtx, name, values[0])
+}
+
 func setTimeZone(
 	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
 ) error {
