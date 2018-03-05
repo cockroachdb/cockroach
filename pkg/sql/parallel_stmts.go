@@ -292,7 +292,7 @@ func NewSpanBasedDependencyAnalyzer() DependencyAnalyzer {
 
 func (a *spanBasedDependencyAnalyzer) Analyze(params runParams) error {
 	p := params.p.curPlan.plan
-	readSpans, writeSpans, err := collectSpans(params, p)
+	readSpans, writeSpans, err := params.p.curPlan.collectSpans(params)
 	if err != nil {
 		return err
 	}
