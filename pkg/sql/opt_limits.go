@@ -142,11 +142,15 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 			p.applyLimit(n.plan, numRows, soft)
 		}
 
+	case *rowCountNode:
+		p.setUnlimited(n.source)
+	case *serializeNode:
+		p.setUnlimited(n.source)
 	case *deleteNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if
 		// the surrounding query only uses parts of its results.
-		p.setUnlimited(n.run.rows)
+		p.setUnlimited(n.source)
 	case *updateNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if

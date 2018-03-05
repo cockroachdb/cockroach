@@ -121,7 +121,17 @@ func doExpandPlan(
 		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
 	case *deleteNode:
-		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
+
+	case *rowCountNode:
+		var newPlan planNode
+		newPlan, err = doExpandPlan(ctx, p, noParams, n.source)
+		n.source = newPlan.(batchedPlanNode)
+
+	case *serializeNode:
+		var newPlan planNode
+		newPlan, err = doExpandPlan(ctx, p, noParams, n.source)
+		n.source = newPlan.(batchedPlanNode)
 
 	case *explainDistSQLNode:
 		// EXPLAIN only shows the structure of the plan, and wants to do
@@ -622,7 +632,13 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
 
 	case *deleteNode:
-		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+		n.source = p.simplifyOrderings(n.source, nil)
+
+	case *rowCountNode:
+		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
+
+	case *serializeNode:
+		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
 
 	case *explainDistSQLNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
