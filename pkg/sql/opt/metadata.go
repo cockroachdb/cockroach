@@ -99,16 +99,10 @@ type Metadata struct {
 	tables map[TableIndex]optbase.Table
 }
 
-// NewMetadata constructs a new instance of metadata based on the given
-// catalog.
-func NewMetadata(catalog optbase.Catalog) *Metadata {
+// NewMetadata constructs a new instance of metadata for the optimizer.
+func NewMetadata() *Metadata {
 	// Skip label index 0 so that it is reserved for "unknown column".
-	return &Metadata{catalog: catalog, cols: make([]mdCol, 1)}
-}
-
-// Catalog returns the system catalog from which query metadata is derived.
-func (md *Metadata) Catalog() optbase.Catalog {
-	return md.catalog
+	return &Metadata{cols: make([]mdCol, 1)}
 }
 
 // AddColumn indexes a new reference to a column within the query and records

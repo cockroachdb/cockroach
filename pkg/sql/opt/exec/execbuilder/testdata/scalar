@@ -151,7 +151,7 @@ exec-explain
 SELECT (a, b + c, 5 + d * 2) = (b+c, 8, a - c)  FROM t.t
 ----
 render     0  render  ·         ·                                                                (column8)                          ·
- │         0  ·       render 0  ((a = (b + c)) AND ((b + c) = 8)) AND ((5 + (d * 2)) = (a - c))  ·                                  ·
+ │         0  ·       render 0  ((a = (b + c)) AND ((b + c) = 8)) AND (((d * 2) + 5) = (a - c))  ·                                  ·
  └── scan  1  scan    ·         ·                                                                (a, b, c, d, j, s, rowid[hidden])  ·
 ·          1  ·       table     t@primary                                                        ·                                  ·
 ·          1  ·       spans     ALL                                                              ·                                  ·
@@ -231,11 +231,11 @@ render     0  render  ·         ·                     (column8)               
 exec-explain
 SELECT +a + (-b) FROM t.t
 ----
-render     0  render  ·         ·            (column8)                          ·
- │         0  ·       render 0  (+a) + (-b)  ·                                  ·
- └── scan  1  scan    ·         ·            (a, b, c, d, j, s, rowid[hidden])  ·
-·          1  ·       table     t@primary    ·                                  ·
-·          1  ·       spans     ALL          ·                                  ·
+render     0  render  ·         ·          (column8)                          ·
+ │         0  ·       render 0  a + (-b)   ·                                  ·
+ └── scan  1  scan    ·         ·          (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary  ·                                  ·
+·          1  ·       spans     ALL        ·                                  ·
 
 exec-explain
 SELECT CASE a WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE 4 END FROM t.t
@@ -349,7 +349,7 @@ exec-explain
 SELECT CAST(a + b + c AS string) FROM t.t
 ----
 render     0  render  ·         ·                      (column8)                          ·
- │         0  ·       render 0  ((a + b) + c)::STRING  ·                                  ·
+ │         0  ·       render 0  (c + (a + b))::STRING  ·                                  ·
  └── scan  1  scan    ·         ·                      (a, b, c, d, j, s, rowid[hidden])  ·
 ·          1  ·       table     t@primary              ·                                  ·
 ·          1  ·       spans     ALL                    ·                                  ·

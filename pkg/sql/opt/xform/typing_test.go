@@ -17,6 +17,7 @@ package xform
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -28,7 +29,8 @@ func TestTyping(t *testing.T) {
 }
 
 func TestTypingJson(t *testing.T) {
-	o := NewOptimizer(createTypingCatalog(t), OptimizeNone)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	o := NewOptimizer(&evalCtx, OptimizeNone)
 	f := o.Factory()
 
 	// (Const <json>)

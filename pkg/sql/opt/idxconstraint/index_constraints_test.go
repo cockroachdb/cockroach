@@ -158,8 +158,9 @@ func TestIndexConstraints(t *testing.T) {
 					if !normalize {
 						steps = xform.OptimizeNone
 					}
-					o := xform.NewOptimizer(catalog, steps)
-					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
+					o := xform.NewOptimizer(&evalCtx, steps)
+					b := optbuilder.NewScalar(
+						ctx, &semaCtx, &evalCtx, catalog, o.Factory(), varNames, varTypes)
 					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
 					if err != nil {
@@ -257,7 +258,13 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				varNames[i] = fmt.Sprintf("@%d", i+1)
 			}
 			bld := optbuilder.NewScalar(
-				context.Background(), &semaCtx, &evalCtx, o.Factory(), varNames, varTypes,
+				context.Background(),
+				&semaCtx,
+				&evalCtx,
+				nil, // catalog should never be used
+				o.Factory(),
+				varNames,
+				varTypes,
 			)
 
 			group, err := bld.Build(typedExpr)
