@@ -57,6 +57,11 @@ func (ee *execEngine) Catalog() optbase.Catalog {
 	return &ee.catalog
 }
 
+// Columns is part of the exec.TestEngine interface.
+func (ee *execEngine) Columns(n exec.Node) sqlbase.ResultColumns {
+	return planColumns(n.(planNode))
+}
+
 // Execute is part of the exec.TestEngine interface.
 func (ee *execEngine) Execute(n exec.Node) ([]tree.Datums, error) {
 	plan := n.(planNode)
