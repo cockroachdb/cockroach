@@ -22,8 +22,9 @@ import { CapacityArc } from "src/views/clusterviz/components/nodeOrLocality/capa
 import { Sparklines } from "src/views/clusterviz/components/nodeOrLocality/sparklines";
 import { LongToMoment } from "src/util/convert";
 import { cockroach } from "src/js/protos";
+
 import NodeLivenessStatus = cockroach.storage.NodeLivenessStatus;
-import Liveness$Properties = cockroach.storage.Liveness$Properties;
+type Liveness$Properties = cockroach.storage.Liveness$Properties;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
