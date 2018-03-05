@@ -11,6 +11,7 @@ var opLayoutTable = [...]opLayout{
 	opt.SubqueryOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.VariableOp:        makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
 	opt.ConstOp:           makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
+	opt.NullOp:            makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
 	opt.TrueOp:            makeOpLayout(0 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.FalseOp:           makeOpLayout(0 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.PlaceholderOp:     makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
@@ -98,6 +99,7 @@ var isScalarLookup = [...]bool{
 	true,  // SubqueryOp
 	true,  // VariableOp
 	true,  // ConstOp
+	true,  // NullOp
 	true,  // TrueOp
 	true,  // FalseOp
 	true,  // PlaceholderOp
@@ -185,6 +187,7 @@ var isConstValueLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	true,  // ConstOp
+	true,  // NullOp
 	true,  // TrueOp
 	true,  // FalseOp
 	false, // PlaceholderOp
@@ -272,6 +275,7 @@ var isBooleanLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	true,  // TrueOp
 	true,  // FalseOp
 	false, // PlaceholderOp
@@ -359,6 +363,7 @@ var isComparisonLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -446,6 +451,7 @@ var isBinaryLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -533,6 +539,7 @@ var isUnaryLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -620,6 +627,7 @@ var isRelationalLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -707,6 +715,7 @@ var isJoinLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -794,6 +803,7 @@ var isJoinApplyLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -881,6 +891,7 @@ var isEnforcerLookup = [...]bool{
 	false, // SubqueryOp
 	false, // VariableOp
 	false, // ConstOp
+	false, // NullOp
 	false, // TrueOp
 	false, // FalseOp
 	false, // PlaceholderOp
@@ -1002,6 +1013,46 @@ func (ev ExprView) IsEnforcer() bool {
 	return isEnforcerLookup[ev.op]
 }
 
+func (me *memoExpr) isScalar() bool {
+	return isScalarLookup[me.op]
+}
+
+func (me *memoExpr) isConstValue() bool {
+	return isConstValueLookup[me.op]
+}
+
+func (me *memoExpr) isBoolean() bool {
+	return isBooleanLookup[me.op]
+}
+
+func (me *memoExpr) isComparison() bool {
+	return isComparisonLookup[me.op]
+}
+
+func (me *memoExpr) isBinary() bool {
+	return isBinaryLookup[me.op]
+}
+
+func (me *memoExpr) isUnary() bool {
+	return isUnaryLookup[me.op]
+}
+
+func (me *memoExpr) isRelational() bool {
+	return isRelationalLookup[me.op]
+}
+
+func (me *memoExpr) isJoin() bool {
+	return isJoinLookup[me.op]
+}
+
+func (me *memoExpr) isJoinApply() bool {
+	return isJoinApplyLookup[me.op]
+}
+
+func (me *memoExpr) isEnforcer() bool {
+	return isEnforcerLookup[me.op]
+}
+
 type subqueryExpr memoExpr
 
 func makeSubqueryExpr(input opt.GroupID, projection opt.GroupID) subqueryExpr {
@@ -1071,6 +1122,43 @@ func (m *memoExpr) asConst() *constExpr {
 		return nil
 	}
 	return (*constExpr)(m)
+}
+
+// nullExpr is the constant SQL null value that has "unknown value" semantics. If
+// the Typ field is not types.Unknown, then the value is known to be in the
+// domain of that type. This is important for preserving correct types in
+// replacement patterns. For example:
+//   (Plus (Function ...) (Const 1))
+//
+// If the function in that expression has a static type of Int, but then it gets
+// constant folded to (Null), then its type must remain as Int. Any other type
+// violates logical equivalence of the expression, breaking type inference and
+// possibly changing the results of execution. The solution is to tag the null
+// with the correct type:
+//   (Plus (Null (Int)) (Const 1))
+//
+// Null is its own operator rather than a Const datum in order to make matching
+// and replacement easier and more efficient, as patterns can contain (Null)
+// expressions.
+type nullExpr memoExpr
+
+func makeNullExpr(typ opt.PrivateID) nullExpr {
+	return nullExpr{op: opt.NullOp, state: exprState{uint32(typ)}}
+}
+
+func (e *nullExpr) typ() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
+}
+
+func (e *nullExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asNull() *nullExpr {
+	if m.op != opt.NullOp {
+		return nil
+	}
+	return (*nullExpr)(m)
 }
 
 // trueExpr is the boolean true value that is equivalent to the tree.DBoolTrue datum

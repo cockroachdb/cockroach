@@ -34,6 +34,28 @@ func inferType(ev ExprView) types.T {
 	return fn(ev)
 }
 
+// inferUnaryType infers the return type of a unary operator, given the type of
+// its input.
+func inferUnaryType(op opt.Operator, inputType types.T) types.T {
+	unaryOp := opt.UnaryOpReverseMap[op]
+
+	// Find the unary op that matches the type of the expression's child.
+	for _, op := range tree.UnaryOps[unaryOp] {
+		o := op.(tree.UnaryOp)
+		if inputType.Equivalent(o.Typ) {
+			return o.ReturnType
+		}
+	}
+	panic(fmt.Sprintf("could not find type for unary expression %s", op))
+}
+
+// inferBinaryType infers the return type of a binary operator, given the type
+// of its inputs.
+func inferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
+	returnType, _ := resolveBinary(op, leftType, rightType)
+	return returnType
+}
+
 type typingFunc func(ev ExprView) types.T
 
 // typingFuncMap is a lookup table from scalar operator type to a function
@@ -44,6 +66,7 @@ func init() {
 	typingFuncMap = [opt.NumOperators]typingFunc{
 		opt.VariableOp:        typeVariable,
 		opt.ConstOp:           typeAsTypedExpr,
+		opt.NullOp:            typeAsPrivate,
 		opt.PlaceholderOp:     typeAsTypedExpr,
 		opt.UnsupportedExprOp: typeAsTypedExpr,
 		opt.TupleOp:           typeAsTuple,
@@ -52,7 +75,7 @@ func init() {
 		opt.ExistsOp:          typeAsBool,
 		opt.FunctionOp:        typeFunction,
 		opt.CoalesceOp:        typeCoalesce,
-		opt.CastOp:            typeCast,
+		opt.CastOp:            typeAsPrivate,
 	}
 
 	for _, op := range opt.BooleanOperators {
@@ -108,54 +131,16 @@ func typeAsTypedExpr(ev ExprView) types.T {
 // typeAsUnary returns the type of a unary expression by hooking into the sql
 // semantics code that searches for unary operator overloads.
 func typeAsUnary(ev ExprView) types.T {
-	unaryOp := opt.UnaryOpReverseMap[ev.Operator()]
-
-	input := ev.Child(0)
-	inputType := input.Logical().Scalar.Type
-
-	// Find the unary op that matches the type of the expression's child.
-	for _, op := range tree.UnaryOps[unaryOp] {
-		o := op.(tree.UnaryOp)
-		if inputType.Equivalent(o.Typ) {
-			return o.ReturnType
-		}
-	}
-
-	panic(fmt.Sprintf("could not find type for unary expression: %v", ev))
+	return inferUnaryType(ev.Operator(), ev.Child(0).Logical().Scalar.Type)
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
 // semantics code that searches for binary operator overloads.
 func typeAsBinary(ev ExprView) types.T {
-	binOp := opt.BinaryOpReverseMap[ev.Operator()]
-
-	left := ev.Child(0)
-	leftType := left.Logical().Scalar.Type
-
-	right := ev.Child(1)
-	rightType := right.Logical().Scalar.Type
-
-	// Find the binary op that matches the type of the expression's left and
-	// right children.
-	for _, op := range tree.BinOps[binOp] {
-		o := op.(tree.BinOp)
-
-		if leftType == types.Unknown {
-			if rightType.Equivalent(o.RightType) {
-				return o.ReturnType
-			}
-		} else if rightType == types.Unknown {
-			if leftType.Equivalent(o.LeftType) {
-				return o.ReturnType
-			}
-		} else {
-			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
-				return o.ReturnType
-			}
-		}
-	}
-
-	panic(fmt.Sprintf("could not find type for binary expression: %v", ev))
+	leftType := ev.Child(0).Logical().Scalar.Type
+	rightType := ev.Child(1).Logical().Scalar.Type
+	typ, _ := resolveBinary(ev.Operator(), leftType, rightType)
+	return typ
 }
 
 // typeFunction returns the type of a function expression by extracting it from
@@ -173,7 +158,7 @@ func typeAsAny(_ ExprView) types.T {
 }
 
 // typeCoalesce returns the type of a coalesce expression, which is equal to
-// the type of its children.
+// the type of its first non-null child.
 func typeCoalesce(ev ExprView) types.T {
 	for i := 0; i < ev.ChildCount(); i++ {
 		childType := ev.Child(i).Logical().Scalar.Type
@@ -184,6 +169,38 @@ func typeCoalesce(ev ExprView) types.T {
 	return types.Unknown
 }
 
-func typeCast(ev ExprView) types.T {
+// typeAsPrivate returns a type extracted from the expression's private field,
+// which is an instance of types.T.
+func typeAsPrivate(ev ExprView) types.T {
 	return ev.Private().(types.T)
+}
+
+// resolveBinary finds the correct type signature overload for the specified
+// binary operator, given the types of its inputs. resolveBinary returns the
+// overloads's return type, as well as a boolean indicating whether it allows
+// null values to be passed as inputs (if not, the operator can just be folded
+// to null).
+func resolveBinary(op opt.Operator, leftType, rightType types.T) (typ types.T, allowNulls bool) {
+	binOp := opt.BinaryOpReverseMap[op]
+
+	// Find the binary op that matches the type of the expression's left and
+	// right children.
+	for _, op := range tree.BinOps[binOp] {
+		o := op.(tree.BinOp)
+
+		if leftType == types.Unknown {
+			if rightType.Equivalent(o.RightType) {
+				return o.ReturnType, o.NullableArgs
+			}
+		} else if rightType == types.Unknown {
+			if leftType.Equivalent(o.LeftType) {
+				return o.ReturnType, o.NullableArgs
+			}
+		} else {
+			if leftType.Equivalent(o.LeftType) && rightType.Equivalent(o.RightType) {
+				return o.ReturnType, o.NullableArgs
+			}
+		}
+	}
+	panic(fmt.Sprintf("could not find type for binary expression %s", op))
 }

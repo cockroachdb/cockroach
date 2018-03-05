@@ -62,6 +62,39 @@ func (_f *factory) ConstructConst(
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_constExpr)))
 }
 
+// ConstructNull constructs an expression for the Null operator.
+// Null is the constant SQL null value that has "unknown value" semantics. If
+// the Typ field is not types.Unknown, then the value is known to be in the
+// domain of that type. This is important for preserving correct types in
+// replacement patterns. For example:
+//   (Plus (Function ...) (Const 1))
+//
+// If the function in that expression has a static type of Int, but then it gets
+// constant folded to (Null), then its type must remain as Int. Any other type
+// violates logical equivalence of the expression, breaking type inference and
+// possibly changing the results of execution. The solution is to tag the null
+// with the correct type:
+//   (Plus (Null (Int)) (Const 1))
+//
+// Null is its own operator rather than a Const datum in order to make matching
+// and replacement easier and more efficient, as patterns can contain (Null)
+// expressions.
+func (_f *factory) ConstructNull(
+	typ opt.PrivateID,
+) opt.GroupID {
+	_nullExpr := makeNullExpr(typ)
+	_group := _f.mem.lookupGroupByFingerprint(_nullExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr((*memoExpr)(&_nullExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_nullExpr)))
+}
+
 // ConstructTrue constructs an expression for the True operator.
 // True is the boolean true value that is equivalent to the tree.DBoolTrue datum
 // value. It is a separate operator to make matching and replacement simpler and
@@ -210,19 +243,6 @@ func (_f *factory) ConstructAnd(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_andExpr))
 	}
 
-	// [EliminateAnd]
-	{
-		for _, _item := range _f.mem.lookupList(conditions) {
-			_false := _f.mem.lookupNormExpr(_item).asFalse()
-			if _false != nil {
-				_f.reportOptimization()
-				_group = _f.ConstructFalse()
-				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
 	// [FlattenAnd]
 	{
 		for _, _item := range _f.mem.lookupList(conditions) {
@@ -239,12 +259,28 @@ func (_f *factory) ConstructAnd(
 	// [SimplifyAnd]
 	{
 		for _, _item := range _f.mem.lookupList(conditions) {
-			_true := _f.mem.lookupNormExpr(_item).asTrue()
-			if _true != nil {
+			_norm := _f.mem.lookupNormExpr(_item)
+			if _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
 				_f.reportOptimization()
 				_group = _f.simplifyAnd(conditions)
 				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
 				return _group
+			}
+		}
+	}
+
+	// [FoldNullAndOr]
+	{
+		if conditions.Length > 0 {
+			_item := _f.mem.lookupList(conditions)[0]
+			_null := _f.mem.lookupNormExpr(_item).asNull()
+			if _null != nil {
+				if _f.listOnlyHasNulls(conditions) {
+					_f.reportOptimization()
+					_group = _f.ConstructNull(_f.boolType())
+					_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
+					return _group
+				}
 			}
 		}
 	}
@@ -269,19 +305,6 @@ func (_f *factory) ConstructOr(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_orExpr))
 	}
 
-	// [EliminateOr]
-	{
-		for _, _item := range _f.mem.lookupList(conditions) {
-			_true := _f.mem.lookupNormExpr(_item).asTrue()
-			if _true != nil {
-				_f.reportOptimization()
-				_group = _f.ConstructTrue()
-				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
 	// [FlattenOr]
 	{
 		for _, _item := range _f.mem.lookupList(conditions) {
@@ -298,12 +321,28 @@ func (_f *factory) ConstructOr(
 	// [SimplifyOr]
 	{
 		for _, _item := range _f.mem.lookupList(conditions) {
-			_false := _f.mem.lookupNormExpr(_item).asFalse()
-			if _false != nil {
+			_norm := _f.mem.lookupNormExpr(_item)
+			if _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
 				_f.reportOptimization()
 				_group = _f.simplifyOr(conditions)
 				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 				return _group
+			}
+		}
+	}
+
+	// [FoldNullAndOr]
+	{
+		if conditions.Length > 0 {
+			_item := _f.mem.lookupList(conditions)[0]
+			_null := _f.mem.lookupNormExpr(_item).asNull()
+			if _null != nil {
+				if _f.listOnlyHasNulls(conditions) {
+					_f.reportOptimization()
+					_group = _f.ConstructNull(_f.boolType())
+					_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+					return _group
+				}
 			}
 		}
 	}
@@ -342,7 +381,7 @@ func (_f *factory) ConstructNot(
 	// [NegateComparison]
 	{
 		_norm := _f.mem.lookupNormExpr(input)
-		if isComparisonLookup[_norm.op] {
+		if _norm.isComparison() {
 			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
 			left := _e.ChildGroup(0)
 			right := _e.ChildGroup(1)
@@ -416,6 +455,28 @@ func (_f *factory) ConstructEq(
 		}
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
 }
 
@@ -432,6 +493,28 @@ func (_f *factory) ConstructLt(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
@@ -452,6 +535,28 @@ func (_f *factory) ConstructGt(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
 }
 
@@ -470,6 +575,28 @@ func (_f *factory) ConstructLe(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_leExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leExpr)))
 }
 
@@ -486,6 +613,28 @@ func (_f *factory) ConstructGe(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_geExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_geExpr)))
@@ -517,6 +666,28 @@ func (_f *factory) ConstructNe(
 				_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 				return _group
 			}
+		}
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
+			return _group
 		}
 	}
 
@@ -574,6 +745,28 @@ func (_f *factory) ConstructLike(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_likeExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_likeExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr)))
 }
 
@@ -590,6 +783,28 @@ func (_f *factory) ConstructNotLike(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notLikeExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notLikeExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr)))
@@ -610,6 +825,28 @@ func (_f *factory) ConstructILike(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_iLikeExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_iLikeExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr)))
 }
 
@@ -626,6 +863,28 @@ func (_f *factory) ConstructNotILike(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notILikeExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notILikeExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr)))
@@ -646,6 +905,28 @@ func (_f *factory) ConstructSimilarTo(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_similarToExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_similarToExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr)))
 }
 
@@ -662,6 +943,28 @@ func (_f *factory) ConstructNotSimilarTo(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notSimilarToExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notSimilarToExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr)))
@@ -682,6 +985,28 @@ func (_f *factory) ConstructRegMatch(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_regMatchExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_regMatchExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr)))
 }
 
@@ -698,6 +1023,28 @@ func (_f *factory) ConstructNotRegMatch(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notRegMatchExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notRegMatchExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr)))
@@ -718,6 +1065,28 @@ func (_f *factory) ConstructRegIMatch(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_regIMatchExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_regIMatchExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr)))
 }
 
@@ -734,6 +1103,28 @@ func (_f *factory) ConstructNotRegIMatch(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr))
+	}
+
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notRegIMatchExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_notRegIMatchExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
@@ -808,6 +1199,32 @@ func (_f *factory) ConstructBitand(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.BitandOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.BitandOp, left, right)
+				_f.mem.addAltFingerprint(_bitandExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.BitandOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.BitandOp, left, right)
+				_f.mem.addAltFingerprint(_bitandExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr)))
 }
 
@@ -824,6 +1241,32 @@ func (_f *factory) ConstructBitor(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.BitorOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.BitorOp, left, right)
+				_f.mem.addAltFingerprint(_bitorExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.BitorOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.BitorOp, left, right)
+				_f.mem.addAltFingerprint(_bitorExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr)))
@@ -844,6 +1287,32 @@ func (_f *factory) ConstructBitxor(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.BitxorOp, left, right)
+				_f.mem.addAltFingerprint(_bitxorExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.BitxorOp, left, right)
+				_f.mem.addAltFingerprint(_bitxorExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr)))
 }
 
@@ -860,6 +1329,58 @@ func (_f *factory) ConstructPlus(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.PlusOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.PlusOp, left, right)
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.PlusOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.PlusOp, left, right)
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldPlusZero]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isZero(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldZeroPlus]
+	{
+		_const := _f.mem.lookupNormExpr(left).asConst()
+		if _const != nil {
+			if _f.isZero(left) {
+				_f.reportOptimization()
+				_group = right
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
@@ -880,6 +1401,45 @@ func (_f *factory) ConstructMinus(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.MinusOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.MinusOp, left, right)
+				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.MinusOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.MinusOp, left, right)
+				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldMinusZero]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isZero(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
 }
 
@@ -896,6 +1456,58 @@ func (_f *factory) ConstructMult(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_multExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.MultOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.MultOp, left, right)
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.MultOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.MultOp, left, right)
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldMultOne]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isOne(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldOneMult]
+	{
+		_const := _f.mem.lookupNormExpr(left).asConst()
+		if _const != nil {
+			if _f.isOne(left) {
+				_f.reportOptimization()
+				_group = right
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_multExpr)))
@@ -916,6 +1528,45 @@ func (_f *factory) ConstructDiv(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_divExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.DivOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.DivOp, left, right)
+				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.DivOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.DivOp, left, right)
+				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldDivOne]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isOne(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_divExpr)))
 }
 
@@ -932,6 +1583,45 @@ func (_f *factory) ConstructFloorDiv(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
+				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
+				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldDivOne]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isOne(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr)))
@@ -952,6 +1642,32 @@ func (_f *factory) ConstructMod(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_modExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.ModOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.ModOp, left, right)
+				_f.mem.addAltFingerprint(_modExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.ModOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.ModOp, left, right)
+				_f.mem.addAltFingerprint(_modExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_modExpr)))
 }
 
@@ -968,6 +1684,32 @@ func (_f *factory) ConstructPow(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_powExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.PowOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.PowOp, left, right)
+				_f.mem.addAltFingerprint(_powExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.PowOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.PowOp, left, right)
+				_f.mem.addAltFingerprint(_powExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_powExpr)))
@@ -988,6 +1730,32 @@ func (_f *factory) ConstructConcat(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.ConcatOp, left, right)
+				_f.mem.addAltFingerprint(_concatExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.ConcatOp, left, right)
+				_f.mem.addAltFingerprint(_concatExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr)))
 }
 
@@ -1004,6 +1772,32 @@ func (_f *factory) ConstructLShift(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.LShiftOp, left, right)
+				_f.mem.addAltFingerprint(_lShiftExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.LShiftOp, left, right)
+				_f.mem.addAltFingerprint(_lShiftExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr)))
@@ -1024,6 +1818,32 @@ func (_f *factory) ConstructRShift(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.RShiftOp, left, right)
+				_f.mem.addAltFingerprint(_rShiftExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.RShiftOp, left, right)
+				_f.mem.addAltFingerprint(_rShiftExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
 }
 
@@ -1040,6 +1860,36 @@ func (_f *factory) ConstructFetchVal(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		left := json
+		_null := _f.mem.lookupNormExpr(json).asNull()
+		if _null != nil {
+			right := index
+			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchValOp, left, right)
+				_f.mem.addAltFingerprint(_fetchValExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		left := json
+		right := index
+		_null := _f.mem.lookupNormExpr(index).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchValOp, left, right)
+				_f.mem.addAltFingerprint(_fetchValExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr)))
@@ -1060,6 +1910,36 @@ func (_f *factory) ConstructFetchText(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		left := json
+		_null := _f.mem.lookupNormExpr(json).asNull()
+		if _null != nil {
+			right := index
+			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
+				_f.mem.addAltFingerprint(_fetchTextExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		left := json
+		right := index
+		_null := _f.mem.lookupNormExpr(index).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
+				_f.mem.addAltFingerprint(_fetchTextExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr)))
 }
 
@@ -1076,6 +1956,36 @@ func (_f *factory) ConstructFetchValPath(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr))
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		left := json
+		_null := _f.mem.lookupNormExpr(json).asNull()
+		if _null != nil {
+			right := path
+			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
+				_f.mem.addAltFingerprint(_fetchValPathExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		left := json
+		right := path
+		_null := _f.mem.lookupNormExpr(path).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
+				_f.mem.addAltFingerprint(_fetchValPathExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr)))
@@ -1096,6 +2006,36 @@ func (_f *factory) ConstructFetchTextPath(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr))
 	}
 
+	// [FoldNullBinaryLeft]
+	{
+		left := json
+		_null := _f.mem.lookupNormExpr(json).asNull()
+		if _null != nil {
+			right := path
+			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
+				_f.mem.addAltFingerprint(_fetchTextPathExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		left := json
+		right := path
+		_null := _f.mem.lookupNormExpr(path).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
+				_f.mem.addAltFingerprint(_fetchTextPathExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr)))
 }
 
@@ -1111,6 +2051,17 @@ func (_f *factory) ConstructUnaryPlus(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr))
+	}
+
+	// [FoldNullUnary]
+	{
+		_null := _f.mem.lookupNormExpr(input).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.foldNullUnary(opt.UnaryPlusOp, input)
+			_f.mem.addAltFingerprint(_unaryPlusExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr)))
@@ -1130,6 +2081,17 @@ func (_f *factory) ConstructUnaryMinus(
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr))
 	}
 
+	// [FoldNullUnary]
+	{
+		_null := _f.mem.lookupNormExpr(input).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.foldNullUnary(opt.UnaryMinusOp, input)
+			_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr)))
 }
 
@@ -1145,6 +2107,17 @@ func (_f *factory) ConstructUnaryComplement(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr))
+	}
+
+	// [FoldNullUnary]
+	{
+		_null := _f.mem.lookupNormExpr(input).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.foldNullUnary(opt.UnaryComplementOp, input)
+			_f.mem.addAltFingerprint(_unaryComplementExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
@@ -1163,6 +2136,17 @@ func (_f *factory) ConstructCast(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_castExpr))
+	}
+
+	// [FoldNullCast]
+	{
+		_null := _f.mem.lookupNormExpr(input).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(typ)
+			_f.mem.addAltFingerprint(_castExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_castExpr)))
@@ -1201,6 +2185,32 @@ func (_f *factory) ConstructCoalesce(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr((*memoExpr)(&_coalesceExpr))
+	}
+
+	// [EliminateCoalesce]
+	{
+		if args.Length == 1 {
+			_item := _f.mem.lookupList(args)[0]
+			item := _item
+			_f.reportOptimization()
+			_group = item
+			_f.mem.addAltFingerprint(_coalesceExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [SimplifyCoalesce]
+	{
+		if args.Length > 0 {
+			_item := _f.mem.lookupList(args)[0]
+			_norm := _f.mem.lookupNormExpr(_item)
+			if _norm.isConstValue() {
+				_f.reportOptimization()
+				_group = _f.simplifyCoalesce(args)
+				_f.mem.addAltFingerprint(_coalesceExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_coalesceExpr)))
@@ -1772,7 +2782,7 @@ func (_f *factory) ConstructExceptAll(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [82]dynConstructLookupFunc
+var dynConstructLookup [83]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1793,6 +2803,11 @@ func init() {
 	// ConstOp
 	dynConstructLookup[opt.ConstOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructConst(private)
+	}
+
+	// NullOp
+	dynConstructLookup[opt.NullOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructNull(private)
 	}
 
 	// TrueOp

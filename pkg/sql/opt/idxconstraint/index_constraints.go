@@ -260,7 +260,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 			// (see #4313).
 			break
 		}
-		if xform.MatchesConstNull(rightChild) {
+		if rightChild.Operator() == opt.NullOp {
 			// NULLs are tricky and require special handling; see
 			// nullVal related code below.
 			nullVal = true

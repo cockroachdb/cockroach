@@ -273,7 +273,7 @@ group-by
  │    │    └── tuple [type=tuple{}]
  │    └── projections
  │         └── cast: string [type=string]
- │              └── const: NULL [type=unknown]
+ │              └── null [type=unknown]
  └── aggregations
       └── function: array_agg [type=string[]]
            └── variable: column1 [type=string]
@@ -796,10 +796,10 @@ group-by
  │    │    └── tuple [type=tuple{}]
  │    └── projections
  │         ├── cast: int [type=int]
- │         │    └── const: NULL [type=unknown]
+ │         │    └── null [type=unknown]
  │         └── tuple [type=tuple{unknown, unknown}]
- │              ├── const: NULL [type=unknown]
- │              └── const: NULL [type=unknown]
+ │              ├── null [type=unknown]
+ │              └── null [type=unknown]
  └── aggregations
       ├── function: count [type=int]
       │    └── variable: column1 [type=int]
@@ -872,7 +872,7 @@ group-by
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    └── is [type=bool]
  │    │         ├── variable: kv.s [type=string]
- │    │         └── const: NULL [type=unknown]
+ │    │         └── null [type=unknown]
  │    └── projections
  │         └── variable: kv.s [type=string]
  └── aggregations
