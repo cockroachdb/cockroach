@@ -17,7 +17,6 @@ package exec
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -36,7 +35,7 @@ type Node interface{}
 // via IndexedVars.
 type Factory interface {
 	// ConstructValues returns a node that outputs the given rows as results.
-	ConstructValues(rows [][]tree.TypedExpr, colTypes []types.T, colNames []string) (Node, error)
+	ConstructValues(rows [][]tree.TypedExpr, cols sqlbase.ResultColumns) (Node, error)
 
 	// ConstructScan returns a node that represents a scan of the given table.
 	// TODO(radu): support list of columns, index, index constraints
