@@ -56,6 +56,9 @@ type txnState2 struct {
 		txn *client.Txn
 	}
 
+	// connCtx is the connection's context. This is the parent of Ctx.
+	connCtx context.Context
+
 	// Ctx is the context for everything running in this SQL txn.
 	// This is only set while the session's state is not stateNoTxn.
 	Ctx context.Context
@@ -69,9 +72,9 @@ type txnState2 struct {
 	recordingThreshold time.Duration
 	recordingStart     time.Time
 
-	// cancel is the cancellation function for the above context. Called upon
-	// COMMIT/ROLLBACK of the transaction to release resources associated with the
-	// context. nil when no txn is in progress.
+	// cancel is Ctx's cancellation function. Called upon COMMIT/ROLLBACK of the
+	// transaction to release resources associated with the context. nil when no
+	// txn is in progress.
 	cancel context.CancelFunc
 
 	// The timestamp to report for current_timestamp(), now() etc.

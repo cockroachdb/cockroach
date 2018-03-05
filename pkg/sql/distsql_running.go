@@ -247,11 +247,11 @@ type distSQLReceiver struct {
 	// Once set, no more rows are accepted.
 	commErr error
 
-	// canceled is atomically set to an error when this distSQL receiver
-	// has been marked as canceled. Upon the next Push(), err is set to
-	// this value, and ConsumerClosed is the ConsumerStatus.
-	// It contains errWraps only.
-	canceled atomic.Value
+	// txnAbortedErr is atomically set to an errWrap when the KV txn finishes
+	// asynchronously. Further results should not be returned to the client, as
+	// they risk missing seeing their own writes. Upon the next Push(), err is set
+	// and ConsumerStatus is set to ConsumerClosed.
+	txnAbortedErr atomic.Value
 
 	row    tree.Datums
 	status distsqlrun.ConsumerStatus
@@ -312,7 +312,6 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 }
 
 var _ distsqlrun.RowReceiver = &distSQLReceiver{}
-var _ distsqlrun.CancellableRowReceiver = &distSQLReceiver{}
 
 // makeDistSQLReceiver creates a distSQLReceiver.
 //
@@ -340,11 +339,17 @@ func makeDistSQLReceiver(
 		updateClock:  updateClock,
 		stmtType:     stmtType,
 	}
-	// When the root transaction finishes (i.e. it is abandoned,
-	// aborted, or committed), ensure the dist SQL flow is canceled.
+	// When the root transaction finishes (i.e. it is abandoned, aborted, or
+	// committed), ensure the flow is canceled so that we don't return results to
+	// the client that might have missed seeing their own writes. The committed
+	// case shouldn't happen.
+	//
+	// TODO(andrei): Instead of doing this, should we lift this transaction
+	// monitoring to connExecutor and have it cancel the SQL txn's context? Or for
+	// that matter, should the TxnCoordSender cancel the context itself?
 	if r.txn != nil {
 		r.txn.OnFinish(func(err error) {
-			r.canceled.Store(errWrap{err: err})
+			r.txnAbortedErr.Store(errWrap{err: err})
 		})
 	}
 	return r
@@ -406,12 +411,14 @@ func (r *distSQLReceiver) Push(
 		}
 		return r.status
 	}
-	if r.resultWriter.Err() == nil && r.canceled.Load() != nil {
-		// Set the error to reflect query cancellation.
-		r.resultWriter.SetError(r.canceled.Load().(errWrap).err)
+	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {
+		r.resultWriter.SetError(r.txnAbortedErr.Load().(errWrap).err)
+	}
+	if r.resultWriter.Err() == nil && r.ctx.Err() != nil {
+		r.resultWriter.SetError(r.ctx.Err())
 	}
 	if r.resultWriter.Err() != nil {
-		// TODO(andrei): We should drain here.
+		// TODO(andrei): We should drain here if we weren't canceled.
 		return distsqlrun.ConsumerClosed
 	}
 	if r.status != distsqlrun.NeedMoreRows {
@@ -463,11 +470,6 @@ func (r *distSQLReceiver) ProducerDone() {
 		panic("double close")
 	}
 	r.closed = true
-}
-
-// SetCanceled is part of the CancellableRowReceiver interface.
-func (r *distSQLReceiver) SetCanceled() {
-	r.canceled.Store(errWrap{err: sqlbase.NewQueryCanceledError()})
 }
 
 // updateCaches takes information about some ranges that were mis-planned and
