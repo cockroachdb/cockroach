@@ -18,6 +18,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/spf13/cobra"
 
@@ -49,6 +50,7 @@ func runCSVServer(_ *cobra.Command, _ []string) error {
 			}
 		})
 	}
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	s := &http.Server{
 		Addr:    fmt.Sprintf(`:%d`, *port),
 		Handler: mux,
