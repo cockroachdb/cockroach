@@ -59,7 +59,14 @@ func TestJoinReader(t *testing.T) {
 		99,
 		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
 
-	td := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+	tdSecondary := sqlbase.GetTableDescriptor(kvDB, "test", "t")
+
+	sqlutils.CreateTable(t, sqlDB, "t2",
+		"a INT, b INT, sum INT, s STRING, PRIMARY KEY (a,b), FAMILY f1 (a, b), FAMILY f2 (s), FAMILY f3 (sum), INDEX bs (b,s)",
+		99,
+		sqlutils.ToRowFn(aFn, bFn, sumFn, sqlutils.RowEnglishFn))
+
+	tdFamily := sqlbase.GetTableDescriptor(kvDB, "test", "t2")
 
 	testCases := []struct {
 		description     string
@@ -87,6 +94,22 @@ func TestJoinReader(t *testing.T) {
 			},
 			outputTypes: threeIntCols,
 			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
+		},
+		{
+			description: "Test duplicate rows in input stream on index join",
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{0, 1, 2},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2)},
+				{aFn(2), bFn(2)},
+				{aFn(5), bFn(5)},
+				{aFn(5), bFn(5)},
+				{aFn(2), bFn(2)},
+			},
+			outputTypes: threeIntCols,
+			expected:    "[[0 2 2] [0 2 2] [0 5 5] [0 5 5] [0 2 2]]",
 		},
 		{
 			description: "Test selecting columns from second table",
@@ -238,72 +261,74 @@ func TestJoinReader(t *testing.T) {
 			expected:        "[[2 3] [10 NULL]]",
 		},
 	}
-	for _, c := range testCases {
-		t.Run(c.description, func(t *testing.T) {
-			st := cluster.MakeTestingClusterSettings()
-			evalCtx := tree.MakeTestingEvalContext(st)
-			defer evalCtx.Stop(context.Background())
-			flowCtx := FlowCtx{
-				EvalCtx:  evalCtx,
-				Settings: st,
-				txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
-			}
-
-			encRows := make(sqlbase.EncDatumRows, len(c.input))
-			for rowIdx, row := range c.input {
-				encRow := make(sqlbase.EncDatumRow, len(row))
-				for i, d := range row {
-					encRow[i] = sqlbase.DatumToEncDatum(intType, d)
+	for _, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily} {
+		for _, c := range testCases {
+			t.Run(c.description, func(t *testing.T) {
+				st := cluster.MakeTestingClusterSettings()
+				evalCtx := tree.MakeTestingEvalContext(st)
+				defer evalCtx.Stop(context.Background())
+				flowCtx := FlowCtx{
+					EvalCtx:  evalCtx,
+					Settings: st,
+					txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
 				}
-				encRows[rowIdx] = encRow
-			}
-			in := NewRowBuffer(twoIntCols, encRows, RowBufferArgs{})
 
-			out := &RowBuffer{}
-			jr, err := newJoinReader(
-				&flowCtx,
-				0, /* processorID */
-				&JoinReaderSpec{
-					Table:           *td,
-					IndexIdx:        c.indexIdx,
-					LookupColumns:   c.lookupCols,
-					OnExpr:          Expression{Expr: c.onExpr},
-					IndexFilterExpr: c.indexFilterExpr,
-					Type:            c.joinType,
-				},
-				in,
-				&c.post,
-				out,
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			// Set a lower batch size to force multiple batches.
-			jr.batchSize = 2
-
-			jr.Run(context.Background(), nil /* wg */)
-
-			if !in.Done {
-				t.Fatal("joinReader didn't consume all the rows")
-			}
-			if !out.ProducerClosed {
-				t.Fatalf("output RowReceiver not closed")
-			}
-
-			var res sqlbase.EncDatumRows
-			for {
-				row := out.NextNoMeta(t)
-				if row == nil {
-					break
+				encRows := make(sqlbase.EncDatumRows, len(c.input))
+				for rowIdx, row := range c.input {
+					encRow := make(sqlbase.EncDatumRow, len(row))
+					for i, d := range row {
+						encRow[i] = sqlbase.DatumToEncDatum(intType, d)
+					}
+					encRows[rowIdx] = encRow
 				}
-				res = append(res, row)
-			}
+				in := NewRowBuffer(twoIntCols, encRows, RowBufferArgs{})
 
-			if result := res.String(c.outputTypes); result != c.expected {
-				t.Errorf("invalid results: %s, expected %s'", result, c.expected)
-			}
-		})
+				out := &RowBuffer{}
+				jr, err := newJoinReader(
+					&flowCtx,
+					0, /* processorID */
+					&JoinReaderSpec{
+						Table:           *td,
+						IndexIdx:        c.indexIdx,
+						LookupColumns:   c.lookupCols,
+						OnExpr:          Expression{Expr: c.onExpr},
+						IndexFilterExpr: c.indexFilterExpr,
+						Type:            c.joinType,
+					},
+					in,
+					&c.post,
+					out,
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				// Set a lower batch size to force multiple batches.
+				jr.batchSize = 2
+
+				jr.Run(context.Background(), nil /* wg */)
+
+				if !in.Done {
+					t.Fatal("joinReader didn't consume all the rows")
+				}
+				if !out.ProducerClosed {
+					t.Fatalf("output RowReceiver not closed")
+				}
+
+				var res sqlbase.EncDatumRows
+				for {
+					row := out.NextNoMeta(t)
+					if row == nil {
+						break
+					}
+					res = append(res, row)
+				}
+
+				if result := res.String(c.outputTypes); result != c.expected {
+					t.Errorf("invalid results: %s, expected %s'", result, c.expected)
+				}
+			})
+		}
 	}
 }
 
