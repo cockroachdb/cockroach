@@ -168,10 +168,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.plan, allColumns(n.plan))
 
 	case *deleteNode:
-		// TODO(knz): This can be optimized by omitting the columns that
-		// are not part of the primary key, do not participate in
-		// foreign key relations and that are not needed for RETURNING.
-		setNeededColumns(n.run.rows, allColumns(n.run.rows))
+		setNeededColumns(n.source, allColumns(n.source))
 
 	case *updateNode:
 		// TODO(knz): This can be optimized by omitting the columns that
@@ -196,6 +193,14 @@ func setNeededColumns(plan planNode, needed []bool) {
 
 	case *testingRelocateNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
+
+	case *rowCountNode:
+		// The sub-node is a DELETE, INSERT, UPDATE etc. and will decide which columns it needs.
+		setNeededColumns(n.source, nil)
+
+	case *serializeNode:
+		// The sub-node is a DELETE, INSERT, UPDATE etc. and will decide which columns it needs.
+		setNeededColumns(n.source, nil)
 
 	case *alterIndexNode:
 	case *alterTableNode:
