@@ -3628,8 +3628,9 @@ numeric_only:
 //   [INCREMENT <increment>]
 //   [MINVALUE <minvalue> | NO MINVALUE]
 //   [MAXVALUE <maxvalue> | NO MAXVALUE]
-//   [START <start>]
-//   [[NO] CYCLE]
+//   [START [WITH] <start>]
+//   [CACHE <cache>]
+//   [NO CYCLE]
 //
 // %SeeAlso: CREATE TABLE
 create_sequence_stmt:
@@ -3657,15 +3658,33 @@ opt_sequence_option_list:
 | /* EMPTY */          { $$.val = []tree.SequenceOption(nil) }
 
 sequence_option_list:
-  sequence_option_elem                       { $$.val = []tree.SequenceOption{$1.seqOpt()} }
-| sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
+  sequence_option_elem
+  {
+    if $1.val == nil {
+      $$.val = []tree.SequenceOption(nil)
+    } else {
+      $$.val = []tree.SequenceOption{$1.seqOpt()}
+    }
+  }
+| sequence_option_list sequence_option_elem
+  {
+    if $2.val == nil {
+      $$.val = $1.seqOpts()
+    } else {
+      $$.val = append($1.seqOpts(), $2.seqOpt())
+    }
+  }
 
 sequence_option_elem:
   AS typename                  { return unimplemented(sqllex, "create sequence AS option") }
 | CYCLE                        { return unimplemented(sqllex, "create sequence CYCLE option") }
-| NO CYCLE                     { return unimplemented(sqllex, "create sequence CYCLE option") }
+| NO CYCLE                     { $$.val = nil }
 | OWNED BY column_path         { return unimplemented(sqllex, "create sequence OWNED BY option") }
-| CACHE signed_iconst64        { return unimplemented(sqllex, "create sequence CACHE option") }
+| CACHE signed_iconst64        { if x := $2.int64(); x != 1 {
+                                   return unimplemented(sqllex, "create sequence CACHE option")
+                                 }
+                                 // 1 is the default value, so ignore.
+                                 $$.val = nil }
 | INCREMENT signed_iconst64    { x := $2.int64()
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptIncrement, IntVal: &x} }
 | INCREMENT BY signed_iconst64 { x := $3.int64()

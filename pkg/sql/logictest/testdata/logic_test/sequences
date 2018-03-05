@@ -98,6 +98,9 @@ CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
 statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
 CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
 
+statement ok
+CREATE SEQUENCE ignored_options_test CACHE 1 NO CYCLE
+
 # Verify presence in crdb_internal.create_statements.
 
 statement ok
@@ -107,7 +110,7 @@ query ITTITTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
 database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state
-50           test           public       59             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC
+50           test           public       60             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
