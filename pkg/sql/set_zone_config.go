@@ -193,6 +193,13 @@ func writeZoneConfig(
 				"cluster version does not support zone configs with per-replica constraints")
 		}
 	}
+	if len(zone.LeasePreferences) > 0 {
+		st := execCfg.Settings
+		if !st.Version.IsMinSupported(cluster.VersionLeasePreferences) {
+			return 0, errors.New(
+				"cluster version does not support zone configs with lease placement preferences")
+		}
+	}
 
 	internalExecutor := InternalExecutor{ExecCfg: execCfg}
 
