@@ -252,26 +252,21 @@ func (c *groupCSVWriter) groupWriteCSVs(
 }
 
 func csvServerPaths(
-	csvServerURL string, gen workload.Generator, table workload.Table, chunkSizeBytes int64,
+	csvServerURL string, gen workload.Generator, table workload.Table, numNodes int,
 ) []string {
 	if table.InitialRowCount == 0 {
 		return nil
 	}
 
-	// TODO(dan): Do some better sampling to figure out these row splits.
-	var rowStep int
-	{
-		var approxRowSize int64
-		for _, datum := range table.InitialRowFn(0) {
-			approxRowSize += workload.ApproxDatumSize(datum)
-		}
-		if approxRowSize <= 0 {
-			approxRowSize = 1
-		}
-		rowStep = int(chunkSizeBytes / approxRowSize)
-		if rowStep <= 0 {
-			rowStep = 1
-		}
+	// More files means more granularity in the progress tracking, but more
+	// files also means larger jobs table entries, so this is a balance. The
+	// IMPORT code round-robins the files in an import per node, so it's best to
+	// have some integer multiple of the number of nodes in the cluster, which
+	// will guarantee that the work is balanced across the cluster.
+	numFiles := numNodes * 10
+	rowStep := table.InitialRowCount / (numFiles)
+	if rowStep == 0 {
+		rowStep = 1
 	}
 
 	var paths []string
@@ -344,7 +339,12 @@ func MakeFixture(
 				startRow, endRow := 0, table.InitialRowCount
 				return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
 			}
-			paths := csvServerPaths(config.CSVServerURL, gen, table, writeCSVChunkSize)
+			const numNodesQuery = `SELECT COUNT(node_id) FROM crdb_internal.gossip_liveness`
+			var numNodes int
+			if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
+				return err
+			}
+			paths := csvServerPaths(config.CSVServerURL, gen, table, numNodes)
 			for _, path := range paths {
 				tableCSVPathsCh <- path
 			}
