@@ -105,30 +105,33 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     const parentLocality = tiers.slice(0, tiers.length - 1);
 
     return (
-      <div
-        style={{
-          position: "absolute",
-          left: BACK_BUTTON_OFFSET,
-          bottom: BACK_BUTTON_OFFSET,
-          backgroundColor: "white",
-          border: "1px solid #EDEDED",
-          borderRadius: 3,
-          padding: 12,
-          boxShadow: "0px 0px 4px 0px rgba(0, 0, 0, 0.2)",
-          letterSpacing: 0.5,
-        }}
+      <Link
+        to={ CLUSTERVIZ_ROOT + generateLocalityRoute(parentLocality) }
+        style={{ textDecoration: "none", color: "#595f6c" }}
       >
-        <Link
-          to={ CLUSTERVIZ_ROOT + generateLocalityRoute(parentLocality) }
-          style={{ textDecoration: "none", color: "#595f6c" }}
+        <div
+          style={{
+            position: "absolute",
+            left: BACK_BUTTON_OFFSET,
+            bottom: BACK_BUTTON_OFFSET,
+            backgroundColor: "white",
+            border: "1px solid #EDEDED",
+            borderRadius: 3,
+            padding: 12,
+            boxShadow: "0px 0px 4px 0px rgba(0, 0, 0, 0.2)",
+            letterSpacing: 0.5,
+          }}
         >
-          <span dangerouslySetInnerHTML={trustIcon(arrowUpIcon)} style={{ position: "relative", top: 1 }} />
+          <span
+            dangerouslySetInnerHTML={trustIcon(arrowUpIcon)}
+            style={{ position: "relative", top: 1 }}
+          />
           Up to{" "}
           <span style={{ textTransform: "uppercase" }}>
             { getLocalityLabel(parentLocality) }
           </span>
-        </Link>
-      </div>
+        </div>
+      </Link>
     );
   }
 
