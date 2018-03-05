@@ -1149,6 +1149,7 @@ server_version_num              90500         NULL      NULL        NULL        
 session_user                    root          NULL      NULL        NULL        string
 sql_safe_updates                false         NULL      NULL        NULL        string
 standard_conforming_strings     on            NULL      NULL        NULL        string
+statement_timeout               0             NULL      NULL        NULL        string
 timezone                        UTC           NULL      NULL        NULL        string
 tracing                         off           NULL      NULL        NULL        string
 transaction_isolation           serializable  NULL      NULL        NULL        string
@@ -1180,6 +1181,7 @@ server_version_num              90500         NULL  user     NULL      90500    
 session_user                    root          NULL  user     NULL      root          root
 sql_safe_updates                false         NULL  user     NULL      false         false
 standard_conforming_strings     on            NULL  user     NULL      on            on
+statement_timeout               0             NULL  user     NULL      0             0
 timezone                        UTC           NULL  user     NULL      UTC           UTC
 tracing                         off           NULL  user     NULL      off           off
 transaction_isolation           serializable  NULL  user     NULL      serializable  serializable
@@ -1190,33 +1192,34 @@ transaction_status              NoTxn         NULL  user     NULL      NoTxn    
 query TTTTTT colnames
 SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
 ----
-name                             source  min_val  max_val  sourcefile  sourceline
-application_name                 NULL    NULL     NULL     NULL        NULL
-client_encoding                  NULL    NULL     NULL     NULL        NULL
-client_min_messages              NULL    NULL     NULL     NULL        NULL
-database                         NULL    NULL     NULL     NULL        NULL
-datestyle                        NULL    NULL     NULL     NULL        NULL
-default_transaction_isolation    NULL    NULL     NULL     NULL        NULL
-default_transaction_read_only    NULL    NULL     NULL     NULL        NULL
-distsql                          NULL    NULL     NULL     NULL        NULL
-experimental_force_lookup_join   NULL    NULL     NULL     NULL        NULL
-experimental_opt                 NULL    NULL     NULL     NULL        NULL
-extra_float_digits               NULL    NULL     NULL     NULL        NULL
-intervalstyle                    NULL    NULL     NULL     NULL        NULL
-max_index_keys                   NULL    NULL     NULL     NULL        NULL
-node_id                          NULL    NULL     NULL     NULL        NULL
-search_path                      NULL    NULL     NULL     NULL        NULL
-server_version                   NULL    NULL     NULL     NULL        NULL
-server_version_num               NULL    NULL     NULL     NULL        NULL
-session_user                     NULL    NULL     NULL     NULL        NULL
-sql_safe_updates                 NULL    NULL     NULL     NULL        NULL
-standard_conforming_strings      NULL    NULL     NULL     NULL        NULL
-timezone                         NULL    NULL     NULL     NULL        NULL
-tracing                          NULL    NULL     NULL     NULL        NULL
-transaction_isolation            NULL    NULL     NULL     NULL        NULL
-transaction_priority             NULL    NULL     NULL     NULL        NULL
-transaction_read_only            NULL    NULL     NULL     NULL        NULL
-transaction_status               NULL    NULL     NULL     NULL        NULL
+name                            source  min_val  max_val  sourcefile  sourceline
+application_name                NULL    NULL     NULL     NULL        NULL
+client_encoding                 NULL    NULL     NULL     NULL        NULL
+client_min_messages             NULL    NULL     NULL     NULL        NULL
+database                        NULL    NULL     NULL     NULL        NULL
+datestyle                       NULL    NULL     NULL     NULL        NULL
+default_transaction_isolation   NULL    NULL     NULL     NULL        NULL
+default_transaction_read_only   NULL    NULL     NULL     NULL        NULL
+distsql                         NULL    NULL     NULL     NULL        NULL
+experimental_force_lookup_join  NULL    NULL     NULL     NULL        NULL
+experimental_opt                NULL    NULL     NULL     NULL        NULL
+extra_float_digits              NULL    NULL     NULL     NULL        NULL
+intervalstyle                   NULL    NULL     NULL     NULL        NULL
+max_index_keys                  NULL    NULL     NULL     NULL        NULL
+node_id                         NULL    NULL     NULL     NULL        NULL
+search_path                     NULL    NULL     NULL     NULL        NULL
+server_version                  NULL    NULL     NULL     NULL        NULL
+server_version_num              NULL    NULL     NULL     NULL        NULL
+session_user                    NULL    NULL     NULL     NULL        NULL
+sql_safe_updates                NULL    NULL     NULL     NULL        NULL
+standard_conforming_strings     NULL    NULL     NULL     NULL        NULL
+statement_timeout               NULL    NULL     NULL     NULL        NULL
+timezone                        NULL    NULL     NULL     NULL        NULL
+tracing                         NULL    NULL     NULL     NULL        NULL
+transaction_isolation           NULL    NULL     NULL     NULL        NULL
+transaction_priority            NULL    NULL     NULL     NULL        NULL
+transaction_read_only           NULL    NULL     NULL     NULL        NULL
+transaction_status              NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
 
