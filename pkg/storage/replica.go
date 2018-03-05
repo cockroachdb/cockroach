@@ -6019,26 +6019,20 @@ func calcReplicaMetrics(
 	m.Leader = isRaftLeader(raftStatus)
 	m.Quiescent = quiescent
 
-	// We gather per-range stats on either the leader or, if there is no leader,
-	// the first live replica in the descriptor. Note that the first live replica
-	// is an arbitrary choice. We want to select one live replica to do the
-	// counting that all replicas can agree on.
+	// We gather per-range stats from the first live replica in the descriptor.
+	// Note that the first live replica is an arbitrary choice. We want to select
+	// one live replica to do the counting that all replicas can agree on.
 	//
 	// Note that the current heuristics can double count. If the first live
 	// replica is on a node that is partitioned from the other replicas in the
-	// range it may not know the leader even though there is one. This scenario
-	// seems rare as it requires the partitioned node to be alive enough to be
-	// performing liveness heartbeats.
-	if !HasRaftLeader(raftStatus) {
-		// The range doesn't have a leader or we don't know who the leader is.
-		for _, rd := range desc.Replicas {
-			if livenessMap[rd.NodeID] {
-				m.RangeCounter = rd.StoreID == storeID
-				break
-			}
+	// range, there may be multiple nodes which believe they are the first live
+	// replica. This scenario seems rare as it requires the partitioned node to be
+	// alive enough to be performing liveness heartbeats.
+	for _, rd := range desc.Replicas {
+		if livenessMap[rd.NodeID] {
+			m.RangeCounter = rd.StoreID == storeID
+			break
 		}
-	} else {
-		m.RangeCounter = m.Leader
 	}
 
 	if m.RangeCounter {
