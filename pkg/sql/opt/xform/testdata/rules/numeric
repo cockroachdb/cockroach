@@ -25,25 +25,25 @@ project
  ├── columns: column5:int:null:5 column6:int:null:6 column7:float:null:7 column8:float:null:8 column9:decimal:null:9 column10:decimal:null:10
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4
- └── projections
-      ├── plus [type=int]
-      │    ├── variable: a.i [type=int]
-      │    └── variable: a.i [type=int]
-      ├── plus [type=int]
-      │    ├── variable: a.i [type=int]
-      │    └── variable: a.i [type=int]
-      ├── plus [type=float]
-      │    ├── variable: a.f [type=float]
-      │    └── variable: a.f [type=float]
-      ├── plus [type=float]
-      │    ├── variable: a.f [type=float]
-      │    └── variable: a.f [type=float]
-      ├── plus [type=decimal]
-      │    ├── variable: a.d [type=decimal]
-      │    └── variable: a.d [type=decimal]
-      └── plus [type=decimal]
-           ├── variable: a.d [type=decimal]
-           └── variable: a.d [type=decimal]
+ └── projections [outer=(2-4)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── plus [type=float, outer=(3)]
+      │    ├── variable: a.f [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      ├── plus [type=float, outer=(3)]
+      │    ├── variable: a.f [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      ├── plus [type=decimal, outer=(4)]
+      │    ├── variable: a.d [type=decimal, outer=(4)]
+      │    └── variable: a.d [type=decimal, outer=(4)]
+      └── plus [type=decimal, outer=(4)]
+           ├── variable: a.d [type=decimal, outer=(4)]
+           └── variable: a.d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldMultOne, FoldOneMult
@@ -61,25 +61,25 @@ project
  ├── columns: column5:int:null:5 column6:int:null:6 column7:float:null:7 column8:float:null:8 column9:decimal:null:9 column10:decimal:null:10
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4
- └── projections
-      ├── plus [type=int]
-      │    ├── variable: a.i [type=int]
-      │    └── variable: a.i [type=int]
-      ├── plus [type=int]
-      │    ├── variable: a.i [type=int]
-      │    └── variable: a.i [type=int]
-      ├── plus [type=float]
-      │    ├── variable: a.f [type=float]
-      │    └── variable: a.f [type=float]
-      ├── plus [type=float]
-      │    ├── variable: a.f [type=float]
-      │    └── variable: a.f [type=float]
-      ├── plus [type=decimal]
-      │    ├── variable: a.d [type=decimal]
-      │    └── variable: a.d [type=decimal]
-      └── plus [type=decimal]
-           ├── variable: a.d [type=decimal]
-           └── variable: a.d [type=decimal]
+ └── projections [outer=(2-4)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── variable: a.i [type=int, outer=(2)]
+      ├── plus [type=float, outer=(3)]
+      │    ├── variable: a.f [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      ├── plus [type=float, outer=(3)]
+      │    ├── variable: a.f [type=float, outer=(3)]
+      │    └── variable: a.f [type=float, outer=(3)]
+      ├── plus [type=decimal, outer=(4)]
+      │    ├── variable: a.d [type=decimal, outer=(4)]
+      │    └── variable: a.d [type=decimal, outer=(4)]
+      └── plus [type=decimal, outer=(4)]
+           ├── variable: a.d [type=decimal, outer=(4)]
+           └── variable: a.d [type=decimal, outer=(4)]
 
 # --------------------------------------------------
 # FoldDivOne
@@ -96,7 +96,7 @@ project
  ├── columns: column5:decimal:null:5 column6:float:null:6 column7:decimal:null:7
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4
- └── projections
-      ├── variable: a.i [type=int]
-      ├── variable: a.f [type=float]
-      └── variable: a.d [type=decimal]
+ └── projections [outer=(2-4)]
+      ├── variable: a.i [type=int, outer=(2)]
+      ├── variable: a.f [type=float, outer=(3)]
+      └── variable: a.d [type=decimal, outer=(4)]

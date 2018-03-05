@@ -24,8 +24,8 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
+ └── eq [type=bool, outer=(1)]
+      ├── variable: a.x [type=int, outer=(1)]
       └── const: 1 [type=int]
 
 build
@@ -42,11 +42,11 @@ project
  │    │    ├── scan
  │    │    │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
  │    │    └── true [type=bool]
- │    └── eq [type=bool]
- │         ├── variable: a.x [type=int]
- │         └── variable: b.x [type=int]
- └── projections
-      ├── variable: a.x [type=int]
-      ├── variable: a.y [type=int]
-      ├── variable: b.x [type=int]
-      └── variable: b.z [type=int]
+ │    └── eq [type=bool, outer=(1,3)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: b.x [type=int, outer=(3)]
+ └── projections [outer=(1-4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: a.y [type=int, outer=(2)]
+      ├── variable: b.x [type=int, outer=(3)]
+      └── variable: b.z [type=int, outer=(4)]

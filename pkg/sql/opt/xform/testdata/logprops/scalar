@@ -1,0 +1,54 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+TABLE b
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM a WHERE x < 5
+----
+select
+ ├── columns: x:int:1 y:int:null:2
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── lt [type=bool, outer=(1)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── const: 5 [type=int]
+
+build
+SELECT a.x + 1 = length('foo') + a.y, b.rowid * a.x FROM a, b
+----
+project
+ ├── columns: column6:bool:null:6 column7:int:null:7
+ ├── inner-join
+ │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    ├── scan
+ │    │    └── columns: a.x:int:1 a.y:int:null:2
+ │    ├── scan
+ │    │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    └── true [type=bool]
+ └── projections [outer=(1,2,5)]
+      ├── eq [type=bool, outer=(1,2)]
+      │    ├── plus [type=int, outer=(1)]
+      │    │    ├── variable: a.x [type=int, outer=(1)]
+      │    │    └── const: 1 [type=int]
+      │    └── plus [type=int, outer=(2)]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── variable: a.y [type=int, outer=(2)]
+      └── mult [type=int, outer=(1,5)]
+           ├── variable: b.rowid [type=int, outer=(5)]
+           └── variable: a.x [type=int, outer=(1)]
