@@ -644,7 +644,7 @@ func (ru *RowUpdater) UpdateRow(
 		return nil, errors.Errorf("got %d values but expected %d", len(updateValues), len(ru.UpdateCols))
 	}
 
-	primaryIndexKey, secondaryIndexEntries, err := ru.Helper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
+	primaryIndexKey, oldSecondaryIndexEntries, err := ru.Helper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
 	if err != nil {
 		return nil, err
 	}
@@ -652,8 +652,8 @@ func (ru *RowUpdater) UpdateRow(
 	// The secondary index entries returned by rowHelper.encodeIndexes are only
 	// valid until the next call to encodeIndexes. We need to copy them so that
 	// we can compare against the new secondary index entries.
-	secondaryIndexEntries = append(ru.indexEntriesBuf[:0], secondaryIndexEntries...)
-	ru.indexEntriesBuf = secondaryIndexEntries
+	oldSecondaryIndexEntries = append(ru.indexEntriesBuf[:0], oldSecondaryIndexEntries...)
+	ru.indexEntriesBuf = oldSecondaryIndexEntries
 
 	// Check that the new value types match the column types. This needs to
 	// happen before index encoding because certain datum types (i.e. tuple)
@@ -700,7 +700,7 @@ func (ru *RowUpdater) UpdateRow(
 
 		ru.Fks.addCheckForIndex(ru.Helper.TableDesc.PrimaryIndex.ID)
 		for i := range newSecondaryIndexEntries {
-			if !bytes.Equal(newSecondaryIndexEntries[i].Key, secondaryIndexEntries[i].Key) {
+			if !bytes.Equal(newSecondaryIndexEntries[i].Key, oldSecondaryIndexEntries[i].Key) {
 				ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID)
 			}
 		}
@@ -835,14 +835,16 @@ func (ru *RowUpdater) UpdateRow(
 	for i, newSecondaryIndexEntry := range newSecondaryIndexEntries {
 		// We're making sure that if there are more new index entries for an inverted index than old ones, we will
 		// handle the checks for insertion and deletion correctly.
+
 		var oldSecondaryIndexEntry IndexEntry
-		if len(secondaryIndexEntries) > i {
-			oldSecondaryIndexEntry = secondaryIndexEntries[i]
+		if len(oldSecondaryIndexEntries) > i {
+			oldSecondaryIndexEntry = oldSecondaryIndexEntries[i]
 			lastSeenOldEntry = i
 		}
 
+		hadOldEntry := len(oldSecondaryIndexEntry.Key) > 0
 		var expValue interface{}
-		if !bytes.Equal(newSecondaryIndexEntry.Key, oldSecondaryIndexEntry.Key) && len(oldSecondaryIndexEntry.Key) > 0 {
+		if !bytes.Equal(newSecondaryIndexEntry.Key, oldSecondaryIndexEntry.Key) && hadOldEntry {
 			ru.Fks.addCheckForIndex(ru.Helper.Indexes[i].ID)
 			if traceKV {
 				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], oldSecondaryIndexEntry.Key))
@@ -862,7 +864,7 @@ func (ru *RowUpdater) UpdateRow(
 
 			// Here we're checking to see if we're replacing an existing entry. If we are we do a CPut. Otherwise in the case
 			// where there are more new index entries than old ones, we do an InitPut to add them to the KV.
-			if len(oldSecondaryIndexEntry.Key) > 0 {
+			if hadOldEntry {
 				batch.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
 			} else {
 				batch.InitPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, true)
@@ -872,8 +874,8 @@ func (ru *RowUpdater) UpdateRow(
 
 	// We're handling the case for inverted index where they could be less new entries than old entries, so we need to purge
 	// the old ones from the KV.
-	for i := lastSeenOldEntry + 1; i < len(secondaryIndexEntries); i++ {
-		batch.Del(secondaryIndexEntries[i].Key)
+	for i := lastSeenOldEntry + 1; i < len(oldSecondaryIndexEntries); i++ {
+		batch.Del(oldSecondaryIndexEntries[i].Key)
 	}
 
 	if ru.cascader != nil {
