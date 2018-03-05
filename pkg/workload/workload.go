@@ -193,6 +193,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		// used to batch things by size and table of all `0`s should not get
 		// infinite size batches.
 		return int64(bits.Len(uint(t))+8) / 8
+	case uint64:
+		return int64(bits.Len64(t)+8) / 8
 	case float64:
 		return int64(bits.Len64(math.Float64bits(t))+8) / 8
 	case string:
