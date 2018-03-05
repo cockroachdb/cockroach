@@ -1720,7 +1720,8 @@ alter_index_cmd ::=
 	partition_by
 
 sequence_option_elem ::=
-	'INCREMENT' signed_iconst64
+	'NO' 'CYCLE'
+	| 'INCREMENT' signed_iconst64
 	| 'INCREMENT' 'BY' signed_iconst64
 	| 'MINVALUE' signed_iconst64
 	| 'NO' 'MINVALUE'
