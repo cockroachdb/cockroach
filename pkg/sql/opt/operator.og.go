@@ -163,6 +163,29 @@ const (
 
 	CastOp
 
+	// CaseOp is a CASE statement of the form:
+	//   CASE [ <Input> ]
+	//       WHEN <condval1> THEN <expr1>
+	//     [ WHEN <condval2> THEN <expr2> ] ...
+	//     [ ELSE <expr> ]
+	//   END
+	//
+	// The Case operator evaluates <Input> (if not provided, Input is set to True),
+	// then picks the WHEN branch where <condval> is equal to
+	// <cond>, then evaluates and returns the corresponding THEN expression. If no
+	// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+	// Otherwise, NULL is returned.
+	//
+	// Note that the Whens list inside Case is used to represent all the WHEN
+	// branches as well as the ELSE statement if it exists. It is of the form:
+	// [(When <condval1> <expr1>),(When <condval2> <expr2>),...,<expr>]
+	CaseOp
+
+	// WhenOp represents a single WHEN ... THEN ... condition inside a CASE statement.
+	// It is the type of each list item in Whens (except for the last item which is
+	// a raw expression for the ELSE statement).
+	WhenOp
+
 	// FunctionOp invokes a builtin SQL function like CONCAT or NOW, passing the given
 	// arguments. The private field is an opt.FuncDef struct that provides the name
 	// of the function as well as a pointer to the builtin overload definition.
@@ -342,9 +365,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
+const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-plusunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 89, 91, 94, 96, 98, 100, 102, 104, 106, 108, 114, 118, 126, 132, 142, 152, 166, 175, 188, 199, 214, 216, 222, 230, 236, 241, 247, 251, 256, 260, 263, 272, 275, 278, 284, 291, 298, 307, 317, 331, 346, 356, 367, 383, 387, 395, 403, 419, 423, 429, 435, 442, 452, 461, 471, 480, 489, 498, 514, 529, 545, 560, 575, 590, 598, 603, 612, 618, 627, 640, 650, 654}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 89, 91, 94, 96, 98, 100, 102, 104, 106, 108, 114, 118, 126, 132, 142, 152, 166, 175, 188, 199, 214, 216, 222, 230, 236, 241, 247, 251, 256, 260, 263, 272, 275, 278, 284, 291, 298, 307, 317, 331, 346, 356, 367, 383, 387, 391, 395, 403, 411, 427, 431, 437, 443, 450, 460, 469, 479, 488, 497, 506, 522, 537, 553, 568, 583, 598, 606, 611, 620, 626, 635, 648, 658, 662}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -403,6 +426,8 @@ var ScalarOperators = [...]Operator{
 	UnaryMinusOp,
 	UnaryComplementOp,
 	CastOp,
+	CaseOp,
+	WhenOp,
 	FunctionOp,
 	CoalesceOp,
 	UnsupportedExprOp,

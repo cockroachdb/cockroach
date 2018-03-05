@@ -237,6 +237,31 @@ type Factory interface {
 	// ConstructCast constructs an expression for the Cast operator.
 	ConstructCast(input GroupID, typ PrivateID) GroupID
 
+	// ConstructCase constructs an expression for the Case operator.
+	// Case is a CASE statement of the form:
+	//   CASE [ <Input> ]
+	//       WHEN <condval1> THEN <expr1>
+	//     [ WHEN <condval2> THEN <expr2> ] ...
+	//     [ ELSE <expr> ]
+	//   END
+	//
+	// The Case operator evaluates <Input> (if not provided, Input is set to True),
+	// then picks the WHEN branch where <condval> is equal to
+	// <cond>, then evaluates and returns the corresponding THEN expression. If no
+	// WHEN branch matches, the ELSE expression is evaluated and returned, if any.
+	// Otherwise, NULL is returned.
+	//
+	// Note that the Whens list inside Case is used to represent all the WHEN
+	// branches as well as the ELSE statement if it exists. It is of the form:
+	// [(When <condval1> <expr1>),(When <condval2> <expr2>),...,<expr>]
+	ConstructCase(input GroupID, whens ListID) GroupID
+
+	// ConstructWhen constructs an expression for the When operator.
+	// When represents a single WHEN ... THEN ... condition inside a CASE statement.
+	// It is the type of each list item in Whens (except for the last item which is
+	// a raw expression for the ELSE statement).
+	ConstructWhen(condition GroupID, value GroupID) GroupID
+
 	// ConstructFunction constructs an expression for the Function operator.
 	// Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 	// arguments. The private field is an opt.FuncDef struct that provides the name
