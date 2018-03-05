@@ -227,7 +227,7 @@ dupe_generated  check_foo2  CHECK        foo        foo > 1
 statement ok
 CREATE TABLE test.named_constraints (
   id        INT CONSTRAINT pk PRIMARY KEY,
-  name      VARCHAR CONSTRAINT notnull NOT NULL,
+  name      VARCHAR CONSTRAINT nn NOT NULL,
   title     VARCHAR  CONSTRAINT def DEFAULT 'VP of Something',
   nickname  STRING CONSTRAINT ck1 CHECK (LENGTH(nickname) < 10),
   username  STRING(10) CONSTRAINT nl NULL,
