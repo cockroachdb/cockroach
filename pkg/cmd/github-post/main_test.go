@@ -29,17 +29,18 @@ import (
 
 func TestRunGH(t *testing.T) {
 	const (
-		expOwner    = "cockroachdb"
-		expRepo     = "cockroach"
-		expAssignee = "hodor"
-		envPkg      = "storage"
-		envTags     = "deadlock"
-		envGoFlags  = "race"
-		sha         = "abcd123"
-		serverURL   = "https://teamcity.example.com"
-		buildID     = 8008135
-		issueID     = 1337
-		issueNumber = 30
+		expOwner     = "cockroachdb"
+		expRepo      = "cockroach"
+		expAssignee  = "hodor"
+		expMilestone = 2
+		envPkg       = "storage"
+		envTags      = "deadlock"
+		envGoFlags   = "race"
+		sha          = "abcd123"
+		serverURL    = "https://teamcity.example.com"
+		buildID      = 8008135
+		issueID      = 1337
+		issueNumber  = 30
 	)
 
 	for key, value := range map[string]string{
@@ -150,6 +151,9 @@ Stress build found a failed test: %s`,
 					if length := len(*issue.Body); length > githubIssueBodyMaximumLength {
 						t.Fatalf("issue length %d exceeds (undocumented) maximum %d", length, githubIssueBodyMaximumLength)
 					}
+					if *issue.Milestone != expMilestone {
+						t.Fatalf("expected milestone %d, but got %d", expMilestone, *issue.Milestone)
+					}
 					return &github.Issue{ID: github.Int64(issueID)}, nil, nil
 				}
 				searchIssues := func(_ context.Context, query string, opt *github.SearchOptions) (*github.IssuesSearchResult, *github.Response, error) {
@@ -201,7 +205,43 @@ Stress build found a failed test: %s`,
 						},
 					}, nil, nil
 				}
-				if err := runGH(context.Background(), file, postIssue, searchIssues, postComment, listCommits); err != nil {
+
+				listTags := func(_ context.Context, owner, repo string, _ *github.ListOptions) ([]*github.RepositoryTag, *github.Response, error) {
+					if owner != expOwner {
+						t.Fatalf("got %s, expected %s", owner, expOwner)
+					}
+					if repo != expRepo {
+						t.Fatalf("got %s, expected %s", repo, expRepo)
+					}
+					return []*github.RepositoryTag{
+						{Name: github.String("v3.3-alpha")},
+						{Name: github.String("v3.2")},
+					}, nil, nil
+				}
+
+				listMilestones := func(_ context.Context, owner, repo string, _ *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error) {
+					if owner != expOwner {
+						t.Fatalf("got %s, expected %s", owner, expOwner)
+					}
+					if repo != expRepo {
+						t.Fatalf("got %s, expected %s", repo, expRepo)
+					}
+					return []*github.Milestone{
+						{Title: github.String("3.3"), Number: github.Int(expMilestone)},
+						{Title: github.String("3.2"), Number: github.Int(1)},
+					}, nil, nil
+				}
+
+				if err := runGH(
+					context.Background(),
+					file,
+					postIssue,
+					searchIssues,
+					postComment,
+					listCommits,
+					listTags,
+					listMilestones,
+				); err != nil {
 					t.Fatal(err)
 				}
 				expectedIssues := 1

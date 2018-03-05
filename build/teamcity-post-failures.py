@@ -15,6 +15,7 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from pkg_resources import parse_version
 from urllib.parse import urljoin, urlencode
 
 BASEURL = "https://teamcity.cockroachdb.com/httpAuth/app/rest/"
@@ -56,6 +57,37 @@ def collect_build_results(build_id):
             o.findtext("details"))
         yield (test_name, test_log)
 
+def get_probable_milestone():
+    try:
+        res = urllib.request.urlopen(
+            'https://api.github.com/repos/cockroachdb/cockroach/tags')
+        tags = json.load(res)
+    except (ValueError, urllib.error.HTTPError) as e:
+        print('warning: unable to load tags: {0}'.format(e))
+        print('issue will be posted without milestone')
+        return None
+    if len(tags) == 0:
+        return None
+
+    match = re.match(r'v(\d+\.\d+)', tags[0]['name'])
+    if not match:
+        return None
+    version = match.group(1)
+
+    try:
+        res = urllib.request.urlopen(
+            'https://api.github.com/repos/cockroachdb/cockroach/milestones?state=open')
+        milestones = json.load(res)
+    except (ValueError, urllib.error.HTTPError) as e:
+        print('warning: unable to load milestones: {0}'.format(e))
+        print('issue will be posted without milestone')
+        return None
+
+    for m in milestones:
+        if m['title'] == version:
+            return m['number']
+    return None
+
 
 def create_issue(build_id, failed_tests):
     """Format a list of failed tests as an issue.
@@ -79,6 +111,7 @@ The following tests appear to have failed:
 Please assign, take a look and update the issue accordingly.
 '''.format(build_id, ''.join(t[1] for t in failed_tests)),
         'labels': ['test-failure', 'Robot'],
+        'milestone': get_probable_milestone(),
     }
 
 
