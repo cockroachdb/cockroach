@@ -19,8 +19,9 @@ filter     0  filter  ·       ·          (x, y)  ·
 exec
 SELECT * FROM t.a WHERE x > 1
 ----
-2  20
-3  30
+x:int  y:int
+2      20
+3      30
 
 exec-explain
 SELECT * FROM t.a WHERE y > 10
@@ -34,8 +35,9 @@ filter     0  filter  ·       ·          (x, y)  ·
 exec
 SELECT * FROM t.a WHERE y > 10
 ----
-2  20
-3  30
+x:int  y:int
+2      20
+3      30
 
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND x < 3
@@ -49,7 +51,8 @@ filter     0  filter  ·       ·                    (x, y)  ·
 exec
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
-2  20
+x:int  y:int
+2      20
 
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND y < 30
@@ -63,7 +66,8 @@ filter     0  filter  ·       ·                     (x, y)  ·
 exec
 SELECT * FROM t.a WHERE x > 1 AND y < 30
 ----
-2  20
+x:int  y:int
+2      20
 
 exec-raw
 CREATE TABLE t.b (x INT, y INT);

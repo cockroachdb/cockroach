@@ -23,9 +23,10 @@ scan  0  scan  ·      ·          (x, y)  ·
 exec
 SELECT * FROM t.a
 ----
-1  1.0
-2  2.0
-3  3.0
+x:int  y:float
+1      1.0
+2      2.0
+3      3.0
 
 exec-raw
 CREATE TABLE t.b (x INT, y INT);

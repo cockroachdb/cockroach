@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -159,11 +160,14 @@ func TestBuild(t *testing.T) {
 						d.Fatalf(t, "BuildExec: %v", err)
 					}
 
+					var columns sqlbase.ResultColumns
+
 					// Execute the node tree.
 					var results []tree.Datums
 					if d.Cmd == "exec-explain" {
 						results, err = eng.Explain(node)
 					} else {
+						columns = eng.Columns(node)
 						results, err = eng.Execute(node)
 					}
 					if err != nil {
@@ -180,6 +184,15 @@ func TestBuild(t *testing.T) {
 						' ', /* padchar */
 						0,   /* flags */
 					)
+					if columns != nil {
+						for i := range columns {
+							if i > 0 {
+								fmt.Fprintf(tw, "\t")
+							}
+							fmt.Fprintf(tw, "%s:%s", columns[i].Name, columns[i].Typ)
+						}
+						fmt.Fprintf(tw, "\n")
+					}
 					for _, r := range results {
 						for j, val := range r {
 							if j > 0 {

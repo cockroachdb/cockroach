@@ -264,6 +264,7 @@ INSERT INTO t.str VALUES ('a'), ('ab'), ('abc')
 exec
 SELECT LENGTH(s) FROM t.str
 ----
+column3:int
 1
 2
 3
@@ -308,9 +309,10 @@ render     0  render  ·         ·                      (column8)              
 exec
 SELECT LENGTH(s)::float, s FROM t.str
 ----
-1.0  a
-2.0  ab
-3.0  abc
+column3:float  str.s:string
+1.0            a
+2.0            ab
+3.0            abc
 
 exec-explain
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
@@ -331,6 +333,7 @@ render       0  render  ·              ·                           (column3)  
 exec
 SELECT COALESCE(a, b) FROM (VALUES (1, 2), (3, NULL), (NULL, 4), (NULL, NULL)) AS v(a, b)
 ----
+column3:int
 1
 3
 4
@@ -359,6 +362,7 @@ render       0  render  ·              ·                                    (c
 exec
 SELECT COALESCE(a, b, c) FROM (VALUES (1, 2, 3), (NULL, 4, 5), (NULL, NULL, 6), (NULL, NULL, NULL)) AS v(a, b, c)
 ----
+column4:int
 1
 4
 6

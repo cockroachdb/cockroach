@@ -22,8 +22,9 @@ filter     0  filter  ·       ·          (x, y)  ·
 exec
 SELECT * FROM t.a WHERE x > 1
 ----
-2  20
-3  30
+x:int  y:int
+2      20
+3      30
 
 exec-explain
 SELECT * FROM t.a WHERE y > 1
@@ -37,9 +38,10 @@ filter     0  filter  ·       ·          (x, y)  ·
 exec
 SELECT * FROM t.a WHERE y > 1
 ----
-1  10
-2  20
-3  30
+x:int  y:int
+1      10
+2      20
+3      30
 
 exec-explain
 SELECT * FROM t.a WHERE x > 1 AND x < 3
@@ -53,7 +55,8 @@ filter     0  filter  ·       ·                    (x, y)  ·
 exec
 SELECT * FROM t.a WHERE x > 1 AND x < 3
 ----
-2  20
+x:int  y:int
+2      20
 
 exec-explain
 SELECT x + 1 FROM t.a
@@ -67,6 +70,7 @@ render     0  render  ·         ·          (column3)  ·
 exec
 SELECT x + 1 FROM t.a
 ----
+column3:int
 2
 3
 4
@@ -87,9 +91,10 @@ render     0  render  ·         ·          ("a.x", column3, "a.y", column4, co
 exec
 SELECT x, x + 1, y, y + 1, x + y FROM t.a
 ----
-1  2  10  11  11
-2  3  20  21  22
-3  4  30  31  33
+a.x:int  column3:int  a.y:int  column4:int  column5:int
+1        2            10       11           11
+2        3            20       21           22
+3        4            30       31           33
 
 exec-explain
 SELECT u + v FROM (SELECT x + 3, y + 10 FROM t.a) AS foo(u, v)
@@ -106,6 +111,7 @@ render          0  render  ·         ·                  (column5)           ·
 exec
 SELECT u + v FROM (SELECT x + 3, y + 10 FROM t.a) AS foo(u, v)
 ----
+column5:int
 24
 35
 46
@@ -147,8 +153,9 @@ render          0  render  ·         ·             (column3, column4)  ·
 exec
 SELECT x + 1, x + y FROM t.a WHERE x + y > 20
 ----
-3  22
-4  33
+column3:int  column4:int
+3            22
+4            33
 
 exec-raw
 CREATE TABLE t.b (x INT, y INT);
@@ -169,9 +176,10 @@ render     0  render  ·         ·          ("b.x", "b.y")         ·
 exec
 SELECT * FROM t.b
 ----
-1  10
-2  20
-3  30
+b.x:int  b.y:int
+1        10
+2        20
+3        30
 
 exec-explain
 SELECT x FROM t.b WHERE rowid > 0
@@ -187,6 +195,7 @@ render          0  render  ·         ·          ("b.x")                ·
 exec
 SELECT x FROM t.b WHERE rowid > 0
 ----
+b.x:int
 1
 2
 3
