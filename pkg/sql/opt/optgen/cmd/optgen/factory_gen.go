@@ -217,7 +217,7 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 
 	case *lang.MatchListLastExpr:
 		if noMatch {
-			panic("noMatch is not yet supported by the list match first op")
+			panic("noMatch is not yet supported by the list match last op")
 		}
 		g.w.nest("if %s.Length > 0 {\n", contextName)
 		g.w.writeIndent("_item := _f.mem.lookupList(%s)[%s.Length-1]\n", contextName, contextName)
@@ -225,17 +225,22 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 
 	case *lang.MatchListSingleExpr:
 		if noMatch {
-			panic("noMatch is not yet supported by the list match first op")
+			if t.MatchItem.Op() != lang.MatchAnyOp {
+				panic("noMatch is not yet fully supported by the list match single op")
+			}
+			g.w.nest("if %s.Length != 1 {\n", contextName)
+		} else {
+			g.w.nest("if %s.Length == 1 {\n", contextName)
+			g.w.writeIndent("_item := _f.mem.lookupList(%s)[0]\n", contextName)
+			g.genMatch(t.MatchItem, "_item", noMatch)
 		}
-		g.w.nest("if %s.Length == 1 {\n", contextName)
-		g.w.writeIndent("_item := _f.mem.lookupList(%s)[0]\n", contextName)
-		g.genMatch(t.MatchItem, "_item", noMatch)
 
 	case *lang.MatchListEmptyExpr:
 		if noMatch {
-			panic("noMatch is not yet supported by the list match first op")
+			g.w.nest("if %s.Length != 0 {\n", contextName)
+		} else {
+			g.w.nest("if %s.Length == 0 {\n", contextName)
 		}
-		g.w.nest("if %s.Length == 0 {\n", contextName)
 
 	default:
 		panic(fmt.Sprintf("unrecognized match expression: %v", match))
