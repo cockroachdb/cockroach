@@ -68,6 +68,8 @@ func init() {
 	}
 }
 
+var envChannel = envutil.EnvOrDefaultString("COCKROACH_CHANNEL", "unknown")
+
 const (
 	updateCheckFrequency = time.Hour * 24
 	// TODO(dt): switch to settings.
@@ -171,7 +173,8 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, runningTime time
 	q.Set("insecure", strconv.FormatBool(s.cfg.Insecure))
 	q.Set("internal",
 		strconv.FormatBool(strings.Contains(sql.ClusterOrganization.Get(&s.st.SV), "Cockroach Labs")))
-
+	q.Set("buildchannel", b.Channel)
+	q.Set("envchannel", envChannel)
 	licenseType, err := base.LicenseType(s.st)
 	if err == nil {
 		q.Set("licensetype", licenseType)

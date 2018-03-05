@@ -104,6 +104,7 @@ CREATE TABLE crdb_internal.node_build_info (
 			"Organization": execCfg.Organization(),
 			"Build":        info.Short(),
 			"Version":      info.Tag,
+			"Channel":      info.Channel,
 		} {
 			if err := addRow(
 				nodeID,

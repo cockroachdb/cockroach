@@ -36,5 +36,7 @@ EXPOSE 26257/tcp 8080/tcp
 # Non-root runtime
 USER 99
 
+ENV COCKROACH_CHANNEL=rhel-docker
+
 # Run the script to start up the CockroachDB process
 ENTRYPOINT ["/cockroach/cockroach.sh"] 
