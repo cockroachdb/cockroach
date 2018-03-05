@@ -16,9 +16,9 @@ package xform
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -39,7 +39,8 @@ import (
 // optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
 type factory struct {
-	mem *memo
+	mem     *memo
+	evalCtx *tree.EvalContext
 
 	// maxSteps sets the maximum number of optimization patterns that the
 	// factory will apply. Once this maximum is reached, the factory will
@@ -53,8 +54,8 @@ var _ opt.Factory = &factory{}
 
 // NewFactory returns a new Factory structure with a new, blank memo
 // structure inside.
-func newFactory(catalog optbase.Catalog, maxSteps OptimizeSteps) *factory {
-	return &factory{mem: newMemo(catalog), maxSteps: maxSteps}
+func newFactory(evalCtx *tree.EvalContext, maxSteps OptimizeSteps) *factory {
+	return &factory{mem: newMemo(), evalCtx: evalCtx, maxSteps: maxSteps}
 }
 
 // Metadata returns the query-specific metadata, which includes information
@@ -121,6 +122,86 @@ func (f *factory) listOnlyHasNulls(list opt.ListID) bool {
 	return true
 }
 
+// isSortedUniqueList returns true if the list is in sorted order, with no
+// duplicates. See the comment for listSorter.compare for comparison rule
+// details.
+func (f *factory) isSortedUniqueList(list opt.ListID) bool {
+	ls := listSorter{f: f, list: f.mem.lookupList(list)}
+	for i := 0; i < int(list.Length-1); i++ {
+		if !ls.less(i, i+1) {
+			return false
+		}
+	}
+	return true
+}
+
+// constructSortedUniqueList sorts the given list and removes duplicates, and
+// returns the resulting list. See the comment for listSorter.compare for
+// comparison rule details.
+func (f *factory) constructSortedUniqueList(list opt.ListID) opt.ListID {
+	// Make a copy of the list, since it needs to stay immutable.
+	newList := make([]opt.GroupID, list.Length)
+	copy(newList, f.mem.lookupList(list))
+	ls := listSorter{f: f, list: newList}
+
+	// Sort the list.
+	sort.Slice(ls.list, ls.less)
+
+	// Remove duplicates from the list.
+	n := 0
+	for i := 0; i < int(list.Length); i++ {
+		if i == 0 || ls.compare(i-1, i) < 0 {
+			newList[n] = newList[i]
+			n++
+		}
+	}
+	return f.mem.internList(newList[:n])
+}
+
+// listSorter is a helper struct that implements the sort.Slice "less"
+// comparison function.
+type listSorter struct {
+	f    *factory
+	list []opt.GroupID
+}
+
+// less returns true if item i in the list compares less than item j.
+// sort.Slice uses this method to sort the list.
+func (s listSorter) less(i, j int) bool {
+	return s.compare(i, j) < 0
+}
+
+// compare returns -1 if item i compares less than item j, 0 if they are equal,
+// and 1 if item i compares greater. Constants sort before non-constants, and
+// are sorted and uniquified according to Datum comparison rules. Non-constants
+// are sorted and uniquified by GroupID (arbitrary, but stable).
+func (s listSorter) compare(i, j int) int {
+	// If both are constant values, then use datum comparison.
+	isLeftConst := s.f.mem.lookupNormExpr(s.list[i]).isConstValue()
+	isRightConst := s.f.mem.lookupNormExpr(s.list[j]).isConstValue()
+	if isLeftConst {
+		if !isRightConst {
+			// Constant always sorts before non-constant
+			return -1
+		}
+
+		leftD := extractConstDatum(s.f.mem, makeNormLoc(s.list[i]))
+		rightD := extractConstDatum(s.f.mem, makeNormLoc(s.list[j]))
+		return leftD.Compare(s.f.evalCtx, rightD)
+	} else if isRightConst {
+		// Non-constant always sorts after constant.
+		return 1
+	}
+
+	// Arbitrarily order by GroupID.
+	if s.list[i] < s.list[j] {
+		return -1
+	} else if s.list[i] > s.list[j] {
+		return 1
+	}
+	return 0
+}
+
 // ----------------------------------------------------------------------
 //
 // Typing functions
@@ -129,8 +210,42 @@ func (f *factory) listOnlyHasNulls(list opt.ListID) bool {
 //
 // ----------------------------------------------------------------------
 
+// hasType returns true if the given expression has a static type that's
+// equivalent to the requested type.
+func (f *factory) hasType(group opt.GroupID, typ opt.PrivateID) bool {
+	groupType := f.mem.lookupGroup(group).logical.Scalar.Type
+	requestedType := f.mem.lookupPrivate(typ).(types.T)
+	return groupType.Equivalent(requestedType)
+}
+
 func (f *factory) boolType() opt.PrivateID {
 	return f.InternPrivate(types.Bool)
+}
+
+// canConstructBinary returns true if (op left right) has a valid binary op
+// overload and is therefore legal to construct. For example, while
+// (Minus <date> <int>) is valid, (Minus <int> <date>) is not.
+func (f *factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) bool {
+	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
+	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
+	_, ok := findBinaryOverload(opt.MinusOp, rightType, leftType)
+	return ok
+}
+
+// ----------------------------------------------------------------------
+//
+// Property functions
+//   General custom match and replace functions used to test expression
+//   logical properties.
+//
+// ----------------------------------------------------------------------
+
+// onlyConstants returns true if the scalar expression is a "constant
+// expression tree", meaning that it will always evaluate to the same result.
+// See the CommuteConst pattern comment for more details.
+func (f *factory) onlyConstants(group opt.GroupID) bool {
+	// TODO(andyk): Consider impact of "impure" functions with side effects.
+	return f.mem.lookupGroup(group).logical.Scalar.OuterCols.Empty()
 }
 
 // ----------------------------------------------------------------------
@@ -243,11 +358,11 @@ func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 	return f.ConstructOr(f.mem.internList(list))
 }
 
-// invertComparison negates a comparison op like:
+// negateComparison negates a comparison op like:
 //   a.x = 5
 // to:
 //   a.x <> 5
-func (f *factory) invertComparison(cmp opt.Operator, left, right opt.GroupID) opt.GroupID {
+func (f *factory) negateComparison(cmp opt.Operator, left, right opt.GroupID) opt.GroupID {
 	switch cmp {
 	case opt.EqOp:
 		return f.ConstructNe(left, right)
@@ -292,6 +407,25 @@ func (f *factory) invertComparison(cmp opt.Operator, left, right opt.GroupID) op
 	default:
 		panic(fmt.Sprintf("unexpected operator: %v", cmp))
 	}
+}
+
+// commuteInequality swaps the operands of an inequality comparison expression,
+// changing the operator to compensate:
+//   5 < x
+// to:
+//   x > 5
+func (f *factory) commuteInequality(op opt.Operator, left, right opt.GroupID) opt.GroupID {
+	switch op {
+	case opt.GeOp:
+		return f.ConstructLe(right, left)
+	case opt.GtOp:
+		return f.ConstructLt(right, left)
+	case opt.LeOp:
+		return f.ConstructGe(right, left)
+	case opt.LtOp:
+		return f.ConstructGt(right, left)
+	}
+	panic(fmt.Sprintf("called commuteInequality with operator %s", op))
 }
 
 // ----------------------------------------------------------------------
@@ -355,8 +489,11 @@ func (f *factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
 func (f *factory) allowNullArgs(op opt.Operator, left, right opt.GroupID) bool {
 	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
 	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
-	_, allowNulls := resolveBinary(op, leftType, rightType)
-	return allowNulls
+	overload, ok := findBinaryOverload(op, leftType, rightType)
+	if !ok {
+		panic(fmt.Sprintf("could not find overload for binary expression %s", op))
+	}
+	return overload.allowNullArgs
 }
 
 // foldNullUnary replaces the unary operator with a typed null value having the

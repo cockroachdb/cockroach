@@ -304,17 +304,17 @@ select
  │    │    ├── columns: column5:string:null:5 kv.s:string:null:4 column7:string:null:7
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    │    └── projections
- │    │         ├── function: upper [type=string]
- │    │         │    └── variable: kv.s [type=string]
- │    │         ├── variable: kv.s [type=string]
- │    │         └── function: upper [type=string]
- │    │              └── variable: kv.s [type=string]
- │    └── aggregations
- │         ├── function: count [type=int]
- │         │    └── variable: column5 [type=string]
- │         └── function: count [type=int]
- │              └── variable: kv.s [type=string]
- └── gt [type=bool]
-      ├── variable: column6 [type=int]
+ │    │    └── projections [outer=(4)]
+ │    │         ├── function: upper [type=string, outer=(4)]
+ │    │         │    └── variable: kv.s [type=string, outer=(4)]
+ │    │         ├── variable: kv.s [type=string, outer=(4)]
+ │    │         └── function: upper [type=string, outer=(4)]
+ │    │              └── variable: kv.s [type=string, outer=(4)]
+ │    └── aggregations [outer=(4,5)]
+ │         ├── function: count [type=int, outer=(5)]
+ │         │    └── variable: column5 [type=string, outer=(5)]
+ │         └── function: count [type=int, outer=(4)]
+ │              └── variable: kv.s [type=string, outer=(4)]
+ └── gt [type=bool, outer=(6)]
+      ├── variable: column6 [type=int, outer=(6)]
       └── const: 1 [type=int]

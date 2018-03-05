@@ -42,8 +42,10 @@ func BenchmarkExprView(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			o := NewOptimizer(catalog, OptimizeAll)
-			bld := optbuilder.New(context.Background(), &semaCtx, &evalCtx, o.Factory(), stmt)
+			o := NewOptimizer(&evalCtx, OptimizeAll)
+			bld := optbuilder.New(
+				context.Background(), &semaCtx, &evalCtx, catalog, o.Factory(), stmt,
+			)
 			root, props, err := bld.Build()
 			if err != nil {
 				b.Fatal(err)

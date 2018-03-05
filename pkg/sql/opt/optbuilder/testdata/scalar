@@ -185,8 +185,7 @@ build-scalar vars=(int, int)
 + @1 + (- @2)
 ----
 plus [type=int, outer=(1,2)]
- ├── unary-plus [type=int, outer=(1)]
- │    └── variable: @1 [type=int, outer=(1)]
+ ├── variable: @1 [type=int, outer=(1)]
  └── unary-minus [type=int, outer=(2)]
       └── variable: @2 [type=int, outer=(2)]
 
