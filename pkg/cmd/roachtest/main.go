@@ -74,6 +74,8 @@ func main() {
 		&username, "user", "u", username, "username to run under, detect if blank")
 	runCmd.Flags().StringVar(
 		&workload, "workload", "", "path to workload binary to use")
+	runCmd.Flags().StringVar(
+		&slackToken, "slack-token", "", "Slack bot token")
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
