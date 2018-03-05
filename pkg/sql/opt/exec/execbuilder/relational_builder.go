@@ -66,40 +66,49 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 }
 
 func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
+	var ep execPlan
+	var err error
 	switch ev.Operator() {
 	case opt.ValuesOp:
-		return b.buildValues(ev)
+		ep, err = b.buildValues(ev)
 
 	case opt.ScanOp:
-		return b.buildScan(ev)
+		ep, err = b.buildScan(ev)
 
 	case opt.SelectOp:
-		return b.buildSelect(ev)
+		ep, err = b.buildSelect(ev)
 
 	case opt.ProjectOp:
-		return b.buildProject(ev)
+		ep, err = b.buildProject(ev)
 
 	case opt.InnerJoinOp:
-		return b.buildJoin(ev, sqlbase.InnerJoin)
+		ep, err = b.buildJoin(ev, sqlbase.InnerJoin)
 
 	case opt.LeftJoinOp:
-		return b.buildJoin(ev, sqlbase.LeftOuterJoin)
+		ep, err = b.buildJoin(ev, sqlbase.LeftOuterJoin)
 
 	case opt.RightJoinOp:
-		return b.buildJoin(ev, sqlbase.RightOuterJoin)
+		ep, err = b.buildJoin(ev, sqlbase.RightOuterJoin)
 
 	case opt.FullJoinOp:
-		return b.buildJoin(ev, sqlbase.FullOuterJoin)
+		ep, err = b.buildJoin(ev, sqlbase.FullOuterJoin)
 
 	case opt.SemiJoinOp:
-		return b.buildJoin(ev, sqlbase.LeftSemiJoin)
+		ep, err = b.buildJoin(ev, sqlbase.LeftSemiJoin)
 
 	case opt.AntiJoinOp:
-		return b.buildJoin(ev, sqlbase.LeftAntiJoin)
+		ep, err = b.buildJoin(ev, sqlbase.LeftAntiJoin)
 
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
+	if err != nil {
+		return execPlan{}, err
+	}
+	if p := ev.Physical().Presentation; p.Defined() {
+		ep, err = b.applyPresentation(ep, ev.Metadata(), p)
+	}
+	return ep, err
 }
 
 func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
@@ -226,6 +235,33 @@ func (b *Builder) buildJoin(ev xform.ExprView, joinType sqlbase.JoinType) (execP
 	ep.root, err = b.factory.ConstructJoin(joinType, left.root, right.root, onExpr)
 	if err != nil {
 		return execPlan{}, err
+	}
+	return ep, nil
+}
+
+// applyPresentation adds a projection to a plan to satisfy a required
+// Presentation property.
+func (b *Builder) applyPresentation(
+	inputPlan execPlan, md *opt.Metadata, p opt.Presentation,
+) (execPlan, error) {
+	exprs := make(tree.TypedExprs, len(p))
+	colNames := make([]string, len(p))
+	ivh := tree.MakeIndexedVarHelper(nil /* container */, inputPlan.outputCols.Len())
+	for i := range p {
+		idx, ok := inputPlan.outputCols.Get(int(p[i].Index))
+		if !ok {
+			return execPlan{}, errors.Errorf("presentation includes absent column %d", p[i].Index)
+		}
+		exprs[i] = ivh.IndexedVarWithType(idx, md.ColumnType(p[i].Index))
+		colNames[i] = p[i].Label
+	}
+	node, err := b.factory.ConstructProject(inputPlan.root, exprs, colNames)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i := range p {
+		ep.outputCols.Set(int(p[i].Index), i)
 	}
 	return ep, nil
 }

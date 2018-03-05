@@ -175,6 +175,26 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 func (ee *execEngine) ConstructProject(
 	n exec.Node, exprs tree.TypedExprs, colNames []string,
 ) (exec.Node, error) {
+	// Check if this is the identity projection, in which case we only need to
+	// rename columns.
+	inputCols := planColumns(n.(planNode))
+	if len(exprs) == len(inputCols) {
+		identity := true
+		for i := range exprs {
+			if v, ok := exprs[i].(*tree.IndexedVar); !ok || v.Idx != i {
+				identity = false
+				break
+			}
+		}
+		if identity {
+			inputCols = planMutableColumns(n.(planNode))
+			for i := range inputCols {
+				inputCols[i].Name = colNames[i]
+			}
+			return n, nil
+		}
+	}
+
 	src := asDataSource(n)
 	r := &renderNode{
 		source:     src,
