@@ -878,7 +878,7 @@ func (ex *connExecutor) addActiveQuery(
 
 	_, hidden := stmt.(tree.HiddenFromShowQueries)
 	qm := queryMeta{
-		start:         ex.phaseTimes[sessionEndParse],
+		start:         ex.phaseTimes[sessionQueryReceived],
 		stmt:          stmt,
 		phase:         preparing,
 		isDistributed: false,
