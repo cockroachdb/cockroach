@@ -225,3 +225,4 @@ render     0  render  ·         ·               (column2)        ·
 exec
 SELECT 1, * FROM t.nocols
 ----
+column2:int
