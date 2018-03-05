@@ -48,7 +48,7 @@ type testContext struct {
 	mockDB      *client.DB
 	mon         mon.BytesMonitor
 	tracer      opentracing.Tracer
-	// ctx is mimicking the spirit of a clientn connection's context
+	// ctx is mimicking the spirit of a client connection's context
 	ctx      context.Context
 	settings *cluster.Settings
 }
@@ -115,6 +115,7 @@ func (tc *testContext) createOpenState(
 
 	ts := txnState2{
 		Ctx:           ctx,
+		connCtx:       tc.ctx,
 		sp:            sp,
 		cancel:        cancel,
 		sqlTimestamp:  timeutil.Now(),
@@ -169,7 +170,7 @@ func (tc *testContext) createNoTxnState() (State, *txnState2) {
 		1000, /* noteworthy */
 		cluster.MakeTestingClusterSettings(),
 	)
-	ts := txnState2{mon: &txnStateMon}
+	ts := txnState2{mon: &txnStateMon, connCtx: tc.ctx}
 	return stateNoTxn{}, &ts
 }
 

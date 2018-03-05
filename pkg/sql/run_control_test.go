@@ -26,12 +26,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq"
 )
 
 func TestCancelSelectQuery(t *testing.T) {
@@ -79,7 +81,7 @@ func TestCancelSelectQuery(t *testing.T) {
 
 	select {
 	case err := <-errChan:
-		if !sqlbase.IsQueryCanceledError(err) {
+		if !isClientsideQueryCanceledErr(err) {
 			t.Fatal(err)
 		}
 	case <-time.After(time.Second * 5):
@@ -168,7 +170,7 @@ func TestCancelParallelQuery(t *testing.T) {
 	// Start the txn. Both queries should run in parallel - and queryToBlock
 	// should error out.
 	_, err := conn1.Exec(sqlToRun)
-	if err != nil && !sqlbase.IsQueryCanceledError(err) {
+	if err != nil && !isClientsideQueryCanceledErr(err) {
 		t.Fatal(err)
 	} else if err == nil {
 		t.Fatal("didn't get an error from txn that should have been canceled")
@@ -187,7 +189,6 @@ func TestCancelParallelQuery(t *testing.T) {
 // various points of execution.
 func TestCancelDistSQLQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("#22654")
 	const queryToCancel = "SELECT * FROM nums ORDER BY num"
 	cancelQuery := fmt.Sprintf("CANCEL QUERY (SELECT query_id FROM [SHOW CLUSTER QUERIES] WHERE query = '%s')", queryToCancel)
 
@@ -263,10 +264,21 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	if err != nil && !testutils.IsError(err, "query ID") {
 		t.Fatal(err)
 	}
-	// Successful cancellation.
-	// Note the err != nil check. It exists because a successful cancellation
-	// does not imply that the query was canceled.
-	if err := <-errChan; err != nil && !sqlbase.IsQueryCanceledError(err) {
-		t.Fatal(err)
+
+	err = <-errChan
+	if err == nil {
+		// A successful cancellation does not imply that the query was canceled.
+		return
 	}
+	if !isClientsideQueryCanceledErr(err) {
+		t.Fatalf("expected error with specific error code, got: %s", err)
+	}
+}
+
+func isClientsideQueryCanceledErr(err error) bool {
+	pqErr, ok := err.(*pq.Error)
+	if !ok {
+		return false
+	}
+	return pqErr.Code == pgerror.CodeQueryCanceledError
 }

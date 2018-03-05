@@ -406,8 +406,10 @@ var TxnStateTransitions = Compile(Pattern{
 
 				payload := args.Payload.(eventTxnStartPayload)
 
+				// Note that we pass the connection's context here, not args.Ctx which
+				// was the previous txn's context.
 				ts.resetForNewSQLTxn(
-					args.Ctx,
+					ts.connCtx,
 					explicitTxn,
 					payload.txnSQLTimestamp, payload.iso, payload.pri, payload.readOnly,
 					args.Payload.(eventTxnStartPayload).tranCtx,
