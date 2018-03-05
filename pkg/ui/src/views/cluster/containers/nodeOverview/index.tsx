@@ -51,7 +51,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
     if (!node) {
       return (
         <div className="section">
-          <h1>Loading cluster status...</h1>
+          <h1>Loading node status...</h1>
         </div>
       );
     }
@@ -67,6 +67,9 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
         <div className="section section--heading">
           <h2>{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>
+        <section className="section">
+          <pre>{node.args.join(" ")}</pre>
+        </section>
         <section className="section l-columns">
           <div className="l-columns__left">
             <table className="table">
