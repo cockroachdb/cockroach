@@ -3,6 +3,43 @@
 # =============================================================================
 
 
+# CommuteVar ensures that variable references are on the left side of
+# commutative comparison and binary operators. Other patterns don't need to
+# handle both combinations.
+[CommuteVar, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:^(Variable)
+    $right:(Variable)
+)
+=>
+((OpName) $right $left)
+
+# CommuteConst ensures that "constant expression trees" are on the right side
+# of commutative comparison and binary operators. A constant expression tree
+# has no unbound variables that refer to outer columns. It therefore always
+# evaluates to the same result. Note that this is possible even if the tree
+# contains variable expressions, as long as they are bound, such as in
+# uncorrelated subqueries:
+#
+#   SELECT * FROM a WHERE a.x = (SELECT SUM(b.x) FROM b)
+#
+# The right side of the equality expression is a constant expression tree, even
+# though it contains an entire subquery, because it always evalutes to the same
+# result. The left side is not a constant expression tree, even though it
+# contains just a single variable, because its value can be different for each
+# row in the table "a".
+#
+# The goal of this and related patterns is to push constant expression trees to
+# the right side until only a Variable remains on the left (if possible). Other
+# patterns can rely on this normal form and only handle one combination.
+[CommuteConst, Normalize]
+(Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+    $left:* & (OnlyConstants $left)
+    $right:* & ^(OnlyConstants $right)
+)
+=>
+((OpName) $right $left)
+
 # EliminateCoalesce discards the Coalesce operator if it has a single operand.
 [EliminateCoalesce, Normalize]
 (Coalesce [ $item:* ]) => $item
@@ -12,6 +49,11 @@
 # matches nulls as well as other constants.
 [SimplifyCoalesce, Normalize]
 (Coalesce $args:[ (ConstValue) ... ]) => (SimplifyCoalesce $args)
+
+# EliminateCast discards the cast operator if its input already has the desired
+# static type.
+[EliminateCast, Normalize]
+(Cast $input:* $typ:* & (HasType $input $typ)) => $input
 
 # FoldNullCast discards the cast operator if it has a null input. The resulting
 # null value has the target cast type.
@@ -42,3 +84,57 @@
 )
 =>
 (FoldNullBinary (OpName) $left $right)
+
+# FoldNullInNonEmpty replaces the In/NotIn with null when the left input is
+# null and the right input is not empty. Null is the unknown value, and if the
+# set is non-empty, it is unknown whether it's in/not in the set.
+[FoldNullInNonEmpty, Normalize]
+(In | NotIn
+    $left:(Null)
+    (Tuple ^[])
+)
+=>
+(Null (BoolType))
+
+# FoldNullInEmpty replaces the In with False when the left input is null and
+# the right input is empty, since even an unknown value can't be in an empty
+# set.
+[FoldNullInEmpty, Normalize]
+(In
+    $left:(Null)
+    (Tuple [])
+)
+=>
+(False)
+
+# FoldNullNotInEmpty replaces the NotIn with True when the left input is null
+# and the right input is empty, since even an unknown value can't be in an
+# empty set.
+[FoldNullNotInEmpty, Normalize]
+(NotIn
+    $left:(Null)
+    (Tuple [])
+)
+=>
+(True)
+
+# NormalizeInConst ensures that the In operator's tuple operand is sorted with
+# duplicates removed (since duplicates do not change the result).
+[NormalizeInConst, Normalize]
+(In | NotIn
+    $left:*
+    $right:(Tuple $elems:*) & ^(IsSortedUniqueList $elems)
+)
+=>
+((OpName) $left (Tuple (ConstructSortedUniqueList $elems)))
+
+# FoldInNull replaces the In/Not operator with Null when the tuple only
+# contains null. The NormalizeInConst pattern will reduce multiple nulls to a
+# single null when it removes duplicates, so this pattern will match that.
+[FoldInNull, Normalize]
+(In | NotIn
+    $left:*
+    (Tuple [ (Null) ])
+)
+=>
+(Null (BoolType))

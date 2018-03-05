@@ -71,7 +71,7 @@ type ScalarProps struct {
 	// only it is defined "outside" the EXISTS expression (hence the name
 	// "outer"). Note that what constitutes an "outer column" is dependent on
 	// an expression's lcoation in the query. For example, while the b.x and
-	// b.y columns are not outer columns on the EXISTS expression, the *are*
+	// b.y columns are not outer columns on the EXISTS expression, they *are*
 	// outer columns on the inner WHERE condition.
 	OuterCols opt.ColSet
 }

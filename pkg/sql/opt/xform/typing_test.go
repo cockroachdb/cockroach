@@ -17,8 +17,8 @@ package xform
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -28,7 +28,8 @@ func TestTyping(t *testing.T) {
 }
 
 func TestTypingJson(t *testing.T) {
-	o := NewOptimizer(createTypingCatalog(t), OptimizeNone)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	o := NewOptimizer(&evalCtx, OptimizeNone)
 	f := o.Factory()
 
 	// (Const <json>)
@@ -137,13 +138,6 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 			}
 		}
 	}
-}
-
-func createTypingCatalog(t *testing.T) *testutils.TestCatalog {
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(t, "CREATE TABLE a (x INT PRIMARY KEY, y INT)", cat)
-	testutils.ExecuteTestDDL(t, "CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL)", cat)
-	return cat
 }
 
 func testTyping(t *testing.T, ev ExprView, expected types.T) {

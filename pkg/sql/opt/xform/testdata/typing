@@ -308,17 +308,15 @@ project
            ├── variable: b.x [type=string, outer=(1)]
            └── const: 'more' [type=string]
 
-# UnaryPlus, UnaryMinus, UnaryComplement
+# UnaryMinus, UnaryComplement
 build
-SELECT +a.x, -a.y, ~a.x FROM a
+SELECT -a.y, ~a.x FROM a
 ----
 project
- ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
+ ├── columns: column3:int:null:3 column4:int:null:4
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [outer=(1,2)]
-      ├── unary-plus [type=int, outer=(1)]
-      │    └── variable: a.x [type=int, outer=(1)]
       ├── unary-minus [type=int, outer=(2)]
       │    └── variable: a.y [type=int, outer=(2)]
       └── unary-complement [type=int, outer=(1)]

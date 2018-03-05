@@ -60,7 +60,6 @@ var opLayoutTable = [...]opLayout{
 	opt.FetchTextOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.FetchValPathOp:    makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.FetchTextPathOp:   makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.UnaryPlusOp:       makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.UnaryMinusOp:      makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.UnaryComplementOp: makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.CastOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 2 /*priv*/, 0 /*enforcer*/),
@@ -150,7 +149,6 @@ var isScalarLookup = [...]bool{
 	true,  // FetchTextOp
 	true,  // FetchValPathOp
 	true,  // FetchTextPathOp
-	true,  // UnaryPlusOp
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	true,  // CastOp
@@ -240,7 +238,6 @@ var isConstValueLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -330,7 +327,6 @@ var isBooleanLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -420,7 +416,6 @@ var isComparisonLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -510,7 +505,6 @@ var isBinaryLookup = [...]bool{
 	true,  // FetchTextOp
 	true,  // FetchValPathOp
 	true,  // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -600,7 +594,6 @@ var isUnaryLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	true,  // UnaryPlusOp
 	true,  // UnaryMinusOp
 	true,  // UnaryComplementOp
 	false, // CastOp
@@ -690,7 +683,6 @@ var isRelationalLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -780,7 +772,6 @@ var isJoinLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -870,7 +861,6 @@ var isJoinApplyLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -960,7 +950,6 @@ var isEnforcerLookup = [...]bool{
 	false, // FetchTextOp
 	false, // FetchValPathOp
 	false, // FetchTextPathOp
-	false, // UnaryPlusOp
 	false, // UnaryMinusOp
 	false, // UnaryComplementOp
 	false, // CastOp
@@ -2363,27 +2352,6 @@ func (m *memoExpr) asFetchTextPath() *fetchTextPathExpr {
 		return nil
 	}
 	return (*fetchTextPathExpr)(m)
-}
-
-type unaryPlusExpr memoExpr
-
-func makeUnaryPlusExpr(input opt.GroupID) unaryPlusExpr {
-	return unaryPlusExpr{op: opt.UnaryPlusOp, state: exprState{uint32(input)}}
-}
-
-func (e *unaryPlusExpr) input() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *unaryPlusExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asUnaryPlus() *unaryPlusExpr {
-	if m.op != opt.UnaryPlusOp {
-		return nil
-	}
-	return (*unaryPlusExpr)(m)
 }
 
 type unaryMinusExpr memoExpr

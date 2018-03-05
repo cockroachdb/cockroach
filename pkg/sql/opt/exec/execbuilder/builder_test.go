@@ -141,8 +141,10 @@ func TestBuild(t *testing.T) {
 					defer eng.Close()
 
 					// Build and optimize the opt expression tree.
-					o := xform.NewOptimizer(eng.Catalog(), xform.OptimizeAll)
-					builder := optbuilder.New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
+					o := xform.NewOptimizer(&evalCtx, xform.OptimizeAll)
+					builder := optbuilder.New(
+						ctx, &semaCtx, &evalCtx, eng.Catalog(), o.Factory(), stmt,
+					)
 					builder.AllowUnsupportedExpr = allowUnsupportedExpr
 					root, props, err := builder.Build()
 					if err != nil {

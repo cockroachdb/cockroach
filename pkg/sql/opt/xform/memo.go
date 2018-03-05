@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -31,6 +30,12 @@ import (
 type memoLoc struct {
 	group opt.GroupID
 	expr  exprID
+}
+
+// makeNormLoc creates a memoLoc that refers to the normalized expression in
+// the given group.
+func makeNormLoc(group opt.GroupID) memoLoc {
+	return memoLoc{group: group, expr: normExprID}
 }
 
 // memo is a data structure for efficiently storing a forest of query plans.
@@ -103,8 +108,8 @@ type memoLoc struct {
 //
 // TODO(andyk): See the comments in explorer.go for more details.
 type memo struct {
-	// metadata provides access to database metadata and statistics, as well as
-	// information about the columns and tables used in this particular query.
+	// metadata provides information about the columns and tables used in this
+	// particular query.
 	metadata *opt.Metadata
 
 	// exprMap maps from expression fingerprint (memoExpr.fingerprint()) to
@@ -145,7 +150,7 @@ type memo struct {
 	privates    []interface{}
 }
 
-func newMemo(catalog optbase.Catalog) *memo {
+func newMemo() *memo {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
@@ -154,7 +159,7 @@ func newMemo(catalog optbase.Catalog) *memo {
 	// physical should never actually be accessed when traversing the normalized
 	// tree.
 	m := &memo{
-		metadata:     opt.NewMetadata(catalog),
+		metadata:     opt.NewMetadata(),
 		exprMap:      make(map[fingerprint]opt.GroupID),
 		groups:       make([]memoGroup, 1),
 		physPropsMap: make(map[string]opt.PhysicalPropsID),
