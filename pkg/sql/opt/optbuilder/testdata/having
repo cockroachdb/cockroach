@@ -291,3 +291,30 @@ build
 SELECT t.kv.v FROM t.kv GROUP BY v, kv.k * w HAVING w > 5
 ----
 error: column "t.kv.w" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT UPPER(s), COUNT(s), COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(s) > 1
+----
+select
+ ├── columns: column5:string:null:5 column6:int:null:6 column8:int:null:8
+ ├── group-by
+ │    ├── columns: column5:string:null:5 column6:int:null:6 column8:int:null:8
+ │    ├── grouping columns: column5:string:null:5
+ │    ├── project
+ │    │    ├── columns: column5:string:null:5 kv.s:string:null:4 column7:string:null:7
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── projections
+ │    │         ├── function: upper [type=string]
+ │    │         │    └── variable: kv.s [type=string]
+ │    │         ├── variable: kv.s [type=string]
+ │    │         └── function: upper [type=string]
+ │    │              └── variable: kv.s [type=string]
+ │    └── aggregations
+ │         ├── function: count [type=int]
+ │         │    └── variable: column5 [type=string]
+ │         └── function: count [type=int]
+ │              └── variable: kv.s [type=string]
+ └── gt [type=bool]
+      ├── variable: column6 [type=int]
+      └── const: 1 [type=int]
