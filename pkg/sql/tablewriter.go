@@ -734,21 +734,19 @@ func (td *tableDeleter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	return nil
 }
 
+func (td *tableDeleter) rotateBatch(ctx context.Context) error {
+	if err := td.txn.Run(ctx, td.b); err != nil {
+		return err
+	}
+	td.b = td.txn.NewBatch()
+	td.batchSize = 0
+	return nil
+}
+
 func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	// Rudimentarily chunk the deletions to avoid memory blowup in queries such
-	// as `DELETE FROM mytable`.
-	const maxBatchSize = 10000
-	if td.batchSize >= maxBatchSize {
-		if err := td.txn.Run(ctx, td.b); err != nil {
-			return nil, err
-		}
-		td.b = td.txn.NewBatch()
-		td.batchSize = 0
-	}
 	td.batchSize++
-
 	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
 }
 
