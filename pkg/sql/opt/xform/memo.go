@@ -173,9 +173,9 @@ func newMemo(catalog optbase.Catalog) *memo {
 }
 
 // newGroup creates a new group and adds it to the memo.
-func (m *memo) newGroup(norm *memoExpr) *memoGroup {
+func (m *memo) newGroup(norm memoExpr) *memoGroup {
 	id := opt.GroupID(len(m.groups))
-	exprs := []memoExpr{*norm}
+	exprs := []memoExpr{norm}
 	m.groups = append(m.groups, memoGroup{
 		id:    id,
 		exprs: exprs,
@@ -201,7 +201,7 @@ func (m *memo) addAltFingerprint(alt fingerprint, group opt.GroupID) {
 // memoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression.
-func (m *memo) memoizeNormExpr(norm *memoExpr) opt.GroupID {
+func (m *memo) memoizeNormExpr(norm memoExpr) opt.GroupID {
 	if m.exprMap[norm.fingerprint()] != 0 {
 		panic("normalized expression has been entered into the memo more than once")
 	}
