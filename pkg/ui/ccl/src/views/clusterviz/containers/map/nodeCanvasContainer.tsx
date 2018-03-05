@@ -32,7 +32,7 @@ import Loading from "src/views/shared/components/loading";
 import { NodeCanvas } from "./nodeCanvas";
 import spinner from "assets/spinner.gif";
 
-import Liveness = cockroach.storage.Liveness;
+type Liveness = cockroach.storage.Liveness;
 
 interface NodeCanvasContainerProps {
   nodesSummary: NodesSummary;
