@@ -75,6 +75,8 @@ func init() {
 		opt.ExistsOp:          typeAsBool,
 		opt.FunctionOp:        typeFunction,
 		opt.CoalesceOp:        typeCoalesce,
+		opt.CaseOp:            typeCase,
+		opt.WhenOp:            typeWhen,
 		opt.CastOp:            typeAsPrivate,
 	}
 
@@ -167,6 +169,33 @@ func typeCoalesce(ev ExprView) types.T {
 		}
 	}
 	return types.Unknown
+}
+
+// typeCase returns the type of a CASE expression, which is
+// of the form:
+//   CASE [ <cond> ]
+//       WHEN <condval1> THEN <expr1>
+//     [ WHEN <condval2> THEN <expr2> ] ...
+//     [ ELSE <expr> ]
+//   END
+// The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
+// the type of the ELSE <expr> value if all the previous types are unknown.
+func typeCase(ev ExprView) types.T {
+	// Skip over the first child since that corresponds to the input <cond>.
+	for i := 1; i < ev.ChildCount(); i++ {
+		childType := ev.Child(i).Logical().Scalar.Type
+		if childType != types.Unknown {
+			return childType
+		}
+	}
+	return types.Unknown
+}
+
+// typeWhen returns the type of a WHEN <condval> THEN <expr> clause inside a
+// CASE statement.
+func typeWhen(ev ExprView) types.T {
+	val := ev.Child(1)
+	return val.Logical().Scalar.Type
 }
 
 // typeAsPrivate returns a type extracted from the expression's private field,
