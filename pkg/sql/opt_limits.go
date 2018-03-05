@@ -136,8 +136,12 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 			p.applyLimit(n.plan, numRows, soft)
 		}
 
+	case *rowCountNode:
+		p.setUnlimited(n.source)
+	case *serializeNode:
+		p.setUnlimited(n.source)
 	case *deleteNode:
-		p.setUnlimited(n.run.rows)
+		p.setUnlimited(n.source)
 	case *updateNode:
 		p.setUnlimited(n.run.rows)
 	case *insertNode:

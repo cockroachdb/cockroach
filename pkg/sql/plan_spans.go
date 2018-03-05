@@ -43,7 +43,7 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 		return n.spans, nil, nil
 
 	case *updateNode:
-		return editNodeSpans(params, &n.run.editNodeRun)
+		return editNodeSpans(params, n.run.rows, n.run.tw)
 	case *insertNode:
 		if v, ok := n.run.editNodeRun.rows.(*valuesNode); ok && !n.isUpsert() {
 			// subqueries, even within valuesNodes, can be arbitrarily complex,
@@ -52,9 +52,13 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 				return insertNodeWithValuesSpans(params, n, v)
 			}
 		}
-		return editNodeSpans(params, &n.run.editNodeRun)
+		return editNodeSpans(params, n.run.rows, n.run.tw)
 	case *deleteNode:
-		return editNodeSpans(params, &n.run.editNodeRun)
+		return editNodeSpans(params, n.source, &n.run.td)
+	case *rowCountNode:
+		return collectSpans(params, n.source)
+	case *serializeNode:
+		return collectSpans(params, n.source)
 
 	case *delayedNode:
 		return collectSpans(params, n.plan)
@@ -101,12 +105,14 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 //
 // Where possible, we should try to specialize this analysis like we do with
 // insertNodeWithValuesSpans.
-func editNodeSpans(params runParams, r *editNodeRun) (reads, writes roachpb.Spans, err error) {
-	readerReads, readerWrites, err := collectSpans(params, r.rows)
+func editNodeSpans(
+	params runParams, source planNode, tw tableWriter,
+) (reads, writes roachpb.Spans, err error) {
+	readerReads, readerWrites, err := collectSpans(params, source)
 	if err != nil {
 		return nil, nil, err
 	}
-	writerReads, writerWrites := tableWriterSpans(params, r.tw)
+	writerReads, writerWrites := tableWriterSpans(params, tw)
 
 	return append(readerReads, writerReads...), append(readerWrites, writerWrites...), nil
 }
