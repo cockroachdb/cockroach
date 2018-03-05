@@ -17,6 +17,7 @@ package exec
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // TestEngine enables the creation and execution of plans for testing.
@@ -31,6 +32,10 @@ type TestEngine interface {
 	// Factory returns the execution Factory associated with this engine, which
 	// can be used to create an execution plan.
 	Factory() Factory
+
+	// Columns returns the column information for the given execution node
+	// (created through the factory).
+	Columns(n Node) sqlbase.ResultColumns
 
 	// Execute runs the given execution node (created through the Factory) and
 	// returns the results as a Datum table.

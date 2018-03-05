@@ -10,6 +10,7 @@ render       0  render  ·         ·                 (column1)  ·
 exec
 SELECT 1
 ----
+column1:int
 1
 
 exec-explain
@@ -23,6 +24,7 @@ render       0  render  ·         ·                 (column1)  ·
 exec
 SELECT 1 + 2
 ----
+column1:int
 3
 
 exec-explain
@@ -40,8 +42,9 @@ values  0  values  ·              ·                  (column1, column2, column
 exec
 VALUES (1, 2, 3), (4, 5, 6)
 ----
-1  2  3
-4  5  6
+column1:int  column2:int  column3:int
+1            2            3
+4            5            6
 
 exec-explain
 VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
@@ -56,6 +59,7 @@ values  0  values  ·              ·                 (column1)  ·
 exec
 VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
 ----
+column1:int
 1
 2
 3
@@ -78,6 +82,7 @@ render       0  render  ·              ·                  (column3)           
 exec
 SELECT a + b FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)
 ----
+column3:int
 3
 7
 11
