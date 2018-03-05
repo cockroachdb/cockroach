@@ -112,20 +112,26 @@ func GC(
 	// keys unless we have to (to allow the GC queue to batch requests more
 	// efficiently), and we must honor what we declare.
 
-	pd.Replicated.State = &storagebase.ReplicaState{}
+	var replState storagebase.ReplicaState
 	if newThreshold != (hlc.Timestamp{}) {
-		pd.Replicated.State.GCThreshold = &newThreshold
+		replState.GCThreshold = &newThreshold
 		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
 			return result.Result{}, err
 		}
 	}
 
 	if newTxnSpanGCThreshold != (hlc.Timestamp{}) {
-		pd.Replicated.State.TxnSpanGCThreshold = &newTxnSpanGCThreshold
+		replState.TxnSpanGCThreshold = &newTxnSpanGCThreshold
 		if err := stateLoader.SetTxnSpanGCThreshold(ctx, batch, cArgs.Stats, &newTxnSpanGCThreshold); err != nil {
 			return result.Result{}, err
 		}
 	}
 
+	// Only set ReplicatedEvalResult.ReplicaState if at least one of the GC keys
+	// was written. Leaving the field nil to signify that no changes to the
+	// Replica state occurred allows replicas to perform less work beneath Raft.
+	if replState != (storagebase.ReplicaState{}) {
+		pd.Replicated.State = &replState
+	}
 	return pd, nil
 }
