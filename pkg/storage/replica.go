@@ -6031,39 +6031,41 @@ func calcReplicaMetrics(
 	m.Leader = isRaftLeader(raftStatus)
 	m.Quiescent = quiescent
 
-	// We gather per-range stats on either the leader or, if there is no leader,
-	// the first live replica in the descriptor. Note that the first live replica
-	// is an arbitrary choice. We want to select one live replica to do the
-	// counting that all replicas can agree on.
+	// We compute an estimated range count across the cluster by counting the
+	// first live replica in each descriptor. Note that the first live replica is
+	// an arbitrary choice. We want to select one live replica to do the counting
+	// that all replicas can agree on.
 	//
-	// Note that the current heuristics can double count. If the first live
-	// replica is on a node that is partitioned from the other replicas in the
-	// range it may not know the leader even though there is one. This scenario
-	// seems rare as it requires the partitioned node to be alive enough to be
-	// performing liveness heartbeats.
-	if !HasRaftLeader(raftStatus) {
-		// The range doesn't have a leader or we don't know who the leader is.
-		for _, rd := range desc.Replicas {
-			if livenessMap[rd.NodeID] {
-				m.RangeCounter = rd.StoreID == storeID
-				break
-			}
+	// Note that this heuristic can double count. If the first live replica is on
+	// a node that is partitioned from the other replicas in the range, there may
+	// be multiple nodes which believe they are the first live replica. This
+	// scenario seems rare as it requires the partitioned node to be alive enough
+	// to be performing liveness heartbeats.
+	for _, rd := range desc.Replicas {
+		if livenessMap[rd.NodeID] {
+			m.RangeCounter = rd.StoreID == storeID
+			break
 		}
-	} else {
-		m.RangeCounter = m.Leader
 	}
 
+	// We also compute an estimated per-range count of under-replicated and
+	// unavailable ranges for each range based on the liveness table.
 	if m.RangeCounter {
-		var goodReplicas int
-		goodReplicas, m.BehindCount = calcGoodReplicas(raftStatus, desc, livenessMap)
-		if goodReplicas < computeQuorum(len(desc.Replicas)) {
+		liveReplicas := calcLiveReplicas(desc, livenessMap)
+		if liveReplicas < computeQuorum(len(desc.Replicas)) {
 			m.Unavailable = true
 		}
 		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
 			log.Error(ctx, err)
-		} else if int32(goodReplicas) < zoneConfig.NumReplicas {
+		} else if int32(liveReplicas) < zoneConfig.NumReplicas {
 			m.Underreplicated = true
 		}
+	}
+
+	// The raft leader computes the number of raft entries that replicas are
+	// behind.
+	if m.Leader {
+		m.BehindCount = calcBehindCount(raftStatus, desc, livenessMap)
 	}
 
 	m.CmdQMetricsLocal = cmdQMetricsLocal
@@ -6072,48 +6074,37 @@ func calcReplicaMetrics(
 	return m
 }
 
-// calcGoodReplicas returns a count of the "good" replicas and a count of the
-// number of log entries the replicas are behind. The log entry count is only
-// returned if the local replica is the leader. A "good" replica must be on a
-// live node and, if there is a leader, not too far behind.
-func calcGoodReplicas(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
-) (int, int64) {
-	leader := isRaftLeader(raftStatus)
+// calcLiveReplicas returns a count of the live replicas; a live replica is
+// determined by checking its node in the provided liveness map.
+func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool) int {
 	var goodReplicas int
+	for _, rd := range desc.Replicas {
+		if livenessMap[rd.NodeID] {
+			goodReplicas++
+		}
+	}
+	return goodReplicas
+}
+
+// calcBehindCount returns a total count of log entries that follower replicas
+// are behind. This can only be computed on the raft leader.
+func calcBehindCount(
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
+) int64 {
+	if !isRaftLeader(raftStatus) {
+		return 0
+	}
 	var behindCount int64
 	for _, rd := range desc.Replicas {
-		live := livenessMap[rd.NodeID]
-		if !leader {
-			if live {
-				goodReplicas++
-			}
-			continue
-		}
-
 		if progress, ok := raftStatus.Progress[uint64(rd.ReplicaID)]; ok {
-			if live {
-				// A single range can process thousands of ops/sec, so a replica that
-				// is 10 Raft log entries behind is fairly current. Setting this value
-				// to 0 makes the under-replicated metric overly sensitive. Setting
-				// this value too high makes the metric not show all of the
-				// under-replicated replicas.
-				const behindThreshold = 10
-				// TODO(peter): progress.Match will be 0 if this node recently
-				// became the leader. Presume such replicas are up to date until we
-				// hear otherwise. This is a bit of a hack.
-				if progress.Match == 0 ||
-					progress.Match+behindThreshold >= raftStatus.Commit {
-					goodReplicas++
-				}
-			}
 			if progress.Match > 0 &&
 				progress.Match < raftStatus.Commit {
 				behindCount += int64(raftStatus.Commit) - int64(progress.Match)
 			}
 		}
 	}
-	return goodReplicas, behindCount
+
+	return behindCount
 }
 
 // QueriesPerSecond returns the range's average QPS if it is the current
