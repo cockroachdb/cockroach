@@ -24,6 +24,8 @@ interface NodeOverviewProps extends RouterState {
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
+  // True if current status results are still valid. Needed so that this
+  // component refreshes status query when it becomes invalid.
   nodesSummaryValid: boolean;
 }
 
@@ -34,7 +36,7 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
   componentWillMount() {
     // Refresh nodes status query when mounting.
     this.props.refreshNodes();
-    this.props.refreshNodes();
+    this.props.refreshLiveness();
   }
 
   componentWillReceiveProps(props: NodeOverviewProps) {
