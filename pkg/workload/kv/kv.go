@@ -25,6 +25,7 @@ import (
 	"hash"
 	"math"
 	"math/rand"
+	"strings"
 	"sync/atomic"
 
 	"github.com/pkg/errors"
@@ -39,7 +40,8 @@ const (
 )
 
 type kv struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	batchSize                            int
 	minBlockSizeBytes, maxBlockSizeBytes int
@@ -74,6 +76,7 @@ var kvMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
@@ -120,38 +123,51 @@ func (w *kv) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *kv) Ops() workload.Operations {
-	opFn := func(db *gosql.DB, reg *workload.HistogramRegistry) (func(context.Context) error, error) {
-		var buf bytes.Buffer
-		buf.WriteString(`SELECT k, v FROM test.kv WHERE k IN (`)
-		for i := 0; i < w.batchSize; i++ {
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, `$%d`, i+1)
-		}
-		buf.WriteString(`)`)
-		readStmt, err := db.Prepare(buf.String())
-		if err != nil {
-			return nil, err
-		}
+func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+	// Allow a maximum of concurrency+1 connections to the database.
+	db.SetMaxOpenConns(w.connFlags.Concurrency + 1)
+	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
 
-		buf.Reset()
-		buf.WriteString(`UPSERT INTO test. kv (k, v) VALUES`)
-
-		for i := 0; i < w.batchSize; i++ {
-			j := i * 2
-			if i > 0 {
-				buf.WriteString(", ")
-			}
-			fmt.Fprintf(&buf, ` ($%d, $%d)`, j+1, j+2)
+	var buf bytes.Buffer
+	buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
+	for i := 0; i < w.batchSize; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
 		}
+		fmt.Fprintf(&buf, `$%d`, i+1)
+	}
+	buf.WriteString(`)`)
+	readStmt, err := db.Prepare(buf.String())
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
 
-		writeStmt, err := db.Prepare(buf.String())
-		if err != nil {
-			return nil, err
+	buf.Reset()
+	buf.WriteString(`UPSERT INTO kv (k, v) VALUES`)
+
+	for i := 0; i < w.batchSize; i++ {
+		j := i * 2
+		if i > 0 {
+			buf.WriteString(", ")
 		}
+		fmt.Fprintf(&buf, ` ($%d, $%d)`, j+1, j+2)
+	}
 
+	writeStmt, err := db.Prepare(buf.String())
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
+	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := kvOp{
 			config:    w,
 			hists:     reg.GetHandle(),
@@ -165,13 +181,9 @@ func (w *kv) Ops() workload.Operations {
 		} else {
 			op.g = newHashGenerator(seq)
 		}
-		return op.run, nil
+		ql.WorkerFns = append(ql.WorkerFns, op.run)
 	}
-
-	return workload.Operations{
-		Name: fmt.Sprintf(`r%02dw%02d`, w.readPercent, 100-w.readPercent),
-		Fn:   opFn,
-	}
+	return ql, nil
 }
 
 type kvOp struct {
