@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -123,17 +124,36 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 	}()
 
+	var timeoutTicker *time.Timer
+
 	// Canceling a query cancels its transaction's context so we take a reference
 	// to the cancelation function here.
 	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	stopTickerAndUnregisterFn := func() {
+		if timeoutTicker != nil {
+			// The timeout callback assumes the query is still active, so we need to
+			// stop the timer before unregistering the query. We don't need to
+			// explicitly synchronize with the callback because access to
+			// ActiveQueries is serialized, so if the callback is running now, we can
+			// guarantee that the query won't be unregistered until it's canceled.
+			timeoutTicker.Stop()
+		}
+		unregisterFn()
+	}
 	// Generally we want to unregister after the auto-commit below. However, in
 	// case we'll execute the statement through the parallel execution queue,
 	// we'll pass the responsibility for unregistering to the queue.
 	defer func() {
-		if unregisterFn != nil {
-			unregisterFn()
+		if stopTickerAndUnregisterFn != nil {
+			stopTickerAndUnregisterFn()
 		}
 	}()
+
+	if _, ok := stmt.AST.(tree.HiddenFromShowQueries); !ok && ex.sessionData.StmtTimeout > 0 {
+		timeoutTicker = time.AfterFunc(
+			time.Duration(ex.sessionData.StmtTimeout)*time.Millisecond,
+			func() { ex.cancelQuery(stmt.queryID) })
+	}
 
 	defer func() {
 		if filter := ex.server.cfg.TestingKnobs.StatementFilter; retErr == nil && filter != nil {
@@ -325,8 +345,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFn)
-		unregisterFn = nil
+		cols, err := ex.execStmtInParallel(ctx, stmt, p, stopTickerAndUnregisterFn)
+		stopTickerAndUnregisterFn = nil
 		if err != nil {
 			return makeErrEvent(err)
 		}

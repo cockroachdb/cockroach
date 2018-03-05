@@ -52,6 +52,9 @@ type SessionData struct {
 	// before the database. Currently, this is used only for SELECTs.
 	// Names in the search path must have been normalized already.
 	SearchPath SearchPath
+	// StmtTimeout is the duration a query is permitted to run (in milliseconds)
+	// before it is canceled by the session. If set to 0, there is no timeout.
+	StmtTimeout int
 	// User is the name of the user logged into the session.
 	User string
 	// SafeUpdates causes errors when the client
