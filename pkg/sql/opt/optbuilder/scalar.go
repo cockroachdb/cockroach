@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -75,7 +76,6 @@ var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
 
 // Map from tree.UnaryOperator to Factory constructor function.
 var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
-	tree.UnaryPlus:       (opt.Factory).ConstructUnaryPlus,
 	tree.UnaryMinus:      (opt.Factory).ConstructUnaryMinus,
 	tree.UnaryComplement: (opt.Factory).ConstructUnaryComplement,
 }
@@ -223,7 +223,12 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		out = b.factory.ConstructTuple(b.factory.InternList(list))
 
 	case *tree.UnaryExpr:
-		out = unaryOpMap[t.Operator](b.factory, b.buildScalar(t.TypedInnerExpr(), inScope))
+		out = b.buildScalar(t.TypedInnerExpr(), inScope)
+
+		// Discard do-nothing unary plus operator.
+		if t.Operator != tree.UnaryPlus {
+			out = unaryOpMap[t.Operator](b.factory, out)
+		}
 
 	// NB: this is the exception to the sorting of the case statements. The
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
@@ -323,6 +328,7 @@ func NewScalar(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
+	catalog optbase.Catalog,
 	factory opt.Factory,
 	columnNames []string,
 	columnTypes []types.T,
@@ -334,6 +340,7 @@ func NewScalar(
 			ctx:     ctx,
 			semaCtx: semaCtx,
 			evalCtx: evalCtx,
+			catalog: catalog,
 		},
 	}
 	sb.scope.builder = &sb.Builder

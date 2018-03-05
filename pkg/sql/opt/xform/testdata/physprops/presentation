@@ -46,8 +46,8 @@ project
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── projections [outer=(1,2)]
       ├── plus [type=int, outer=(2)]
-      │    ├── const: 1 [type=int]
-      │    └── variable: a.y [type=int, outer=(2)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 1 [type=int]
       └── variable: a.x [type=int, outer=(1)]
 
 # Join operator.

@@ -103,7 +103,13 @@ func makeSpans(
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	bld := optbuilder.NewScalar(
-		context.Background(), &semaCtx, &evalCtx, o.Factory(), colNames, colTypes,
+		context.Background(),
+		&semaCtx,
+		&evalCtx,
+		nil, // catalog should never be used
+		o.Factory(),
+		colNames,
+		colTypes,
 	)
 	bld.AllowUnsupportedExpr = true
 	filterGroup, err := bld.Build(expr)

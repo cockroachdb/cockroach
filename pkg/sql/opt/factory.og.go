@@ -225,9 +225,6 @@ type Factory interface {
 	// ConstructFetchTextPath constructs an expression for the FetchTextPath operator.
 	ConstructFetchTextPath(json GroupID, path GroupID) GroupID
 
-	// ConstructUnaryPlus constructs an expression for the UnaryPlus operator.
-	ConstructUnaryPlus(input GroupID) GroupID
-
 	// ConstructUnaryMinus constructs an expression for the UnaryMinus operator.
 	ConstructUnaryMinus(input GroupID) GroupID
 

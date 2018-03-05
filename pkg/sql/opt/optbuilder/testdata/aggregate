@@ -2145,15 +2145,13 @@ project
  │    │    ├── scan
  │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
  │    │    └── projections [outer=(1,3)]
- │    │         ├── unary-plus [type=int, outer=(1)]
- │    │         │    └── variable: kv.k [type=int, outer=(1)]
+ │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── unary-minus [type=int, outer=(3)]
  │    │              └── variable: kv.w [type=int, outer=(3)]
  │    └── aggregations
  └── projections [outer=(1,3)]
       └── mult [type=int, outer=(1,3)]
-           ├── unary-plus [type=int, outer=(1)]
-           │    └── variable: kv.k [type=int, outer=(1)]
+           ├── variable: kv.k [type=int, outer=(1)]
            └── unary-minus [type=int, outer=(3)]
                 └── variable: kv.w [type=int, outer=(3)]
 
@@ -2180,8 +2178,7 @@ project
  │    └── aggregations
  └── projections [outer=(1,3)]
       └── mult [type=int, outer=(1,3)]
-           ├── unary-plus [type=int, outer=(1)]
-           │    └── variable: kv.k [type=int, outer=(1)]
+           ├── variable: kv.k [type=int, outer=(1)]
            └── unary-minus [type=int, outer=(3)]
                 └── variable: kv.w [type=int, outer=(3)]
 

@@ -11,22 +11,269 @@ TABLE a
       └── k int not null
 
 # --------------------------------------------------
-# NormalizeVar
+# CommuteVarInequality
 # --------------------------------------------------
+
+# Put variables on both sides of comparison operator to avoid matching constant
+# patterns.
 opt
-SELECT * FROM a WHERE 1=k AND 2<>i
+SELECT * FROM a WHERE 1+i<k AND k-1<=i AND i*i>k AND k/2>=i
 ----
 select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
  └── and [type=bool, outer=(1,2)]
-      ├── eq [type=bool, outer=(1)]
+      ├── gt [type=bool, outer=(1,2)]
       │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
-      └── ne [type=bool, outer=(2)]
+      │    └── plus [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── const: 1 [type=int]
+      ├── ge [type=bool, outer=(1,2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=int, outer=(1)]
+      │         ├── variable: a.k [type=int, outer=(1)]
+      │         └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(1,2)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── mult [type=int, outer=(2)]
+      │         ├── variable: a.i [type=int, outer=(2)]
+      │         └── variable: a.i [type=int, outer=(2)]
+      └── le [type=bool, outer=(1,2)]
            ├── variable: a.i [type=int, outer=(2)]
-           └── const: 2 [type=int]
+           └── div [type=decimal, outer=(1)]
+                ├── variable: a.k [type=int, outer=(1)]
+                └── const: 2 [type=int]
+
+# --------------------------------------------------
+# CommuteConstInequality
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2 AND 5>i AND 'foo'>=s
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool, outer=(1,2,4)]
+      ├── gt [type=bool, outer=(1,2)]
+      │    ├── plus [type=int, outer=(1,2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── variable: a.k [type=int, outer=(1)]
+      │    └── plus [type=int]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── const: 1 [type=int]
+      ├── ge [type=bool, outer=(2)]
+      │    ├── mult [type=int, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── const: 2 [type=int]
+      │    └── function: length [type=int]
+      │         └── const: 'bar' [type=string]
+      ├── lt [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── const: 5 [type=int]
+      └── le [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── const: 'foo' [type=string]
+
+# --------------------------------------------------
+# NormalizeCmpPlusConst
+# --------------------------------------------------
+opt
+SELECT *
+FROM a
+WHERE
+    i+1 = 2 AND
+    (f+f)+2 < 5 AND
+    1::decimal+i <= length('foo') AND
+    i+2+2 > 10 AND
+    '1:00:00'::time + i::interval >= '2:00:00'::time
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool, outer=(2,3)]
+      ├── eq [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=int]
+      │         ├── const: 2 [type=int]
+      │         └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(3)]
+      │    ├── plus [type=float, outer=(3)]
+      │    │    ├── variable: a.f [type=float, outer=(3)]
+      │    │    └── variable: a.f [type=float, outer=(3)]
+      │    └── minus [type=float]
+      │         ├── const: 5.0 [type=float]
+      │         └── const: 2.0 [type=float]
+      ├── le [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=decimal]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── const: 1 [type=decimal]
+      ├── gt [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=int]
+      │         ├── minus [type=int]
+      │         │    ├── const: 10 [type=int]
+      │         │    └── const: 2 [type=int]
+      │         └── const: 2 [type=int]
+      └── ge [type=bool, outer=(2)]
+           ├── cast: interval [type=interval, outer=(2)]
+           │    └── variable: a.i [type=int, outer=(2)]
+           └── minus [type=interval]
+                ├── const: '02:00:00' [type=time]
+                └── const: '01:00:00' [type=time]
+
+# Try case that should not match pattern because Plus overload is not defined.
+opt
+SELECT * FROM a WHERE s::json - 1 = '[1]'::json
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── eq [type=bool, outer=(4)]
+      ├── minus [type=jsonb, outer=(4)]
+      │    ├── cast: jsonb [type=jsonb, outer=(4)]
+      │    │    └── variable: a.s [type=string, outer=(4)]
+      │    └── const: 1 [type=int]
+      └── const: '[1]' [type=jsonb]
+
+# --------------------------------------------------
+# NormalizeCmpMinusConst
+# --------------------------------------------------
+opt
+SELECT *
+FROM a
+WHERE
+    i-1 = 2 AND
+    (f+f)-2 < 5 AND
+    i-1::decimal <= length('foo') AND
+    i-2-2 > 10 AND
+    f+i::float-10.0 >= 100.0
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool, outer=(2,3)]
+      ├── eq [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── plus [type=int]
+      │         ├── const: 2 [type=int]
+      │         └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(3)]
+      │    ├── plus [type=float, outer=(3)]
+      │    │    ├── variable: a.f [type=float, outer=(3)]
+      │    │    └── variable: a.f [type=float, outer=(3)]
+      │    └── plus [type=float]
+      │         ├── const: 5.0 [type=float]
+      │         └── const: 2.0 [type=float]
+      ├── le [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── plus [type=decimal]
+      │         ├── function: length [type=int]
+      │         │    └── const: 'foo' [type=string]
+      │         └── const: 1 [type=decimal]
+      ├── gt [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── plus [type=int]
+      │         ├── plus [type=int]
+      │         │    ├── const: 10 [type=int]
+      │         │    └── const: 2 [type=int]
+      │         └── const: 2 [type=int]
+      └── ge [type=bool, outer=(2,3)]
+           ├── plus [type=float, outer=(2,3)]
+           │    ├── variable: a.f [type=float, outer=(3)]
+           │    └── cast: float [type=float, outer=(2)]
+           │         └── variable: a.i [type=int, outer=(2)]
+           └── plus [type=float]
+                ├── const: 100.0 [type=float]
+                └── const: 10.0 [type=float]
+
+# Try case that should not match pattern because Plus overload is not defined.
+opt
+SELECT * FROM a WHERE s::json - 1 = '[1]'::json
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── eq [type=bool, outer=(4)]
+      ├── minus [type=jsonb, outer=(4)]
+      │    ├── cast: jsonb [type=jsonb, outer=(4)]
+      │    │    └── variable: a.s [type=string, outer=(4)]
+      │    └── const: 1 [type=int]
+      └── const: '[1]' [type=jsonb]
+
+# --------------------------------------------------
+# NormalizeCmpConstMinus
+# --------------------------------------------------
+opt
+SELECT *
+FROM a
+WHERE
+    1-i = 2 AND
+    2-(f+f) < 5 AND
+    1::decimal-i <= length('foo') AND
+    2-(2-i) > 10 AND
+    10.0-(f+i::float) >= 100.0
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── and [type=bool, outer=(2,3)]
+      ├── eq [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=int]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      ├── gt [type=bool, outer=(3)]
+      │    ├── plus [type=float, outer=(3)]
+      │    │    ├── variable: a.f [type=float, outer=(3)]
+      │    │    └── variable: a.f [type=float, outer=(3)]
+      │    └── minus [type=float]
+      │         ├── const: 2.0 [type=float]
+      │         └── const: 5.0 [type=float]
+      ├── ge [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=decimal]
+      │         ├── const: 1 [type=decimal]
+      │         └── function: length [type=int]
+      │              └── const: 'foo' [type=string]
+      ├── gt [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
+      │    └── minus [type=int]
+      │         ├── const: 2 [type=int]
+      │         └── minus [type=int]
+      │              ├── const: 2 [type=int]
+      │              └── const: 10 [type=int]
+      └── le [type=bool, outer=(2,3)]
+           ├── plus [type=float, outer=(2,3)]
+           │    ├── variable: a.f [type=float, outer=(3)]
+           │    └── cast: float [type=float, outer=(2)]
+           │         └── variable: a.i [type=int, outer=(2)]
+           └── minus [type=float]
+                ├── const: 10.0 [type=float]
+                └── const: 100.0 [type=float]
+
+# Try case that should not match pattern because Minus overload is not defined.
+opt
+SELECT * FROM a WHERE '[1, 2]'::json - i = '[1]'
+----
+select
+ ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
+ ├── scan
+ │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
+ └── eq [type=bool, outer=(2)]
+      ├── minus [type=jsonb, outer=(2)]
+      │    ├── const: '[1, 2]' [type=jsonb]
+      │    └── variable: a.i [type=int, outer=(2)]
+      └── const: '[1]' [type=jsonb]
 
 # --------------------------------------------------
 # NormalizeTupleEquality
