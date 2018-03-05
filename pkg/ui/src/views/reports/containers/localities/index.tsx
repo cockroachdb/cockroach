@@ -95,7 +95,7 @@ class Localities extends React.Component<LocalitiesProps, {}> {
   render() {
     return (
       <Loading
-        loading={ !this.props.localityStatus.valid || !this.props.locationStatus.valid }
+        loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
         className="loading-image loading-image__spinner-left"
         image={ spinner }
       >
