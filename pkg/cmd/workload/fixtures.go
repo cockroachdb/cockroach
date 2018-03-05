@@ -70,6 +70,10 @@ var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
 	`csv-server`, ``,
 	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
 
+var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
+	`only-tables`, ``,
+	`Only load the tables with the given comma-separated names`)
+
 // gcs-bucket-override and gcs-prefix-override are exposed for testing.
 var gcsBucketOverride, gcsPrefixOverride *string
 
@@ -150,6 +154,25 @@ func fixturesList(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
+type filteringGenerator struct {
+	gen    workload.Generator
+	filter map[string]struct{}
+}
+
+func (f filteringGenerator) Meta() workload.Meta {
+	return f.gen.Meta()
+}
+
+func (f filteringGenerator) Tables() []workload.Table {
+	ret := make([]workload.Table, 0)
+	for _, t := range f.gen.Tables() {
+		if _, ok := f.filter[t.Name]; ok {
+			ret = append(ret, t)
+		}
+	}
+	return ret
+}
+
 func fixturesMake(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 	gcs, err := getStorage(ctx)
@@ -161,6 +184,20 @@ func fixturesMake(gen workload.Generator, urls []string, dbName string) error {
 	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
+	}
+	if *fixturesMakeOnlyTable != "" {
+		tableNames := strings.Split(*fixturesMakeOnlyTable, ",")
+		if len(tableNames) == 0 {
+			return errors.New("no table names specified")
+		}
+		filter := make(map[string]struct{}, len(tableNames))
+		for _, tableName := range tableNames {
+			filter[tableName] = struct{}{}
+		}
+		gen = filteringGenerator{
+			gen:    gen,
+			filter: filter,
+		}
 	}
 	fixture, err := workloadccl.MakeFixture(ctx, sqlDB, gcs, config(), gen)
 	if err != nil {
