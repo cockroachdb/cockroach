@@ -19,6 +19,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -393,6 +394,22 @@ func (p *planTop) start(params runParams) error {
 // columns retrieves the plan's columns.
 func (p *planTop) columns() sqlbase.ResultColumns {
 	return planColumns(p.plan)
+}
+
+func (p *planTop) collectSpans(params runParams) (readSpans, writeSpans roachpb.Spans, err error) {
+	readSpans, writeSpans, err = collectSpans(params, p.plan)
+	if err != nil {
+		return nil, nil, err
+	}
+	for i := range params.p.curPlan.subqueryPlans {
+		reads, writes, err := collectSpans(params, params.p.curPlan.subqueryPlans[i].plan)
+		if err != nil {
+			return nil, nil, err
+		}
+		readSpans = append(readSpans, reads...)
+		writeSpans = append(writeSpans, writes...)
+	}
+	return readSpans, writeSpans, nil
 }
 
 // startPlan starts the given plan and all its sub-query nodes.
