@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -56,6 +55,11 @@ func (ee *execEngine) Factory() exec.Factory {
 // Catalog is part of the exec.TestEngine interface.
 func (ee *execEngine) Catalog() optbase.Catalog {
 	return &ee.catalog
+}
+
+// Columns is part of the exec.TestEngine interface.
+func (ee *execEngine) Columns(n exec.Node) sqlbase.ResultColumns {
+	return planColumns(n.(planNode))
 }
 
 // Execute is part of the exec.TestEngine interface.
@@ -117,17 +121,12 @@ var _ exec.Factory = &execEngine{}
 
 // ConstructValues is part of the exec.Factory interface.
 func (ee *execEngine) ConstructValues(
-	rows [][]tree.TypedExpr, colTypes []types.T, colNames []string,
+	rows [][]tree.TypedExpr, cols sqlbase.ResultColumns,
 ) (exec.Node, error) {
-	v := &valuesNode{
-		columns: make(sqlbase.ResultColumns, len(colTypes)),
+	return &valuesNode{
+		columns: cols,
 		tuples:  rows,
-	}
-	for i := range v.columns {
-		v.columns[i].Name = colNames[i]
-		v.columns[i].Typ = colTypes[i]
-	}
-	return v, nil
+	}, nil
 }
 
 // ConstructScan is part of the exec.Factory interface.

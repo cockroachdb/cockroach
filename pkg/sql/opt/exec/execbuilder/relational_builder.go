@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -108,13 +107,6 @@ func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
 	cols := *ev.Private().(*opt.ColList)
 	numCols := len(cols)
 
-	colNames := make([]string, numCols)
-	colTypes := make([]types.T, numCols)
-	for i, col := range cols {
-		colNames[i] = md.ColumnLabel(col)
-		colTypes[i] = md.ColumnType(col)
-	}
-
 	rows := make([][]tree.TypedExpr, ev.ChildCount())
 	rowBuf := make([]tree.TypedExpr, len(rows)*numCols)
 	scalarCtx := buildScalarCtx{}
@@ -131,7 +123,12 @@ func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
 		}
 	}
 
-	node, err := b.factory.ConstructValues(rows, colTypes, colNames)
+	resultCols := make(sqlbase.ResultColumns, numCols)
+	for i, col := range cols {
+		resultCols[i].Name = md.ColumnLabel(col)
+		resultCols[i].Typ = md.ColumnType(col)
+	}
+	node, err := b.factory.ConstructValues(rows, resultCols)
 	if err != nil {
 		return execPlan{}, err
 	}
