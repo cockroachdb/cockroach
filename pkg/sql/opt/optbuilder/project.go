@@ -171,7 +171,7 @@ func (b *Builder) buildVariableProjection(
 func (b *Builder) buildDefaultScalarProjection(
 	texpr tree.TypedExpr, group opt.GroupID, label string, inScope, outScope *scope,
 ) opt.GroupID {
-	if inScope.inGroupingContext() {
+	if inScope.inGroupingContext() && !inScope.groupby.inAgg {
 		if len(inScope.groupby.varsUsed) > 0 {
 			if _, ok := inScope.groupby.groupStrs[symbolicExprStr(texpr)]; !ok {
 				// This expression was not found among the GROUP BY expressions.
