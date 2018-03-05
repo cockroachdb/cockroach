@@ -100,7 +100,83 @@ const (
 var _ tableWriter = (*tableInserter)(nil)
 var _ tableWriter = (*tableUpdater)(nil)
 var _ tableWriter = (*tableUpserter)(nil)
-var _ tableWriter = (*tableDeleter)(nil)
+
+// extendedTableWriter is a temporary interface introduced
+// until all the tableWriters implement it. When that is achieved, it will be merged into
+// the main tableWriter interface.
+type extendedTableWriter interface {
+	tableWriter
+
+	// atBatchEnd is called at the end of each batch, just before
+	// finalize/flush. It can utilize the current KV batch which is
+	// still open at that point. It must not run the batch itself; that
+	// task is left to tableWriter.finalize() or flushAndStartNewBatch()
+	// below.
+	atBatchEnd(context.Context) error
+
+	// flushAndStartNewBatch is called at the end of each batch but the last.
+	// This should flush the current batch.
+	flushAndStartNewBatch(context.Context) error
+
+	// curBatchSize returns an upper bound for the amount of KV work
+	// needed for the current batch. This cannot reflect the actual KV
+	// batch size because the actual KV batch will be constructed only
+	// during the call to atBatchEnd().
+	curBatchSize() int
+}
+
+var _ extendedTableWriter = (*tableDeleter)(nil)
+
+// tableWriterBase is meant to be used to factor common code between
+// the other tableWriters.
+type tableWriterBase struct {
+	// txn is the current KV transaction.
+	txn *client.Txn
+	// b is the current batch.
+	b *client.Batch
+	// batchSize is the current batch size (when known).
+	batchSize int
+}
+
+func (tb *tableWriterBase) init(txn *client.Txn) {
+	tb.txn = txn
+	tb.b = txn.NewBatch()
+}
+
+// flushAndStartNewBatch shares the common flushAndStartNewBatch()
+// code between extendedTableWriters.
+func (tb *tableWriterBase) flushAndStartNewBatch(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor,
+) error {
+	if err := tb.txn.Run(ctx, tb.b); err != nil {
+		return sqlbase.ConvertBatchError(ctx, tableDesc, tb.b)
+	}
+	tb.b = tb.txn.NewBatch()
+	tb.batchSize = 0
+	return nil
+}
+
+// curBatchSize shares the common curBatchSize() code between extendedTableWriters().
+func (tb *tableWriterBase) curBatchSize() int { return tb.batchSize }
+
+// finalize shares the common finalize code between extendedTableWriters.
+func (tb *tableWriterBase) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, tableDesc *sqlbase.TableDescriptor,
+) (err error) {
+	if autoCommit == autoCommitEnabled {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		err = tb.txn.CommitInBatch(ctx, tb.b)
+	} else {
+		err = tb.txn.Run(ctx, tb.b)
+	}
+
+	if err != nil {
+		return sqlbase.ConvertBatchError(ctx, tableDesc, tb.b)
+	}
+	return nil
+}
 
 // tableInserter handles writing kvs and forming table rows for inserts.
 type tableInserter struct {
@@ -1051,54 +1127,41 @@ func (tu *fastTableUpserter) close(ctx context.Context) {}
 
 // tableDeleter handles writing kvs and forming table rows for deletes.
 type tableDeleter struct {
-	rd        sqlbase.RowDeleter
-	alloc     *sqlbase.DatumAlloc
-	batchSize int
+	tableWriterBase
 
-	// Set by init.
-	txn     *client.Txn
-	evalCtx *tree.EvalContext
-	b       *client.Batch
+	rd    sqlbase.RowDeleter
+	alloc *sqlbase.DatumAlloc
 }
 
+// walkExprs is part of the tableWriter interface.
 func (td *tableDeleter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (td *tableDeleter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	td.txn = txn
-	td.evalCtx = evalCtx
-	td.b = txn.NewBatch()
+// init is part of the tableWriter interface.
+func (td *tableDeleter) init(txn *client.Txn, _ *tree.EvalContext) error {
+	td.tableWriterBase.init(txn)
 	return nil
 }
 
-func (td *tableDeleter) row(
-	ctx context.Context, values tree.Datums, traceKV bool,
-) (tree.Datums, error) {
-	// Rudimentarily chunk the deletions to avoid memory blowup in queries such
-	// as `DELETE FROM mytable`.
-	const maxBatchSize = 10000
-	if td.batchSize >= maxBatchSize {
-		if err := td.txn.Run(ctx, td.b); err != nil {
-			return nil, err
-		}
-		td.b = td.txn.NewBatch()
-		td.batchSize = 0
-	}
-	td.batchSize++
-
-	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (td *tableDeleter) flushAndStartNewBatch(ctx context.Context) error {
+	return td.tableWriterBase.flushAndStartNewBatch(ctx, td.rd.Helper.TableDesc)
 }
 
 // finalize is part of the tableWriter interface.
 func (td *tableDeleter) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, _ bool,
 ) (*sqlbase.RowContainer, error) {
-	if autoCommit == autoCommitEnabled {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		return nil, td.txn.CommitInBatch(ctx, td.b)
-	}
-	return nil, td.txn.Run(ctx, td.b)
+	return nil, td.tableWriterBase.finalize(ctx, autoCommit, td.rd.Helper.TableDesc)
+}
+
+// atBatchEnd is part of the extendedTableWriter interface.
+func (td *tableDeleter) atBatchEnd(_ context.Context) error { return nil }
+
+func (td *tableDeleter) row(
+	ctx context.Context, values tree.Datums, traceKV bool,
+) (tree.Datums, error) {
+	td.batchSize++
+	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.

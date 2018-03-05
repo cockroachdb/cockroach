@@ -20,14 +20,15 @@ query TTT
 EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                ·      ·
- └── spool           ·      ·
-      │              limit  1
-      └── delete     ·      ·
-           │         from   t
-           └── scan  ·      ·
-·                    table  t@primary
-·                    spans  ALL
+limit                     ·      ·
+ └── spool                ·      ·
+      │                   limit  1
+      └── run             ·      ·
+           └── delete     ·      ·
+                │         from   t
+                └── scan  ·      ·
+·                         table  t@primary
+·                         spans  ALL
 
 
 query TTT
@@ -71,14 +72,15 @@ limit                  ·      ·
 query TTT
 EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
 ----
-limit                ·      ·
- └── spool           ·      ·
-      │              limit  1
-      └── delete     ·      ·
-           │         from   t
-           └── scan  ·      ·
-·                    table  t@primary
-·                    spans  ALL
+limit                     ·      ·
+ └── spool                ·      ·
+      │                   limit  1
+      └── run             ·      ·
+           └── delete     ·      ·
+                │         from   t
+                └── scan  ·      ·
+·                         table  t@primary
+·                         spans  ALL
 
 query TTT
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
