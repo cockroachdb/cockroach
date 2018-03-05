@@ -11,7 +11,7 @@ import moment from "moment";
 import { Link } from "react-router";
 
 import { NodeStatus$Properties } from "src/util/proto";
-import { sumNodeStats } from "src/redux/nodes";
+import {livenessNomenclature, sumNodeStats} from "src/redux/nodes";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
@@ -50,12 +50,11 @@ export class NodeView extends React.Component<NodeViewProps> {
   getUptimeText() {
     const { node, livenessStatuses, liveness } = this.props;
 
-    const thisLiveness = livenessStatuses[node.desc.node_id];
-
-    switch (thisLiveness) {
+    const thisLivenessStatus = livenessStatuses[node.desc.node_id];
+    switch (thisLivenessStatus) {
       case NodeLivenessStatus.DEAD: {
         if (!liveness) {
-          return "no information";
+          return "dead";
         }
 
         const deadTime = liveness.expiration.wall_time;
@@ -64,18 +63,10 @@ export class NodeView extends React.Component<NodeViewProps> {
       }
       case NodeLivenessStatus.LIVE: {
         const startTime = LongToMoment(node.started_at);
-        return "up for " + moment.duration(startTime.diff(moment())).humanize();
+        return `up for ${moment.duration(startTime.diff(moment())).humanize()}`;
       }
-      case NodeLivenessStatus.DECOMMISSIONED:
-        return "decommissioned";
-      case NodeLivenessStatus.DECOMMISSIONING:
-        return "decommissioning";
-      case NodeLivenessStatus.UNKNOWN:
-        return "unknown";
-      case NodeLivenessStatus.UNAVAILABLE:
-        return "unavailable";
       default:
-        return ""; // idk man
+        return livenessNomenclature(thisLivenessStatus);
     }
   }
 
