@@ -71,8 +71,8 @@ select
  ├── scan
  │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
  │    └── ordering: +1,-2
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
+ └── eq [type=bool, outer=(1)]
+      ├── variable: a.x [type=int, outer=(1)]
       └── const: 1 [type=int]
 
 # Pass through ordering to scan operator that can't support it.
@@ -87,8 +87,8 @@ select
  │    ├── ordering: -3
  │    └── scan
  │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
+ └── eq [type=bool, outer=(1)]
+      ├── variable: a.x [type=int, outer=(1)]
       └── const: 1 [type=int]
 
 # --------------------------------------------------
@@ -105,9 +105,9 @@ project
  ├── scan
  │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
  │    └── ordering: +1,-2
- └── projections
-      ├── variable: a.x [type=int]
-      └── variable: a.y [type=float]
+ └── projections [outer=(1,2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.y [type=float, outer=(2)]
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -121,11 +121,11 @@ project
  │    ├── ordering: +1,+2
  │    └── scan
  │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
- └── projections
-      ├── variable: a.y [type=float]
-      ├── variable: a.x [type=int]
-      └── plus [type=decimal]
-           ├── variable: a.z [type=decimal]
+ └── projections [outer=(1-3)]
+      ├── variable: a.y [type=float, outer=(2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── plus [type=decimal, outer=(3)]
+           ├── variable: a.z [type=decimal, outer=(3)]
            └── const: 1 [type=decimal]
 
 # Ordering cannot be passed through because it includes computed column.
@@ -139,10 +139,10 @@ sort
       ├── columns: a.x:int:1 one:int:null:5 a.y:float:2
       ├── scan
       │    └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
-      └── projections
-           ├── variable: a.x [type=int]
+      └── projections [outer=(1,2)]
+           ├── variable: a.x [type=int, outer=(1)]
            ├── const: 1 [type=int]
-           └── variable: a.y [type=float]
+           └── variable: a.y [type=float, outer=(2)]
 
 # --------------------------------------------------
 # Select + Project operators (pass through both).
@@ -161,12 +161,12 @@ project
  │    ├── scan
  │    │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
  │    │    └── ordering: +1,-2
- │    └── eq [type=bool]
- │         ├── variable: a.x [type=int]
+ │    └── eq [type=bool, outer=(1)]
+ │         ├── variable: a.x [type=int, outer=(1)]
  │         └── const: 1 [type=int]
- └── projections
-      ├── variable: a.y [type=float]
-      └── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: a.y [type=float, outer=(2)]
+      └── variable: a.x [type=int, outer=(1)]
 
 memo
 SELECT y, x FROM a WHERE x=1 ORDER BY x, y DESC
@@ -209,12 +209,12 @@ project
  │    │    ├── ordering: +2
  │    │    └── scan
  │    │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
- │    └── eq [type=bool]
- │         ├── variable: a.x [type=int]
+ │    └── eq [type=bool, outer=(1)]
+ │         ├── variable: a.x [type=int, outer=(1)]
  │         └── const: 1 [type=int]
- └── projections
-      ├── variable: a.y [type=float]
-      └── variable: a.z [type=decimal]
+ └── projections [outer=(2,3)]
+      ├── variable: a.y [type=float, outer=(2)]
+      └── variable: a.z [type=decimal, outer=(3)]
 
 memo
 SELECT y, z FROM a WHERE x=1 ORDER BY y

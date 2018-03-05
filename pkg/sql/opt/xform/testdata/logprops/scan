@@ -30,6 +30,6 @@ project
  ├── columns: x:int:null:1 z:int:2
  ├── scan
  │    └── columns: b.x:int:null:1 b.z:int:2 b.rowid:int:3
- └── projections
-      ├── variable: b.x [type=int]
-      └── variable: b.z [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: b.x [type=int, outer=(1)]
+      └── variable: b.z [type=int, outer=(2)]

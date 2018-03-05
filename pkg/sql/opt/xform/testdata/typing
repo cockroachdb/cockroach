@@ -33,8 +33,8 @@ project
  ├── columns: x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      └── variable: a.x [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
 
 # Const
 build
@@ -58,8 +58,8 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
+ └── eq [type=bool, outer=(1)]
+      ├── variable: a.x [type=int, outer=(1)]
       └── placeholder: $1 [type=int]
 
 # Tuple, Projections
@@ -70,11 +70,11 @@ project
  ├── columns: column3:tuple{int, decimal}:null:3 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── tuple [type=tuple{int, decimal}]
-      │    ├── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── tuple [type=tuple{int, decimal}, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 1.5 [type=decimal]
-      └── variable: a.y [type=int]
+      └── variable: a.y [type=int, outer=(2)]
 
 # And, Or, Not
 build
@@ -84,17 +84,17 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── and [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.x [type=int]
+ └── and [type=bool, outer=(1,2)]
+      ├── eq [type=bool, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      └── not [type=bool]
-           └── or [type=bool]
-                ├── eq [type=bool]
-                │    ├── variable: a.y [type=int]
+      └── not [type=bool, outer=(2)]
+           └── or [type=bool, outer=(2)]
+                ├── eq [type=bool, outer=(2)]
+                │    ├── variable: a.y [type=int, outer=(2)]
                 │    └── const: 2 [type=int]
-                └── eq [type=bool]
-                     ├── variable: a.y [type=int]
+                └── eq [type=bool, outer=(2)]
+                     ├── variable: a.y [type=int, outer=(2)]
                      └── const: 3.5 [type=decimal]
 
 # Eq, Ne
@@ -105,12 +105,12 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── and [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.x [type=int]
+ └── and [type=bool, outer=(1)]
+      ├── eq [type=bool, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      └── ne [type=bool]
-           ├── variable: a.x [type=int]
+      └── ne [type=bool, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
            └── const: 2 [type=int]
 
 # Le, Ge, Lt, Gt
@@ -121,20 +121,20 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── and [type=bool]
-      ├── and [type=bool]
-      │    ├── and [type=bool]
-      │    │    ├── ge [type=bool]
-      │    │    │    ├── variable: a.x [type=int]
+ └── and [type=bool, outer=(1,2)]
+      ├── and [type=bool, outer=(1,2)]
+      │    ├── and [type=bool, outer=(1)]
+      │    │    ├── ge [type=bool, outer=(1)]
+      │    │    │    ├── variable: a.x [type=int, outer=(1)]
       │    │    │    └── const: 1 [type=int]
-      │    │    └── le [type=bool]
-      │    │         ├── variable: a.x [type=int]
+      │    │    └── le [type=bool, outer=(1)]
+      │    │         ├── variable: a.x [type=int, outer=(1)]
       │    │         └── const: 10 [type=int]
-      │    └── gt [type=bool]
-      │         ├── variable: a.y [type=int]
+      │    └── gt [type=bool, outer=(2)]
+      │         ├── variable: a.y [type=int, outer=(2)]
       │         └── const: 1 [type=int]
-      └── lt [type=bool]
-           ├── variable: a.y [type=int]
+      └── lt [type=bool, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
            └── const: 10 [type=int]
 
 # In, NotIn
@@ -145,14 +145,14 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── and [type=bool]
-      ├── in [type=bool]
-      │    ├── variable: a.x [type=int]
+ └── and [type=bool, outer=(1,2)]
+      ├── in [type=bool, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 1 [type=int]
       │         └── const: 2 [type=int]
-      └── not-in [type=bool]
-           ├── variable: a.y [type=int]
+      └── not-in [type=bool, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
            └── tuple [type=tuple{int, int}]
                 ├── const: 3 [type=int]
                 └── const: 4 [type=int]
@@ -165,12 +165,12 @@ select
  ├── columns: x:string:1 z:decimal:2
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
- └── and [type=bool]
-      ├── like [type=bool]
-      │    ├── variable: b.x [type=string]
+ └── and [type=bool, outer=(1)]
+      ├── like [type=bool, outer=(1)]
+      │    ├── variable: b.x [type=string, outer=(1)]
       │    └── const: '%foo%' [type=string]
-      └── not-like [type=bool]
-           ├── variable: b.x [type=string]
+      └── not-like [type=bool, outer=(1)]
+           ├── variable: b.x [type=string, outer=(1)]
            └── const: '%bar%' [type=string]
 
 # ILike, INotLike
@@ -181,12 +181,12 @@ select
  ├── columns: x:string:1 z:decimal:2
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
- └── and [type=bool]
-      ├── i-like [type=bool]
-      │    ├── variable: b.x [type=string]
+ └── and [type=bool, outer=(1)]
+      ├── i-like [type=bool, outer=(1)]
+      │    ├── variable: b.x [type=string, outer=(1)]
       │    └── const: '%foo%' [type=string]
-      └── not-i-like [type=bool]
-           ├── variable: b.x [type=string]
+      └── not-i-like [type=bool, outer=(1)]
+           ├── variable: b.x [type=string, outer=(1)]
            └── const: '%bar%' [type=string]
 
 # RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
@@ -197,20 +197,20 @@ select
  ├── columns: x:string:1 z:decimal:2
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
- └── and [type=bool]
-      ├── and [type=bool]
-      │    ├── and [type=bool]
-      │    │    ├── reg-match [type=bool]
-      │    │    │    ├── variable: b.x [type=string]
+ └── and [type=bool, outer=(1)]
+      ├── and [type=bool, outer=(1)]
+      │    ├── and [type=bool, outer=(1)]
+      │    │    ├── reg-match [type=bool, outer=(1)]
+      │    │    │    ├── variable: b.x [type=string, outer=(1)]
       │    │    │    └── const: 'foo' [type=string]
-      │    │    └── not-reg-match [type=bool]
-      │    │         ├── variable: b.x [type=string]
+      │    │    └── not-reg-match [type=bool, outer=(1)]
+      │    │         ├── variable: b.x [type=string, outer=(1)]
       │    │         └── const: 'bar' [type=string]
-      │    └── reg-i-match [type=bool]
-      │         ├── variable: b.x [type=string]
+      │    └── reg-i-match [type=bool, outer=(1)]
+      │         ├── variable: b.x [type=string, outer=(1)]
       │         └── const: 'foo' [type=string]
-      └── not-reg-i-match [type=bool]
-           ├── variable: b.x [type=string]
+      └── not-reg-i-match [type=bool, outer=(1)]
+           ├── variable: b.x [type=string, outer=(1)]
            └── const: 'bar' [type=string]
 
 # Is, IsNot
@@ -221,12 +221,12 @@ select
  ├── columns: x:int:1 y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── and [type=bool]
-      ├── is-not [type=bool]
-      │    ├── variable: a.x [type=int]
-      │    └── variable: a.y [type=int]
-      └── is [type=bool]
-           ├── variable: a.x [type=int]
+ └── and [type=bool, outer=(1,2)]
+      ├── is-not [type=bool, outer=(1,2)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── variable: a.y [type=int, outer=(2)]
+      └── is [type=bool, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
            └── null [type=unknown]
 
 # Bitand, Bitor, Bitxor
@@ -237,16 +237,16 @@ project
  ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── bitand [type=int]
-      │    ├── variable: a.x [type=int]
-      │    └── variable: a.y [type=int]
-      ├── bitor [type=int]
-      │    ├── variable: a.x [type=int]
-      │    └── variable: a.y [type=int]
-      └── bitxor [type=int]
-           ├── variable: a.x [type=int]
-           └── variable: a.y [type=int]
+ └── projections [outer=(1,2)]
+      ├── bitand [type=int, outer=(1,2)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── variable: a.y [type=int, outer=(2)]
+      ├── bitor [type=int, outer=(1,2)]
+      │    ├── variable: a.x [type=int, outer=(1)]
+      │    └── variable: a.y [type=int, outer=(2)]
+      └── bitxor [type=int, outer=(1,2)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── variable: a.y [type=int, outer=(2)]
 
 # Plus, Minus, Mult, Div, FloorDiv
 build
@@ -256,21 +256,21 @@ project
  ├── columns: column3:decimal:null:3 column4:date:null:4 column5:decimal:null:5 column6:decimal:null:6 column7:decimal:null:7
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── plus [type=decimal]
-      │    ├── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── plus [type=decimal, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 1.5 [type=decimal]
       ├── minus [type=date]
       │    ├── const: '2000-01-01' [type=date]
       │    └── const: 15 [type=int]
-      ├── mult [type=decimal]
+      ├── mult [type=decimal, outer=(1)]
       │    ├── const: 10.10 [type=decimal]
-      │    └── variable: a.x [type=int]
-      ├── div [type=decimal]
+      │    └── variable: a.x [type=int, outer=(1)]
+      ├── div [type=decimal, outer=(2)]
       │    ├── const: 1 [type=int]
-      │    └── variable: a.y [type=int]
-      └── floor-div [type=decimal]
-           ├── variable: a.x [type=int]
+      │    └── variable: a.y [type=int, outer=(2)]
+      └── floor-div [type=decimal, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
            └── const: 1.5 [type=decimal]
 
 # Mod, Pow, LShift, RShift
@@ -281,18 +281,18 @@ project
  ├── columns: column3:decimal:null:3 column4:decimal:null:4 column5:int:null:5 column6:int:null:6
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── mod [type=decimal]
+ └── projections [outer=(1,2)]
+      ├── mod [type=decimal, outer=(1)]
       │    ├── const: 100.1 [type=decimal]
-      │    └── variable: a.x [type=int]
-      ├── pow [type=decimal]
-      │    ├── variable: a.x [type=int]
+      │    └── variable: a.x [type=int, outer=(1)]
+      ├── pow [type=decimal, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 2.5 [type=decimal]
-      ├── l-shift [type=int]
-      │    ├── variable: a.x [type=int]
+      ├── l-shift [type=int, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 3 [type=int]
-      └── r-shift [type=int]
-           ├── variable: a.y [type=int]
+      └── r-shift [type=int, outer=(2)]
+           ├── variable: a.y [type=int, outer=(2)]
            └── const: 2 [type=int]
 
 # Concat
@@ -303,9 +303,9 @@ project
  ├── columns: column3:string:null:3
  ├── scan
  │    └── columns: b.x:string:1 b.z:decimal:2
- └── projections
-      └── concat [type=string]
-           ├── variable: b.x [type=string]
+ └── projections [outer=(1)]
+      └── concat [type=string, outer=(1)]
+           ├── variable: b.x [type=string, outer=(1)]
            └── const: 'more' [type=string]
 
 # UnaryPlus, UnaryMinus, UnaryComplement
@@ -316,13 +316,13 @@ project
  ├── columns: column3:int:null:3 column4:int:null:4 column5:int:null:5
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── unary-plus [type=int]
-      │    └── variable: a.x [type=int]
-      ├── unary-minus [type=int]
-      │    └── variable: a.y [type=int]
-      └── unary-complement [type=int]
-           └── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── unary-plus [type=int, outer=(1)]
+      │    └── variable: a.x [type=int, outer=(1)]
+      ├── unary-minus [type=int, outer=(2)]
+      │    └── variable: a.y [type=int, outer=(2)]
+      └── unary-complement [type=int, outer=(1)]
+           └── variable: a.x [type=int, outer=(1)]
 
 # Array Concat
 build
@@ -332,16 +332,16 @@ project
  ├── columns: column3:int[]:null:3 column4:int[]:null:4 column5:int[]:null:5
  ├── scan
  │    └── columns: unusual.x:int:1 unusual.arr:int[]:null:2
- └── projections
-      ├── concat [type=int[]]
-      │    ├── variable: unusual.arr [type=int[]]
-      │    └── variable: unusual.arr [type=int[]]
-      ├── concat [type=int[]]
-      │    ├── variable: unusual.arr [type=int[]]
+ └── projections [outer=(2)]
+      ├── concat [type=int[], outer=(2)]
+      │    ├── variable: unusual.arr [type=int[], outer=(2)]
+      │    └── variable: unusual.arr [type=int[], outer=(2)]
+      ├── concat [type=int[], outer=(2)]
+      │    ├── variable: unusual.arr [type=int[], outer=(2)]
       │    └── null [type=unknown]
-      └── concat [type=int[]]
+      └── concat [type=int[], outer=(2)]
            ├── null [type=unknown]
-           └── variable: unusual.arr [type=int[]]
+           └── variable: unusual.arr [type=int[], outer=(2)]
 
 # Array Element Concat
 build
@@ -351,19 +351,19 @@ project
  ├── columns: column3:int[]:null:3 column4:int[]:null:4 column5:int[]:null:5 column6:int[]:null:6
  ├── scan
  │    └── columns: unusual.x:int:1 unusual.arr:int[]:null:2
- └── projections
-      ├── concat [type=int[]]
-      │    ├── variable: unusual.x [type=int]
-      │    └── variable: unusual.arr [type=int[]]
-      ├── concat [type=int[]]
-      │    ├── variable: unusual.arr [type=int[]]
-      │    └── variable: unusual.x [type=int]
-      ├── concat [type=int[]]
-      │    ├── variable: unusual.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── concat [type=int[], outer=(1,2)]
+      │    ├── variable: unusual.x [type=int, outer=(1)]
+      │    └── variable: unusual.arr [type=int[], outer=(2)]
+      ├── concat [type=int[], outer=(1,2)]
+      │    ├── variable: unusual.arr [type=int[], outer=(2)]
+      │    └── variable: unusual.x [type=int, outer=(1)]
+      ├── concat [type=int[], outer=(1)]
+      │    ├── variable: unusual.x [type=int, outer=(1)]
       │    └── null [type=unknown]
-      └── concat [type=int[]]
+      └── concat [type=int[], outer=(1)]
            ├── null [type=unknown]
-           └── variable: unusual.x [type=int]
+           └── variable: unusual.x [type=int, outer=(1)]
 
 # Function with fixed return type.
 build
