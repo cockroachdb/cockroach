@@ -190,3 +190,29 @@ SELECT x FROM t.b WHERE rowid > 0
 1
 2
 3
+
+# "*" must expand to zero columns if there are zero columns to select.
+exec-raw
+CREATE TABLE t.nocols(x INT); ALTER TABLE t.nocols DROP COLUMN x
+----
+
+catalog
+t.nocols
+----
+TABLE nocols
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-explain
+SELECT 1, * FROM t.nocols
+----
+render     0  render  ·         ·               (column2)        ·
+ │         0  ·       render 0  1               ·                ·
+ └── scan  1  scan    ·         ·               (rowid[hidden])  ·
+·          1  ·       table     nocols@primary  ·                ·
+·          1  ·       spans     ALL             ·                ·
+
+exec
+SELECT 1, * FROM t.nocols
+----
