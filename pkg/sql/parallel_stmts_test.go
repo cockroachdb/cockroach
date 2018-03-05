@@ -394,6 +394,9 @@ func TestSpanBasedDependencyAnalyzer(t *testing.T) {
 		{`DELETE FROM bar`, `SELECT * FROM bar`, false},
 		{`DELETE FROM bar`, `SELECT * FROM bar@idx`, false},
 
+		{`DELETE FROM bar`, `WITH a AS (DELETE FROM bar RETURNING v) SELECT EXISTS(SELECT * FROM a)`, false},
+		{`DELETE FROM bar`, `SELECT EXISTS(SELECT * FROM [DELETE FROM bar RETURNING v])`, false},
+
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar VALUES (1)`, true},
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT k FROM foo`, false},
 		{`INSERT INTO foo VALUES (1)`, `INSERT INTO bar SELECT f FROM fks`, true},
