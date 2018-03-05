@@ -18,9 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -243,21 +240,6 @@ func (s *subquery) subqueryTupleOrdering() (bool, encoding.Direction) {
 		return true, encoding.Descending
 	}
 	return false, 0
-}
-
-func collectSubquerySpans(params runParams, plan planNode) (roachpb.Spans, error) {
-	var ret roachpb.Spans
-	for i := range params.p.curPlan.subqueryPlans {
-		reads, writes, err := collectSpans(params, params.p.curPlan.subqueryPlans[i].plan)
-		if err != nil {
-			return nil, err
-		}
-		if len(writes) > 0 {
-			return nil, errors.Errorf("unexpected span writes in subquery: %v", writes)
-		}
-		ret = append(ret, reads...)
-	}
-	return ret, nil
 }
 
 // subqueryVisitor replaces tree.Subquery syntax nodes by a
