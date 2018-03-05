@@ -262,8 +262,11 @@ func newInternalPlanner(
 
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = &s.tables
+	acc := s.mon.MakeBoundAccount()
+	p.extendedEvalCtx.ActiveMemAcc = &acc
 
 	return p, func() {
+		acc.Close(ctx)
 		s.TxnState.mon.Stop(ctx)
 		s.sessionMon.Stop(ctx)
 		s.mon.Stop(ctx)
