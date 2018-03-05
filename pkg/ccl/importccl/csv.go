@@ -1165,6 +1165,13 @@ func doDistributedCSVTransform(
 	for _, node := range resp.Nodes {
 		nodes = append(nodes, node.Desc)
 	}
+	// Shuffle node order so that multiple IMPORTs done in parallel will not
+	// identically schedule CSV reading. For example, if there are 3 nodes and 4
+	// files, the first node will get 2 files while the other nodes will each get 1
+	// file. Shuffling will make that first node random instead of always the same.
+	rand.Shuffle(len(nodes), func(i, j int) {
+		nodes[i], nodes[j] = nodes[j], nodes[i]
+	})
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
