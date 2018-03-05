@@ -75,6 +75,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   mouseMove = (e: any) => {
+    // TODO(couchand): make this defensive (seems to cause #23011)
     const datapoints = this.props.data.results[0].datapoints;
     const timeScale = this.chart.xAxis.scale();
 
@@ -178,20 +179,12 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data, hoverOn} = this.props;
-
-    let hoverProps: Partial<React.SVGProps<SVGSVGElement>> = {};
-    if (hoverOn) {
-      hoverProps = {
-        onMouseMove: this.mouseMove,
-        onMouseLeave: this.mouseLeave,
-      };
-    }
+    const { title, subtitle, tooltip, data } = this.props;
 
     return (
       <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
         <div className="linegraph">
-          <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} {...hoverProps} />
+          <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} />
         </div>
       </Visualization>
     );
