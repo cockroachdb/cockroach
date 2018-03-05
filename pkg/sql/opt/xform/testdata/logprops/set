@@ -1,0 +1,83 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+TABLE b
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM a UNION SELECT * FROM b
+----
+union
+ ├── columns: x:int:null:6 y:int:null:7
+ ├── left columns: a.x:int:null:1 a.y:int:null:2
+ ├── right columns: b.x:int:null:3 b.z:int:null:4
+ ├── scan
+ │    └── columns: a.x:int:1 a.y:int:null:2
+ └── project
+      ├── columns: b.x:int:null:3 b.z:int:4
+      ├── scan
+      │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+      └── projections [outer=(3,4)]
+           ├── variable: b.x [type=int, outer=(3)]
+           └── variable: b.z [type=int, outer=(4)]
+
+build
+SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM b
+----
+intersect
+ ├── columns: x:int:1 y:int:null:2 x:int:1
+ ├── left columns: a.x:int:1 a.y:int:null:2 a.x:int:1
+ ├── right columns: b.z:int:null:4 b.x:int:null:3 b.rowid:int:null:5
+ ├── project
+ │    ├── columns: a.x:int:1 a.y:int:null:2 a.x:int:1
+ │    ├── scan
+ │    │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         ├── variable: a.y [type=int, outer=(2)]
+ │         └── variable: a.x [type=int, outer=(1)]
+ └── project
+      ├── columns: b.z:int:4 b.x:int:null:3 b.rowid:int:5
+      ├── scan
+      │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+      └── projections [outer=(3-5)]
+           ├── variable: b.z [type=int, outer=(4)]
+           ├── variable: b.x [type=int, outer=(3)]
+           └── variable: b.rowid [type=int, outer=(5)]
+
+build
+SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM b
+----
+except
+ ├── columns: x:int:1 x:int:1 y:int:null:2
+ ├── left columns: a.x:int:1 a.x:int:1 a.y:int:null:2
+ ├── right columns: b.x:int:null:3 b.z:int:null:4 b.z:int:null:4
+ ├── project
+ │    ├── columns: a.x:int:1 a.x:int:1 a.y:int:null:2
+ │    ├── scan
+ │    │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: a.y [type=int, outer=(2)]
+ └── project
+      ├── columns: b.x:int:null:3 b.z:int:4 b.z:int:4
+      ├── scan
+      │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+      └── projections [outer=(3,4)]
+           ├── variable: b.x [type=int, outer=(3)]
+           ├── variable: b.z [type=int, outer=(4)]
+           └── variable: b.z [type=int, outer=(4)]

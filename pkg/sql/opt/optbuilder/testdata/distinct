@@ -33,9 +33,9 @@ project
  ├── columns: y:int:null:2 z:float:null:3
  ├── scan
  │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- └── projections
-      ├── variable: xyz.y [type=int]
-      └── variable: xyz.z [type=float]
+ └── projections [outer=(2,3)]
+      ├── variable: xyz.y [type=int, outer=(2)]
+      └── variable: xyz.z [type=float, outer=(3)]
 
 build
 SELECT DISTINCT y, z FROM t.xyz
@@ -47,9 +47,9 @@ group-by
  │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
  │    ├── scan
  │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    └── projections
- │         ├── variable: xyz.y [type=int]
- │         └── variable: xyz.z [type=float]
+ │    └── projections [outer=(2,3)]
+ │         ├── variable: xyz.y [type=int, outer=(2)]
+ │         └── variable: xyz.z [type=float, outer=(3)]
  └── aggregations
 
 build
@@ -64,12 +64,12 @@ project
  │    │    ├── columns: xyz.y:int:null:2 xyz.z:float:null:3
  │    │    ├── scan
  │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    └── projections
- │    │         ├── variable: xyz.y [type=int]
- │    │         └── variable: xyz.z [type=float]
+ │    │    └── projections [outer=(2,3)]
+ │    │         ├── variable: xyz.y [type=int, outer=(2)]
+ │    │         └── variable: xyz.z [type=float, outer=(3)]
  │    └── aggregations
- └── projections
-      └── variable: xyz.y [type=int]
+ └── projections [outer=(2)]
+      └── variable: xyz.y [type=int, outer=(2)]
 
 build
 SELECT DISTINCT (y,z) FROM t.xyz
@@ -81,10 +81,10 @@ group-by
  │    ├── columns: column4:tuple{int, float}:null:4
  │    ├── scan
  │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    └── projections
- │         └── tuple [type=tuple{int, float}]
- │              ├── variable: xyz.y [type=int]
- │              └── variable: xyz.z [type=float]
+ │    └── projections [outer=(2,3)]
+ │         └── tuple [type=tuple{int, float}, outer=(2,3)]
+ │              ├── variable: xyz.y [type=int, outer=(2)]
+ │              └── variable: xyz.z [type=float, outer=(3)]
  └── aggregations
 
 build
@@ -100,8 +100,8 @@ group-by
  │    │    │    ├── columns: xyz.y:int:null:2
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    │    └── projections
- │    │    │         └── variable: xyz.y [type=int]
+ │    │    │    └── projections [outer=(2)]
+ │    │    │         └── variable: xyz.y [type=int, outer=(2)]
  │    │    └── aggregations
  │    └── projections
  └── aggregations
@@ -119,11 +119,11 @@ group-by
  │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  │    │    ├── scan
  │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    └── gt [type=bool]
- │    │         ├── variable: xyz.x [type=int]
+ │    │    └── gt [type=bool, outer=(1)]
+ │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── const: 0 [type=int]
- │    └── projections
- │         └── variable: xyz.x [type=int]
+ │    └── projections [outer=(1)]
+ │         └── variable: xyz.x [type=int, outer=(1)]
  └── aggregations
 
 build
@@ -138,11 +138,11 @@ group-by
  │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  │    │    ├── scan
  │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    └── gt [type=bool]
- │    │         ├── variable: xyz.x [type=int]
+ │    │    └── gt [type=bool, outer=(1)]
+ │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── const: 0 [type=int]
- │    └── projections
- │         └── variable: xyz.z [type=float]
+ │    └── projections [outer=(3)]
+ │         └── variable: xyz.z [type=float, outer=(3)]
  └── aggregations
 
 build
@@ -160,14 +160,14 @@ group-by
  │    │    │    ├── columns: xyz.x:int:1 xyz.x:int:1
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    │    └── projections
- │    │    │         ├── variable: xyz.x [type=int]
- │    │    │         └── variable: xyz.x [type=int]
- │    │    └── aggregations
- │    │         └── function: max [type=int]
- │    │              └── variable: xyz.x [type=int]
- │    └── projections
- │         └── variable: column4 [type=int]
+ │    │    │    └── projections [outer=(1)]
+ │    │    │         ├── variable: xyz.x [type=int, outer=(1)]
+ │    │    │         └── variable: xyz.x [type=int, outer=(1)]
+ │    │    └── aggregations [outer=(1)]
+ │    │         └── function: max [type=int, outer=(1)]
+ │    │              └── variable: xyz.x [type=int, outer=(1)]
+ │    └── projections [outer=(4)]
+ │         └── variable: column4 [type=int, outer=(4)]
  └── aggregations
 
 build
@@ -180,10 +180,10 @@ group-by
  │    ├── columns: column4:int:null:4
  │    ├── scan
  │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    └── projections
- │         └── plus [type=int]
- │              ├── variable: xyz.x [type=int]
- │              └── variable: xyz.y [type=int]
+ │    └── projections [outer=(1,2)]
+ │         └── plus [type=int, outer=(1,2)]
+ │              ├── variable: xyz.x [type=int, outer=(1)]
+ │              └── variable: xyz.y [type=int, outer=(2)]
  └── aggregations
 
 build
@@ -229,16 +229,16 @@ group-by
  │    │    │    ├── grouping columns: xyz.x:int:1 xyz.y:int:null:2
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    │    └── aggregations
- │    │    │         └── function: max [type=float]
- │    │    │              └── variable: xyz.x [type=int]
- │    │    └── gt [type=bool]
- │    │         ├── variable: xyz.y [type=int]
+ │    │    │    └── aggregations [outer=(1)]
+ │    │    │         └── function: max [type=float, outer=(1)]
+ │    │    │              └── variable: xyz.x [type=int, outer=(1)]
+ │    │    └── gt [type=bool, outer=(2)]
+ │    │         ├── variable: xyz.y [type=int, outer=(2)]
  │    │         └── const: 4 [type=int]
- │    └── projections
- │         ├── variable: column4 [type=float]
- │         ├── plus [type=int]
- │         │    ├── variable: xyz.x [type=int]
- │         │    └── variable: xyz.y [type=int]
+ │    └── projections [outer=(1,2,4)]
+ │         ├── variable: column4 [type=float, outer=(4)]
+ │         ├── plus [type=int, outer=(1,2)]
+ │         │    ├── variable: xyz.x [type=int, outer=(1)]
+ │         │    └── variable: xyz.y [type=int, outer=(2)]
  │         └── const: 3 [type=int]
  └── aggregations

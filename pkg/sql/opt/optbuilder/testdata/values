@@ -137,10 +137,10 @@ project
  │    └── tuple [type=tuple{unknown, unknown}]
  │         ├── null [type=unknown]
  │         └── null [type=unknown]
- └── projections
-      └── coalesce [type=int]
-           ├── variable: column1 [type=int]
-           └── variable: column2 [type=int]
+ └── projections [outer=(1,2)]
+      └── coalesce [type=int, outer=(1,2)]
+           ├── variable: column1 [type=int, outer=(1)]
+           └── variable: column2 [type=int, outer=(2)]
 
 
 # TODO(rytaft): uncomment these tests once subqueries are supported

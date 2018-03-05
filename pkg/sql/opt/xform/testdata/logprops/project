@@ -14,10 +14,10 @@ project
  ├── columns: y:int:null:2 column3:int:null:3 column4:int:null:4 x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── variable: a.y [type=int]
-      ├── plus [type=int]
-      │    ├── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: a.y [type=int, outer=(2)]
+      ├── plus [type=int, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       ├── const: 1 [type=int]
-      └── variable: a.x [type=int]
+      └── variable: a.x [type=int, outer=(1)]
