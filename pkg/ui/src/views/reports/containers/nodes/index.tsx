@@ -107,7 +107,7 @@ function titleTimestampValue(value: string) {
       return null;
     }
     const raw = FixLong(_.get(status, value) as Long);
-    return `${LongToMoment(raw).format(dateFormat)}\n${raw.toString}`;
+    return `${LongToMoment(raw).format(dateFormat)}\n${raw.toString()}`;
   };
 }
 
