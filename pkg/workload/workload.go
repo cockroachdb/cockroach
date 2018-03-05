@@ -146,6 +146,32 @@ type QueryLoad struct {
 	ResultHist string
 }
 
+type filteringGenerator struct {
+	gen    Generator
+	filter map[string]struct{}
+}
+
+func NewFilteringGenerator(gen Generator, filter map[string]struct{}) Generator {
+	return filteringGenerator{
+		gen:    gen,
+		filter: filter,
+	}
+}
+
+func (f filteringGenerator) Meta() Meta {
+	return f.gen.Meta()
+}
+
+func (f filteringGenerator) Tables() []Table {
+	ret := make([]Table, 0)
+	for _, t := range f.gen.Tables() {
+		if _, ok := f.filter[t.Name]; ok {
+			ret = append(ret, t)
+		}
+	}
+	return ret
+}
+
 var registered = make(map[string]Meta)
 
 // Register is a hook for init-time registration of Generator implementations.
