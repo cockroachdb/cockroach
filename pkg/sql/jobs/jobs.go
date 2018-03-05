@@ -669,5 +669,10 @@ func (d ImportDetails_Table) Completed() float32 {
 	}
 	read := sum(d.ReadProgress) * readStageContribution
 	write := sum(d.WriteProgress) * writeStageContribution
-	return sampling + read + write
+	completed := sampling + read + write
+	// Float addition can round such that the sum is > 1.
+	if completed > 1 {
+		completed = 1
+	}
+	return completed
 }
