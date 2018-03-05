@@ -266,6 +266,8 @@ func TestSimplifyExpr(t *testing.T) {
 
 		{`c IS NULL`, `c IS NULL`, true},
 		{`c IS NOT NULL`, `c IS NOT NULL`, true},
+		{`c ISNULL`, `c IS NULL`, true},
+		{`c NOTNULL`, `c IS NOT NULL`, true},
 		{`c IS UNKNOWN`, `c IS NULL`, true},
 		{`c IS NOT UNKNOWN`, `c IS NOT NULL`, true},
 		{`a IS DISTINCT FROM NULL`, `a IS NOT NULL`, true},

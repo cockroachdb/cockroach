@@ -483,7 +483,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str>   INET_CONTAINS_OR_EQUALS INTERLEAVE INDEX INDEXES INITIALLY
 %token <str>   INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
-%token <str>   INTERSECT INTERVAL INTO INVERTED IS ISOLATION
+%token <str>   INTERSECT INTERVAL INTO INVERTED IS ISNULL ISOLATION
 
 %token <str>   JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
@@ -496,7 +496,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   MATCH MINVALUE MAXVALUE MINUTE MONTH
 
 %token <str>   NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
-%token <str>   NOT NOTHING NULL NULLIF
+%token <str>   NOT NOTHING NOTNULL NULL NULLIF
 %token <str>   NULLS NUMERIC
 
 %token <str>   OF OFF OFFSET OID ON ONLY OPTION OPTIONS OR
@@ -936,7 +936,7 @@ func newNameFromStr(s string) *tree.Name {
 %left      OR
 %left      AND
 %right     NOT
-%nonassoc  IS                  // IS sets precedence for IS NULL, etc
+%nonassoc  IS ISNULL NOTNULL   // IS sets precedence for IS NULL, etc
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS CONTAINS CONTAINED_BY '?' JSON_SOME_EXISTS JSON_ALL_EXISTS
 %nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
@@ -6014,7 +6014,15 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.IsNotDistinctFrom, Left: $1.expr(), Right: tree.DNull}
   }
+| a_expr ISNULL %prec IS
+  {
+    $$.val = &tree.ComparisonExpr{Operator: tree.IsNotDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+  }
 | a_expr IS NOT NULL %prec IS
+  {
+    $$.val = &tree.ComparisonExpr{Operator: tree.IsDistinctFrom, Left: $1.expr(), Right: tree.DNull}
+  }
+| a_expr NOTNULL %prec IS
   {
     $$.val = &tree.ComparisonExpr{Operator: tree.IsDistinctFrom, Left: $1.expr(), Right: tree.DNull}
   }
@@ -7676,12 +7684,14 @@ type_func_name_keyword:
 | INNER
 | ILIKE
 | IS
+| ISNULL
 | JOIN
 | LEFT
 | LIKE
 | MAXVALUE
 | MINVALUE
 | NATURAL
+| NOTNULL
 | OUTER
 | OVERLAPS
 | RIGHT
