@@ -78,7 +78,7 @@ func (g *factoryGen) genConstructFuncs() {
 		g.w.unnest("}\n\n")
 
 		g.w.nest("if !_f.allowOptimizations() {\n")
-		g.w.writeIndent("return _f.mem.memoizeNormExpr((*memoExpr)(&%s))\n", varName)
+		g.w.writeIndent("return _f.mem.memoizeNormExpr(memoExpr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
 		rules := g.compiled.LookupMatchingRules(string(define.Name))
@@ -90,7 +90,7 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.newline()
 		}
 
-		g.w.writeIndent("return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&%s)))\n", varName)
+		g.w.writeIndent("return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(%s)))\n", varName)
 		g.w.unnest("}\n\n")
 	}
 }

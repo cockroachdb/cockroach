@@ -18,10 +18,10 @@ func (_f *factory) ConstructSubquery(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_subqueryExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_subqueryExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_subqueryExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_subqueryExpr)))
 }
 
 // ConstructVariable constructs an expression for the Variable operator.
@@ -37,10 +37,10 @@ func (_f *factory) ConstructVariable(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_variableExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_variableExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_variableExpr)))
 }
 
 // ConstructConst constructs an expression for the Const operator.
@@ -56,10 +56,10 @@ func (_f *factory) ConstructConst(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_constExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_constExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_constExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_constExpr)))
 }
 
 // ConstructNull constructs an expression for the Null operator.
@@ -89,10 +89,10 @@ func (_f *factory) ConstructNull(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_nullExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_nullExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_nullExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_nullExpr)))
 }
 
 // ConstructTrue constructs an expression for the True operator.
@@ -107,10 +107,10 @@ func (_f *factory) ConstructTrue() opt.GroupID {
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_trueExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_trueExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_trueExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_trueExpr)))
 }
 
 // ConstructFalse constructs an expression for the False operator.
@@ -125,10 +125,10 @@ func (_f *factory) ConstructFalse() opt.GroupID {
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_falseExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_falseExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_falseExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_falseExpr)))
 }
 
 // ConstructPlaceholder constructs an expression for the Placeholder operator.
@@ -142,10 +142,10 @@ func (_f *factory) ConstructPlaceholder(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_placeholderExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_placeholderExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_placeholderExpr)))
 }
 
 // ConstructTuple constructs an expression for the Tuple operator.
@@ -159,10 +159,10 @@ func (_f *factory) ConstructTuple(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_tupleExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_tupleExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_tupleExpr)))
 }
 
 // ConstructProjections constructs an expression for the Projections operator.
@@ -181,10 +181,10 @@ func (_f *factory) ConstructProjections(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_projectionsExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectionsExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_projectionsExpr)))
 }
 
 // ConstructAggregations constructs an expression for the Aggregations operator.
@@ -203,10 +203,10 @@ func (_f *factory) ConstructAggregations(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_aggregationsExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_aggregationsExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_aggregationsExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_aggregationsExpr)))
 }
 
 // ConstructExists constructs an expression for the Exists operator.
@@ -220,10 +220,10 @@ func (_f *factory) ConstructExists(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_existsExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_existsExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_existsExpr)))
 }
 
 // ConstructAnd constructs an expression for the And operator.
@@ -240,7 +240,7 @@ func (_f *factory) ConstructAnd(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_andExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_andExpr))
 	}
 
 	// [FlattenAnd]
@@ -285,7 +285,7 @@ func (_f *factory) ConstructAnd(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_andExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_andExpr)))
 }
 
 // ConstructOr constructs an expression for the Or operator.
@@ -302,7 +302,7 @@ func (_f *factory) ConstructOr(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_orExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_orExpr))
 	}
 
 	// [FlattenOr]
@@ -359,7 +359,7 @@ func (_f *factory) ConstructOr(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_orExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_orExpr)))
 }
 
 // ConstructNot constructs an expression for the Not operator.
@@ -375,7 +375,7 @@ func (_f *factory) ConstructNot(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notExpr))
 	}
 
 	// [NegateComparison]
@@ -407,7 +407,7 @@ func (_f *factory) ConstructNot(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notExpr)))
 }
 
 // ConstructEq constructs an expression for the Eq operator.
@@ -422,7 +422,7 @@ func (_f *factory) ConstructEq(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_eqExpr))
 	}
 
 	// [NormalizeVar]
@@ -477,7 +477,7 @@ func (_f *factory) ConstructEq(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_eqExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_eqExpr)))
 }
 
 // ConstructLt constructs an expression for the Lt operator.
@@ -492,7 +492,7 @@ func (_f *factory) ConstructLt(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_ltExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -517,7 +517,7 @@ func (_f *factory) ConstructLt(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_ltExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_ltExpr)))
 }
 
 // ConstructGt constructs an expression for the Gt operator.
@@ -532,7 +532,7 @@ func (_f *factory) ConstructGt(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_gtExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -557,7 +557,7 @@ func (_f *factory) ConstructGt(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_gtExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_gtExpr)))
 }
 
 // ConstructLe constructs an expression for the Le operator.
@@ -572,7 +572,7 @@ func (_f *factory) ConstructLe(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_leExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_leExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -597,7 +597,7 @@ func (_f *factory) ConstructLe(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leExpr)))
 }
 
 // ConstructGe constructs an expression for the Ge operator.
@@ -612,7 +612,7 @@ func (_f *factory) ConstructGe(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_geExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_geExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -637,7 +637,7 @@ func (_f *factory) ConstructGe(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_geExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_geExpr)))
 }
 
 // ConstructNe constructs an expression for the Ne operator.
@@ -652,7 +652,7 @@ func (_f *factory) ConstructNe(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_neExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_neExpr))
 	}
 
 	// [NormalizeVar]
@@ -691,7 +691,7 @@ func (_f *factory) ConstructNe(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_neExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_neExpr)))
 }
 
 // ConstructIn constructs an expression for the In operator.
@@ -706,10 +706,10 @@ func (_f *factory) ConstructIn(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_inExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_inExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_inExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_inExpr)))
 }
 
 // ConstructNotIn constructs an expression for the NotIn operator.
@@ -724,10 +724,10 @@ func (_f *factory) ConstructNotIn(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notInExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notInExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notInExpr)))
 }
 
 // ConstructLike constructs an expression for the Like operator.
@@ -742,7 +742,7 @@ func (_f *factory) ConstructLike(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_likeExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -767,7 +767,7 @@ func (_f *factory) ConstructLike(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_likeExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_likeExpr)))
 }
 
 // ConstructNotLike constructs an expression for the NotLike operator.
@@ -782,7 +782,7 @@ func (_f *factory) ConstructNotLike(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notLikeExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -807,7 +807,7 @@ func (_f *factory) ConstructNotLike(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notLikeExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notLikeExpr)))
 }
 
 // ConstructILike constructs an expression for the ILike operator.
@@ -822,7 +822,7 @@ func (_f *factory) ConstructILike(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_iLikeExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -847,7 +847,7 @@ func (_f *factory) ConstructILike(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_iLikeExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_iLikeExpr)))
 }
 
 // ConstructNotILike constructs an expression for the NotILike operator.
@@ -862,7 +862,7 @@ func (_f *factory) ConstructNotILike(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notILikeExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -887,7 +887,7 @@ func (_f *factory) ConstructNotILike(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notILikeExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notILikeExpr)))
 }
 
 // ConstructSimilarTo constructs an expression for the SimilarTo operator.
@@ -902,7 +902,7 @@ func (_f *factory) ConstructSimilarTo(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_similarToExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -927,7 +927,7 @@ func (_f *factory) ConstructSimilarTo(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_similarToExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_similarToExpr)))
 }
 
 // ConstructNotSimilarTo constructs an expression for the NotSimilarTo operator.
@@ -942,7 +942,7 @@ func (_f *factory) ConstructNotSimilarTo(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notSimilarToExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -967,7 +967,7 @@ func (_f *factory) ConstructNotSimilarTo(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notSimilarToExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notSimilarToExpr)))
 }
 
 // ConstructRegMatch constructs an expression for the RegMatch operator.
@@ -982,7 +982,7 @@ func (_f *factory) ConstructRegMatch(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_regMatchExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -1007,7 +1007,7 @@ func (_f *factory) ConstructRegMatch(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regMatchExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_regMatchExpr)))
 }
 
 // ConstructNotRegMatch constructs an expression for the NotRegMatch operator.
@@ -1022,7 +1022,7 @@ func (_f *factory) ConstructNotRegMatch(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notRegMatchExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -1047,7 +1047,7 @@ func (_f *factory) ConstructNotRegMatch(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegMatchExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notRegMatchExpr)))
 }
 
 // ConstructRegIMatch constructs an expression for the RegIMatch operator.
@@ -1062,7 +1062,7 @@ func (_f *factory) ConstructRegIMatch(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_regIMatchExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -1087,7 +1087,7 @@ func (_f *factory) ConstructRegIMatch(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_regIMatchExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_regIMatchExpr)))
 }
 
 // ConstructNotRegIMatch constructs an expression for the NotRegIMatch operator.
@@ -1102,7 +1102,7 @@ func (_f *factory) ConstructNotRegIMatch(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_notRegIMatchExpr))
 	}
 
 	// [FoldNullComparisonLeft]
@@ -1127,7 +1127,7 @@ func (_f *factory) ConstructNotRegIMatch(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_notRegIMatchExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notRegIMatchExpr)))
 }
 
 // ConstructIs constructs an expression for the Is operator.
@@ -1142,10 +1142,10 @@ func (_f *factory) ConstructIs(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_isExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_isExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_isExpr)))
 }
 
 // ConstructIsNot constructs an expression for the IsNot operator.
@@ -1160,10 +1160,10 @@ func (_f *factory) ConstructIsNot(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_isNotExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_isNotExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_isNotExpr)))
 }
 
 // ConstructContains constructs an expression for the Contains operator.
@@ -1178,10 +1178,10 @@ func (_f *factory) ConstructContains(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_containsExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_containsExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_containsExpr)))
 }
 
 // ConstructBitand constructs an expression for the Bitand operator.
@@ -1196,7 +1196,7 @@ func (_f *factory) ConstructBitand(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_bitandExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1225,7 +1225,7 @@ func (_f *factory) ConstructBitand(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitandExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_bitandExpr)))
 }
 
 // ConstructBitor constructs an expression for the Bitor operator.
@@ -1240,7 +1240,7 @@ func (_f *factory) ConstructBitor(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_bitorExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1269,7 +1269,7 @@ func (_f *factory) ConstructBitor(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitorExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_bitorExpr)))
 }
 
 // ConstructBitxor constructs an expression for the Bitxor operator.
@@ -1284,7 +1284,7 @@ func (_f *factory) ConstructBitxor(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_bitxorExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1313,7 +1313,7 @@ func (_f *factory) ConstructBitxor(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_bitxorExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_bitxorExpr)))
 }
 
 // ConstructPlus constructs an expression for the Plus operator.
@@ -1328,7 +1328,7 @@ func (_f *factory) ConstructPlus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_plusExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1383,7 +1383,7 @@ func (_f *factory) ConstructPlus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_plusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_plusExpr)))
 }
 
 // ConstructMinus constructs an expression for the Minus operator.
@@ -1398,7 +1398,7 @@ func (_f *factory) ConstructMinus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_minusExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1440,7 +1440,7 @@ func (_f *factory) ConstructMinus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_minusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_minusExpr)))
 }
 
 // ConstructMult constructs an expression for the Mult operator.
@@ -1455,7 +1455,7 @@ func (_f *factory) ConstructMult(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_multExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_multExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1510,7 +1510,7 @@ func (_f *factory) ConstructMult(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_multExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_multExpr)))
 }
 
 // ConstructDiv constructs an expression for the Div operator.
@@ -1525,7 +1525,7 @@ func (_f *factory) ConstructDiv(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_divExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_divExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1567,7 +1567,7 @@ func (_f *factory) ConstructDiv(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_divExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_divExpr)))
 }
 
 // ConstructFloorDiv constructs an expression for the FloorDiv operator.
@@ -1582,7 +1582,7 @@ func (_f *factory) ConstructFloorDiv(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_floorDivExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1624,7 +1624,7 @@ func (_f *factory) ConstructFloorDiv(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_floorDivExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_floorDivExpr)))
 }
 
 // ConstructMod constructs an expression for the Mod operator.
@@ -1639,7 +1639,7 @@ func (_f *factory) ConstructMod(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_modExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_modExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1668,7 +1668,7 @@ func (_f *factory) ConstructMod(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_modExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_modExpr)))
 }
 
 // ConstructPow constructs an expression for the Pow operator.
@@ -1683,7 +1683,7 @@ func (_f *factory) ConstructPow(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_powExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_powExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1712,7 +1712,7 @@ func (_f *factory) ConstructPow(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_powExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_powExpr)))
 }
 
 // ConstructConcat constructs an expression for the Concat operator.
@@ -1727,7 +1727,7 @@ func (_f *factory) ConstructConcat(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_concatExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1756,7 +1756,7 @@ func (_f *factory) ConstructConcat(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_concatExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_concatExpr)))
 }
 
 // ConstructLShift constructs an expression for the LShift operator.
@@ -1771,7 +1771,7 @@ func (_f *factory) ConstructLShift(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_lShiftExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1800,7 +1800,7 @@ func (_f *factory) ConstructLShift(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_lShiftExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_lShiftExpr)))
 }
 
 // ConstructRShift constructs an expression for the RShift operator.
@@ -1815,7 +1815,7 @@ func (_f *factory) ConstructRShift(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_rShiftExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1844,7 +1844,7 @@ func (_f *factory) ConstructRShift(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rShiftExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rShiftExpr)))
 }
 
 // ConstructFetchVal constructs an expression for the FetchVal operator.
@@ -1859,7 +1859,7 @@ func (_f *factory) ConstructFetchVal(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fetchValExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1892,7 +1892,7 @@ func (_f *factory) ConstructFetchVal(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fetchValExpr)))
 }
 
 // ConstructFetchText constructs an expression for the FetchText operator.
@@ -1907,7 +1907,7 @@ func (_f *factory) ConstructFetchText(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fetchTextExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1940,7 +1940,7 @@ func (_f *factory) ConstructFetchText(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fetchTextExpr)))
 }
 
 // ConstructFetchValPath constructs an expression for the FetchValPath operator.
@@ -1955,7 +1955,7 @@ func (_f *factory) ConstructFetchValPath(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fetchValPathExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -1988,7 +1988,7 @@ func (_f *factory) ConstructFetchValPath(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchValPathExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fetchValPathExpr)))
 }
 
 // ConstructFetchTextPath constructs an expression for the FetchTextPath operator.
@@ -2003,7 +2003,7 @@ func (_f *factory) ConstructFetchTextPath(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fetchTextPathExpr))
 	}
 
 	// [FoldNullBinaryLeft]
@@ -2036,7 +2036,7 @@ func (_f *factory) ConstructFetchTextPath(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fetchTextPathExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fetchTextPathExpr)))
 }
 
 // ConstructUnaryPlus constructs an expression for the UnaryPlus operator.
@@ -2050,7 +2050,7 @@ func (_f *factory) ConstructUnaryPlus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unaryPlusExpr))
 	}
 
 	// [FoldNullUnary]
@@ -2064,7 +2064,7 @@ func (_f *factory) ConstructUnaryPlus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryPlusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unaryPlusExpr)))
 }
 
 // ConstructUnaryMinus constructs an expression for the UnaryMinus operator.
@@ -2078,7 +2078,7 @@ func (_f *factory) ConstructUnaryMinus(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unaryMinusExpr))
 	}
 
 	// [FoldNullUnary]
@@ -2092,7 +2092,7 @@ func (_f *factory) ConstructUnaryMinus(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryMinusExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unaryMinusExpr)))
 }
 
 // ConstructUnaryComplement constructs an expression for the UnaryComplement operator.
@@ -2106,7 +2106,7 @@ func (_f *factory) ConstructUnaryComplement(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unaryComplementExpr))
 	}
 
 	// [FoldNullUnary]
@@ -2120,7 +2120,7 @@ func (_f *factory) ConstructUnaryComplement(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unaryComplementExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unaryComplementExpr)))
 }
 
 // ConstructCast constructs an expression for the Cast operator.
@@ -2135,7 +2135,7 @@ func (_f *factory) ConstructCast(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_castExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_castExpr))
 	}
 
 	// [FoldNullCast]
@@ -2149,7 +2149,7 @@ func (_f *factory) ConstructCast(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_castExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_castExpr)))
 }
 
 // ConstructFunction constructs an expression for the Function operator.
@@ -2167,10 +2167,10 @@ func (_f *factory) ConstructFunction(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_functionExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_functionExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_functionExpr)))
 }
 
 // ConstructCoalesce constructs an expression for the Coalesce operator.
@@ -2184,7 +2184,7 @@ func (_f *factory) ConstructCoalesce(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_coalesceExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_coalesceExpr))
 	}
 
 	// [EliminateCoalesce]
@@ -2213,7 +2213,7 @@ func (_f *factory) ConstructCoalesce(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_coalesceExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_coalesceExpr)))
 }
 
 // ConstructUnsupportedExpr constructs an expression for the UnsupportedExpr operator.
@@ -2229,10 +2229,10 @@ func (_f *factory) ConstructUnsupportedExpr(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unsupportedExprExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unsupportedExprExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unsupportedExprExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unsupportedExprExpr)))
 }
 
 // ConstructScan constructs an expression for the Scan operator.
@@ -2250,10 +2250,10 @@ func (_f *factory) ConstructScan(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_scanExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_scanExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_scanExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_scanExpr)))
 }
 
 // ConstructValues constructs an expression for the Values operator.
@@ -2277,10 +2277,10 @@ func (_f *factory) ConstructValues(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_valuesExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_valuesExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_valuesExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_valuesExpr)))
 }
 
 // ConstructSelect constructs an expression for the Select operator.
@@ -2297,10 +2297,10 @@ func (_f *factory) ConstructSelect(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_selectExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_selectExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_selectExpr)))
 }
 
 // ConstructProject constructs an expression for the Project operator.
@@ -2320,7 +2320,7 @@ func (_f *factory) ConstructProject(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_projectExpr))
 	}
 
 	// [EliminateProject]
@@ -2333,7 +2333,7 @@ func (_f *factory) ConstructProject(
 		}
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_projectExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_projectExpr)))
 }
 
 // ConstructInnerJoin constructs an expression for the InnerJoin operator.
@@ -2354,10 +2354,10 @@ func (_f *factory) ConstructInnerJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
 }
 
 // ConstructLeftJoin constructs an expression for the LeftJoin operator.
@@ -2373,10 +2373,10 @@ func (_f *factory) ConstructLeftJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr)))
 }
 
 // ConstructRightJoin constructs an expression for the RightJoin operator.
@@ -2392,10 +2392,10 @@ func (_f *factory) ConstructRightJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr)))
 }
 
 // ConstructFullJoin constructs an expression for the FullJoin operator.
@@ -2411,10 +2411,10 @@ func (_f *factory) ConstructFullJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr)))
 }
 
 // ConstructSemiJoin constructs an expression for the SemiJoin operator.
@@ -2430,10 +2430,10 @@ func (_f *factory) ConstructSemiJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr)))
 }
 
 // ConstructAntiJoin constructs an expression for the AntiJoin operator.
@@ -2449,10 +2449,10 @@ func (_f *factory) ConstructAntiJoin(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr)))
 }
 
 // ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
@@ -2471,10 +2471,10 @@ func (_f *factory) ConstructInnerJoinApply(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinApplyExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_innerJoinApplyExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr)))
 }
 
 // ConstructLeftJoinApply constructs an expression for the LeftJoinApply operator.
@@ -2490,10 +2490,10 @@ func (_f *factory) ConstructLeftJoinApply(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinApplyExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_leftJoinApplyExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr)))
 }
 
 // ConstructRightJoinApply constructs an expression for the RightJoinApply operator.
@@ -2509,10 +2509,10 @@ func (_f *factory) ConstructRightJoinApply(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinApplyExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_rightJoinApplyExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr)))
 }
 
 // ConstructFullJoinApply constructs an expression for the FullJoinApply operator.
@@ -2528,10 +2528,10 @@ func (_f *factory) ConstructFullJoinApply(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinApplyExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_fullJoinApplyExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr)))
 }
 
 // ConstructSemiJoinApply constructs an expression for the SemiJoinApply operator.
@@ -2547,10 +2547,10 @@ func (_f *factory) ConstructSemiJoinApply(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinApplyExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_semiJoinApplyExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr)))
 }
 
 // ConstructAntiJoinApply constructs an expression for the AntiJoinApply operator.
@@ -2566,10 +2566,10 @@ func (_f *factory) ConstructAntiJoinApply(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinApplyExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_antiJoinApplyExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr)))
 }
 
 // ConstructGroupBy constructs an expression for the GroupBy operator.
@@ -2590,10 +2590,10 @@ func (_f *factory) ConstructGroupBy(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_groupByExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_groupByExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_groupByExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_groupByExpr)))
 }
 
 // ConstructUnion constructs an expression for the Union operator.
@@ -2614,10 +2614,10 @@ func (_f *factory) ConstructUnion(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unionExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionExpr)))
 }
 
 // ConstructIntersect constructs an expression for the Intersect operator.
@@ -2640,10 +2640,10 @@ func (_f *factory) ConstructIntersect(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_intersectExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_intersectExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_intersectExpr)))
 }
 
 // ConstructExcept constructs an expression for the Except operator.
@@ -2665,10 +2665,10 @@ func (_f *factory) ConstructExcept(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_exceptExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptExpr)))
 }
 
 // ConstructUnionAll constructs an expression for the UnionAll operator.
@@ -2700,10 +2700,10 @@ func (_f *factory) ConstructUnionAll(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_unionAllExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_unionAllExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionAllExpr)))
 }
 
 // ConstructIntersectAll constructs an expression for the IntersectAll operator.
@@ -2737,10 +2737,10 @@ func (_f *factory) ConstructIntersectAll(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_intersectAllExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_intersectAllExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_intersectAllExpr)))
 }
 
 // ConstructExceptAll constructs an expression for the ExceptAll operator.
@@ -2774,10 +2774,10 @@ func (_f *factory) ConstructExceptAll(
 	}
 
 	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr))
+		return _f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr))
 	}
 
-	return _f.onConstruct(_f.mem.memoizeNormExpr((*memoExpr)(&_exceptAllExpr)))
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr)))
 }
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
