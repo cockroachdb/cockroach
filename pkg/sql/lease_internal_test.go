@@ -379,7 +379,8 @@ func TestReleaseAcquireByNameDeadlock(t *testing.T) {
 	testingKnobs := base.TestingKnobs{
 		SQLLeaseManager: &LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
-				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+				LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
+				RemoveOnceDereferenced: true,
 			},
 		},
 	}
@@ -407,13 +408,6 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	if err := leaseManager.Release(table); err != nil {
 		t.Fatal(err)
 	}
-
-	// Pretend the table has been dropped, so that when we release leases on it,
-	// they are removed from the tableNameCache too.
-	tableState := leaseManager.findTableState(tableDesc.ID, true)
-	tableState.mu.Lock()
-	tableState.mu.dropped = true
-	tableState.mu.Unlock()
 
 	// Try to trigger the race repeatedly: race an AcquireByName against a
 	// Release.
@@ -450,30 +444,37 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 		if err != nil {
 			t.Fatal(err)
 		}
-		tracker2 := removalTracker.TrackRemoval(tableByName)
+
 		// See if there was an error releasing lease.
 		err = <-errChan
 		if err != nil {
 			t.Fatal(err)
 		}
 
+		// Even after waiting for the error above, the lease might still
+		// need removal from the store because lease removal is asynchronous.
 		// Depending on how the race went, there are two cases - either the
 		// AcquireByName ran first, and got the same lease as we already had,
-		// or the Release ran first and so we got a new lease.
-		if tableByName.ID == table.ID {
-			if err := leaseManager.Release(table); err != nil {
-				t.Fatal(err)
-			}
+		// or the Release ran first and so we got a new lease and can wait here
+		// for the old lease to be released.
+		if tableByName != table {
 			if err := tracker.WaitForRemoval(); err != nil {
 				t.Fatal(err)
 			}
-		} else {
-			if err := leaseManager.Release(tableByName); err != nil {
-				t.Fatal(err)
-			}
-			if err := tracker2.WaitForRemoval(); err != nil {
-				t.Fatal(err)
-			}
+		}
+
+		// Track removal only after the above call to WaitForRemoval
+		// so that if there is an existing removal of a lease
+		// (Release occurred before AcquireByName) it is guaranteed
+		// to not reuse an existing tracker.
+		tracker2 := removalTracker.TrackRemoval(tableByName)
+
+		if err := leaseManager.Release(tableByName); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := tracker2.WaitForRemoval(); err != nil {
+			t.Fatal(err)
 		}
 	}
 	close(tableChan)
