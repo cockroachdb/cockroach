@@ -532,7 +532,7 @@ func (f *Flow) cancel() {
 			// receiver and prevent it from being connected.
 			is.receiver.Push(
 				nil, /* row */
-				&ProducerMetadata{Err: sqlbase.NewQueryCanceledError()})
+				&ProducerMetadata{Err: sqlbase.QueryCanceledError})
 			is.receiver.ProducerDone()
 			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
 		}
