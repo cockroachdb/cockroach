@@ -126,8 +126,12 @@ RUN git clone --depth 1 https://github.com/tpoechtrager/osxcross.git \
  && mv osxcross/target /x-tools/x86_64-apple-darwin13 \
  && rm -rf osxcross
 
-# Compile Go from source so that CC defaults to clang instead of gcc.
-# This requires a Go toolchain to bootstrap.
+# Compile Go from source so that CC defaults to clang instead of gcc. This
+# requires a Go toolchain to bootstrap.
+#
+# NB: care needs to be taken when updating this version because earlier
+# releases of Go will no longer be run in CI once it is changed. Consider
+# bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
  && curl -fsSL https://storage.googleapis.com/golang/go1.10.src.tar.gz -o golang.tar.gz \
  && echo 'f3de49289405fda5fd1483a8fe6bd2fa5469e005fd567df64485c4fa000c7f24 golang.tar.gz' | sha256sum -c - \
