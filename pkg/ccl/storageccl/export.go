@@ -37,7 +37,7 @@ import (
 // could be improved by more measured heuristics.
 const ExportRequestLimit = 5
 
-var exportRequestLimiter = makeConcurrentRequestLimiter(ExportRequestLimit)
+var exportRequestLimiter = makeConcurrentRequestLimiter("exportRequestLimiter", ExportRequestLimit)
 
 func init() {
 	batcheval.RegisterCommand(roachpb.Export, declareKeysExport, evalExport)

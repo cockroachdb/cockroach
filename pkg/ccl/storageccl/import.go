@@ -39,7 +39,7 @@ import (
 // node at a time.
 var importRequestLimit = 1
 
-var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
+var importRequestLimiter = makeConcurrentRequestLimiter("importRequestLimiter", importRequestLimit)
 
 var importBatchSize = settings.RegisterByteSizeSetting(
 	"kv.import.batch_size",
