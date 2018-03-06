@@ -176,8 +176,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			return errors.Errorf("user %s cannot be dropped", security.RootUser)
 		}
 
-		internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
-		rowsAffected, err := internalExecutor.ExecuteStatementInTransaction(
+		rowsAffected, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			"drop-user",
 			params.p.txn,
@@ -195,7 +194,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 		numUsersDeleted += rowsAffected
 
 		// Drop all role memberships involving the user/role.
-		rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+		rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 			params.ctx,
 			"drop-role-membership",
 			params.p.txn,

@@ -85,7 +85,7 @@ func (EngineMetrics) MetricStruct() {}
 //   so far.
 // - result is the result set computed by the query/statement.
 // - err is the error encountered, if any.
-func recordStatementSummary(
+func (ex *connExecutor) recordStatementSummary(
 	planner *planner,
 	stmt Statement,
 	distSQLUsed bool,
@@ -94,6 +94,10 @@ func recordStatementSummary(
 	err error,
 	m *EngineMetrics,
 ) {
+	if ex.stmtCounterDisabled {
+		return
+	}
+
 	phaseTimes := planner.statsCollector.PhaseTimes()
 
 	// Compute the run latency. This is always recorded in the

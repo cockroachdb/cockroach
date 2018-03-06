@@ -17,7 +17,6 @@ package pgwire
 import (
 	"bufio"
 	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"strconv"
@@ -30,7 +29,6 @@ import (
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -259,60 +257,6 @@ var statusReportParams = map[string]string{
 	"standard_conforming_strings": "on",
 }
 
-// handleAuthentication should discuss with the client to arrange
-// authentication and update c.sessionArgs with the authenticated user's
-// name, if different from the one given initially. Note: at this
-// point the sql.Session does not exist yet! If need exists to access the
-// database to look up authentication data, use the internal executor.
-func (c *v3Conn) handleAuthentication(ctx context.Context, insecure bool) error {
-	// Check that the requested user exists and retrieve the hashed
-	// password in case password authentication is needed.
-	exists, hashedPassword, err := sql.GetUserHashedPassword(
-		ctx, c.executor.Cfg(), c.metrics.internalMemMetrics, c.sessionArgs.User,
-	)
-	if err != nil {
-		return c.sendError(err)
-	}
-	if !exists {
-		return c.sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
-	}
-
-	if tlsConn, ok := c.conn.(*tls.Conn); ok {
-		var authenticationHook security.UserAuthHook
-
-		tlsState := tlsConn.ConnectionState()
-		// If no certificates are provided, default to password
-		// authentication.
-		if len(tlsState.PeerCertificates) == 0 {
-			password, err := c.sendAuthPasswordRequest()
-			if err != nil {
-				return c.sendError(err)
-			}
-			authenticationHook = security.UserAuthPasswordHook(
-				insecure, password, hashedPassword,
-			)
-		} else {
-			// Normalize the username contained in the certificate.
-			tlsState.PeerCertificates[0].Subject.CommonName = tree.Name(
-				tlsState.PeerCertificates[0].Subject.CommonName,
-			).Normalize()
-			var err error
-			authenticationHook, err = security.UserAuthCertHook(insecure, &tlsState)
-			if err != nil {
-				return c.sendError(err)
-			}
-		}
-
-		if err := authenticationHook(c.sessionArgs.User, true /* public */); err != nil {
-			return c.sendError(err)
-		}
-	}
-
-	c.writeBuf.initMsg(pgwirebase.ServerMsgAuth)
-	c.writeBuf.putInt32(authOK)
-	return c.writeBuf.finishMsg(c.wr)
-}
-
 func (c *v3Conn) setupSession(ctx context.Context, reserved mon.BoundAccount) error {
 	c.sessionArgs.RemoteAddr = c.conn.RemoteAddr()
 	c.session = sql.NewSession(
@@ -479,31 +423,6 @@ func (c *v3Conn) serve(ctx context.Context, draining func() bool, reserved mon.B
 			return err
 		}
 	}
-}
-
-// sendAuthPasswordRequest requests a cleartext password from the client and
-// returns it.
-func (c *v3Conn) sendAuthPasswordRequest() (string, error) {
-	c.writeBuf.initMsg(pgwirebase.ServerMsgAuth)
-	c.writeBuf.putInt32(authCleartextPassword)
-	if err := c.writeBuf.finishMsg(c.wr); err != nil {
-		return "", err
-	}
-	if err := c.wr.Flush(); err != nil {
-		return "", err
-	}
-
-	typ, n, err := c.readBuf.ReadTypedMsg(c.rd)
-	c.metrics.BytesInCount.Inc(int64(n))
-	if err != nil {
-		return "", err
-	}
-
-	if typ != pgwirebase.ClientMsgPassword {
-		return "", errors.Errorf("invalid response to authentication request: %s", typ)
-	}
-
-	return c.readBuf.GetString()
 }
 
 func (c *v3Conn) handleSimpleQuery(buf *pgwirebase.ReadBuffer) error {

@@ -150,8 +150,8 @@ type Server struct {
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
 	stopper            *stop.Stopper
-	sqlExecutor        *sql.Executor
 	execCfg            *sql.ExecutorConfig
+	internalExecutor   *sql.InternalExecutor
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
@@ -468,7 +468,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
-	s.admin = newAdminServer(s, internalExecutor)
+	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
 		st,
@@ -483,7 +483,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.sessionRegistry,
 	)
-	s.authentication = newAuthenticationServer(s, internalExecutor)
+	s.authentication = newAuthenticationServer(s)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
@@ -575,28 +575,25 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
-	if s.cfg.UseLegacyConnHandling {
-		s.registry.AddMetricStruct(s.sqlExecutor)
-	}
 
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
 		s.ClusterSettings(),
-		s.sqlExecutor,
 		&s.internalMemMetrics,
 		&rootSQLMemoryMonitor,
 		s.cfg.HistogramWindowInterval(),
 		&execCfg,
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
-	if !s.cfg.UseLegacyConnHandling {
-		s.registry.AddMetricStruct(s.pgServer.StatementCounters())
-		s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
-	}
+	s.registry.AddMetricStruct(s.pgServer.StatementCounters())
+	s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
+	*internalExecutor = sql.MakeInternalExecutor(
+		ctx, s.pgServer.SQLServer, &s.internalMemMetrics, s.ClusterSettings(),
+	)
+	s.internalExecutor = internalExecutor
+	execCfg.InternalExecutor = internalExecutor
 
-	internalExecutor.ExecCfg = &execCfg
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetExecCfg(&execCfg)
@@ -1438,7 +1435,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.execCfg.DistSQLPlanner,
 	).Start(s.stopper)
 
-	s.sqlExecutor.Start(ctx, s.execCfg.DistSQLPlanner)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)
 
@@ -1516,10 +1512,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	migMgr := sqlmigrations.NewManager(
 		s.stopper,
 		s.db,
-		s.sqlExecutor,
+		s.internalExecutor,
 		s.clock,
 		mmKnobs,
-		&s.internalMemMetrics,
 		s.NodeID().String(),
 	)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
@@ -1548,13 +1543,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
-			var serveFn func(ctx context.Context, conn net.Conn) error
-			if !s.cfg.UseLegacyConnHandling {
-				serveFn = s.pgServer.ServeConn2
-			} else {
-				serveFn = s.pgServer.ServeConn
-			}
-			if err := serveFn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
 				// the logs.
