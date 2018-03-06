@@ -32,8 +32,8 @@ select
  ├── columns: y:int:null:2 x:int:1 y2:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── eq [type=bool]
-      ├── variable: a.x [type=int]
+ └── eq [type=bool, outer=(1)]
+      ├── variable: a.x [type=int, outer=(1)]
       └── const: 1 [type=int]
 
 # Project operator.
@@ -44,11 +44,11 @@ project
  ├── columns: plus:int:null:3 x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── projections
-      ├── plus [type=int]
-      │    ├── const: 1 [type=int]
-      │    └── variable: a.y [type=int]
-      └── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── plus [type=int, outer=(2)]
+      │    ├── variable: a.y [type=int, outer=(2)]
+      │    └── const: 1 [type=int]
+      └── variable: a.x [type=int, outer=(1)]
 
 # Join operator.
 opt
@@ -71,6 +71,6 @@ group-by
  ├── grouping columns: a.x:int:1 a.y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── aggregations
-      └── function: max [type=int]
-           └── variable: a.x [type=int]
+ └── aggregations [outer=(1)]
+      └── function: max [type=int, outer=(1)]
+           └── variable: a.x [type=int, outer=(1)]

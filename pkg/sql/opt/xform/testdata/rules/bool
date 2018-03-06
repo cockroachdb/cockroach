@@ -20,15 +20,15 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── gt [type=bool]
-      │    ├── variable: a.k [type=int]
+ └── and [type=bool, outer=(1,3)]
+      ├── gt [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      ├── lt [type=bool]
-      │    ├── variable: a.k [type=int]
+      ├── lt [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 5 [type=int]
-      └── eq [type=bool]
-           ├── variable: a.f [type=float]
+      └── eq [type=bool, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
            └── const: 3.5 [type=float]
 
 # --------------------------------------------------
@@ -41,15 +41,15 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── or [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.k [type=int]
+ └── or [type=bool, outer=(1-3)]
+      ├── eq [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      ├── eq [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── eq [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 2 [type=int]
-      └── eq [type=bool]
-           ├── variable: a.f [type=float]
+      └── eq [type=bool, outer=(3)]
+           ├── variable: a.f [type=float, outer=(3)]
            └── const: 3.5 [type=float]
 
 # --------------------------------------------------
@@ -64,22 +64,22 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── or [type=bool]
-      │    ├── eq [type=bool]
-      │    │    ├── variable: a.k [type=int]
+ └── and [type=bool, outer=(1-4)]
+      ├── or [type=bool, outer=(1-3)]
+      │    ├── eq [type=bool, outer=(1)]
+      │    │    ├── variable: a.k [type=int, outer=(1)]
       │    │    └── const: 1 [type=int]
-      │    ├── eq [type=bool]
-      │    │    ├── variable: a.i [type=int]
+      │    ├── eq [type=bool, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
       │    │    └── const: 2 [type=int]
-      │    └── eq [type=bool]
-      │         ├── variable: a.f [type=float]
+      │    └── eq [type=bool, outer=(3)]
+      │         ├── variable: a.f [type=float, outer=(3)]
       │         └── const: 3.5 [type=float]
-      ├── eq [type=bool]
-      │    ├── variable: a.s [type=string]
+      ├── eq [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      └── ne [type=bool]
-           ├── variable: a.s [type=string]
+      └── ne [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
            └── const: 'bar' [type=string]
 
 # --------------------------------------------------
@@ -110,9 +110,9 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      └── eq [type=bool]
-           ├── variable: a.k [type=int]
+ └── and [type=bool, outer=(1)]
+      └── eq [type=bool, outer=(1)]
+           ├── variable: a.k [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 opt
@@ -122,12 +122,12 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.k [type=int]
+ └── and [type=bool, outer=(1,2)]
+      ├── eq [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      └── eq [type=bool]
-           ├── variable: a.i [type=int]
+      └── eq [type=bool, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
            └── const: 2 [type=int]
 
 opt
@@ -167,8 +167,8 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── eq [type=bool]
-      ├── variable: a.k [type=int]
+ └── eq [type=bool, outer=(1)]
+      ├── variable: a.k [type=int, outer=(1)]
       └── const: 1 [type=int]
 
 opt
@@ -178,12 +178,12 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── or [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.k [type=int]
+ └── or [type=bool, outer=(1,2)]
+      ├── eq [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      └── eq [type=bool]
-           ├── variable: a.i [type=int]
+      └── eq [type=bool, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
            └── const: 2 [type=int]
 
 opt
@@ -205,12 +205,12 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── eq [type=bool]
-      │    ├── variable: a.k [type=int]
+ └── and [type=bool, outer=(1)]
+      ├── eq [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
-      └── eq [type=bool]
-           ├── variable: a.k [type=int]
+      └── eq [type=bool, outer=(1)]
+           ├── variable: a.k [type=int, outer=(1)]
            └── const: 2 [type=int]
 
 # --------------------------------------------------
@@ -251,12 +251,12 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── or [type=bool]
+ └── or [type=bool, outer=(1)]
       ├── null [type=unknown]
-      └── and [type=bool]
+      └── and [type=bool, outer=(1)]
            ├── null [type=unknown]
-           └── eq [type=bool]
-                ├── variable: a.k [type=int]
+           └── eq [type=bool, outer=(1)]
+                ├── variable: a.k [type=int, outer=(1)]
                 └── const: 1 [type=int]
 
 # --------------------------------------------------
@@ -271,24 +271,24 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── ne [type=bool]
-      │    ├── variable: a.i [type=int]
+ └── and [type=bool, outer=(2)]
+      ├── ne [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
-      ├── eq [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── eq [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
-      ├── le [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── le [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
-      ├── lt [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── lt [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
-      ├── ge [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── ge [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
-      └── gt [type=bool]
-           ├── variable: a.i [type=int]
+      └── gt [type=bool, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
            └── const: 1 [type=int]
 
 # IN and IS comparisons.
@@ -301,22 +301,22 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── not-in [type=bool]
-      │    ├── variable: a.i [type=int]
+ └── and [type=bool, outer=(2)]
+      ├── not-in [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 1 [type=int]
       │         └── const: 2 [type=int]
-      ├── in [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── in [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 3 [type=int]
       │         └── const: 4 [type=int]
-      ├── is-not [type=bool]
-      │    ├── variable: a.i [type=int]
+      ├── is-not [type=bool, outer=(2)]
+      │    ├── variable: a.i [type=int, outer=(2)]
       │    └── null [type=unknown]
-      └── is [type=bool]
-           ├── variable: a.i [type=int]
+      └── is [type=bool, outer=(2)]
+           ├── variable: a.i [type=int, outer=(2)]
            └── null [type=unknown]
 
 # Like comparisons.
@@ -329,18 +329,18 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── not-like [type=bool]
-      │    ├── variable: a.s [type=string]
+ └── and [type=bool, outer=(4)]
+      ├── not-like [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      ├── like [type=bool]
-      │    ├── variable: a.s [type=string]
+      ├── like [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      ├── not-i-like [type=bool]
-      │    ├── variable: a.s [type=string]
+      ├── not-i-like [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      └── i-like [type=bool]
-           ├── variable: a.s [type=string]
+      └── i-like [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
            └── const: 'foo' [type=string]
 
 # SimilarTo comparisons.
@@ -351,12 +351,12 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── not-similar-to [type=bool]
-      │    ├── variable: a.s [type=string]
+ └── and [type=bool, outer=(4)]
+      ├── not-similar-to [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      └── similar-to [type=bool]
-           ├── variable: a.s [type=string]
+      └── similar-to [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
            └── const: 'foo' [type=string]
 
 # RegMatch comparisons.
@@ -367,18 +367,18 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── not-reg-match [type=bool]
-      │    ├── variable: a.s [type=string]
+ └── and [type=bool, outer=(4)]
+      ├── not-reg-match [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      ├── reg-match [type=bool]
-      │    ├── variable: a.s [type=string]
+      ├── reg-match [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      ├── not-reg-i-match [type=bool]
-      │    ├── variable: a.s [type=string]
+      ├── not-reg-i-match [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
-      └── reg-i-match [type=bool]
-           ├── variable: a.s [type=string]
+      └── reg-i-match [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
            └── const: 'foo' [type=string]
 
 # Contains comparison (should not be negated).
@@ -389,15 +389,15 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── and [type=bool]
-      ├── not [type=bool]
-      │    └── contains [type=bool]
+ └── and [type=bool, outer=(5)]
+      ├── not [type=bool, outer=(5)]
+      │    └── contains [type=bool, outer=(5)]
       │         ├── const: '[1, 2]' [type=jsonb]
-      │         └── variable: a.j [type=jsonb]
-      └── not [type=bool]
-           └── contains [type=bool]
+      │         └── variable: a.j [type=jsonb, outer=(5)]
+      └── not [type=bool, outer=(5)]
+           └── contains [type=bool, outer=(5)]
                 ├── const: '[3, 4]' [type=jsonb]
-                └── variable: a.j [type=jsonb]
+                └── variable: a.j [type=jsonb, outer=(5)]
 
 # --------------------------------------------------
 # EliminateNot
@@ -409,6 +409,6 @@ select
  ├── columns: k:int:1 i:int:null:2 f:float:null:3 s:string:null:4 j:jsonb:null:5
  ├── scan
  │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.s:string:null:4 a.j:jsonb:null:5
- └── contains [type=bool]
+ └── contains [type=bool, outer=(5)]
       ├── const: '[1, 2]' [type=jsonb]
-      └── variable: a.j [type=jsonb]
+      └── variable: a.j [type=jsonb, outer=(5)]

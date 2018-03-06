@@ -52,7 +52,7 @@ func (b *Builder) buildTable(
 		if err != nil {
 			panic(builderError{err})
 		}
-		tbl, err := b.factory.Metadata().Catalog().FindTable(b.ctx, tn)
+		tbl, err := b.catalog.FindTable(b.ctx, tn)
 		if err != nil {
 			panic(builderError{err})
 		}

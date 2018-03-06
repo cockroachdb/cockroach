@@ -75,7 +75,6 @@ var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
 
 // Map from tree.UnaryOperator to Factory constructor function.
 var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
-	tree.UnaryPlus:       (opt.Factory).ConstructUnaryPlus,
 	tree.UnaryMinus:      (opt.Factory).ConstructUnaryMinus,
 	tree.UnaryComplement: (opt.Factory).ConstructUnaryComplement,
 }
@@ -223,7 +222,12 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 		out = b.factory.ConstructTuple(b.factory.InternList(list))
 
 	case *tree.UnaryExpr:
-		out = unaryOpMap[t.Operator](b.factory, b.buildScalar(t.TypedInnerExpr(), inScope))
+		out = b.buildScalar(t.TypedInnerExpr(), inScope)
+
+		// Discard do-nothing unary plus operator.
+		if t.Operator != tree.UnaryPlus {
+			out = unaryOpMap[t.Operator](b.factory, out)
+		}
 
 	// NB: this is the exception to the sorting of the case statements. The
 	// tree.Datum case needs to occur after *tree.Placeholder which implements

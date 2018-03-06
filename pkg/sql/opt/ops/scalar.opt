@@ -349,11 +349,6 @@ define FetchTextPath {
 }
 
 [Scalar, Unary]
-define UnaryPlus {
-    Input Expr
-}
-
-[Scalar, Unary]
 define UnaryMinus {
     Input Expr
 }

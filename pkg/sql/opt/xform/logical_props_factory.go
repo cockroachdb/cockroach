@@ -212,7 +212,24 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 }
 
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
-	return LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
+	props := LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
+
+	switch ev.Operator() {
+	case opt.VariableOp:
+		// Variable introduces outer column.
+		props.Scalar.OuterCols.Add(int(ev.Private().(opt.ColumnIndex)))
+		return props
+	}
+
+	// By default, union outer cols from all children, both relational and scalar.
+	for i := 0; i < ev.ChildCount(); i++ {
+		// TODO(andyk): Union with relational outer cols once we've got them.
+		logical := &ev.lookupChildGroup(i).logical
+		if logical.Scalar != nil {
+			props.Scalar.OuterCols.UnionWith(logical.Scalar.OuterCols)
+		}
+	}
+	return props
 }
 
 // filterNullCols will ensure that the set of null columns is a subset of the

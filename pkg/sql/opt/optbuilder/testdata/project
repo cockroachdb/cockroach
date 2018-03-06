@@ -34,8 +34,8 @@ project
  ├── columns: x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      └── variable: a.x [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
 
 build
 SELECT a.x, a.y FROM t.a
@@ -50,9 +50,9 @@ project
  ├── columns: y:float:null:2 x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      ├── variable: a.y [type=float]
-      └── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: a.y [type=float, outer=(2)]
+      └── variable: a.x [type=int, outer=(1)]
 
 build
 SELECT * FROM t.a
@@ -69,9 +69,9 @@ project
  ├── columns: x:int:null:1 y:float:null:2
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections
-      ├── variable: b.x [type=int]
-      └── variable: b.y [type=float]
+ └── projections [outer=(1,2)]
+      ├── variable: b.x [type=int, outer=(1)]
+      └── variable: b.y [type=float, outer=(2)]
 
 build
 SELECT (a.x + 3) AS "X", false AS "Y" FROM t.a
@@ -80,9 +80,9 @@ project
  ├── columns: X:int:null:3 Y:bool:null:4
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      ├── plus [type=int]
-      │    ├── variable: a.x [type=int]
+ └── projections [outer=(1)]
+      ├── plus [type=int, outer=(1)]
+      │    ├── variable: a.x [type=int, outer=(1)]
       │    └── const: 3 [type=int]
       └── false [type=bool]
 
@@ -93,15 +93,15 @@ project
  ├── columns: x:int:1 y:float:null:2 column3:bool:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      ├── variable: a.x [type=int]
-      ├── variable: a.y [type=float]
-      └── or [type=bool]
-           ├── lt [type=bool]
-           │    ├── variable: a.x [type=int]
-           │    └── variable: a.y [type=float]
-           └── gt [type=bool]
-                ├── variable: a.x [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: a.y [type=float, outer=(2)]
+      └── or [type=bool, outer=(1,2)]
+           ├── lt [type=bool, outer=(1,2)]
+           │    ├── variable: a.x [type=int, outer=(1)]
+           │    └── variable: a.y [type=float, outer=(2)]
+           └── gt [type=bool, outer=(1)]
+                ├── variable: a.x [type=int, outer=(1)]
                 └── const: 1000 [type=int]
 
 build
@@ -111,9 +111,9 @@ project
  ├── columns: x:int:1 y:float:null:2 column3:bool:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      ├── variable: a.x [type=int]
-      ├── variable: a.y [type=float]
+ └── projections [outer=(1,2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: a.y [type=float, outer=(2)]
       └── true [type=bool]
 
 build
@@ -125,19 +125,19 @@ project
  │    ├── columns: column3:int:null:3 column4:float:null:4
  │    ├── scan
  │    │    └── columns: a.x:int:1 a.y:float:null:2
- │    └── projections
- │         ├── plus [type=int]
- │         │    ├── variable: a.x [type=int]
+ │    └── projections [outer=(1,2)]
+ │         ├── plus [type=int, outer=(1)]
+ │         │    ├── variable: a.x [type=int, outer=(1)]
  │         │    └── const: 3 [type=int]
- │         └── plus [type=float]
- │              ├── variable: a.y [type=float]
+ │         └── plus [type=float, outer=(2)]
+ │              ├── variable: a.y [type=float, outer=(2)]
  │              └── const: 1.0 [type=float]
- └── projections
-      ├── plus [type=int]
-      │    ├── variable: column3 [type=int]
+ └── projections [outer=(3,4)]
+      ├── plus [type=int, outer=(3)]
+      │    ├── variable: column3 [type=int, outer=(3)]
       │    └── const: 1 [type=int]
-      └── plus [type=float]
-           ├── variable: column4 [type=float]
+      └── plus [type=float, outer=(4)]
+           ├── variable: column4 [type=float, outer=(4)]
            └── const: 1.0 [type=float]
 
 build
@@ -147,8 +147,8 @@ project
  ├── columns: rowid:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections
-      └── variable: b.rowid [type=int]
+ └── projections [outer=(3)]
+      └── variable: b.rowid [type=int, outer=(3)]
 
 build
 SELECT rowid FROM (SELECT * FROM b)
@@ -162,8 +162,8 @@ project
  ├── columns: rowid:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections
-      └── variable: b.rowid [type=int]
+ └── projections [outer=(3)]
+      └── variable: b.rowid [type=int, outer=(3)]
 
 build
 SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
@@ -172,8 +172,8 @@ project
  ├── columns: r:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections
-      └── variable: b.rowid [type=int]
+ └── projections [outer=(3)]
+      └── variable: b.rowid [type=int, outer=(3)]
 
 build
 SELECT r FROM (SELECT rowid FROM b) AS q(r)
@@ -182,8 +182,8 @@ project
  ├── columns: r:int:3
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections
-      └── variable: b.rowid [type=int]
+ └── projections [outer=(3)]
+      └── variable: b.rowid [type=int, outer=(3)]
 
 exec-ddl
 CREATE TABLE c (x INT, y FLOAT)
@@ -207,9 +207,9 @@ project
  ├── columns: column4:string:null:4
  ├── scan
  │    └── columns: b.x:int:null:1 b.y:float:null:2 b.rowid:int:3
- └── projections
-      └── cast: string [type=string]
-           └── variable: b.rowid [type=int]
+ └── projections [outer=(3)]
+      └── cast: string [type=string, outer=(3)]
+           └── variable: b.rowid [type=int, outer=(3)]
 
 build
 SELECT (x, y)::timestamp FROM b
