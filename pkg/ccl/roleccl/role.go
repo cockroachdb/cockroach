@@ -157,13 +157,11 @@ func grantRolePlanHook(
 		memberStmt += ` DO NOTHING`
 	}
 
-	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
 	var rowsAffected int
 	for _, r := range grant.Roles {
 		for _, m := range grant.Members {
-			affected, err := internalExecutor.ExecuteStatement(
-				ctx,
-				"grant-role",
+			affected, err := p.ExecCfg().InternalExecutor.Exec(
+				ctx, "grant-role", nil, /* txn */
 				memberStmt,
 				r, m, grant.AdminOption,
 			)
@@ -244,7 +242,6 @@ func revokeRolePlanHook(
 		memberStmt = `DELETE FROM system.role_members WHERE "role" = $1 AND "member" = $2`
 	}
 
-	internalExecutor := sql.InternalExecutor{ExecCfg: p.ExecCfg()}
 	var rowsAffected int
 	for _, r := range revoke.Roles {
 		for _, m := range revoke.Members {
@@ -254,9 +251,8 @@ func revokeRolePlanHook(
 					"user %s cannot be removed from role %s or lose the ADMIN OPTION",
 					security.RootUser, sqlbase.AdminRole)
 			}
-			affected, err := internalExecutor.ExecuteStatement(
-				ctx,
-				"revoke-role",
+			affected, err := p.ExecCfg().InternalExecutor.Exec(
+				ctx, "revoke-role", nil, /* stmt */
 				memberStmt,
 				r, m,
 			)

@@ -340,7 +340,7 @@ func (j *Job) load(ctx context.Context) error {
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const stmt = "SELECT payload FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, stmt, *j.id)
+		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, stmt, *j.id)
 		if err != nil {
 			return err
 		}
@@ -375,7 +375,7 @@ func (j *Job) insert(ctx context.Context, id int64, payload *Payload) error {
 		}
 
 		const stmt = "INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)"
-		_, err = j.registry.ex.ExecuteStatementInTransaction(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes)
+		_, err = j.registry.ex.Exec(ctx, "job-insert", txn, stmt, id, StatusPending, payloadBytes)
 		return err
 	}); err != nil {
 		return err
@@ -395,7 +395,7 @@ func (j *Job) update(
 	var payload *Payload
 	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		const selectStmt = "SELECT status, payload FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRowInTransaction(ctx, "log-job", txn, selectStmt, *j.id)
+		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, selectStmt, *j.id)
 		if err != nil {
 			return err
 		}
@@ -425,8 +425,7 @@ func (j *Job) update(
 
 		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2 WHERE id = $3"
 		updateArgs := []interface{}{status, payloadBytes, *j.id}
-		n, err := j.registry.ex.ExecuteStatementInTransaction(
-			ctx, "job-update", txn, updateStmt, updateArgs...)
+		n, err := j.registry.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
 		if err != nil {
 			return err
 		}

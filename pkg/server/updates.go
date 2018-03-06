@@ -249,12 +249,8 @@ func (s *Server) maybeReportDiagnostics(
 	if log.DiagnosticsReportingEnabled.Get(&s.st.SV) {
 		s.reportDiagnostics(ctx, running)
 	}
-	if !s.cfg.UseLegacyConnHandling {
-		s.pgServer.SQLServer.ResetStatementStats(ctx)
-		s.pgServer.SQLServer.ResetErrorCounts()
-	} else {
-		s.sqlExecutor.ResetErrorCounts()
-	}
+	s.pgServer.SQLServer.ResetStatementStats(ctx)
+	s.pgServer.SQLServer.ResetErrorCounts()
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -298,10 +294,10 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, _, err := (&sql.InternalExecutor{ExecCfg: s.execCfg}).QueryRows(
-		ctx, "read-setting", "SELECT name FROM system.settings",
+	if datums, _, err := s.internalExecutor.Query(
+		ctx, "read-setting", nil /* txn */, "SELECT name FROM system.settings",
 	); err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
 		info.AlteredSettings = make(map[string]string, len(datums))
 		for _, row := range datums {
@@ -310,9 +306,10 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		}
 	}
 
-	if datums, _, err := (&sql.InternalExecutor{ExecCfg: s.execCfg}).QueryRows(
+	if datums, _, err := s.internalExecutor.Query(
 		ctx,
 		"read-zone-configs",
+		nil, /* txn */
 		"SELECT id, config FROM system.zones",
 	); err != nil {
 		log.Warning(ctx, err)
@@ -335,13 +332,8 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		}
 	}
 
-	if !s.cfg.UseLegacyConnHandling {
-		info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
-		s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
-	} else {
-		info.SqlStats = s.sqlExecutor.GetScrubbedStmtStats()
-		s.sqlExecutor.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
-	}
+	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
+	s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
 	return &info
 }
 
