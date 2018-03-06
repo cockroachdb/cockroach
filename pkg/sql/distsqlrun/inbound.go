@@ -121,7 +121,7 @@ func processInboundStreamHelper(
 	// goroutine.
 	select {
 	case <-f.Ctx.Done():
-		return sqlbase.NewQueryCanceledError()
+		return sqlbase.QueryCanceledError
 	case err := <-errChan:
 		return err
 	}
