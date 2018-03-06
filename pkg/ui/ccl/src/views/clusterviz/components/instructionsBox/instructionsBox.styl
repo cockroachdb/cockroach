@@ -1,0 +1,75 @@
+.instructions-box
+  color #595f6c
+  font-size 12px
+  line-height 17px
+  position absolute
+  right 26px
+  top 26px
+  background-color white
+  border 1px solid #EDEDED
+  border-radius 3px
+  box-shadow 0 0 4px 0 rgba(0, 0, 0, 0.2)
+  letter-spacing 0.5px
+
+  a
+    text-decoration none
+    color #2F80ED
+
+  &--collapsed
+    cursor pointer
+    padding 10px
+    line-height 6px
+    font-size 13px
+
+.instructions-box-top-bar
+  display flex
+  justify-content space-between
+  background-color #F6F6F6
+  padding-top 10px
+  padding-bottom 10px
+  padding-left 15px
+  padding-right 15px
+
+  &__see_nodes
+    color #333333
+    font-family Lato-Bold
+
+  &__setup_link
+    margin-left 10px
+
+  &__x-out
+    cursor pointer
+
+.instructions-box-content
+  margin-top 10px
+  margin-bottom 15px
+  margin-left 15px
+  margin-right 15px
+  max-width 395px
+  color black
+
+  ol
+    margin-left 15px
+    margin-bottom 5px
+
+  &__todo-item
+    padding-bottom 2px
+
+    &--done
+      text-decoration line-through
+
+  &__screenshot
+    // Crop the image.
+    height 200px
+    overflow hidden
+
+    img
+      margin-top -50px // Translate the image.
+      width 395px
+      overflow hidden
+
+  code
+    background-color #F7F7F7
+    border 1px solid #DADADA
+    border-radius 2px
+    padding 1px
