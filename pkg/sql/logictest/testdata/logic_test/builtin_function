@@ -694,6 +694,12 @@ SELECT round(-2.5::float), round(-1.5::float), round(-0.0::float), round(0.0::fl
 ----
 -2 -2 -0 0 2 2
 
+# some edge cases: denormal, 0.5-epsilon, 0.5+epsilon, 1 bit fractions, 1 bit fraction rounding to 0 bit fraction, large integer
+query RRRRRRR
+SELECT round(1.390671161567e-309::float), round(0.49999999999999994::float), round(0.5000000000000001::float), round(2251799813685249.5::float), round(2251799813685250.5::float), round(4503599627370495.5::float), round(4503599627370497::float)
+----
+0  0  1  2.25179981368525e+15  2.25179981368525e+15  4.503599627370496e+15  4.503599627370497e+15
+
 # round up for decimals
 # These results are indeed different than floats. Compare with postgres.
 # Float rounding uses banker, decimal rounding uses half away from zero.
