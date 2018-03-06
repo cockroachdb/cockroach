@@ -16,10 +16,17 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"html/template"
 	"io"
 	"os"
+	"strings"
 
+	"io/ioutil"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/spf13/cobra"
 )
@@ -38,6 +45,13 @@ can resolve the hostnames in the configuration file, either by using full-qualif
 running haproxy in the same network.
 `,
 	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
+}
+
+type haProxyNodeInfo struct {
+	NodeID   roachpb.NodeID
+	NodeAddr string
+	// The port on which health checks are performed.
+	CheckPort string
 }
 
 func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
@@ -75,7 +89,31 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		w = f
 	}
 
-	err = configTemplate.Execute(w, nodeStatuses.Nodes)
+	fs := flag.NewFlagSet("haproxy", flag.ContinueOnError)
+	checkPort := fs.String(cliflags.ServerHTTPPort.Name, base.DefaultHTTPPort, "" /* usage */)
+
+	// Discard parsing output.
+	fs.SetOutput(ioutil.Discard)
+
+	nodeInfos := make([]haProxyNodeInfo, len(nodeStatuses.Nodes))
+	for i, status := range nodeStatuses.Nodes {
+		nodeInfos[i].NodeID = status.Desc.NodeID
+		nodeInfos[i].NodeAddr = status.Desc.Address.AddressField
+
+		for i, arg := range status.Args {
+			// If the flag in status.Args corresponds to the ServerHTTPPort flag we
+			// pass in the rest of the slice to be parsed. This is done because Parse
+			// returns an error when it encounters an undefined flag and we do not
+			// want to define all possible flags.
+			if strings.Contains(arg, cliflags.ServerHTTPPort.Name) {
+				_ = fs.Parse(status.Args[i:])
+			}
+		}
+
+		nodeInfos[i].CheckPort = *checkPort
+	}
+
+	err = configTemplate.Execute(w, nodeInfos)
 	if err != nil {
 		// Return earliest error, but still close the file.
 		_ = f.Close()
@@ -107,6 +145,7 @@ listen psql
     bind :26257
     mode tcp
     balance roundrobin
-{{range .}}    server cockroach{{.Desc.NodeID}} {{.Desc.Address.AddressField}} check
+    option httpchk GET /health?ready=1
+{{range .}}    server cockroach{{.NodeID}} {{.NodeAddr}} check port {{.CheckPort}}
 {{end}}
 `
