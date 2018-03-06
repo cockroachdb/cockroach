@@ -11,8 +11,8 @@ import { LongToMoment } from "src/util/convert";
 import { SortableTable } from "src/views/shared/components/sortabletable";
 import { AdminUIState } from "src/redux/state";
 import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
-
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
+import "./logs.styl";
 
 interface LogProps {
   logs: LogEntriesResponseMessage;
@@ -50,9 +50,9 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
         {
           title: "Message",
           cell: (index: number) => (
-            <div className="sort-table__unbounded-column">
+            <pre className="sort-table__unbounded-column logs-table__message">
               { logEntries[index].message }
-            </div>
+            </pre>
           ),
         },
         {
@@ -60,7 +60,13 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
           cell: (index: number) => `${logEntries[index].file}:${logEntries[index].line}`,
         },
       ];
-      content = <SortableTable count={logEntries.length} columns={columns} />;
+      content = (
+        <SortableTable
+          count={logEntries.length}
+          columns={columns}
+          className="logs-table"
+        />
+      );
     }
     return (
       <div>
