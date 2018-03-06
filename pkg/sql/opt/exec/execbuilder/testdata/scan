@@ -11,7 +11,7 @@ build
 SELECT * FROM t.a
 ----
 scan
- └── columns: x:int:1 y:float:null:2
+ └── columns: x:1(int!null) y:2(float)
 
 exec-explain
 SELECT * FROM t.a

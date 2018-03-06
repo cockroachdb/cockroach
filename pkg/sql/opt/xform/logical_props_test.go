@@ -51,14 +51,14 @@ func TestLogicalJoinProps(t *testing.T) {
 		testLogicalProps(t, f, joinGroup, expected)
 	}
 
-	joinFunc(opt.InnerJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2 b.x:int:3 b.z:int:4\n")
-	joinFunc(opt.LeftJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4\n")
-	joinFunc(opt.RightJoinApplyOp, "columns: a.x:int:null:1 a.y:int:null:2 b.x:int:3 b.z:int:4\n")
-	joinFunc(opt.FullJoinApplyOp, "columns: a.x:int:null:1 a.y:int:null:2 b.x:int:null:3 b.z:int:null:4\n")
-	joinFunc(opt.SemiJoinOp, "columns: a.x:int:1 a.y:int:null:2\n")
-	joinFunc(opt.SemiJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2\n")
-	joinFunc(opt.AntiJoinOp, "columns: a.x:int:1 a.y:int:null:2\n")
-	joinFunc(opt.AntiJoinApplyOp, "columns: a.x:int:1 a.y:int:null:2\n")
+	joinFunc(opt.InnerJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
+	joinFunc(opt.LeftJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int)\n")
+	joinFunc(opt.RightJoinApplyOp, "columns: a.x:1(int) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
+	joinFunc(opt.FullJoinApplyOp, "columns: a.x:1(int) a.y:2(int) b.x:3(int) b.z:4(int)\n")
+	joinFunc(opt.SemiJoinOp, "columns: a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.SemiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.AntiJoinOp, "columns: a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.AntiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
 }
 
 func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected string) {

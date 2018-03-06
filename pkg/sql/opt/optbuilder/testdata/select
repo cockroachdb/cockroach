@@ -6,7 +6,7 @@ build
 SELECT 1
 ----
 project
- ├── columns: column1:int:null:1
+ ├── columns: column1:1(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -16,7 +16,7 @@ build
 SELECT NULL
 ----
 project
- ├── columns: column1:unknown:null:1
+ ├── columns: column1:1(unknown)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -26,7 +26,7 @@ build
 SELECT 1+1 AS two, 2+2 AS four
 ----
 project
- ├── columns: two:int:null:1 four:int:null:2
+ ├── columns: two:1(int) four:2(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -54,15 +54,15 @@ build
 SELECT * FROM abc
 ----
 scan
- └── columns: a:int:1 b:int:null:2 c:int:null:3
+ └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT NULL, * FROM abc
 ----
 project
- ├── columns: column4:unknown:null:4 a:int:1 b:int:null:2 c:int:null:3
+ ├── columns: column4:4(unknown) a:1(int!null) b:2(int) c:3(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections [outer=(1-3)]
       ├── null [type=unknown]
       ├── variable: abc.a [type=int, outer=(1)]
@@ -75,33 +75,33 @@ build
 TABLE abc
 ----
 scan
- └── columns: a:int:1 b:int:null:2 c:int:null:3
+ └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
 SELECT * FROM abc WHERE NULL
 ----
 select
- ├── columns: a:int:1 b:int:null:2 c:int:null:3
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── null [type=unknown]
 
 build
 SELECT * FROM abc WHERE a = NULL
 ----
 select
- ├── columns: a:int:1 b:int:null:2 c:int:null:3
+ ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── null [type=unknown]
 
 build
 SELECT *,* FROM abc
 ----
 project
- ├── columns: a:int:1 b:int:null:2 c:int:null:3 a:int:1 b:int:null:2 c:int:null:3
+ ├── columns: a:1(int!null) b:2(int) c:3(int) a:1(int!null) b:2(int) c:3(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections [outer=(1-3)]
       ├── variable: abc.a [type=int, outer=(1)]
       ├── variable: abc.b [type=int, outer=(2)]
@@ -114,9 +114,9 @@ build
 SELECT a,a,a,a FROM abc
 ----
 project
- ├── columns: a:int:1 a:int:1 a:int:1 a:int:1
+ ├── columns: a:1(int!null) a:1(int!null) a:1(int!null) a:1(int!null)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections [outer=(1)]
       ├── variable: abc.a [type=int, outer=(1)]
       ├── variable: abc.a [type=int, outer=(1)]
@@ -127,9 +127,9 @@ build
 SELECT a,c FROM abc
 ----
 project
- ├── columns: a:int:1 c:int:null:3
+ ├── columns: a:1(int!null) c:3(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections [outer=(1,3)]
       ├── variable: abc.a [type=int, outer=(1)]
       └── variable: abc.c [type=int, outer=(3)]
@@ -138,9 +138,9 @@ build
 SELECT a+b+c AS foo FROM abc
 ----
 project
- ├── columns: foo:int:null:4
+ ├── columns: foo:4(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections [outer=(1-3)]
       └── plus [type=int, outer=(1-3)]
            ├── plus [type=int, outer=(1,2)]
@@ -152,11 +152,11 @@ build allow-unsupported
 SELECT a,b FROM abc WHERE CASE WHEN a != 0 THEN b/a > 1.5 ELSE false END
 ----
 project
- ├── columns: a:int:1 b:int:null:2
+ ├── columns: a:1(int!null) b:2(int)
  ├── select
- │    ├── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    ├── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  │    ├── scan
- │    │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  │    └── case [type=bool, outer=(1,2)]
  │         ├── true [type=bool]
  │         ├── when [type=bool, outer=(1,2)]
@@ -188,21 +188,21 @@ build
 SELECT * FROM kv
 ----
 scan
- └── columns: k:string:1 v:string:null:2
+ └── columns: k:1(string!null) v:2(string)
 
 build
 SELECT k,v FROM kv
 ----
 scan
- └── columns: k:string:1 v:string:null:2
+ └── columns: k:1(string!null) v:2(string)
 
 build
 SELECT v||'foo' FROM kv
 ----
 project
- ├── columns: column3:string:null:3
+ ├── columns: column3:3(string)
  ├── scan
- │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    └── columns: kv.k:1(string!null) kv.v:2(string)
  └── projections [outer=(2)]
       └── concat [type=string, outer=(2)]
            ├── variable: kv.v [type=string, outer=(2)]
@@ -212,9 +212,9 @@ build
 SELECT LOWER(v) FROM kv
 ----
 project
- ├── columns: column3:string:null:3
+ ├── columns: column3:3(string)
  ├── scan
- │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    └── columns: kv.k:1(string!null) kv.v:2(string)
  └── projections [outer=(2)]
       └── function: lower [type=string, outer=(2)]
            └── variable: kv.v [type=string, outer=(2)]
@@ -223,9 +223,9 @@ build
 SELECT k FROM kv
 ----
 project
- ├── columns: k:string:1
+ ├── columns: k:1(string!null)
  ├── scan
- │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    └── columns: kv.k:1(string!null) kv.v:2(string)
  └── projections [outer=(1)]
       └── variable: kv.k [type=string, outer=(1)]
 
@@ -233,21 +233,21 @@ build
 SELECT kv.K,KV.v FROM kv
 ----
 scan
- └── columns: k:string:1 v:string:null:2
+ └── columns: k:1(string!null) v:2(string)
 
 build
 SELECT kv.* FROM kv
 ----
 scan
- └── columns: k:string:1 v:string:null:2
+ └── columns: k:1(string!null) v:2(string)
 
 build
 SELECT (kv.*) FROM kv
 ----
 project
- ├── columns: column3:tuple{string, string}:null:3
+ ├── columns: column3:3(tuple{string, string})
  ├── scan
- │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    └── columns: kv.k:1(string!null) kv.v:2(string)
  └── projections [outer=(1,2)]
       └── tuple [type=tuple{string, string}, outer=(1,2)]
            ├── variable: kv.k [type=string, outer=(1)]
@@ -283,11 +283,11 @@ build
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
- ├── columns: k:string:1
+ ├── columns: k:1(string!null)
  ├── select
- │    ├── columns: kv.k:string:1 kv.v:string:null:2
+ │    ├── columns: kv.k:1(string!null) kv.v:2(string)
  │    ├── scan
- │    │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    │    └── columns: kv.k:1(string!null) kv.v:2(string)
  │    └── eq [type=bool, outer=(1)]
  │         ├── variable: kv.k [type=string, outer=(1)]
  │         └── const: 'a' [type=string]
@@ -298,11 +298,11 @@ build
 SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
- ├── columns: v:string:null:2
+ ├── columns: v:2(string)
  ├── select
- │    ├── columns: kv.k:string:1 kv.v:string:null:2
+ │    ├── columns: kv.k:1(string!null) kv.v:2(string)
  │    ├── scan
- │    │    └── columns: kv.k:string:1 kv.v:string:null:2
+ │    │    └── columns: kv.k:1(string!null) kv.v:2(string)
  │    └── eq [type=bool, outer=(1)]
  │         ├── variable: kv.k [type=string, outer=(1)]
  │         └── const: 'a' [type=string]
@@ -321,9 +321,9 @@ build
 SELECT *, "from", kw."from" FROM kw
 ----
 project
- ├── columns: from:int:1 from:int:1 from:int:1
+ ├── columns: from:1(int!null) from:1(int!null) from:1(int!null)
  ├── scan
- │    └── columns: kw.from:int:1
+ │    └── columns: kw.from:1(int!null)
  └── projections [outer=(1)]
       ├── variable: kw.from [type=int, outer=(1)]
       ├── variable: kw.from [type=int, outer=(1)]
@@ -345,9 +345,9 @@ build
 SELECT value FROM boolean_table
 ----
 project
- ├── columns: value:bool:null:2
+ ├── columns: value:2(bool)
  ├── scan
- │    └── columns: boolean_table.id:int:1 boolean_table.value:bool:null:2
+ │    └── columns: boolean_table.id:1(int!null) boolean_table.value:2(bool)
  └── projections [outer=(2)]
       └── variable: boolean_table.value [type=bool, outer=(2)]
 
@@ -355,7 +355,7 @@ build allow-unsupported
 SELECT CASE WHEN NULL THEN 1 ELSE 2 END
 ----
 project
- ├── columns: column1:int:null:1
+ ├── columns: column1:1(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -370,9 +370,9 @@ build
 SELECT 0 * b, b % 1, 0 % b from abc
 ----
 project
- ├── columns: column4:int:null:4 column5:int:null:5 column6:int:null:6
+ ├── columns: column4:4(int) column5:5(int) column6:6(int)
  ├── scan
- │    └── columns: abc.a:int:1 abc.b:int:null:2 abc.c:int:null:3
+ │    └── columns: abc.a:1(int!null) abc.b:2(int) abc.c:3(int)
  └── projections [outer=(2)]
       ├── mult [type=int, outer=(2)]
       │    ├── const: 0 [type=int]
@@ -389,7 +389,7 @@ build
 SELECT 1 IN (1, 2)
 ----
 project
- ├── columns: column1:bool:null:1
+ ├── columns: column1:1(bool)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -403,7 +403,7 @@ build
 SELECT NULL IN (1, 2)
 ----
 project
- ├── columns: column1:bool:null:1
+ ├── columns: column1:1(bool)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -417,7 +417,7 @@ build
 SELECT 1 IN (NULL, 2)
 ----
 project
- ├── columns: column1:bool:null:1
+ ├── columns: column1:1(bool)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -431,7 +431,7 @@ build
 SELECT (1, NULL) IN ((1, 1))
 ----
 project
- ├── columns: column1:bool:null:1
+ ├── columns: column1:1(bool)
  ├── values
  │    └── tuple [type=tuple{}]
  └── projections
@@ -457,15 +457,15 @@ build
 SELECT * FROM t.a
 ----
 scan
- └── columns: x:int:1 y:float:null:2
+ └── columns: x:1(int!null) y:2(float)
 
 build
 SELECT * FROM t.a WHERE x > 10
 ----
 select
- ├── columns: x:int:1 y:float:null:2
+ ├── columns: x:1(int!null) y:2(float)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── gt [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
       └── const: 10 [type=int]
@@ -474,9 +474,9 @@ build
 SELECT * FROM t.a WHERE (x > 10 AND (x < 20 AND x != 13))
 ----
 select
- ├── columns: x:int:1 y:float:null:2
+ ├── columns: x:1(int!null) y:2(float)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── and [type=bool, outer=(1)]
       ├── gt [type=bool, outer=(1)]
       │    ├── variable: a.x [type=int, outer=(1)]
@@ -493,9 +493,9 @@ build
 SELECT * FROM t.a WHERE x IN (1, 2, 3)
 ----
 select
- ├── columns: x:int:1 y:float:null:2
+ ├── columns: x:1(int!null) y:2(float)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── in [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
       └── tuple [type=tuple{int, int, int}]
@@ -507,15 +507,15 @@ build
 SELECT * FROM t.a AS A(X, Y)
 ----
 scan
- └── columns: x:int:1 y:float:null:2
+ └── columns: x:1(int!null) y:2(float)
 
 build
 SELECT @1, @2 FROM t.a
 ----
 project
- ├── columns: column3:int:null:3 column4:float:null:4
+ ├── columns: column3:3(int) column4:4(float)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1,2)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: a.y [type=float, outer=(2)]
@@ -524,9 +524,9 @@ build
 SELECT * FROM t.a WHERE (x > 10)::bool
 ----
 select
- ├── columns: x:int:1 y:float:null:2
+ ├── columns: x:1(int!null) y:2(float)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── cast: bool [type=bool, outer=(1)]
       └── gt [type=bool, outer=(1)]
            ├── variable: a.x [type=int, outer=(1)]
