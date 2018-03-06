@@ -97,7 +97,7 @@ func TestLoadCSV(t *testing.T) {
 	}
 
 	null := ""
-	if _, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, filepath.Join(tmp, "foo"), 0 /* comma */, 0 /* comment */, &null, testSSTMaxSize, tmp); err != nil {
+	if _, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, filepath.Join(tmp, "foo"), 0 /* comma */, 0 /* comment */, 0 /* skip */, &null, testSSTMaxSize, tmp); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,7 +164,7 @@ func TestLoadCSVUniqueDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
+	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, testSSTMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
@@ -203,7 +203,7 @@ func TestLoadCSVPrimaryDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
+	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, testSSTMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
@@ -242,7 +242,7 @@ d
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, testSSTMaxSize, tmp)
+	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, testSSTMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %+v", err)
 	}
@@ -283,7 +283,7 @@ func TestLoadCSVPrimaryDuplicateSSTBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, sstMaxSize, tmp)
+	_, _, _, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, sstMaxSize, tmp)
 	if !testutils.IsError(err, "duplicate key") {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestLoadCSVOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	null := "N"
-	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, &null /* nullif */, 400, tmp)
+	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, '|' /* comma */, '#' /* comment */, 0 /* skip */, &null /* nullif */, 400, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestLoadCSVSplit(t *testing.T) {
 	}
 	// sstMaxSize = 1 should put each index (could be more than one KV due to
 	// column families) in its own SST.
-	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, nil /* nullif */, 1 /* sstMaxSize */, tmp)
+	csv, kv, sst, err := LoadCSV(ctx, tablePath, []string{dataPath}, tmp, 0 /* comma */, 0 /* comment */, 0 /* skip */, nil /* nullif */, 1 /* sstMaxSize */, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,6 +425,12 @@ func makeCSVData(
 		pathWithOpts := filepath.Join("csv", fmt.Sprintf("data-%d-opts", fn))
 		fWithOpts, err := os.Create(filepath.Join(in, pathWithOpts))
 		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fmt.Fprint(fWithOpts, "This is a header line to be skipped\n"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fmt.Fprint(fWithOpts, "So is this\n"); err != nil {
 			t.Fatal(err)
 		}
 		pathDup := filepath.Join("csv", fmt.Sprintf("data-%d-dup", fn))
@@ -548,10 +554,10 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query-opts",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif=''`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2'`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = ''`,
+			`WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2'`,
 			"",
 		},
 		{
@@ -581,18 +587,18 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"schema-in-query-local-opts",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, delimiter = '|', comment = '#', nullif='', transform = $1`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH local, delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', local, "nullif" = '', transform = 'nodelocal:///7'`,
+			`WITH comment = '#', delimiter = '|', local, "nullif" = '', skip = '2', transform = 'nodelocal:///7'`,
 			"",
 		},
 		{
 			"schema-in-query-transform-only",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', transform = $1`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
-			`WITH comment = '#', delimiter = '|', "nullif" = '', transform = 'nodelocal:///8'`,
+			`WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///8'`,
 			"",
 		},
 		{
@@ -654,7 +660,7 @@ func TestImportStmt(t *testing.T) {
 		},
 		{
 			"bad-computed-column",
-			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform = $1`,
+			`IMPORT TABLE t (a INT PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2', transform = $1`,
 			nil,
 			filesWithOpts,
 			``,
