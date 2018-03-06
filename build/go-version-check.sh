@@ -27,7 +27,7 @@ fi
 
 version_major=$(cut -f1 -d. <<< "$version")
 version_minor=$(cut -f2 -d. <<< "$version")
-if (( version_major != 1 )) || (( version_minor < 9 )); then
-  echo "go1.9+ required (detected go$version)"
+if (( version_major != 1 )) || (( version_minor < 10 )); then
+  echo "go1.10+ required (detected go$version)"
   exit
 fi
