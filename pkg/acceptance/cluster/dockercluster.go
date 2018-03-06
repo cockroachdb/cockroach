@@ -511,6 +511,7 @@ func (l *DockerCluster) startNode(ctx context.Context, node *testNode) {
 		"COCKROACH_SCAN_MAX_IDLE_TIME=200ms",
 		"COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE=true",
 		"COCKROACH_SKIP_UPDATE_CHECK=1",
+		"COCKROACH_CRASH_REPORTS=",
 	}
 	l.createRoach(ctx, node, l.vols, env, cmd...)
 	maybePanic(node.Start(ctx))

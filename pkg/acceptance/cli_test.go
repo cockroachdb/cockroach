@@ -32,6 +32,7 @@ const containerPath = "/go/src/github.com/cockroachdb/cockroach/cli/interactive_
 var cmdBase = []string{
 	"/usr/bin/env",
 	"COCKROACH_SKIP_UPDATE_CHECK=1",
+	"COCKROACH_CRASH_REPORTS=",
 	"/bin/bash",
 	"-c",
 }
