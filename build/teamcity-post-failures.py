@@ -76,7 +76,7 @@ def get_probable_milestone():
     try:
         res = urllib.request.urlopen(
             'https://api.github.com/repos/cockroachdb/cockroach/milestones?state=open')
-        milestones = json.load(res)
+        milestones = json.loads(res.read().decode(res.info().get_param('charset') or 'utf-8'))
     except (ValueError, urllib.error.HTTPError) as e:
         print('warning: unable to load milestones: {0}'.format(e))
         print('issue will be posted without milestone')
