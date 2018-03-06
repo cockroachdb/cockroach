@@ -37,17 +37,28 @@ func (i Operator) String() string {
 	return opNames[opIndexes[i]:opIndexes[i+1]]
 }
 
-// FuncDef defines the value of the Def private field of the Function operator.
-// It provides the name and return type of the function, as well as a pointer
-// to an already resolved builtin overload definition.
-type FuncDef struct {
+// FuncOpDef defines the value of the Def private field of the Function
+// operator. It provides the name and return type of the function, as well as a
+// pointer to an already resolved builtin overload definition.
+type FuncOpDef struct {
 	Name     string
 	Type     types.T
 	Overload *tree.Builtin
 }
 
-func (f FuncDef) String() string {
+func (f FuncOpDef) String() string {
 	return f.Name
+}
+
+// ScanOpDef defines the value of the Def private field of the Scan operator.
+type ScanOpDef struct {
+	// Table identifies the table to scan. It is an index that can be passed to
+	// the Metadata.Table method in order to fetch optbase.Table metadata.
+	Table TableIndex
+
+	// Cols specifies the set of columns that the scan operator projects. This
+	// may be a subset of the columns that the table contains.
+	Cols ColSet
 }
 
 // SetOpColMap defines the value of the ColMap private field of the set

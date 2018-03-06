@@ -261,8 +261,8 @@ type Factory interface {
 
 	// ConstructFunction constructs an expression for the Function operator.
 	// Function invokes a builtin SQL function like CONCAT or NOW, passing the given
-	// arguments. The private field is an opt.FuncDef struct that provides the name
-	// of the function as well as a pointer to the builtin overload definition.
+	// arguments. The private field is an opt.FuncOpDef struct that provides the
+	// name of the function as well as a pointer to the builtin overload definition.
 	ConstructFunction(args ListID, def PrivateID) GroupID
 
 	// ConstructCoalesce constructs an expression for the Coalesce operator.
@@ -278,11 +278,12 @@ type Factory interface {
 	// ------------------------------------------------------------
 
 	// ConstructScan constructs an expression for the Scan operator.
-	// Scan returns a result set containing every row in the specified table. Rows
-	// and columns are not expected to have any particular ordering. The private
-	// Table field is a Metadata.TableIndex that references an opt.Table
-	// definition in the query's metadata.
-	ConstructScan(table PrivateID) GroupID
+	// Scan returns a result set containing every row in the specified table. The
+	// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+	// well as the subset of columns to project from it. Rows and columns are not
+	// expected to have any particular ordering unless a physical property requires
+	// it.
+	ConstructScan(def PrivateID) GroupID
 
 	// ConstructValues constructs an expression for the Values operator.
 	// Values returns a manufactured result set containing a constant number of rows.
@@ -359,7 +360,7 @@ type Factory interface {
 	// groups results that are equal on the grouping columns and computes
 	// aggregations as described by Aggregations (which is always an Aggregations
 	// operator). The arguments of the aggregations are columns from the input.
-	ConstructGroupBy(input GroupID, aggregations GroupID, groupingColumns PrivateID) GroupID
+	ConstructGroupBy(input GroupID, aggregations GroupID, groupingCols PrivateID) GroupID
 
 	// ConstructUnion constructs an expression for the Union operator.
 	// Union is an operator used to combine the Left and Right input relations into

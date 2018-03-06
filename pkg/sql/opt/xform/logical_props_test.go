@@ -42,8 +42,8 @@ func TestLogicalJoinProps(t *testing.T) {
 		t.Helper()
 
 		// (Join (Scan a) (Scan b) (True))
-		leftGroup := f.ConstructScan(f.InternPrivate(a))
-		rightGroup := f.ConstructScan(f.InternPrivate(b))
+		leftGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), a)))
+		rightGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), b)))
 		onGroup := f.ConstructTrue()
 		children := []opt.GroupID{leftGroup, rightGroup, onGroup}
 		joinGroup := f.DynamicConstruct(op, children, 0)
@@ -61,11 +61,24 @@ func TestLogicalJoinProps(t *testing.T) {
 	joinFunc(opt.AntiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
 }
 
+func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *opt.ScanOpDef {
+	def := opt.ScanOpDef{Table: tblIndex}
+	for i := 0; i < md.Table(tblIndex).ColumnCount(); i++ {
+		def.Cols.Add(int(md.TableColumn(tblIndex, i)))
+	}
+	return &def
+}
+
 func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected string) {
 	t.Helper()
 
+	logical := f.mem.lookupGroup(group).logical
+	if logical.Relational == nil {
+		panic("only relational properties are supported")
+	}
+
 	tp := treeprinter.New()
-	f.mem.lookupGroup(group).logical.format(f.Metadata(), tp)
+	logical.formatOutputCols(f.Metadata(), tp)
 	actual := tp.String()
 
 	if actual != expected {

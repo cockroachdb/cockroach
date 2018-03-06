@@ -2993,8 +2993,8 @@ func (_f *factory) ConstructWhen(
 
 // ConstructFunction constructs an expression for the Function operator.
 // Function invokes a builtin SQL function like CONCAT or NOW, passing the given
-// arguments. The private field is an opt.FuncDef struct that provides the name
-// of the function as well as a pointer to the builtin overload definition.
+// arguments. The private field is an opt.FuncOpDef struct that provides the
+// name of the function as well as a pointer to the builtin overload definition.
 func (_f *factory) ConstructFunction(
 	args opt.ListID,
 	def opt.PrivateID,
@@ -3075,14 +3075,15 @@ func (_f *factory) ConstructUnsupportedExpr(
 }
 
 // ConstructScan constructs an expression for the Scan operator.
-// Scan returns a result set containing every row in the specified table. Rows
-// and columns are not expected to have any particular ordering. The private
-// Table field is a Metadata.TableIndex that references an opt.Table
-// definition in the query's metadata.
+// Scan returns a result set containing every row in the specified table. The
+// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+// well as the subset of columns to project from it. Rows and columns are not
+// expected to have any particular ordering unless a physical property requires
+// it.
 func (_f *factory) ConstructScan(
-	table opt.PrivateID,
+	def opt.PrivateID,
 ) opt.GroupID {
-	_scanExpr := makeScanExpr(table)
+	_scanExpr := makeScanExpr(def)
 	_group := _f.mem.lookupGroupByFingerprint(_scanExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -3164,11 +3165,117 @@ func (_f *factory) ConstructProject(
 
 	// [EliminateProject]
 	{
-		if _f.hasSameProjectionCols(input, projections) {
+		if _f.hasSameCols(input, projections) {
 			_f.reportOptimization()
 			_group = input
 			_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 			return _group
+		}
+	}
+
+	// [FilterUnusedProjectCols]
+	{
+		_project := _f.mem.lookupNormExpr(input).asProject()
+		if _project != nil {
+			innerInput := _project.input()
+			innerProjections := _project.projections()
+			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructProject(innerInput, _f.filterUnusedColumns(innerProjections, _f.neededCols(projections))), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedScanCols]
+	{
+		_scan := _f.mem.lookupNormExpr(input).asScan()
+		if _scan != nil {
+			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedSelectCols]
+	{
+		_select := _f.mem.lookupNormExpr(input).asSelect()
+		if _select != nil {
+			innerInput := _select.input()
+			filter := _select.filter()
+			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructSelect(_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)), filter), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedJoinLeftCols]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.isJoin() {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, []opt.GroupID{_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on)), right, on}, 0), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedJoinRightCols]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.isJoin() {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, []opt.GroupID{left, _f.filterUnusedColumns(right, _f.neededCols2(projections, on)), on}, 0), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedAggCols]
+	{
+		_groupBy := _f.mem.lookupNormExpr(input).asGroupBy()
+		if _groupBy != nil {
+			innerInput := _groupBy.input()
+			aggregations := _groupBy.aggregations()
+			groupingCols := _groupBy.groupingCols()
+			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructGroupBy(innerInput, _f.filterUnusedColumns(aggregations, _f.neededCols(projections)), groupingCols), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedValueCols]
+	{
+		_values := _f.mem.lookupNormExpr(input).asValues()
+		if _values != nil {
+			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
 		}
 	}
 
@@ -3420,9 +3527,9 @@ func (_f *factory) ConstructAntiJoinApply(
 func (_f *factory) ConstructGroupBy(
 	input opt.GroupID,
 	aggregations opt.GroupID,
-	groupingColumns opt.PrivateID,
+	groupingCols opt.PrivateID,
 ) opt.GroupID {
-	_groupByExpr := makeGroupByExpr(input, aggregations, groupingColumns)
+	_groupByExpr := makeGroupByExpr(input, aggregations, groupingCols)
 	_group := _f.mem.lookupGroupByFingerprint(_groupByExpr.fingerprint())
 	if _group != 0 {
 		return _group
@@ -3430,6 +3537,16 @@ func (_f *factory) ConstructGroupBy(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_groupByExpr))
+	}
+
+	// [FilterUnusedGroupByCols]
+	{
+		if _f.hasUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)) {
+			_f.reportOptimization()
+			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)), aggregations, groupingCols)
+			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_groupByExpr)))
