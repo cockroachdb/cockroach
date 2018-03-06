@@ -1709,16 +1709,20 @@ func EncodeSecondaryIndexes(
 	values []tree.Datum,
 	secondaryIndexEntries []IndexEntry,
 ) ([]IndexEntry, error) {
+	if len(secondaryIndexEntries) != len(indexes) {
+		panic("Length of secondaryIndexEntries is not equal to the number of indexes.")
+	}
 	for i := range indexes {
 		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
 		if err != nil {
 			return secondaryIndexEntries, err
 		}
+		secondaryIndexEntries[i] = entries[0]
+
+		// This is specifically for inverted indexes which can have more than one entry
+		// associated with them.
 		if len(entries) > 1 {
 			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
-		}
-		if len(entries) > 0 {
-			secondaryIndexEntries[i] = entries[0]
 		}
 	}
 	return secondaryIndexEntries, nil
