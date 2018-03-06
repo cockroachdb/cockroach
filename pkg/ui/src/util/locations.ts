@@ -96,22 +96,18 @@ export function findOrCalculateLocation(locations: LocationTree, locality: Local
 export function getConfigStatus(
   localityTree: LocalityTree, locationTree: LocationTree,
 ): NodeMapConfigStatus {
-  const result = {
-    totalNodes: 0,
-    withLocality: 0,
-    withLocation: 0,
-  };
+  let totalNodes = 0;
+  let withLocality = 0;
+  let withLocation = 0;
   function recur(tree: LocalityTree) {
-    console.log('recur', tree);
-    tree.nodes.forEach((node) => {
-      console.log('node', node);
-      result.totalNodes++;
+    tree.nodes.forEach(() => {
+      totalNodes++;
       // TODO: what about root?
       if (tree.tiers.length > 0) {
-        result.withLocality++;
+        withLocality++;
         const currentTier = tree.tiers[tree.tiers.length - 1];
         if (hasLocation(locationTree, currentTier)) {
-          result.withLocation++;
+          withLocation++;
         }
       }
     });
@@ -122,11 +118,15 @@ export function getConfigStatus(
     });
   }
   recur(localityTree);
-  return result;
+  return {
+    totalNodes,
+    withoutLocality: totalNodes - withLocality,
+    withoutLocation: totalNodes - withLocation,
+  };
 }
 
 export interface NodeMapConfigStatus {
   totalNodes: number;
-  withLocality: number;
-  withLocation: number;
+  withoutLocality: number;
+  withoutLocation: number;
 }

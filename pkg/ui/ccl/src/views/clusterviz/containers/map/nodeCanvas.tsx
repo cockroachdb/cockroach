@@ -23,6 +23,7 @@ import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
 import {getConfigStatus} from "oss/src/util/locations";
+import {InstructionsBox} from "oss/ccl/src/views/clusterviz/components/instructionsBox";
 
 type Liveness = cockroach.storage.Liveness;
 
@@ -137,29 +138,12 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     );
   }
 
-  renderPictureInPicture() {
-    const status = getConfigStatus(this.props.localityTree, this.props.locationTree);
-    console.log(status);
+  renderInstructionsBox() {
     return (
-      <div
-        style={{
-          position: "absolute",
-          right: BACK_BUTTON_OFFSET,
-          bottom: BACK_BUTTON_OFFSET,
-          backgroundColor: "white",
-          border: "1px solid #EDEDED",
-          borderRadius: 3,
-          padding: 12,
-          boxShadow: "0px 0px 4px 0px rgba(0, 0, 0, 0.2)",
-          letterSpacing: 0.5,
-        }}
-      >
-        Nodes: {status.totalNodes}.{" "}
-        Without locality: {status.totalNodes - status.withLocality}.{" "}
-        Without location: {status.totalNodes - status.withLocation}.
-        <br />
-        <a href="http://cockroachlabs.com/docs">Docs</a>
-      </div>
+      <InstructionsBox
+        localityTree={this.props.localityTree}
+        locationTree={this.props.locationTree}
+      />
     );
   }
 
@@ -186,7 +170,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
           </svg>
         </div>
         { this.renderBackButton() }
-        { showMap ? null : this.renderPictureInPicture() }
+        { showMap ? null : this.renderInstructionsBox() }
       </div>
     );
   }
