@@ -180,6 +180,12 @@ func (ib *indexBackfiller) runChunk(
 			if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.da); err != nil {
 				return nil, err
 			}
+
+			// We're resetting the length of this slice for variable length indexes such as inverted
+			// indexes which can append entries to the end of the slice. If we don't do this, then everything
+			// EncodeSecondaryIndexes appends to secondaryIndexEntries for a row, would stay in the slice for
+			// subsequent rows and we would then have duplicates in entries on output.
+			secondaryIndexEntries = secondaryIndexEntries[:len(mutations)]
 			if secondaryIndexEntries, err = sqlbase.EncodeSecondaryIndexes(
 				&ib.spec.Table, added, ib.colIdxMap,
 				ib.rowVals, secondaryIndexEntries); err != nil {
