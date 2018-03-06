@@ -12,17 +12,20 @@ import { SortableTable } from "src/views/shared/components/sortabletable";
 import { AdminUIState } from "src/redux/state";
 import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
 import { currentNode } from "src/views/cluster/containers/nodeOverview";
+import { CachedDataReducerState } from "oss/src/redux/cachedDataReducer";
+import Loading from "src/views/shared/components/loading";
+import spinner from "assets/spinner.gif";
 import "./logs.styl";
 
 interface LogProps {
-  logs: LogEntriesResponseMessage;
+  logs: CachedDataReducerState<LogEntriesResponseMessage>;
   currentNode: NodeStatus$Properties;
   refreshLogs: typeof refreshLogs;
   refreshNodes: typeof refreshNodes;
 }
 
 /**
- * Renders the main content of the help us page.
+ * Renders the main content of the logs page.
  */
 class Logs extends React.Component<LogProps & RouterState, {}> {
   componentWillMount() {
@@ -36,8 +39,8 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
       ? this.props.currentNode.desc.address.address_field
       : null;
 
-    if (this.props.logs) {
-      const logEntries = _.sortBy(this.props.logs.entries, (e) => e.time);
+    if (this.props.logs.data) {
+      const logEntries = _.sortBy(this.props.logs.data.entries, (e) => e.time);
       const columns = [
         {
           title: "Time",
@@ -77,20 +80,24 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
           <h2>Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
         </div>
         <section className="section">
-          { content }
+          <Loading
+            loading={ !this.props.logs.data }
+            className="loading-image loading-image__spinner-left"
+            image={ spinner }
+          >
+            { content }
+          </Loading>
         </section>
       </div>
     );
   }
 }
 
-const logs = (state: AdminUIState): LogEntriesResponseMessage => state.cachedData.logs.data;
-
 // Connect the EventsList class with our redux store.
 const logsConnected = connect(
   (state: AdminUIState, ownProps: RouterState) => {
     return {
-      logs: logs(state),
+      logs: state.cachedData.logs,
       currentNode: currentNode(state, ownProps),
     };
   },
