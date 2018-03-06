@@ -61,11 +61,11 @@ x:int  y:int
 exec-explain
 SELECT x + 1 FROM t.a
 ----
-render     0  render  ·         ·          (column3)  ·
- │         0  ·       render 0  x + 1      ·          ·
- └── scan  1  scan    ·         ·          (x, y)     ·
-·          1  ·       table     a@primary  ·          ·
-·          1  ·       spans     ALL        ·          ·
+render     0  render  ·         ·          (column3)       ·
+ │         0  ·       render 0  x + 1      ·               ·
+ └── scan  1  scan    ·         ·          (x, y[hidden])  ·
+·          1  ·       table     a@primary  ·               ·
+·          1  ·       spans     ALL        ·               ·
 
 exec
 SELECT x + 1 FROM t.a
@@ -182,13 +182,13 @@ x:int  y:int
 exec-explain
 SELECT x FROM t.b WHERE rowid > 0
 ----
-render          0  render  ·         ·          (x)                    ·
- │              0  ·       render 0  x          ·                      ·
- └── filter     1  filter  ·         ·          (x, y, rowid[hidden])  ·
-      │         1  ·       filter    rowid > 0  ·                      ·
-      └── scan  2  scan    ·         ·          (x, y, rowid[hidden])  ·
-·               2  ·       table     b@primary  ·                      ·
-·               2  ·       spans     ALL        ·                      ·
+render          0  render  ·         ·          (x)                            ·
+ │              0  ·       render 0  x          ·                              ·
+ └── filter     1  filter  ·         ·          (x, rowid[hidden], y[hidden])  ·
+      │         1  ·       filter    rowid > 0  ·                              ·
+      └── scan  2  scan    ·         ·          (x, rowid[hidden], y[hidden])  ·
+·               2  ·       table     b@primary  ·                              ·
+·               2  ·       spans     ALL        ·                              ·
 
 exec
 SELECT x FROM t.b WHERE rowid > 0

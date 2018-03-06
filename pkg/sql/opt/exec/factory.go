@@ -38,8 +38,8 @@ type Factory interface {
 	ConstructValues(rows [][]tree.TypedExpr, cols sqlbase.ResultColumns) (Node, error)
 
 	// ConstructScan returns a node that represents a scan of the given table.
-	// TODO(radu): support list of columns, index, index constraints
-	ConstructScan(table optbase.Table) (Node, error)
+	// TODO(radu): support list of index, index constraints
+	ConstructScan(table optbase.Table, cols []optbase.Column) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.

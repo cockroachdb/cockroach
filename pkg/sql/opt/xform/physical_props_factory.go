@@ -96,16 +96,22 @@ func (f physicalPropsFactory) canProvideOrdering(ev ExprView, required opt.Order
 
 	case opt.ScanOp:
 		// Scan naturally orders according to the primary index.
-		tblIdx := ev.Private().(opt.TableIndex)
-		primary := ev.Metadata().Table(tblIdx).Primary()
+		def := ev.Private().(*opt.ScanOpDef)
+		primary := ev.Metadata().Table(def.Table).Primary()
 
-		ordering := make(opt.Ordering, primary.ColumnCount())
+		// Scan can project subset of columns.
+		n := 0
+		ordering := make(opt.Ordering, 0, primary.ColumnCount())
 		for i := 0; i < primary.ColumnCount(); i++ {
-			idxCol := primary.Column(i)
-			ordering[i] = ev.Metadata().TableColumn(tblIdx, idxCol.Ordinal)
-			if idxCol.Descending {
-				// Negative metadata column index indicates descending order.
-				ordering[i] = -ordering[i]
+			primaryCol := primary.Column(i)
+			colIndex := ev.Metadata().TableColumn(def.Table, primaryCol.Ordinal)
+			if def.Cols.Contains(int(colIndex)) {
+				if primaryCol.Descending {
+					// Negative metadata column index indicates descending order.
+					colIndex = -colIndex
+				}
+				ordering = append(ordering, colIndex)
+				n++
 			}
 		}
 

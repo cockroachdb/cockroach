@@ -291,7 +291,7 @@ func (b *Builder) buildFunction(
 		panic(builderError{err})
 	}
 
-	funcDef := opt.FuncDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
+	funcDef := opt.FuncOpDef{Name: def.Name, Type: f.ResolvedType(), Overload: f.ResolvedBuiltin()}
 
 	if isAggregate(def) {
 		return b.buildAggregateFunction(f, funcDef, label, inScope)
@@ -302,7 +302,7 @@ func (b *Builder) buildFunction(
 		argList[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope)
 	}
 
-	// Construct a private FuncDef that refers to a resolved function overload.
+	// Construct a private FuncOpDef that refers to a resolved function overload.
 	return b.factory.ConstructFunction(
 		b.factory.InternList(argList), b.factory.InternPrivate(funcDef),
 	), nil

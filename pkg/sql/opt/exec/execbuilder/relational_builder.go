@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -150,17 +151,31 @@ func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
-	tblIndex := ev.Private().(opt.TableIndex)
+	def := ev.Private().(*opt.ScanOpDef)
 	md := ev.Metadata()
-	tbl := md.Table(tblIndex)
-	node, err := b.factory.ConstructScan(tbl)
+	tbl := md.Table(def.Table)
+	res := execPlan{}
+
+	// Determine output columns for the builder and for ConstructScan.
+	n := 0
+	cols := make([]optbase.Column, 0, def.Cols.Len())
+	for i := 0; i < tbl.ColumnCount(); i++ {
+		colIndex := md.TableColumn(def.Table, i)
+		if !def.Cols.Contains(int(colIndex)) {
+			// Skip columns that don't need to be returned by the scan.
+			continue
+		}
+		cols = append(cols, tbl.Column(i))
+		res.outputCols.Set(int(colIndex), n)
+		n++
+	}
+
+	var err error
+	res.root, err = b.factory.ConstructScan(tbl, cols)
 	if err != nil {
 		return execPlan{}, err
 	}
-	res := execPlan{root: node}
-	for i := 0; i < tbl.ColumnCount(); i++ {
-		res.outputCols.Set(int(md.TableColumn(tblIndex, i)), i)
-	}
+
 	return res, nil
 }
 

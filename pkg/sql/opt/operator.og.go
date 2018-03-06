@@ -185,8 +185,8 @@ const (
 	WhenOp
 
 	// FunctionOp invokes a builtin SQL function like CONCAT or NOW, passing the given
-	// arguments. The private field is an opt.FuncDef struct that provides the name
-	// of the function as well as a pointer to the builtin overload definition.
+	// arguments. The private field is an opt.FuncOpDef struct that provides the
+	// name of the function as well as a pointer to the builtin overload definition.
 	FunctionOp
 
 	CoalesceOp
@@ -199,10 +199,10 @@ const (
 	// Relational Operators
 	// ------------------------------------------------------------
 
-	// ScanOp returns a result set containing every row in the specified table. Rows
-	// and columns are not expected to have any particular ordering. The private
-	// Table field is a Metadata.TableIndex that references an optbase.Table
-	// definition in the query's metadata.
+	// ScanOp returns rows and columns from a table. The private Def field is an
+	// *opt.ScanOpDef that identifies the table to scan, as well as the subset of
+	// columns to project from it. Rows and columns are not expected to have any
+	// particular ordering unless a physical property requires it.
 	ScanOp
 
 	// ValuesOp returns a manufactured result set containing a constant number of rows.

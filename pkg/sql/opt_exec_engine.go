@@ -130,12 +130,12 @@ func (ee *execEngine) ConstructValues(
 }
 
 // ConstructScan is part of the exec.Factory interface.
-func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
+func (ee *execEngine) ConstructScan(table optbase.Table, cols []optbase.Column) (exec.Node, error) {
 	desc := table.(*optTable).desc
 
-	columns := make([]tree.ColumnID, len(desc.Columns))
-	for i := range columns {
-		columns[i] = tree.ColumnID(desc.Columns[i].ID)
+	columns := make([]tree.ColumnID, len(cols))
+	for i, col := range cols {
+		columns[i] = tree.ColumnID(col.(*sqlbase.ColumnDescriptor).ID)
 	}
 	// Create a scanNode.
 	scan := ee.planner.Scan()

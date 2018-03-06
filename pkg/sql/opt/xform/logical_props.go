@@ -51,6 +51,23 @@ type RelationalProps struct {
 	// The NULL-ability of columns flows from the inputs and can also be
 	// derived from filters that are NULL-intolerant.
 	NotNullCols opt.ColSet
+
+	// OuterCols is the set of columns that are referenced by variables within
+	// this relational sub-expression, but are not bound within the scope of
+	// the expression. For example:
+	//
+	//   SELECT *
+	//   FROM a
+	//   WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x AND b.y = 5)
+	//
+	// For the inner SELECT expression, a.x is an outer column, meaning that it
+	// is defined "outside" the SELECT expression (hence the name "outer"). The
+	// SELECT expression binds the b.x and b.y references, so they are not
+	// part of the outer column set. The outer SELECT binds the a.x column, and
+	// so its outer column set is empty.
+	//
+	// TODO(andyk): populate this when we have subquery support
+	OuterCols opt.ColSet
 }
 
 // ScalarProps are the subset of logical properties that are computed for
@@ -70,18 +87,10 @@ type ScalarProps struct {
 	// For the EXISTS expression, only a.x is an outer column, meaning that
 	// only it is defined "outside" the EXISTS expression (hence the name
 	// "outer"). Note that what constitutes an "outer column" is dependent on
-	// an expression's lcoation in the query. For example, while the b.x and
+	// an expression's location in the query. For example, while the b.x and
 	// b.y columns are not outer columns on the EXISTS expression, they *are*
 	// outer columns on the inner WHERE condition.
 	OuterCols opt.ColSet
-}
-
-func (p *LogicalProps) format(md *opt.Metadata, tp treeprinter.Node) {
-	if p.Relational != nil {
-		p.formatOutputCols(md, tp)
-	} else {
-		tp.Child(fmt.Sprintf("type: %s", p.Scalar.Type))
-	}
 }
 
 func (p *LogicalProps) formatOutputCols(md *opt.Metadata, tp treeprinter.Node) {
