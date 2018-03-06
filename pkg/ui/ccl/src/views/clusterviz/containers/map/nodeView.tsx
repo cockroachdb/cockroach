@@ -88,6 +88,7 @@ export class NodeView extends React.Component<NodeViewProps> {
         style={{ cursor: "pointer" }}
       >
         <g transform={`translate(${TRANSLATE_X},${TRANSLATE_Y})scale(${SCALE_FACTOR})`}>
+          <rect width={180} height={210} opacity={0} />
           <Labels
             label={`Node ${node.desc.node_id}`}
             subLabel={this.getUptimeText()}
