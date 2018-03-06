@@ -1341,19 +1341,25 @@ SELECT array_upper(ARRAY[ARRAY[1, 2]], 2)
 ----
 2
 
-query error only 'hex' format is supported for ENCODE
-SELECT ENCODE('abc', 'escape')
-
-query error only 'hex' format is supported for DECODE
-SELECT DECODE('abc', 'escape')
-
-query error invalid UTF-8
+query T
 SELECT ENCODE('\xa7', 'hex')
+----
+a7
 
 query TT
 SELECT ENCODE('abc', 'hex'), DECODE('616263', 'hex')
 ----
 616263 abc
+
+query T
+SELECT ENCODE(e'123\000456', 'escape')
+----
+123\000456
+
+query T
+SELECT DECODE('123\000456', 'escape')::STRING
+----
+\x31323300343536
 
 query T
 SELECT FROM_IP(b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xff\x01\x02\x03\x04')
