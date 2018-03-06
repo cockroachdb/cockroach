@@ -15,18 +15,104 @@
 package jobutils
 
 import (
+	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/kr/pretty"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
+
+// WaitForJob waits for the specified job ID to terminate.
+func WaitForJob(db *gosql.DB, jobID int64) error {
+	var jobFailedErr error
+	err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+		var status string
+		var payloadBytes []byte
+		if err := db.QueryRow(
+			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&status, &payloadBytes); err != nil {
+			return err
+		}
+		if jobs.Status(status) == jobs.StatusFailed {
+			jobFailedErr = errors.New("job failed")
+			payload := &jobs.Payload{}
+			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
+				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
+			}
+			return nil
+		}
+		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
+			return errors.Errorf("expected backup status %s, but got %s", e, a)
+		}
+		return nil
+	})
+	if jobFailedErr != nil {
+		return jobFailedErr
+	}
+	return err
+}
+
+// RunJob runs the provided job control statement, notifying the chan (see
+// discussion on ResponseFilter), returning the jobID and error result.
+func RunJob(
+	t *testing.T,
+	db *sqlutils.SQLRunner,
+	allowResponse *chan struct{},
+	op, query string,
+	args ...interface{},
+) (int64, error) {
+	*allowResponse = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := db.DB.Exec(query, args...)
+		errCh <- err
+	}()
+	select {
+	case *allowResponse <- struct{}{}:
+	case err := <-errCh:
+		return 0, errors.Wrapf(err, "query returned before expected: %s", query)
+	}
+	var jobID int64
+	db.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	db.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
+	close(*allowResponse)
+	return jobID, <-errCh
+}
+
+// ResponseFilter creates a store response filter: PAUSE JOB and CANCEL JOB are
+// racy in that it's hard to guarantee that the job is still running when
+// executing a PAUSE or CANCEL--or that the job has even started running. To
+// synchronize, we install a store response filter which does a blocking receive
+// whenever it encounters an export or import response. Later, when we want to
+// guarantee the job is in progress, we do exactly one blocking send. When this
+// send completes, we know the job has started, as we've seen one export or
+// import response. We also know the job has not finished, because we're
+// blocking all future export and import responses until we close the channel,
+// and our backup or restore is large enough that it will generate more than one
+// export or import response.
+func ResponseFilter(allowResponse *chan struct{}) storagebase.ReplicaResponseFilter {
+	return func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+		for _, res := range br.Responses {
+			if res.Export != nil || res.Import != nil || res.AddSstable != nil {
+				<-*allowResponse
+			}
+		}
+		return nil
+	}
+}
 
 // GetSystemJobsCount queries the number of entries in the jobs table.
 func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
