@@ -90,7 +90,7 @@ type TableStatisticsCache struct {
 		histogramCache *cache.UnorderedCache
 	}
 	ClientDB    *client.DB
-	SQLExecutor sqlutil.InternalExecutor
+	SQLExecutor sqlutil.InternalSQLExecutor
 }
 
 // NewTableStatisticsCache creates a new TableStatisticsCache, with the
@@ -98,7 +98,10 @@ type TableStatisticsCache struct {
 // the underlying histogramCache set to histogramCacheSize.
 // Both underlying caches internally use a hash map, so lookups are cheap.
 func NewTableStatisticsCache(
-	statsCacheSize int, histogramCacheSize int, db *client.DB, sqlExecutor sqlutil.InternalExecutor,
+	statsCacheSize int,
+	histogramCacheSize int,
+	db *client.DB,
+	sqlExecutor sqlutil.InternalSQLExecutor,
 ) *TableStatisticsCache {
 	tableStatsCache := &TableStatisticsCache{
 		ClientDB:    db,
@@ -352,14 +355,8 @@ SELECT "tableID", "statisticID", name, "columnIDs", "createdAt", "rowCount", "di
 FROM system.table_statistics
 WHERE "tableID" = $1
 `
-	var rows []tree.Datums
-	if err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		rows, _ /* cols */, err = sc.SQLExecutor.QueryRowsInTransaction(
-			ctx, "get-table-statistics", txn, getTableStatisticsStmt, tableID,
-		)
-		return err
-	}); err != nil {
+	rows, _ /* cols */, err := sc.SQLExecutor.Query(ctx, nil /* txn */, getTableStatisticsStmt, tableID)
+	if err != nil {
 		return nil, err
 	}
 
@@ -386,12 +383,8 @@ SELECT histogram
 FROM system.table_statistics
 WHERE "tableID" = $1 AND "statisticID" = $2
 `
-	var row tree.Datums
-	if err := sc.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		row, err = sc.SQLExecutor.QueryRowInTransaction(ctx, "get-histogram", txn, getHistogramStmt, tableID, statisticID)
-		return err
-	}); err != nil {
+	row, err := sc.SQLExecutor.QueryRow(ctx, nil /* txn */, getHistogramStmt, tableID, statisticID)
+	if err != nil {
 		return nil, err
 	}
 

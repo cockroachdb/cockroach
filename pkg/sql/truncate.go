@@ -101,9 +101,12 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	}
 
 	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
+	// andrei: Also, the current code runs the risk of executing the truncation at
+	// prepare time. That doesn't happen currently because we don't prepare
+	// TRUNCATE statements.
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id := range toTruncate {
-		if err := p.truncateTable(p.EvalContext().Ctx(), id, traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, traceKV); err != nil {
 			return nil, err
 		}
 	}
@@ -227,7 +230,7 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 	const insertZoneCfg = `INSERT INTO system.zones (id, config) VALUES ($1, $2)`
-	_, err = p.exec(ctx, insertZoneCfg, newID, zoneCfg)
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(ctx, p.txn, insertZoneCfg, newID, zoneCfg)
 	return err
 }
 

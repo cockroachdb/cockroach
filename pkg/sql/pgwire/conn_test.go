@@ -209,8 +209,8 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 func execQuery(
 	ctx context.Context, query string, s serverutils.TestServerInterface, c *conn,
 ) error {
-	rows, cols, err := s.InternalExecutor().(sqlutil.InternalExecutor).QueryRows(
-		ctx, "pgx init" /* opName */, query,
+	rows, cols, err := s.InternalExecutor().(sqlutil.InternalSQLExecutor).Query(
+		ctx, nil /* txn */, query,
 	)
 	if err != nil {
 		return err

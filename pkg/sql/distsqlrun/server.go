@@ -115,7 +115,7 @@ type ServerConfig struct {
 
 	// DB is a handle to the cluster.
 	DB       *client.DB
-	Executor sqlutil.InternalExecutor
+	Executor sqlutil.InternalSQLExecutor
 
 	// FlowDB is the DB that flows should use for interacting with the database.
 	// This DB has to be set such that it bypasses the local TxnCoordSender. We

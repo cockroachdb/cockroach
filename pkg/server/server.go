@@ -138,8 +138,8 @@ type Server struct {
 	tsServer           ts.Server
 	raftTransport      *storage.RaftTransport
 	stopper            *stop.Stopper
-	sqlExecutor        *sql.Executor
 	execCfg            *sql.ExecutorConfig
+	internalExecutor   *sql.InternalSQLExecutor
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
@@ -366,7 +366,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// need an InternalExecutor, but the InternalExecutor needs an ExecutorConfig,
 	// which in turn needs many things. That's why everybody that needs an
 	// InternalExecutor takes pointers to this one instance.
-	sqlExecutor := sql.InternalExecutor{}
+	internalSQLExecutor := new(sql.InternalSQLExecutor)
 
 	// Similarly for execCfg.
 	var execCfg sql.ExecutorConfig
@@ -387,7 +387,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		TimestampCachePageSize:  s.cfg.TimestampCachePageSize,
 		HistogramWindowInterval: s.cfg.HistogramWindowInterval(),
 		StorePool:               s.storePool,
-		SQLExecutor:             &sqlExecutor,
+		SQLExecutor:             internalSQLExecutor,
 		LogRangeEvents:          s.cfg.EventLogEnabled,
 		TimeSeriesDataStore:     s.tsDB,
 
@@ -411,7 +411,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
-		s.cfg.AmbientCtx, s.clock, s.db, &sqlExecutor, &s.nodeIDContainer, st, func(opName, user string) (interface{}, func()) {
+		s.cfg.AmbientCtx, s.clock, s.db, internalSQLExecutor, &s.nodeIDContainer, st, func(opName, user string) (interface{}, func()) {
 			// This is a hack to get around a Go package dependency cycle. See comment
 			// in sql/jobs/registry.go on planHookMaker.
 			return sql.NewInternalPlanner(opName, nil, user, &sql.MemoryMetrics{}, &execCfg)
@@ -425,7 +425,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
 		DB:             s.db,
-		Executor:       &sqlExecutor,
+		Executor:       internalSQLExecutor,
 		FlowDB:         client.NewDB(s.tcsFactory, s.clock),
 		RPCContext:     s.rpcContext,
 		Stopper:        s.stopper,
@@ -448,7 +448,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.distSQLServer = distsqlrun.NewServer(ctx, distSQLCfg)
 	distsqlrun.RegisterDistSQLServer(s.grpc, s.distSQLServer)
 
-	s.admin = newAdminServer(s, &sqlExecutor)
+	s.admin = newAdminServer(s)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
@@ -462,7 +462,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.stopper,
 		s.sessionRegistry,
 	)
-	s.authentication = newAuthenticationServer(s, &sqlExecutor)
+	s.authentication = newAuthenticationServer(s)
 	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
 		gw.RegisterService(s.grpc)
 	}
@@ -539,28 +539,25 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
-	s.sqlExecutor = sql.NewExecutor(execCfg, s.stopper)
-	if s.cfg.UseLegacyConnHandling {
-		s.registry.AddMetricStruct(s.sqlExecutor)
-	}
 
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
 		s.cfg.Config,
 		s.ClusterSettings(),
-		s.sqlExecutor,
 		&s.internalMemMetrics,
 		&rootSQLMemoryMonitor,
 		s.cfg.HistogramWindowInterval(),
 		&execCfg,
 	)
 	s.registry.AddMetricStruct(s.pgServer.Metrics())
-	if !s.cfg.UseLegacyConnHandling {
-		s.registry.AddMetricStruct(s.pgServer.StatementCounters())
-		s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
-	}
+	s.registry.AddMetricStruct(s.pgServer.StatementCounters())
+	s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
+	*internalSQLExecutor = sql.MakeInternalSQLExecutor(
+		ctx, s.pgServer.SQLServer, &s.internalMemMetrics, s.ClusterSettings(),
+	)
+	s.internalExecutor = internalSQLExecutor
+	execCfg.InternalExecutor = internalSQLExecutor
 
-	sqlExecutor.ExecCfg = &execCfg
 	s.execCfg = &execCfg
 
 	s.leaseMgr.SetExecCfg(&execCfg)
@@ -1213,7 +1210,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		s.execCfg.DistSQLPlanner,
 	).Start(s.stopper)
 
-	s.sqlExecutor.Start(ctx, s.execCfg.DistSQLPlanner)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)
 
@@ -1291,10 +1287,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	migMgr := sqlmigrations.NewManager(
 		s.stopper,
 		s.db,
-		s.sqlExecutor,
+		s.internalExecutor,
 		s.clock,
 		mmKnobs,
-		&s.internalMemMetrics,
 		s.NodeID().String(),
 	)
 	if err := migMgr.EnsureMigrations(ctx); err != nil {
@@ -1323,13 +1318,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
-			var serveFn func(ctx context.Context, conn net.Conn) error
-			if !s.cfg.UseLegacyConnHandling {
-				serveFn = s.pgServer.ServeConn2
-			} else {
-				serveFn = s.pgServer.ServeConn
-			}
-			if err := serveFn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+			if err := s.pgServer.ServeConn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
 				// the logs.

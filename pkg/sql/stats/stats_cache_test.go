@@ -41,7 +41,7 @@ import (
 func insertTableStat(
 	ctx context.Context,
 	db *client.DB,
-	ex sqlutil.InternalExecutor,
+	ex sqlutil.InternalSQLExecutor,
 	stat *TableStatistic,
 	histogram *HistogramData,
 ) error {
@@ -82,7 +82,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	var rows int
 	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
-		rows, err = ex.ExecuteStatementInTransaction(ctx, "insert-table-stats", txn, insertStatStmt, args...)
+		rows, err = ex.Exec(ctx, txn, insertStatStmt, args...)
 		return err
 	}); err != nil {
 		return err
@@ -161,7 +161,7 @@ func checkHistForTable(
 }
 
 func initTestData(
-	ctx context.Context, db *client.DB, ex sqlutil.InternalExecutor,
+	ctx context.Context, db *client.DB, ex sqlutil.InternalSQLExecutor,
 ) (map[sqlbase.ID][]*TableStatistic, map[HistogramCacheKey]*HistogramData, error) {
 	// The expected stats must be ordered by TableID, StatisticID so they can
 	// later be compared with the returned stats using reflect.DeepEqual.
@@ -257,7 +257,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	ctx := context.Background()
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
+	ex := s.InternalExecutor().(sqlutil.InternalSQLExecutor)
 
 	expectedStats, expectedHist, err := initTestData(ctx, db, ex)
 	if err != nil {

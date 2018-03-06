@@ -47,7 +47,7 @@ type NodeLiveness interface {
 type Registry struct {
 	ac       log.AmbientContext
 	db       *client.DB
-	ex       sqlutil.InternalExecutor
+	ex       sqlutil.InternalSQLExecutor
 	clock    *hlc.Clock
 	nodeID   *base.NodeIDContainer
 	settings *cluster.Settings
@@ -89,7 +89,7 @@ func MakeRegistry(
 	ac log.AmbientContext,
 	clock *hlc.Clock,
 	db *client.DB,
-	ex sqlutil.InternalExecutor,
+	ex sqlutil.InternalSQLExecutor,
 	nodeID *base.NodeIDContainer,
 	settings *cluster.Settings,
 	planFn planHookMaker,
@@ -419,14 +419,9 @@ func AddResumeHook(fn ResumeHookFn) {
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
-	var rows []tree.Datums
-	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
-		rows, _ /* cols */, err = r.ex.QueryRowsInTransaction(
-			ctx, "adopt-job", txn, stmt, StatusPending, StatusRunning)
-		return err
-	}); err != nil {
+	const stmt = `SELECT id, payload FROM system.jobs WHERE status IN ($1, $2) ORDER BY created DESC`
+	rows, _ /* cols */, err := r.ex.Query(ctx, nil /* txn */, stmt, StatusPending, StatusRunning)
+	if err != nil {
 		return err
 	}
 

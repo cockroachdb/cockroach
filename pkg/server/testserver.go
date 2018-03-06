@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -552,14 +551,9 @@ func (ts *TestServer) LeaseManager() interface{} {
 	return ts.leaseMgr
 }
 
-// Executor is part of TestServerInterface.
-func (ts *TestServer) Executor() interface{} {
-	return ts.sqlExecutor
-}
-
 // InternalExecutor is part of TestServerInterface.
 func (ts *TestServer) InternalExecutor() interface{} {
-	return &sql.InternalExecutor{ExecCfg: ts.execCfg}
+	return ts.internalExecutor
 }
 
 // GetNode exposes the Server's Node.
@@ -579,7 +573,7 @@ func (ts *TestServer) DistSQLServer() interface{} {
 
 // SetDistSQLSpanResolver is part of TestServerInterface.
 func (ts *Server) SetDistSQLSpanResolver(spanResolver interface{}) {
-	ts.sqlExecutor.SetDistSQLSpanResolver(spanResolver.(distsqlplan.SpanResolver))
+	ts.execCfg.DistSQLPlanner.SetSpanResolver(spanResolver.(distsqlplan.SpanResolver))
 }
 
 // GetFirstStoreID is part of TestServerInterface.
@@ -729,6 +723,11 @@ func (ts *TestServer) GetRangeLease(
 	}
 	return leaseResp.(*roachpb.LeaseInfoResponse).Lease, ts.Clock().Now(), nil
 
+}
+
+// ExecutorConfig is part of the TestServerInterface.
+func (ts *TestServer) ExecutorConfig() interface{} {
+	return *ts.execCfg
 }
 
 type testServerFactoryImpl struct{}

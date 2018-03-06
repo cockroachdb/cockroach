@@ -47,7 +47,7 @@ func TestSampleAggregator(t *testing.T) {
 		Settings: st,
 		EvalCtx:  evalCtx,
 		clientDB: kvDB,
-		executor: server.InternalExecutor().(sqlutil.InternalExecutor),
+		executor: server.InternalExecutor().(sqlutil.InternalSQLExecutor),
 	}
 
 	inputRows := [][]int{

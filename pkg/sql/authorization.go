@@ -233,8 +233,6 @@ func (p *planner) resolveMemberOfWithAdminOption(
 
 	lookupRolesStmt := `SELECT "role", "isAdmin" FROM system.role_members WHERE "member" = $1`
 
-	internalExecutor := InternalExecutor{ExecCfg: p.ExecCfg()}
-
 	for len(toVisit) > 0 {
 		// Pop first element.
 		m := toVisit[0]
@@ -244,12 +242,8 @@ func (p *planner) resolveMemberOfWithAdminOption(
 		}
 		visited[m] = struct{}{}
 
-		rows, _ /* cols */, err := internalExecutor.QueryRowsInTransaction(
-			ctx,
-			"expand-roles",
-			p.Txn(),
-			lookupRolesStmt,
-			m,
+		rows, _ /* cols */, err := p.ExecCfg().InternalExecutor.Query(
+			ctx, p.Txn(), lookupRolesStmt, m,
 		)
 		if err != nil {
 			return nil, err
