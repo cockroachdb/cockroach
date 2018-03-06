@@ -2231,3 +2231,26 @@ project
  │         └── function: count_rows [type=int]
  └── projections
       └── variable: column5 [type=int]
+
+build
+SELECT COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s)
+----
+project
+ ├── columns: column7:int:null:7
+ ├── group-by
+ │    ├── columns: column5:string:null:5 column7:int:null:7
+ │    ├── grouping columns: column5:string:null:5
+ │    ├── project
+ │    │    ├── columns: column5:string:null:5 column6:string:null:6
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── projections
+ │    │         ├── function: upper [type=string]
+ │    │         │    └── variable: kv.s [type=string]
+ │    │         └── function: upper [type=string]
+ │    │              └── variable: kv.s [type=string]
+ │    └── aggregations
+ │         └── function: count [type=int]
+ │              └── variable: column5 [type=string]
+ └── projections
+      └── variable: column7 [type=int]
