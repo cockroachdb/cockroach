@@ -1,6 +1,4 @@
-# LogicTest: default parallel-stmts
-
-# This still fails in DistSQL, #22264.
+# LogicTest: default distsql parallel-stmts
 
 statement ok
 CREATE TABLE d (id INT PRIMARY KEY, str STRING);
