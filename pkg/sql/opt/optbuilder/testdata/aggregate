@@ -21,11 +21,11 @@ SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1),
   VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM t.kv
 ----
 group-by
- ├── columns: column6:int:null:6 column8:int:null:8 column10:int:null:10 column12:int:null:12 column14:decimal:null:14 column16:decimal:null:16 column18:decimal:null:18 column20:decimal:null:20 column22:bool:null:22 column24:bool:null:24 column26:bytes:null:26
+ ├── columns: column6:6(int) column8:8(int) column10:10(int) column12:12(int) column14:14(decimal) column16:16(decimal) column18:18(decimal) column20:20(decimal) column22:22(bool) column24:24(bool) column26:26(bytes)
  ├── project
- │    ├── columns: column5:int:null:5 column7:int:null:7 column9:int:null:9 column11:int:null:11 column13:int:null:13 column15:int:null:15 column17:int:null:17 column19:int:null:19 column21:bool:null:21 column23:bool:null:23 column25:bytes:null:25
+ │    ├── columns: column5:5(int) column7:7(int) column9:9(int) column11:11(int) column13:13(int) column15:15(int) column17:17(int) column19:19(int) column21:21(bool) column23:23(bool) column25:25(bytes)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
  │         ├── const: 1 [type=int]
  │         ├── const: 1 [type=int]
@@ -67,11 +67,11 @@ SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v),
   VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 group-by
- ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7 column9:int:null:9 column10:decimal:null:10 column11:decimal:null:11 column12:decimal:null:12 column13:decimal:null:13 column15:bool:null:15 column17:bool:null:17 column19:bytes:null:19
+ ├── columns: column5:5(int) column6:6(int) column7:7(int) column9:9(int) column10:10(decimal) column11:11(decimal) column12:12(decimal) column13:13(decimal) column15:15(bool) column17:17(bool) column19:19(bytes)
  ├── project
- │    ├── columns: kv.v:int:null:2 kv.v:int:null:2 kv.v:int:null:2 column8:int:null:8 kv.v:int:null:2 kv.v:int:null:2 kv.v:int:null:2 kv.v:int:null:2 column14:bool:null:14 column16:bool:null:16 column18:bytes:null:18
+ │    ├── columns: kv.v:2(int) kv.v:2(int) kv.v:2(int) column8:8(int) kv.v:2(int) kv.v:2(int) kv.v:2(int) kv.v:2(int) column14:14(bool) column16:16(bool) column18:18(bytes)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(2,4)]
  │         ├── variable: kv.v [type=int, outer=(2)]
  │         ├── variable: kv.v [type=int, outer=(2)]
@@ -118,11 +118,11 @@ SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1),
   VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01'))
 ----
 project
- ├── columns: column2:int:null:2 column4:int:null:4 column6:int:null:6 column8:int:null:8 column11:float:null:11 column13:decimal:null:13 column15:decimal:null:15 column18:float:null:18 column20:bool:null:20 column22:bool:null:22 column25:string:null:25
+ ├── columns: column2:2(int) column4:4(int) column6:6(int) column8:8(int) column11:11(float) column13:13(decimal) column15:15(decimal) column18:18(float) column20:20(bool) column22:22(bool) column25:25(string)
  ├── group-by
- │    ├── columns: column2:int:null:2 column4:int:null:4 column6:int:null:6 column8:int:null:8 column10:decimal:null:10 column13:decimal:null:13 column15:decimal:null:15 column17:decimal:null:17 column20:bool:null:20 column22:bool:null:22 column24:bytes:null:24
+ │    ├── columns: column2:2(int) column4:4(int) column6:6(int) column8:8(int) column10:10(decimal) column13:13(decimal) column15:15(decimal) column17:17(decimal) column20:20(bool) column22:22(bool) column24:24(bytes)
  │    ├── project
- │    │    ├── columns: column1:int:null:1 column3:int:null:3 column5:int:null:5 column7:int:null:7 column9:int:null:9 column12:int:null:12 column14:int:null:14 column16:int:null:16 column19:bool:null:19 column21:bool:null:21 column23:bytes:null:23
+ │    │    ├── columns: column1:1(int) column3:3(int) column5:5(int) column7:7(int) column9:9(int) column12:12(int) column14:14(int) column16:16(int) column19:19(bool) column21:21(bool) column23:23(bytes)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
@@ -180,11 +180,11 @@ build
 SELECT ARRAY_AGG(1) FROM t.kv
 ----
 group-by
- ├── columns: column6:int[]:null:6
+ ├── columns: column6:6(int[])
  ├── project
- │    ├── columns: column5:int:null:5
+ │    ├── columns: column5:5(int)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations [outer=(5)]
@@ -195,11 +195,11 @@ build
 SELECT JSON_AGG(v) FROM t.kv
 ----
 group-by
- ├── columns: column5:jsonb:null:5
+ ├── columns: column5:5(jsonb)
  ├── project
- │    ├── columns: kv.v:int:null:2
+ │    ├── columns: kv.v:2(int)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(2)]
  │         └── variable: kv.v [type=int, outer=(2)]
  └── aggregations [outer=(2)]
@@ -210,9 +210,9 @@ build
 SELECT JSONB_AGG(1)
 ----
 group-by
- ├── columns: column2:jsonb:null:2
+ ├── columns: column2:2(jsonb)
  ├── project
- │    ├── columns: column1:int:null:1
+ │    ├── columns: column1:1(int)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -226,14 +226,14 @@ build
 SELECT 1 FROM t.kv GROUP BY v
 ----
 project
- ├── columns: column5:int:null:5
+ ├── columns: column5:5(int)
  ├── group-by
- │    ├── columns: kv.v:int:null:2
- │    ├── grouping columns: kv.v:int:null:2
+ │    ├── columns: kv.v:2(int)
+ │    ├── grouping columns: kv.v:2(int)
  │    ├── project
- │    │    ├── columns: kv.v:int:null:2
+ │    │    ├── columns: kv.v:2(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(2)]
  │    │         └── variable: kv.v [type=int, outer=(2)]
  │    └── aggregations
@@ -266,9 +266,9 @@ build
 SELECT ARRAY_AGG(NULL::TEXT)
 ----
 group-by
- ├── columns: column2:string[]:null:2
+ ├── columns: column2:2(string[])
  ├── project
- │    ├── columns: column1:string:null:1
+ │    ├── columns: column1:1(string)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -292,14 +292,14 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY k
 ----
 project
- ├── columns: column5:int:null:5 k:int:1
+ ├── columns: column5:5(int) k:1(int!null)
  ├── group-by
- │    ├── columns: kv.k:int:1 column5:int:null:5
- │    ├── grouping columns: kv.k:int:1
+ │    ├── columns: kv.k:1(int!null) column5:5(int)
+ │    ├── grouping columns: kv.k:1(int!null)
  │    ├── project
- │    │    ├── columns: kv.k:int:1
+ │    │    ├── columns: kv.k:1(int!null)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1)]
  │    │         └── variable: kv.k [type=int, outer=(1)]
  │    └── aggregations
@@ -313,14 +313,14 @@ build
 SELECT COUNT(*), k FROM t.kv GROUP BY 2
 ----
 project
- ├── columns: column5:int:null:5 k:int:1
+ ├── columns: column5:5(int) k:1(int!null)
  ├── group-by
- │    ├── columns: kv.k:int:1 column5:int:null:5
- │    ├── grouping columns: kv.k:int:1
+ │    ├── columns: kv.k:1(int!null) column5:5(int)
+ │    ├── grouping columns: kv.k:1(int!null)
  │    ├── project
- │    │    ├── columns: kv.k:int:1
+ │    │    ├── columns: kv.k:1(int!null)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1)]
  │    │         └── variable: kv.k [type=int, outer=(1)]
  │    └── aggregations
@@ -349,14 +349,14 @@ build
 SELECT COUNT(*), kv.s FROM t.kv GROUP BY s
 ----
 project
- ├── columns: column5:int:null:5 s:string:null:4
+ ├── columns: column5:5(int) s:4(string)
  ├── group-by
- │    ├── columns: kv.s:string:null:4 column5:int:null:5
- │    ├── grouping columns: kv.s:string:null:4
+ │    ├── columns: kv.s:4(string) column5:5(int)
+ │    ├── grouping columns: kv.s:4(string)
  │    ├── project
- │    │    ├── columns: kv.s:string:null:4
+ │    │    ├── columns: kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         └── variable: kv.s [type=string, outer=(4)]
  │    └── aggregations
@@ -369,14 +369,14 @@ build
 SELECT COUNT(*), s FROM t.kv GROUP BY kv.s
 ----
 project
- ├── columns: column5:int:null:5 s:string:null:4
+ ├── columns: column5:5(int) s:4(string)
  ├── group-by
- │    ├── columns: kv.s:string:null:4 column5:int:null:5
- │    ├── grouping columns: kv.s:string:null:4
+ │    ├── columns: kv.s:4(string) column5:5(int)
+ │    ├── grouping columns: kv.s:4(string)
  │    ├── project
- │    │    ├── columns: kv.s:string:null:4
+ │    │    ├── columns: kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         └── variable: kv.s [type=string, outer=(4)]
  │    └── aggregations
@@ -389,14 +389,14 @@ build
 SELECT COUNT(*), kv.s FROM t.kv GROUP BY kv.s
 ----
 project
- ├── columns: column5:int:null:5 s:string:null:4
+ ├── columns: column5:5(int) s:4(string)
  ├── group-by
- │    ├── columns: kv.s:string:null:4 column5:int:null:5
- │    ├── grouping columns: kv.s:string:null:4
+ │    ├── columns: kv.s:4(string) column5:5(int)
+ │    ├── grouping columns: kv.s:4(string)
  │    ├── project
- │    │    ├── columns: kv.s:string:null:4
+ │    │    ├── columns: kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         └── variable: kv.s [type=string, outer=(4)]
  │    └── aggregations
@@ -409,14 +409,14 @@ build
 SELECT COUNT(*), s FROM t.kv GROUP BY s
 ----
 project
- ├── columns: column5:int:null:5 s:string:null:4
+ ├── columns: column5:5(int) s:4(string)
  ├── group-by
- │    ├── columns: kv.s:string:null:4 column5:int:null:5
- │    ├── grouping columns: kv.s:string:null:4
+ │    ├── columns: kv.s:4(string) column5:5(int)
+ │    ├── grouping columns: kv.s:4(string)
  │    ├── project
- │    │    ├── columns: kv.s:string:null:4
+ │    │    ├── columns: kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         └── variable: kv.s [type=string, outer=(4)]
  │    └── aggregations
@@ -430,14 +430,14 @@ build
 SELECT v, COUNT(*), w FROM t.kv GROUP BY v, w
 ----
 project
- ├── columns: v:int:null:2 column5:int:null:5 w:int:null:3
+ ├── columns: v:2(int) column5:5(int) w:3(int)
  ├── group-by
- │    ├── columns: kv.v:int:null:2 kv.w:int:null:3 column5:int:null:5
- │    ├── grouping columns: kv.v:int:null:2 kv.w:int:null:3
+ │    ├── columns: kv.v:2(int) kv.w:3(int) column5:5(int)
+ │    ├── grouping columns: kv.v:2(int) kv.w:3(int)
  │    ├── project
- │    │    ├── columns: kv.v:int:null:2 kv.w:int:null:3
+ │    │    ├── columns: kv.v:2(int) kv.w:3(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: kv.v [type=int, outer=(2)]
  │    │         └── variable: kv.w [type=int, outer=(3)]
@@ -453,14 +453,14 @@ build
 SELECT v, COUNT(*), w FROM t.kv GROUP BY 1, 3
 ----
 project
- ├── columns: v:int:null:2 column5:int:null:5 w:int:null:3
+ ├── columns: v:2(int) column5:5(int) w:3(int)
  ├── group-by
- │    ├── columns: kv.v:int:null:2 kv.w:int:null:3 column5:int:null:5
- │    ├── grouping columns: kv.v:int:null:2 kv.w:int:null:3
+ │    ├── columns: kv.v:2(int) kv.w:3(int) column5:5(int)
+ │    ├── grouping columns: kv.v:2(int) kv.w:3(int)
  │    ├── project
- │    │    ├── columns: kv.v:int:null:2 kv.w:int:null:3
+ │    │    ├── columns: kv.v:2(int) kv.w:3(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: kv.v [type=int, outer=(2)]
  │    │         └── variable: kv.w [type=int, outer=(3)]
@@ -476,14 +476,14 @@ build
 SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY UPPER(s)
 ----
 project
- ├── columns: column6:int:null:6 column5:string:null:5
+ ├── columns: column6:6(int) column5:5(string)
  ├── group-by
- │    ├── columns: column5:string:null:5 column6:int:null:6
- │    ├── grouping columns: column5:string:null:5
+ │    ├── columns: column5:5(string) column6:6(int)
+ │    ├── grouping columns: column5:5(string)
  │    ├── project
- │    │    ├── columns: column5:string:null:5
+ │    │    ├── columns: column5:5(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         └── function: upper [type=string, outer=(4)]
  │    │              └── variable: kv.s [type=string, outer=(4)]
@@ -498,14 +498,14 @@ build
 SELECT COUNT(*) FROM t.kv GROUP BY 1+2
 ----
 project
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 column6:int:null:6
- │    ├── grouping columns: column5:int:null:5
+ │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── grouping columns: column5:5(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5
+ │    │    ├── columns: column5:5(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
  │    │         └── const: 3 [type=int]
  │    └── aggregations
@@ -517,14 +517,14 @@ build
 SELECT COUNT(*) FROM t.kv GROUP BY length('abc')
 ----
 project
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 column6:int:null:6
- │    ├── grouping columns: column5:int:null:5
+ │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── grouping columns: column5:5(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5
+ │    │    ├── columns: column5:5(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections
  │    │         └── function: length [type=int]
  │    │              └── const: 'abc' [type=string]
@@ -538,14 +538,14 @@ build
 SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY s
 ----
 project
- ├── columns: column5:int:null:5 column6:string:null:6
+ ├── columns: column5:5(int) column6:6(string)
  ├── group-by
- │    ├── columns: kv.s:string:null:4 column5:int:null:5
- │    ├── grouping columns: kv.s:string:null:4
+ │    ├── columns: kv.s:4(string) column5:5(int)
+ │    ├── grouping columns: kv.s:4(string)
  │    ├── project
- │    │    ├── columns: kv.s:string:null:4
+ │    │    ├── columns: kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         └── variable: kv.s [type=string, outer=(4)]
  │    └── aggregations
@@ -566,14 +566,14 @@ build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
 ----
 project
- ├── columns: column6:int:null:6 column5:int:null:5
+ ├── columns: column6:6(int) column5:5(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 column6:int:null:6
- │    ├── grouping columns: column5:int:null:5
+ │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── grouping columns: column5:5(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5
+ │    │    ├── columns: column5:5(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,2)]
  │    │         └── plus [type=int, outer=(1,2)]
  │    │              ├── variable: kv.k [type=int, outer=(1)]
@@ -590,14 +590,14 @@ build
 SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
 ----
 project
- ├── columns: column5:int:null:5 column6:int:null:6
+ ├── columns: column5:5(int) column6:6(int)
  ├── group-by
- │    ├── columns: kv.k:int:1 kv.v:int:null:2 column5:int:null:5
- │    ├── grouping columns: kv.k:int:1 kv.v:int:null:2
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int) column5:5(int)
+ │    ├── grouping columns: kv.k:1(int!null) kv.v:2(int)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,2)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── variable: kv.v [type=int, outer=(2)]
@@ -639,14 +639,14 @@ build
 SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM t.kv GROUP BY kv.v + kv.w
 ----
 project
- ├── columns: count_1:int:null:6 lx:int:null:5
+ ├── columns: count_1:6(int) lx:5(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 count_1:int:null:6
- │    ├── grouping columns: column5:int:null:5
+ │    ├── columns: column5:5(int) count_1:6(int)
+ │    ├── grouping columns: column5:5(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5 kv.k:int:1
+ │    │    ├── columns: column5:5(int) kv.k:1(int!null)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── plus [type=int, outer=(2,3)]
  │    │         │    ├── variable: kv.v [type=int, outer=(2)]
@@ -663,7 +663,7 @@ build
 SELECT COUNT(*)
 ----
 group-by
- ├── columns: column1:int:null:1
+ ├── columns: column1:1(int)
  ├── values
  │    └── tuple [type=tuple{}]
  └── aggregations
@@ -673,11 +673,11 @@ build
 SELECT COUNT(k) from t.kv
 ----
 group-by
- ├── columns: column5:int:null:5
+ ├── columns: column5:5(int)
  ├── project
- │    ├── columns: kv.k:int:1
+ │    ├── columns: kv.k:1(int!null)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1)]
  │         └── variable: kv.k [type=int, outer=(1)]
  └── aggregations [outer=(1)]
@@ -688,9 +688,9 @@ build
 SELECT COUNT(1)
 ----
 group-by
- ├── columns: column2:int:null:2
+ ├── columns: column2:2(int)
  ├── project
- │    ├── columns: column1:int:null:1
+ │    ├── columns: column1:1(int)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -703,11 +703,11 @@ build
 SELECT COUNT(1) from t.kv
 ----
 group-by
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── project
- │    ├── columns: column5:int:null:5
+ │    ├── columns: column5:5(int)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
  │         └── const: 1 [type=int]
  └── aggregations [outer=(5)]
@@ -723,11 +723,11 @@ build
 SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM t.kv
 ----
 group-by
- ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7
+ ├── columns: column5:5(int) column6:6(int) column7:7(int)
  ├── project
- │    ├── columns: kv.k:int:1 kv.v:int:null:2
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1,2)]
  │         ├── variable: kv.k [type=int, outer=(1)]
  │         └── variable: kv.v [type=int, outer=(2)]
@@ -742,11 +742,11 @@ build
 SELECT COUNT(kv.*) FROM t.kv
 ----
 group-by
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── project
- │    ├── columns: column5:tuple{int, int, int, string}:null:5
+ │    ├── columns: column5:5(tuple{int, int, int, string})
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1-4)]
  │         └── tuple [type=tuple{int, int, int, string}, outer=(1-4)]
  │              ├── variable: kv.k [type=int, outer=(1)]
@@ -761,11 +761,11 @@ build
 SELECT COUNT((k, v)) FROM t.kv
 ----
 group-by
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── project
- │    ├── columns: column5:tuple{int, int}:null:5
+ │    ├── columns: column5:5(tuple{int, int})
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1,2)]
  │         └── tuple [type=tuple{int, int}, outer=(1,2)]
  │              ├── variable: kv.k [type=int, outer=(1)]
@@ -778,13 +778,13 @@ build
 SELECT COUNT(k)+COUNT(kv.v) FROM t.kv
 ----
 project
- ├── columns: column7:int:null:7
+ ├── columns: column7:7(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    ├── columns: column5:5(int) column6:6(int)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,2)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── variable: kv.v [type=int, outer=(2)]
@@ -802,9 +802,9 @@ build
 SELECT COUNT(NULL::int), COUNT((NULL, NULL))
 ----
 group-by
- ├── columns: column2:int:null:2 column4:int:null:4
+ ├── columns: column2:2(int) column4:4(int)
  ├── project
- │    ├── columns: column1:int:null:1 column3:tuple{unknown, unknown}:null:3
+ │    ├── columns: column1:1(int) column3:3(tuple{unknown, unknown})
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -823,11 +823,11 @@ build
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv
 ----
 group-by
- ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7 column8:int:null:8
+ ├── columns: column5:5(int) column6:6(int) column7:7(int) column8:8(int)
  ├── project
- │    ├── columns: kv.k:int:1 kv.k:int:1 kv.v:int:null:2 kv.v:int:null:2
+ │    ├── columns: kv.k:1(int!null) kv.k:1(int!null) kv.v:2(int) kv.v:2(int)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1,2)]
  │         ├── variable: kv.k [type=int, outer=(1)]
  │         ├── variable: kv.k [type=int, outer=(1)]
@@ -847,13 +847,13 @@ build
 SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv WHERE k > 8
 ----
 group-by
- ├── columns: column5:int:null:5 column6:int:null:6 column7:int:null:7 column8:int:null:8
+ ├── columns: column5:5(int) column6:6(int) column7:7(int) column8:8(int)
  ├── project
- │    ├── columns: kv.k:int:1 kv.k:int:1 kv.v:int:null:2 kv.v:int:null:2
+ │    ├── columns: kv.k:1(int!null) kv.k:1(int!null) kv.v:2(int) kv.v:2(int)
  │    ├── select
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── gt [type=bool, outer=(1)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── const: 8 [type=int]
@@ -876,13 +876,13 @@ build
 SELECT array_agg(s) FROM t.kv WHERE s IS NULL
 ----
 group-by
- ├── columns: column5:string[]:null:5
+ ├── columns: column5:5(string[])
  ├── project
- │    ├── columns: kv.s:string:null:4
+ │    ├── columns: kv.s:4(string)
  │    ├── select
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── is [type=bool, outer=(4)]
  │    │         ├── variable: kv.s [type=string, outer=(4)]
  │    │         └── null [type=unknown]
@@ -896,11 +896,11 @@ build
 SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM t.kv
 ----
 group-by
- ├── columns: column5:decimal:null:5 column6:decimal:null:6 column7:decimal:null:7 column8:decimal:null:8
+ ├── columns: column5:5(decimal) column6:6(decimal) column7:7(decimal) column8:8(decimal)
  ├── project
- │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.k:int:1 kv.v:int:null:2
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.k:1(int!null) kv.v:2(int)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1,2)]
  │         ├── variable: kv.k [type=int, outer=(1)]
  │         ├── variable: kv.v [type=int, outer=(2)]
@@ -920,11 +920,11 @@ build
 SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
 group-by
- ├── columns: column6:decimal:null:6 column8:decimal:null:8 column10:decimal:null:10 column12:decimal:null:12
+ ├── columns: column6:6(decimal) column8:8(decimal) column10:10(decimal) column12:12(decimal)
  ├── project
- │    ├── columns: column5:decimal:null:5 column7:decimal:null:7 column9:decimal:null:9 column11:decimal:null:11
+ │    ├── columns: column5:5(decimal) column7:7(decimal) column9:9(decimal) column11:11(decimal)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections [outer=(1,2)]
  │         ├── cast: decimal [type=decimal, outer=(1)]
  │         │    └── variable: kv.k [type=int, outer=(1)]
@@ -948,13 +948,13 @@ build
 SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
 project
- ├── columns: column7:decimal:null:7
+ ├── columns: column7:7(decimal)
  ├── group-by
- │    ├── columns: column5:decimal:null:5 column6:int:null:6
+ │    ├── columns: column5:5(decimal) column6:6(int)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,2)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── variable: kv.v [type=int, outer=(2)]
@@ -975,15 +975,15 @@ build
 SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 project
- ├── columns: column7:decimal:null:7
+ ├── columns: column7:7(decimal)
  ├── group-by
- │    ├── columns: column5:decimal:null:5 column6:int:null:6
+ │    ├── columns: column5:5(decimal) column6:6(int)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int)
  │    │    ├── select
- │    │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    │    ├── scan
- │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    │    └── eq [type=bool, outer=(1,3)]
  │    │    │         ├── mult [type=int, outer=(3)]
  │    │    │         │    ├── variable: kv.w [type=int, outer=(3)]
@@ -1025,9 +1025,9 @@ build
 SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM t.abc
 ----
 group-by
- ├── columns: column5:string:null:5 column6:float:null:6 column7:bool:null:7 column8:decimal:null:8
+ ├── columns: column5:5(string) column6:6(float) column7:7(bool) column8:8(decimal)
  ├── scan
- │    └── columns: abc.a:string:1 abc.b:float:null:2 abc.c:bool:null:3 abc.d:decimal:null:4
+ │    └── columns: abc.a:1(string!null) abc.b:2(float) abc.c:3(bool) abc.d:4(decimal)
  └── aggregations [outer=(1-4)]
       ├── function: min [type=string, outer=(1)]
       │    └── variable: abc.a [type=string, outer=(1)]
@@ -1042,9 +1042,9 @@ build
 SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM t.abc
 ----
 group-by
- ├── columns: column5:string:null:5 column6:float:null:6 column7:bool:null:7 column8:decimal:null:8
+ ├── columns: column5:5(string) column6:6(float) column7:7(bool) column8:8(decimal)
  ├── scan
- │    └── columns: abc.a:string:1 abc.b:float:null:2 abc.c:bool:null:3 abc.d:decimal:null:4
+ │    └── columns: abc.a:1(string!null) abc.b:2(float) abc.c:3(bool) abc.d:4(decimal)
  └── aggregations [outer=(1-4)]
       ├── function: max [type=string, outer=(1)]
       │    └── variable: abc.a [type=string, outer=(1)]
@@ -1059,11 +1059,11 @@ build
 SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM t.abc
 ----
 group-by
- ├── columns: column5:float:null:5 column6:float:null:6 column7:decimal:null:7 column8:decimal:null:8
+ ├── columns: column5:5(float) column6:6(float) column7:7(decimal) column8:8(decimal)
  ├── project
- │    ├── columns: abc.b:float:null:2 abc.b:float:null:2 abc.d:decimal:null:4 abc.d:decimal:null:4
+ │    ├── columns: abc.b:2(float) abc.b:2(float) abc.d:4(decimal) abc.d:4(decimal)
  │    ├── scan
- │    │    └── columns: abc.a:string:1 abc.b:float:null:2 abc.c:bool:null:3 abc.d:decimal:null:4
+ │    │    └── columns: abc.a:1(string!null) abc.b:2(float) abc.c:3(bool) abc.d:4(decimal)
  │    └── projections [outer=(2,4)]
  │         ├── variable: abc.b [type=float, outer=(2)]
  │         ├── variable: abc.b [type=float, outer=(2)]
@@ -1094,9 +1094,9 @@ build
 SELECT SUM(a) FROM t.intervals
 ----
 group-by
- ├── columns: column2:interval:null:2
+ ├── columns: column2:2(interval)
  ├── scan
- │    └── columns: intervals.a:interval:1
+ │    └── columns: intervals.a:1(interval!null)
  └── aggregations [outer=(1)]
       └── function: sum [type=interval, outer=(1)]
            └── variable: intervals.a [type=interval, outer=(1)]
@@ -1161,11 +1161,11 @@ build
 SELECT MIN(x) FROM t.xyz
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── scan
- │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections [outer=(1)]
  │         └── variable: xyz.x [type=int, outer=(1)]
  └── aggregations [outer=(1)]
@@ -1176,13 +1176,13 @@ build
 SELECT MIN(x) FROM t.xyz WHERE x in (0, 4, 7)
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── in [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── tuple [type=tuple{int, int, int}]
@@ -1199,11 +1199,11 @@ build
 SELECT MAX(x) FROM t.xyz
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── scan
- │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections [outer=(1)]
  │         └── variable: xyz.x [type=int, outer=(1)]
  └── aggregations [outer=(1)]
@@ -1214,13 +1214,13 @@ build
 SELECT MAX(y) FROM t.xyz WHERE x = 1
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.y:int:null:2
+ │    ├── columns: xyz.y:2(int)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── const: 1 [type=int]
@@ -1234,13 +1234,13 @@ build
 SELECT MIN(y) FROM t.xyz WHERE x = 7
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.y:int:null:2
+ │    ├── columns: xyz.y:2(int)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── const: 7 [type=int]
@@ -1254,13 +1254,13 @@ build
 SELECT MIN(x) FROM t.xyz WHERE (y, z) = (2, 3.0)
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── eq [type=bool, outer=(2,3)]
  │    │         ├── tuple [type=tuple{int, float}, outer=(2,3)]
  │    │         │    ├── variable: xyz.y [type=int, outer=(2)]
@@ -1278,13 +1278,13 @@ build
 SELECT MAX(x) FROM t.xyz WHERE (z, y) = (3.0, 2)
 ----
 group-by
- ├── columns: column4:int:null:4
+ ├── columns: column4:4(int)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── eq [type=bool, outer=(2,3)]
  │    │         ├── tuple [type=tuple{float, int}, outer=(2,3)]
  │    │         │    ├── variable: xyz.z [type=float, outer=(3)]
@@ -1305,13 +1305,13 @@ build
 SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
 project
- ├── columns: column4:decimal:null:4 column6:decimal:null:6 column8:float:null:8
+ ├── columns: column4:4(decimal) column6:6(decimal) column8:8(float)
  ├── group-by
- │    ├── columns: column4:decimal:null:4 column6:decimal:null:6 column7:float:null:7
+ │    ├── columns: column4:4(decimal) column6:6(decimal) column7:7(float)
  │    ├── project
- │    │    ├── columns: xyz.x:int:1 column5:decimal:null:5 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) column5:5(decimal) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         ├── cast: decimal [type=decimal, outer=(2)]
@@ -1335,13 +1335,13 @@ build
 SELECT VARIANCE(x) FROM t.xyz WHERE x = 10
 ----
 group-by
- ├── columns: column4:decimal:null:4
+ ├── columns: column4:4(decimal)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── const: 10 [type=int]
@@ -1355,13 +1355,13 @@ build
 SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
 ----
 project
- ├── columns: column4:decimal:null:4 column6:decimal:null:6 column8:float:null:8
+ ├── columns: column4:4(decimal) column6:6(decimal) column8:8(float)
  ├── group-by
- │    ├── columns: column4:decimal:null:4 column6:decimal:null:6 column7:float:null:7
+ │    ├── columns: column4:4(decimal) column6:6(decimal) column7:7(float)
  │    ├── project
- │    │    ├── columns: xyz.x:int:1 column5:decimal:null:5 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) column5:5(decimal) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         ├── cast: decimal [type=decimal, outer=(2)]
@@ -1385,13 +1385,13 @@ build
 SELECT STDDEV(x) FROM t.xyz WHERE x = 1
 ----
 group-by
- ├── columns: column4:decimal:null:4
+ ├── columns: column4:4(decimal)
  ├── project
- │    ├── columns: xyz.x:int:1
+ │    ├── columns: xyz.x:1(int!null)
  │    ├── select
- │    │    ├── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    ├── scan
- │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
+ │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
  │    │         └── const: 1 [type=int]
@@ -1405,11 +1405,11 @@ build
 SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
 ----
 project
- ├── columns: column3:float:null:3 column6:float:null:6 column9:float:null:9
+ ├── columns: column3:3(float) column6:6(float) column9:9(float)
  ├── group-by
- │    ├── columns: column2:decimal:null:2 column5:float:null:5 column8:decimal:null:8
+ │    ├── columns: column2:2(decimal) column5:5(float) column8:8(decimal)
  │    ├── project
- │    │    ├── columns: column1:int:null:1 column4:float:null:4 column7:decimal:null:7
+ │    │    ├── columns: column1:1(int) column4:4(float) column7:7(decimal)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple{}]
  │    │    └── projections
@@ -1438,9 +1438,9 @@ build
 SELECT COUNT(2::int), COUNT(3::float), COUNT(4::decimal)
 ----
 group-by
- ├── columns: column2:int:null:2 column4:int:null:4 column6:int:null:6
+ ├── columns: column2:2(int) column4:4(int) column6:6(int)
  ├── project
- │    ├── columns: column1:int:null:1 column3:float:null:3 column5:decimal:null:5
+ │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -1462,9 +1462,9 @@ build
 SELECT SUM(1::int), SUM(2::float), SUM(3::decimal)
 ----
 group-by
- ├── columns: column2:decimal:null:2 column4:float:null:4 column6:decimal:null:6
+ ├── columns: column2:2(decimal) column4:4(float) column6:6(decimal)
  ├── project
- │    ├── columns: column1:int:null:1 column3:float:null:3 column5:decimal:null:5
+ │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -1486,9 +1486,9 @@ build
 SELECT VARIANCE(1::int), VARIANCE(1::float), VARIANCE(1::decimal)
 ----
 group-by
- ├── columns: column2:decimal:null:2 column4:float:null:4 column6:decimal:null:6
+ ├── columns: column2:2(decimal) column4:4(float) column6:6(decimal)
  ├── project
- │    ├── columns: column1:int:null:1 column3:float:null:3 column5:decimal:null:5
+ │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -1510,9 +1510,9 @@ build
 SELECT STDDEV(1::int), STDDEV(1::float), STDDEV(1::decimal)
 ----
 group-by
- ├── columns: column2:decimal:null:2 column4:float:null:4 column6:decimal:null:6
+ ├── columns: column2:2(decimal) column4:4(float) column6:6(decimal)
  ├── project
- │    ├── columns: column1:int:null:1 column3:float:null:3 column5:decimal:null:5
+ │    ├── columns: column1:1(int) column3:3(float) column5:5(decimal)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -1543,11 +1543,11 @@ build
 SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
 ----
 group-by
- ├── columns: column3:bool:null:3 column4:bool:null:4
+ ├── columns: column3:3(bool) column4:4(bool)
  ├── project
- │    ├── columns: bools.b:bool:null:1 bools.b:bool:null:1
+ │    ├── columns: bools.b:1(bool) bools.b:1(bool)
  │    ├── scan
- │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │    └── projections [outer=(1)]
  │         ├── variable: bools.b [type=bool, outer=(1)]
  │         └── variable: bools.b [type=bool, outer=(1)]
@@ -1563,12 +1563,12 @@ build
 SELECT 1 FROM t.kv GROUP BY kv.*;
 ----
 project
- ├── columns: column5:int:null:5
+ ├── columns: column5:5(int)
  ├── group-by
- │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
- │    ├── grouping columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    ├── grouping columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    ├── scan
- │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── aggregations
  └── projections
       └── const: 1 [type=int]
@@ -1588,13 +1588,13 @@ build
 SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM t.xor_bytes
 ----
 project
- ├── columns: column6:string:null:6 column7:int:null:7
+ ├── columns: column6:6(string) column7:7(int)
  ├── group-by
- │    ├── columns: column5:bytes:null:5 column7:int:null:7
+ │    ├── columns: column5:5(bytes) column7:7(int)
  │    ├── project
- │    │    ├── columns: xor_bytes.a:bytes:null:1 xor_bytes.c:int:null:3
+ │    │    ├── columns: xor_bytes.a:1(bytes) xor_bytes.c:3(int)
  │    │    ├── scan
- │    │    │    └── columns: xor_bytes.a:bytes:null:1 xor_bytes.b:int:null:2 xor_bytes.c:int:null:3 xor_bytes.rowid:int:4
+ │    │    │    └── columns: xor_bytes.a:1(bytes) xor_bytes.b:2(int) xor_bytes.c:3(int) xor_bytes.rowid:4(int!null)
  │    │    └── projections [outer=(1,3)]
  │    │         ├── variable: xor_bytes.a [type=bytes, outer=(1)]
  │    │         └── variable: xor_bytes.c [type=int, outer=(3)]
@@ -1612,9 +1612,9 @@ build
 SELECT MAX(true), MIN(true)
 ----
 group-by
- ├── columns: column2:bool:null:2 column4:bool:null:4
+ ├── columns: column2:2(bool) column4:4(bool)
  ├── project
- │    ├── columns: column1:bool:null:1 column3:bool:null:3
+ │    ├── columns: column1:1(bool) column3:3(bool)
  │    ├── values
  │    │    └── tuple [type=tuple{}]
  │    └── projections
@@ -1655,14 +1655,14 @@ build
 SELECT (b, a) FROM t.ab GROUP BY (b, a)
 ----
 project
- ├── columns: column3:tuple{int, int}:null:3
+ ├── columns: column3:3(tuple{int, int})
  ├── group-by
- │    ├── columns: ab.a:int:1 ab.b:int:null:2
- │    ├── grouping columns: ab.a:int:1 ab.b:int:null:2
+ │    ├── columns: ab.a:1(int!null) ab.b:2(int)
+ │    ├── grouping columns: ab.a:1(int!null) ab.b:2(int)
  │    ├── project
- │    │    ├── columns: ab.b:int:null:2 ab.a:int:1
+ │    │    ├── columns: ab.b:2(int) ab.a:1(int!null)
  │    │    ├── scan
- │    │    │    └── columns: ab.a:int:1 ab.b:int:null:2
+ │    │    │    └── columns: ab.a:1(int!null) ab.b:2(int)
  │    │    └── projections [outer=(1,2)]
  │    │         ├── variable: ab.b [type=int, outer=(2)]
  │    │         └── variable: ab.a [type=int, outer=(1)]
@@ -1677,18 +1677,18 @@ SELECT MIN(y), (b, a)
  FROM t.ab, t.xy GROUP BY (x, (a, b))
 ----
 project
- ├── columns: column6:string:null:6 column7:tuple{int, int}:null:7
+ ├── columns: column6:6(string) column7:7(tuple{int, int})
  ├── group-by
- │    ├── columns: ab.a:int:1 ab.b:int:null:2 xy.x:string:null:3 column6:string:null:6
- │    ├── grouping columns: ab.a:int:1 ab.b:int:null:2 xy.x:string:null:3
+ │    ├── columns: ab.a:1(int!null) ab.b:2(int) xy.x:3(string) column6:6(string)
+ │    ├── grouping columns: ab.a:1(int!null) ab.b:2(int) xy.x:3(string)
  │    ├── project
- │    │    ├── columns: xy.x:string:null:3 ab.a:int:1 ab.b:int:null:2 xy.y:string:null:4
+ │    │    ├── columns: xy.x:3(string) ab.a:1(int!null) ab.b:2(int) xy.y:4(string)
  │    │    ├── inner-join
- │    │    │    ├── columns: ab.a:int:1 ab.b:int:null:2 xy.x:string:null:3 xy.y:string:null:4 xy.rowid:int:5
+ │    │    │    ├── columns: ab.a:1(int!null) ab.b:2(int) xy.x:3(string) xy.y:4(string) xy.rowid:5(int!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: ab.a:int:1 ab.b:int:null:2
+ │    │    │    │    └── columns: ab.a:1(int!null) ab.b:2(int)
  │    │    │    ├── scan
- │    │    │    │    └── columns: xy.x:string:null:3 xy.y:string:null:4 xy.rowid:int:5
+ │    │    │    │    └── columns: xy.x:3(string) xy.y:4(string) xy.rowid:5(int!null)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(1-4)]
  │    │         ├── variable: xy.x [type=string, outer=(3)]
@@ -1708,14 +1708,14 @@ build
 SELECT (k+v)/(v+w) FROM t.kv GROUP BY k+v, v+w;
 ----
 project
- ├── columns: column7:decimal:null:7
+ ├── columns: column7:7(decimal)
  ├── group-by
- │    ├── columns: column5:int:null:5 column6:int:null:6
- │    ├── grouping columns: column5:int:null:5 column6:int:null:6
+ │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── grouping columns: column5:5(int) column6:6(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    │    ├── columns: column5:5(int) column6:6(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── plus [type=int, outer=(1,2)]
  │    │         │    ├── variable: kv.k [type=int, outer=(1)]
@@ -1738,14 +1738,14 @@ build
 SELECT SUM(t.kv.w), t.kv.v FROM t.kv GROUP BY v, kv.k * w
 ----
 project
- ├── columns: column6:decimal:null:6 v:int:null:2
+ ├── columns: column6:6(decimal) v:2(int)
  ├── group-by
- │    ├── columns: kv.v:int:null:2 column5:int:null:5 column6:decimal:null:6
- │    ├── grouping columns: kv.v:int:null:2 column5:int:null:5
+ │    ├── columns: kv.v:2(int) column5:5(int) column6:6(decimal)
+ │    ├── grouping columns: kv.v:2(int) column5:5(int)
  │    ├── project
- │    │    ├── columns: kv.v:int:null:2 column5:int:null:5 kv.w:int:null:3
+ │    │    ├── columns: kv.v:2(int) column5:5(int) kv.w:3(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── variable: kv.v [type=int, outer=(2)]
  │    │         ├── mult [type=int, outer=(1,3)]
@@ -1763,14 +1763,14 @@ build
 SELECT SUM(t.kv.w), LOWER(s), t.kv.v + k * t.kv.w, t.kv.v FROM t.kv GROUP BY v, LOWER(kv.s), kv.k * w
 ----
 project
- ├── columns: column7:decimal:null:7 column5:string:null:5 column8:int:null:8 v:int:null:2
+ ├── columns: column7:7(decimal) column5:5(string) column8:8(int) v:2(int)
  ├── group-by
- │    ├── columns: kv.v:int:null:2 column5:string:null:5 column6:int:null:6 column7:decimal:null:7
- │    ├── grouping columns: kv.v:int:null:2 column5:string:null:5 column6:int:null:6
+ │    ├── columns: kv.v:2(int) column5:5(string) column6:6(int) column7:7(decimal)
+ │    ├── grouping columns: kv.v:2(int) column5:5(string) column6:6(int)
  │    ├── project
- │    │    ├── columns: kv.v:int:null:2 column5:string:null:5 column6:int:null:6 kv.w:int:null:3
+ │    │    ├── columns: kv.v:2(int) column5:5(string) column6:6(int) kv.w:3(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1-4)]
  │    │         ├── variable: kv.v [type=int, outer=(2)]
  │    │         ├── function: lower [type=string, outer=(4)]
@@ -1797,23 +1797,23 @@ build
 SELECT b1.b AND abc.c AND b2.b FROM bools b1, bools b2, abc GROUP BY b1.b AND abc.c, b2.b
 ----
 project
- ├── columns: column10:bool:null:10
+ ├── columns: column10:10(bool)
  ├── group-by
- │    ├── columns: bools.b:bool:null:3 column9:bool:null:9
- │    ├── grouping columns: bools.b:bool:null:3 column9:bool:null:9
+ │    ├── columns: bools.b:3(bool) column9:9(bool)
+ │    ├── grouping columns: bools.b:3(bool) column9:9(bool)
  │    ├── project
- │    │    ├── columns: column9:bool:null:9 bools.b:bool:null:3
+ │    │    ├── columns: column9:9(bool) bools.b:3(bool)
  │    │    ├── inner-join
- │    │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    ├── inner-join
- │    │    │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null)
  │    │    │    │    ├── scan
- │    │    │    │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │    │    │    │    ├── scan
- │    │    │    │    │    └── columns: bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
  │    │    │    │    └── true [type=bool]
  │    │    │    ├── scan
- │    │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    │    └── columns: abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(1,3,7)]
  │    │         ├── and [type=bool, outer=(1,7)]
@@ -1837,23 +1837,23 @@ build
 SELECT b1.b OR abc.c OR b2.b FROM bools b1, bools b2, abc GROUP BY b1.b OR abc.c, b2.b
 ----
 project
- ├── columns: column10:bool:null:10
+ ├── columns: column10:10(bool)
  ├── group-by
- │    ├── columns: bools.b:bool:null:3 column9:bool:null:9
- │    ├── grouping columns: bools.b:bool:null:3 column9:bool:null:9
+ │    ├── columns: bools.b:3(bool) column9:9(bool)
+ │    ├── grouping columns: bools.b:3(bool) column9:9(bool)
  │    ├── project
- │    │    ├── columns: column9:bool:null:9 bools.b:bool:null:3
+ │    │    ├── columns: column9:9(bool) bools.b:3(bool)
  │    │    ├── inner-join
- │    │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    ├── inner-join
- │    │    │    │    ├── columns: bools.b:bool:null:1 bools.rowid:int:2 bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null)
  │    │    │    │    ├── scan
- │    │    │    │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │    │    │    │    ├── scan
- │    │    │    │    │    └── columns: bools.b:bool:null:3 bools.rowid:int:4
+ │    │    │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
  │    │    │    │    └── true [type=bool]
  │    │    │    ├── scan
- │    │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    │    └── columns: abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(1,3,7)]
  │    │         ├── or [type=bool, outer=(1,7)]
@@ -1877,14 +1877,14 @@ build
 SELECT k % w % v FROM kv GROUP BY k % w, v
 ----
 project
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── group-by
- │    ├── columns: kv.v:int:null:2 column5:int:null:5
- │    ├── grouping columns: kv.v:int:null:2 column5:int:null:5
+ │    ├── columns: kv.v:2(int) column5:5(int)
+ │    ├── grouping columns: kv.v:2(int) column5:5(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5 kv.v:int:null:2
+ │    │    ├── columns: column5:5(int) kv.v:2(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── mod [type=int, outer=(1,3)]
  │    │         │    ├── variable: kv.k [type=int, outer=(1)]
@@ -1902,18 +1902,18 @@ build
 SELECT CONCAT(CONCAT(s, a), a) FROM kv, abc GROUP BY CONCAT(s, a), a
 ----
 project
- ├── columns: column10:string:null:10
+ ├── columns: column10:10(string)
  ├── group-by
- │    ├── columns: abc.a:string:5 column9:string:null:9
- │    ├── grouping columns: abc.a:string:5 column9:string:null:9
+ │    ├── columns: abc.a:5(string!null) column9:9(string)
+ │    ├── grouping columns: abc.a:5(string!null) column9:9(string)
  │    ├── project
- │    │    ├── columns: column9:string:null:9 abc.a:string:5
+ │    │    ├── columns: column9:9(string) abc.a:5(string!null)
  │    │    ├── inner-join
- │    │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    ├── scan
- │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    │    ├── scan
- │    │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    │    └── columns: abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(4,5)]
  │    │         ├── function: concat [type=string, outer=(4,5)]
@@ -1937,14 +1937,14 @@ build
 SELECT k < w AND v != 5 FROM kv GROUP BY k < w, v
 ----
 project
- ├── columns: column6:bool:null:6
+ ├── columns: column6:6(bool)
  ├── group-by
- │    ├── columns: kv.v:int:null:2 column5:bool:null:5
- │    ├── grouping columns: kv.v:int:null:2 column5:bool:null:5
+ │    ├── columns: kv.v:2(int) column5:5(bool)
+ │    ├── grouping columns: kv.v:2(int) column5:5(bool)
  │    ├── project
- │    │    ├── columns: column5:bool:null:5 kv.v:int:null:2
+ │    │    ├── columns: column5:5(bool) kv.v:2(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1-3)]
  │    │         ├── lt [type=bool, outer=(1,3)]
  │    │         │    ├── variable: kv.k [type=int, outer=(1)]
@@ -1979,18 +1979,18 @@ build
 SELECT a.bar @> b.baz AND b.baz @> b.baz FROM foo AS a, foo AS b GROUP BY a.bar @> b.baz, b.baz
 ----
 project
- ├── columns: column8:bool:null:8
+ ├── columns: column8:8(bool)
  ├── group-by
- │    ├── columns: foo.baz:jsonb:null:5 column7:bool:null:7
- │    ├── grouping columns: foo.baz:jsonb:null:5 column7:bool:null:7
+ │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
  │    ├── project
- │    │    ├── columns: column7:bool:null:7 foo.baz:jsonb:null:5
+ │    │    ├── columns: column7:7(bool) foo.baz:5(jsonb)
  │    │    ├── inner-join
- │    │    │    ├── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3 foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3
+ │    │    │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(1,5)]
  │    │         ├── contains [type=bool, outer=(1,5)]
@@ -2016,18 +2016,18 @@ build
 SELECT b.baz <@ a.bar AND b.baz <@ b.baz FROM foo AS a, foo AS b GROUP BY b.baz <@ a.bar, b.baz
 ----
 project
- ├── columns: column8:bool:null:8
+ ├── columns: column8:8(bool)
  ├── group-by
- │    ├── columns: foo.baz:jsonb:null:5 column7:bool:null:7
- │    ├── grouping columns: foo.baz:jsonb:null:5 column7:bool:null:7
+ │    ├── columns: foo.baz:5(jsonb) column7:7(bool)
+ │    ├── grouping columns: foo.baz:5(jsonb) column7:7(bool)
  │    ├── project
- │    │    ├── columns: column7:bool:null:7 foo.baz:jsonb:null:5
+ │    │    ├── columns: column7:7(bool) foo.baz:5(jsonb)
  │    │    ├── inner-join
- │    │    │    ├── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3 foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    │    ├── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null) foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: foo.bar:jsonb:null:1 foo.baz:jsonb:null:2 foo.rowid:int:3
+ │    │    │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: foo.bar:jsonb:null:4 foo.baz:jsonb:null:5 foo.rowid:int:6
+ │    │    │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(1,5)]
  │    │         ├── contains [type=bool, outer=(1,5)]
@@ -2057,18 +2057,18 @@ SELECT date_trunc('second', a.t) - date_trunc('minute', b.t) FROM times a, times
   GROUP BY date_trunc('second', a.t), date_trunc('minute', b.t)
 ----
 project
- ├── columns: column5:interval:null:5
+ ├── columns: column5:5(interval)
  ├── group-by
- │    ├── columns: column3:interval:null:3 column4:interval:null:4
- │    ├── grouping columns: column3:interval:null:3 column4:interval:null:4
+ │    ├── columns: column3:3(interval) column4:4(interval)
+ │    ├── grouping columns: column3:3(interval) column4:4(interval)
  │    ├── project
- │    │    ├── columns: column3:interval:null:3 column4:interval:null:4
+ │    │    ├── columns: column3:3(interval) column4:4(interval)
  │    │    ├── inner-join
- │    │    │    ├── columns: times.t:time:1 times.t:time:2
+ │    │    │    ├── columns: times.t:1(time!null) times.t:2(time!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: times.t:time:1
+ │    │    │    │    └── columns: times.t:1(time!null)
  │    │    │    ├── scan
- │    │    │    │    └── columns: times.t:time:2
+ │    │    │    │    └── columns: times.t:2(time!null)
  │    │    │    └── true [type=bool]
  │    │    └── projections [outer=(1,2)]
  │    │         ├── function: date_trunc [type=interval, outer=(1)]
@@ -2097,12 +2097,12 @@ build
 SELECT NOT b FROM bools GROUP BY NOT b
 ----
 group-by
- ├── columns: column3:bool:null:3
- ├── grouping columns: column3:bool:null:3
+ ├── columns: column3:3(bool)
+ ├── grouping columns: column3:3(bool)
  ├── project
- │    ├── columns: column3:bool:null:3
+ │    ├── columns: column3:3(bool)
  │    ├── scan
- │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │    └── projections [outer=(1)]
  │         └── not [type=bool, outer=(1)]
  │              └── variable: bools.b [type=bool, outer=(1)]
@@ -2117,14 +2117,14 @@ build
 SELECT NOT b FROM bools GROUP BY b
 ----
 project
- ├── columns: column3:bool:null:3
+ ├── columns: column3:3(bool)
  ├── group-by
- │    ├── columns: bools.b:bool:null:1
- │    ├── grouping columns: bools.b:bool:null:1
+ │    ├── columns: bools.b:1(bool)
+ │    ├── grouping columns: bools.b:1(bool)
  │    ├── project
- │    │    ├── columns: bools.b:bool:null:1
+ │    │    ├── columns: bools.b:1(bool)
  │    │    ├── scan
- │    │    │    └── columns: bools.b:bool:null:1 bools.rowid:int:2
+ │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │    │    └── projections [outer=(1)]
  │    │         └── variable: bools.b [type=bool, outer=(1)]
  │    └── aggregations
@@ -2136,14 +2136,14 @@ build
 SELECT +k * (-w) FROM kv GROUP BY +k, -w
 ----
 project
- ├── columns: column7:int:null:7
+ ├── columns: column7:7(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 column6:int:null:6
- │    ├── grouping columns: column5:int:null:5 column6:int:null:6
+ │    ├── columns: column5:5(int) column6:6(int)
+ │    ├── grouping columns: column5:5(int) column6:6(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    │    ├── columns: column5:5(int) column6:6(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,3)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── unary-minus [type=int, outer=(3)]
@@ -2164,14 +2164,14 @@ build
 SELECT +k * (-w) FROM kv GROUP BY k, w
 ----
 project
- ├── columns: column5:int:null:5
+ ├── columns: column5:5(int)
  ├── group-by
- │    ├── columns: kv.k:int:1 kv.w:int:null:3
- │    ├── grouping columns: kv.k:int:1 kv.w:int:null:3
+ │    ├── columns: kv.k:1(int!null) kv.w:3(int)
+ │    ├── grouping columns: kv.k:1(int!null) kv.w:3(int)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.w:int:null:3
+ │    │    ├── columns: kv.k:1(int!null) kv.w:3(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,3)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── variable: kv.w [type=int, outer=(3)]
@@ -2186,14 +2186,14 @@ build
 SELECT 1 + MIN(v*2) FROM kv GROUP BY k+3
 ----
 project
- ├── columns: column8:int:null:8
+ ├── columns: column8:8(int)
  ├── group-by
- │    ├── columns: column5:int:null:5 column7:int:null:7
- │    ├── grouping columns: column5:int:null:5
+ │    ├── columns: column5:5(int) column7:7(int)
+ │    ├── grouping columns: column5:5(int)
  │    ├── project
- │    │    ├── columns: column5:int:null:5 column6:int:null:6
+ │    │    ├── columns: column5:5(int) column6:6(int)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1,2)]
  │    │         ├── plus [type=int, outer=(1)]
  │    │         │    ├── variable: kv.k [type=int, outer=(1)]
@@ -2213,14 +2213,14 @@ build
 SELECT count(*) FROM kv GROUP BY k, k
 ----
 project
- ├── columns: column5:int:null:5
+ ├── columns: column5:5(int)
  ├── group-by
- │    ├── columns: kv.k:int:1 column5:int:null:5
- │    ├── grouping columns: kv.k:int:1
+ │    ├── columns: kv.k:1(int!null) column5:5(int)
+ │    ├── grouping columns: kv.k:1(int!null)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.k:int:1
+ │    │    ├── columns: kv.k:1(int!null) kv.k:1(int!null)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(1)]
  │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │         └── variable: kv.k [type=int, outer=(1)]
@@ -2233,14 +2233,14 @@ build
 SELECT COUNT(UPPER(s)) FROM t.kv GROUP BY UPPER(s)
 ----
 project
- ├── columns: column7:int:null:7
+ ├── columns: column7:7(int)
  ├── group-by
- │    ├── columns: column5:string:null:5 column7:int:null:7
- │    ├── grouping columns: column5:string:null:5
+ │    ├── columns: column5:5(string) column7:7(int)
+ │    ├── grouping columns: column5:5(string)
  │    ├── project
- │    │    ├── columns: column5:string:null:5 column6:string:null:6
+ │    │    ├── columns: column5:5(string) column6:6(string)
  │    │    ├── scan
- │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    └── projections [outer=(4)]
  │    │         ├── function: upper [type=string, outer=(4)]
  │    │         │    └── variable: kv.s [type=string, outer=(4)]
@@ -2256,18 +2256,18 @@ build
 SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*
 ----
 project
- ├── columns: column9:decimal:null:9
+ ├── columns: column9:9(decimal)
  ├── group-by
- │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 column9:decimal:null:9
- │    ├── grouping columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) column9:9(decimal)
+ │    ├── grouping columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    ├── project
- │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.d:decimal:null:8
+ │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) abc.d:8(decimal)
  │    │    ├── inner-join
- │    │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string) abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    ├── scan
- │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    │    │    ├── scan
- │    │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    │    └── columns: abc.a:5(string!null) abc.b:6(float) abc.c:7(bool) abc.d:8(decimal)
  │    │    │    └── ge [type=bool, outer=(1,8)]
  │    │    │         ├── variable: kv.k [type=int, outer=(1)]
  │    │    │         └── variable: abc.d [type=decimal, outer=(8)]
