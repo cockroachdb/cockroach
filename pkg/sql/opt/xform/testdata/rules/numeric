@@ -23,9 +23,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:int:null:6 column7:int:null:7 column8:float:null:8 column9:float:null:9 column10:decimal:null:10 column11:decimal:null:11
+ ├── columns: column6:6(int) column7:7(int) column8:8(float) column9:9(float) column10:10(decimal) column11:11(decimal)
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
  └── projections [outer=(2-4)]
       ├── plus [type=int, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
@@ -59,9 +59,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:int:null:6 column7:float:null:7 column8:decimal:null:8
+ ├── columns: column6:6(int) column7:7(float) column8:8(decimal)
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
  └── projections [outer=(2-4)]
       ├── plus [type=int, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
@@ -86,9 +86,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:int:null:6 column7:int:null:7 column8:float:null:8 column9:float:null:9 column10:decimal:null:10 column11:decimal:null:11
+ ├── columns: column6:6(int) column7:7(int) column8:8(float) column9:9(float) column10:10(decimal) column11:11(decimal)
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
  └── projections [outer=(2-4)]
       ├── plus [type=int, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
@@ -121,9 +121,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:decimal:null:6 column7:float:null:7 column8:decimal:null:8
+ ├── columns: column6:6(decimal) column7:7(float) column8:8(decimal)
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
  └── projections [outer=(2-4)]
       ├── variable: a.i [type=int, outer=(2)]
       ├── variable: a.f [type=float, outer=(3)]
@@ -140,9 +140,9 @@ SELECT
 FROM a
 ----
 project
- ├── columns: column6:float:null:6 column7:decimal:null:7 column8:interval:null:8
+ ├── columns: column6:6(float) column7:7(decimal) column8:8(interval)
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
  └── projections [outer=(2-5)]
       ├── minus [type=float, outer=(3)]
       │    ├── variable: a.f [type=float, outer=(3)]
@@ -161,8 +161,8 @@ opt
 SELECT -(-a.i::int) FROM a
 ----
 project
- ├── columns: column6:int:null:6
+ ├── columns: column6:6(int)
  ├── scan
- │    └── columns: a.k:int:1 a.i:int:null:2 a.f:float:null:3 a.d:decimal:null:4 a.t:time:null:5
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.d:4(decimal) a.t:5(time)
  └── projections [outer=(2)]
       └── variable: a.i [type=int, outer=(2)]

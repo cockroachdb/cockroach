@@ -21,11 +21,11 @@ build
 SELECT *, rowid FROM a INNER JOIN b ON a.x=b.x
 ----
 inner-join
- ├── columns: x:int:1 y:int:null:2 x:int:null:3 z:int:4 rowid:int:5
+ ├── columns: x:1(int!null) y:2(int) x:3(int) z:4(int!null) rowid:5(int!null)
  ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  ├── scan
- │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  └── eq [type=bool, outer=(1,3)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: b.x [type=int, outer=(3)]
@@ -34,11 +34,11 @@ build
 SELECT *, rowid FROM a LEFT JOIN b ON a.x=b.x
 ----
 left-join
- ├── columns: x:int:1 y:int:null:2 x:int:null:3 z:int:null:4 rowid:int:null:5
+ ├── columns: x:1(int!null) y:2(int) x:3(int) z:4(int) rowid:5(int)
  ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  ├── scan
- │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  └── eq [type=bool, outer=(1,3)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: b.x [type=int, outer=(3)]
@@ -47,11 +47,11 @@ build
 SELECT *, rowid FROM a RIGHT JOIN b ON a.x=b.x
 ----
 right-join
- ├── columns: x:int:null:1 y:int:null:2 x:int:null:3 z:int:4 rowid:int:5
+ ├── columns: x:1(int) y:2(int) x:3(int) z:4(int!null) rowid:5(int!null)
  ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  ├── scan
- │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  └── eq [type=bool, outer=(1,3)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: b.x [type=int, outer=(3)]
@@ -60,11 +60,11 @@ build
 SELECT *, rowid FROM a FULL JOIN b ON a.x=b.x
 ----
 full-join
- ├── columns: x:int:null:1 y:int:null:2 x:int:null:3 z:int:null:4 rowid:int:null:5
+ ├── columns: x:1(int) y:2(int) x:3(int) z:4(int) rowid:5(int)
  ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  ├── scan
- │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  └── eq [type=bool, outer=(1,3)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: b.x [type=int, outer=(3)]

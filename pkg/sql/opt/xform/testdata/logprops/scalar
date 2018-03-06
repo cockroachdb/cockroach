@@ -21,9 +21,9 @@ build
 SELECT * FROM a WHERE x < 5
 ----
 select
- ├── columns: x:int:1 y:int:null:2
+ ├── columns: x:1(int!null) y:2(int)
  ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  └── lt [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
       └── const: 5 [type=int]
@@ -32,13 +32,13 @@ build
 SELECT a.x + 1 = length('foo') + a.y, b.rowid * a.x FROM a, b
 ----
 project
- ├── columns: column6:bool:null:6 column7:int:null:7
+ ├── columns: column6:6(bool) column7:7(int)
  ├── inner-join
- │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    ├── scan
- │    │    └── columns: a.x:int:1 a.y:int:null:2
+ │    │    └── columns: a.x:1(int!null) a.y:2(int)
  │    ├── scan
- │    │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    └── true [type=bool]
  └── projections [outer=(1,2,5)]
       ├── eq [type=bool, outer=(1,2)]

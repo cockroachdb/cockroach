@@ -124,10 +124,11 @@ func (p *LogicalProps) formatCol(
 	buf.WriteByte(' ')
 	buf.WriteString(label)
 	buf.WriteByte(':')
-	buf.WriteString(typ.String())
-	buf.WriteByte(':')
-	if !p.Relational.NotNullCols.Contains(int(index)) {
-		buf.WriteString("null:")
-	}
 	fmt.Fprintf(buf, "%d", index)
+	buf.WriteByte('(')
+	buf.WriteString(typ.String())
+	if p.Relational.NotNullCols.Contains(int(index)) {
+		buf.WriteString("!null")
+	}
+	buf.WriteByte(')')
 }

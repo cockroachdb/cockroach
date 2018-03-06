@@ -26,30 +26,30 @@ opt
 SELECT x, y FROM t.a
 ----
 scan
- └── columns: x:int:1 y:float:null:2
+ └── columns: x:1(int!null) y:2(float)
 
 # Different order, aliased names.
 opt
 SELECT a.y AS aliasy, a.x FROM t.a
 ----
 scan
- └── columns: aliasy:float:null:2 x:int:1
+ └── columns: aliasy:2(float) x:1(int!null)
 
 # Reordered, duplicate, aliased columns.
 opt
 SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM t.a
 ----
 scan
- └── columns: alias1:float:null:2 x:int:1 alias1:float:null:2 x:int:1
+ └── columns: alias1:2(float) x:1(int!null) alias1:2(float) x:1(int!null)
 
 # Added column (projection should not be eliminated).
 opt
 SELECT x, y, 1 FROM t.a
 ----
 project
- ├── columns: x:int:1 y:float:null:2 column3:int:null:3
+ ├── columns: x:1(int!null) y:2(float) column3:3(int)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1,2)]
       ├── variable: a.x [type=int, outer=(1)]
       ├── variable: a.y [type=float, outer=(2)]
@@ -60,8 +60,8 @@ opt
 SELECT x FROM t.a
 ----
 project
- ├── columns: x:int:1
+ ├── columns: x:1(int!null)
  ├── scan
- │    └── columns: a.x:int:1 a.y:float:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1)]
       └── variable: a.x [type=int, outer=(1)]
