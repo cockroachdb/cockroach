@@ -321,7 +321,11 @@ func (post *PostProcessSpec) summaryWithPrefix(prefix string) []string {
 		res = append(res, fmt.Sprintf("%sFilter: %s", prefix, post.Filter.Expr))
 	}
 	if post.Projection {
-		res = append(res, fmt.Sprintf("%sOut: %s", prefix, colListStr(post.OutputColumns)))
+		outputColumns := "None"
+		if len(post.OutputColumns) > 0 {
+			outputColumns = colListStr(post.OutputColumns)
+		}
+		res = append(res, fmt.Sprintf("%sOut: %s", prefix, outputColumns))
 	}
 	if len(post.RenderExprs) > 0 {
 		var buf bytes.Buffer
