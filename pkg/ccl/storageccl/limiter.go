@@ -11,41 +11,37 @@ package storageccl
 import (
 	"context"
 
+	"github.com/marusama/semaphore"
+
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // concurrentRequestLimiter allows a configurable number of requests to run at
-// once, while respecting context.Context cancellation and adding tracing spans
-// when a request has to block for the limiter.
+// once, while respecting context.Context cancellation and adding tracing with
+// the configured name when a request has to block for the limiter.
 type concurrentRequestLimiter struct {
-	sem chan struct{}
+	spanName string
+	sem      semaphore.Semaphore
 }
 
-func makeConcurrentRequestLimiter(limit int) concurrentRequestLimiter {
-	return concurrentRequestLimiter{sem: make(chan struct{}, limit)}
+func makeConcurrentRequestLimiter(spanName string, limit int) concurrentRequestLimiter {
+	return concurrentRequestLimiter{spanName: spanName, sem: semaphore.New(limit)}
 }
 
 func (l *concurrentRequestLimiter) beginLimitedRequest(ctx context.Context) error {
-	// Check to see there's a slot immediately available.
-	select {
-	case l.sem <- struct{}{}:
+	if l.sem.TryAcquire(1) {
 		return nil
-	default:
 	}
-
 	// If not, start a span and begin waiting.
-	ctx, span := tracing.ChildSpan(ctx, "beginLimitedRequest")
+	ctx, span := tracing.ChildSpan(ctx, l.spanName)
 	defer tracing.FinishSpan(span)
-
-	// Wait until the context is done or we have a slot.
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case l.sem <- struct{}{}:
-		return nil
-	}
+	return l.sem.Acquire(ctx, 1)
 }
 
 func (l *concurrentRequestLimiter) endLimitedRequest() {
-	<-l.sem
+	l.sem.Release(1)
+}
+
+func (l *concurrentRequestLimiter) resize(newLimit int) {
+	l.sem.SetLimit(newLimit)
 }
