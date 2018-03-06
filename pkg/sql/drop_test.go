@@ -810,7 +810,6 @@ func TestDropAndCreateTable(t *testing.T) {
 
 func TestDropAndCreateDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip(`#22256`)
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `test`})
