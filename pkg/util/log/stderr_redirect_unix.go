@@ -18,13 +18,19 @@ package log
 
 import (
 	"os"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
 
 func dupFD(fd uintptr) (uintptr, error) {
-	nfd, err := unix.Dup(int(fd))
-	return uintptr(nfd), err
+	// Warning: failing to set FD_CLOEXEC on duplicated file descriptors can
+	// prevent the process from exiting while child processes are live.
+	nfd, _, errno := unix.Syscall(syscall.SYS_FCNTL, fd, unix.F_DUPFD_CLOEXEC, 0)
+	if errno != 0 {
+		return 0, errno
+	}
+	return uintptr(nfd), nil
 }
 
 func redirectStderr(f *os.File) error {
