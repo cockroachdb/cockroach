@@ -10,7 +10,10 @@ import {
   getLocalityLabel,
   getLeaves,
   getLocality,
+  allNodesHaveLocality,
 } from "./localities";
+import { cockroach } from "src/js/protos";
+type NodeStatus$Properties = cockroach.server.status.NodeStatus$Properties;
 
 describe("parseLocalityRoute", function() {
   describe("with an empty route", function() {
@@ -391,4 +394,26 @@ describe("getLocalityLabel", function() {
       assert.equal(label, key + "=" + value);
     });
   });
+});
+
+describe("allNodesHaveLocality", function() {
+
+  it("returns false if a node exists without a locality", function() {
+    const nodes: NodeStatus$Properties[] = [
+      { desc: { node_id: 1, locality: { tiers: [] } } },
+      { desc: { node_id: 2, locality: { tiers: [{ key: "region", value: "us-east-1" }] } } },
+    ];
+
+    assert.isFalse(allNodesHaveLocality(nodes));
+  });
+
+  it("returns true if all nodes have localities", function() {
+    const nodes: NodeStatus$Properties[] = [
+      { desc: { node_id: 1, locality: { tiers: [{ key: "region", value: "us-west-1" }] } } },
+      { desc: { node_id: 2, locality: { tiers: [{ key: "region", value: "us-east-1" }] } } },
+    ];
+
+    assert.isTrue(allNodesHaveLocality(nodes));
+  });
+
 });
