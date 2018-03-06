@@ -76,6 +76,16 @@ dist sender  querying next range at /Table/3/1/12/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  querying next range at /Table/3/1/1/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/2/1/0/"system"/3/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/1/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/12/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/1/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  r1: sending batch 5 CPut to (n1,s1):1
 dist sender  querying next range at /Table/SystemConfigSpan/Start
 dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
@@ -118,6 +128,16 @@ dist sender  querying next range at /Table/3/1/12/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  querying next range at /Table/3/1/1/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/2/1/0/"system"/3/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/1/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/12/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/1/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  r1: sending batch 5 CPut to (n1,s1):1
 dist sender  querying next range at /Table/SystemConfigSpan/Start
 dist sender  r1: sending batch 1 EndTxn to (n1,s1):1
@@ -142,11 +162,31 @@ dist sender    querying next range at /Table/3/1/15/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/3/1/1/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/0/"system"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/1/"jobs"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/15/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/SystemConfigSpan/Start
 dist sender    r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
 starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:1 up_version:true modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:3 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > mutations:<index:<name:"woo" id:2 unique:true column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > state:DELETE_ONLY direction:ADD mutation_id:1 rollback:false > next_mutation_id:2 format_version:3 state:PUBLIC view_query:"" mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED >
 dist sender    querying next range at /Table/3/1/52/2/1
 dist sender    r1: sending batch 1 Put to (n1,s1):1
+dist sender    querying next range at /Table/2/1/0/"system"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/12/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/2/1/0/"system"/3/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/3/1/1/2/1
@@ -274,6 +314,16 @@ dist sender  querying next range at /Table/3/1/12/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  querying next range at /Table/3/1/1/2/1
 dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/2/1/0/"system"/3/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/1/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/12/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
+dist sender  querying next range at /Table/3/1/1/2/1
+dist sender  r1: sending batch 1 Get to (n1,s1):1
 dist sender  r1: sending batch 5 CPut to (n1,s1):1
 sql txn      Scan /Table/52/{1-2}
 dist sender  querying next range at /Table/52/1
@@ -361,6 +411,16 @@ dist sender    querying next range at /Table/3/1/12/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/3/1/1/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/0/"system"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/12/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    r1: sending batch 5 CPut to (n1,s1):1
 
 query TT
@@ -410,11 +470,31 @@ dist sender    querying next range at /Table/3/1/15/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/3/1/1/2/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/0/"system"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/1/"jobs"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/15/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/SystemConfigSpan/Start
 dist sender    r1: sending batch 1 CPut, 1 BeginTxn, 1 InitPut to (n1,s1):1
 starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:4 up_version:true modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:3 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > mutations:<index:<name:"woo" id:2 unique:true column_names:"v" column_directions:ASC column_ids:2 extra_column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > state:DELETE_AND_WRITE_ONLY direction:DROP mutation_id:2 rollback:false > next_mutation_id:3 format_version:3 state:PUBLIC view_query:"" mutationJobs:<...> drop_time:0 replacement_of:<id:0 time:<> > audit_mode:DISABLED >
 dist sender    querying next range at /Table/3/1/52/2/1
 dist sender    r1: sending batch 1 Put to (n1,s1):1
+dist sender    querying next range at /Table/2/1/0/"system"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/12/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/2/1/0/"system"/3/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/3/1/1/2/1
@@ -447,6 +527,16 @@ dist sender    r1: sending batch 1 Get to (n1,s1):1
 starting plan  Put /Table/3/1/52/2/1 -> table:<name:"kv" id:52 parent_id:51 version:7 up_version:true modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > next_column_id:3 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_ids:1 column_ids:2 default_column_id:2 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"k" column_directions:ASC column_ids:1 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:3 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > next_mutation_id:3 format_version:3 state:DROP draining_names:<parent_id:51 name:"kv" > view_query:"" drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED >
 dist sender    querying next range at /Table/SystemConfigSpan/Start
 dist sender    r1: sending batch 1 Put, 1 BeginTxn to (n1,s1):1
+dist sender    querying next range at /Table/2/1/0/"system"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/2/1/1/"eventlog"/3/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/12/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
+dist sender    querying next range at /Table/3/1/1/2/1
+dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/2/1/0/"system"/3/1
 dist sender    r1: sending batch 1 Get to (n1,s1):1
 dist sender    querying next range at /Table/3/1/1/2/1

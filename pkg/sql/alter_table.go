@@ -570,7 +570,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !ok {
 				return errors.Errorf("programming error: missing stats data")
 			}
-			if err := params.p.injectTableStats(params.ctx, n.tableDesc, sd); err != nil {
+			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
 				return err
 			}
 
@@ -732,10 +732,10 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 // given json object (in the same format as the result of SHOW STATISTICS USING
 // JSON). This is useful for reproducing planning issues without importing the
 // data.
-func (p *planner) injectTableStats(
-	ctx context.Context, desc *sqlbase.TableDescriptor, statsExpr tree.TypedExpr,
+func injectTableStats(
+	params runParams, desc *sqlbase.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
-	val, err := statsExpr.Eval(p.EvalContext())
+	val, err := statsExpr.Eval(params.EvalContext())
 	if err != nil {
 		return err
 	}
@@ -748,22 +748,20 @@ func (p *planner) injectTableStats(
 		return err
 	}
 
-	// We will be doing multiple p.exec() calls; turn off auto-commit.
-	if p.autoCommit {
-		defer func() { p.autoCommit = true }()
-		p.autoCommit = false
-	}
-
 	// First, delete all statistics for the table.
-	_, err = p.exec(ctx, `DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.ID)
-	if err != nil {
-		return err
+	if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+		params.ctx,
+		"delete-stats",
+		params.EvalContext().Txn,
+		`DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.ID,
+	); err != nil {
+		return errors.Wrapf(err, "failed to delete old stats")
 	}
 
 	// Insert each statistic.
 	for i := range stats {
 		s := &stats[i]
-		h, err := s.GetHistogram(p.EvalContext())
+		h, err := s.GetHistogram(params.EvalContext())
 		if err != nil {
 			return err
 		}
@@ -791,8 +789,10 @@ func (p *planner) injectTableStats(
 		if s.Name != "" {
 			name = s.Name
 		}
-		_, err = p.exec(
-			ctx,
+		if _ /* rows */, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx,
+			"insert-stats",
+			params.EvalContext().Txn,
 			`INSERT INTO system.table_statistics (
 					"tableID",
 					"name",
@@ -811,9 +811,8 @@ func (p *planner) injectTableStats(
 			s.DistinctCount,
 			s.NullCount,
 			histogram,
-		)
-		if err != nil {
-			return err
+		); err != nil {
+			return errors.Wrapf(err, "failed to insert stats")
 		}
 	}
 	return nil

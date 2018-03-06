@@ -163,9 +163,9 @@ func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
 	dsp.nodeDesc = desc
 }
 
-// setSpanResolver switches to a different SpanResolver. It is the caller's
+// SetSpanResolver switches to a different SpanResolver. It is the caller's
 // responsibility to make sure the DistSQLPlanner is not in use.
-func (dsp *DistSQLPlanner) setSpanResolver(spanResolver distsqlplan.SpanResolver) {
+func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver distsqlplan.SpanResolver) {
 	dsp.spanResolver = spanResolver
 }
 

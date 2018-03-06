@@ -227,10 +227,8 @@ func writeZoneConfig(
 		}
 	}
 
-	internalExecutor := InternalExecutor{ExecCfg: execCfg}
-
 	if zone.IsSubzonePlaceholder() && len(zone.Subzones) == 0 {
-		return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,
+		return execCfg.InternalExecutor.Exec(ctx, "delete-zone", txn,
 			"DELETE FROM system.zones WHERE id = $1", targetID)
 	}
 
@@ -238,7 +236,7 @@ func writeZoneConfig(
 	if err != nil {
 		return 0, fmt.Errorf("could not marshal zone config: %s", err)
 	}
-	return internalExecutor.ExecuteStatementInTransaction(ctx, "set zone", txn,
+	return execCfg.InternalExecutor.Exec(ctx, "update-zone", txn,
 		"UPSERT INTO system.zones (id, config) VALUES ($1, $2)", targetID, buf)
 }
 

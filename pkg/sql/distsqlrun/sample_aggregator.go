@@ -204,6 +204,10 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, _ erro
 
 // writeResults inserts the new statistics into system.table_statistics.
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
+	// TODO(andrei): This method would benefit from a session interface on the
+	// internal executor instead of doing this weird thing where it uses the
+	// internal executor to execute one statement at a time inside a db.Txn()
+	// closure.
 	return s.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData

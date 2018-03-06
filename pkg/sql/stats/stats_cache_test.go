@@ -75,11 +75,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	}
 
 	var rows int
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		rows, err = ex.ExecuteStatementInTransaction(ctx, "insert-table-stats", txn, insertStatStmt, args...)
-		return err
-	}); err != nil {
+	rows, err := ex.Exec(ctx, "insert-stat", nil /* txn */, insertStatStmt, args...)
+	if err != nil {
 		return err
 	}
 	if rows != 1 {

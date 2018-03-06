@@ -102,14 +102,12 @@ type EventLogSetClusterSettingDetail struct {
 
 // An EventLogger exposes methods used to record events to the event table.
 type EventLogger struct {
-	InternalExecutor
+	*InternalExecutor
 }
 
 // MakeEventLogger constructs a new EventLogger.
 func MakeEventLogger(execCfg *ExecutorConfig) EventLogger {
-	return EventLogger{InternalExecutor{
-		ExecCfg: execCfg,
-	}}
+	return EventLogger{InternalExecutor: execCfg.InternalExecutor}
 }
 
 // InsertEventRecord inserts a single event into the event log as part of the
@@ -153,8 +151,7 @@ VALUES(
 		args[3] = string(infoBytes)
 	}
 
-	rows, err := ev.ExecuteStatementInTransaction(
-		ctx, "log-event", txn, insertEventTableStmt, args...)
+	rows, err := ev.Exec(ctx, "log-event", txn, insertEventTableStmt, args...)
 	if err != nil {
 		return err
 	}
