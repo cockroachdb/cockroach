@@ -15,56 +15,16 @@
 package acceptance
 
 import (
-	"context"
 	gosql "database/sql"
-	"os"
-	"os/signal"
-	"strings"
 	"testing"
 
-	"github.com/docker/docker/pkg/namesgenerator"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 var stopper = stop.NewStopper()
-
-// RunTests runs the tests in a package while gracefully handling interrupts.
-func RunTests(m *testing.M) {
-	randutil.SeedForTests()
-	go func() {
-		// Shut down tests when interrupted (for example CTRL+C).
-		sig := make(chan os.Signal, 1)
-		signal.Notify(sig, os.Interrupt)
-		<-sig
-		select {
-		case <-stopper.ShouldStop():
-		default:
-			// There is a very tiny race here: the cluster might be closing
-			// the stopper simultaneously.
-			stopper.Stop(context.TODO())
-		}
-	}()
-	os.Exit(m.Run())
-}
-
-// getRandomName generates a random, human-readable name to ease identification
-// of different test resources.
-func getRandomName() string {
-	// Remove characters that aren't allowed in hostnames for machines allocated
-	// by Terraform.
-	return strings.Replace(namesgenerator.GetRandomName(0), "_", "", -1)
-}
-
-// SkipUnlessRemote calls t.Skip if not running against a remote cluster.
-func SkipUnlessRemote(t testing.TB) {
-	if !*flagRemote {
-		t.Skip("skipping since not run against remote cluster")
-	}
-}
 
 func makePGClient(t *testing.T, dest string) *gosql.DB {
 	db, err := gosql.Open("postgres", dest)
