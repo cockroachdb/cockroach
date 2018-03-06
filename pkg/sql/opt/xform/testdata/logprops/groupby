@@ -18,9 +18,9 @@ project
  │    ├── grouping columns: a.x:int:1 a.y:int:null:2
  │    ├── scan
  │    │    └── columns: a.x:int:1 a.y:int:null:2 a.z:float:3
- │    └── aggregations [outer=(1)]
- │         └── function: sum [type=float, outer=(1)]
- │              └── variable: a.x [type=int, outer=(1)]
+ │    └── aggregations [outer=(3)]
+ │         └── function: sum [type=float, outer=(3)]
+ │              └── variable: a.z [type=float, outer=(3)]
  └── projections [outer=(1,2,4)]
       ├── variable: a.y [type=int, outer=(2)]
       ├── variable: column4 [type=float, outer=(4)]

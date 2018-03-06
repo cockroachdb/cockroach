@@ -229,9 +229,9 @@ group-by
  │    │    │    ├── grouping columns: xyz.x:int:1 xyz.y:int:null:2
  │    │    │    ├── scan
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
- │    │    │    └── aggregations [outer=(1)]
- │    │    │         └── function: max [type=float, outer=(1)]
- │    │    │              └── variable: xyz.x [type=int, outer=(1)]
+ │    │    │    └── aggregations [outer=(3)]
+ │    │    │         └── function: max [type=float, outer=(3)]
+ │    │    │              └── variable: xyz.z [type=float, outer=(3)]
  │    │    └── gt [type=bool, outer=(2)]
  │    │         ├── variable: xyz.y [type=int, outer=(2)]
  │    │         └── const: 4 [type=int]
