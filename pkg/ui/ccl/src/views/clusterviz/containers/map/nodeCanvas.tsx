@@ -15,19 +15,22 @@ import { renderAsMap } from "./layout";
 import { MapLayout } from "./mapLayout";
 
 import { LivenessStatus } from "src/redux/nodes";
-import { LocalityTier, LocalityTree } from "src/redux/localities";
+import { LocalityTier, LocalityTree, noSubLocalities } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
+import { NodeStatus$Properties } from "src/util/proto";
+import { InstructionsBox } from "src/views/clusterviz/components/instructionsBox";
 
 type Liveness = cockroach.storage.Liveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
 interface NodeCanvasProps {
+  allNodes: NodeStatus$Properties[];
   localityTree: LocalityTree;
   locationTree: LocationTree;
   livenessStatuses: { [id: string]: LivenessStatus };
@@ -71,7 +74,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     window.removeEventListener("resize", this.debouncedOnResize);
   }
 
-  renderContent() {
+  renderContent(asMap: boolean) {
     if (!this.state) {
       return null;
     }
@@ -79,7 +82,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     const { localityTree, locationTree, livenessStatuses, livenesses } = this.props;
     const { viewportSize } = this.state;
 
-    if (renderAsMap(locationTree, localityTree)) {
+    if (asMap) {
       return <MapLayout
         localityTree={localityTree}
         locationTree={locationTree}
@@ -137,6 +140,8 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   render() {
+    const showMap = renderAsMap(this.props.locationTree, this.props.localityTree);
+
     // We must render the SVG even before initializing the state, because we
     // need to read its dimensions from the DOM in order to initialize the
     // state.
@@ -153,11 +158,29 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
             className="cluster-viz"
             ref={svg => this.graphEl = svg}
           >
-            { this.renderContent() }
+            { this.renderContent(showMap) }
           </svg>
         </div>
         { this.renderBackButton() }
+        { showInstructionsBox(showMap, this.props.tiers, this.props.localityTree)
+            ? null
+            : <InstructionsBox
+                allNodes={this.props.allNodes}
+              />
+        }
       </div>
     );
   }
+}
+
+// exported for testing
+export function showInstructionsBox(
+  showMap: boolean, tiers: LocalityTier[], localityTree: LocalityTree,
+): boolean {
+  if (showMap) {
+    return false;
+  }
+  const showingAllNodes = noSubLocalities(localityTree);
+  const atTopLevel = tiers.length === 0;
+  return showingAllNodes && !atTopLevel;
 }

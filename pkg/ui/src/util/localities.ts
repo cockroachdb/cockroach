@@ -98,3 +98,11 @@ export function getLocalityLabel(path: LocalityTier[]): string {
   const thisTier = path[path.length - 1];
   return `${thisTier.key}=${thisTier.value}`;
 }
+
+/*
+ * numNodesWithoutLocality finds how many nodes are missing locality flags.
+ */
+export function numNodesWithoutLocality(nodes: NodeStatus$Properties[]): number {
+  const nodesWithoutLocality = nodes.filter((n) => n.desc.locality.tiers.length === 0);
+  return nodesWithoutLocality.length;
+}

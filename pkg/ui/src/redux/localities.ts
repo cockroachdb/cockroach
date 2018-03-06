@@ -33,6 +33,10 @@ function buildLocalityTree(nodes: NodeStatus$Properties[] = [], depth = 0): Loca
   };
 }
 
+export function noSubLocalities(tree: LocalityTree): boolean {
+  return _.size(tree.localities) === 0;
+}
+
 export const selectLocalityTree = createSelector(
   selectCommissionedNodeStatuses,
   buildLocalityTree,
