@@ -210,12 +210,12 @@ func (b *Builder) buildAggregation(
 	// Construct the aggregation. We represent the aggregations as Function
 	// operators with Variable arguments; construct those now.
 	aggExprs := make([]opt.GroupID, len(aggInfos))
-	argIdx := 0
+	argCols := aggInScope.cols[len(groupings):]
 	for i, agg := range aggInfos {
 		argList := make([]opt.GroupID, len(agg.args))
 		for j := range agg.args {
-			colIndex := aggInScope.cols[argIdx].index
-			argIdx++
+			colIndex := argCols[0].index
+			argCols = argCols[1:]
 			argList[j] = b.factory.ConstructVariable(b.factory.InternPrivate(colIndex))
 		}
 		aggExprs[i] = b.factory.ConstructFunction(
