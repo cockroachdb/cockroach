@@ -124,7 +124,8 @@ type LeaseStore struct {
 	leaseRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
-	memMetrics   *MemoryMetrics
+	// !!! remove the metrics and take an executor
+	memMetrics *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval

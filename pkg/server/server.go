@@ -134,6 +134,7 @@ type Server struct {
 	stopper            *stop.Stopper
 	sqlExecutor        *sql.Executor
 	execCfg            *sql.ExecutorConfig
+	internalExecutor   sql.InternalSQLExecutor
 	leaseMgr           *sql.LeaseManager
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
@@ -549,6 +550,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.registry.AddMetricStruct(s.pgServer.StatementCounters())
 		s.registry.AddMetricStruct(s.pgServer.EngineMetrics())
 	}
+	s.internalExecutor = sql.MakeInternalSQLExecutor(
+		ctx, s.pgServer.SQLServer, &s.internalMemMetrics, s.ClusterSettings(),
+	)
 
 	sqlExecutor.ExecCfg = &execCfg
 	s.execCfg = &execCfg

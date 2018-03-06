@@ -334,6 +334,7 @@ func (p *planner) DistLoader() *DistLoader {
 // This function is not suitable for use in the planNode constructors directly:
 // the returned planNode has already been optimized.
 // Consider also (*planner).delegateQuery(...).
+// !!! remove?
 func (p *planner) makeInternalPlan(ctx context.Context, sql string, args ...interface{}) error {
 	if log.V(2) {
 		log.Infof(ctx, "internal query: %s", sql)
@@ -388,6 +389,7 @@ func (p *planner) QueryRow(
 }
 
 // queryRows executes a SQL query string where multiple result rows are returned.
+// !!! remove
 func (p *planner) queryRows(
 	ctx context.Context, sql string, args ...interface{},
 ) (rows []tree.Datums, cols sqlbase.ResultColumns, err error) {
@@ -429,6 +431,7 @@ func (p *planner) queryRows(
 
 // exec executes a SQL query string and returns the number of rows
 // affected.
+// !!! remove
 func (p *planner) exec(
 	ctx context.Context, sql string, args ...interface{},
 ) (numRows int, err error) {

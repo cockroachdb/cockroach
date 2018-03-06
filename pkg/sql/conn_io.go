@@ -233,6 +233,13 @@ type BindStmt struct {
 	// need to match the number of arguments for the portal, or contains a single
 	// code, in which case that code will be applied to all arguments.
 	ArgFormatCodes []pgwirebase.FormatCode
+
+	// internalArgs, if not nil, represents the arguments for the prepared
+	// statements as produced by the internal clients. These don't need to go
+	// through encoding/decoding of the args. However, the types of the datums
+	// must correspond exactly to the inferred types.
+	// If internalArgs is specified, Args and ArgFormatCodes are ignored.
+	internalArgs []tree.Datum
 }
 
 // command implements the Command interface.
@@ -818,49 +825,102 @@ func (rc *rewindCapability) rewindAndUnlock(ctx context.Context) {
 	rc.cl.Close()
 }
 
-type errOnlyRestrictedCommandResult struct {
+type resCloseType bool
+
+const closed resCloseType = true
+const discarded resCloseType = false
+
+// bufferingCommandResult is a CommandResult that buffers rows and can call a
+// provided callback when closed.
+type bufferingCommandResult struct {
 	err          error
+	rows         []tree.Datums
 	rowsAffected int
+	cols         sqlbase.ResultColumns
+
+	// errOnly, if set, makes AddRow() panic. This can be used when the execution
+	// of the query is not expected to produce any results.
+	errOnly bool
+
+	// closeCallback, if set, is called when Close()/CloseWithErr()/Discard() is
+	// called.
+	closeCallback func(*bufferingCommandResult, resCloseType, error)
 }
 
-var _ RestrictedCommandResult = &errOnlyRestrictedCommandResult{}
+var _ RestrictedCommandResult = &bufferingCommandResult{}
 
 // SetColumns is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) SetColumns(context.Context, sqlbase.ResultColumns) {
-	panic("unimplemented")
+func (r *bufferingCommandResult) SetColumns(_ context.Context, cols sqlbase.ResultColumns) {
+	if r.errOnly {
+		panic("SetColumns() called when errOnly is set")
+	}
+	r.cols = cols
 }
 
 // ResetStmtType is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) ResetStmtType(stmt tree.Statement) {
+func (r *bufferingCommandResult) ResetStmtType(stmt tree.Statement) {
 	panic("unimplemented")
 }
 
 // AddRow is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
-	panic("unimplemented")
+func (r *bufferingCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
+	if r.errOnly {
+		panic("AddRow() called when errOnly is set")
+	}
+	rowCopy := make(tree.Datums, len(row))
+	copy(rowCopy, row)
+	r.rows = append(r.rows, rowCopy)
+	return nil
 }
 
 // SetError is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) SetError(err error) {
+func (r *bufferingCommandResult) SetError(err error) {
 	r.err = err
 }
 
 // OverwriteError is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) OverwriteError(err error) {
+func (r *bufferingCommandResult) OverwriteError(err error) {
 	r.err = err
 }
 
 // Err is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) Err() error {
+func (r *bufferingCommandResult) Err() error {
 	return r.err
 }
 
 // IncrementRowsAffected is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) IncrementRowsAffected(n int) {
+func (r *bufferingCommandResult) IncrementRowsAffected(n int) {
 	r.rowsAffected += n
 }
 
 // RowsAffected is part of the RestrictedCommandResult interface.
-func (r *errOnlyRestrictedCommandResult) RowsAffected() int {
+func (r *bufferingCommandResult) RowsAffected() int {
 	return r.rowsAffected
+}
+
+// SetLimit is part of the CommandResult interface.
+func (r *bufferingCommandResult) SetLimit(int) {
+	panic("unimplemented")
+}
+
+// Close is part of the CommandResult interface.
+func (r *bufferingCommandResult) Close(TransactionStatusIndicator) {
+	if r.closeCallback != nil {
+		r.closeCallback(r, closed, nil /* err */)
+	}
+}
+
+// CloseWithErr is part of the CommandResult interface.
+func (r *bufferingCommandResult) CloseWithErr(err error) {
+	r.err = err
+	if r.closeCallback != nil {
+		r.closeCallback(r, closed, err)
+	}
+}
+
+// Discard is part of the CommandResult interface.
+func (r *bufferingCommandResult) Discard() {
+	if r.closeCallback != nil {
+		r.closeCallback(r, discarded, nil /* err */)
+	}
 }

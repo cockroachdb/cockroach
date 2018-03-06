@@ -306,10 +306,10 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
-	if datums, _, err := (&sql.InternalExecutor{ExecCfg: s.execCfg}).QueryRows(
+	if datums, _, err := s.internalExecutor.Query(
 		ctx, "read-setting", "SELECT name FROM system.settings",
 	); err != nil {
-		log.Warning(ctx, err)
+		log.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
 		info.AlteredSettings = make(map[string]string, len(datums))
 		for _, row := range datums {

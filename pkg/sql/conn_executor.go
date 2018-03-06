@@ -230,7 +230,7 @@ type Server struct {
 
 	reCache *tree.RegexpCache
 
-	// pool is the parent monitor for all session monitors.
+	// pool is the parent monitor for all session monitors except "internal" ones.
 	pool *mon.BytesMonitor
 
 	// EngineMetrics is exported as required by the metrics.Struct magic we use
@@ -379,7 +379,28 @@ func (s *Server) ServeConn(
 	reserved mon.BoundAccount,
 	memMetrics *MemoryMetrics,
 ) error {
-	// Create the various monitors. They are Start()ed later.
+
+	ex := s.newConnExecutor(ctx, args, stmtBuf, clientComm, s.pool, reserved, memMetrics)
+	defer func() {
+		r := recover()
+		ex.closeWrapper(ctx, r)
+	}()
+	return ex.run(ctx)
+}
+
+func (s *Server) newConnExecutor(
+	ctx context.Context,
+	args SessionArgs,
+	stmtBuf *StmtBuf,
+	clientComm ClientComm,
+	parentMon *mon.BytesMonitor,
+	reserved mon.BoundAccount,
+	memMetrics *MemoryMetrics,
+) *connExecutor {
+	settings := &s.cfg.Settings.SV
+	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(settings))
+
+	// Create the various monitors.
 	//
 	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
 	// buffer. This is not done for sessionMon nor state.mon: these monitors don't
@@ -391,14 +412,13 @@ func (s *Server) ServeConn(
 		memMetrics.CurBytesCount,
 		memMetrics.MaxBytesHist,
 		-1, math.MaxInt64, s.cfg.Settings)
-	sessionRootMon.Start(ctx, s.pool, reserved)
+	sessionRootMon.Start(ctx, parentMon, reserved)
 	sessionMon := mon.MakeMonitor("session",
 		mon.MemoryResource,
 		memMetrics.SessionCurBytesCount,
 		memMetrics.SessionMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 	sessionMon.Start(ctx, &sessionRootMon, mon.BoundAccount{})
-
 	// We merely prepare the txn monitor here. It is started in
 	// txnState.resetForNewSQLTxn().
 	txnMon := mon.MakeMonitor("txn",
@@ -407,10 +427,7 @@ func (s *Server) ServeConn(
 		memMetrics.TxnMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 
-	settings := &s.cfg.Settings.SV
-	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(settings))
-
-	ex := connExecutor{
+	ex := &connExecutor{
 		server:     s,
 		stmtBuf:    stmtBuf,
 		clientComm: clientComm,
@@ -471,7 +488,7 @@ func (s *Server) ServeConn(
 		},
 	}
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
-	ex.dataMutator.sessionTracing.ex = &ex
+	ex.dataMutator.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.dataMutator.sessionTracing
 
 	if traceSessionEventLogEnabled.Get(&s.cfg.Settings.SV) {
@@ -481,12 +498,7 @@ func (s *Server) ServeConn(
 		}
 		ex.eventLog = trace.NewEventLog(fmt.Sprintf("sql session [%s]", args.User), remoteStr)
 	}
-
-	defer func() {
-		r := recover()
-		ex.closeWrapper(ctx, r)
-	}()
-	return ex.run(ctx)
+	return ex
 }
 
 type closeType bool

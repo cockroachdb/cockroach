@@ -464,7 +464,7 @@ func (ex *connExecutor) execStmtInParallel(
 	ex.mu.Unlock()
 
 	if err := ex.parallelizeQueue.Add(params, func() error {
-		res := &errOnlyRestrictedCommandResult{}
+		res := &bufferingCommandResult{errOnly: true}
 
 		defer queryDone(ctx, res)
 

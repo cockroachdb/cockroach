@@ -16,14 +16,23 @@ package sql
 
 import (
 	"context"
+	"math"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // InternalExecutor can be used internally by cockroach to execute SQL
@@ -130,4 +139,279 @@ func (ie *InternalExecutor) GetTableSpan(
 func (ie *InternalExecutor) initSession(p *planner) {
 	p.extendedEvalCtx.NodeID = ie.ExecCfg.LeaseManager.LeaseStore.execCfg.NodeID.Get()
 	p.extendedEvalCtx.Tables.leaseMgr = ie.ExecCfg.LeaseManager
+}
+
+// InternalSQLExecutor can be used internally by code modules to execute SQL
+// statements without needing to open a SQL connection.
+type InternalSQLExecutor struct {
+	s *Server
+
+	// mon is the monitor used by all queries executed through the
+	// InternalSQLExecutor.
+	mon *mon.BytesMonitor
+
+	// memMetrics is the memory metrics that queries executed through the
+	// InternalSQLExecutor will contribute to.
+	memMetrics *MemoryMetrics
+}
+
+// MakeInternalSQLExecutor creates an InternalSQLExecutor.
+func MakeInternalSQLExecutor(
+	ctx context.Context, s *Server, memMetrics *MemoryMetrics, settings *cluster.Settings,
+) InternalSQLExecutor {
+	monitor := mon.MakeUnlimitedMonitor(
+		ctx,
+		"internal SQL executor",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount,
+		memMetrics.MaxBytesHist,
+		math.MaxInt64, /* noteworthy */
+		settings,
+	)
+	return InternalSQLExecutor{
+		s:          s,
+		mon:        &monitor,
+		memMetrics: memMetrics,
+	}
+}
+
+// Query executes the supplied SQL statement and returns the resulting rows.
+// The statement is executed as the root user.
+func (ie *InternalSQLExecutor) Query(
+	ctx context.Context, opName string, stmt string, qargs ...interface{},
+) ([]tree.Datums, sqlbase.ResultColumns, error) {
+
+	timeReceived := timeutil.Now()
+	parseStart := timeutil.Now()
+	s, err := parser.ParseOne(stmt)
+	if err != nil {
+		return nil, nil, err
+	}
+	parseEnd := timeutil.Now()
+
+	type result struct {
+		rows []tree.Datums
+		cols sqlbase.ResultColumns
+		err  error
+	}
+
+	// resIdx will be set to the index of the result in clientComm that contains
+	// corresponds to the statement.
+	var resIdx int
+
+	resCh := make(chan result)
+
+	clientComm := &internalClientComm{
+		sync: func(results []resWithPos) {
+			res := results[resIdx]
+			resCh <- result{rows: res.rows, cols: res.cols, err: res.Err()}
+		},
+	}
+
+	stmtBuf := NewStmtBuf()
+	ex := ie.s.newConnExecutor(
+		ctx,
+		SessionArgs{User: security.RootUser},
+		stmtBuf,
+		clientComm,
+		ie.mon,
+		mon.BoundAccount{}, /* reserved */
+		ie.memMetrics,
+	)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		ex.run(ctx)
+		wg.Done()
+	}()
+	if len(qargs) == 0 {
+		if err := stmtBuf.Push(
+			ctx,
+			ExecStmt{
+				Stmt:         s,
+				TimeReceived: timeReceived,
+				ParseStart:   parseStart,
+				ParseEnd:     parseEnd,
+			}); err != nil {
+			return nil, nil, err
+		}
+		resIdx = 0
+	} else {
+		if err := stmtBuf.Push(
+			ctx,
+			PrepareStmt{
+				Stmt:       s,
+				ParseStart: parseStart,
+				ParseEnd:   parseEnd,
+			},
+		); err != nil {
+			return nil, nil, err
+		}
+
+		pinfo := tree.MakePlaceholderInfo()
+		golangFillQueryArguments(&pinfo, qargs)
+		args := make([]tree.Datum, len(pinfo.Values))
+		for k, v := range pinfo.Values {
+			i, err := strconv.Atoi(k)
+			i--
+			if err != nil {
+				return nil, nil, err
+			}
+			args[i] = v.(tree.Datum)
+		}
+
+		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: args}); err != nil {
+			return nil, nil, err
+		}
+
+		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived}); err != nil {
+			return nil, nil, err
+		}
+		resIdx = 2
+	}
+	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
+		return nil, nil, err
+	}
+
+	res := <-resCh
+	stmtBuf.Close()
+	wg.Wait()
+	return res.rows, res.cols, res.err
+}
+
+// internalClientComm is an implementation of ClientComm used by the
+// InternalSQLExecutor. Result rows are buffered in memory.
+type internalClientComm struct {
+	// results will contain the results of the commands executed by an
+	// InternalSQLExecutor.
+	results []resWithPos
+
+	lastDelivered CmdPos
+
+	// sync, if set, is called whenever a Sync is executed. It returns all the
+	// results since the previous Sync.
+	sync func([]resWithPos)
+}
+
+type resWithPos struct {
+	*bufferingCommandResult
+	pos CmdPos
+}
+
+// CreateStatementResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateStatementResult(
+	_ tree.Statement, _ RowDescOpt, pos CmdPos, _ []pgwirebase.FormatCode, _ *time.Location,
+) CommandResult {
+	return icc.createRes(pos, nil /* onClose */)
+}
+
+// createRes creates a result. onClose, if not nil, is called when the result is
+// closed.
+func (icc *internalClientComm) createRes(pos CmdPos, onClose func(error)) *bufferingCommandResult {
+	res := &bufferingCommandResult{
+		closeCallback: func(res *bufferingCommandResult, typ resCloseType, err error) {
+			if typ == discarded {
+				return
+			}
+			icc.results = append(icc.results, resWithPos{bufferingCommandResult: res, pos: pos})
+			if onClose != nil {
+				onClose(err)
+			}
+		},
+	}
+	return res
+}
+
+// CreatePrepareResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreatePrepareResult(pos CmdPos) ParseResult {
+	return icc.createRes(pos, nil /* onClose */)
+}
+
+// CreateBindResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateBindResult(pos CmdPos) BindResult {
+	return icc.createRes(pos, nil /* onClose */)
+}
+
+// CreateSyncResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
+	return icc.createRes(pos, func(err error) {
+		results := make([]resWithPos, len(icc.results))
+		copy(results, icc.results)
+		icc.results = icc.results[:0]
+		icc.sync(results)
+		icc.lastDelivered = pos
+	})
+}
+
+// LockCommunication is part of the ClientComm interface.
+func (icc *internalClientComm) LockCommunication() ClientLock {
+	return &noopClientLock{
+		clientComm: icc,
+	}
+}
+
+// Flush is part of the ClientComm interface.
+func (icc *internalClientComm) Flush(pos CmdPos) error {
+	return nil
+}
+
+// CreateDescribeResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateDescribeResult(pos CmdPos) DescribeResult {
+	panic("unimplemented")
+}
+
+// CreateDeleteResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateDeleteResult(pos CmdPos) DeleteResult {
+	panic("unimplemented")
+}
+
+// CreateFlushResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateFlushResult(pos CmdPos) FlushResult {
+	panic("unimplemented")
+}
+
+// CreateErrorResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateErrorResult(pos CmdPos) ErrorResult {
+	panic("unimplemented")
+}
+
+// CreateEmptyQueryResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateEmptyQueryResult(pos CmdPos) EmptyQueryResult {
+	panic("unimplemented")
+}
+
+// CreateCopyInResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
+	panic("unimplemented")
+}
+
+// CreateDrainResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
+	panic("unimplemented")
+}
+
+// noopClientLock is an implementation of ClientLock that says that no results
+// have been communicated to the client.
+type noopClientLock struct {
+	clientComm *internalClientComm
+}
+
+// Close is part of the ClientLock interface.
+func (ncl *noopClientLock) Close() {}
+
+// ClientPos is part of the ClientLock interface.
+func (ncl *noopClientLock) ClientPos() CmdPos {
+	return ncl.clientComm.lastDelivered
+}
+
+// RTrim is part of the ClientLock interface.
+func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
+	var i int
+	var r resWithPos
+	for i, r = range ncl.clientComm.results {
+		if r.pos >= pos {
+			break
+		}
+	}
+	ncl.clientComm.results = ncl.clientComm.results[:i]
 }

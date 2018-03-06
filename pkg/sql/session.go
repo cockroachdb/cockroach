@@ -281,12 +281,14 @@ type sessionDefaults struct {
 	database        string
 }
 
-// SessionArgs contains arguments for creating a new Session with NewSession().
+// SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
 	Database        string
 	User            string
 	ApplicationName string
-	RemoteAddr      net.Addr
+	// RemoteAddr is the client's address. This is nil iff this is an internal
+	// client.
+	RemoteAddr net.Addr
 }
 
 // SessionRegistry stores a set of all sessions on this node.

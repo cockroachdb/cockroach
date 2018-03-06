@@ -406,7 +406,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 15, len(r.last.SqlStats); expected != actual {
+	if expected, actual := 16, len(r.last.SqlStats); expected != actual {
 		t.Fatalf("expected %d queries in stats report, got %d :\n %v", expected, actual, r.last.SqlStats)
 	}
 
@@ -433,6 +433,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
+			`SELECT _ FROM _`, /* performed internally by the reporting */
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,

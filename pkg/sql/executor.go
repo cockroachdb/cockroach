@@ -2343,6 +2343,7 @@ func (e *Executor) generateQueryID() uint128.Uint128 {
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
+// !!! change interface to return array of datum
 func golangFillQueryArguments(pinfo *tree.PlaceholderInfo, args []interface{}) {
 	pinfo.Clear()
 
