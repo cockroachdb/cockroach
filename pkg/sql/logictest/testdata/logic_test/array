@@ -1085,3 +1085,11 @@ query T
 SELECT STRING_TO_ARRAY('foofoofoofoo', 'foo', 'foo')
 ----
 {"","","","",""}
+
+# Regression test for #23429.
+
+statement ok
+CREATE TABLE x (a STRING[], b INT[])
+
+statement ok
+UPDATE x SET a = ARRAY[], b = ARRAY[]
