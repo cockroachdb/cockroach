@@ -3,7 +3,8 @@ import React from "react";
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
 import { getConfigStatus } from "src/util/locations";
-import { pluralize } from "oss/src/util/pluralize";
+import { pluralize } from "src/util/pluralize";
+import nodeMapScreenshot from "assets/nodeMapScreenshot.png";
 import "./instructionsBox.styl";
 
 interface InstructionsBoxProps {
@@ -59,9 +60,12 @@ export class InstructionsBox extends React.Component<InstructionsBoxProps, Instr
     }
 
     return (
-      <div>
-        To see a map, {todos.join(" and ")}.{" "}
-        (<a href="http://cockroachlabs.com/docs">See Docs</a>)
+      <div style={{ maxWidth: 220 }}>
+        <p>
+          To see a map, {todos.join(" and ")}.{" "}
+          (<a href="http://cockroachlabs.com/docs">See Docs</a>)
+        </p>
+        <img src={nodeMapScreenshot} width={220} />
       </div>
     );
   }
