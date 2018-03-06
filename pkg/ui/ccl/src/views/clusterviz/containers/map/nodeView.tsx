@@ -11,7 +11,7 @@ import moment from "moment";
 import { Link } from "react-router";
 
 import { NodeStatus$Properties } from "src/util/proto";
-import {livenessNomenclature, sumNodeStats} from "src/redux/nodes";
+import { nodeCapacityStats, livenessNomenclature } from "src/redux/nodes";
 import { trustIcon } from "src/util/trust";
 import liveIcon from "!!raw-loader!assets/livenessIcons/live.svg";
 import suspectIcon from "!!raw-loader!assets/livenessIcons/suspect.svg";
@@ -28,7 +28,7 @@ type Liveness$Properties = cockroach.storage.Liveness$Properties;
 
 interface NodeViewProps {
   node: NodeStatus$Properties;
-  livenessStatuses: { [id: string]: NodeLivenessStatus };
+  livenessStatus: NodeLivenessStatus;
   liveness: Liveness$Properties;
 }
 
@@ -37,21 +37,21 @@ const TRANSLATE_X = -90 * SCALE_FACTOR;
 const TRANSLATE_Y = -100 * SCALE_FACTOR;
 
 export class NodeView extends React.Component<NodeViewProps> {
-  getLivenessIcon(nodeCounts: { suspect: number, dead: number }) {
-    if (nodeCounts.dead > 0) {
-      return deadIcon;
+  getLivenessIcon(livenessStatus: NodeLivenessStatus) {
+    switch (livenessStatus) {
+      case NodeLivenessStatus.LIVE:
+        return liveIcon;
+      case NodeLivenessStatus.DEAD:
+        return deadIcon;
+      default:
+        return suspectIcon;
     }
-    if (nodeCounts.suspect > 0) {
-      return suspectIcon;
-    }
-    return liveIcon;
   }
 
   getUptimeText() {
-    const { node, livenessStatuses, liveness } = this.props;
+    const { node, livenessStatus, liveness } = this.props;
 
-    const thisLivenessStatus = livenessStatuses[node.desc.node_id];
-    switch (thisLivenessStatus) {
+    switch (livenessStatus) {
       case NodeLivenessStatus.DEAD: {
         if (!liveness) {
           return "dead";
@@ -66,13 +66,13 @@ export class NodeView extends React.Component<NodeViewProps> {
         return `up for ${moment.duration(startTime.diff(moment())).humanize()}`;
       }
       default:
-        return livenessNomenclature(thisLivenessStatus);
+        return livenessNomenclature(livenessStatus);
     }
   }
 
   render() {
-    const { node, livenessStatuses } = this.props;
-    const { capacityUsable, capacityUsed, nodeCounts } = sumNodeStats([node], livenessStatuses);
+    const { node, livenessStatus } = this.props;
+    const { used, usable } = nodeCapacityStats(node);
 
     return (
       <Link
@@ -87,12 +87,12 @@ export class NodeView extends React.Component<NodeViewProps> {
           />
           <g dangerouslySetInnerHTML={trustIcon(nodeIcon)} transform="translate(14 14)" />
           <g
-            dangerouslySetInnerHTML={trustIcon(this.getLivenessIcon(nodeCounts))}
+            dangerouslySetInnerHTML={trustIcon(this.getLivenessIcon(livenessStatus))}
             transform="translate(9, 9)"
           />
           <CapacityArc
-            usableCapacity={capacityUsable}
-            usedCapacity={capacityUsed}
+            usableCapacity={usable}
+            usedCapacity={used}
           />
           <Sparklines nodes={[`${node.desc.node_id}`]} />
         </g>

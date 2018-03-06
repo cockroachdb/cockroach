@@ -70,7 +70,7 @@ export class CircleLayout extends React.Component<CircleLayoutProps> {
               <g transform={`translate(${this.coordsFor(i + childLocalities.length, total, radius)})`}>
                 <NodeView
                   node={node}
-                  livenessStatuses={this.props.livenessStatuses}
+                  livenessStatus={this.props.livenessStatuses[node.desc.node_id]}
                   liveness={this.props.livenesses[node.desc.node_id]}
                 />
               </g>

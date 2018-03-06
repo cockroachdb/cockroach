@@ -177,10 +177,12 @@ export function sumNodeStats(
           break;
       }
       if (status !== LivenessStatus.DEAD && status !== LivenessStatus.DECOMMISSIONED) {
-        result.capacityUsed += n.metrics[MetricConstants.usedCapacity];
-        result.capacityAvailable += n.metrics[MetricConstants.availableCapacity];
+        const { available, used, usable } = nodeCapacityStats(n);
+
+        result.capacityUsed += used;
+        result.capacityAvailable += available;
+        result.capacityUsable = usable;
         result.capacityTotal += n.metrics[MetricConstants.capacity];
-        result.capacityUsable = result.capacityUsed + result.capacityAvailable;
         result.usedBytes += BytesUsed(n);
         result.usedMem += n.metrics[MetricConstants.rss];
         result.totalRanges += n.metrics[MetricConstants.ranges];
@@ -191,6 +193,22 @@ export function sumNodeStats(
     });
   }
   return result;
+}
+
+export interface CapacityStats {
+  used: number;
+  usable: number;
+  available: number;
+}
+
+export function nodeCapacityStats(n: NodeStatus$Properties): CapacityStats {
+  const used = n.metrics[MetricConstants.usedCapacity];
+  const available = n.metrics[MetricConstants.availableCapacity];
+  return {
+    used,
+    available,
+    usable: used + available,
+  };
 }
 
 export function getDisplayName(node: NodeStatus$Properties) {
