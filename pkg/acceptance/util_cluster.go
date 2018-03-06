@@ -35,7 +35,6 @@ import (
 const (
 	localTest  = "runMode=local"
 	dockerTest = "runMode=docker"
-	farmerTest = "runMode=farmer"
 )
 
 // RunLocal runs the given acceptance test using a bare cluster.
@@ -47,13 +46,6 @@ func RunLocal(t *testing.T, testee func(t *testing.T)) {
 func RunDocker(t *testing.T, testee func(t *testing.T)) {
 	t.Run(dockerTest, testee)
 }
-
-// RunTerraform runs the given acceptance test using a terraform cluster.
-func RunTerraform(t *testing.T, testee func(t *testing.T)) {
-	t.Run(farmerTest, testee)
-}
-
-var _ = RunTerraform // silence unused warning
 
 // turns someTest#123 into someTest when invoked with ReplicaAllLiteralString.
 // This is useful because the go test harness automatically disambiguates
@@ -93,90 +85,74 @@ func StartCluster(ctx context.Context, t *testing.T, cfg cluster.TestConfig) (c 
 		}
 	}()
 
-	if *flagRemote { // force the test remote, no matter what run mode we think it should be run in
-		f := MakeFarmer(t, "", stopper)
-		c = f
-		if err := f.Resize(*flagNodes); err != nil {
+	parts := strings.Split(t.Name(), "/")
+	if len(parts) < 2 {
+		t.Fatal("must invoke RunLocal or RunDocker")
+	}
+
+	var runMode string
+	for _, part := range parts[1:] {
+		part = reStripTestEnumeration.ReplaceAllLiteralString(part, "")
+		switch part {
+		case localTest:
+			fallthrough
+		case dockerTest:
+			if runMode != "" {
+				t.Fatalf("test has more than one run mode: %s and %s", runMode, part)
+			}
+			runMode = part
+		}
+	}
+
+	switch runMode {
+	case localTest:
+		pwd, err := os.Getwd()
+		if err != nil {
 			t.Fatal(err)
 		}
-		if err := f.WaitReady(5 * time.Minute); err != nil {
-			if destroyErr := f.Destroy(t); destroyErr != nil {
-				t.Fatalf("could not destroy cluster after error %s: %s", err, destroyErr)
-			}
-			t.Fatalf("cluster not ready in time: %s", err)
-		}
-	} else {
-		parts := strings.Split(t.Name(), "/")
-		if len(parts) < 2 {
-			t.Fatal("must invoke RunLocal, RunDocker, or RunFarmer")
+		dataDir, err := ioutil.TempDir(pwd, ".localcluster")
+		if err != nil {
+			t.Fatal(err)
 		}
 
-		var runMode string
-		for _, part := range parts[1:] {
-			part = reStripTestEnumeration.ReplaceAllLiteralString(part, "")
-			switch part {
-			case localTest:
-				fallthrough
-			case dockerTest:
-				fallthrough
-			case farmerTest:
-				if runMode != "" {
-					t.Fatalf("test has more than one run mode: %s and %s", runMode, part)
-				}
-				runMode = part
-			}
+		logDir := *flagLogDir
+		if logDir != "" {
+			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
 		}
 
-		switch runMode {
-		case localTest:
-			pwd, err := os.Getwd()
-			if err != nil {
-				t.Fatal(err)
+		perNodeCfg := map[int]localcluster.NodeConfig{}
+		for i := 0; i < len(cfg.Nodes); i++ {
+			// TODO(tschottdorf): handle Nodes[i].Stores properly.
+			if cfg.Nodes[i].Version != "" {
+				var nCfg localcluster.NodeConfig
+				nCfg.Binary = GetBinary(ctx, t, cfg.Nodes[i].Version)
+				perNodeCfg[i] = nCfg
 			}
-			dataDir, err := ioutil.TempDir(pwd, ".localcluster")
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			logDir := *flagLogDir
-			if logDir != "" {
-				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
-			}
-
-			perNodeCfg := map[int]localcluster.NodeConfig{}
-			for i := 0; i < len(cfg.Nodes); i++ {
-				// TODO(tschottdorf): handle Nodes[i].Stores properly.
-				if cfg.Nodes[i].Version != "" {
-					var nCfg localcluster.NodeConfig
-					nCfg.Binary = GetBinary(ctx, t, cfg.Nodes[i].Version)
-					perNodeCfg[i] = nCfg
-				}
-			}
-			clusterCfg := localcluster.ClusterConfig{
-				Ephemeral:  true,
-				DataDir:    dataDir,
-				LogDir:     logDir,
-				NumNodes:   len(cfg.Nodes),
-				PerNodeCfg: perNodeCfg,
-			}
-
-			l := localcluster.New(clusterCfg)
-
-			l.Start(ctx)
-			c = &localcluster.LocalCluster{Cluster: l}
-
-		case dockerTest:
-			logDir := *flagLogDir
-			if logDir != "" {
-				logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
-			}
-			l := cluster.CreateDocker(ctx, cfg, logDir, stopper)
-			l.Start(ctx)
-			c = l
-
-		default:
-			t.Fatalf("unable to run in mode %q, use either RunLocal, RunDocker, or RunFarmer", runMode)
 		}
+		clusterCfg := localcluster.ClusterConfig{
+			Ephemeral:  true,
+			DataDir:    dataDir,
+			LogDir:     logDir,
+			NumNodes:   len(cfg.Nodes),
+			PerNodeCfg: perNodeCfg,
+		}
+
+		l := localcluster.New(clusterCfg)
+
+		l.Start(ctx)
+		c = &localcluster.LocalCluster{Cluster: l}
+
+	case dockerTest:
+		logDir := *flagLogDir
+		if logDir != "" {
+			logDir = filepath.Join(logDir, filepath.Clean(t.Name()))
+		}
+		l := cluster.CreateDocker(ctx, cfg, logDir, stopper)
+		l.Start(ctx)
+		c = l
+
+	default:
+		t.Fatalf("unable to run in mode %q, use either RunLocal or RunDocker", runMode)
 	}
 
 	// Don't wait for replication unless requested (usually it is).
