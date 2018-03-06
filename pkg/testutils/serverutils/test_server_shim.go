@@ -70,11 +70,14 @@ type TestServerInterface interface {
 	// LeaseManager() returns the *sql.LeaseManager as an interface{}.
 	LeaseManager() interface{}
 
-	// Executor() returns the *sql.Executor as an interface{}.
-	Executor() interface{}
-
-	// InternalExecutor returns a *sqlutil.InternalExecutor as an interface{}.
+	// InternalExecutor returns a *sql.InternalSQLExecutor as an interface{}
+	// (which also implements sqlutil.InternalSQLExecutor if the test cannot
+	// depend on sql).
 	InternalExecutor() interface{}
+
+	// ExecutorConfig returns a copy of the server's ExecutorConfig.
+	// The real return type is sql.ExecutorConfig.
+	ExecutorConfig() interface{}
 
 	// Gossip returns the gossip used by the TestServer.
 	Gossip() *gossip.Gossip

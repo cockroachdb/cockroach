@@ -107,6 +107,10 @@ type txnState2 struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// inExternalTxn, if set, means that mu.txn is not owned by the txnState. This
+	// happens for the InternalSQLExecutor.
+	inExternalTxn bool
 }
 
 // txnType represents the type of a SQL transaction.
@@ -133,6 +137,8 @@ const (
 // isolation: The transaction's isolation level.
 // priority: The transaction's priority.
 // readOnly: The read-only character of the new txn.
+// txn: If not nil, this txn will be used instead of creating a new txn. If so,
+//      all the other arguments need to correspond to the attributes of this txn.
 // tranCtx: A bag of extra execution context.
 func (ts *txnState2) resetForNewSQLTxn(
 	connCtx context.Context,
@@ -141,6 +147,7 @@ func (ts *txnState2) resetForNewSQLTxn(
 	isolation enginepb.IsolationType,
 	priority roachpb.UserPriority,
 	readOnly tree.ReadWriteMode,
+	txn *client.Txn,
 	tranCtx transitionCtx,
 ) {
 	// Reset state vars to defaults.
@@ -190,8 +197,13 @@ func (ts *txnState2) resetForNewSQLTxn(
 	ts.mon.Start(ts.Ctx, tranCtx.connMon, mon.BoundAccount{} /* reserved */)
 
 	ts.mu.Lock()
-	ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
-	ts.mu.txn.SetDebugName(opName)
+	if txn == nil {
+		ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
+		ts.mu.txn.SetDebugName(opName)
+	} else {
+		ts.mu.txn = txn
+		ts.inExternalTxn = true
+	}
 	ts.mu.Unlock()
 
 	if err := ts.mu.txn.SetIsolation(isolation); err != nil {
@@ -227,7 +239,7 @@ func (ts *txnState2) finishSQLTxn(connCtx context.Context) {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
 	}
 
-	if !ts.mu.txn.IsFinalized() {
+	if !ts.mu.txn.IsFinalized() && !ts.inExternalTxn {
 		panic(fmt.Sprintf(
 			"attempting to finishSQLTxn(), but KV txn is not finalized: %+v", ts.mu.txn))
 	}

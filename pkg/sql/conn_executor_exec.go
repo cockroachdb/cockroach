@@ -109,7 +109,7 @@ func (ex *connExecutor) execStmt(
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ex.server.StatementCounters.incrementCount(stmt.AST)
+	ex.incrementStmtCounter(stmt)
 	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer
@@ -464,7 +464,7 @@ func (ex *connExecutor) execStmtInParallel(
 	ex.mu.Unlock()
 
 	if err := ex.parallelizeQueue.Add(params, func() error {
-		res := &errOnlyRestrictedCommandResult{}
+		res := &bufferingCommandResult{errOnly: true}
 
 		defer queryDone(ctx, res)
 
@@ -484,9 +484,11 @@ func (ex *connExecutor) execStmtInParallel(
 		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
 
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-		recordStatementSummary(
-			planner, stmt, false /* distSQLUsed*/, ex.extraTxnState.autoRetryCounter,
-			res.RowsAffected(), err, &ex.server.EngineMetrics)
+		if !ex.stmtCounterDisabled {
+			recordStatementSummary(
+				planner, stmt, false /* distSQLUsed*/, ex.extraTxnState.autoRetryCounter,
+				res.RowsAffected(), err, &ex.server.EngineMetrics)
+		}
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 			ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 		}
@@ -583,10 +585,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	if err != nil {
 		return err
 	}
-	recordStatementSummary(
-		planner, stmt, useDistSQL, ex.extraTxnState.autoRetryCounter,
-		res.RowsAffected(), res.Err(), &ex.server.EngineMetrics,
-	)
+	if !ex.stmtCounterDisabled {
+		recordStatementSummary(
+			planner, stmt, useDistSQL, ex.extraTxnState.autoRetryCounter,
+			res.RowsAffected(), res.Err(), &ex.server.EngineMetrics,
+		)
+	}
 	if ex.server.cfg.TestingKnobs.AfterExecute != nil {
 		ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
 	}
@@ -712,7 +716,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 ) (fsm.Event, fsm.EventPayload) {
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
-		ex.server.StatementCounters.incrementCount(stmt.AST)
+		ex.incrementStmtCounter(stmt)
 		iso, err := ex.isolationToProto(s.Modes.Isolation)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -844,7 +848,7 @@ func (ex *connExecutor) execStmtInAbortedState(
 func (ex *connExecutor) execStmtInCommitWaitState(
 	stmt Statement, res RestrictedCommandResult,
 ) (fsm.Event, fsm.EventPayload) {
-	ex.server.StatementCounters.incrementCount(stmt.AST)
+	ex.incrementStmtCounter(stmt)
 	switch stmt.AST.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
@@ -971,4 +975,10 @@ func (ex *connExecutor) handleAutoCommit(ctx context.Context, stmt tree.Statemen
 	err := txn.Commit(ctx)
 	log.VEventf(ctx, 2, "AutoCommit. err: %v", err)
 	return err
+}
+
+func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
+	if !ex.stmtCounterDisabled {
+		ex.server.StatementCounters.incrementCount(stmt.AST)
+	}
 }

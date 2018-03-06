@@ -78,8 +78,9 @@ type FlowCtx struct {
 	// clientDB is a handle to the cluster. Used for performing requests outside
 	// of the transaction in which the flow's query is running.
 	clientDB *client.DB
-	// executor provides access to the SQL executor.
-	executor sqlutil.InternalExecutor
+
+	// executor is used to run internal SQL statements.
+	executor sqlutil.InternalSQLExecutor
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
 	// run.

@@ -170,7 +170,7 @@ func TestBuild(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+					eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
 
 					// Build and optimize the opt expression tree.
@@ -257,7 +257,7 @@ func TestBuild(t *testing.T) {
 
 				case "catalog":
 					// Create the engine in order to get access to its catalog.
-					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
+					eng := s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
 
 					parts := strings.Split(d.Input, ".")

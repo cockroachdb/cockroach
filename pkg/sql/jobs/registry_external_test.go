@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -76,7 +76,6 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	db := s.DB()
-	ex := &sql.InternalExecutor{ExecCfg: s.InternalExecutor().(*sql.InternalExecutor).ExecCfg}
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	nodeLiveness := jobs.NewFakeNodeLiveness(4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
@@ -85,7 +84,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 		nodeID := &base.NodeIDContainer{}
 		nodeID.Reset(id)
-		r := jobs.MakeRegistry(log.AmbientContext{}, clock, db, ex, nodeID, cluster.NoSettings, jobs.FakePHS)
+		r := jobs.MakeRegistry(
+			log.AmbientContext{}, clock, db,
+			s.InternalExecutor().(sqlutil.InternalSQLExecutor),
+			nodeID, cluster.NoSettings, jobs.FakePHS,
+		)
 		if err := r.Start(ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
 			t.Fatal(err)
 		}

@@ -16,86 +16,421 @@ package sql
 
 import (
 	"context"
+	"math"
+	"strconv"
+	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
-// InternalExecutor can be used internally by cockroach to execute SQL
-// statements without needing to open a SQL connection. InternalExecutor assumes
-// that the caller has access to a cockroach KV client to handle connection and
-// transaction management.
-type InternalExecutor struct {
-	ExecCfg *ExecutorConfig
+var _ sqlutil.InternalSQLExecutor = &InternalSQLExecutor{}
+
+// InternalSQLExecutor can be used internally by code modules to execute SQL
+// statements without needing to open a SQL connection.
+//
+// InternalSQLExecutor can execute one statement at a time. As of 03/2018, it
+// doesn't offer a session interface for maintaining session state or for
+// running explicit SQL transaction. However, it supports running SQL statements
+// inside a higher-lever (KV) txn.
+type InternalSQLExecutor struct {
+	s *Server
+
+	// mon is the monitor used by all queries executed through the
+	// InternalSQLExecutor.
+	mon *mon.BytesMonitor
+
+	// memMetrics is the memory metrics that queries executed through the
+	// InternalSQLExecutor will contribute to.
+	memMetrics *MemoryMetrics
 }
 
-var _ sqlutil.InternalExecutor = &InternalExecutor{}
-
-// ExecuteStatementInTransaction executes the supplied SQL statement as part of
-// the supplied transaction. Statements are currently executed as the root user
-// with the system database as current database.
-func (ie *InternalExecutor) ExecuteStatementInTransaction(
-	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-) (int, error) {
-	// TODO(andrei): The use of the LeaseManager's memMetrics is very dubious. We
-	// should probably pass in the metrics to use.
-	p, cleanup := newInternalPlanner(
-		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
-	defer cleanup()
-	ie.initSession(p)
-	return p.exec(ctx, statement, qargs...)
+// MakeInternalSQLExecutor creates an InternalSQLExecutor.
+func MakeInternalSQLExecutor(
+	ctx context.Context, s *Server, memMetrics *MemoryMetrics, settings *cluster.Settings,
+) InternalSQLExecutor {
+	monitor := mon.MakeUnlimitedMonitor(
+		ctx,
+		"internal SQL executor",
+		mon.MemoryResource,
+		memMetrics.CurBytesCount,
+		memMetrics.MaxBytesHist,
+		math.MaxInt64, /* noteworthy */
+		settings,
+	)
+	return InternalSQLExecutor{
+		s:          s,
+		mon:        &monitor,
+		memMetrics: memMetrics,
+	}
 }
 
-// QueryRowInTransaction executes the supplied SQL statement as part of the
-// supplied transaction and returns the result. Statements are currently
-// executed as the root user.
-func (ie *InternalExecutor) QueryRowInTransaction(
-	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
-) (tree.Datums, error) {
-	p, cleanup := newInternalPlanner(
-		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
-	defer cleanup()
-	ie.initSession(p)
-	return p.QueryRow(ctx, statement, qargs...)
+// initConnEx creates a connExecutor and runs it on a separate goroutine. It
+// returns a StmtBuf into which commands can be pushed and a WaitGroup that will
+// be signaled when connEx.run() returns.
+func (ie *InternalSQLExecutor) initConnEx(
+	ctx context.Context,
+	txn *client.Txn,
+	sargs SessionArgs,
+	syncCallback func([]resWithPos),
+	errCallback func(error),
+) (*StmtBuf, *sync.WaitGroup) {
+	clientComm := &internalClientComm{sync: syncCallback}
+
+	stmtBuf := NewStmtBuf()
+	var ex *connExecutor
+	if txn == nil {
+		ex = ie.s.newConnExecutor(
+			ctx,
+			sargs,
+			stmtBuf,
+			clientComm,
+			ie.mon,
+			mon.BoundAccount{}, /* reserved */
+			ie.memMetrics)
+	} else {
+		ex = ie.s.newConnExecutorWithTxn(
+			ctx,
+			sargs,
+			stmtBuf,
+			clientComm,
+			ie.mon,
+			mon.BoundAccount{}, /* reserved */
+			ie.memMetrics,
+			txn)
+	}
+	ex.stmtCounterDisabled = true
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		if err := ex.run(ctx); err != nil {
+			errCallback(err)
+		}
+		wg.Done()
+	}()
+	return stmtBuf, &wg
 }
 
-// QueryRowsInTransaction executes the supplied SQL statement as part of the
-// supplied transaction and returns the resulting rows. Statements are currently
-// executed as the root user.
-func (ie *InternalExecutor) QueryRowsInTransaction(
-	ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
+// Query executes the supplied SQL statement and returns the resulting rows.
+// The statement is executed as the root user.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+func (ie *InternalSQLExecutor) Query(
+	ctx context.Context, txn *client.Txn, stmt string, qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	p, cleanup := newInternalPlanner(
-		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
-	defer cleanup()
-	ie.initSession(p)
-	rows, cols, err := p.queryRows(ctx, statement, qargs...)
+	res, err := ie.execInternal(ctx, txn, SessionArgs{User: security.RootUser, Database: "system"}, stmt, qargs...)
 	if err != nil {
 		return nil, nil, err
 	}
-	return rows, cols, nil
+	return res.rows, res.cols, res.err
 }
 
-// QueryRows is like QueryRowsInTransaction, except it runs a transaction
-// internally. Committing the transaction and any required retries are handled
-// transparently.
-func (ie InternalExecutor) QueryRows(
-	ctx context.Context, opName string, statement string, qargs ...interface{},
+// QueryWithSessionArgs is like Query, except it takes the session arguments.
+// Nothing is filled in by default, not even the user or database.
+func (ie *InternalSQLExecutor) QueryWithSessionArgs(
+	ctx context.Context, txn *client.Txn, sargs SessionArgs, stmt string, qargs ...interface{},
 ) ([]tree.Datums, sqlbase.ResultColumns, error) {
-	var rows []tree.Datums
-	var cols sqlbase.ResultColumns
-	err := ie.ExecCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		rows, cols, err = ie.QueryRowsInTransaction(ctx, opName, txn, statement, qargs...)
-		return err
-	})
-	return rows, cols, err
+	res, err := ie.execInternal(ctx, txn, sargs, stmt, qargs...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return res.rows, res.cols, res.err
 }
 
-func (ie *InternalExecutor) initSession(p *planner) {
-	p.extendedEvalCtx.NodeID = ie.ExecCfg.LeaseManager.LeaseStore.execCfg.NodeID.Get()
-	p.extendedEvalCtx.Tables.leaseMgr = ie.ExecCfg.LeaseManager
+// QueryRow is like Query, except it returns a single row, or nil if not row is
+// found, or an error if more that one row is returned.
+func (ie *InternalSQLExecutor) QueryRow(
+	ctx context.Context, txn *client.Txn, stmt string, qargs ...interface{},
+) (tree.Datums, error) {
+	rows, _, err := ie.Query(ctx, txn, stmt, qargs...)
+	if err != nil {
+		return nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, nil
+	case 1:
+		return rows[0], nil
+	default:
+		return nil, &tree.MultipleResultsError{SQL: stmt}
+	}
+}
+
+// Exec executes the supplied SQL statement. Statements are currently executed
+// as the root user with the system database as current database.
+//
+// If txn is not nil, the statement will be executed in the respective txn.
+//
+// Returns the number of rows affected.
+func (ie *InternalSQLExecutor) Exec(
+	ctx context.Context, txn *client.Txn, stmt string, qargs ...interface{},
+) (int, error) {
+	res, err := ie.execInternal(ctx, txn, SessionArgs{User: security.RootUser, Database: "system"}, stmt, qargs...)
+	if err != nil {
+		return 0, err
+	}
+	return res.rowsAffected, res.err
+}
+
+// ExecWithSessionArgs is like Exec, except it takes the session arguments.
+// Nothing is filled in by default, not even the user or database.
+func (ie *InternalSQLExecutor) ExecWithSessionArgs(
+	ctx context.Context, txn *client.Txn, sargs SessionArgs, stmt string, qargs ...interface{},
+) (int, error) {
+	res, err := ie.execInternal(ctx, txn, sargs, stmt, qargs...)
+	if err != nil {
+		return 0, err
+	}
+	return res.rowsAffected, res.err
+}
+
+type result struct {
+	rows         []tree.Datums
+	rowsAffected int
+	cols         sqlbase.ResultColumns
+	err          error
+}
+
+func (ie *InternalSQLExecutor) execInternal(
+	ctx context.Context, txn *client.Txn, sargs SessionArgs, stmt string, qargs ...interface{},
+) (result, error) {
+	timeReceived := timeutil.Now()
+	parseStart := timeutil.Now()
+	s, err := parser.ParseOne(stmt)
+	if err != nil {
+		return result{}, err
+	}
+	parseEnd := timeutil.Now()
+
+	// resPos will be set to the position of the command that represents the
+	// statement we care about.
+	var resPos CmdPos
+
+	resCh := make(chan result)
+	var resultsReceived bool
+	syncCallback := func(results []resWithPos) {
+		resultsReceived = true
+		for _, res := range results {
+			if res.pos == resPos {
+				resCh <- result{rows: res.rows, rowsAffected: res.RowsAffected(), cols: res.cols, err: res.Err()}
+				return
+			}
+			if res.err != nil {
+				// If we encounter an error, there's no point in looking further; the
+				// rest of the commands in the batch have been skipped.
+				resCh <- result{err: res.Err()}
+				return
+			}
+		}
+		resCh <- result{err: errors.Errorf("missing result for pos: %d and no previous error. How could that be?", resPos)}
+	}
+	errCallback := func(err error) {
+		if resultsReceived {
+			return
+		}
+		resCh <- result{err: err}
+	}
+	stmtBuf, wg := ie.initConnEx(ctx, txn, sargs, syncCallback, errCallback)
+
+	if len(qargs) == 0 {
+		if err := stmtBuf.Push(
+			ctx,
+			ExecStmt{
+				Stmt:         s,
+				TimeReceived: timeReceived,
+				ParseStart:   parseStart,
+				ParseEnd:     parseEnd,
+			}); err != nil {
+			return result{}, err
+		}
+		resPos = 0
+	} else {
+		if err := stmtBuf.Push(
+			ctx,
+			PrepareStmt{
+				Stmt:       s,
+				ParseStart: parseStart,
+				ParseEnd:   parseEnd,
+			},
+		); err != nil {
+			return result{}, err
+		}
+
+		pinfo := tree.MakePlaceholderInfo()
+		golangFillQueryArguments(&pinfo, qargs)
+		args := make([]tree.Datum, len(pinfo.Values))
+		for k, v := range pinfo.Values {
+			i, err := strconv.Atoi(k)
+			i--
+			if err != nil {
+				return result{}, err
+			}
+			args[i] = v.(tree.Datum)
+		}
+
+		if err := stmtBuf.Push(ctx, BindStmt{internalArgs: args}); err != nil {
+			return result{}, err
+		}
+
+		if err := stmtBuf.Push(ctx, ExecPortal{TimeReceived: timeReceived}); err != nil {
+			return result{}, err
+		}
+		resPos = 2
+	}
+	if err := stmtBuf.Push(ctx, Sync{}); err != nil {
+		return result{}, err
+	}
+
+	res := <-resCh
+	stmtBuf.Close()
+	wg.Wait()
+	return res, nil
+}
+
+// internalClientComm is an implementation of ClientComm used by the
+// InternalSQLExecutor. Result rows are buffered in memory.
+type internalClientComm struct {
+	// results will contain the results of the commands executed by an
+	// InternalSQLExecutor.
+	results []resWithPos
+
+	lastDelivered CmdPos
+
+	// sync, if set, is called whenever a Sync is executed. It returns all the
+	// results since the previous Sync.
+	sync func([]resWithPos)
+}
+
+type resWithPos struct {
+	*bufferingCommandResult
+	pos CmdPos
+}
+
+// CreateStatementResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateStatementResult(
+	_ tree.Statement, _ RowDescOpt, pos CmdPos, _ []pgwirebase.FormatCode, _ *time.Location,
+) CommandResult {
+	return icc.createRes(pos, nil /* onClose */)
+}
+
+// createRes creates a result. onClose, if not nil, is called when the result is
+// closed.
+func (icc *internalClientComm) createRes(pos CmdPos, onClose func(error)) *bufferingCommandResult {
+	res := &bufferingCommandResult{
+		closeCallback: func(res *bufferingCommandResult, typ resCloseType, err error) {
+			if typ == discarded {
+				return
+			}
+			icc.results = append(icc.results, resWithPos{bufferingCommandResult: res, pos: pos})
+			if onClose != nil {
+				onClose(err)
+			}
+		},
+	}
+	return res
+}
+
+// CreatePrepareResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreatePrepareResult(pos CmdPos) ParseResult {
+	return icc.createRes(pos, nil /* onClose */)
+}
+
+// CreateBindResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateBindResult(pos CmdPos) BindResult {
+	return icc.createRes(pos, nil /* onClose */)
+}
+
+// CreateSyncResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateSyncResult(pos CmdPos) SyncResult {
+	return icc.createRes(pos, func(err error) {
+		results := make([]resWithPos, len(icc.results))
+		copy(results, icc.results)
+		icc.results = icc.results[:0]
+		icc.sync(results)
+		icc.lastDelivered = pos
+	})
+}
+
+// LockCommunication is part of the ClientComm interface.
+func (icc *internalClientComm) LockCommunication() ClientLock {
+	return &noopClientLock{
+		clientComm: icc,
+	}
+}
+
+// Flush is part of the ClientComm interface.
+func (icc *internalClientComm) Flush(pos CmdPos) error {
+	return nil
+}
+
+// CreateDescribeResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateDescribeResult(pos CmdPos) DescribeResult {
+	panic("unimplemented")
+}
+
+// CreateDeleteResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateDeleteResult(pos CmdPos) DeleteResult {
+	panic("unimplemented")
+}
+
+// CreateFlushResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateFlushResult(pos CmdPos) FlushResult {
+	panic("unimplemented")
+}
+
+// CreateErrorResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateErrorResult(pos CmdPos) ErrorResult {
+	panic("unimplemented")
+}
+
+// CreateEmptyQueryResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateEmptyQueryResult(pos CmdPos) EmptyQueryResult {
+	panic("unimplemented")
+}
+
+// CreateCopyInResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateCopyInResult(pos CmdPos) CopyInResult {
+	panic("unimplemented")
+}
+
+// CreateDrainResult is part of the ClientComm interface.
+func (icc *internalClientComm) CreateDrainResult(pos CmdPos) DrainResult {
+	panic("unimplemented")
+}
+
+// noopClientLock is an implementation of ClientLock that says that no results
+// have been communicated to the client.
+type noopClientLock struct {
+	clientComm *internalClientComm
+}
+
+// Close is part of the ClientLock interface.
+func (ncl *noopClientLock) Close() {}
+
+// ClientPos is part of the ClientLock interface.
+func (ncl *noopClientLock) ClientPos() CmdPos {
+	return ncl.clientComm.lastDelivered
+}
+
+// RTrim is part of the ClientLock interface.
+func (ncl *noopClientLock) RTrim(_ context.Context, pos CmdPos) {
+	var i int
+	var r resWithPos
+	for i, r = range ncl.clientComm.results {
+		if r.pos >= pos {
+			break
+		}
+	}
+	ncl.clientComm.results = ncl.clientComm.results[:i]
 }

@@ -76,11 +76,23 @@ func (stateCommitWait) String() string {
 	return "CommitWait"
 }
 
-func (stateNoTxn) State()       {}
-func (stateOpen) State()        {}
-func (stateAborted) State()     {}
-func (stateRestartWait) State() {}
-func (stateCommitWait) State()  {}
+// stateInternalError is used by the InternalSQLExecutor when running statements
+// in a higher-level transaction. The fsm is in this state after encountering an
+// execution error when running in an external transaction: the "SQL
+// transaction" is finished, however the higher-level transaction is not rolled
+// back.
+type stateInternalError struct{}
+
+func (stateInternalError) String() string {
+	return "InternalError"
+}
+
+func (stateNoTxn) State()         {}
+func (stateOpen) State()          {}
+func (stateAborted) State()       {}
+func (stateRestartWait) State()   {}
+func (stateCommitWait) State()    {}
+func (stateInternalError) State() {}
 
 /// Events.
 
@@ -88,13 +100,14 @@ type eventTxnStart struct {
 	ImplicitTxn Bool
 }
 type eventTxnStartPayload struct {
+	tranCtx transitionCtx
+
 	iso enginepb.IsolationType
 	pri roachpb.UserPriority
 	// txnSQLTimestamp is the timestamp that statements executed in the
 	// transaction that is started by this event will report for now(),
 	// current_timestamp(), transaction_timestamp().
 	txnSQLTimestamp time.Time
-	tranCtx         transitionCtx
 	readOnly        tree.ReadWriteMode
 }
 
@@ -412,6 +425,7 @@ var TxnStateTransitions = Compile(Pattern{
 					ts.connCtx,
 					explicitTxn,
 					payload.txnSQLTimestamp, payload.iso, payload.pri, payload.readOnly,
+					nil, /* txn */
 					args.Payload.(eventTxnStartPayload).tranCtx,
 				)
 				ts.setAdvanceInfo(advanceOne, noRewind, noEvent)
@@ -511,9 +525,39 @@ func (ts *txnState2) noTxnToOpen(
 		payload.iso,
 		payload.pri,
 		payload.readOnly,
+		nil, /* txn */
 		payload.tranCtx,
 	)
-
 	ts.setAdvanceInfo(advCode, noRewind, txnStart)
 	return nil
 }
+
+// InternalSQLExecutorStateTransitions is the state machine used by the
+// InternalSQLExecutor when running SQL inside a higher-level txn. It's a very
+// limited state machine - doesn't allow starting or finishing txns,
+// auto-retries, etc.
+var InternalSQLExecutorStateTransitions = Compile(Pattern{
+	stateOpen{ImplicitTxn: False, RetryIntent: False}: {
+		// We accept eventNonRetriableErr with both IsCommit={True, False}, even
+		// those this state machine does not support COMMIT statements because
+		// connExecutor.close() sends an eventNonRetriableErr{IsCommit: True} event.
+		eventNonRetriableErr{IsCommit: Any}: {
+			Next: stateInternalError{},
+			Action: func(args Args) error {
+				ts := args.Extended.(*txnState2)
+				ts.finishSQLTxn(args.Ctx)
+				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				return nil
+			},
+		},
+		eventRetriableErr{CanAutoRetry: Any, IsCommit: False}: {
+			Next: stateInternalError{},
+			Action: func(args Args) error {
+				ts := args.Extended.(*txnState2)
+				ts.finishSQLTxn(args.Ctx)
+				ts.setAdvanceInfo(skipBatch, noRewind, txnAborted)
+				return nil
+			},
+		},
+	},
+})

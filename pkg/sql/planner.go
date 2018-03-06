@@ -427,37 +427,6 @@ func (p *planner) queryRows(
 	return rows, cols, nil
 }
 
-// exec executes a SQL query string and returns the number of rows
-// affected.
-func (p *planner) exec(
-	ctx context.Context, sql string, args ...interface{},
-) (numRows int, err error) {
-	// makeInternalPlan() clobbers p.curplan and the placeholder info
-	// map, so we have to save/restore them here.
-	defer func(psave planTop, pisave tree.PlaceholderInfo) {
-		p.semaCtx.Placeholders = pisave
-		p.curPlan = psave
-	}(p.curPlan, p.semaCtx.Placeholders)
-
-	startTime := timeutil.Now()
-	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
-		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
-		return 0, err
-	}
-	defer p.curPlan.close(ctx)
-	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", numRows, err, startTime) }()
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := p.curPlan.start(params); err != nil {
-		return 0, err
-	}
-	return countRowsAffected(params, p.curPlan.plan)
-}
-
 func (p *planner) lookupFKTable(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {

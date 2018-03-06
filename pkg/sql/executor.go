@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -173,7 +172,6 @@ func (rl ResultList) Close(ctx context.Context) {
 
 // Result corresponds to the execution of a single SQL statement.
 type Result struct {
-	Err error
 	// The type of statement that the result is for.
 	Type tree.StatementType
 	// The tag of the statement that the result is for.
@@ -254,21 +252,22 @@ type NodeInfo struct {
 type ExecutorConfig struct {
 	Settings *cluster.Settings
 	NodeInfo
-	AmbientCtx      log.AmbientContext
-	DB              *client.DB
-	Gossip          *gossip.Gossip
-	DistSender      *kv.DistSender
-	RPCContext      *rpc.Context
-	LeaseManager    *LeaseManager
-	Clock           *hlc.Clock
-	DistSQLSrv      *distsqlrun.ServerImpl
-	StatusServer    serverpb.StatusServer
-	SessionRegistry *SessionRegistry
-	JobRegistry     *jobs.Registry
-	VirtualSchemas  *VirtualSchemaHolder
-	DistSQLPlanner  *DistSQLPlanner
-	ExecLogger      *log.SecondaryLogger
-	AuditLogger     *log.SecondaryLogger
+	AmbientCtx       log.AmbientContext
+	DB               *client.DB
+	Gossip           *gossip.Gossip
+	DistSender       *kv.DistSender
+	RPCContext       *rpc.Context
+	LeaseManager     *LeaseManager
+	Clock            *hlc.Clock
+	DistSQLSrv       *distsqlrun.ServerImpl
+	StatusServer     serverpb.StatusServer
+	SessionRegistry  *SessionRegistry
+	JobRegistry      *jobs.Registry
+	VirtualSchemas   *VirtualSchemaHolder
+	DistSQLPlanner   *DistSQLPlanner
+	ExecLogger       *log.SecondaryLogger
+	AuditLogger      *log.SecondaryLogger
+	InternalExecutor *InternalSQLExecutor
 
 	TestingKnobs              *ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
@@ -389,32 +388,6 @@ func NewExecutor(cfg ExecutorConfig, stopper *stop.Stopper) *Executor {
 		// The cache will be updated on Start() through gossip.
 		dbCache: newDatabaseCacheHolder(newDatabaseCache(config.SystemConfig{})),
 	}
-}
-
-// Start starts workers for the executor.
-func (e *Executor) Start(ctx context.Context, dsp *DistSQLPlanner) {
-	ctx = e.AnnotateCtx(ctx)
-	e.distSQLPlanner = dsp
-
-	gossipUpdateC := e.cfg.Gossip.RegisterSystemConfigChannel()
-	e.stopper.RunWorker(ctx, func(ctx context.Context) {
-		for {
-			select {
-			case <-gossipUpdateC:
-				sysCfg, _ := e.cfg.Gossip.GetSystemConfig()
-				e.dbCache.updateSystemConfig(sysCfg)
-			case <-e.stopper.ShouldStop():
-				return
-			}
-		}
-	})
-}
-
-// SetDistSQLSpanResolver changes the SpanResolver used for DistSQL. It is the
-// caller's responsibility to make sure no queries are being run with DistSQL at
-// the same time.
-func (e *Executor) SetDistSQLSpanResolver(spanResolver distsqlplan.SpanResolver) {
-	e.distSQLPlanner.setSpanResolver(spanResolver)
 }
 
 // AnnotateCtx is a convenience wrapper; see AmbientContext.
@@ -587,42 +560,6 @@ func (e *Executor) Prepare(
 	}
 	prepared.Types = planner.semaCtx.Placeholders.Types
 	return prepared, nil
-}
-
-// ExecuteStatementsBuffered executes the given statement(s), buffering them
-// entirely in memory prior to returning a response. If there is an error then
-// we return an empty StatementResults and the error.
-//
-// Note that we will only receive an error even if we run a successful statement
-// followed by a statement which has an error then the caller will only receive
-// the error, however the first statement will have been executed.
-//
-// If no error is returned, the caller has to call Close() on the returned
-// StatementResults.
-func (e *Executor) ExecuteStatementsBuffered(
-	session *Session, stmts string, pinfo *tree.PlaceholderInfo, expectedNumResults int,
-) (StatementResults, error) {
-	b := newBufferedWriter(session.makeBoundAccount())
-	session.ResultsWriter = b
-	err := e.ExecuteStatements(session, stmts, pinfo)
-	res := b.results()
-	if err != nil {
-		res.Close(session.Ctx())
-		return StatementResults{}, err
-	}
-	for _, result := range res.ResultList {
-		if result.Err != nil {
-			res.Close(session.Ctx())
-			return StatementResults{}, errors.Errorf("%s", result.Err)
-		}
-	}
-	// This needs to be the last error check since in the case of an error during
-	// execution this would swallow the true error.
-	if a, e := len(res.ResultList), expectedNumResults; a != e {
-		res.Close(session.Ctx())
-		return StatementResults{}, errors.Errorf("number of results %d != expected %d", a, e)
-	}
-	return res, nil
 }
 
 // ExecuteStatements executes the given statement(s).
@@ -2345,9 +2282,14 @@ func (e *Executor) generateQueryID() uint128.Uint128 {
 
 // golangFillQueryArguments populates the placeholder map with
 // types and values from an array of Go values.
+// The args can be datums, or Go basic types.
+//
 // TODO: This does not support arguments of the SQL 'Date' type, as there is not
 // an equivalent type in Go's standard library. It's not currently needed by any
 // of our internal tables.
+//
+// TODO(andrei): make this simply return a slice of datums once the "internal
+// planner" goes away.
 func golangFillQueryArguments(pinfo *tree.PlaceholderInfo, args []interface{}) {
 	pinfo.Clear()
 

@@ -219,15 +219,7 @@ func init() {
 
 type runner struct {
 	db          db
-	sqlExecutor *sql.Executor
-	memMetrics  *sql.MemoryMetrics
-}
-
-func (r *runner) newRootSession(ctx context.Context) *sql.Session {
-	args := sql.SessionArgs{User: security.NodeUser}
-	s := sql.NewSession(ctx, args, r.sqlExecutor, r.memMetrics, nil /* conn */)
-	s.StartUnlimitedMonitor()
-	return s
+	sqlExecutor *sql.InternalSQLExecutor
 }
 
 // leaseManager is defined just to allow us to use a fake client.LeaseManager
@@ -253,8 +245,7 @@ type Manager struct {
 	stopper      *stop.Stopper
 	leaseManager leaseManager
 	db           db
-	sqlExecutor  *sql.Executor
-	memMetrics   *sql.MemoryMetrics
+	sqlExecutor  *sql.InternalSQLExecutor
 	testingKnobs MigrationManagerTestingKnobs
 }
 
@@ -262,10 +253,9 @@ type Manager struct {
 func NewManager(
 	stopper *stop.Stopper,
 	db *client.DB,
-	executor *sql.Executor,
+	executor *sql.InternalSQLExecutor,
 	clock *hlc.Clock,
 	testingKnobs MigrationManagerTestingKnobs,
-	memMetrics *sql.MemoryMetrics,
 	clientID string,
 ) *Manager {
 	opts := client.LeaseManagerOptions{
@@ -277,7 +267,6 @@ func NewManager(
 		leaseManager: client.NewLeaseManager(db, clock, opts),
 		db:           db,
 		sqlExecutor:  executor,
-		memMetrics:   memMetrics,
 		testingKnobs: testingKnobs,
 	}
 }
@@ -410,7 +399,6 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 	r := runner{
 		db:          m.db,
 		sqlExecutor: m.sqlExecutor,
-		memMetrics:  m.memMetrics,
 	}
 	for _, migration := range backwardCompatibleMigrations {
 		if migration.workFn == nil {
@@ -504,18 +492,13 @@ func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescript
 var reportingOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
 
 func runStmtAsRootWithRetry(ctx context.Context, r runner, stmt string) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
 	// Retry a limited number of times because returning an error and letting
 	// the node kill itself is better than holding the migration lease for an
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+		_, err := r.sqlExecutor.Exec(ctx, nil /* txn */, stmt)
 		if err == nil {
-			res.Close(ctx)
 			break
 		}
 		log.Warningf(ctx, "failed to run %s: %v", stmt, err)
@@ -569,50 +552,31 @@ func populateVersionSetting(ctx context.Context, r runner) error {
 		return errors.Wrap(err, "while marshaling version")
 	}
 
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	// Add a ON CONFLICT DO NOTHING to avoid changing an existing version.
 	// Again, this can happen if the migration doesn't run to completion
 	// (overwriting also seems reasonable, but what for).
 	// We don't allow users to perform version changes until we have run
 	// the insert below.
-	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
-		session,
+	if _, err := r.sqlExecutor.Exec(
+		ctx,
+		nil, /* txn */
 		fmt.Sprintf(`INSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ('version', x'%x', NOW(), 'm') ON CONFLICT(name) DO NOTHING`, b),
-		nil, 1,
-	); err == nil {
-		res.Close(ctx)
-	} else if err != nil {
+	); err != nil {
 		return err
 	}
 
-	pl := tree.MakePlaceholderInfo()
-	pl.SetValue("1", tree.NewDString(v.String()))
-	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
-		session, "SET CLUSTER SETTING version = $1", &pl, 1); err == nil {
-		res.Close(ctx)
-	} else if err != nil {
+	if _, err := r.sqlExecutor.Exec(
+		ctx, nil /* txn */, "SET CLUSTER SETTING version = $1", v.String()); err != nil {
 		return err
 	}
 	return nil
 }
 
 func addRootUser(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	// Upsert the root user into the table. We intentionally override any existing entry.
 	const upsertRootStmt = `UPSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`
 
-	pl := tree.MakePlaceholderInfo()
-	pl.SetValue("1", tree.NewDString(security.RootUser))
-	res, err := r.sqlExecutor.ExecuteStatementsBuffered(session, upsertRootStmt, &pl, 1)
-	if err == nil {
-		res.Close(ctx)
-	}
+	_, err := r.sqlExecutor.Exec(ctx, nil /* txn */, upsertRootStmt, security.RootUser)
 	return err
 }
 
@@ -653,22 +617,12 @@ func upsertZoneConfig(ctx context.Context, r runner, id uint32, zone config.Zone
 	}
 
 	const stmt = `UPSERT INTO system.zones (id, config) VALUES ($1, $2)`
-	pl := tree.MakePlaceholderInfo()
-	pl.SetValue("1", tree.NewDInt(tree.DInt(id)))
-	pl.SetValue("2", tree.NewDString(string(buf)))
-
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	// Retry a limited number of times because returning an error and letting
 	// the node kill itself is better than holding the migration lease for an
 	// arbitrarily long time.
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, &pl, 1)
+		_, err = r.sqlExecutor.Exec(ctx, nil /* txn */, stmt, id, buf)
 		if err == nil {
-			res.Close(ctx)
 			break
 		}
 		log.Warningf(ctx, "failed attempt to add .%s zone config: %s",
@@ -681,29 +635,20 @@ func getZoneConfig(ctx context.Context, r runner, stmtFor string) (config.ZoneCo
 	stmt := fmt.Sprintf(
 		`SELECT config_proto FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s]`,
 		stmtFor)
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
 
 	// Retry a limited number of times because returning an error and letting the
 	// node kill itself is better than holding the migration lease for an
 	// arbitrarily long time.
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, stmt, nil, 1)
+		var row tree.Datums
+		row, err = r.sqlExecutor.QueryRow(ctx, nil /* txn */, stmt)
 		if err != nil {
 			log.Warningf(ctx, "failed attempt to retrieve %s zone config: %s",
 				stmtFor, err)
 			continue
 		}
-		defer res.Close(ctx)
-
-		// TODO(peter): This is very manual. Is there a better way?
-		if len(res.ResultList) == 0 || res.ResultList[0].Rows.Len() == 0 {
-			break
-		}
-		row := res.ResultList[0].Rows.At(0)
-		if len(row) != 1 {
+		if row == nil {
 			break
 		}
 		data, ok := row[0].(*tree.DBytes)
@@ -723,19 +668,15 @@ func getZoneConfig(ctx context.Context, r runner, stmtFor string) (config.ZoneCo
 }
 
 func addRoles(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	// Add the roles column to the system.users table.
 	const alterStmt = `
 					ALTER TABLE system.users ADD COLUMN IF NOT EXISTS "isRole" BOOL NOT NULL DEFAULT false
 					`
 
-	if res, err := r.sqlExecutor.ExecuteStatementsBuffered(
-		session, alterStmt, nil, 1); err == nil {
-		res.Close(ctx)
-	} else {
+	if _, err := r.sqlExecutor.ExecWithSessionArgs(
+		ctx, nil, /* txn */
+		sql.SessionArgs{User: security.NodeUser}, alterStmt,
+	); err != nil {
 		return err
 	}
 
@@ -745,14 +686,10 @@ func addRoles(ctx context.Context, r runner) error {
 					`
 
 	// Add the `admin` role. We retry a few times as the schema change may still be backfilling.
-	pl := tree.MakePlaceholderInfo()
-	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, insertAdminStmt, &pl, 1)
+		_, err = r.sqlExecutor.Exec(ctx, nil /* txn */, insertAdminStmt, sqlbase.AdminRole)
 		if err == nil {
-			res.Close(ctx)
 			break
 		}
 
@@ -770,15 +707,13 @@ func addRoles(ctx context.Context, r runner) error {
 		selectStmt := `SELECT username FROM system.users WHERE username = $1 AND "isRole" = false`
 
 		// Do not overwrite err or res.
-		var selectRes sql.StatementResults
-		selectRes, selectErr := r.sqlExecutor.ExecuteStatementsBuffered(session, selectStmt, &pl, 1)
+		row, selectErr := r.sqlExecutor.QueryRow(ctx, nil /* txn */, selectStmt, sqlbase.AdminRole)
 		if selectErr != nil {
 			// Rely on the main retry loop to retry failed SELECT.
 			continue
 		}
-		defer selectRes.Close(ctx)
 
-		if len(selectRes.ResultList) == 0 || selectRes.ResultList[0].Rows.Len() == 0 {
+		if row == nil {
 			// No results: this is the migration being rerun.
 			err = nil
 			break
@@ -793,23 +728,14 @@ func addRoles(ctx context.Context, r runner) error {
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	const upsertAdminStmt = `
 					UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
 					`
 
-	pl := tree.MakePlaceholderInfo()
-	pl.SetValue("1", tree.NewDString(sqlbase.AdminRole))
-	pl.SetValue("2", tree.NewDString(security.RootUser))
 	var err error
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
-		var res sql.StatementResults
-		res, err = r.sqlExecutor.ExecuteStatementsBuffered(session, upsertAdminStmt, &pl, 1)
+		_, err = r.sqlExecutor.Exec(ctx, nil /* txn */, upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
 		if err == nil {
-			res.Close(ctx)
 			break
 		}
 		log.Warningf(ctx, "failed to make %s a member of the %s role: %s", security.RootUser, sqlbase.AdminRole, err)
@@ -859,9 +785,6 @@ func upgradeDescsWithFn(
 	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
 	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
 ) error {
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
 	startKey := sqlbase.MakeAllDescsMetadataKey()
 	endKey := startKey.PrefixEnd()
 	for done := false; !done; {

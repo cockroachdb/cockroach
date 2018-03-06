@@ -97,12 +97,11 @@ func (p *planner) SetClusterSetting(
 }
 
 func (n *setClusterSettingNode) startExec(params runParams) error {
-	ie := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
 
 	var reportedValue string
 	if n.value == nil {
-		if _, err := ie.ExecuteStatementInTransaction(
-			params.ctx, "reset-setting", params.p.txn,
+		if _, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx, params.p.txn,
 			"DELETE FROM system.settings WHERE name = $1", n.name,
 		); err != nil {
 			return err
@@ -110,12 +109,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 		reportedValue = "DEFAULT"
 	} else {
 		// TODO(dt): validate and properly encode str according to type.
-		encoded, err := params.p.toSettingString(params.ctx, ie, n.st, n.name, n.setting, n.value)
+		encoded, err := params.p.toSettingString(params.ctx, n.st, n.name, n.setting, n.value)
 		if err != nil {
 			return err
 		}
-		if _, err := ie.ExecuteStatementInTransaction(
-			params.ctx, "update-setting", params.p.txn,
+		if _, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
+			params.ctx, params.p.txn,
 			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, NOW(), $3)`,
 			n.name, encoded, n.setting.Typ(),
 		); err != nil {
@@ -140,7 +139,6 @@ func (n *setClusterSettingNode) Close(_ context.Context)        {}
 
 func (p *planner) toSettingString(
 	ctx context.Context,
-	ie InternalExecutor,
 	st *cluster.Settings,
 	name string,
 	setting settings.Setting,
@@ -162,8 +160,8 @@ func (p *planner) toSettingString(
 		return "", errors.Errorf("cannot use %s %T value for string setting", d.ResolvedType(), d)
 	case *settings.StateMachineSetting:
 		if s, ok := d.(*tree.DString); ok {
-			datums, err := ie.QueryRowInTransaction(
-				ctx, "retrieve-prev-setting", p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
+			datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+				ctx, p.txn, "SELECT value FROM system.settings WHERE name = $1", name,
 			)
 			if err != nil {
 				return "", err

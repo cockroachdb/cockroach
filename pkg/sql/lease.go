@@ -124,7 +124,9 @@ type LeaseStore struct {
 	leaseRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
-	memMetrics   *MemoryMetrics
+	// TODO(andrei): remove memMetrics once the LeaseStore moves from using an
+	// "internal planner" to using the InternalSQLExecutor.
+	memMetrics *MemoryMetrics
 }
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
@@ -174,15 +176,19 @@ func (s LeaseStore) acquire(
 		if nodeID == 0 {
 			panic("zero nodeID")
 		}
-		p, cleanup := newInternalPlanner(
-			"lease-insert", txn, security.RootUser, s.memMetrics, s.execCfg)
-		defer cleanup()
-		const insertLease = `INSERT INTO system.lease ("descID", version, "nodeID", expiration) ` +
-			`VALUES ($1, $2, $3, $4)`
 		leaseExpiration := table.leaseExpiration()
-		count, err := p.exec(
-			ctx, insertLease, table.ID, int(table.Version), nodeID, &leaseExpiration,
+
+		// We use string interpolation here, instead of passing the arguments to
+		// InternalExecutor.Exec() because we don't want to pay for preparing the
+		// statement (which would happen if we'd pass arguments). Besides the
+		// general cost of preparing, as of 03/2018 preparing this statement always
+		// requires a read from the database for the special descriptor of a system
+		// table.
+		insertLease := fmt.Sprintf(
+			`INSERT INTO system.lease ("descID", version, "nodeID", expiration) VALUES (%d, %d, %d, %s)`,
+			table.ID, int(table.Version), nodeID, &leaseExpiration,
 		)
+		count, err := s.execCfg.InternalExecutor.Exec(ctx, txn, insertLease)
 		if err != nil {
 			return err
 		}
@@ -202,40 +208,34 @@ func (s LeaseStore) release(ctx context.Context, stopper *stop.Stopper, table *t
 	retryOptions := base.DefaultRetryOptions()
 	retryOptions.Closer = stopper.ShouldQuiesce()
 	firstAttempt := true
+	// This transaction is idempotent; the retry was put in place because of
+	// NodeUnavailableErrors.
 	for r := retry.Start(retryOptions); r.Next(); {
-		// This transaction is idempotent.
-		err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			log.VEventf(ctx, 2, "LeaseStore releasing lease %s", table)
-			nodeID := s.execCfg.NodeID.Get()
-			if nodeID == 0 {
-				panic("zero nodeID")
-			}
-			p, cleanup := newInternalPlanner(
-				"lease-release", txn, security.RootUser, s.memMetrics, s.execCfg)
-			defer cleanup()
-			const deleteLease = `DELETE FROM system.lease ` +
-				`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
-			leaseExpiration := table.leaseExpiration()
-			count, err := p.exec(
-				ctx, deleteLease, table.ID, int(table.Version), nodeID, &leaseExpiration)
-			if err != nil {
-				return err
-			}
-			// We allow count == 0 after the first attempt.
-			if count > 1 || (count == 0 && firstAttempt) {
-				log.Warningf(ctx, "unexpected results while deleting lease %s: "+
-					"expected 1 result, found %d", table, count)
-			}
-			return nil
-		})
+		log.VEventf(ctx, 2, "LeaseStore releasing lease %s", table)
+		nodeID := s.execCfg.NodeID.Get()
+		if nodeID == 0 {
+			panic("zero nodeID")
+		}
+		const deleteLease = `DELETE FROM system.lease ` +
+			`WHERE ("descID", version, "nodeID", expiration) = ($1, $2, $3, $4)`
+		leaseExpiration := table.leaseExpiration()
+		count, err := s.execCfg.InternalExecutor.Exec(
+			ctx, nil /* txn */, deleteLease, table.ID, int(table.Version), nodeID, &leaseExpiration)
+		if err != nil {
+			log.Warningf(ctx, "error releasing lease %q: %s", table, err)
+			firstAttempt = false
+			continue
+		}
+		// We allow count == 0 after the first attempt.
+		if count > 1 || (count == 0 && firstAttempt) {
+			log.Warningf(ctx, "unexpected results while deleting lease %s: "+
+				"expected 1 result, found %d", table, count)
+		}
+
 		if s.testingKnobs.LeaseReleasedEvent != nil {
 			s.testingKnobs.LeaseReleasedEvent(table.TableDescriptor, err)
 		}
-		if err == nil {
-			break
-		}
-		log.Warningf(ctx, "error releasing lease %q: %s", table, err)
-		firstAttempt = false
+		break
 	}
 }
 
