@@ -119,7 +119,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
 		if ctx.Err() != nil {
-			res.OverwriteError(sqlbase.NewQueryCanceledError())
+			res.OverwriteError(sqlbase.QueryCanceledError)
 		}
 	}()
 
@@ -456,7 +456,7 @@ func (ex *connExecutor) execStmtInParallel(
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before.
 		if ctx.Err() != nil {
-			res.OverwriteError(sqlbase.NewQueryCanceledError())
+			res.OverwriteError(sqlbase.QueryCanceledError)
 		}
 
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()

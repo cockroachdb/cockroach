@@ -48,7 +48,7 @@ func (c *CancelChecker) Check() error {
 			// Once the context is canceled, we no longer increment
 			// callsSinceLastCheck and will fall into this path on subsequent calls
 			// to Check().
-			return NewQueryCanceledError()
+			return QueryCanceledError
 		default:
 		}
 	}
