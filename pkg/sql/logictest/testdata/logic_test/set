@@ -102,6 +102,7 @@ server_version_num              90500
 session_user                    root
 sql_safe_updates                false
 standard_conforming_strings     on
+statement_timeout               0s
 timezone                        UTC
 tracing                         off
 transaction_isolation           serializable
@@ -250,3 +251,14 @@ UTC
 # Regression test for #19727 - invalid EvalContext used to evaluate arguments to set.
 statement ok
 SET APPLICATION_NAME = current_timestamp()::string
+
+# Test statement_timeout on a long-running query.
+statement ok
+SET statement_timeout = 1
+
+statement error query execution canceled due to statement timeout
+SELECT * FROM generate_series(1,1000000)
+
+# Test that statement_timeout can be set with an interval string.
+statement ok
+SET statement_timeout = '0ms'

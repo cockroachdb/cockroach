@@ -42,6 +42,7 @@ server_version_num              90500
 session_user                    root
 sql_safe_updates                false
 standard_conforming_strings     on
+statement_timeout               0s
 timezone                        UTC
 tracing                         off
 transaction_isolation           serializable
