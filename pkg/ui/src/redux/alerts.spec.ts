@@ -14,7 +14,10 @@ import {
   newVersionNotificationSelector, newVersionDismissedLocalSetting,
   disconnectedAlertSelector, disconnectedDismissedLocalSetting,
 } from "./alerts";
-import { VERSION_DISMISSED_KEY, setUIDataKey, isInFlight } from "./uiData";
+import {
+  VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_COLLAPSED_KEY,
+  setUIDataKey, isInFlight,
+} from "./uiData";
 import {
   livenessReducerObj, versionReducerObj, nodesReducerObj, clusterReducerObj, healthReducerObj,
 } from "./apiReducers";
@@ -411,6 +414,7 @@ describe("alerts", function() {
         cluster_id: "my-cluster",
       })));
       dispatch(setUIDataKey(VERSION_DISMISSED_KEY, "blank"));
+      dispatch(setUIDataKey(INSTRUCTIONS_BOX_COLLAPSED_KEY, false));
       dispatch(versionReducerObj.receiveData({
         details: [],
       }));

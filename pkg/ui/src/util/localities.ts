@@ -98,3 +98,11 @@ export function getLocalityLabel(path: LocalityTier[]): string {
   const thisTier = path[path.length - 1];
   return `${thisTier.key}=${thisTier.value}`;
 }
+
+/*
+ * allNodesHaveLocality returns true if there exists a node without a locality flag.
+ */
+export function allNodesHaveLocality(nodes: NodeStatus$Properties[]): boolean {
+  const nodesWithoutLocality = nodes.filter((n) => n.desc.locality.tiers.length === 0);
+  return nodesWithoutLocality.length === 0;
+}
