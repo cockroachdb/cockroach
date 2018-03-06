@@ -1802,50 +1802,66 @@ func TestAcquireLease(t *testing.T) {
 		&pArgs,
 	} {
 		t.Run("", func(t *testing.T) {
-			tc := testContext{}
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
-			tc.Start(t, stopper)
-			// This is a single-replica test; since we're automatically pushing back
-			// the start of a lease as far as possible, and since there is an auto-
-			// matic lease for us at the beginning, we'll basically create a lease from
-			// then on.
-			lease, _ := tc.repl.GetLease()
-			expStart := lease.Start
-			tc.manualClock.Set(leaseExpiry(tc.repl))
+			testutils.RunTrueAndFalse(t, "withMinLeaseProposedTS", func(t *testing.T, withMinLeaseProposedTS bool) {
+				tc := testContext{}
+				stopper := stop.NewStopper()
+				defer stopper.Stop(context.TODO())
+				tc.Start(t, stopper)
 
-			ts := tc.Clock().Now().Next()
-			if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, test); pErr != nil {
-				t.Error(pErr)
-			}
-			if held, expired := hasLease(tc.repl, ts); !held || expired {
-				t.Errorf("expected lease acquisition")
-			}
-			lease, _ = tc.repl.GetLease()
-			if lease.Start != expStart {
-				t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
-			}
+				lease, _ := tc.repl.GetLease()
 
-			if *lease.DeprecatedStartStasis != *lease.Expiration {
-				t.Errorf("%s already in stasis (or beyond): %+v", ts, lease)
-			}
-			if !ts.Less(*lease.Expiration) {
-				t.Errorf("%s already expired: %+v", ts, lease)
-			}
+				// This is a single-replica test; since we're automatically pushing back
+				// the start of a lease as far as possible, and since there is an auto-
+				// matic lease for us at the beginning, we'll basically create a lease
+				// from then on. That is, unless the minLeaseProposedTS which gets set
+				// automatically at server start forces us to get a new lease. We
+				// simulate both cases.
+				var expStart hlc.Timestamp
 
-			shouldRenewTS := lease.Expiration.Add(-1, 0)
-			tc.manualClock.Set(shouldRenewTS.WallTime + 1)
-			if _, pErr := tc.SendWrapped(test); pErr != nil {
-				t.Error(pErr)
-			}
-			// Since the command we sent above does not get blocked on the lease
-			// extension, we need to wait for it to go through.
-			testutils.SucceedsSoon(t, func() error {
-				newLease, _ := tc.repl.GetLease()
-				if !lease.Expiration.Less(*newLease.Expiration) {
-					return errors.Errorf("lease did not get extended: %+v to %+v", lease, newLease)
+				tc.repl.mu.Lock()
+				if !withMinLeaseProposedTS {
+					tc.repl.mu.minLeaseProposedTS = hlc.Timestamp{}
+					expStart = lease.Start
+				} else {
+					expStart = tc.repl.mu.minLeaseProposedTS
 				}
-				return nil
+				tc.repl.mu.Unlock()
+
+				tc.manualClock.Set(leaseExpiry(tc.repl))
+
+				ts := tc.Clock().Now().Next()
+				if _, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: ts}, test); pErr != nil {
+					t.Error(pErr)
+				}
+				if held, expired := hasLease(tc.repl, ts); !held || expired {
+					t.Errorf("expected lease acquisition")
+				}
+				lease, _ = tc.repl.GetLease()
+				if lease.Start != expStart {
+					t.Errorf("unexpected lease start: %s; expected %s", lease.Start, expStart)
+				}
+
+				if *lease.DeprecatedStartStasis != *lease.Expiration {
+					t.Errorf("%s already in stasis (or beyond): %+v", ts, lease)
+				}
+				if !ts.Less(*lease.Expiration) {
+					t.Errorf("%s already expired: %+v", ts, lease)
+				}
+
+				shouldRenewTS := lease.Expiration.Add(-1, 0)
+				tc.manualClock.Set(shouldRenewTS.WallTime + 1)
+				if _, pErr := tc.SendWrapped(test); pErr != nil {
+					t.Error(pErr)
+				}
+				// Since the command we sent above does not get blocked on the lease
+				// extension, we need to wait for it to go through.
+				testutils.SucceedsSoon(t, func() error {
+					newLease, _ := tc.repl.GetLease()
+					if !lease.Expiration.Less(*newLease.Expiration) {
+						return errors.Errorf("lease did not get extended: %+v to %+v", lease, newLease)
+					}
+					return nil
+				})
 			})
 		})
 	}
