@@ -77,6 +77,7 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
         image={spinner}
       >
         <NodeCanvas
+          allNodes={this.props.nodesSummary.nodeStatuses}
           localityTree={currentLocality}
           locationTree={this.props.locationTree}
           tiers={this.props.tiers}
