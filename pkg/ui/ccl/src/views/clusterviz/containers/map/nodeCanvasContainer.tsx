@@ -32,14 +32,14 @@ import Loading from "src/views/shared/components/loading";
 import { NodeCanvas } from "./nodeCanvas";
 import spinner from "assets/spinner.gif";
 
-import Liveness = cockroach.storage.Liveness;
+type Liveness = cockroach.storage.Liveness;
 
 interface NodeCanvasContainerProps {
   nodesSummary: NodesSummary;
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatus: { [id: string]: LivenessStatus };
-  liveness: { [id: string]: Liveness };
+  livenessStatuses: { [id: string]: LivenessStatus };
+  livenesses: { [id: string]: Liveness };
   dataExists: boolean;
   dataIsValid: boolean;
   refreshNodes: typeof refreshNodes;
@@ -80,8 +80,8 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
           localityTree={currentLocality}
           locationTree={this.props.locationTree}
           tiers={this.props.tiers}
-          livenessStatus={this.props.livenessStatus}
-          liveness={this.props.liveness}
+          livenessStatuses={this.props.livenessStatuses}
+          livenesses={this.props.livenesses}
         />
       </Loading>
     );
@@ -107,8 +107,8 @@ export default connect(
     nodesSummary: nodesSummarySelector(state),
     localityTree: selectLocalityTree(state),
     locationTree: selectLocationTree(state),
-    livenessStatus: livenessStatusByNodeIDSelector(state),
-    liveness: livenessByNodeIDSelector(state),
+    livenessStatuses: livenessStatusByNodeIDSelector(state),
+    livenesses: livenessByNodeIDSelector(state),
     dataIsValid: selectDataIsValid(state),
     dataExists: selectDataExists(state),
   }),

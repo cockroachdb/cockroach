@@ -24,7 +24,7 @@ import { Labels } from "src/views/clusterviz/components/nodeOrLocality/labels";
 
 interface LocalityViewProps {
   localityTree: LocalityTree;
-  liveness: { [id: string]: LivenessStatus };
+  livenessStatuses: { [id: string]: LivenessStatus };
 }
 
 const SCALE_FACTOR = 0.7;
@@ -95,7 +95,7 @@ class LocalityView extends React.Component<LocalityViewProps & WithRouterProps> 
       capacityUsable,
       capacityUsed,
       nodeCounts,
-    } = sumNodeStats(leavesUnderMe, this.props.liveness);
+    } = sumNodeStats(leavesUnderMe, this.props.livenessStatuses);
 
     const nodeIds = leavesUnderMe.map((node) => `${node.desc.node_id}`);
 
