@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -695,7 +696,8 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 
 func waitForJob(db *gosql.DB, jobID int64) error {
 	var jobFailedErr error
-	err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+	const waitDuration = time.Minute * 2
+	err := retry.ForDuration(waitDuration, func() error {
 		var status string
 		var payloadBytes []byte
 		if err := db.QueryRow(
@@ -1056,7 +1058,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		const count = 100
+		count := 100
+		// This test takes a while with the race detector, so reduce the number of
+		// files in an attempt to speed it up.
+		if util.RaceEnabled {
+			count = 20
+		}
 		urls := make([]string, count)
 		for i := 0; i < count; i++ {
 			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
