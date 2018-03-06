@@ -71,6 +71,6 @@ group-by
  ├── grouping columns: a.x:int:1 a.y:int:null:2
  ├── scan
  │    └── columns: a.x:int:1 a.y:int:null:2
- └── aggregations [outer=(1)]
-      └── function: max [type=int, outer=(1)]
-           └── variable: a.x [type=int, outer=(1)]
+ └── aggregations [outer=(2)]
+      └── function: max [type=int, outer=(2)]
+           └── variable: a.y [type=int, outer=(2)]
