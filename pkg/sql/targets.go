@@ -116,7 +116,7 @@ func (s *renderNode) addOrReuseRender(
 		// already so that comparison occurs after replacing column names
 		// to IndexedVars.
 		for j := range s.render {
-			if s.isRenderEquivalent(exprStr, j) {
+			if s.isRenderEquivalent(exprStr, j) && s.render[j].ResolvedType() == col.Typ {
 				return j
 			}
 		}
