@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -26,17 +27,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 const testSSTMaxSize = 1024 * 1024 * 50
@@ -1016,4 +1020,107 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	close(kvCh)
+}
+
+// TestImportControlJob tests that PAUSE JOB, RESUME JOB, and CANCEL JOB
+// work as intended on import jobs.
+func TestImportControlJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	serverArgs := base.TestServerArgs{ExternalIODir: dir}
+	// Disable external processing of mutations so that the final check of
+	// crdb_internal.tables is guaranteed to not be cleaned up. Although this
+	// was never observed by a stress test, it is here for safety.
+	serverArgs.Knobs.SQLSchemaChanger = &sql.SchemaChangerTestingKnobs{
+		AsyncExecNotification: func() error {
+			return errors.New("async schema changer disabled")
+		},
+	}
+
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, params)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+	sqlDB.Exec(t, `CREATE DATABASE data`)
+
+	t.Run("cancel import", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				<-allowResponse
+				_, _ = w.Write([]byte(r.URL.Path[1:]))
+			}
+		}))
+		defer srv.Close()
+
+		var urls []string
+		for i := 0; i < 10; i++ {
+			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
+		}
+		csvURLs := strings.Join(urls, ", ")
+
+		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT PRIMARY KEY) CSV DATA (%s)`, csvURLs)
+
+		if _, err := jobutils.RunJob(t, sqlDB, &allowResponse, "cancel", query); !testutils.IsError(err, "job canceled") {
+			t.Fatalf("expected 'job canceled' error, but got %+v", err)
+		}
+		// Check that executing again succeeds. This won't work if the first import
+		// was not successfully canceled.
+		sqlDB.Exec(t, query)
+	})
+
+	t.Run("pause import", func(t *testing.T) {
+		// Test that IMPORT can be paused and resumed. This test also attempts to
+		// only pause the job after it has begun splitting ranges. When the job
+		// is resumed, if the sampling phase is re-run, the splits points will
+		// differ. When AddSSTable attempts to import the new ranges, they will
+		// fail because there is an existing split in the key space that it cannot
+		// handle. Use a sstsize that will more-or-less (since it is statistical)
+		// always cause this condition.
+
+		sqlDB.Exec(t, `CREATE DATABASE pauseimport`)
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == "GET" {
+				_, _ = w.Write([]byte(r.URL.Path[1:]))
+			}
+		}))
+		defer srv.Close()
+
+		const count = 100
+		urls := make([]string, count)
+		for i := 0; i < count; i++ {
+			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
+		}
+		csvURLs := strings.Join(urls, ", ")
+		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
+
+		jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, "PAUSE", query)
+		if !testutils.IsError(err, "job paused") {
+			t.Fatalf("unexpected: %v", err)
+		}
+		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
+		if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.CheckQueryResults(t,
+			`SELECT * FROM pauseimport.t ORDER BY i`,
+			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
+		)
+	})
 }
