@@ -773,6 +773,7 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	l.mu.Lock()
 
 	var stacks []byte
+	var fatalTrigger chan struct{}
 	if s == Severity_FATAL {
 		switch traceback {
 		case tracebackSingle:
@@ -781,6 +782,28 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 			stacks = getStacks(true)
 		}
 		logExitFunc = func(error) {} // If we get a write error, we'll still exit.
+
+		// We don't want to hang forever writing our final log message. If
+		// things are broken (for example, if the disk fills up and there
+		// are cascading errors and our process manager has stopped
+		// reading from its side of a stderr pipe), it's more important to
+		// let the process exit than limp along.
+		//
+		// Note that we do not use os.File.SetWriteDeadline because not
+		// all files support this (for example, plain files on a network
+		// file system do not support deadlines but can block
+		// indefinitely).
+		//
+		// https://github.com/cockroachdb/cockroach/issues/23119
+		fatalTrigger = make(chan struct{})
+		exitFunc := l.exitFunc
+		go func() {
+			select {
+			case <-time.After(10 * time.Second):
+			case <-fatalTrigger:
+			}
+			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+		}()
 	} else if l.traceLocation.isSet() {
 		if l.traceLocation.match(file, line) {
 			stacks = getStacks(false)
@@ -812,14 +835,12 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 
 		l.putBuffer(buf)
 	}
-	exitFunc := l.exitFunc // restore the exitFunc
-	l.mu.Unlock()
 	// Flush and exit on fatal logging.
 	if s == Severity_FATAL {
-		// If we got here via Exit rather than Fatal, print no stacks.
-		l.timeoutFlush(10 * time.Second)
-		exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+		l.flushAndSync(true /*doSync*/)
+		close(fatalTrigger)
 	}
+	l.mu.Unlock()
 }
 
 // printPanicToFile copies the panic details to the log file. This is
@@ -863,23 +884,6 @@ func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
 // processForFile formats a log entry for output to a file.
 func (l *loggingT) processForFile(entry Entry, stacks []byte) *buffer {
 	return formatLogEntry(entry, stacks, nil)
-}
-
-// timeoutFlush calls Flush and returns when it completes or after timeout
-// elapses, whichever happens first.  This is needed because the hooks invoked
-// by Flush may deadlock when clog.Fatal is called from a hook that holds
-// a lock.
-func (l *loggingT) timeoutFlush(timeout time.Duration) {
-	done := make(chan bool, 1)
-	go func() {
-		l.lockAndFlushAll() // calls logging.lockAndFlushAll()
-		done <- true
-	}()
-	select {
-	case <-done:
-	case <-time.After(timeout):
-		fmt.Fprintf(OrigStderr, "clog (%s): Flush took longer than %s\n", l.prefix, timeout)
-	}
 }
 
 // getStacks is a wrapper for runtime.Stack that attempts to recover the data for all goroutines.
