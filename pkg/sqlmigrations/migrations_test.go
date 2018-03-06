@@ -431,8 +431,7 @@ func (mt *migrationTest) runMigration(ctx context.Context, m migrationDescriptor
 	}
 	return m.workFn(ctx, runner{
 		db:          mt.kvDB,
-		memMetrics:  mt.memMetrics,
-		sqlExecutor: mt.server.Executor().(*sql.Executor),
+		sqlExecutor: mt.server.InternalExecutor().(*sql.InternalExecutor),
 	})
 }
 

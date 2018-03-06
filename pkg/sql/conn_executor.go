@@ -232,7 +232,7 @@ type Server struct {
 
 	reCache *tree.RegexpCache
 
-	// pool is the parent monitor for all session monitors.
+	// pool is the parent monitor for all session monitors except "internal" ones.
 	pool *mon.BytesMonitor
 
 	// EngineMetrics is exported as required by the metrics.Struct magic we use
@@ -383,7 +383,28 @@ func (s *Server) ServeConn(
 	memMetrics *MemoryMetrics,
 	cancel context.CancelFunc,
 ) error {
-	// Create the various monitors. They are Start()ed later.
+
+	ex := s.newConnExecutor(ctx, args, stmtBuf, clientComm, s.pool, reserved, memMetrics)
+	defer func() {
+		r := recover()
+		ex.closeWrapper(ctx, r)
+	}()
+	return ex.run(ctx, cancel)
+}
+
+func (s *Server) newConnExecutor(
+	ctx context.Context,
+	args SessionArgs,
+	stmtBuf *StmtBuf,
+	clientComm ClientComm,
+	parentMon *mon.BytesMonitor,
+	reserved mon.BoundAccount,
+	memMetrics *MemoryMetrics,
+) *connExecutor {
+	settings := &s.cfg.Settings.SV
+	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(settings))
+
+	// Create the various monitors.
 	//
 	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
 	// buffer. This is not done for sessionMon nor state.mon: these monitors don't
@@ -395,14 +416,13 @@ func (s *Server) ServeConn(
 		memMetrics.CurBytesCount,
 		memMetrics.MaxBytesHist,
 		-1, math.MaxInt64, s.cfg.Settings)
-	sessionRootMon.Start(ctx, s.pool, reserved)
+	sessionRootMon.Start(ctx, parentMon, reserved)
 	sessionMon := mon.MakeMonitor("session",
 		mon.MemoryResource,
 		memMetrics.SessionCurBytesCount,
 		memMetrics.SessionMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 	sessionMon.Start(ctx, &sessionRootMon, mon.BoundAccount{})
-
 	// We merely prepare the txn monitor here. It is started in
 	// txnState.resetForNewSQLTxn().
 	txnMon := mon.MakeMonitor("txn",
@@ -411,10 +431,7 @@ func (s *Server) ServeConn(
 		memMetrics.TxnMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 
-	settings := &s.cfg.Settings.SV
-	distSQLMode := sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(settings))
-
-	ex := connExecutor{
+	ex := &connExecutor{
 		server:     s,
 		stmtBuf:    stmtBuf,
 		clientComm: clientComm,
@@ -477,7 +494,7 @@ func (s *Server) ServeConn(
 		},
 	}
 	ex.dataMutator.SetApplicationName(args.ApplicationName)
-	ex.dataMutator.sessionTracing.ex = &ex
+	ex.dataMutator.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.dataMutator.sessionTracing
 
 	if traceSessionEventLogEnabled.Get(&s.cfg.Settings.SV) {
@@ -487,12 +504,42 @@ func (s *Server) ServeConn(
 		}
 		ex.eventLog = trace.NewEventLog(fmt.Sprintf("sql session [%s]", args.User), remoteStr)
 	}
+	return ex
+}
 
-	defer func() {
-		r := recover()
-		ex.closeWrapper(ctx, r)
-	}()
-	return ex.run(ctx, cancel)
+// newConnExecutorWithTxn creates a connExecutor that will execute statements
+// under a higher-level txn. This connExecutor runs with a different state
+// machine, much reduced from the regular one. It cannot initiate or end
+// transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
+// retries).
+func (s *Server) newConnExecutorWithTxn(
+	ctx context.Context,
+	args SessionArgs,
+	stmtBuf *StmtBuf,
+	clientComm ClientComm,
+	parentMon *mon.BytesMonitor,
+	reserved mon.BoundAccount,
+	memMetrics *MemoryMetrics,
+	txn *client.Txn,
+) *connExecutor {
+	ex := s.newConnExecutor(ctx, args, stmtBuf, clientComm, parentMon, reserved, memMetrics)
+	// Perform some surgery on the executor - replace its state machine and
+	// initialize the state.
+	ex.machine = fsm.MakeMachine(
+		BoundTxnStateTransitions,
+		stateOpen{ImplicitTxn: fsm.False, RetryIntent: fsm.False},
+		&ex.state,
+	)
+	ex.state.resetForNewSQLTxn(
+		ctx,
+		explicitTxn,
+		txn.OrigTimestamp().GoTime(),
+		txn.Isolation(),
+		txn.UserPriority(),
+		tree.ReadWrite,
+		txn,
+		ex.transitionCtx)
+	return ex
 }
 
 var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
@@ -669,6 +716,11 @@ type connExecutor struct {
 	// eventLog for SQL statements and other important session events. Will be set
 	// if traceSessionEventLogEnabled; it is used by ex.sessionEventf()
 	eventLog trace.EventLog
+
+	// stmtCounterDisabled, if set, makes this connExecutor not contribute to
+	// statement counter metrics and to "statement summary" stats. This is used by
+	// "internal" SQL executors.
+	stmtCounterDisabled bool
 
 	// extraTxnState groups fields scoped to a SQL txn that are not handled by
 	// ex.state, above. The rule of thumb is that, if the state influences state
@@ -887,6 +939,10 @@ func (ex *connExecutor) Ctx() context.Context {
 	if _, ok := ex.machine.CurState().(stateNoTxn); ok {
 		return ex.ctxHolder.ctx()
 	}
+	// stateInternalError is used by the InternalExecutor.
+	if _, ok := ex.machine.CurState().(stateInternalError); ok {
+		return ex.ctxHolder.ctx()
+	}
 	return ex.state.Ctx
 }
 
@@ -1043,6 +1099,10 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 				// now. If we are inside a transaction, we'll check again the next time
 				// a Sync is processed.
 				if snt, ok := ex.machine.CurState().(stateNoTxn); ok {
+					res.Close(stateToTxnStatusIndicator(snt))
+					return nil
+				}
+				if snt, ok := ex.machine.CurState().(stateInternalError); ok {
 					res.Close(stateToTxnStatusIndicator(snt))
 					return nil
 				}
@@ -1267,6 +1327,8 @@ func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {
 	case stateNoTxn:
 		return IdleTxnBlock
 	case stateCommitWait:
+		return InTxnBlock
+	case stateInternalError:
 		return InTxnBlock
 	default:
 		panic(fmt.Sprintf("unknown state: %T", s))

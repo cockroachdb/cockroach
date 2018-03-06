@@ -203,7 +203,7 @@ func (bm *benchmark) runUsingAPI(b *testing.B, bmType benchmarkType, query strin
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-	eng := bm.s.Executor().(exec.TestEngineFactory).NewTestEngine("bench")
+	eng := bm.s.InternalExecutor().(exec.TestEngineFactory).NewTestEngine("bench")
 	defer eng.Close()
 
 	b.ResetTimer()
