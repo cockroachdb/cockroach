@@ -137,17 +137,14 @@ func (ee *execEngine) ConstructValues(
 }
 
 // ConstructScan is part of the exec.Factory interface.
-func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
+func (ee *execEngine) ConstructScan(
+	table optbase.Table, cols exec.ColumnOrdinalSet,
+) (exec.Node, error) {
 	desc := table.(*optTable).desc
-
-	columns := make([]tree.ColumnID, len(desc.Columns))
-	for i := range columns {
-		columns[i] = tree.ColumnID(desc.Columns[i].ID)
-	}
 	// Create a scanNode.
 	scan := ee.planner.Scan()
 	if err := scan.initTable(
-		context.TODO(), ee.planner, desc, nil /* hints */, publicColumns, columns,
+		context.TODO(), ee.planner, desc, nil /* hints */, publicColumns, nil, /* wantedColumns */
 	); err != nil {
 		return nil, err
 	}
@@ -155,6 +152,16 @@ func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
 	scan.spans, err = unconstrainedSpans(desc, &desc.PrimaryIndex)
 	if err != nil {
 		return nil, err
+	}
+	scan.valNeededForCol = cols.Copy()
+	l := cols.Len()
+	if l != len(desc.Columns) {
+		// Only a subset of columns should be projected.
+		ordinals := make([]exec.ColumnOrdinal, 0, l)
+		cols.ForEach(func(ord int) {
+			ordinals = append(ordinals, exec.ColumnOrdinal(ord))
+		})
+		return ee.ConstructSimpleProject(scan, ordinals, nil)
 	}
 	return scan, nil
 }

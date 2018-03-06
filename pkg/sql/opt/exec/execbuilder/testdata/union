@@ -192,12 +192,12 @@ exec-explain
 SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
 ----
 union           0  union   ·         ·                  (v)                    ·
- ├── render     1  render  ·         ·                  ("uniontest.k")        ·
+ ├── render     1  render  ·         ·                  (k)                    ·
  │    │         1  ·       render 0  k                  ·                      ·
  │    └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
  │              2  ·       table     uniontest@primary  ·                      ·
  │              2  ·       spans     ALL                ·                      ·
- └── render     1  render  ·         ·                  ("uniontest.v")        ·
+ └── render     1  render  ·         ·                  (v)                    ·
       │         1  ·       render 0  v                  ·                      ·
       └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
 ·               2  ·       table     uniontest@primary  ·                      ·
@@ -207,12 +207,12 @@ exec-explain
 SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
 ----
 append          0  append  ·         ·                  (v)                    ·
- ├── render     1  render  ·         ·                  ("uniontest.k")        ·
+ ├── render     1  render  ·         ·                  (k)                    ·
  │    │         1  ·       render 0  k                  ·                      ·
  │    └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
  │              2  ·       table     uniontest@primary  ·                      ·
  │              2  ·       spans     ALL                ·                      ·
- └── render     1  render  ·         ·                  ("uniontest.v")        ·
+ └── render     1  render  ·         ·                  (v)                    ·
       │         1  ·       render 0  v                  ·                      ·
       └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
 ·               2  ·       table     uniontest@primary  ·                      ·

@@ -112,6 +112,7 @@ func (b *Builder) buildScan(
 	tbl optbase.Table, tn *tree.TableName, inScope *scope,
 ) (out opt.GroupID, outScope *scope) {
 	tblIndex := b.factory.Metadata().AddTable(tbl)
+	scanOpDef := opt.ScanOpDef{Table: tblIndex}
 
 	outScope = inScope.push()
 	for i := 0; i < tbl.ColumnCount(); i++ {
@@ -127,11 +128,12 @@ func (b *Builder) buildScan(
 			hidden:   col.IsHidden(),
 		}
 
+		scanOpDef.Cols.Add(int(colIndex))
 		b.colMap = append(b.colMap, colProps)
 		outScope.cols = append(outScope.cols, colProps)
 	}
 
-	return b.factory.ConstructScan(b.factory.InternPrivate(tblIndex)), outScope
+	return b.factory.ConstructScan(b.factory.InternPrivate(&scanOpDef)), outScope
 }
 
 // buildSelect builds a set of memo groups that represent the given select

@@ -38,7 +38,6 @@ func (f logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
 	if ev.IsRelational() {
 		return f.constructRelationalProps(ev)
 	}
-
 	return f.constructScalarProps(ev)
 }
 
@@ -75,16 +74,20 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	tblIndex := ev.Private().(opt.TableIndex)
-	tbl := ev.Metadata().Table(tblIndex)
+	md := ev.Metadata()
+	def := ev.Private().(*opt.ScanOpDef)
+	tbl := md.Table(def.Table)
 
-	// A table's output column indexes are contiguous.
-	props.Relational.OutputCols.AddRange(int(tblIndex), int(tblIndex)+tbl.ColumnCount()-1)
+	// Scan output columns are stored in the definition.
+	props.Relational.OutputCols = def.Cols
 
 	// Initialize not-NULL columns from the table schema.
 	for i := 0; i < tbl.ColumnCount(); i++ {
 		if !tbl.Column(i).IsNullable() {
-			props.Relational.NotNullCols.Add(int(tblIndex) + i)
+			colIndex := md.TableColumn(def.Table, i)
+			if def.Cols.Contains(int(colIndex)) {
+				props.Relational.NotNullCols.Add(int(colIndex))
+			}
 		}
 	}
 
@@ -223,10 +226,11 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 
 	// By default, union outer cols from all children, both relational and scalar.
 	for i := 0; i < ev.ChildCount(); i++ {
-		// TODO(andyk): Union with relational outer cols once we've got them.
 		logical := &ev.lookupChildGroup(i).logical
 		if logical.Scalar != nil {
 			props.Scalar.OuterCols.UnionWith(logical.Scalar.OuterCols)
+		} else {
+			props.Scalar.OuterCols.UnionWith(logical.Relational.OuterCols)
 		}
 	}
 	return props

@@ -8,7 +8,145 @@
 [EliminateProject, Normalize]
 (Project
     $input:*
-    $projections:* & (HasSameProjectionCols $input $projections)
+    $projections:* & (HasSameCols $input $projections)
 )
 =>
 $input
+
+# FilterUnusedProjectCols discards nested project columns that are never used.
+[FilterUnusedProjectCols]
+(Project
+    (Project
+        $innerInput:*
+        $innerProjections:*
+    )
+    $projections:* & (HasUnusedColumns $innerProjections (NeededCols $projections))
+)
+=>
+(Project
+    (Project
+        $innerInput
+        (FilterUnusedColumns $innerProjections (NeededCols $projections))
+    )
+    $projections
+)
+
+# FilterUnusedScanCols discards Scan operator columns that are never used. The
+# needed columns are pushed down into the Scan's opt.ScanOpDef private.
+[FilterUnusedScanCols]
+(Project
+    $input:(Scan)
+    $projections:* & (HasUnusedColumns $input (NeededCols $projections))
+)
+=>
+(Project
+    (FilterUnusedColumns $input (NeededCols $projections))
+    $projections
+)
+
+# FilterUnusedSelectCols discards Select input columns that are never used.
+[FilterUnusedSelectCols]
+(Project
+    (Select
+        $innerInput:*
+        $filter:*
+    )
+    $projections:* & (HasUnusedColumns $innerInput (NeededCols2 $projections $filter))
+)
+=>
+(Project
+    (Select
+        (FilterUnusedColumns $innerInput (NeededCols2 $projections $filter))
+        $filter
+    )
+    $projections
+)
+
+# FilterUnusedJoinLeftCols discards columns on the left side of a join that are
+# never used.
+[FilterUnusedJoinLeftCols]
+(Project
+    $input:(Join
+        $left:*
+        $right:*
+        $on:*
+    )
+    $projections:* & (HasUnusedColumns $left (NeededCols3 $projections $right $on))
+)
+=>
+(Project
+    ((OpName $input)
+        (FilterUnusedColumns $left (NeededCols3 $projections $right $on))
+        $right
+        $on
+    )
+    $projections
+)
+
+# FilterUnusedJoinRightCols discards columns on the right side of a join that
+# are never used.
+[FilterUnusedJoinRightCols]
+(Project
+    $input:(Join
+        $left:*
+        $right:*
+        $on:*
+    )
+    $projections:* & (HasUnusedColumns $right (NeededCols2 $projections $on))
+)
+=>
+(Project
+    ((OpName $input)
+        $left
+        (FilterUnusedColumns $right (NeededCols2 $projections $on))
+        $on
+    )
+    $projections
+)
+
+# FilterUnusedAggCols discards aggregation columns in a GroupBy that are never
+# used.
+[FilterUnusedAggCols]
+(Project
+    (GroupBy
+        $innerInput:*
+        $aggregations:*
+        $groupingCols:*
+    )
+    $projections:* & (HasUnusedColumns $aggregations (NeededCols $projections))
+)
+=>
+(Project
+    (GroupBy
+        $innerInput
+        (FilterUnusedColumns $aggregations (NeededCols $projections))
+        $groupingCols
+    )
+    $projections
+)
+
+# FilterUnusedGroupByCols discards GroupBy input columns that are never used.
+[FilterUnusedGroupByCols]
+(GroupBy
+    $input:*
+    $aggregations:*
+    $groupingCols:* & (HasUnusedColumns $input (GroupByNeededCols $aggregations $groupingCols))
+)
+=>
+(GroupBy
+    (FilterUnusedColumns $input (GroupByNeededCols $aggregations $groupingCols))
+    $aggregations
+    $groupingCols
+)
+
+# FilterUnusedValueCols discards Values columns that are never used.
+[FilterUnusedValueCols]
+(Project
+    $input:(Values)
+    $projections:* & (HasUnusedColumns $input (NeededCols $projections))
+)
+=>
+(Project
+    (FilterUnusedColumns $input (NeededCols $projections))
+    $projections
+)
