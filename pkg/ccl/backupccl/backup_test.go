@@ -18,8 +18,6 @@ import (
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -51,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -694,36 +691,6 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 	}
 }
 
-func waitForJob(db *gosql.DB, jobID int64) error {
-	var jobFailedErr error
-	const waitDuration = time.Minute * 2
-	err := retry.ForDuration(waitDuration, func() error {
-		var status string
-		var payloadBytes []byte
-		if err := db.QueryRow(
-			`SELECT status, payload FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&status, &payloadBytes); err != nil {
-			return err
-		}
-		if jobs.Status(status) == jobs.StatusFailed {
-			jobFailedErr = errors.New("job failed")
-			payload := &jobs.Payload{}
-			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
-			}
-			return nil
-		}
-		if e, a := jobs.StatusSucceeded, jobs.Status(status); e != a {
-			return errors.Errorf("expected backup status %s, but got %s", e, a)
-		}
-		return nil
-	})
-	if jobFailedErr != nil {
-		return jobFailedErr
-	}
-	return err
-}
-
 func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details) error {
 	now := timeutil.ToUnixMicros(timeutil.Now())
 	payload, err := protoutil.Marshal(&jobs.Payload{
@@ -744,7 +711,7 @@ func createAndWaitForJob(db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.
 	).Scan(&jobID); err != nil {
 		return err
 	}
-	return waitForJob(db, jobID)
+	return jobutils.WaitForJob(db, jobID)
 }
 
 // TestBackupRestoreResume tests whether backup and restore jobs are properly
@@ -899,14 +866,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
 	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for _, res := range br.Responses {
-				if res.Export != nil || res.Import != nil || res.AddSstable != nil {
-					<-allowResponse
-				}
-			}
-			return nil
-		},
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 
 	const numAccounts = 1000
@@ -914,25 +874,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	defer cleanup()
 
 	sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
-
-	run := func(t *testing.T, op, query string, args ...interface{}) (int64, error) {
-		allowResponse = make(chan struct{})
-		errCh := make(chan error)
-		go func() {
-			_, err := sqlDB.DB.Exec(query, args...)
-			errCh <- err
-		}()
-		select {
-		case allowResponse <- struct{}{}:
-		case err := <-errCh:
-			return 0, errors.Wrapf(err, "query returned before expected: %s", query)
-		}
-		var jobID int64
-		sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
-		sqlDB.Exec(t, fmt.Sprintf("%s JOB %d", op, jobID))
-		close(allowResponse)
-		return jobID, <-errCh
-	}
 
 	t.Run("foreign", func(t *testing.T) {
 		foreignDir := "nodelocal:///foreign"
@@ -949,12 +890,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP orig_fkdb.fk TO $1`,
 			`RESTORE orig_fkdb.fk FROM $1 WITH OPTIONS ('skip_missing_foreign_keys', 'into_db'='restore_fkdb')`,
 		} {
-			jobID, err := run(t, "PAUSE", query, foreignDir)
+			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, "PAUSE", query, foreignDir)
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-			if err := waitForJob(sqlDB.DB, jobID); err != nil {
+			if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -973,12 +914,12 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='pause')`,
 		} {
-			jobID, err := run(t, "PAUSE", query, pauseDir)
+			jobID, err := jobutils.RunJob(t, sqlDB, &allowResponse, "PAUSE", query, pauseDir)
 			if !testutils.IsError(err, "job paused") {
 				t.Fatalf("%d: expected 'job paused' error, but got %+v", i, err)
 			}
 			sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-			if err := waitForJob(sqlDB.DB, jobID); err != nil {
+			if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -997,7 +938,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			`BACKUP DATABASE data TO $1`,
 			`RESTORE data.* FROM $1 WITH OPTIONS ('into_db'='cancel')`,
 		} {
-			if _, err := run(t, "cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
+			if _, err := jobutils.RunJob(t, sqlDB, &allowResponse, "cancel", query, cancelDir); !testutils.IsError(err, "job canceled") {
 				t.Fatalf("%d: expected 'job canceled' error, but got %+v", i, err)
 			}
 			// Check that executing the same backup or restore succeeds. This won't
@@ -1008,80 +949,6 @@ func TestBackupRestoreControlJob(t *testing.T) {
 		sqlDB.CheckQueryResults(t,
 			`SELECT name FROM crdb_internal.tables WHERE database_name = 'cancel' AND state = 'DROP'`,
 			[][]string{{"bank"}},
-		)
-	})
-
-	// TODO(dt): move to importccl.
-	t.Run("cancel import", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
-
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				<-allowResponse
-				_, _ = w.Write([]byte(r.URL.Path[1:]))
-			}
-		}))
-		defer srv.Close()
-
-		var urls []string
-		for i := 0; i < 10; i++ {
-			urls = append(urls, fmt.Sprintf("'%s/%d'", srv.URL, i))
-		}
-		csvURLs := strings.Join(urls, ", ")
-
-		query := fmt.Sprintf(`IMPORT TABLE cancelimport.t (i INT PRIMARY KEY) CSV DATA (%s)`, csvURLs)
-
-		if _, err := run(t, "cancel", query); !testutils.IsError(err, "job canceled") {
-			t.Fatalf("expected 'job canceled' error, but got %+v", err)
-		}
-		// Check that executing again succeeds. This won't work if the first import
-		// was not successfully canceled.
-		sqlDB.Exec(t, query)
-	})
-
-	// TODO(dt): move to importccl.
-	t.Run("pause import", func(t *testing.T) {
-		// Test that IMPORT can be paused and resumed. This test also attempts to
-		// only pause the job after it has begun splitting ranges. When the job
-		// is resumed, if the sampling phase is re-run, the splits points will
-		// differ. When AddSSTable attempts to import the new ranges, they will
-		// fail because there is an existing split in the key space that it cannot
-		// handle. Use a sstsize that will more-or-less (since it is statistical)
-		// always cause this condition.
-
-		sqlDB.Exec(t, `CREATE DATABASE pauseimport`)
-
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "GET" {
-				_, _ = w.Write([]byte(r.URL.Path[1:]))
-			}
-		}))
-		defer srv.Close()
-
-		count := 100
-		// This test takes a while with the race detector, so reduce the number of
-		// files in an attempt to speed it up.
-		if util.RaceEnabled {
-			count = 20
-		}
-		urls := make([]string, count)
-		for i := 0; i < count; i++ {
-			urls[i] = fmt.Sprintf("'%s/%d'", srv.URL, i)
-		}
-		csvURLs := strings.Join(urls, ", ")
-		query := fmt.Sprintf(`IMPORT TABLE pauseimport.t (i INT PRIMARY KEY) CSV DATA (%s) WITH sstsize = '50B'`, csvURLs)
-
-		jobID, err := run(t, "PAUSE", query)
-		if !testutils.IsError(err, "job paused") {
-			t.Fatalf("unexpected: %v", err)
-		}
-		sqlDB.Exec(t, fmt.Sprintf(`RESUME JOB %d`, jobID))
-		if err := waitForJob(sqlDB.DB, jobID); err != nil {
-			t.Fatal(err)
-		}
-		sqlDB.CheckQueryResults(t,
-			`SELECT * FROM pauseimport.t ORDER BY i`,
-			sqlDB.QueryStr(t, `SELECT * FROM generate_series(0, $1)`, count-1),
 		)
 	})
 }
