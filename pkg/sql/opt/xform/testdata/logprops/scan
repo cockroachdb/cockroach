@@ -1,9 +1,11 @@
 exec-ddl
-CREATE TABLE a (x INT PRIMARY KEY, y INT)
+CREATE TABLE a (x INT PRIMARY KEY, y INT, s STRING, d DECIMAL NOT NULL)
 ----
 TABLE a
  ├── x int not null
  ├── y int
+ ├── s string
+ ├── d decimal not null
  └── INDEX primary
       └── x int not null
 
@@ -21,7 +23,7 @@ build
 SELECT * FROM a
 ----
 scan
- └── columns: x:1(int!null) y:2(int)
+ └── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
 
 build
 SELECT * FROM b
@@ -33,3 +35,10 @@ project
  └── projections [outer=(1,2)]
       ├── variable: b.x [type=int, outer=(1)]
       └── variable: b.z [type=int, outer=(2)]
+
+# Select subset of columns.
+opt
+SELECT s, x FROM a
+----
+scan
+ └── columns: s:3(string) x:1(int!null)

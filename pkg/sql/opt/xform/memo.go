@@ -385,8 +385,8 @@ func (m *memo) formatExpr(ev ExprView, buf *bytes.Buffer, includeRequired bool) 
 	if private != nil {
 		switch t := private.(type) {
 		case nil:
-		case opt.TableIndex:
-			fmt.Fprintf(buf, " %s", m.metadata.Table(t).TabName())
+		case *opt.ScanOpDef:
+			fmt.Fprintf(buf, " %s", m.metadata.Table(t.Table).TabName())
 		case opt.ColumnIndex:
 			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
 		case *opt.ColSet, *opt.ColMap, *opt.ColList:

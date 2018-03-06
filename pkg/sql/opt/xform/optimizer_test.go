@@ -15,10 +15,13 @@
 package xform
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
 	"testing"
+
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -26,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // PhysProps files can be run separately like this:
@@ -59,6 +63,11 @@ func TestPhysicalProps(t *testing.T) {
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the lowest cost tree.
 //
+//  - optsteps
+//
+//    Outputs the lowest cost tree for each step in optimization. Used for
+//    debugging the optimizer.
+//
 //  - memo
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
@@ -73,50 +82,111 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 		t.Fatalf("no testfiles found matching: %s", testdataGlob)
 	}
 
+	test := newOptimizerTest(t)
 	for _, path := range paths {
-		t.Run(filepath.Base(path), func(t *testing.T) {
-			ctx := context.Background()
-			semaCtx := tree.MakeSemaContext(false /* privileged */)
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			catalog := testutils.NewTestCatalog()
-
-			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				if d.Cmd == "exec-ddl" {
-					return testutils.ExecuteTestDDL(t, d.Input, catalog)
-				}
-
-				stmt, err := parser.ParseOne(d.Input)
-				if err != nil {
-					d.Fatalf(t, "%v", err)
-				}
-
-				switch d.Cmd {
-				case "build", "opt", "memo":
-					// build command disables optimizations, opt enables them.
-					var steps OptimizeSteps
-					if d.Cmd == "build" {
-						steps = OptimizeNone
-					} else {
-						steps = OptimizeAll
-					}
-					o := NewOptimizer(&evalCtx, steps)
-					b := optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt)
-					root, props, err := b.Build()
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					exprView := o.Optimize(root, props)
-
-					if d.Cmd == "memo" {
-						return fmt.Sprintf("[%d: \"%s\"]\n%s", root, props.String(), o.mem.String())
-					}
-					return exprView.String()
-
-				default:
-					d.Fatalf(t, "unsupported command: %s", d.Cmd)
-					return ""
-				}
-			})
-		})
+		test.run(path)
 	}
+}
+
+type optimizerTest struct {
+	t       *testing.T
+	d       *datadriven.TestData
+	ctx     context.Context
+	semaCtx tree.SemaContext
+	evalCtx tree.EvalContext
+	catalog *testutils.TestCatalog
+}
+
+func newOptimizerTest(t *testing.T) *optimizerTest {
+	return &optimizerTest{
+		t:       t,
+		ctx:     context.Background(),
+		semaCtx: tree.MakeSemaContext(false /* privileged */),
+		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
+		catalog: testutils.NewTestCatalog(),
+	}
+}
+
+func (ot *optimizerTest) run(path string) {
+	datadriven.RunTest(ot.t, path, func(d *datadriven.TestData) string {
+		ot.d = d
+
+		if d.Cmd == "exec-ddl" {
+			return testutils.ExecuteTestDDL(ot.t, d.Input, ot.catalog)
+		}
+
+		stmt, err := parser.ParseOne(d.Input)
+		if err != nil {
+			d.Fatalf(ot.t, "%v", err)
+		}
+
+		switch d.Cmd {
+		case "build":
+			// build command disables optimizations.
+			return ot.optimizeExpr(stmt, OptimizeNone).String()
+
+		case "opt":
+			// opt command enables all optimizations.
+			return ot.optimizeExpr(stmt, OptimizeAll).String()
+
+		case "optsteps":
+			// optstep command iteratively outputs the output from each
+			// optimization step for debugging.
+			var buf bytes.Buffer
+			var prev, next string
+			for i := 0; ; i++ {
+				next = ot.optimizeExpr(stmt, OptimizeSteps(i)).String()
+				if prev == next {
+					// No change, so nothing more to optimize.
+					// TODO(andyk): this method of detecting changes won't work
+					// when we introduce exploration patterns.
+					break
+				}
+
+				if i == 0 {
+					// Output starting tree.
+					buf.WriteString(next)
+				} else {
+					diff := difflib.UnifiedDiff{
+						A:        difflib.SplitLines(prev),
+						B:        difflib.SplitLines(next),
+						FromFile: "Previous",
+						ToFile:   "Next",
+						Context:  100,
+					}
+
+					text, _ := difflib.GetUnifiedDiffString(diff)
+					buf.WriteString(strings.Trim(text, " \t\r\n") + "\n")
+				}
+
+				prev = next
+			}
+
+			// Output ending tree.
+			buf.WriteString("--- Previous\n")
+			buf.WriteString("+++ Next\n")
+			buf.WriteString(next)
+			return buf.String()
+
+		case "memo":
+			ev := ot.optimizeExpr(stmt, OptimizeAll)
+			root := ev.Group()
+			props := ev.Physical().String()
+			return fmt.Sprintf("[%d: \"%s\"]\n%s", root, props, ev.mem.String())
+
+		default:
+			d.Fatalf(ot.t, "unsupported command: %s", d.Cmd)
+			return ""
+		}
+	})
+}
+
+func (ot *optimizerTest) optimizeExpr(stmt tree.Statement, steps OptimizeSteps) ExprView {
+	o := NewOptimizer(&ot.evalCtx, steps)
+	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, o.Factory(), stmt)
+	root, props, err := b.Build()
+	if err != nil {
+		ot.d.Fatalf(ot.t, "%v", err)
+	}
+	return o.Optimize(root, props)
 }

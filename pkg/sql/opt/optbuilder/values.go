@@ -41,14 +41,16 @@ func (b *Builder) buildValuesClause(
 	}
 	rows := make([]opt.GroupID, 0, len(values.Tuples))
 
+	// elems is used to store tuple values, and can be allocated once and reused
+	// repeatedly, since InternList will copy values to memo storage.
+	elems := make([]opt.GroupID, numCols)
+
 	for _, tuple := range values.Tuples {
 		if numCols != len(tuple.Exprs) {
 			panic(errorf(
 				"VALUES lists must all be the same length, expected %d columns, found %d",
 				numCols, len(tuple.Exprs)))
 		}
-
-		elems := make([]opt.GroupID, numCols)
 
 		for i, expr := range tuple.Exprs {
 			texpr := inScope.resolveType(expr, types.Any)
