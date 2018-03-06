@@ -199,10 +199,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 			PrevLease: status.Lease,
 		}
 	} else {
+		minProposedTS := p.repl.mu.minLeaseProposedTS
 		leaseReq = &roachpb.RequestLeaseRequest{
-			Span:      reqSpan,
-			Lease:     reqLease,
-			PrevLease: status.Lease,
+			Span:          reqSpan,
+			Lease:         reqLease,
+			PrevLease:     status.Lease,
+			MinProposedTS: &minProposedTS,
 		}
 	}
 
