@@ -324,9 +324,9 @@ FROM system.eventlog
 WHERE "eventType" = 'set_cluster_setting' AND info NOT LIKE '%version%' AND info NOT LIKE '%sql.defaults.distsql%'
 ORDER BY "timestamp"
 ----
-0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"node"}
-0  1  {"SettingName":"trace.debug.enable","Value":"false","User":"node"}
-0  1  {"SettingName":"cluster.secret","Value":"gen_random_uuid()::STRING","User":"node"}
+0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}
+0  1  {"SettingName":"trace.debug.enable","Value":"false","User":"root"}
+0  1  {"SettingName":"cluster.secret","Value":"gen_random_uuid()::STRING","User":"root"}
 0  1  {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"false","User":"root"}
 0  1  {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"DEFAULT","User":"root"}
 

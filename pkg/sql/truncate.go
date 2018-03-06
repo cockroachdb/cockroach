@@ -109,7 +109,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id := range toTruncate {
-		if err := p.truncateTable(p.EvalContext().Ctx(), id, traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, traceKV); err != nil {
 			return nil, err
 		}
 	}
@@ -233,7 +233,8 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 		return err
 	}
 	const insertZoneCfg = `INSERT INTO system.zones (id, config) VALUES ($1, $2)`
-	_, err = p.exec(ctx, insertZoneCfg, newID, zoneCfg)
+	_, err = p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
+		ctx, "insert-zone", p.txn, insertZoneCfg, newID, zoneCfg)
 	return err
 }
 

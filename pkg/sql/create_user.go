@@ -93,8 +93,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		opName = "create-user"
 	}
 
-	internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
-	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
 		opName,
 		params.p.txn,
@@ -106,7 +105,9 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	if err != nil {
 		if sqlbase.IsUniquenessConstraintViolationError(err) {
 			// Entry exists. We need to know if it's a user or role.
-			isRole, roleErr := existingUserIsRole(params.ctx, internalExecutor, opName, params.p.txn, normalizedUsername)
+			isRole, roleErr := existingUserIsRole(
+				params.ctx, params.extendedEvalCtx.ExecCfg.InternalExecutor, params.p.txn, normalizedUsername,
+			)
 			if roleErr != nil {
 				return roleErr
 			}
@@ -115,7 +116,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 				// if it exists: no error.
 				//
 				// INSERT only detects error at the end of each batch.  This
-				// means perhaps the count by ExecuteStatementInTransactions
+				// means perhaps the count by InternalExecutor.Exec
 				// will have reported updated rows even though an error was
 				// encountered.  If the error was due to a duplicate entry, we
 				// are not actually inserting anything but are canceling the

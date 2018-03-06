@@ -77,10 +77,9 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 		return errors.New("cluster in insecure mode; user cannot use password authentication")
 	}
 
-	internalExecutor := InternalExecutor{ExecCfg: params.extendedEvalCtx.ExecCfg}
-	n.run.rowsAffected, err = internalExecutor.ExecuteStatementInTransaction(
+	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
 		params.ctx,
-		"create-user",
+		"update-user",
 		params.p.txn,
 		`UPDATE system.users SET "hashedPassword" = $2 WHERE username = $1 AND "isRole" = false`,
 		normalizedUsername,

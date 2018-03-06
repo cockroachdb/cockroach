@@ -43,25 +43,12 @@ func (s *Session) StartMonitor(pool *mon.BytesMonitor, reserved mon.BoundAccount
 	s.deriveAndStartMonitors()
 }
 
-// StartUnlimitedMonitor interfaces between Session and mon.MemoryMonitor
-func (s *Session) StartUnlimitedMonitor() {
-	s.mon = mon.MakeUnlimitedMonitor(s.context,
-		"root",
-		mon.MemoryResource,
-		s.memMetrics.CurBytesCount,
-		s.memMetrics.MaxBytesHist,
-		math.MaxInt64,
-		s.execCfg.Settings,
-	)
-	s.deriveAndStartMonitors()
-}
-
 func (s *Session) deriveAndStartMonitors() {
 	s.sessionMon = mon.MakeMonitor("session",
 		mon.MemoryResource,
 		s.memMetrics.SessionCurBytesCount,
 		s.memMetrics.SessionMaxBytesHist,
-		-1, noteworthyMemoryUsageBytes, s.execCfg.Settings)
+		-1 /* increment */, noteworthyMemoryUsageBytes, s.execCfg.Settings)
 	s.sessionMon.Start(s.context, &s.mon, mon.BoundAccount{})
 
 	// We merely prepare the txn monitor here. It is fully started in

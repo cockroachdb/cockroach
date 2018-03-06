@@ -32,12 +32,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-var _ exec.TestEngineFactory = &Executor{}
+var _ exec.TestEngineFactory = &InternalExecutor{}
 
 // NewTestEngine is part of the exec.TestEngineFactory interface.
-func (e *Executor) NewTestEngine(defaultDatabase string) exec.TestEngine {
-	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
-	p, cleanup := newInternalPlanner("opt", txn, security.RootUser, &MemoryMetrics{}, &e.cfg)
+func (ie *InternalExecutor) NewTestEngine(defaultDatabase string) exec.TestEngine {
+	txn := client.NewTxn(ie.s.cfg.DB, ie.s.cfg.NodeID.Get(), client.RootTxn)
+	p, cleanup := newInternalPlanner("opt", txn, security.RootUser, &MemoryMetrics{}, ie.s.cfg)
 	// TODO(radu): Setting this directly is a hack.
 	p.extendedEvalCtx.SessionData.Database = defaultDatabase
 	return newExecEngine(p, cleanup)
