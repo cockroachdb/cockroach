@@ -14,7 +14,7 @@ type ClusterResponse = protos.cockroach.server.serverpb.ClusterResponse$Properti
  * TODO(mrtracy): It this list becomes more extensive, it might benefit from a
  * set of tests as a double-check.
  */
-const defaultRedactions = [
+export const defaultRedactions = [
     // When viewing a specific database, the database name and table are part of
     // the URL path.
     {
