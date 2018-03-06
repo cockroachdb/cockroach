@@ -25,10 +25,10 @@ kubectl run cockroachdb --image=cockroachdb/cockroach --restart=Never -- start -
 ### Kubernetes version
 
 The minimum kubernetes version to successfully run the examples in this
-directory without modification is `1.7`. If you want to run the examples on
-Kubernetes version `1.6`, you can do so by removing the `PodDisruptionBudget`
-resource from `cockroachdb-statefulset.yaml` and/or
-`cockroachdb-statefulset-secure.yaml`, depending on which you're using.
+directory without modification is `1.8`. If you want to run them on
+Kubernetes version `1.7`, use the files as of git revision
+96d3788475696b0bfa826b08dcfc99a2275b1774. If you want to run them on an
+even older version of Kubernetes, go back further in the git history.
 
 For secure mode, the controller must enable `certificatesigningrequests`.
 You can check if this is enabled by looking at the controller logs:
@@ -55,15 +55,16 @@ Jun 28 12:49:00 minikube localkube[3440]: I0628 12:49:00.231134    3440 certific
 
 ### StatefulSet limitations
 
-There is currently no possibility to use node-local storage (outside of
-single-node tests), and so there is likely a performance hit associated with
-running CockroachDB on some external storage. Note that CockroachDB already
-does replication and thus, for better performance, should not be deployed on a
-persistent volume which already replicates internally. High-performance use
-cases on a private Kubernetes cluster may want to consider a
+Node-local storage for StatefulSets was only recently promoted to beta as a
+Kubernetes feature (known as [local persistent
+volumes](https://kubernetes.io/docs/concepts/storage/volumes/#local)), so we
+don't yet recommend running that way in production. Instead, these examples use
+dynamically provisioned remote persistent volumes. Note that CockroachDB already
+replicates its data and thus, for the best performance, should not be deployed
+on a persistent volume which already replicates internally. High-performance use
+cases that need the very best performance may want to consider a
 [DaemonSet](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
-deployment until StatefulSets support node-local storage
-([open issue here](https://github.com/kubernetes/kubernetes/issues/7562)).
+deployment until node-local storage has been more rigorously hardened.
 
 ### Secure mode
 
@@ -157,8 +158,8 @@ and you're running on Google Kubernetes Engine, see [the note above](#on-gce).
 If not, talk to your cluster administrator.
 
 Each new node will request a certificate from the kubernetes CA during its initialization phase.
-Statefulsets create pods one at a time, waiting for each previous pod to be initialized.
-This means that you must approve podN's certificate for podN+1 to be created.
+We have configured the StatefulSet to bring up all its pods at once, so you can approve all of
+the pods' certificates in quick succession.
 
 If a pod is rescheduled, it will reuse the previously-generated certificate.
 
@@ -168,6 +169,8 @@ You can view pending certificates and approve them using:
 $ kubectl get csr
 NAME                         AGE       REQUESTOR                               CONDITION
 default.node.cockroachdb-0   4s        system:serviceaccount:default:default   Pending
+default.node.cockroachdb-1   4s        system:serviceaccount:default:default   Pending
+default.node.cockroachdb-2   4s        system:serviceaccount:default:default   Pending
 
 # Examine the CSR:
 $ kubectl describe csr default.node.cockroachdb-0
@@ -313,6 +316,11 @@ Scale the StatefulSet by running
 ```shell
 kubectl scale statefulset cockroachdb --replicas=4
 ```
+
+You should never scale the StatefulSet down by more than one replica at a time.
+Doing so could lead to data unavailability. For best practices on safely
+removing nodes from a safely, see our docs on [node
+decommissioning](https://www.cockroachlabs.com/docs/stable/remove-nodes.html).
 
 ## Doing a rolling upgrade to a different CockroachDB version
 
