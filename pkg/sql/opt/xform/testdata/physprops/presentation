@@ -73,4 +73,4 @@ group-by
  │    └── columns: a.x:int:1 a.y:int:null:2
  └── aggregations
       └── function: max [type=int]
-           └── variable: a.x [type=int]
+           └── variable: a.y [type=int]

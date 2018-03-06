@@ -231,7 +231,7 @@ group-by
  │    │    │    │    └── columns: xyz.x:int:1 xyz.y:int:null:2 xyz.z:float:null:3
  │    │    │    └── aggregations
  │    │    │         └── function: max [type=float]
- │    │    │              └── variable: xyz.x [type=int]
+ │    │    │              └── variable: xyz.z [type=float]
  │    │    └── gt [type=bool]
  │    │         ├── variable: xyz.y [type=int]
  │    │         └── const: 4 [type=int]

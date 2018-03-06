@@ -221,7 +221,7 @@ project
  │    │    │         └── variable: kv.w [type=int]
  │    │    └── aggregations
  │    │         └── function: sum [type=decimal]
- │    │              └── variable: column5 [type=string]
+ │    │              └── variable: kv.w [type=int]
  │    └── like [type=bool]
  │         ├── function: lower [type=string]
  │         │    └── variable: kv.s [type=string]
@@ -249,7 +249,7 @@ project
  │    │    │         └── variable: kv.w [type=int]
  │    │    └── aggregations
  │    │         └── function: sum [type=decimal]
- │    │              └── variable: column5 [type=string]
+ │    │              └── variable: kv.w [type=int]
  │    └── in [type=bool]
  │         ├── variable: column6 [type=decimal]
  │         └── tuple [type=tuple{decimal, decimal, decimal}]
@@ -312,9 +312,9 @@ select
  │    │              └── variable: kv.s [type=string]
  │    └── aggregations
  │         ├── function: count [type=int]
- │         │    └── variable: column5 [type=string]
+ │         │    └── variable: kv.s [type=string]
  │         └── function: count [type=int]
- │              └── variable: kv.s [type=string]
+ │              └── variable: column7 [type=string]
  └── gt [type=bool]
       ├── variable: column6 [type=int]
       └── const: 1 [type=int]

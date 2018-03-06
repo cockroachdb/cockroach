@@ -20,7 +20,7 @@ project
  │    │    └── columns: a.x:int:1 a.y:int:null:2 a.z:float:3
  │    └── aggregations
  │         └── function: sum [type=float]
- │              └── variable: a.x [type=int]
+ │              └── variable: a.z [type=float]
  └── projections
       ├── variable: a.y [type=int]
       ├── variable: column4 [type=float]

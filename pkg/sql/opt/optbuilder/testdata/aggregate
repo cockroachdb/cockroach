@@ -654,7 +654,7 @@ project
  │    │         └── variable: kv.k [type=int]
  │    └── aggregations
  │         └── function: count [type=int]
- │              └── variable: column5 [type=int]
+ │              └── variable: kv.k [type=int]
  └── projections
       ├── variable: count_1 [type=int]
       └── variable: column5 [type=int]
@@ -1697,7 +1697,7 @@ project
  │    │         └── variable: xy.y [type=string]
  │    └── aggregations
  │         └── function: min [type=string]
- │              └── variable: xy.x [type=string]
+ │              └── variable: xy.y [type=string]
  └── projections
       ├── variable: column6 [type=string]
       └── tuple [type=tuple{int, int}]
@@ -1754,7 +1754,7 @@ project
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
  │         └── function: sum [type=decimal]
- │              └── variable: kv.v [type=int]
+ │              └── variable: kv.w [type=int]
  └── projections
       ├── variable: column6 [type=decimal]
       └── variable: kv.v [type=int]
@@ -1781,7 +1781,7 @@ project
  │    │         └── variable: kv.w [type=int]
  │    └── aggregations
  │         └── function: sum [type=decimal]
- │              └── variable: kv.v [type=int]
+ │              └── variable: kv.w [type=int]
  └── projections
       ├── variable: column7 [type=decimal]
       ├── variable: column5 [type=string]
@@ -2206,7 +2206,7 @@ project
  │    │              └── const: 2 [type=int]
  │    └── aggregations
  │         └── function: min [type=int]
- │              └── variable: column5 [type=int]
+ │              └── variable: column6 [type=int]
  └── projections
       └── plus [type=int]
            ├── const: 1 [type=int]
@@ -2251,6 +2251,37 @@ project
  │    │              └── variable: kv.s [type=string]
  │    └── aggregations
  │         └── function: count [type=int]
- │              └── variable: column5 [type=string]
+ │              └── variable: column6 [type=string]
  └── projections
       └── variable: column7 [type=int]
+
+build
+SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*
+----
+project
+ ├── columns: column9:decimal:null:9
+ ├── group-by
+ │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 column9:decimal:null:9
+ │    ├── grouping columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    ├── project
+ │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.d:decimal:null:8
+ │    │    ├── inner-join
+ │    │    │    ├── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4 abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: kv.k:int:1 kv.v:int:null:2 kv.w:int:null:3 kv.s:string:null:4
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: abc.a:string:5 abc.b:float:null:6 abc.c:bool:null:7 abc.d:decimal:null:8
+ │    │    │    └── ge [type=bool]
+ │    │    │         ├── variable: kv.k [type=int]
+ │    │    │         └── variable: abc.d [type=decimal]
+ │    │    └── projections
+ │    │         ├── variable: kv.k [type=int]
+ │    │         ├── variable: kv.v [type=int]
+ │    │         ├── variable: kv.w [type=int]
+ │    │         ├── variable: kv.s [type=string]
+ │    │         └── variable: abc.d [type=decimal]
+ │    └── aggregations
+ │         └── function: sum [type=decimal]
+ │              └── variable: abc.d [type=decimal]
+ └── projections
+      └── variable: column9 [type=decimal]
