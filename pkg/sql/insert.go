@@ -128,17 +128,19 @@ func (p *planner) Insert(
 	// columns receiving a default value, or computed columns.
 	numInputColumns := len(cols)
 
-	// We update the set of columns being inserted into with any default values
-	// for columns.
-	cols, defaultExprs, err :=
-		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, p.EvalContext())
+	// We update the set of columns being inserted into with any computed columns.
+	cols, computedCols, computeExprs, err :=
+		ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
 
-	// We update the set of columns being inserted into with any computed columns.
-	cols, computedCols, computeExprs, err :=
-		ProcessComputedColumns(ctx, cols, tn, en.tableDesc, &p.txCtx, p.EvalContext())
+	// We update the set of columns being inserted into with any default values
+	// for columns. This needs to happen after we process the computed columns,
+	// because `defaultExprs` is expected to line up with the final set of
+	// columns being inserted into.
+	cols, defaultExprs, err :=
+		sqlbase.ProcessDefaultColumns(cols, en.tableDesc, &p.txCtx, p.EvalContext())
 	if err != nil {
 		return nil, err
 	}
