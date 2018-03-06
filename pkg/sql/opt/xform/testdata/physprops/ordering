@@ -26,7 +26,7 @@ opt
 SELECT * FROM a ORDER BY x, y DESC
 ----
 scan
- ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  └── ordering: +1,-2
 
 # Order by prefix.
@@ -34,7 +34,7 @@ opt
 SELECT * FROM a ORDER BY x
 ----
 scan
- ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  └── ordering: +1
 
 # Order by suffix (scan shouldn't be able to provide).
@@ -42,20 +42,20 @@ opt
 SELECT * FROM a ORDER BY y DESC
 ----
 sort
- ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: -2
  └── scan
-      └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+      └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
 
 # Order by additional column (scan shouldn't be able to provide for now).
 opt
 SELECT * FROM a ORDER BY x, y DESC, z
 ----
 sort
- ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: +1,-2,+3
  └── scan
-      └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+      └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
 
 # --------------------------------------------------
 # Select operator (pass through).
@@ -66,10 +66,10 @@ opt
 SELECT * FROM a WHERE x=1 ORDER BY x, y DESC
 ----
 select
- ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: +1,-2
  ├── scan
- │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    └── ordering: +1,-2
  └── eq [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -80,13 +80,13 @@ opt
 SELECT * FROM a WHERE x=1 ORDER BY z DESC
 ----
 select
- ├── columns: x:int:1 y:float:2 z:decimal:null:3 s:string:4
+ ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  ├── ordering: -3
  ├── sort
- │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    ├── ordering: -3
  │    └── scan
- │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │         └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  └── eq [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
       └── const: 1 [type=int]
@@ -100,10 +100,10 @@ opt
 SELECT x, y FROM a ORDER BY x, y DESC
 ----
 project
- ├── columns: x:int:1 y:float:2
+ ├── columns: x:1(int!null) y:2(float!null)
  ├── ordering: +1,-2
  ├── scan
- │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    └── ordering: +1,-2
  └── projections [outer=(1,2)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -114,13 +114,13 @@ opt
 SELECT y, x, z+1 FROM a ORDER BY x, y
 ----
 project
- ├── columns: y:float:2 x:int:1 column5:decimal:null:5
+ ├── columns: y:2(float!null) x:1(int!null) column5:5(decimal)
  ├── ordering: +1,+2
  ├── sort
- │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    ├── ordering: +1,+2
  │    └── scan
- │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │         └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  └── projections [outer=(1-3)]
       ├── variable: a.y [type=float, outer=(2)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -133,12 +133,12 @@ opt
 SELECT x, 1 one, y FROM a ORDER BY x, one
 ----
 sort
- ├── columns: x:int:1 one:int:null:5 y:float:2
+ ├── columns: x:1(int!null) one:5(int) y:2(float!null)
  ├── ordering: +1,+5
  └── project
-      ├── columns: a.x:int:1 one:int:null:5 a.y:float:2
+      ├── columns: a.x:1(int!null) one:5(int) a.y:2(float!null)
       ├── scan
-      │    └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+      │    └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
       └── projections [outer=(1,2)]
            ├── variable: a.x [type=int, outer=(1)]
            ├── const: 1 [type=int]
@@ -153,13 +153,13 @@ opt
 SELECT y, x FROM a WHERE x=1 ORDER BY x, y DESC
 ----
 project
- ├── columns: y:float:2 x:int:1
+ ├── columns: y:2(float!null) x:1(int!null)
  ├── ordering: +1,-2
  ├── select
- │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    ├── ordering: +1,-2
  │    ├── scan
- │    │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    │    └── ordering: +1,-2
  │    └── eq [type=bool, outer=(1)]
  │         ├── variable: a.x [type=int, outer=(1)]
@@ -199,16 +199,16 @@ opt
 SELECT y, z FROM a WHERE x=1 ORDER BY y
 ----
 project
- ├── columns: y:float:2 z:decimal:null:3
+ ├── columns: y:2(float!null) z:3(decimal)
  ├── ordering: +2
  ├── select
- │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    ├── ordering: +2
  │    ├── sort
- │    │    ├── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    │    ├── ordering: +2
  │    │    └── scan
- │    │         └── columns: a.x:int:1 a.y:float:2 a.z:decimal:null:3 a.s:string:4
+ │    │         └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    └── eq [type=bool, outer=(1)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── const: 1 [type=int]

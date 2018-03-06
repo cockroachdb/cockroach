@@ -37,6 +37,9 @@
 # tree. Also, the NormalizePlusMult pattern ensures that constant expression
 # trees are on the right side of the expression, so no "flipped" pattern is
 # necessary. Other patterns will fold new constant expressions further.
+#
+# NOTE: Ne is not part of the operator choices because it wasn't handled in
+#       normalize.go either. We can add once we've proved it's OK to do so.
 [NormalizeCmpPlusConst]
 (Eq | Ge | Gt | Le | Lt
     (Plus

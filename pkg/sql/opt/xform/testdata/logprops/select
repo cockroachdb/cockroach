@@ -21,9 +21,9 @@ build
 SELECT * FROM a WHERE x=1
 ----
 select
- ├── columns: x:int:1 y:int:null:2
+ ├── columns: x:1(int!null) y:2(int)
  ├── scan
- │    └── columns: a.x:int:1 a.y:int:null:2
+ │    └── columns: a.x:1(int!null) a.y:2(int)
  └── eq [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
       └── const: 1 [type=int]
@@ -32,15 +32,15 @@ build
 SELECT * FROM a,b WHERE a.x=b.x
 ----
 project
- ├── columns: x:int:1 y:int:null:2 x:int:null:3 z:int:4
+ ├── columns: x:1(int!null) y:2(int) x:3(int) z:4(int!null)
  ├── select
- │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    ├── inner-join
- │    │    ├── columns: a.x:int:1 a.y:int:null:2 b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    │    ├── scan
- │    │    │    └── columns: a.x:int:1 a.y:int:null:2
+ │    │    │    └── columns: a.x:1(int!null) a.y:2(int)
  │    │    ├── scan
- │    │    │    └── columns: b.x:int:null:3 b.z:int:4 b.rowid:int:5
+ │    │    │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    │    └── true [type=bool]
  │    └── eq [type=bool, outer=(1,3)]
  │         ├── variable: a.x [type=int, outer=(1)]
