@@ -572,18 +572,19 @@ var Builtins = map[string][]tree.Builtin{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
-				data, format := string(*args[0].(*tree.DBytes)), string(tree.MustBeDString(args[1]))
-				if format != "hex" {
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for ENCODE")
+				data, format := *args[0].(*tree.DBytes), string(tree.MustBeDString(args[1]))
+				switch format {
+				case "hex":
+					var buf bytes.Buffer
+					lex.HexEncodeString(&buf, string(data))
+					return tree.NewDString(buf.String()), nil
+				case "escape":
+					return tree.NewDString(encodeEscape([]byte(data))), nil
+				default:
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' and 'escape' formats are supported for ENCODE")
 				}
-				if !utf8.ValidString(data) {
-					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
-				}
-				var buf bytes.Buffer
-				lex.HexEncodeString(&buf, data)
-				return tree.NewDString(buf.String()), nil
 			},
-			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" is supported).",
+			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" and \"encode\" are supported).",
 		},
 	},
 
@@ -3578,6 +3579,28 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 		}
 	}
 	return result, nil
+}
+
+// encodeEscape implements the encode(..., 'escape') Postgres builtin. It's
+// described "escape converts zero bytes and high-bit-set bytes to octal
+// sequences (\nnn) and doubles backslashes."
+func encodeEscape(input []byte) string {
+	var result bytes.Buffer
+	start := 0
+	for i := range input {
+		if input[i] == 0 || input[i]&128 != 0 {
+			result.Write(input[start:i])
+			start = i + 1
+			result.WriteByte('\\')
+			result.WriteString(fmt.Sprintf("%03o", input[i]))
+		} else if input[i] == '\\' {
+			result.Write(input[start:i])
+			result.WriteString(`\\`)
+			start = i + 1
+		}
+	}
+	result.Write(input[start:])
+	return result.String()
 }
 
 func truncateTimestamp(

@@ -111,3 +111,30 @@ func TestStringToArray(t *testing.T) {
 		})
 	}
 }
+
+func TestEncodeEscape(t *testing.T) {
+	testCases := []struct {
+		bytes    []byte
+		expected string
+	}{
+		{[]byte{}, ``},
+		{[]byte{'a', 'b', 'c'}, `abc`},
+		{[]byte{'a', 'b', 'c', 'd'}, `abcd`},
+		{[]byte{'a', 'b', 0, 'd'}, `ab\000d`},
+		{[]byte{'a', 'b', 0, 0, 'd'}, `ab\000\000d`},
+		{[]byte{'a', 'b', 0, 'a', 'b', 'c', 0, 'd'}, `ab\000abc\000d`},
+		{[]byte{'a', 'b', 0, 0}, `ab\000\000`},
+		{[]byte{'a', 'b', '\\', 'd'}, `ab\\d`},
+		{[]byte{'a', 'b', 200, 'd'}, `ab\310d`},
+		{[]byte{'a', 'b', 7, 'd'}, "ab\x07d"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.expected, func(t *testing.T) {
+			result := encodeEscape(tc.bytes)
+			if result != tc.expected {
+				t.Fatalf("expected %q, got %q", tc.expected, result)
+			}
+		})
+	}
+}
