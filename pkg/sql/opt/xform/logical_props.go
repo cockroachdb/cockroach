@@ -58,6 +58,22 @@ type RelationalProps struct {
 type ScalarProps struct {
 	// Type is the data type of the scalar expression (int, string, etc).
 	Type types.T
+
+	// OuterCols is the set of columns that are referenced by variables within
+	// this scalar sub-expression, but are not bound within the scope of the
+	// expression. For example:
+	//
+	//   SELECT *
+	//   FROM a
+	//   WHERE EXISTS(SELECT * FROM b WHERE b.x = a.x AND b.y = 5)
+	//
+	// For the EXISTS expression, only a.x is an outer column, meaning that
+	// only it is defined "outside" the EXISTS expression (hence the name
+	// "outer"). Note that what constitutes an "outer column" is dependent on
+	// an expression's lcoation in the query. For example, while the b.x and
+	// b.y columns are not outer columns on the EXISTS expression, they *are*
+	// outer columns on the inner WHERE condition.
+	OuterCols opt.ColSet
 }
 
 func (p *LogicalProps) format(md *opt.Metadata, tp treeprinter.Node) {

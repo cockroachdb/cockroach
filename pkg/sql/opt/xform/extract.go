@@ -21,22 +21,29 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// This file contains various helper functions that extract an
-// op-specific field from an ExprView.
+// This file contains various helper functions that extract an op-specific
+// field from an expression.
 
-// ExtractConstDatum returns the Datum that represents the value
-// of an operator in the ConstValue group.
+// ExtractConstDatum returns the Datum that represents the value of an operator
+// having the ConstValue tag.
 func ExtractConstDatum(ev ExprView) tree.Datum {
-	switch ev.Operator() {
+	return extractConstDatum(ev.mem, ev.loc)
+}
+
+func extractConstDatum(mem *memo, loc memoLoc) tree.Datum {
+	expr := mem.lookupExpr(loc)
+	switch expr.op {
 	case opt.NullOp:
 		return tree.DNull
 	case opt.TrueOp:
 		return tree.DBoolTrue
 	case opt.FalseOp:
 		return tree.DBoolFalse
-	case opt.ConstOp:
-		return ev.Private().(tree.Datum)
-	default:
-		panic(fmt.Sprintf("non-const op %s", ev.Operator()))
 	}
+
+	constant := expr.asConst()
+	if constant == nil {
+		panic(fmt.Sprintf("non-const op %s", expr.op))
+	}
+	return mem.lookupPrivate(constant.value()).(tree.Datum)
 }

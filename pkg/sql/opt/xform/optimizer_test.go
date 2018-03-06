@@ -28,14 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
-// Rules files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/bool"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/comp"
-//   ...
-func TestRules(t *testing.T) {
-	runDataDrivenTest(t, "testdata/rules/*")
-}
-
 // PhysProps files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalProps/ordering"
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalProps/presentation"
@@ -44,7 +36,34 @@ func TestPhysicalProps(t *testing.T) {
 	runDataDrivenTest(t, "testdata/physprops/*")
 }
 
-// runDataDrivenTest
+// runDataDrivenTest runs data-driven testcases of the form
+//   <command>
+//   <SQL statement>
+//   ----
+//   <expected results>
+//
+// The supported commands are:
+//
+//  - exec-ddl
+//
+//    Runs a SQL DDL statement to build the test catalog. Only a small number
+//    of DDL statements are supported, and those not fully.
+//
+//  - build
+//
+//    Builds an expression tree from a SQL query and outputs it without any
+//    optimizations applied to it.
+//
+//  - opt
+//
+//    Builds an expression tree from a SQL query, fully optimizes it using the
+//    memo, and then outputs the lowest cost tree.
+//
+//  - memo
+//
+//    Builds an expression tree from a SQL query, fully optimizes it using the
+//    memo, and then outputs the memo containing the forest of trees.
+//
 func runDataDrivenTest(t *testing.T, testdataGlob string) {
 	paths, err := filepath.Glob(testdataGlob)
 	if err != nil {
@@ -80,8 +99,8 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 					} else {
 						steps = OptimizeAll
 					}
-					o := NewOptimizer(catalog, steps)
-					b := optbuilder.New(ctx, &semaCtx, &evalCtx, o.Factory(), stmt)
+					o := NewOptimizer(&evalCtx, steps)
+					b := optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt)
 					root, props, err := b.Build()
 					if err != nil {
 						d.Fatalf(t, "%v", err)

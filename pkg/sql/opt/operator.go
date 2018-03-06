@@ -127,7 +127,6 @@ var BinaryOpReverseMap = [...]tree.BinaryOperator{
 // UnaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // unary operator type.
 var UnaryOpReverseMap = [...]tree.UnaryOperator{
-	UnaryPlusOp:       tree.UnaryPlus,
 	UnaryMinusOp:      tree.UnaryMinus,
 	UnaryComplementOp: tree.UnaryComplement,
 }

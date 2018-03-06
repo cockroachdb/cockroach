@@ -22,11 +22,7 @@ import (
 )
 
 func TestMetadataColumns(t *testing.T) {
-	cat := testutils.NewTestCatalog()
-	md := NewMetadata(cat)
-	if md.Catalog() != cat {
-		t.Fatal("metadata catalog didn't match catalog passed to newMetadata")
-	}
+	md := NewMetadata()
 
 	// Add standalone column.
 	colIndex := md.AddColumn("alias", types.Int)
@@ -70,11 +66,7 @@ func TestMetadataColumns(t *testing.T) {
 }
 
 func TestMetadataTables(t *testing.T) {
-	cat := testutils.NewTestCatalog()
-	md := NewMetadata(cat)
-	if md.Catalog() != cat {
-		t.Fatal("metadata catalog didn't match catalog passed to newMetadata")
-	}
+	md := NewMetadata()
 
 	// Add a table reference to the metadata.
 	a := &testutils.TestTable{Name: "a"}

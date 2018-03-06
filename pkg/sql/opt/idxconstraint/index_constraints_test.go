@@ -88,8 +88,6 @@ func TestIndexConstraints(t *testing.T) {
 			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-			catalog := testutils.NewTestCatalog()
-
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var varTypes []types.T
 				var colInfos []IndexColumnInfo
@@ -158,7 +156,7 @@ func TestIndexConstraints(t *testing.T) {
 					if !normalize {
 						steps = xform.OptimizeNone
 					}
-					o := xform.NewOptimizer(catalog, steps)
+					o := xform.NewOptimizer(&evalCtx, steps)
 					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
 					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
@@ -256,9 +254,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			for i := range varNames {
 				varNames[i] = fmt.Sprintf("@%d", i+1)
 			}
-			bld := optbuilder.NewScalar(
-				context.Background(), &semaCtx, &evalCtx, o.Factory(), varNames, varTypes,
-			)
+			bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
 
 			group, err := bld.Build(typedExpr)
 			if err != nil {

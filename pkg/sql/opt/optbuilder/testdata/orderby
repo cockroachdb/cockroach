@@ -25,8 +25,8 @@ project
  │    ├── ordering: +3
  │    └── scan
  │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- └── projections
-      └── variable: t.c [type=bool]
+ └── projections [outer=(3)]
+      └── variable: t.c [type=bool, outer=(3)]
 
 build
 SELECT c FROM t ORDER BY c DESC
@@ -39,8 +39,8 @@ project
  │    ├── ordering: -3
  │    └── scan
  │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- └── projections
-      └── variable: t.c [type=bool]
+ └── projections [outer=(3)]
+      └── variable: t.c [type=bool, outer=(3)]
 
 build
 SELECT a, b FROM t ORDER BY b
@@ -53,9 +53,9 @@ project
  │    ├── ordering: +2
  │    └── scan
  │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
 
 build
 SELECT a, b FROM t ORDER BY b DESC
@@ -68,9 +68,9 @@ project
  │    ├── ordering: -2
  │    └── scan
  │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
 
 build
 SELECT a AS foo, b FROM t ORDER BY foo DESC
@@ -83,9 +83,9 @@ project
  │    ├── ordering: -1
  │    └── scan
  │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
 
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
@@ -101,12 +101,12 @@ project
  │    │    ├── ordering: +2,+1
  │    │    └── scan
  │    │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- │    └── eq [type=bool]
- │         ├── variable: t.b [type=int]
+ │    └── eq [type=bool, outer=(2)]
+ │         ├── variable: t.b [type=int, outer=(2)]
  │         └── const: 7 [type=int]
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
 
 build
 SELECT a, b FROM t ORDER BY b, a DESC
@@ -119,9 +119,9 @@ project
  │    ├── ordering: +2,-1
  │    └── scan
  │         └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
 
 build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
@@ -135,12 +135,12 @@ sort
       │    ├── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
       │    ├── scan
       │    │    └── columns: t.a:int:1 t.b:int:null:2 t.c:bool:null:3
-      │    └── eq [type=bool]
-      │         ├── variable: t.b [type=int]
+      │    └── eq [type=bool, outer=(2)]
+      │         ├── variable: t.b [type=int, outer=(2)]
       │         └── const: 7 [type=int]
-      └── projections
-           ├── variable: t.a [type=int]
-           ├── variable: t.b [type=int]
-           └── plus [type=int]
-                ├── variable: t.a [type=int]
-                └── variable: t.b [type=int]
+      └── projections [outer=(1,2)]
+           ├── variable: t.a [type=int, outer=(1)]
+           ├── variable: t.b [type=int, outer=(2)]
+           └── plus [type=int, outer=(1,2)]
+                ├── variable: t.a [type=int, outer=(1)]
+                └── variable: t.b [type=int, outer=(2)]

@@ -50,9 +50,9 @@ project
  ├── columns: x:int:1 y:float:null:2 column3:int:null:3
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      ├── variable: a.x [type=int]
-      ├── variable: a.y [type=float]
+ └── projections [outer=(1,2)]
+      ├── variable: a.x [type=int, outer=(1)]
+      ├── variable: a.y [type=float, outer=(2)]
       └── const: 1 [type=int]
 
 # Removed column (projection should not be eliminated).
@@ -63,5 +63,5 @@ project
  ├── columns: x:int:1
  ├── scan
  │    └── columns: a.x:int:1 a.y:float:null:2
- └── projections
-      └── variable: a.x [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]

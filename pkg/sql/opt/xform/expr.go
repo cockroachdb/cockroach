@@ -99,7 +99,7 @@ func makeExprView(mem *memo, group opt.GroupID, required opt.PhysicalPropsID) Ex
 		// expression, which is always the first expression in the group.
 		return ExprView{
 			mem:      mem,
-			loc:      memoLoc{group: group, expr: normExprID},
+			loc:      makeNormLoc(group),
 			op:       mgrp.lookupExpr(normExprID).op,
 			required: required,
 		}
@@ -194,22 +194,36 @@ func (ev ExprView) formatScalar(tp treeprinter.Node) {
 	fmt.Fprintf(&buf, "%v", ev.op)
 	ev.formatPrivate(&buf, ev.Private())
 
-	switch ev.Operator() {
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		// Don't show the type of these ops because they are simply tuple types
-		// of their children's types, and the types of children are already
-		// listed.
+	// Don't panic if scalar properties don't yet exist when printing
+	// expression.
+	scalar := ev.Logical().Scalar
+	if scalar == nil {
+		buf.WriteString(" [type=undefined]")
+	} else {
+		showType := true
+		switch ev.Operator() {
+		case opt.ProjectionsOp, opt.AggregationsOp:
+			// Don't show the type of these ops because they are simply tuple
+			// types of their children's types, and the types of children are
+			// already listed.
+			showType = false
+		}
 
-	default:
-		scalar := ev.Logical().Scalar
-		if scalar != nil {
+		hasOuterCols := !ev.Logical().Scalar.OuterCols.Empty()
+
+		if showType || hasOuterCols {
 			buf.WriteString(" [")
-			fmt.Fprintf(&buf, "type=%s", scalar.Type)
+			if showType {
+				fmt.Fprintf(&buf, "type=%s", scalar.Type)
+				if hasOuterCols {
+					buf.WriteString(", ")
+				}
+			}
+			if hasOuterCols {
+				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
+			}
 			buf.WriteString("]")
-		} else {
-			// Don't panic if scalar properties don't yet exist when printing
-			// expression.
-			buf.WriteString(" [type=undefined]")
+
 		}
 	}
 

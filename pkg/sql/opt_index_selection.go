@@ -139,7 +139,7 @@ func (p *planner) selectIndex(
 			colNames[i] = s.resultColumns[i].Name
 			colTypes[i] = s.resultColumns[i].Typ
 		}
-		optimizer = xform.NewOptimizer(nil /* Catalog */, xform.OptimizeAll)
+		optimizer = xform.NewOptimizer(p.EvalContext(), xform.OptimizeAll)
 		bld := optbuilder.NewScalar(
 			ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory(), colNames, colTypes,
 		)

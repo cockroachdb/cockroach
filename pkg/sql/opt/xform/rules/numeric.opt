@@ -2,7 +2,6 @@
 # numeric.opt contains normalization rules for numeric operators.
 # =============================================================================
 
-
 # FoldPlusZero folds $left + 0 for numeric types.
 [FoldPlusZero, Normalize]
 (Plus
@@ -56,3 +55,13 @@ $right
 )
 =>
 $left
+
+# InvertMinus rewrites -(a - b) to (b - a) if the operand types allow it.
+[InvertMinus, Normalize]
+(UnaryMinus (Minus $left:* $right:*) & (CanConstructBinary Minus $right $left))
+=>
+(Minus $right $left)
+
+# EliminateUnaryMinus discards a doubled UnaryMinus operator.
+[EliminateUnaryMinus, Normalize]
+(UnaryMinus (UnaryMinus $input:*)) => $input
