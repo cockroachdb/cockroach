@@ -89,3 +89,44 @@ export function findOrCalculateLocation(locations: LocationTree, locality: Local
   centroid = vector.mult(centroid, 1 / childLocations.length);
   return { longitude: centroid[0], latitude: centroid[1] };
 }
+
+/*
+ * getConfigStats finds how many nodes are missing locality or location config.
+ */
+export function getConfigStatus(
+  localityTree: LocalityTree, locationTree: LocationTree,
+): NodeMapConfigStatus {
+  const result = {
+    totalNodes: 0,
+    withLocality: 0,
+    withLocation: 0,
+  };
+  function recur(tree: LocalityTree) {
+    console.log('recur', tree);
+    tree.nodes.forEach((node) => {
+      console.log('node', node);
+      result.totalNodes++;
+      // TODO: what about root?
+      if (tree.tiers.length > 0) {
+        result.withLocality++;
+        const currentTier = tree.tiers[tree.tiers.length - 1];
+        if (hasLocation(locationTree, currentTier)) {
+          result.withLocation++;
+        }
+      }
+    });
+    _.forEach(tree.localities, (values) => {
+      _.forEach(values, (subTree) => {
+        recur(subTree);
+      });
+    });
+  }
+  recur(localityTree);
+  return result;
+}
+
+export interface NodeMapConfigStatus {
+  totalNodes: number;
+  withLocality: number;
+  withLocation: number;
+}
