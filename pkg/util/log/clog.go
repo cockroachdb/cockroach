@@ -44,6 +44,14 @@ import (
 	"github.com/petermattis/goid"
 )
 
+// FatalChan is closed when Fatal is called. This can be used to make
+// the process stop handling requests while the final log messages and
+// crash report are being written.
+var FatalChan = make(chan struct{})
+
+// fatalChanMu is held while closing FatalChan to prevent double closes.
+var fatalChanMu syncutil.Mutex
+
 const severityChar = "IWEF"
 
 const (
@@ -775,6 +783,14 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	var stacks []byte
 	var fatalTrigger chan struct{}
 	if s == Severity_FATAL {
+		fatalChanMu.Lock()
+		select {
+		case <-FatalChan:
+		default:
+			close(FatalChan)
+		}
+		fatalChanMu.Unlock()
+
 		switch traceback {
 		case tracebackSingle:
 			stacks = getStacks(false)
