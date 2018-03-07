@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -199,6 +200,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		return int64(bits.Len64(math.Float64bits(t))+8) / 8
 	case string:
 		return int64(len(t))
+	case time.Time:
+		return 12
 	default:
 		panic(fmt.Sprintf("unsupported type %T: %v", x, x))
 	}
@@ -227,7 +230,7 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 	for _, table := range tables {
 		createStmt := fmt.Sprintf(`CREATE TABLE "%s" %s`, table.Name, table.Schema)
 		if _, err := db.Exec(createStmt); err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
 		}
 	}
 
@@ -263,7 +266,7 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 			if len(params) > 0 {
 				insertStmt := insertStmtBuf.String()
 				if _, err := db.Exec(insertStmt, params...); err != nil {
-					return 0, err
+					return 0, errors.Wrapf(err, "failed insert into %s", table.Name)
 				}
 			}
 		}
