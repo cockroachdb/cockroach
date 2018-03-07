@@ -340,7 +340,9 @@ func (s *sortAllProcessor) producerMeta(err error) *ProducerMetadata {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		s.close()
-		return meta
+		if meta != nil {
+			return meta
+		}
 	}
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
@@ -495,7 +497,9 @@ func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		s.close()
-		return meta
+		if meta != nil {
+			return meta
+		}
 	}
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
@@ -678,7 +682,9 @@ func (s *sortChunksProcessor) producerMeta(err error) *ProducerMetadata {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		s.close()
-		return meta
+		if meta != nil {
+			return meta
+		}
 	}
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
