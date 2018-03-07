@@ -66,6 +66,9 @@ func (m *mockEvalCtx) Clock() *hlc.Clock {
 func (m *mockEvalCtx) DB() *client.DB {
 	panic("unimplemented")
 }
+func (m *mockEvalCtx) GetLimiters() *Limiters {
+	panic("unimplemented")
+}
 func (m *mockEvalCtx) AbortSpan() *abortspan.AbortSpan {
 	return m.abortSpan
 }

@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -28,7 +29,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
 )
+
+// Limiters is the collection of per-store limits used during cmd evaluation.
+type Limiters struct {
+	BulkIOWriteRate   *rate.Limiter
+	ConcurrentImports limit.ConcurrentRequestLimiter
+	ConcurrentExports limit.ConcurrentRequestLimiter
+}
 
 // EvalContext is the interface through which command evaluation accesses the
 // underlying state.
@@ -45,6 +54,7 @@ type EvalContext interface {
 	DB() *client.DB
 	AbortSpan() *abortspan.AbortSpan
 	GetTxnWaitQueue() *txnwait.Queue
+	GetLimiters() *Limiters
 
 	NodeID() roachpb.NodeID
 	StoreID() roachpb.StoreID
