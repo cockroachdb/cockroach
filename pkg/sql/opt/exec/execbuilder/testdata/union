@@ -1,0 +1,231 @@
+# tests adapted from logictest -- union
+
+exec rowsort
+VALUES (1), (1), (1), (2), (2) UNION VALUES (1), (3), (1)
+----
+column1:int
+1
+2
+3
+
+exec rowsort
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)
+----
+column1:int
+1
+1
+1
+1
+1
+2
+2
+3
+
+exec rowsort
+VALUES (1), (1), (1), (2), (2) INTERSECT VALUES (1), (3), (1)
+----
+column1:int
+1
+
+exec rowsort
+VALUES (1), (1), (1), (2), (2) INTERSECT ALL VALUES (1), (3), (1)
+----
+column1:int
+1
+1
+
+exec rowsort
+VALUES (1), (1), (1), (2), (2) EXCEPT VALUES (1), (3), (1)
+----
+column1:int
+2
+
+exec rowsort
+VALUES (1), (1), (1), (2), (2) EXCEPT ALL VALUES (1), (3), (1)
+----
+column1:int
+1
+2
+2
+
+exec rowsort
+VALUES (1, 2), (1, 1), (1, 2), (2, 1), (2, 1) UNION VALUES (1, 3), (3, 4), (1, 1)
+----
+column1:int  column2:int
+1            1
+1            2
+1            3
+2            1
+3            4
+
+# TODO(radu): ORDER BY not supported yet.
+#exec
+#(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+#----
+#3
+#2
+#
+## The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+#exec
+#VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+#----
+#3
+#2
+#
+## UNION with NULL columns in operands works.
+#exec
+#VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
+#----
+#NULL
+#1
+#
+#exec
+#VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
+#----
+#NULL
+#1
+
+exec
+VALUES (NULL) UNION ALL VALUES (NULL)
+----
+column1:unknown
+NULL
+NULL
+
+exec
+SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
+----
+x:int  column7:string
+1      unknown
+2      int
+
+exec
+SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
+----
+x:int  column7:string
+1      int
+2      unknown
+
+exec-raw
+CREATE DATABASE t;
+CREATE TABLE t.uniontest (
+  k INT,
+  v INT
+)
+----
+
+exec-raw
+INSERT INTO t.uniontest VALUES
+(1, 1),
+(1, 1),
+(1, 1),
+(1, 2),
+(1, 2),
+(2, 1),
+(2, 3),
+(2, 1)
+----
+
+exec rowsort
+SELECT v FROM t.uniontest WHERE k = 1 UNION SELECT v FROM t.uniontest WHERE k = 2
+----
+v:int
+1
+2
+3
+
+exec rowsort
+SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2
+----
+v:int
+1
+1
+1
+1
+1
+2
+2
+3
+
+exec rowsort
+SELECT v FROM t.uniontest WHERE k = 1 INTERSECT SELECT v FROM t.uniontest WHERE k = 2
+----
+v:int
+1
+
+exec rowsort
+SELECT v FROM t.uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM t.uniontest WHERE k = 2
+----
+v:int
+1
+1
+
+exec rowsort
+SELECT v FROM t.uniontest WHERE k = 1 EXCEPT SELECT v FROM t.uniontest WHERE k = 2
+----
+v:int
+2
+
+exec rowsort
+SELECT v FROM t.uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM t.uniontest WHERE k = 2
+----
+v:int
+1
+2
+2
+
+# TODO(radu): ORDER BY, LIMIT not supported yet.
+#exec
+#(SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
+#----
+#3
+#2
+#
+## The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
+#exec
+#SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
+#----
+#3
+#2
+
+exec-explain
+SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
+----
+union           0  union   ·         ·                  (v)                    ·
+ ├── render     1  render  ·         ·                  ("uniontest.k")        ·
+ │    │         1  ·       render 0  k                  ·                      ·
+ │    └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
+ │              2  ·       table     uniontest@primary  ·                      ·
+ │              2  ·       spans     ALL                ·                      ·
+ └── render     1  render  ·         ·                  ("uniontest.v")        ·
+      │         1  ·       render 0  v                  ·                      ·
+      └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
+·               2  ·       table     uniontest@primary  ·                      ·
+·               2  ·       spans     ALL                ·                      ·
+
+exec-explain
+SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
+----
+append          0  append  ·         ·                  (v)                    ·
+ ├── render     1  render  ·         ·                  ("uniontest.k")        ·
+ │    │         1  ·       render 0  k                  ·                      ·
+ │    └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
+ │              2  ·       table     uniontest@primary  ·                      ·
+ │              2  ·       spans     ALL                ·                      ·
+ └── render     1  render  ·         ·                  ("uniontest.v")        ·
+      │         1  ·       render 0  v                  ·                      ·
+      └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
+·               2  ·       table     uniontest@primary  ·                      ·
+·               2  ·       spans     ALL                ·                      ·
+
+exec
+SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
+----
+column1:int  column1:int
+1            1
+
+exec
+SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
+----
+column1:int  column1:int
+1            1
