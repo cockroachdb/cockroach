@@ -18,7 +18,7 @@ query II
 3  30
 
 # Select
-query error pq: ORDER BY only supports simple column references at this time
+query error pq: building execution for non-relational operator sort
 SELECT * FROM test.t ORDER BY t.k+1
 
 # SelectClause

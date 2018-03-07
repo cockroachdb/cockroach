@@ -273,7 +273,8 @@ func (b *Builder) buildUsingJoinPredicate(
 			outScope.cols = append(outScope.cols, *rightCol)
 		} else {
 			// Construct a new merged column to represent IFNULL(left, right).
-			col := b.synthesizeColumn(outScope, string(leftCol.name), leftCol.typ)
+			texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, leftCol.typ)
+			col := b.synthesizeColumn(outScope, string(leftCol.name), leftCol.typ, texpr)
 			merged := b.factory.ConstructCoalesce(b.factory.InternList([]opt.GroupID{leftVar, rightVar}))
 			mergedCols[col.index] = merged
 		}

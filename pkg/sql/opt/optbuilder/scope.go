@@ -33,11 +33,12 @@ import (
 //
 // See builder.go for more details.
 type scope struct {
-	builder  *Builder
-	parent   *scope
-	cols     []columnProps
-	groupby  groupby
-	ordering opt.Ordering
+	builder      *Builder
+	parent       *scope
+	cols         []columnProps
+	groupby      groupby
+	ordering     opt.Ordering
+	presentation opt.Presentation
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions.
