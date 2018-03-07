@@ -40,6 +40,7 @@ func WriteCSVRows(
 ) (rowIdx int, err error) {
 	bytesWrittenW := &bytesWrittenWriter{w: w}
 	csvW := csv.NewWriter(bytesWrittenW)
+	var rowStrings []string
 	for rowIdx = rowStart; rowIdx < rowEnd; rowIdx++ {
 		if sizeBytesLimit > 0 && bytesWrittenW.written > sizeBytesLimit {
 			break
@@ -51,13 +52,14 @@ func WriteCSVRows(
 		default:
 		}
 		row := table.InitialRowFn(rowIdx)
+		if cap(rowStrings) < len(row) {
+			rowStrings = make([]string, len(row))
+		} else {
+			rowStrings = rowStrings[:len(row)]
+		}
 		rowStrings := make([]string, len(row))
 		for i, datum := range row {
-			if datum == nil {
-				rowStrings[i] = `NULL`
-			} else {
-				rowStrings[i] = fmt.Sprintf(`%v`, datum)
-			}
+			rowStrings[i] = datumToCSVString(datum)
 		}
 		if err := csvW.Write(rowStrings); err != nil {
 			return 0, err
@@ -65,6 +67,22 @@ func WriteCSVRows(
 	}
 	csvW.Flush()
 	return rowIdx, csvW.Error()
+}
+
+func datumToCSVString(datum interface{}) string {
+	if datum == nil {
+		return `NULL`
+	}
+	switch t := datum.(type) {
+	case int:
+		return strconv.Itoa(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case string:
+		return t
+	default:
+		panic(fmt.Sprintf("unsupported type %T: %v", datum, datum))
+	}
 }
 
 // HandleCSV configures a Generator with url params and outputs the data for a
