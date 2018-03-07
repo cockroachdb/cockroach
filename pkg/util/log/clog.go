@@ -44,6 +44,13 @@ import (
 	"github.com/petermattis/goid"
 )
 
+// FatalChan is closed when Fatal is called. This can be used to make
+// the process stop handling requests while the final log messages and
+// crash report are being written.
+func FatalChan() <-chan struct{} {
+	return logging.fatalCh
+}
+
 const severityChar = "IWEF"
 
 const (
@@ -578,6 +585,7 @@ func init() {
 	logging.setVState(0, nil, false)
 	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
+	logging.fatalCh = make(chan struct{})
 
 	go flushDaemon()
 }
@@ -674,6 +682,7 @@ type loggingT struct {
 	verbosity level         // V logging level, the value of the --verbosity flag/
 	exitFunc  func(int)     // func that will be called on fatal errors
 	gcNotify  chan struct{} // notify GC daemon that a new log file was created
+	fatalCh   chan struct{} // closed on fatal error
 
 	interceptor atomic.Value // InterceptorFn
 }
@@ -775,6 +784,14 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	var stacks []byte
 	var fatalTrigger chan struct{}
 	if s == Severity_FATAL {
+		// Close l.fatalCh if it is not already closed (note that we're
+		// holding l.mu to guard against concurrent closes).
+		select {
+		case <-l.fatalCh:
+		default:
+			close(l.fatalCh)
+		}
+
 		switch traceback {
 		case tracebackSingle:
 			stacks = getStacks(false)
