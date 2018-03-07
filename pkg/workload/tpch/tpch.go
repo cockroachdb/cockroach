@@ -221,21 +221,19 @@ func (w *worker) run(ctx context.Context) error {
 
 const (
 	tpchNationSchema = `(
-		n_nationkey       INTEGER NOT NULL,
+		n_nationkey       INTEGER NOT NULL PRIMARY KEY,
 		n_name            CHAR(25) NOT NULL,
 		n_regionkey       INTEGER NOT NULL,
 		n_comment         VARCHAR(152),
-		INDEX n_rk (n_regionkey ASC),
-		UNIQUE INDEX n_nk (n_nationkey ASC)
+		INDEX n_rk (n_regionkey ASC)
 	)`
 	tpchRegionSchema = `(
-		r_regionkey       INTEGER NOT NULL,
+		r_regionkey       INTEGER NOT NULL PRIMARY KEY,
 		r_name            CHAR(25) NOT NULL,
-		r_comment         VARCHAR(152),
-		UNIQUE INDEX r_rk (r_regionkey ASC)
+		r_comment         VARCHAR(152)
 	)`
 	tpchPartSchema = `(
-		p_partkey         INTEGER NOT NULL,
+		p_partkey         INTEGER NOT NULL PRIMARY KEY,
 		p_name            VARCHAR(55) NOT NULL,
 		p_mfgr            CHAR(25) NOT NULL,
 		p_brand           CHAR(10) NOT NULL,
@@ -243,18 +241,16 @@ const (
 		p_size            INTEGER NOT NULL,
 		p_container       CHAR(10) NOT NULL,
 		p_retailprice     DECIMAL(15,2) NOT NULL,
-		p_comment         VARCHAR(23) NOT NULL,
-		UNIQUE INDEX p_pk (p_partkey ASC)
+		p_comment         VARCHAR(23) NOT NULL
 	)`
 	tpchSupplierSchema = `(
-		s_suppkey         INTEGER NOT NULL,
+		s_suppkey         INTEGER NOT NULL PRIMARY KEY,
 		s_name            CHAR(25) NOT NULL,
 		s_address         VARCHAR(40) NOT NULL,
 		s_nationkey       INTEGER NOT NULL,
 		s_phone           CHAR(15) NOT NULL,
 		s_acctbal         DECIMAL(15,2) NOT NULL,
 		s_comment         VARCHAR(101) NOT NULL,
-		UNIQUE INDEX s_sk (s_suppkey ASC),
 		INDEX s_nk (s_nationkey ASC)
 	)`
 	tpchPartSuppSchema = `(
@@ -263,13 +259,12 @@ const (
 		ps_availqty           INTEGER NOT NULL,
 		ps_supplycost         DECIMAL(15,2) NOT NULL,
 		ps_comment            VARCHAR(199) NOT NULL,
-		INDEX ps_pk (ps_partkey ASC),
 		INDEX ps_sk (ps_suppkey ASC),
-		UNIQUE INDEX ps_pk_sk (ps_partkey ASC, ps_suppkey ASC),
+		PRIMARY KEY (ps_partkey ASC, ps_suppkey ASC),
 		UNIQUE INDEX ps_sk_pk (ps_suppkey ASC, ps_partkey ASC)
 	)`
 	tpchCustomerSchema = `(
-		c_custkey         INTEGER NOT NULL,
+		c_custkey         INTEGER NOT NULL PRIMARY KEY,
 		c_name            VARCHAR(25) NOT NULL,
 		c_address         VARCHAR(40) NOT NULL,
 		c_nationkey       INTEGER NOT NULL,
@@ -277,11 +272,10 @@ const (
 		c_acctbal         DECIMAL(15,2)   NOT NULL,
 		c_mktsegment      CHAR(10) NOT NULL,
 		c_comment         VARCHAR(117) NOT NULL,
-		UNIQUE INDEX c_ck (c_custkey ASC),
 		INDEX c_nk (c_nationkey ASC)
 	)`
 	tpchOrdersSchema = `(
-		o_orderkey           INTEGER NOT NULL,
+		o_orderkey           INTEGER NOT NULL PRIMARY KEY,
 		o_custkey            INTEGER NOT NULL,
 		o_orderstatus        CHAR(1) NOT NULL,
 		o_totalprice         DECIMAL(15,2) NOT NULL,
@@ -290,7 +284,6 @@ const (
 		o_clerk              CHAR(15) NOT NULL,
 		o_shippriority       INTEGER NOT NULL,
 		o_comment            VARCHAR(79) NOT NULL,
-		UNIQUE INDEX o_ok (o_orderkey ASC),
 		INDEX o_ck (o_custkey ASC),
 		INDEX o_od (o_orderdate ASC)
 	)`
@@ -311,6 +304,7 @@ const (
 		l_shipinstruct  CHAR(25) NOT NULL,
 		l_shipmode      CHAR(10) NOT NULL,
 		l_comment       VARCHAR(44) NOT NULL,
+		PRIMARY KEY (l_orderkey, l_linenumber),
 		INDEX l_ok (l_orderkey ASC),
 		INDEX l_pk (l_partkey ASC),
 		INDEX l_sk (l_suppkey ASC),
