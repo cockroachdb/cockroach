@@ -88,6 +88,8 @@ message ImportDetails {
     // used if a job is resumed to guarantee that AddSSTable will not attempt
     // to add ranges with an old split point within them.
     repeated bytes samples = 15;
+    // Skip the first N lines of the input (e.g. to ignore column headers)
+    uint32 skip = 16;
   }
   repeated Table tables = 1 [(gogoproto.nullable) = false];
 }

@@ -74,6 +74,7 @@ Then the file could be converted and saved to /data/backup with:
 	cli.StringFlag(f, &csvNullIf, cliflagsccl.CSVNullIf, "")
 	cli.StringFlag(f, &csvComma, cliflagsccl.CSVComma, "")
 	cli.StringFlag(f, &csvComment, cliflagsccl.CSVComment, "")
+	cli.IntFlag(f, &csvSkip, cliflagsccl.CSVSkip, 0)
 	cli.StringFlag(f, &csvTempDir, cliflagsccl.CSVTempDir, os.TempDir())
 
 	loadShowCmd := &cobra.Command{
@@ -102,6 +103,7 @@ var (
 	csvDataNames []string
 	csvDest      string
 	csvNullIf    string
+	csvSkip      int
 	csvTableName string
 	csvTempDir   string
 )
@@ -121,6 +123,9 @@ func runLoadCSV(cmd *cobra.Command, args []string) error {
 	comment, err := util.GetSingleRune(csvComment)
 	if err != nil {
 		return errors.Wrap(err, "comment flag")
+	}
+	if csvSkip < 0 {
+		return errors.Errorf("skip must be >= 0")
 	}
 	var nullIf *string
 	// pflags doesn't have an option to have a flag without a default value
@@ -143,6 +148,7 @@ func runLoadCSV(cmd *cobra.Command, args []string) error {
 		csvDest,
 		comma,
 		comment,
+		uint32(csvSkip),
 		nullIf,
 		sstMaxSize,
 		csvTempDir,
