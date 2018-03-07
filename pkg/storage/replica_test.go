@@ -3643,10 +3643,9 @@ func TestEndTransactionDeadline(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if statusError, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
-					t.Errorf("expected TransactionStatusError but got %T: %s", pErr, pErr)
-				} else if e := "transaction deadline exceeded"; statusError.Msg != e {
-					t.Errorf("expected %s, got %s", e, statusError.Msg)
+				if retryErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
+					retryErr.Reason != roachpb.RETRY_DEADLINE_EXCEEDED {
+					t.Errorf("expected TransactionRetryError with RETRY_DEADLINE_EXCEEDED but got %T: %s", pErr, pErr)
 				}
 			case 2:
 				// Equal deadline.
@@ -3663,8 +3662,8 @@ func TestEndTransactionDeadline(t *testing.T) {
 	}
 }
 
-// Test that, when a pushed Snapshot txn would get a "deadline exceeded" error,
-// a Serializable one would get a serializable restart instead. In other words,
+// Test that, when a pushed Snapshot txn would get a RETRY_DEADLINE_EXCEEDED error,
+// a Serializable one would get a RETRY_SERIALIZABLE error instead. In other words,
 // for Serializable transactions, regular push retriable errors take precedence
 // over the deadline check.
 func TestSerializableDeadline(t *testing.T) {
@@ -3674,21 +3673,15 @@ func TestSerializableDeadline(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
-	const expectedTransactionStatusError int = 1
-	const expectedTransactionRestartError int = 2
-
 	tests := []struct {
-		isoLevel        enginepb.IsolationType
-		expectedErrType int
-		expectedErrMsg  string
+		isoLevel       enginepb.IsolationType
+		expectedErrMsg string
 	}{{
-		isoLevel:        enginepb.SNAPSHOT,
-		expectedErrType: expectedTransactionStatusError,
-		expectedErrMsg:  "TransactionStatusError: transaction deadline exceeded",
+		isoLevel:       enginepb.SNAPSHOT,
+		expectedErrMsg: "TransactionRetryError: retry txn \\(RETRY_DEADLINE_EXCEEDED\\)",
 	}, {
-		isoLevel:        enginepb.SERIALIZABLE,
-		expectedErrType: expectedTransactionRestartError,
-		expectedErrMsg:  "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE\\)",
+		isoLevel:       enginepb.SERIALIZABLE,
+		expectedErrMsg: "TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE\\)",
 	}}
 	for i, test := range tests {
 		t.Run(test.isoLevel.String(), func(t *testing.T) {
@@ -3727,18 +3720,10 @@ func TestSerializableDeadline(t *testing.T) {
 				t.Fatalf("expected %q, got: nil", test.expectedErrMsg)
 			}
 			err := pErr.GoError()
-			if test.expectedErrType == expectedTransactionStatusError {
-				if _, ok := err.(*roachpb.TransactionStatusError); !ok ||
-					!testutils.IsError(err, test.expectedErrMsg) {
-					t.Fatalf("expected %q, got: %s (%T)", test.expectedErrMsg,
-						err, err)
-				}
-			} else {
-				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
-					!testutils.IsError(err, test.expectedErrMsg) {
-					t.Fatalf("expected %q, got: %s (%T)", test.expectedErrMsg,
-						err, pErr.GetDetail())
-				}
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
+				!testutils.IsError(err, test.expectedErrMsg) {
+				t.Fatalf("expected %q, got: %s (%T)", test.expectedErrMsg,
+					err, pErr.GetDetail())
 			}
 		})
 	}
@@ -3855,10 +3840,9 @@ func TestEndTransactionDeadline_1PC(t *testing.T) {
 	ba.Header = etH
 	ba.Add(&bt, &put, &et)
 	_, pErr := tc.Sender().Send(context.Background(), ba)
-	if statusError, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
-		t.Errorf("expected TransactionStatusError but got %T: %s", pErr, pErr)
-	} else if e := "transaction deadline exceeded"; statusError.Msg != e {
-		t.Errorf("expected %s, got %s", e, statusError.Msg)
+	if retryErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok ||
+		retryErr.Reason != roachpb.RETRY_DEADLINE_EXCEEDED {
+		t.Errorf("expected TransactionRetryError (RETRY_DEADLINE_EXCEEDED) but got %T: %s", pErr, pErr)
 	}
 }
 

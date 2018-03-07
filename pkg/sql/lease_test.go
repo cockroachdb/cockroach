@@ -833,7 +833,7 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	if err := tx.Commit(); !testutils.IsError(err, "transaction deadline exceeded") {
+	if err := tx.Commit(); !testutils.IsError(err, "TransactionRetryError: retry txn \\(RETRY_DEADLINE_EXCEEDED\\)") {
 		t.Fatalf("err = %v", err)
 	}
 }

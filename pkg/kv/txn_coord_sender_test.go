@@ -569,10 +569,9 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				}
 			case 1:
 				// Past deadline.
-				if statusError, ok := err.(*roachpb.TransactionStatusError); !ok {
-					t.Fatalf("expected TransactionStatusError but got %T: %s", err, err)
-				} else if expected := "transaction deadline exceeded"; statusError.Msg != expected {
-					t.Fatalf("expected %s, got %s", expected, statusError.Msg)
+				if _, ok := err.(*roachpb.HandledRetryableTxnError); !ok ||
+					testutils.IsError(err, "TransactionRetryError: retry txn (RETRY_DEADLINE_EXCEEDED)") {
+					t.Fatalf("expected HandledRetryableTxnError but got %T: %s", err, err)
 				}
 			case 2:
 				// Equal deadline.

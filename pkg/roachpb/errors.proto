@@ -144,6 +144,9 @@ enum TransactionRetryReason {
   // A possible replay caused by duplicate begin txn or out-of-order
   // txn sequence number.
   RETRY_POSSIBLE_REPLAY = 4;
+  // The transaction deadline was exceeded at commit time, meaning the
+  // table leases may have expired and the transaction must retry.
+  RETRY_DEADLINE_EXCEEDED = 5;
 }
 
 // A TransactionRetryError indicates that the transaction must be
