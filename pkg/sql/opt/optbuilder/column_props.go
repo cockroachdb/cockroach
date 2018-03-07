@@ -27,6 +27,12 @@ import (
 // interface. During name resolution, unresolved column names in the AST are
 // replaced with a columnProps.
 type columnProps struct {
+	// origName is the original name of this column, either in its origin table,
+	// or when it was first synthesized.
+	origName tree.Name
+
+	// name is the current name of this column. It is usually the same as
+	// origName, unless this column was renamed with an AS expression.
 	name  tree.Name
 	table tree.TableName
 	typ   types.T
@@ -35,6 +41,32 @@ type columnProps struct {
 	// columns in the query.
 	index  opt.ColumnIndex
 	hidden bool
+
+	// expr is the expression that this column refers to, if any. expr is nil if
+	// the column does not refer to an expression.
+	expr tree.TypedExpr
+
+	// exprStr contains a stringified representation of expr, or the original
+	// column name if expr is nil. It is populated lazily inside getExprStr().
+	exprStr string
+}
+
+// getExprStr gets a stringified representation of the expression that this
+// column refers to, or the original column name if the column does not refer
+// to an expression. It caches the result in exprStr.
+func (c *columnProps) getExprStr() string {
+	if c.exprStr == "" {
+		if c.expr == nil {
+			if tableStr := c.table.String(); tableStr != "" {
+				c.exprStr = fmt.Sprintf("%s.%s", tableStr, c.origName)
+			} else {
+				c.exprStr = string(c.origName)
+			}
+		} else {
+			c.exprStr = symbolicExprStr(c.expr)
+		}
+	}
+	return c.exprStr
 }
 
 var _ tree.Expr = &columnProps{}

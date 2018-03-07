@@ -73,6 +73,32 @@ project
       └── variable: t.b [type=int, outer=(2)]
 
 build
+SELECT a FROM t ORDER BY 1 DESC
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1)]
+      └── variable: t.a [type=int, outer=(1)]
+
+# TODO(rytaft): This query causes an error in Postgres, but it is supported by
+# CockroachDB with the semantics:
+#   SELECT c FROM t GROUP BY c ORDER BY max(b) DESC;
+# We may decide to support this later, but for now this should cause an error.
+# TODO(rytaft): Improve this error message to be more descriptive. E.g., the
+# Postgres error message is "for SELECT DISTINCT, ORDER BY expressions must
+# appear in select list".
+build
+SELECT DISTINCT c FROM t ORDER BY b DESC
+----
+error: column name "b" not found
+
+build
 SELECT a AS foo, b FROM t ORDER BY foo DESC
 ----
 project
@@ -86,6 +112,171 @@ project
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
       └── variable: t.b [type=int, outer=(2)]
+
+# Check that ambiguous references to renders are properly reported.
+build
+SELECT a AS foo, b AS foo FROM t ORDER BY foo
+----
+error: ORDER BY "foo" is ambiguous
+
+# Check that no ambiguity is reported if the ORDER BY name refers
+# to two or more equivalent renders (special case in SQL92).
+build
+SELECT a AS foo, (a) AS foo FROM t ORDER BY foo
+----
+project
+ ├── columns: foo:1(int!null) foo:1(int!null)
+ ├── ordering: +1
+ ├── scan
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    └── ordering: +1
+ └── projections [outer=(1)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.a [type=int, outer=(1)]
+
+# Check that this orders by the aliased column b (i.e., column a), not the
+# original column b.
+build
+SELECT a AS b, b AS c FROM t ORDER BY b
+----
+project
+ ├── columns: b:1(int!null) c:2(int)
+ ├── ordering: +1
+ ├── scan
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    └── ordering: +1
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
+
+build
+SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
+----
+project
+ ├── columns: foo.bar:1(int!null) b:2(int)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
+
+build
+SELECT a AS foo, b FROM t ORDER BY a DESC
+----
+project
+ ├── columns: foo:1(int!null) b:2(int)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1,2)]
+      ├── variable: t.a [type=int, outer=(1)]
+      └── variable: t.b [type=int, outer=(2)]
+
+build
+SELECT b FROM t ORDER BY a DESC
+----
+project
+ ├── columns: b:2(int)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1,2)]
+      ├── variable: t.b [type=int, outer=(2)]
+      └── variable: t.a [type=int, outer=(1)]
+
+build
+SELECT b FROM t ORDER BY a DESC, b ASC
+----
+project
+ ├── columns: b:2(int)
+ ├── ordering: -1,+2
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1,+2
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1,2)]
+      ├── variable: t.b [type=int, outer=(2)]
+      └── variable: t.a [type=int, outer=(1)]
+
+build
+SELECT b FROM t ORDER BY a DESC, b DESC
+----
+project
+ ├── columns: b:2(int)
+ ├── ordering: -1,-2
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1,-2
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1,2)]
+      ├── variable: t.b [type=int, outer=(2)]
+      └── variable: t.a [type=int, outer=(1)]
+
+# both presentation and ordering
+build
+SELECT a, b, b FROM t ORDER BY c
+----
+project
+ ├── columns: a:1(int!null) b:2(int) b:2(int)
+ ├── ordering: +3
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: +3
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1-3)]
+      ├── variable: t.a [type=int, outer=(1)]
+      ├── variable: t.b [type=int, outer=(2)]
+      ├── variable: t.b [type=int, outer=(2)]
+      └── variable: t.c [type=bool, outer=(3)]
+
+build
+SELECT * FROM t ORDER BY (b, t.*)
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +2,+1,+2,+3
+ └── scan
+      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+
+build
+SELECT * FROM t ORDER BY (b, a), c
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +2,+1,+3
+ └── scan
+      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+
+build
+SELECT * FROM t ORDER BY b, (a, c)
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +2,+1,+3
+ └── scan
+      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+
+build
+SELECT * FROM t ORDER BY (b, (a, c))
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +2,+1,+3
+ └── scan
+      └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
@@ -144,3 +335,360 @@ sort
            └── plus [type=int, outer=(1,2)]
                 ├── variable: t.a [type=int, outer=(1)]
                 └── variable: t.b [type=int, outer=(2)]
+
+build
+SELECT a FROM t ORDER BY a+b DESC, a
+----
+sort
+ ├── columns: a:1(int!null)
+ ├── ordering: -4,+1
+ └── project
+      ├── columns: t.a:1(int!null) column4:4(int)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(1,2)]
+           ├── variable: t.a [type=int, outer=(1)]
+           └── plus [type=int, outer=(1,2)]
+                ├── variable: t.a [type=int, outer=(1)]
+                └── variable: t.b [type=int, outer=(2)]
+
+build
+SELECT a FROM t ORDER BY (((a)))
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: +1
+ ├── scan
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    └── ordering: +1
+ └── projections [outer=(1)]
+      └── variable: t.a [type=int, outer=(1)]
+
+build
+(((SELECT a FROM t))) ORDER BY a DESC
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1)]
+      └── variable: t.a [type=int, outer=(1)]
+
+build
+(((SELECT a FROM t ORDER BY a DESC)))
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: -1
+ ├── sort
+ │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ │    ├── ordering: -1
+ │    └── scan
+ │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+ └── projections [outer=(1)]
+      └── variable: t.a [type=int, outer=(1)]
+
+build
+((SELECT a FROM t ORDER BY a)) ORDER BY a
+----
+error: multiple ORDER BY clauses not allowed
+
+build
+SELECT CASE a WHEN 1 THEN b ELSE c END as val FROM t ORDER BY val
+----
+error: incompatible value type:: expected t.c to be of type int, found type bool
+
+build
+SELECT * FROM t ORDER BY 0
+----
+error: ORDER BY position 0 is not in select list
+
+build
+SELECT * FROM t ORDER BY true
+----
+error: non-integer constant in ORDER BY: true
+
+build
+SELECT * FROM t ORDER BY 'a'
+----
+error: non-integer constant in ORDER BY: 'a'
+
+build
+SELECT * FROM t ORDER BY 2.5
+----
+error: non-integer constant in ORDER BY: 2.5
+
+build
+SELECT * FROM t ORDER BY foo
+----
+error: column name "foo" not found
+
+build
+SELECT a FROM t ORDER BY a.b
+----
+error: no data source matches prefix: a
+
+build
+SELECT GENERATE_SERIES FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+build
+SELECT ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 100) ORDER BY ARRAY[GENERATE_SERIES]
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+build
+SELECT ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 100) ORDER BY 1
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+build
+SELECT ARRAY[GENERATE_SERIES] AS a FROM GENERATE_SERIES(1, 100) ORDER BY a
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+build
+SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY 1
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+build
+SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY GENERATE_SERIES
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+build
+SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY -GENERATE_SERIES
+----
+error: not yet implemented: table expr: *tree.FuncExpr
+
+
+# Sort should be skipped if the ORDER BY clause is constant.
+# (This skipping will probably happen later during optimization. The below
+# tests should just show that the ordering column is constant.)
+build
+SELECT * FROM t ORDER BY 1+2
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +4
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(1-3)]
+           ├── variable: t.a [type=int, outer=(1)]
+           ├── variable: t.b [type=int, outer=(2)]
+           ├── variable: t.c [type=bool, outer=(3)]
+           └── const: 3 [type=int]
+
+build
+SELECT 1, * FROM t ORDER BY 1
+----
+sort
+ ├── columns: column4:4(int) a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +4
+ └── project
+      ├── columns: column4:4(int) t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(1-3)]
+           ├── const: 1 [type=int]
+           ├── variable: t.a [type=int, outer=(1)]
+           ├── variable: t.b [type=int, outer=(2)]
+           └── variable: t.c [type=bool, outer=(3)]
+
+build
+SELECT * FROM t ORDER BY length('abc')
+----
+sort
+ ├── columns: a:1(int!null) b:2(int) c:3(bool)
+ ├── ordering: +4
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(1-3)]
+           ├── variable: t.a [type=int, outer=(1)]
+           ├── variable: t.b [type=int, outer=(2)]
+           ├── variable: t.c [type=bool, outer=(3)]
+           └── function: length [type=int]
+                └── const: 'abc' [type=string]
+
+# TODO(rytaft): The sort should reuse the synthesized column for b+2.
+build
+SELECT b+2 FROM t ORDER BY b+2
+----
+sort
+ ├── columns: column4:4(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: column4:4(int) column5:5(int)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(2)]
+           ├── plus [type=int, outer=(2)]
+           │    ├── variable: t.b [type=int, outer=(2)]
+           │    └── const: 2 [type=int]
+           └── plus [type=int, outer=(2)]
+                ├── variable: t.b [type=int, outer=(2)]
+                └── const: 2 [type=int]
+
+# Check that the sort picks up a renamed render properly.
+build
+SELECT b+2 AS y FROM t ORDER BY y
+----
+sort
+ ├── columns: y:4(int)
+ ├── ordering: +4
+ └── project
+      ├── columns: y:4(int)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(2)]
+           └── plus [type=int, outer=(2)]
+                ├── variable: t.b [type=int, outer=(2)]
+                └── const: 2 [type=int]
+
+# TODO(rytaft): The sort should reuse a synthesized column even after a rename.
+build
+SELECT b+2 AS y FROM t ORDER BY b+2
+----
+sort
+ ├── columns: y:4(int)
+ ├── ordering: +5
+ └── project
+      ├── columns: y:4(int) column5:5(int)
+      ├── scan
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections [outer=(2)]
+           ├── plus [type=int, outer=(2)]
+           │    ├── variable: t.b [type=int, outer=(2)]
+           │    └── const: 2 [type=int]
+           └── plus [type=int, outer=(2)]
+                ├── variable: t.b [type=int, outer=(2)]
+                └── const: 2 [type=int]
+
+exec-ddl
+CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
+----
+TABLE bar
+ ├── id int not null
+ ├── baz string
+ ├── INDEX primary
+ │    └── id int not null
+ └── INDEX i_bar
+      ├── baz string
+      └── id int not null (storing)
+
+build
+SELECT * FROM bar ORDER BY baz, id
+----
+sort
+ ├── columns: id:1(int!null) baz:2(string)
+ ├── ordering: +2,+1
+ └── scan
+      └── columns: bar.id:1(int!null) bar.baz:2(string)
+
+exec-ddl
+CREATE TABLE abcd (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX abc (a, b, c)
+)
+----
+TABLE abcd
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX abc
+      ├── a int not null
+      ├── b int
+      └── c int
+
+# Verify that projections after ORDER BY perform correctly (i.e., the outer
+# expression does not guarantee it will apply the ORDER BY).
+
+build
+SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
+----
+project
+ ├── columns: column5:5(int)
+ ├── scan
+ │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ └── projections [outer=(1,2)]
+      └── plus [type=int, outer=(1,2)]
+           ├── variable: abcd.a [type=int, outer=(1)]
+           └── variable: abcd.b [type=int, outer=(2)]
+
+build
+SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
+----
+project
+ ├── columns: column5:5(int)
+ ├── scan
+ │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ └── projections [outer=(2,4)]
+      └── plus [type=int, outer=(2,4)]
+           ├── variable: abcd.b [type=int, outer=(2)]
+           └── variable: abcd.d [type=int, outer=(4)]
+
+build
+SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+----
+sort
+ ├── columns: x:1(string)
+ ├── ordering: +1
+ └── values
+      ├── columns: column1:1(string)
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'a' [type=string]
+      ├── tuple [type=tuple{string}]
+      │    └── const: 'b' [type=string]
+      └── tuple [type=tuple{string}]
+           └── const: 'c' [type=string]
+
+exec-ddl
+CREATE TABLE blocks (
+  block_id  INT,
+  writer_id STRING,
+  block_num INT,
+  raw_bytes BYTES,
+  PRIMARY KEY (block_id, writer_id, block_num)
+)
+----
+TABLE blocks
+ ├── block_id int not null
+ ├── writer_id string not null
+ ├── block_num int not null
+ ├── raw_bytes bytes
+ └── INDEX primary
+      ├── block_id int not null
+      ├── writer_id string not null
+      └── block_num int not null
+
+# Regression test for #13696.
+build
+SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num
+----
+project
+ ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
+ ├── ordering: +1,+2,+3
+ ├── scan
+ │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.raw_bytes:4(bytes)
+ │    └── ordering: +1,+2,+3
+ └── projections [outer=(1-3)]
+      ├── variable: blocks.block_id [type=int, outer=(1)]
+      ├── variable: blocks.writer_id [type=string, outer=(2)]
+      ├── variable: blocks.block_num [type=int, outer=(3)]
+      └── variable: blocks.block_id [type=int, outer=(1)]

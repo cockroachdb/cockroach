@@ -23,9 +23,10 @@ import (
 // buildProjectionList builds a set of memo groups that represent the given
 // list of select expressions.
 //
-// The first return value `projections` is an ordered list of top-level memo
-// groups corresponding to each select expression. See Builder.buildStmt above
-// for a description of the remaining input and return values.
+// The return value `projections` is an ordered list of top-level memo
+// groups corresponding to each select expression. See Builder.buildStmt
+// for a description of the remaining input values (outScope is passed as
+// a parameter here rather than a return value).
 //
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
@@ -197,6 +198,6 @@ func (b *Builder) buildDefaultScalarProjection(
 		}
 	}
 
-	b.synthesizeColumn(outScope, label, texpr.ResolvedType())
+	b.synthesizeColumn(outScope, label, texpr.ResolvedType(), texpr)
 	return group
 }

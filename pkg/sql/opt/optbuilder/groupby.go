@@ -389,7 +389,7 @@ func (b *Builder) buildAggregateFunction(
 	// expression and synthesize a column for the aggregation result.
 	col = aggOutScope.findAggregate(info)
 	if col == nil {
-		col = b.synthesizeColumn(aggOutScope, label, f.ResolvedType())
+		col = b.synthesizeColumn(aggOutScope, label, f.ResolvedType(), f)
 
 		// Add the aggregate to the list of aggregates that need to be computed by
 		// the groupby expression.
