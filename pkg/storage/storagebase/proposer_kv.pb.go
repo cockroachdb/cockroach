@@ -132,7 +132,7 @@ type ReplicatedEvalResult struct {
 	// Updates to the Replica's ReplicaState. By convention and as outlined on
 	// the comment on the ReplicaState message, this field is sparsely populated
 	// and any field set overwrites the corresponding field in the state, perhaps
-	// which additional side effects (for instance on a descriptor update).
+	// with additional side effects (for instance on a descriptor update).
 	State           *ReplicaState                              `protobuf:"bytes,2,opt,name=state" json:"state,omitempty"`
 	Split           *Split                                     `protobuf:"bytes,3,opt,name=split" json:"split,omitempty"`
 	Merge           *Merge                                     `protobuf:"bytes,4,opt,name=merge" json:"merge,omitempty"`
