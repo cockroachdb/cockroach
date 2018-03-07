@@ -57,6 +57,11 @@ Valid fields:
 		Description: `if specified, allows comment lines starting with this character`,
 	}
 
+	CSVSkip = cliflags.FlagInfo{
+		Name:        "skip",
+		Description: `if specified, skips the first N lines of the input file (e.g. to ignore column headers)`,
+	}
+
 	CSVTempDir = cliflags.FlagInfo{
 		Name:        "tempdir",
 		Description: `directory to store intermediate temp files`,
