@@ -155,7 +155,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if
 		// the surrounding query only uses parts of its results.
-		p.setUnlimited(n.run.rows)
+		p.setUnlimited(n.source)
 	case *insertNode:
 		// A limit does not propagate into a mutation. When there is a
 		// surrounding query, the mutation must run to completion even if

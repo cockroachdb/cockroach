@@ -225,7 +225,6 @@ type planNodeRequireSpool interface {
 }
 
 var _ planNodeRequireSpool = &insertNode{}
-var _ planNodeRequireSpool = &updateNode{}
 var _ planNodeRequireSpool = &serializeNode{}
 
 // planNodeSpool serves as marker for nodes that can perform all their
