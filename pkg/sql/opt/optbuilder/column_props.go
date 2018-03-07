@@ -35,6 +35,17 @@ type columnProps struct {
 	// columns in the query.
 	index  opt.ColumnIndex
 	hidden bool
+
+	// exprStr contains a stringified representation of the expression that this
+	// column refers to.
+	exprStr string
+}
+
+func (c *columnProps) getExprStr() string {
+	if c.exprStr == "" {
+		return c.String()
+	}
+	return c.exprStr
 }
 
 var _ tree.Expr = &columnProps{}

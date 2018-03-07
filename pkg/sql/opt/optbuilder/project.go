@@ -23,9 +23,10 @@ import (
 // buildProjectionList builds a set of memo groups that represent the given
 // list of select expressions.
 //
-// The first return value `projections` is an ordered list of top-level memo
-// groups corresponding to each select expression. See Builder.buildStmt above
-// for a description of the remaining input and return values.
+// The return value `projections` is an ordered list of top-level memo
+// groups corresponding to each select expression. See Builder.buildStmt
+// for a description of the remaining input values (outScope is passed as
+// a parameter here rather than a return value).
 //
 // As a side-effect, the appropriate scopes are updated with aggregations
 // (scope.groupby.aggs)
@@ -141,6 +142,8 @@ func (b *Builder) buildVariableProjection(
 	// as a visible member of an anonymous table.
 	col = &outScope.cols[len(outScope.cols)-1]
 	if label != "" {
+		// Save the original name for use by ORDER BY.
+		col.exprStr = col.String()
 		col.name = tree.Name(label)
 	}
 	col.table.TableName = ""
@@ -187,6 +190,7 @@ func (b *Builder) buildDefaultScalarProjection(
 		if col := inScope.findGrouping(group); col != nil {
 			// The column already exists, so use that instead.
 			col = &b.colMap[col.index]
+			col.exprStr = symbolicExprStr(texpr)
 			if label != "" {
 				col.name = tree.Name(label)
 			}
@@ -197,6 +201,7 @@ func (b *Builder) buildDefaultScalarProjection(
 		}
 	}
 
-	b.synthesizeColumn(outScope, label, texpr.ResolvedType())
+	col := b.synthesizeColumn(outScope, label, texpr.ResolvedType())
+	col.exprStr = symbolicExprStr(texpr)
 	return group
 }
