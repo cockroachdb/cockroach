@@ -46,9 +46,15 @@ type Factory interface {
 	// the given input node.
 	ConstructFilter(n Node, filter tree.TypedExpr) (Node, error)
 
-	// ConstructProject returns a node that applies a projection on the results of
-	// the given input node.
-	ConstructProject(n Node, exprs tree.TypedExprs, colNames []string) (Node, error)
+	// ConstructSimpleProject returns a node that applies a "simple" projection on the
+	// results of the given input node. A simple projection is one that does not
+	// involve new expressions; it's just a reshuffling of columns. This is a
+	// more efficient version of ConstructRender.
+	ConstructSimpleProject(n Node, cols []int, colNames []string) (Node, error)
+
+	// ConstructRender returns a node that applies a projection on the results of
+	// the given input node. The projection can contain new expressions.
+	ConstructRender(n Node, exprs tree.TypedExprs, colNames []string) (Node, error)
 
 	// ConstructJoin returns a node that runs a hash-join between the results
 	// of two input nodes. The expression can refer to columns from both inputs
