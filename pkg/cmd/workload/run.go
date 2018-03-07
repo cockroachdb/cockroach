@@ -78,7 +78,7 @@ func init() {
 		genInitCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
 		genInitCmd.Flags().AddFlagSet(initFlags)
 		genInitCmd.Flags().AddFlagSet(genFlags)
-		genInitCmd.RunE = cmdHelper(gen, runInit)
+		genInitCmd.Run = cmdHelper(gen, runInit)
 		initCmd.AddCommand(genInitCmd)
 
 		genRunCmd := &cobra.Command{Use: meta.Name, Short: meta.Description}
@@ -90,7 +90,7 @@ func init() {
 			f.Usage += ` (implies --init)`
 			genRunCmd.Flags().AddFlag(&f)
 		})
-		genRunCmd.RunE = cmdHelper(gen, runRun)
+		genRunCmd.Run = cmdHelper(gen, runRun)
 		runCmd.AddCommand(genRunCmd)
 	}
 	rootCmd.AddCommand(initCmd)
@@ -99,10 +99,10 @@ func init() {
 
 func cmdHelper(
 	gen workload.Generator, fn func(gen workload.Generator, urls []string, dbName string) error,
-) func(*cobra.Command, []string) error {
+) func(*cobra.Command, []string) {
 	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
 
-	return func(cmd *cobra.Command, args []string) error {
+	return handleErrs(func(cmd *cobra.Command, args []string) error {
 		if h, ok := gen.(workload.Hookser); ok {
 			if err := h.Hooks().Validate(); err != nil {
 				return err
@@ -124,7 +124,7 @@ func cmdHelper(
 			return err
 		}
 		return fn(gen, urls, dbName)
-	}
+	})
 }
 
 // numOps keeps a global count of successful operations.
@@ -262,8 +262,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				log.Error(ctx, err)
 				continue
 			}
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 
 		case <-tick:
 			startElapsed := timeutil.Since(start)
