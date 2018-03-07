@@ -1303,7 +1303,7 @@ func TestRepartitioning(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if tn.Table() != test.new.parsed.tableName || zs.Partition == "" {
+					if tn.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
 						// Ignore zone configs that do not target a partition of this table.
 						continue
 					}
