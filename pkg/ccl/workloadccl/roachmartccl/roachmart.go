@@ -223,7 +223,7 @@ func (m *roachmart) Ops(
 				}
 			}
 			start := timeutil.Now()
-			_, err := db.ExecContext(ctx, query, zone, email)
+			_, err := db.Exec(query, zone, email)
 			if wantLocal {
 				hists.Get(`local`).Record(timeutil.Since(start))
 			} else {
