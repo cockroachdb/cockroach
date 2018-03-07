@@ -198,14 +198,23 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numOrdersPerWarehouse)
 
-	// We need a random permutation of customers that stable for all orders in a
-	// district, so use the district ID to seed the random permuation.
-	// TODO(dan): Cache this in w.
-	var randomCIDs [numCustomersPerDistrict]int
-	for i, cID := range rand.New(rand.NewSource(int64(dID))).Perm(numCustomersPerDistrict) {
-		randomCIDs[i] = cID + 1
+	var cID int
+	{
+		w.randomCIDsCache.Lock()
+		if w.randomCIDsCache.values == nil {
+			w.randomCIDsCache.values = make([][]int, numDistrictsPerWarehouse*w.warehouses+1)
+		}
+		if w.randomCIDsCache.values[dID] == nil {
+			// We need a random permutation of customers that stable for all orders in a
+			// district, so use the district ID to seed the random permuation.
+			w.randomCIDsCache.values[dID] = make([]int, numCustomersPerDistrict)
+			for i, cID := range rand.New(rand.NewSource(int64(dID))).Perm(numCustomersPerDistrict) {
+				w.randomCIDsCache.values[dID][i] = cID + 1
+			}
+		}
+		cID = w.randomCIDsCache.values[dID][oID-1]
+		w.randomCIDsCache.Unlock()
 	}
-	cID := randomCIDs[oID-1]
 
 	// TODO(dan): This doesn't match the spec, it should be rand 5-15 per order.
 	olCnt := hackOrderLinesPerOrder
