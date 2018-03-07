@@ -18,6 +18,7 @@ package tpcc
 import (
 	gosql "database/sql"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -38,6 +39,11 @@ type tpcc struct {
 
 	txs         []tx
 	totalWeight int
+
+	randomCIDsCache struct {
+		syncutil.Mutex
+		values [][]int
+	}
 }
 
 func init() {
