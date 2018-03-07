@@ -447,6 +447,17 @@ var varGen = map[string]sessionVar{
 		Reset: func(_ *sessionDataMutator) error { return nil },
 	},
 
+	`statement_timeout`: {
+		Set: setStmtTimeout,
+		Get: func(evalCtx *extendedEvalContext) string {
+			return evalCtx.SessionData.StmtTimeout.String()
+		},
+		Reset: func(m *sessionDataMutator) error {
+			m.SetStmtTimeout(0)
+			return nil
+		},
+	},
+
 	// See https://www.postgresql.org/docs/10/static/runtime-config-client.html#GUC-TIMEZONE
 	`timezone`: {
 		Get: func(evalCtx *extendedEvalContext) string {

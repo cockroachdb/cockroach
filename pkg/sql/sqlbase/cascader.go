@@ -956,7 +956,7 @@ func (c *cascader) cascadeAll(
 	for {
 		select {
 		case <-ctx.Done():
-			return NewQueryCanceledError()
+			return QueryCanceledError
 		default:
 		}
 		elem, exists := cascadeQ.dequeue()
