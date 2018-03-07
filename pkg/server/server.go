@@ -904,6 +904,77 @@ func (s *Server) Start(ctx context.Context) error {
 		AssetInfo: ui.AssetInfo,
 	}))
 
+	// Initialize grpc-gateway mux and context in order to get the /health
+	// endpoint working even before the node has fully initialized.
+	jsonpb := &protoutil.JSONPb{
+		EnumsAsInts:  true,
+		EmitDefaults: true,
+		Indent:       "  ",
+	}
+	protopb := new(protoutil.ProtoPb)
+	gwMux := gwruntime.NewServeMux(
+		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
+		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
+		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
+		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
+	)
+	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
+	s.stopper.AddCloser(stop.CloserFn(gwCancel))
+
+	var authHandler http.Handler = gwMux
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
+	}
+
+	// Setup HTTP<->gRPC handlers.
+	c1, c2 := net.Pipe()
+
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		for _, c := range []net.Conn{c1, c2} {
+			if err := c.Close(); err != nil {
+				log.Fatal(workersCtx, err)
+			}
+		}
+	})
+
+	s.stopper.RunWorker(workersCtx, func(context.Context) {
+		netutil.FatalIfUnexpected(s.grpc.Serve(&singleListener{
+			conn: c1,
+		}))
+	})
+
+	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
+	// uniquely in-process connection.
+	dialOpts, err := s.rpcContext.GRPCDialOptions()
+	if err != nil {
+		return err
+	}
+	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
+		dialOpts,
+		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
+			return c2, nil
+		}),
+	)...)
+	if err != nil {
+		return err
+	}
+	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
+		<-s.stopper.ShouldQuiesce()
+		if err := conn.Close(); err != nil {
+			log.Fatal(workersCtx, err)
+		}
+	})
+
+	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
+		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
+			return err
+		}
+	}
+	s.mux.Handle("/health", gwMux)
+
 	s.engines, err = s.cfg.CreateEngines(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to create engines")
@@ -1049,76 +1120,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		return errors.Wrap(err, "inspecting engines")
 	}
 
-	// Initialize grpc-gateway mux and context.
-	jsonpb := &protoutil.JSONPb{
-		EnumsAsInts:  true,
-		EmitDefaults: true,
-		Indent:       "  ",
-	}
-	protopb := new(protoutil.ProtoPb)
-	gwMux := gwruntime.NewServeMux(
-		gwruntime.WithMarshalerOption(gwruntime.MIMEWildcard, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.JSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.AltJSONContentType, jsonpb),
-		gwruntime.WithMarshalerOption(httputil.ProtoContentType, protopb),
-		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
-		gwruntime.WithOutgoingHeaderMatcher(authenticationHeaderMatcher),
-	)
-	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
-	s.stopper.AddCloser(stop.CloserFn(gwCancel))
-
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
-
-	// Setup HTTP<->gRPC handlers.
-
-	c1, c2 := net.Pipe()
-
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		for _, c := range []net.Conn{c1, c2} {
-			if err := c.Close(); err != nil {
-				log.Fatal(workersCtx, err)
-			}
-		}
-	})
-
-	s.stopper.RunWorker(workersCtx, func(context.Context) {
-		netutil.FatalIfUnexpected(s.grpc.Serve(&singleListener{
-			conn: c1,
-		}))
-	})
-
-	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
-	// uniquely in-process connection.
-	dialOpts, err := s.rpcContext.GRPCDialOptions()
-	if err != nil {
-		return err
-	}
-	conn, err := grpc.DialContext(ctx, s.cfg.AdvertiseAddr, append(
-		dialOpts,
-		grpc.WithDialer(func(string, time.Duration) (net.Conn, error) {
-			return c2, nil
-		}),
-	)...)
-	if err != nil {
-		return err
-	}
-	s.stopper.RunWorker(workersCtx, func(workersCtx context.Context) {
-		<-s.stopper.ShouldQuiesce()
-		if err := conn.Close(); err != nil {
-			log.Fatal(workersCtx, err)
-		}
-	})
-
-	for _, gw := range []grpcGatewayServer{s.admin, s.status, s.authentication, &s.tsServer} {
-		if err := gw.RegisterGateway(gwCtx, gwMux, conn); err != nil {
-			return err
-		}
-	}
-
 	// Now that we have a monotonic HLC wrt previous incarnations of the process,
 	// init all the replicas. At this point *some* store has been bootstrapped or
 	// we're joining an existing cluster for the first time.
@@ -1190,7 +1191,6 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.mux.Handle(ts.URLPrefix, authHandler)
 	s.mux.Handle(statusPrefix, authHandler)
 	s.mux.Handle(authPrefix, gwMux)
-	s.mux.Handle("/health", gwMux)
 	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
 	log.Event(ctx, "added http endpoints")
 
