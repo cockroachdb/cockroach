@@ -522,6 +522,15 @@ func runStmtAsRootWithRetry(ctx context.Context, r runner, stmt string) error {
 	return err
 }
 
+// SettingsDefaultOverrides documents the effect of several migrations that add
+// an explicit value for a setting, effectively changing the "default value"
+// from what was defined in code.
+var SettingsDefaultOverrides = map[string]string{
+	"diagnostics.reporting.enabled": "true",
+	"trace.debug.enable":            "false",
+	"cluster.secret":                "<random>",
+}
+
 func optInToDiagnosticsStatReporting(ctx context.Context, r runner) error {
 	// We're opting-out of the automatic opt-in. See discussion in updates.go.
 	if reportingOptOut {
