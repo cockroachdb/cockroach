@@ -60,6 +60,12 @@ func newNamedHistogram(name string) *NamedHistogram {
 
 // Record saves a new datapoint and should be called once per logical operation.
 func (w *NamedHistogram) Record(elapsed time.Duration) {
+	w.RecordCount(elapsed, 1)
+}
+
+// RecordCount saves a new datapoint, counting it as the passed number of
+// logical operations.
+func (w *NamedHistogram) RecordCount(elapsed time.Duration, count int64) {
 	if elapsed < minLatency {
 		elapsed = minLatency
 	} else if elapsed > maxLatency {
@@ -68,7 +74,7 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 
 	w.mu.Lock()
 	err := w.mu.hist.Current.RecordValue(elapsed.Nanoseconds())
-	w.mu.numOps++
+	w.mu.numOps += count
 	w.mu.Unlock()
 
 	if err != nil {

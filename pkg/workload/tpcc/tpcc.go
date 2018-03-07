@@ -208,7 +208,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	if w.doWaits {
 		// TODO(dan): doWaits is currently our catch-all for "run this to spec".
 		// It should probably be renamed to match.
-		ql.ResultHist = `newOrder`
+		ql.ResultHist = `tpmC`
 	}
 	return ql, nil
 }

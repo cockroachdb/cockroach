@@ -135,7 +135,13 @@ func (w *worker) run(ctx context.Context) error {
 	if _, err := t.run(w.config, w.db, warehouseID); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
-	w.hists.Get(t.name).Record(timeutil.Since(start))
+	elapsed := timeutil.Since(start)
+	w.hists.Get(t.name).Record(elapsed)
+	if w.config.doWaits && t.name == `newOrder` {
+		// tpmC is defined as per minute, but the histograms operate per second,
+		// so hack it.
+		w.hists.Get(`tpmC`).RecordCount(elapsed, 60)
+	}
 
 	if w.config.doWaits {
 		// 5.2.5.4: Think time is taken independently from a negative exponential
