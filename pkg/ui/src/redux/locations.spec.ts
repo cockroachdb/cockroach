@@ -62,22 +62,22 @@ describe("selectLocations", function() {
     assert.deepEqual(selectLocations(state), []);
   });
 
-  it("returns an empty array if location data is invalid", function() {
-    const state = {
-      cachedData: {
-        locations: {
-          data: protos.cockroach.server.serverpb.LocationsResponse.fromObject({
-            locations: [
-              {},
-            ],
-          }),
-          inFlight: false,
-          valid: false,
-        },
-      },
-    };
+  // Data must still be returned while the state is invalid to avoid
+  // flickering while the data is being refreshed.
+  it("returns location data if it exists but is invalid", function() {
+    const locationData = [{
+      locality_key: "city",
+      locality_value: "nyc",
+      latitude: 123,
+      longitude: 456,
+    }];
+    const state = makeStateWithLocations(locationData);
+    state.cachedData.locations.valid = false;
 
-    assert.deepEqual(selectLocations(state), []);
+    assert.deepEqual(
+      selectLocations(state).map(climbOutOfTheMorass),
+      locationData,
+    );
   });
 
   it("returns location data if valid", function() {
