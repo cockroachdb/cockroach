@@ -1012,42 +1012,6 @@ SELECT STDDEV(x) FROM t.xyz WHERE x = 1
 column4:decimal
 NULL
 
-# Numerical stability test for VARIANCE/STDDEV.
-# See https://www.johndcook.com/blog/2008/09/28/theoretical-explanation-for-numerical-results.
-# Avoid using random() since we do not have the deterministic option to specify a pseudo-random seed yet.
-# Note under distsql, this is non-deterministic since the running variance/stddev algorithms depend on
-# the local sum of squared difference values which depend on how the data is distributed across the distsql nodes.
-exec-raw
-CREATE TABLE t.mnop (
-  m INT PRIMARY KEY,
-  n FLOAT,
-  o DECIMAL,
-  p BIGINT
-)
-----
-
-exec-raw
-INSERT INTO t.mnop (m, n) SELECT i, (1e9 + i/2e4)::float FROM
-  GENERATE_SERIES(1, 2e4) AS I(i)
-----
-
-exec-raw
-UPDATE t.mnop SET o = n::decimal, p = (n * 10)::bigint
-----
-
-exec
-SELECT round(VARIANCE(n), 2), round(VARIANCE(n), 2), round(VARIANCE(p)) FROM t.mnop
-----
-column6:float  column7:float  column9:decimal
-0.08           0.08           8
-
-
-exec
-SELECT round(STDDEV(n), 2), round(STDDEV(n), 2), round(STDDEV(p)) FROM t.mnop
-----
-column6:float  column7:float  column9:decimal
-0.29           0.29           3
-
 exec
 SELECT AVG(1::int)::float, AVG(2::float)::float, AVG(3::decimal)::float
 ----
