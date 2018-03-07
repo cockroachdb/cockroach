@@ -176,8 +176,48 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 	return f, nil
 }
 
-// ConstructProject is part of the exec.Factory interface.
-func (ee *execEngine) ConstructProject(
+// ConstructSimpleProject is part of the exec.Factory interface.
+func (ee *execEngine) ConstructSimpleProject(
+	n exec.Node, cols []int, colNames []string,
+) (exec.Node, error) {
+	// Check if this is the identity projection, in which case we only need to
+	// rename columns.
+	inputCols := planColumns(n.(planNode))
+	if len(cols) == len(inputCols) {
+		identity := true
+		for i := range cols {
+			if cols[i] != i {
+				identity = false
+				break
+			}
+		}
+		if identity {
+			inputCols = planMutableColumns(n.(planNode))
+			for i := range inputCols {
+				inputCols[i].Name = colNames[i]
+			}
+			return n, nil
+		}
+	}
+
+	src := asDataSource(n)
+	r := &renderNode{
+		source:     src,
+		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+		render:     make([]tree.TypedExpr, len(cols)),
+		columns:    make([]sqlbase.ResultColumn, len(cols)),
+	}
+	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
+	for i := range cols {
+		v := r.ivarHelper.IndexedVar(cols[i])
+		r.render[i] = v
+		r.columns[i] = sqlbase.ResultColumn{Name: colNames[i], Typ: v.ResolvedType()}
+	}
+	return r, nil
+}
+
+// ConstructRender is part of the exec.Factory interface.
+func (ee *execEngine) ConstructRender(
 	n exec.Node, exprs tree.TypedExprs, colNames []string,
 ) (exec.Node, error) {
 	// Check if this is the identity projection, in which case we only need to
@@ -204,14 +244,14 @@ func (ee *execEngine) ConstructProject(
 	r := &renderNode{
 		source:     src,
 		sourceInfo: sqlbase.MultiSourceInfo{src.info},
+		render:     make([]tree.TypedExpr, len(exprs)),
+		columns:    make([]sqlbase.ResultColumn, len(exprs)),
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 	for i, expr := range exprs {
 		expr = r.ivarHelper.Rebind(expr, false /* alsoReset */, true /* normalizeToNonNil */)
-		col := sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
-		// We don't need to pass the render string, it is only used
-		// in planning code.
-		r.addRenderColumn(expr, "" /* exprStr */, col)
+		r.render[i] = expr
+		r.columns[i] = sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
 	}
 	return r, nil
 }
