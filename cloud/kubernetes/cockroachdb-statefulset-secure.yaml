@@ -206,6 +206,9 @@ spec:
           mountPath: /cockroach/cockroach-data
         - name: certs
           mountPath: /cockroach/cockroach-certs
+        env:
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-insecure
         command:
           - "/bin/bash"
           - "-ecx"

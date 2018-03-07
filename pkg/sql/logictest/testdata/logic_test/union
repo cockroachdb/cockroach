@@ -236,4 +236,4 @@ union             ·     ·
  │                size  1 column, 1 row
  └── render       ·     ·
       └── values  ·     ·
-·                 size  3 columns, 5 rows
+·                 size  3 columns, 6 rows
