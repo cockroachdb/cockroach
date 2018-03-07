@@ -15,11 +15,10 @@
 package execbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
@@ -44,7 +43,7 @@ func (b *Builder) Build() (exec.Node, error) {
 
 func (b *Builder) build(ev xform.ExprView) (exec.Node, error) {
 	if !ev.IsRelational() {
-		panic(fmt.Sprintf("building execution for non-relational operator %s", ev.Operator()))
+		return nil, errors.Errorf("building execution for non-relational operator %s", ev.Operator())
 	}
 	plan, err := b.buildRelational(ev)
 	if err != nil {
