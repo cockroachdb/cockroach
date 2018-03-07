@@ -1238,10 +1238,16 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		}
 	})
 
-	if err := s.jobRegistry.Start(
-		ctx, s.stopper, s.nodeLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
-	); err != nil {
-		return err
+	{
+		var regLiveness jobs.NodeLiveness = s.nodeLiveness
+		if testingLiveness := s.cfg.TestingKnobs.RegistryLiveness; testingLiveness != nil {
+			regLiveness = testingLiveness.(*jobs.FakeNodeLiveness)
+		}
+		if err := s.jobRegistry.Start(
+			ctx, s.stopper, regLiveness, jobs.DefaultCancelInterval, jobs.DefaultAdoptInterval,
+		); err != nil {
+			return err
+		}
 	}
 
 	// Before serving SQL requests, we have to make sure the database is
