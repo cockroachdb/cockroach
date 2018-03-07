@@ -47,7 +47,7 @@ interface NodeCanvasContainerProps {
   refreshLocations: typeof refreshLocations;
 }
 
-interface NodeCanvasContainerOwnProps {
+export interface NodeCanvasContainerOwnProps {
   tiers: LocalityTier[];
 }
 
