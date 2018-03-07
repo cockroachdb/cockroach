@@ -734,6 +734,7 @@ func TestLint(t *testing.T) {
 			}),
 			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
 			stream.GrepNot(`\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows`),
+			stream.GrepNot(`\.og\.go:[0-9]+: declaration of ".*" shadows`),
 		), func(s string) {
 			t.Error(s)
 		}); err != nil {
