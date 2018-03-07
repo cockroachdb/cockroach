@@ -61,6 +61,17 @@ func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 
 // ProcessComputedColumns adds columns which are computed to the set of columns
 // being updated and returns the computation exprs for those columns.
+//
+// The original column descriptors are listed at the beginning of
+// the first return slice, and the computed column descriptors come after that.
+// The 2nd return slice is an alias for the part of the 1st return slice
+// that corresponds to computed columns.
+// The 3rd slice has one expression per computed column; that is, its
+// length is equal to that of the 2nd return slice.
+//
+// TODO(justin/knz): This can be made less work intensive by only selecting
+// computed columns that depend on one of the updated columns. See issue
+// https://github.com/cockroachdb/cockroach/issues/23523.
 func ProcessComputedColumns(
 	ctx context.Context,
 	cols []sqlbase.ColumnDescriptor,

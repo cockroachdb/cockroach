@@ -593,10 +593,14 @@ func GenerateInsertRow(
 	return rowVals, nil
 }
 
+// processColumns returns the column descriptors identified by the
+// given name list. It also checks that a given column name is only
+// listed once. If no column names are given (special case for
+// INSERT), the descriptors for all visible columns are returned.
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, node tree.NameList,
+	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList,
 ) ([]sqlbase.ColumnDescriptor, error) {
-	if node == nil {
+	if len(nameList) == 0 {
 		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
 		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
 		// hidden columns. At present, the only hidden column is the implicit rowid
@@ -604,16 +608,16 @@ func (p *planner) processColumns(
 		return tableDesc.VisibleColumns(), nil
 	}
 
-	cols := make([]sqlbase.ColumnDescriptor, len(node))
-	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(node))
-	for i, colName := range node {
+	cols := make([]sqlbase.ColumnDescriptor, len(nameList))
+	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(nameList))
+	for i, colName := range nameList {
 		col, err := tableDesc.FindActiveColumnByName(string(colName))
 		if err != nil {
 			return nil, err
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to the same column %q", &node[i])
+			return nil, fmt.Errorf("multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col
