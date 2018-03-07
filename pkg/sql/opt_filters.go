@@ -291,7 +291,7 @@ func (p *planner) propagateFilters(
 		}
 
 	case *updateNode:
-		if n.run.rows, err = p.triggerFilterPropagation(ctx, n.run.rows); err != nil {
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
 			return plan, extraFilter, err
 		}
 

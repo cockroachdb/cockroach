@@ -157,9 +157,10 @@ type tableUpdater struct {
 	ru sqlbase.RowUpdater
 
 	// Set by init.
-	txn     *client.Txn
-	evalCtx *tree.EvalContext
-	b       *client.Batch
+	txn       *client.Txn
+	evalCtx   *tree.EvalContext
+	b         *client.Batch
+	batchSize int
 }
 
 func (ti *tableInserter) close(_ context.Context) {}
@@ -173,11 +174,23 @@ func (tu *tableUpdater) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	return nil
 }
 
-func (tu *tableUpdater) row(
-	ctx context.Context, values tree.Datums, traceKV bool,
+func (tu *tableUpdater) rotateBatch(ctx context.Context) error {
+	if err := tu.txn.Run(ctx, tu.b); err != nil {
+		return err
+	}
+	tu.b = tu.txn.NewBatch()
+	tu.batchSize = 0
+	return nil
+}
+
+func (tu *tableUpdater) row(context.Context, tree.Datums, bool) (tree.Datums, error) {
+	panic("unimplemented")
+}
+
+func (tu *tableUpdater) row2(
+	ctx context.Context, oldValues, updateValues tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	oldValues := values[:len(tu.ru.FetchCols)]
-	updateValues := values[len(tu.ru.FetchCols):]
+	tu.batchSize++
 	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, sqlbase.CheckFKs, traceKV)
 }
 

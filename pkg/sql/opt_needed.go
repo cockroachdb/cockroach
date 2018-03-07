@@ -171,10 +171,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 		setNeededColumns(n.source, allColumns(n.source))
 
 	case *updateNode:
-		// TODO(knz): This can be optimized by omitting the columns that
-		// are not part of the primary key, do not participate in
-		// foreign key relations and that are not needed for RETURNING.
-		setNeededColumns(n.run.rows, allColumns(n.run.rows))
+		setNeededColumns(n.source, allColumns(n.source))
 
 	case *insertNode:
 		// TODO(knz): This can be optimized by omitting the columns that
