@@ -26,6 +26,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/util/limit"
+
 	"github.com/coreos/etcd/raft"
 	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
@@ -125,6 +127,26 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
 	math.MaxInt64,
+)
+
+// importRequestsLimit limits concurrent import requests.
+var importRequestsLimit = settings.RegisterIntSetting(
+	"kv.bulk_io_write.concurrent_import_requests",
+	"number of import requests a store will handle concurrently before queuing",
+	1,
+)
+
+// ExportRequestsLimit is the number of Export requests that can run at once.
+// Each extracts data from RocksDB to a temp file and then uploads it to cloud
+// storage. In order to not exhaust the disk or memory, or saturate the network,
+// limit the number of these that can be run in parallel. This number was chosen
+// by a guessing - it could be improved by more measured heuristics. Exported
+// here since we check it in in the caller to limit generated requests as well
+// to prevent excessive queuing.
+var ExportRequestsLimit = settings.RegisterIntSetting(
+	"kv.bulk_io_write.concurrent_export_requests",
+	"number of export requests a store will handle concurrently before queuing",
+	5,
 )
 
 // TestStoreConfig has some fields initialized with values relevant in tests.
@@ -372,7 +394,7 @@ type Store struct {
 	metrics            *StoreMetrics
 	intentResolver     *intentResolver
 	raftEntryCache     *raftEntryCache
-	bulkIOWriteLimiter *rate.Limiter
+	limiters           batcheval.Limiters
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -876,9 +898,21 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 
 	s.snapshotApplySem = make(chan struct{}, cfg.concurrentSnapshotApplyLimit)
 
-	s.bulkIOWriteLimiter = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
+	s.limiters.BulkIOWriteRate = rate.NewLimiter(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)), bulkIOWriteBurst)
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
-		s.bulkIOWriteLimiter.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
+		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
+	})
+	s.limiters.ConcurrentImports = limit.MakeConcurrentRequestLimiter(
+		"importRequestLimiter", int(importRequestsLimit.Get(&cfg.Settings.SV)),
+	)
+	importRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.limiters.ConcurrentImports.SetLimit(int(importRequestsLimit.Get(&cfg.Settings.SV)))
+	})
+	s.limiters.ConcurrentExports = limit.MakeConcurrentRequestLimiter(
+		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
+	)
+	ExportRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.limiters.ConcurrentExports.SetLimit(int(ExportRequestsLimit.Get(&cfg.Settings.SV)))
 	})
 
 	if s.cfg.Gossip != nil {
