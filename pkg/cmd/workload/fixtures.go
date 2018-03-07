@@ -232,8 +232,5 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	if err := workloadccl.RestoreFixture(ctx, sqlDB, fixture, dbName); err != nil {
 		return errors.Wrap(err, `restoring fixture`)
 	}
-	for _, table := range fixture.Tables {
-		log.Infof(ctx, `loaded %s`, table.BackupURI)
-	}
 	return nil
 }
