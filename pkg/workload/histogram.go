@@ -16,6 +16,7 @@ package workload
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -141,13 +142,18 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 		})
 	}
 
-	// TODO(dan): Do this in a stable order (probably alphabetical).
-	for name, mergedHist := range merged {
+	names := make([]string, 0, len(merged))
+	for name := range merged {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, name := range names {
 		if _, ok := w.cumulative[name]; !ok {
 			w.cumulative[name] = hdrhistogram.New(
 				minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
 		}
-		w.cumulative[name].Merge(mergedHist)
+		w.cumulative[name].Merge(merged[name])
 
 		prevTick, ok := w.prevTick[name]
 		if !ok {
