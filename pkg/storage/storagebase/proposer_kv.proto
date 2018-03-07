@@ -102,7 +102,7 @@ message ReplicatedEvalResult {
   // Updates to the Replica's ReplicaState. By convention and as outlined on
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
-  // which additional side effects (for instance on a descriptor update).
+  // with additional side effects (for instance on a descriptor update).
   storage.storagebase.ReplicaState state = 2;
   Split split = 3;
   Merge merge = 4;
