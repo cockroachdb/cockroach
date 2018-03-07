@@ -67,7 +67,7 @@ export const refreshRaft = raftReducerObj.refresh;
 export const versionReducerObj = new CachedDataReducer(versionCheck, "version");
 export const refreshVersion = versionReducerObj.refresh;
 
-export const locationsReducerObj = new CachedDataReducer(api.getLocations, "locations", moment.duration(10, "m"));
+export const locationsReducerObj = new CachedDataReducer(api.getLocations, "locations", moment.duration(10, "s"));
 export const refreshLocations = locationsReducerObj.refresh;
 
 const databasesReducerObj = new CachedDataReducer(

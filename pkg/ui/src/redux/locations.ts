@@ -14,7 +14,7 @@ export function selectLocationsRequestStatus(state: LocationState) {
 }
 
 export function selectLocations(state: LocationState) {
-  if (!state.cachedData.locations.valid) {
+  if (!state.cachedData.locations.data) {
     return [];
   }
 
