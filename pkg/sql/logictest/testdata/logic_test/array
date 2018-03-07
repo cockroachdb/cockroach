@@ -153,6 +153,9 @@ SELECT ARRAY[1,2,3]::TEXT[]
 ----
 {"1","2","3"}
 
+statement error invalid cast: int\[\] -> INT2VECTOR
+SELECT ARRAY[1,2,3]::INT2VECTOR
+
 # array subscript access
 
 query T
