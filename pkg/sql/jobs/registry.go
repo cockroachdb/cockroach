@@ -36,9 +36,9 @@ import (
 
 var nodeLivenessLogLimiter = log.Every(5 * time.Second)
 
-// nodeLiveness is the subset of storage.NodeLiveness's interface needed
+// NodeLiveness is the subset of storage.NodeLiveness's interface needed
 // by Registry.
-type nodeLiveness interface {
+type NodeLiveness interface {
 	Self() (*storage.Liveness, error)
 	GetLivenesses() []storage.Liveness
 }
@@ -193,7 +193,7 @@ var DefaultAdoptInterval = 30 * time.Second
 func (r *Registry) Start(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	nl nodeLiveness,
+	nl NodeLiveness,
 	cancelInterval, adoptInterval time.Duration,
 ) error {
 	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
@@ -226,7 +226,7 @@ func (r *Registry) Start(
 	return nil
 }
 
-func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
+func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 	liveness, err := nl.Self()
 	if err != nil {
 		if nodeLivenessLogLimiter.ShouldLog() {
@@ -411,7 +411,7 @@ func AddResumeHook(fn ResumeHookFn) {
 	resumeHooks = append(resumeHooks, fn)
 }
 
-func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
+func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 	var rows []tree.Datums
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
