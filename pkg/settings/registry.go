@@ -69,3 +69,15 @@ func Lookup(name string) (Setting, bool) {
 	v, ok := Registry[name]
 	return v, ok
 }
+
+// ReadableTypes maps our short type identifiers to friendlier names.
+var ReadableTypes = map[string]string{
+	"s": "string",
+	"i": "integer",
+	"f": "float",
+	"b": "boolean",
+	"z": "byte size",
+	"d": "duration",
+	"e": "enumeration",
+	"m": "custom validation",
+}
