@@ -262,6 +262,7 @@ func buildOne(svc s3putter, o opts) {
 		args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", o.GoFlags))
 		args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix))
 		args = append(args, fmt.Sprintf("%s=%s", "TAGS", o.Tags))
+		args = append(args, fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary"))
 		cmd := exec.Command("make", args...)
 		cmd.Dir = o.PkgDir
 		cmd.Stdout = os.Stdout
