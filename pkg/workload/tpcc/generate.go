@@ -55,7 +55,8 @@ const (
 )
 
 func (w *tpcc) tpccItemInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	iID := rowIdx + 1
 
@@ -69,7 +70,8 @@ func (w *tpcc) tpccItemInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccWarehouseInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	wID := rowIdx // warehouse ids are 0-indexed. every other table is 1-indexed
 
@@ -87,7 +89,8 @@ func (w *tpcc) tpccWarehouseInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccStockInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
 	wID := (rowIdx / numStockPerWarehouse)
@@ -113,7 +116,8 @@ func (w *tpcc) tpccStockInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccDistrictInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numDistrictsPerWarehouse)
@@ -134,7 +138,8 @@ func (w *tpcc) tpccDistrictInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -180,7 +185,8 @@ func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -192,7 +198,8 @@ func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
 	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -200,6 +207,9 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 
 	var cID int
 	{
+		// TODO(dan): We can get rid of this cache if we change workload.Table
+		// initial data to be batches of rows instead of rows. This would also
+		// let us fix the hackOrderLinesPerOrder TODO below.
 		w.randomCIDsCache.Lock()
 		if w.randomCIDsCache.values == nil {
 			w.randomCIDsCache.values = make([][]int, numDistrictsPerWarehouse*w.warehouses+1)
@@ -242,7 +252,8 @@ func (w *tpcc) tpccNewOrderInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccOrderLineInitialRow(rowIdx int) []interface{} {
-	rng := rand.New(rand.NewSource(w.seed + int64(rowIdx)))
+	rng := w.rngPool.Get().(*rand.Rand)
+	defer w.rngPool.Put(rng)
 
 	olNumber := (rowIdx % hackOrderLinesPerOrder) + 1
 	oID := ((rowIdx / hackOrderLinesPerOrder) % numOrdersPerDistrict) + 1

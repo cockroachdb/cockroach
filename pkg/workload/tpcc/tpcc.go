@@ -17,8 +17,11 @@ package tpcc
 
 import (
 	gosql "database/sql"
+	"math/rand"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -44,6 +47,7 @@ type tpcc struct {
 		syncutil.Mutex
 		values [][]int
 	}
+	rngPool *sync.Pool
 }
 
 func init() {
@@ -110,6 +114,12 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
+	if w.rngPool == nil {
+		w.rngPool = &sync.Pool{
+			New: func() interface{} { return rand.New(rand.NewSource(timeutil.Now().UnixNano())) },
+		}
+	}
+
 	warehouse := workload.Table{
 		Name:            `warehouse`,
 		Schema:          tpccWarehouseSchema,
