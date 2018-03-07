@@ -200,7 +200,7 @@ func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
 		exprs[i] = b.buildScalar(&ctx, projections.Child(i))
 		colNames[i] = ev.Metadata().ColumnLabel(col)
 	}
-	node, err := b.factory.ConstructProject(input.root, exprs, colNames)
+	node, err := b.factory.ConstructRender(input.root, exprs, colNames)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -304,18 +304,17 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 func (b *Builder) applyPresentation(
 	inputPlan execPlan, md *opt.Metadata, p opt.Presentation,
 ) (execPlan, error) {
-	exprs := make(tree.TypedExprs, len(p))
+	cols := make([]int, len(p))
 	colNames := make([]string, len(p))
-	ivh := tree.MakeIndexedVarHelper(nil /* container */, inputPlan.outputCols.Len())
 	for i := range p {
 		idx, ok := inputPlan.outputCols.Get(int(p[i].Index))
 		if !ok {
 			return execPlan{}, errors.Errorf("presentation includes absent column %d", p[i].Index)
 		}
-		exprs[i] = ivh.IndexedVarWithType(idx, md.ColumnType(p[i].Index))
+		cols[i] = idx
 		colNames[i] = p[i].Label
 	}
-	node, err := b.factory.ConstructProject(inputPlan.root, exprs, colNames)
+	node, err := b.factory.ConstructSimpleProject(inputPlan.root, cols, colNames)
 	if err != nil {
 		return execPlan{}, err
 	}
