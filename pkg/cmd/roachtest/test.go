@@ -187,11 +187,16 @@ func (r *registry) Run(filter []string) int {
 				done := t.mu.done
 				status := t.mu.status
 				statusTime := t.mu.statusTime
+				statusProgress := t.mu.statusProgress
 				t.mu.Unlock()
 				if !done {
 					duration := timeutil.Now().Sub(statusTime)
-					fmt.Fprintf(&buf, "[%4d] %s: %s (%s)\n", i, t.name, status,
-						time.Duration(duration.Seconds()+0.5)*time.Second)
+					progStr := ""
+					if statusProgress > 0 {
+						progStr = fmt.Sprintf("%.1f%%|", 100*statusProgress)
+					}
+					fmt.Fprintf(&buf, "[%4d] %s: %s (%s%s)\n", i, t.name, status,
+						progStr, time.Duration(duration.Seconds()+0.5)*time.Second)
 				}
 			}
 			fmt.Fprint(r.out, buf.String())
@@ -211,11 +216,12 @@ type test struct {
 	end    time.Time
 	mu     struct {
 		syncutil.RWMutex
-		done       bool
-		failed     bool
-		status     string
-		statusTime time.Time
-		output     []byte
+		done           bool
+		failed         bool
+		status         string
+		statusTime     time.Time
+		statusProgress float64
+		output         []byte
 	}
 }
 
@@ -228,6 +234,13 @@ func (t *test) Status(args ...interface{}) {
 	defer t.mu.Unlock()
 	t.mu.status = strings.SplitN(fmt.Sprint(args...), "\n", 2)[0]
 	t.mu.statusTime = timeutil.Now()
+	t.mu.statusProgress = 0
+}
+
+func (t *test) Progress(frac float64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.statusProgress = frac
 }
 
 func (t *test) Fatal(args ...interface{}) {
