@@ -43,6 +43,7 @@ func (s *Server) Intercept() func(string) error {
 		"/cockroach.rpc.Heartbeat/Ping":             {},
 		"/cockroach.gossip.Gossip/Gossip":           {},
 		"/cockroach.server.serverpb.Init/Bootstrap": {},
+		"/cockroach.server.serverpb.Status/Details": {},
 	}
 	return func(fullName string) error {
 		if s.serveMode.operational() {

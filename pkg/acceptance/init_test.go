@@ -18,6 +18,8 @@ package acceptance
 import (
 	"context"
 	gosql "database/sql"
+	"io/ioutil"
+	"net/http"
 	"testing"
 	"time"
 
@@ -122,6 +124,29 @@ func testInitModeNoneInner(
 	case err := <-errCh:
 		t.Fatalf("query finished prematurely with err %v", err)
 	default:
+	}
+
+	// Check that the /health endpoint is functional even before cluster init,
+	// whereas other debug endpoints return an appropriate error.
+	httpTests := []struct {
+		endpoint       string
+		expectedStatus int
+	}{
+		{"/health", http.StatusOK},
+		{"/health?ready=1", http.StatusServiceUnavailable},
+		{"/_status/nodes", http.StatusNotFound},
+	}
+	for _, tc := range httpTests {
+		resp, err := cluster.HTTPClient.Get(c.URL(ctx, 0) + tc.endpoint)
+		if err != nil {
+			t.Fatalf("unexpected error hitting %s endpoint: %v", tc.endpoint, err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != tc.expectedStatus {
+			bodyBytes, _ := ioutil.ReadAll(resp.Body)
+			t.Fatalf("unexpected response code %d (expected %d) hitting %s endpoint: %v",
+				resp.StatusCode, tc.expectedStatus, tc.endpoint, string(bodyBytes))
+		}
 	}
 
 	// TODO(bdarnell): initialize a node other than 0. This will provide
