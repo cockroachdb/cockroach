@@ -32,15 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-// importRequestLimit is the number of Import requests that can run at once.
-// Each downloads a file from cloud storage to a temp file, iterates it, and
-// sends AddSSTable requests (usually just one) to batch insert it. The
-// AddSSTable requests are large enough to clog gRPC, so we only allow one per
-// node at a time.
-var importRequestLimit = 1
-
-var importRequestLimiter = makeConcurrentRequestLimiter(importRequestLimit)
-
 var importBatchSize = settings.RegisterByteSizeSetting(
 	"kv.import.batch_size",
 	"",
@@ -147,10 +138,10 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		return nil, errors.Wrap(err, "make key rewriter")
 	}
 
-	if err := importRequestLimiter.beginLimitedRequest(ctx); err != nil {
+	if err := cArgs.EvalCtx.GetLimiters().ConcurrentImports.Begin(ctx); err != nil {
 		return nil, err
 	}
-	defer importRequestLimiter.endLimitedRequest()
+	defer cArgs.EvalCtx.GetLimiters().ConcurrentImports.Finish()
 
 	var rows rowCounter
 	var iters []engine.SimpleIterator

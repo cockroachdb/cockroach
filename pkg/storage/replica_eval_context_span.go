@@ -182,3 +182,8 @@ func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease) 
 	)
 	return rec.i.GetLease()
 }
+
+// GetLimiters returns the per-store limiters.
+func (rec *SpanSetReplicaEvalContext) GetLimiters() *batcheval.Limiters {
+	return rec.i.GetLimiters()
+}
