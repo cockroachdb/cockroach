@@ -421,7 +421,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	streamNotification.donec <- sqlbase.NewQueryCanceledError()
+	streamNotification.donec <- sqlbase.QueryCanceledError
 
 	wg.Wait()
 	if !ctxCanceled {

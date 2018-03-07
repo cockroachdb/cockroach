@@ -223,13 +223,13 @@ func NewStatementCompletionUnknownError(err error) error {
 	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
 }
 
-var queryCanceledError error = pgerror.NewErrorf(
+// QueryCanceledError is an error representing query cancellation.
+var QueryCanceledError error = pgerror.NewErrorf(
 	pgerror.CodeQueryCanceledError, "query execution canceled")
 
-// NewQueryCanceledError creates a query cancellation error.
-func NewQueryCanceledError() error {
-	return queryCanceledError
-}
+// QueryTimeoutError is an error representing a query timeout.
+var QueryTimeoutError error = pgerror.NewErrorf(
+	pgerror.CodeQueryCanceledError, "query execution canceled due to statement timeout")
 
 // IsQueryCanceledError checks whether this is a query canceled error.
 func IsQueryCanceledError(err error) bool {

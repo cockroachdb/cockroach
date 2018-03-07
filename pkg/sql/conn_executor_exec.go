@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -111,29 +112,55 @@ func (ex *connExecutor) execStmtInOpenState(
 	ex.server.StatementCounters.incrementCount(stmt.AST)
 	os := ex.machine.CurState().(stateOpen)
 
-	defer func() {
+	var timeoutTicker *time.Timer
+	queryTimedOut := false
+	doneAfterFunc := make(chan struct{}, 1)
+
+	// Canceling a query cancels its transaction's context so we take a reference
+	// to the cancelation function here.
+	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	queryDone := func(ctx context.Context, res RestrictedCommandResult) {
+		if timeoutTicker != nil {
+			if !timeoutTicker.Stop() {
+				// Wait for the timer callback to complete to avoid a data race on
+				// queryTimedOut.
+				<-doneAfterFunc
+			}
+		}
+		unregisterFn()
+
 		// Detect context cancelation and overwrite whatever error might have been
 		// set on the result before. The idea is that once the query's context is
 		// canceled, all sorts of actors can detect the cancelation and set all
 		// sorts of errors on the result. Rather than trying to impose discipline
 		// in that jungle, we just overwrite them all here with an error that's
 		// nicer to look at for the client.
-		if ctx.Err() != nil {
-			res.OverwriteError(sqlbase.NewQueryCanceledError())
+		if ctx.Err() != nil && res.Err() != nil {
+			if queryTimedOut {
+				res.OverwriteError(sqlbase.QueryTimeoutError)
+			} else {
+				res.OverwriteError(sqlbase.QueryCanceledError)
+			}
 		}
-	}()
-
-	// Canceling a query cancels its transaction's context so we take a reference
-	// to the cancelation function here.
-	unregisterFn := ex.addActiveQuery(stmt.queryID, stmt.AST, ex.state.cancel)
+	}
 	// Generally we want to unregister after the auto-commit below. However, in
 	// case we'll execute the statement through the parallel execution queue,
 	// we'll pass the responsibility for unregistering to the queue.
 	defer func() {
-		if unregisterFn != nil {
-			unregisterFn()
+		if queryDone != nil {
+			queryDone(ctx, res)
 		}
 	}()
+
+	if ex.sessionData.StmtTimeout > 0 {
+		timeoutTicker = time.AfterFunc(
+			ex.sessionData.StmtTimeout-timeutil.Since(ex.phaseTimes[sessionQueryReceived]),
+			func() {
+				ex.cancelQuery(stmt.queryID)
+				queryTimedOut = true
+				doneAfterFunc <- struct{}{}
+			})
+	}
 
 	defer func() {
 		if filter := ex.server.cfg.TestingKnobs.StatementFilter; retErr == nil && filter != nil {
@@ -325,8 +352,8 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer constantMemAcc.Close(ctx)
 
 	if runInParallel {
-		cols, err := ex.execStmtInParallel(ctx, stmt, p, unregisterFn)
-		unregisterFn = nil
+		cols, err := ex.execStmtInParallel(ctx, stmt, p, queryDone)
+		queryDone = nil
 		if err != nil {
 			return makeErrEvent(err)
 		}
@@ -399,12 +426,15 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 // other queries).
 //
 // Args:
-// unregisterQuery: A cleanup function to be called when the execution is done.
+// queryDone: A cleanup function to be called when the execution is done.
 //
 // TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
 // queries, so this method can only be used with local SQL.
 func (ex *connExecutor) execStmtInParallel(
-	ctx context.Context, stmt Statement, planner *planner, unregisterQuery func(),
+	ctx context.Context,
+	stmt Statement,
+	planner *planner,
+	queryDone func(context.Context, RestrictedCommandResult),
 ) (sqlbase.ResultColumns, error) {
 	params := runParams{
 		ctx:             ctx,
@@ -434,9 +464,9 @@ func (ex *connExecutor) execStmtInParallel(
 	ex.mu.Unlock()
 
 	if err := ex.parallelizeQueue.Add(params, func() error {
-		defer unregisterQuery()
-
 		res := &errOnlyRestrictedCommandResult{}
+
+		defer queryDone(ctx, res)
 
 		defer func() {
 			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
@@ -452,12 +482,6 @@ func (ex *connExecutor) execStmtInParallel(
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
 		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
-
-		// Detect context cancelation and overwrite whatever error might have been
-		// set on the result before.
-		if ctx.Err() != nil {
-			res.OverwriteError(sqlbase.NewQueryCanceledError())
-		}
 
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 		recordStatementSummary(

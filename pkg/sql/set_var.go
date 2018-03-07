@@ -197,3 +197,50 @@ func setTimeZone(
 	m.SetLocation(loc)
 	return nil
 }
+
+func setStmtTimeout(
+	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+) error {
+	if len(values) != 1 {
+		return errors.New("set statement_timeout requires a single argument")
+	}
+	d, err := values[0].Eval(&evalCtx.EvalContext)
+	if err != nil {
+		return err
+	}
+
+	var timeout time.Duration
+	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
+	case *tree.DString:
+		interval, err := tree.ParseDInterval(string(*v))
+		if err != nil {
+			return err
+		}
+		timeout, err = intervalToDuration(interval)
+		if err != nil {
+			return err
+		}
+	case *tree.DInterval:
+		timeout, err = intervalToDuration(v)
+		if err != nil {
+			return err
+		}
+	case *tree.DInt:
+		timeout = time.Duration(*v) * time.Millisecond
+	}
+
+	if timeout < 0 {
+		return errors.New("statement_timeout cannot have a negative duration")
+	}
+	m.SetStmtTimeout(timeout)
+
+	return nil
+}
+
+func intervalToDuration(interval *tree.DInterval) (time.Duration, error) {
+	nanos, _, _, err := interval.Encode()
+	if err != nil {
+		return 0, err
+	}
+	return time.Duration(nanos), nil
+}
