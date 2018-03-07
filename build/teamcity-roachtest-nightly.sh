@@ -8,3 +8,4 @@ set -e
     TC_BUILD_ID="$TC_BUILD_ID" \
     COCKROACH_DEV_LICENSE="$COCKROACH_DEV_LICENSE" \
     ./build/roachtest-nightly.sh
+    | go-test-teamcity
