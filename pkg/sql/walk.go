@@ -291,7 +291,7 @@ func (v *planVisitor) visit(plan planNode) {
 				if agg.isIdentAggregate() {
 					buf.WriteString(inputCols[agg.argRenderIdx].Name)
 				} else {
-					fmt.Fprintf(&buf, "%s(", agg.function.String())
+					fmt.Fprintf(&buf, "%s(", agg.funcName)
 					if agg.argRenderIdx != noRenderIdx {
 						if agg.isDistinct() {
 							buf.WriteString("DISTINCT ")

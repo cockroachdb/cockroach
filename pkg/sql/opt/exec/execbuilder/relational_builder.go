@@ -17,12 +17,13 @@ package execbuilder
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 type execPlan struct {
@@ -98,6 +99,9 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 
 	case opt.AntiJoinOp:
 		ep, err = b.buildJoin(ev, sqlbase.LeftAntiJoin)
+
+	case opt.GroupByOp:
+		ep, err = b.buildGroupBy(ev)
 
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
@@ -233,6 +237,62 @@ func (b *Builder) buildJoin(ev xform.ExprView, joinType sqlbase.JoinType) (execP
 	onExpr := b.buildScalar(&ctx, ev.Child(2))
 
 	ep.root, err = b.factory.ConstructJoin(joinType, left.root, right.root, onExpr)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return ep, nil
+}
+
+func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	aggregations := ev.Child(1)
+	numAgg := aggregations.ChildCount()
+	groupingCols := *ev.Private().(*opt.ColSet)
+
+	groupingColIdx := make([]int, 0, groupingCols.Len())
+	var ep execPlan
+	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
+		idx, ok := input.outputCols.Get(i)
+		if !ok {
+			return execPlan{}, errors.Errorf("column %d not in input", i)
+		}
+		ep.outputCols.Set(i, len(groupingColIdx))
+		groupingColIdx = append(groupingColIdx, idx)
+	}
+
+	aggColList := *aggregations.Private().(*opt.ColList)
+	aggInfos := make([]exec.AggInfo, numAgg)
+	for i := 0; i < numAgg; i++ {
+		fn := aggregations.Child(i)
+		funcDef := fn.Private().(opt.FuncDef)
+
+		argIdx := make([]int, fn.ChildCount())
+		for j := range argIdx {
+			child := fn.Child(j)
+			if child.Operator() != opt.VariableOp {
+				return execPlan{}, errors.Errorf("only VariableOp args supported")
+			}
+			col := child.Private().(opt.ColumnIndex)
+			idx, ok := input.outputCols.Get(int(col))
+			if !ok {
+				return execPlan{}, errors.Errorf("column %d not in input", j)
+			}
+			argIdx[j] = idx
+		}
+
+		aggInfos[i] = exec.AggInfo{
+			FuncName:   funcDef.Name,
+			Builtin:    funcDef.Overload,
+			ResultType: fn.Logical().Scalar.Type,
+			ArgCols:    argIdx,
+		}
+		ep.outputCols.Set(int(aggColList[i]), len(groupingColIdx)+i)
+	}
+
+	ep.root, err = b.factory.ConstructGroupBy(input.root, groupingColIdx, aggInfos)
 	if err != nil {
 		return execPlan{}, err
 	}
