@@ -552,7 +552,12 @@ func (p *planner) addOrMergeExpr(
 	return render.addOrReuseRender(col, expr, true), nil
 }
 
-// namesForExprs expands names in the tuples and subqueries in exprs.
+// namesForExprs collects all the names mentioned in the LHS of the
+// UpdateExprs.  That is, it will transform SET (a,b) = (1,2), b = 3,
+// (a,c) = 4 into [a,b,b,a,c].
+//
+// It also checks that the arity of the LHS and RHS match when
+// assigning tuples.
 func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.NameList, error) {
 	var names tree.NameList
 	for _, expr := range exprs {
