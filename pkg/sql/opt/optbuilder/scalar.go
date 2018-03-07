@@ -214,6 +214,12 @@ func (b *Builder) buildScalar(scalar tree.TypedExpr, inScope *scope) (out opt.Gr
 			// TODO(rytaft): Do we need to update varsUsed here?
 		}
 
+	case *tree.RangeCond:
+		input := b.buildScalar(t.TypedLeft(), inScope)
+		from := b.buildScalar(t.TypedFrom(), inScope)
+		to := b.buildScalar(t.TypedTo(), inScope)
+		out = b.buildRangeCond(t.Not, t.Symmetric, input, from, to)
+
 	case *tree.Tuple:
 		list := make([]opt.GroupID, len(t.Exprs))
 		for i := range t.Exprs {
@@ -306,6 +312,46 @@ func (b *Builder) buildFunction(
 	return b.factory.ConstructFunction(
 		b.factory.InternList(argList), b.factory.InternPrivate(funcDef),
 	), nil
+}
+
+// buildRangeCond builds a RANGE clause as a simpler expression. Examples:
+// x BETWEEN a AND b                ->  x >= a AND x <= b
+// x NOT BETWEEN a AND b            ->  NOT (x >= a AND x <= b)
+// x BETWEEN SYMMETRIC a AND b      ->  (x >= a AND x <= b) OR (x >= b AND x <= a)
+// x NOT BETWEEN SYMMETRIC a AND b  ->  NOT ((x >= a AND x <= b) OR (x >= b AND x <= a))
+//
+// Note that these expressions are subject to normalization rules (which can
+// push down the negation).
+// TODO(radu): this doesn't work when the expressions have side-effects.
+func (b *Builder) buildRangeCond(
+	not bool, symmetric bool, input, from, to opt.GroupID,
+) opt.GroupID {
+	// Build "input >= from AND input <= to".
+	out := b.factory.ConstructAnd(
+		b.factory.InternList([]opt.GroupID{
+			b.factory.ConstructGe(input, from),
+			b.factory.ConstructLe(input, to),
+		}),
+	)
+
+	if symmetric {
+		// Build "(input >= from AND input <= to) OR (input >= to AND input <= from)".
+		lhs := out
+		rhs := b.factory.ConstructAnd(
+			b.factory.InternList([]opt.GroupID{
+				b.factory.ConstructGe(input, to),
+				b.factory.ConstructLe(input, from),
+			}),
+		)
+		out = b.factory.ConstructOr(
+			b.factory.InternList([]opt.GroupID{lhs, rhs}),
+		)
+	}
+
+	if not {
+		out = b.factory.ConstructNot(out)
+	}
+	return out
 }
 
 // ScalarBuilder is a specialized variant of Builder that can be used to create
