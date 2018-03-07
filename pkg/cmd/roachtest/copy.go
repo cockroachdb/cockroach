@@ -81,6 +81,9 @@ func init() {
 			rowsPerInsert := (60 << 20 /* 60MB */) / rowEstimate
 			t.Status("copying from bank_orig to bank")
 			for lastID := -1; lastID+1 < rows; {
+				if lastID > 0 {
+					t.Progress(float64(lastID+1) / float64(rows))
+				}
 				q := fmt.Sprintf(`
 					SELECT id FROM [
 						INSERT INTO bank.bank
