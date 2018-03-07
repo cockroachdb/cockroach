@@ -160,7 +160,7 @@ describe("analytics listener", function() {
       testRedaction(
         "clusterviz map multiple localities",
         "/overview/map/datacenter=us-west-1/rack=1234",
-        "/overview/map/[locality]",
+        "/overview/map/[locality]/[locality]",
       ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
