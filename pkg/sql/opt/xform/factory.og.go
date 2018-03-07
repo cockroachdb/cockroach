@@ -407,6 +407,30 @@ func (_f *factory) ConstructNot(
 		}
 	}
 
+	// [PushNotThroughAnd]
+	{
+		_and := _f.mem.lookupNormExpr(input).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.negateAnd(conditions)
+			_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushNotThroughOr]
+	{
+		_or := _f.mem.lookupNormExpr(input).asOr()
+		if _or != nil {
+			conditions := _or.conditions()
+			_f.reportOptimization()
+			_group = _f.negateOr(conditions)
+			_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_notExpr)))
 }
 

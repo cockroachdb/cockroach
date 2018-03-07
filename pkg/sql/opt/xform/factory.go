@@ -358,6 +358,26 @@ func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 	return f.ConstructOr(f.mem.internList(list))
 }
 
+// negateAnd negates the given conditions and puts them under an Or operator.
+func (f *factory) negateAnd(conditions opt.ListID) opt.GroupID {
+	list := f.mem.lookupList(conditions)
+	negCond := make([]opt.GroupID, len(list))
+	for i := range list {
+		negCond[i] = f.ConstructNot(list[i])
+	}
+	return f.ConstructOr(f.mem.internList(negCond))
+}
+
+// negateOr negates the given conditions and puts them under an And operator.
+func (f *factory) negateOr(conditions opt.ListID) opt.GroupID {
+	list := f.mem.lookupList(conditions)
+	negCond := make([]opt.GroupID, len(list))
+	for i := range list {
+		negCond[i] = f.ConstructNot(list[i])
+	}
+	return f.ConstructAnd(f.mem.internList(negCond))
+}
+
 // negateComparison negates a comparison op like:
 //   a.x = 5
 // to:
