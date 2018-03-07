@@ -44,7 +44,8 @@ run bin/roachtest run \
   --slack-token "${SLACK_TOKEN}" \
   --cockroach "$PWD/cockroach-linux-2.6.32-gnu-amd64" \
   --workload "$PWD/bin/workload" \
-  --artifacts "$artifacts"
+  --artifacts "$artifacts" \
+  --parallelism 5
 if_tc tc_end_block "Run roachtest"
 
 if_tc tc_start_block "Upload artifacts"
