@@ -23,6 +23,9 @@ import (
 // MakeDefaultExprs returns a slice of the default expressions for the slice
 // of input column descriptors, or nil if none of the input column descriptors
 // have default expressions.
+// The length of the result slice matches the length of the input column descriptors.
+// For every column that has no default expression, a NULL expression is reported
+// as default.
 func MakeDefaultExprs(
 	cols []ColumnDescriptor, txCtx *transform.ExprTransformContext, evalCtx *tree.EvalContext,
 ) ([]tree.TypedExpr, error) {
