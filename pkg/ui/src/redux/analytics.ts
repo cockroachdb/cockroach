@@ -26,6 +26,11 @@ export const defaultRedactions = [
         match: new RegExp("/database/.*/table/.*"),
         replace: "/database/[db]/table/[tbl]",
     },
+    // The clusterviz map page, which puts localities in the URL.
+    {
+        match: new RegExp("/overview/map(/.+)+"),
+        replace: "/overview/map/[locality]",
+    },
 ];
 
 /**

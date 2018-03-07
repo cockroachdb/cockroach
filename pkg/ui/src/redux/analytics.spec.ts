@@ -147,6 +147,21 @@ describe("analytics listener", function() {
         "/database/foobar/table/baz",
         "/database/[db]/table/[tbl]",
       ),
+      testRedaction(
+        "clusterviz map root",
+        "/overview/map/",
+        "/overview/map/",
+      ),
+      testRedaction(
+        "clusterviz map single locality",
+        "/overview/map/datacenter=us-west-1",
+        "/overview/map/[locality]",
+      ),
+      testRedaction(
+        "clusterviz map multiple localities",
+        "/overview/map/datacenter=us-west-1/rack=1234",
+        "/overview/map/[locality]",
+      ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
         setClusterData();
