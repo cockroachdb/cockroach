@@ -7,15 +7,20 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import {InjectedRouter, RouterState} from "react-router";
+import { InjectedRouter, RouterState } from "react-router";
 
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
+import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
 
 import "./tweaks.styl";
+
+  // tslint:disable-next-line:variable-name
+const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
 
 export default class ClusterVisualization extends React.Component<RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
@@ -59,7 +64,7 @@ export default class ClusterVisualization extends React.Component<RouterState & 
           <div style={{ float: "right" }}><TimeScaleDropdown /></div>
           <div style={{ textAlign: "center", paddingTop: 4 }}><Breadcrumbs tiers={tiers} /></div>
         </div>
-        <NodeCanvasContainer tiers={tiers} />
+        <NodeCanvasContent tiers={tiers} />
       </div>
     );
   }
