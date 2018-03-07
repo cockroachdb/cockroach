@@ -17,6 +17,7 @@ package exec
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -53,4 +54,14 @@ type Factory interface {
 	// of two input nodes. The expression can refer to columns from both inputs
 	// using IndexedVars (first the left columns, then the right columns).
 	ConstructJoin(joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr) (Node, error)
+
+	ConstructGroupBy(input Node, groupCols []int, aggregations []AggInfo) (Node, error)
+}
+
+// AggInfo represents an aggregation (see ConstructGroupBy).
+type AggInfo struct {
+	FuncName   string
+	Builtin    *tree.Builtin
+	ResultType types.T
+	ArgCols    []int
 }
