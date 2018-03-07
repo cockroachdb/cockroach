@@ -689,7 +689,21 @@ func runStart(cmd *cobra.Command, args []string) error {
 			stopper.Stop(ctx)
 		}()
 
-		// Don't return: we're shutting down gracefully.
+	// Don't return: we're shutting down gracefully.
+
+	case <-log.FatalChan():
+		// A fatal error has occurred. Stop everything (gracelessly) to
+		// avoid serving incorrect data while the final log messages are
+		// being written.
+		// https://github.com/cockroachdb/cockroach/issues/23414
+		// TODO(bdarnell): This could be more graceless, for example by
+		// reaching into the server objects and closing all the
+		// connections while they're in use. That would be more in line
+		// with the expected effect of a log.Fatal.
+		stopper.Stop(ctx)
+		// The logging goroutine is now responsible for killing this
+		// process, so just block this goroutine.
+		select {}
 	}
 
 	// At this point, a signal has been received to shut down the
