@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -561,6 +562,7 @@ func backup(
 	ctx context.Context,
 	db *client.DB,
 	gossip *gossip.Gossip,
+	settings *cluster.Settings,
 	exportStore storageccl.ExportStorage,
 	job *jobs.Job,
 	backupDesc *BackupDescriptor,
@@ -643,7 +645,7 @@ func backup(
 	// TODO(dan): Make this limiting per node.
 	//
 	// TODO(dan): See if there's some better solution than rate-limiting #14798.
-	maxConcurrentExports := clusterNodeCount(gossip) * storageccl.ExportRequestLimit
+	maxConcurrentExports := clusterNodeCount(gossip) * int(storage.ExportRequestsLimit.Get(&settings.SV))
 	exportsSem := make(chan struct{}, maxConcurrentExports)
 
 	g, gCtx := errgroup.WithContext(ctx)
@@ -1100,7 +1102,17 @@ func (b *backupResumer) Resume(
 		// implementations.
 		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *job.ID(), err)
 	}
-	res, err := backup(ctx, p.ExecCfg().DB, p.ExecCfg().Gossip, exportStore, job, &backupDesc, checkpointDesc, resultsCh)
+	res, err := backup(
+		ctx,
+		p.ExecCfg().DB,
+		p.ExecCfg().Gossip,
+		p.ExecCfg().Settings,
+		exportStore,
+		job,
+		&backupDesc,
+		checkpointDesc,
+		resultsCh,
+	)
 	b.res = res
 	return err
 }
