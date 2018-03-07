@@ -54,6 +54,14 @@ func init() {
 	workload.Register(tpccMeta)
 }
 
+// FromWarehouses returns a tpcc generator pre-configured with the specified
+// number of warehouses.
+func FromWarehouses(warehouses int) workload.Generator {
+	gen := tpccMeta.New().(*tpcc)
+	gen.warehouses = warehouses
+	return gen
+}
+
 var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
