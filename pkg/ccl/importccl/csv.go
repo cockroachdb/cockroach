@@ -19,6 +19,7 @@ import (
 	"os"
 	"runtime"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -60,6 +61,7 @@ const (
 	importOptionLocal     = "local"
 	importOptionNullIf    = "nullif"
 	importOptionTransform = "transform"
+	importOptionSkip      = "skip"
 	importOptionSSTSize   = "sstsize"
 )
 
@@ -69,6 +71,7 @@ var importOptionExpectValues = map[string]bool{
 	importOptionLocal:     false,
 	importOptionNullIf:    true,
 	importOptionTransform: true,
+	importOptionSkip:      true,
 	importOptionSSTSize:   true,
 }
 
@@ -79,6 +82,7 @@ func LoadCSV(
 	dataFiles []string,
 	dest string,
 	comma, comment rune,
+	skip uint32,
 	nullif *string,
 	sstMaxSize int64,
 	tempDir string,
@@ -159,7 +163,7 @@ func LoadCSV(
 	defer r.Close()
 
 	return doLocalCSVTransform(
-		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, sstMaxSize, r, walltime, nil,
+		ctx, nil, parentID, tableDesc, dest, dataFiles, comma, comment, nullif, skip, sstMaxSize, r, walltime, nil,
 	)
 }
 
@@ -172,6 +176,7 @@ func doLocalCSVTransform(
 	dataFiles []string,
 	comma, comment rune,
 	nullif *string,
+	skip uint32,
 	sstMaxSize int64,
 	tempEngine engine.Engine,
 	walltime int64,
@@ -230,7 +235,7 @@ func doLocalCSVTransform(
 		for i, f := range dataFiles {
 			readFiles[int32(i)] = f
 		}
-		csvCount, err = readCSV(gCtx, comma, comment, len(tableDesc.VisibleColumns()), readFiles, recordCh, readProgressFn, st)
+		csvCount, err = readCSV(gCtx, comma, comment, skip, len(tableDesc.VisibleColumns()), readFiles, recordCh, readProgressFn, st)
 		return err
 	})
 	group.Go(func() error {
@@ -408,6 +413,7 @@ func groupWorkers(ctx context.Context, num int, f func(context.Context) error) e
 func readCSV(
 	ctx context.Context,
 	comma, comment rune,
+	skip uint32,
 	expectedCols int,
 	dataFiles map[int32]string,
 	recordCh chan<- csvRecord,
@@ -514,6 +520,10 @@ func readCSV(
 				}
 				if err != nil {
 					return errors.Wrapf(err, "row %d: reading CSV record", i)
+				}
+				// Ignore the first N lines.
+				if uint32(i) <= skip {
+					continue
 				}
 				if len(record) == expectedCols {
 					// Expected number of columns.
@@ -1038,6 +1048,23 @@ func importPlanHook(
 			nullif = &override
 		}
 
+		var skip int
+		if override, ok := opts[importOptionSkip]; ok {
+			skip, err = strconv.Atoi(override)
+			if err != nil {
+				return errors.Wrapf(err, "invalid %s value", importOptionSkip)
+			}
+			if skip < 0 {
+				return errors.Errorf("%s must be >= 0", importOptionSkip)
+			}
+			// We need to handle the case where the user wants to skip records and the node
+			// interpreting the statement might be newer than other nodes in the cluster.
+			if !p.ExecCfg().Settings.Version.IsMinSupported(cluster.VersionImportSkipRecords) {
+				return errors.Errorf("Using %s requires all nodes to be upgraded to %s",
+					importOptionSkip, cluster.VersionByKey(cluster.VersionImportSkipRecords))
+			}
+		}
+
 		// sstSize, if 0, will be set to an appropriate default by the specific
 		// implementation (local or distributed) since each has different optimal
 		// settings.
@@ -1127,6 +1154,7 @@ func importPlanHook(
 					Comma:      comma,
 					Comment:    comment,
 					Nullif:     nullifVal,
+					Skip:       uint32(skip),
 					SSTSize:    sstSize,
 					Walltime:   walltime,
 					Local:      local,
@@ -1150,6 +1178,7 @@ func doDistributedCSVTransform(
 	tableDesc *sqlbase.TableDescriptor,
 	temp string,
 	comma, comment rune,
+	skip uint32,
 	nullif *string,
 	walltime int64,
 	sstSize int64,
@@ -1199,6 +1228,7 @@ func doDistributedCSVTransform(
 		files,
 		temp,
 		comma, comment,
+		skip,
 		nullif,
 		walltime,
 		sstSize,
@@ -1339,7 +1369,7 @@ func (cp *readCSVProcessor) Run(wg *sync.WaitGroup) {
 			})
 		}
 
-		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment,
+		_, err = readCSV(sCtx, cp.csvOptions.Comma, cp.csvOptions.Comment, cp.csvOptions.Skip,
 			len(cp.tableDesc.VisibleColumns()), cp.uri, recordCh, progFn, cp.settings)
 		return err
 	})
@@ -1670,6 +1700,7 @@ func (r *importResumer) Resume(
 	files := details.URIs
 	tableDesc := details.Desc
 	parentID := details.ParentID
+	skip := details.Skip
 	sstSize := details.SSTSize
 	var nullif *string
 	if details.Nullif != nil {
@@ -1692,7 +1723,7 @@ func (r *importResumer) Resume(
 		}
 		importErr = doDistributedCSVTransform(
 			ctx, job, files, p, parentID, tableDesc, transform,
-			comma, comment, nullif, walltime,
+			comma, comment, skip, nullif, walltime,
 			sstSize,
 		)
 	} else {
@@ -1704,7 +1735,7 @@ func (r *importResumer) Resume(
 		}
 		_, _, _, importErr = doLocalCSVTransform(
 			ctx, job, parentID, tableDesc, transform, files,
-			comma, comment, nullif, sstSize,
+			comma, comment, nullif, skip, sstSize,
 			p.ExecCfg().DistSQLSrv.TempStorage,
 			walltime, p.ExecCfg(),
 		)
