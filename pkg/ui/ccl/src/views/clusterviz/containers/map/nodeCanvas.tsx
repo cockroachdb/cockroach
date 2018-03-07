@@ -22,15 +22,16 @@ import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
-import Liveness = cockroach.storage.Liveness;
+
+type Liveness = cockroach.storage.Liveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
 interface NodeCanvasProps {
   localityTree: LocalityTree;
   locationTree: LocationTree;
-  livenessStatus: { [id: string]: LivenessStatus };
-  liveness: { [id: string]: Liveness };
+  livenessStatuses: { [id: string]: LivenessStatus };
+  livenesses: { [id: string]: Liveness };
   tiers: LocalityTier[];
 }
 
@@ -75,14 +76,14 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
       return null;
     }
 
-    const { localityTree, locationTree, livenessStatus, liveness } = this.props;
+    const { localityTree, locationTree, livenessStatuses, livenesses } = this.props;
     const { viewportSize } = this.state;
 
     if (renderAsMap(locationTree, localityTree)) {
       return <MapLayout
         localityTree={localityTree}
         locationTree={locationTree}
-        livenessStatus={livenessStatus}
+        livenessStatuses={livenessStatuses}
         viewportSize={viewportSize}
       />;
     }
@@ -90,8 +91,8 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     return <CircleLayout
       viewportSize={viewportSize}
       localityTree={localityTree}
-      livenessStatus={livenessStatus}
-      liveness={liveness}
+      livenessStatuses={livenessStatuses}
+      livenesses={livenesses}
     />;
   }
 
@@ -105,30 +106,33 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
     const parentLocality = tiers.slice(0, tiers.length - 1);
 
     return (
-      <div
-        style={{
-          position: "absolute",
-          left: BACK_BUTTON_OFFSET,
-          bottom: BACK_BUTTON_OFFSET,
-          backgroundColor: "white",
-          border: "1px solid #EDEDED",
-          borderRadius: 3,
-          padding: 12,
-          boxShadow: "0px 0px 4px 0px rgba(0, 0, 0, 0.2)",
-          letterSpacing: 0.5,
-        }}
+      <Link
+        to={ CLUSTERVIZ_ROOT + generateLocalityRoute(parentLocality) }
+        style={{ textDecoration: "none", color: "#595f6c" }}
       >
-        <Link
-          to={ CLUSTERVIZ_ROOT + generateLocalityRoute(parentLocality) }
-          style={{ textDecoration: "none", color: "#595f6c" }}
+        <div
+          style={{
+            position: "absolute",
+            left: BACK_BUTTON_OFFSET,
+            bottom: BACK_BUTTON_OFFSET,
+            backgroundColor: "white",
+            border: "1px solid #EDEDED",
+            borderRadius: 3,
+            padding: 12,
+            boxShadow: "0px 0px 4px 0px rgba(0, 0, 0, 0.2)",
+            letterSpacing: 0.5,
+          }}
         >
-          <span dangerouslySetInnerHTML={trustIcon(arrowUpIcon)} style={{ position: "relative", top: 1 }} />
+          <span
+            dangerouslySetInnerHTML={trustIcon(arrowUpIcon)}
+            style={{ position: "relative", top: 1 }}
+          />
           Up to{" "}
           <span style={{ textTransform: "uppercase" }}>
             { getLocalityLabel(parentLocality) }
           </span>
-        </Link>
-      </div>
+        </div>
+      </Link>
     );
   }
 
