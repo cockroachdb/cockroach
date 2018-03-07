@@ -266,6 +266,8 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 }
 
 func isCastDeepValid(castFrom, castTo types.T) bool {
+	castFrom = types.UnwrapType(castFrom)
+	castTo = types.UnwrapType(castTo)
 	if castTo.FamilyEqual(types.FamArray) && castFrom.FamilyEqual(types.FamArray) {
 		return isCastDeepValid(castFrom.(types.TArray).Typ, castTo.(types.TArray).Typ)
 	}
