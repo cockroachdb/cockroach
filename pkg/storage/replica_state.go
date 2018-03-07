@@ -163,6 +163,11 @@ func (r *Replica) AbortSpan() *abortspan.AbortSpan {
 	return r.abortSpan
 }
 
+// GetLimiters returns the Replica's limiters.
+func (r *Replica) GetLimiters() *batcheval.Limiters {
+	return &r.store.limiters
+}
+
 // GetTxnWaitQueue returns the Replica's txnwait.Queue.
 func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
 	return r.txnWaitQueue
