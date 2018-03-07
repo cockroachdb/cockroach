@@ -94,7 +94,6 @@ const (
 )
 
 var _ tableWriter = (*tableInserter)(nil)
-var _ tableWriter = (*tableUpdater)(nil)
 var _ tableWriter = (*tableUpserter)(nil)
 
 // extendedTableWriter is a temporary interface introduced
@@ -121,6 +120,7 @@ type extendedTableWriter interface {
 	curBatchSize() int
 }
 
+var _ extendedTableWriter = (*tableUpdater)(nil)
 var _ extendedTableWriter = (*tableDeleter)(nil)
 
 // tableWriterBase is meant to be used to factor common code between
@@ -226,60 +226,63 @@ func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
 
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
+	tableWriterBase
 	ru sqlbase.RowUpdater
-
-	// Set by init.
-	txn     *client.Txn
-	evalCtx *tree.EvalContext
-	b       *client.Batch
 }
 
 func (ti *tableInserter) close(_ context.Context) {}
 
+// walkExprs is part of the tableWriter interface.
 func (tu *tableUpdater) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
-func (tu *tableUpdater) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	tu.txn = txn
-	tu.evalCtx = evalCtx
-	tu.b = txn.NewBatch()
+// init is part of the tableWriter interface.
+func (tu *tableUpdater) init(txn *client.Txn, _ *tree.EvalContext) error {
+	tu.tableWriterBase.init(txn)
 	return nil
 }
 
-func (tu *tableUpdater) row(
-	ctx context.Context, values tree.Datums, traceKV bool,
+// row is part of the tableWriter interface.
+// We don't implement this because tu.ru.UpdateRow wants two slices
+// and it would be a shame to split the incoming slice on every call.
+// Instead provide a separate rowForUpdate() below.
+func (tu *tableUpdater) row(context.Context, tree.Datums, bool) (tree.Datums, error) {
+	panic("unimplemented")
+}
+
+// rowForUpdate extends row() from the tableWriter interface.
+func (tu *tableUpdater) rowForUpdate(
+	ctx context.Context, oldValues, updateValues tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	oldValues := values[:len(tu.ru.FetchCols)]
-	updateValues := values[len(tu.ru.FetchCols):]
+	tu.batchSize++
 	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, sqlbase.CheckFKs, traceKV)
 }
 
+// atBatchEnd is part of the extendedTableWriter interface.
+func (tu *tableUpdater) atBatchEnd(_ context.Context) error { return nil }
+
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (tu *tableUpdater) flushAndStartNewBatch(ctx context.Context) error {
+	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
+}
+
+// finalize is part of the tableWriter interface.
 func (tu *tableUpdater) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, _ bool,
 ) (*sqlbase.RowContainer, error) {
-	var err error
-	if autoCommit == autoCommitEnabled {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		err = tu.txn.CommitInBatch(ctx, tu.b)
-	} else {
-		err = tu.txn.Run(ctx, tu.b)
-	}
-
-	if err != nil {
-		return nil, sqlbase.ConvertBatchError(ctx, tu.ru.Helper.TableDesc, tu.b)
-	}
-	return nil, nil
+	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
 }
 
+// tableDesc is part of the tableWriter interface.
 func (tu *tableUpdater) tableDesc() *sqlbase.TableDescriptor {
 	return tu.ru.Helper.TableDesc
 }
 
+// fkSpanCollector is part of the tableWriter interface.
 func (tu *tableUpdater) fkSpanCollector() sqlbase.FkSpanCollector {
 	return tu.ru.Fks
 }
 
+// close is part of the tableWriter interface.
 func (tu *tableUpdater) close(_ context.Context) {}
 
 type tableUpsertEvaler interface {

@@ -43,7 +43,7 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 		return n.spans, nil, nil
 
 	case *updateNode:
-		return editNodeSpans(params, n.run.rows, n.run.tw)
+		return editNodeSpans(params, n.source, &n.run.tu)
 	case *insertNode:
 		if v, ok := n.run.editNodeRun.rows.(*valuesNode); ok {
 			// subqueries, even within valuesNodes, can be arbitrarily complex,

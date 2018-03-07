@@ -35,16 +35,17 @@ query TTT
 EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                     ·      ·
- └── spool                ·      ·
-      │                   limit  1
-      └── update          ·      ·
-           │              table  t
-           │              set    x
-           └── render     ·      ·
-                └── scan  ·      ·
-·                         table  t@primary
-·                         spans  ALL
+limit                          ·      ·
+ └── spool                     ·      ·
+      │                        limit  1
+      └── run                  ·      ·
+           └── update          ·      ·
+                │              table  t
+                │              set    x
+                └── render     ·      ·
+                     └── scan  ·      ·
+·                              table  t@primary
+·                              spans  ALL
 
 # Upsert is special, it doesn't need a spool.
 query TTT
@@ -85,16 +86,17 @@ limit                     ·      ·
 query TTT
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 ----
-limit                     ·      ·
- └── spool                ·      ·
-      │                   limit  1
-      └── update          ·      ·
-           │              table  t
-           │              set    x
-           └── render     ·      ·
-                └── scan  ·      ·
-·                         table  t@primary
-·                         spans  ALL
+limit                          ·      ·
+ └── spool                     ·      ·
+      │                        limit  1
+      └── run                  ·      ·
+           └── update          ·      ·
+                │              table  t
+                │              set    x
+                └── render     ·      ·
+                     └── scan  ·      ·
+·                              table  t@primary
+·                              spans  ALL
 
 query TTT
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2) RETURNING x] LIMIT 1
