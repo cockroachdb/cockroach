@@ -86,6 +86,7 @@ func init() {
 var roachmartMeta = workload.Meta{
 	Name:        `roachmart`,
 	Description: `Roachmart models a geo-distributed online storefront with users and orders`,
+	Version:     `1.0.0`,
 	New: func() workload.Generator {
 		g := &roachmart{}
 		g.flags.FlagSet = pflag.NewFlagSet(`roachmart`, pflag.ContinueOnError)
