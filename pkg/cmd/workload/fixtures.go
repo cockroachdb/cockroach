@@ -55,7 +55,7 @@ var fixturesCmd = &cobra.Command{Use: `fixtures`}
 var fixturesListCmd = &cobra.Command{
 	Use:   `list`,
 	Short: `List all fixtures stored on GCS`,
-	RunE:  fixturesList,
+	Run:   wrap(fixturesList),
 }
 var fixturesMakeCmd = &cobra.Command{
 	Use:   `make`,
@@ -120,7 +120,7 @@ func init() {
 			Args: cobra.RangeArgs(0, 1),
 		}
 		genMakeCmd.Flags().AddFlagSet(genFlags)
-		genMakeCmd.RunE = cmdHelper(gen, fixturesMake)
+		genMakeCmd.Run = cmdHelper(gen, fixturesMake)
 		fixturesMakeCmd.AddCommand(genMakeCmd)
 
 		genLoadCmd := &cobra.Command{
@@ -128,7 +128,7 @@ func init() {
 			Args: cobra.RangeArgs(0, 1),
 		}
 		genLoadCmd.Flags().AddFlagSet(genFlags)
-		genLoadCmd.RunE = cmdHelper(gen, fixturesLoad)
+		genLoadCmd.Run = cmdHelper(gen, fixturesLoad)
 		fixturesLoadCmd.AddCommand(genLoadCmd)
 	}
 	fixturesCmd.AddCommand(fixturesListCmd)

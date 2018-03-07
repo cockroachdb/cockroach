@@ -33,3 +33,13 @@ func main() {
 		os.Exit(1)
 	}
 }
+
+func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Command, args []string) {
+	return func(cmd *cobra.Command, args []string) {
+		err := f(cmd, args)
+		if err != nil {
+			cmd.Println("Error:", err.Error())
+			os.Exit(1)
+		}
+	}
+}
