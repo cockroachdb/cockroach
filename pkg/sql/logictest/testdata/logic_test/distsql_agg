@@ -479,7 +479,7 @@ NULL       /0       {5}       5
 query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) SELECT COUNT(*) FROM one AS a, one AS b, two AS c]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html?eJzUk89LwzAUx-_-FfJOCjms2Q81J8WL87DKnHiQIrF51MKWV5IUlbH_XZoeZuuWUSYFj03yeZ9vX17WoEnhTK7QgniBCBhwYDCGhEFhKEVryVRb9cGp-gQxYJDronTVcsIgJYMg1uByt0QQsJBvS5yjVGiAgUIn86UvXph8Jc3XNWkEBnHpxCkkGwZUum0162SGIKIN69nI9xq3olKTUWhQNTRJRR46siP2nbTv95TrdupwztE_yTnucoM3WWYwk45aitv4abZ4ncfPj2fne02Thik6clbcBx2clWHDyHt_D30Y-Z8au3f1wMTM0RakLbYnfGflQTXWqDKsn4ml0qT4YCj1mvoz9pxfUGhdvTusP6bab_lL-AlHQZiHYd7BzNvwMAiPGvCgDY-C8FUYHnf451-xJ8d0--KYbl92ip1sTr4DAAD__7dOXWU=
+https://cockroachdb.github.io/distsqlplan/decode.html?eJzUkz1P8zAQx_fnUzy6CSQPjfsCeAKxUIYGlSIGFCETn0Kk1hfZjgBV_e4ozlAS2oQQRMUWv_z8--d8XoMmhTO5QgviAQJgwIHBGCIGmaEYrSVTLJUbp-oVxIBBqrPcFdMRg5gMgliDS90SQcBCPi1xjlKhAQYKnUyX_vDMpCtp3s5JIzAIcyf-z4rvaMOAcrc90TqZIIhgww5g5XutW1muySg0qCqqqCDbtuyIfiXt8zWlup68PevoD2Udd7nNiyQxmEhHNc1leDdbPM7D-9uj472mScUU9Owb90Jf6pthxcoP8kZ-y8p_1Pq9Crd00BxtRtpivet3njwoWh1VguXTsZSbGG8MxV5TDkPP-QmF1pWrw3Iw1X7JX8ZHOGiEeTPMO5h5HR42wqMKPKjDo0b4rBked_jnT7Enfap90qfap51iR5t_7wEAAP__VsFp5Q==
 
 query I
 SELECT COUNT(*) FROM one AS a, one AS b, two AS c
