@@ -19,19 +19,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
 func BenchmarkInitTPCC(b *testing.B) {
 	b.Run(`warehouses=1`, func(b *testing.B) {
-		genMeta, err := workload.Get(`tpcc`)
-		if err != nil {
-			b.Fatal(err)
-		}
-		gen := genMeta.New()
-		flags := []string{`--warehouses=1`}
-		if err := gen.(workload.Flagser).Flags().Parse(flags); err != nil {
-			b.Fatal(err)
-		}
+		gen := tpcc.FromWarehouses(1)
 		var bytes int64
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
