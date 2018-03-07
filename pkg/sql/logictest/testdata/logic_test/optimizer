@@ -25,13 +25,17 @@ SELECT * FROM test.t ORDER BY t.k+1
 query II
 SELECT * FROM test.t
 ----
-1 10
-2 20
-3 30
+1  10
+2  20
+3  30
 
 # UnionClause
-query error pq: unsupported relational op union
+query II
 SELECT * FROM test.t UNION SELECT * FROM test.t
+----
+1  10
+2  20
+3  30
 
 # Insert
 statement ok
