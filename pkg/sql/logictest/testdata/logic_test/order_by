@@ -790,13 +790,16 @@ render                    0  render  ·      ·          (b)        key()
 query TITTTTT
 EXPLAIN (METADATA) UPDATE t SET c = TRUE RETURNING b
 ----
-update          0  update  ·      ·          (b)                ·
- │              0  ·       table  t          ·                  ·
- │              0  ·       set    c          ·                  ·
- └── render     1  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
-      └── scan  2  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
-·               2  ·       table  t@primary  ·                  ·
-·               2  ·       spans  ALL        ·                  ·
+render                         0  render  ·      ·          (b)                ·
+ └── spool                     1  spool   ·      ·          (a, b, c)          ·
+      └── run                  2  run     ·      ·          (a, b, c)          ·
+           └── update          3  update  ·      ·          (a, b, c)          ·
+                │              3  ·       table  t          ·                  ·
+                │              3  ·       set    c          ·                  ·
+                └── render     4  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
+                     └── scan  5  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
+·                              5  ·       table  t@primary  ·                  ·
+·                              5  ·       spans  ALL        ·                  ·
 
 statement ok
 CREATE TABLE uvwxyz (
