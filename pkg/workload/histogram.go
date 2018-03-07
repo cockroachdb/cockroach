@@ -16,6 +16,7 @@ package workload
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -117,13 +118,14 @@ func (w *HistogramRegistry) GetHandle() *Histograms {
 }
 
 // Tick aggregates all registered histograms, grouped by name. It is expected to
-// be called periodially from one goroutine.
+// be called periodically from one goroutine.
 func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 	w.mu.Lock()
 	registered := append([]*NamedHistogram(nil), w.mu.registered...)
 	w.mu.Unlock()
 
 	merged := make(map[string]*hdrhistogram.Histogram)
+	var names []string
 	totalOps := make(map[string]int64)
 	for _, hist := range registered {
 		hist.tick(func(numOps int64, h *hdrhistogram.Histogram) {
@@ -137,12 +139,17 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 				m.Merge(h)
 			} else {
 				merged[hist.name] = h
+				names = append(names, hist.name)
 			}
 		})
 	}
 
-	// TODO(dan): Do this in a stable order (probably alphabetical).
-	for name, mergedHist := range merged {
+	sort.Strings(names)
+	for _, name := range names {
+		mergedHist, ok := merged[name]
+		if !ok {
+			panic(fmt.Sprintf("could not find histogram for record %s", name))
+		}
 		if _, ok := w.cumulative[name]; !ok {
 			w.cumulative[name] = hdrhistogram.New(
 				minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
