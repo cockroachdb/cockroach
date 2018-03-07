@@ -18,6 +18,8 @@ package acceptance
 import (
 	"context"
 	gosql "database/sql"
+	"io/ioutil"
+	"net/http"
 	"testing"
 	"time"
 
@@ -123,6 +125,30 @@ func testInitModeNoneInner(
 		t.Fatalf("query finished prematurely with err %v", err)
 	default:
 	}
+
+	// Check that the /health endpoint is functional even before cluster init,
+	// whereas other debug endpoints return a 404.
+	resp, err := cluster.HTTPClient.Get(c.URL(ctx, 0) + "/health")
+	if err != nil {
+		t.Fatalf("unexpected error hitting /health endpoint: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("unexpected response code %d hitting /health endpoint: %v",
+			resp.StatusCode, string(bodyBytes))
+	}
+	resp.Body.Close()
+
+	resp, err = cluster.HTTPClient.Get(c.URL(ctx, 0) + "/_status/nodes")
+	if err != nil {
+		t.Fatalf("unexpected error hitting /health endpoint: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		bodyBytes, _ := ioutil.ReadAll(resp.Body)
+		t.Fatalf("unexpected response code %d hitting /_status/nodes endpoint: %v",
+			resp.StatusCode, string(bodyBytes))
+	}
+	resp.Body.Close()
 
 	// TODO(bdarnell): initialize a node other than 0. This will provide
 	// a different test from what happens in TestInitModeCommand.
