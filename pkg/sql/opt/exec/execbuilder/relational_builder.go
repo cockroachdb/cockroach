@@ -103,6 +103,10 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	case opt.GroupByOp:
 		ep, err = b.buildGroupBy(ev)
 
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
+		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
+		ep, err = b.buildSetOp(ev)
+
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
 	}
@@ -278,7 +282,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 			col := child.Private().(opt.ColumnIndex)
 			idx, ok := input.outputCols.Get(int(col))
 			if !ok {
-				return execPlan{}, errors.Errorf("column %d not in input", j)
+				return execPlan{}, errors.Errorf("column %d not in input", col)
 			}
 			argIdx[j] = idx
 		}
@@ -297,6 +301,90 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 	return ep, nil
+}
+
+func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
+	left, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	right, err := b.buildRelational(ev.Child(1))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	colMap := *ev.Private().(*opt.SetOpColMap)
+
+	// We need to make sure that the two sides render the columns in the same
+	// order; otherwise we add projections.
+	// TODO(radu): we don't have to respect the exact order in the two ColLists;
+	// if one side is a permutation, we could set up a matching projection on
+	// the other side.
+	leftNode, err := b.ensureColumns(left, colMap.Left)
+	if err != nil {
+		return execPlan{}, err
+	}
+	rightNode, err := b.ensureColumns(right, colMap.Right)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	var typ tree.UnionType
+	var all bool
+	switch ev.Operator() {
+	case opt.UnionOp:
+		typ, all = tree.UnionOp, false
+	case opt.UnionAllOp:
+		typ, all = tree.UnionOp, true
+	case opt.IntersectOp:
+		typ, all = tree.IntersectOp, false
+	case opt.IntersectAllOp:
+		typ, all = tree.IntersectOp, true
+	case opt.ExceptOp:
+		typ, all = tree.ExceptOp, false
+	case opt.ExceptAllOp:
+		typ, all = tree.ExceptOp, true
+	default:
+		panic(fmt.Sprintf("invalid operator %s", ev.Operator()))
+	}
+
+	node, err := b.factory.ConstructSetOp(typ, all, leftNode, rightNode)
+	if err != nil {
+		return execPlan{}, err
+	}
+	ep := execPlan{root: node}
+	for i, col := range colMap.Out {
+		ep.outputCols.Set(int(col), i)
+	}
+	return ep, nil
+}
+
+// ensureColumns applies a projection as necessary to make the output match the
+// given list of columns.
+func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node, error) {
+	// Check if we need a projection.
+	if input.outputCols.Len() == len(colList) {
+		needProj := false
+		for i, col := range colList {
+			if idx, ok := input.outputCols.Get(int(col)); !ok || idx != i {
+				needProj = true
+				break
+			}
+		}
+		if !needProj {
+			return input.root, nil
+		}
+	}
+
+	cols := make([]int, len(colList))
+	for i, col := range colList {
+		idx, ok := input.outputCols.Get(int(col))
+		if !ok {
+			return execPlan{}, errors.Errorf("column %d not in input", col)
+		}
+		cols[i] = idx
+	}
+	return b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
 }
 
 // applyPresentation adds a projection to a plan to satisfy a required
