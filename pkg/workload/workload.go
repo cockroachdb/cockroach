@@ -307,7 +307,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 
 				buf.Reset()
 				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
-				if _, err := db.ExecContext(ctx, buf.String()); err != nil {
+				if _, err := db.Exec(buf.String()); err != nil {
 					doneCh <- errors.Wrap(err, buf.String())
 					return
 				}
@@ -315,7 +315,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 				buf.Reset()
 				fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
 					table.Name, split, split)
-				if _, err := db.ExecContext(ctx, buf.String()); err != nil {
+				if _, err := db.Exec(buf.String()); err != nil {
 					// SCATTER can collide with normal replicate queue
 					// operations and fail spuriously, so only print the
 					// error.
