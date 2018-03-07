@@ -79,6 +79,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *deleteNode:
 		return n.columns
+	case *updateNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -104,8 +106,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 
 	// Nodes using the RETURNING helper.
 	case *insertNode:
-		return n.rh.columns
-	case *updateNode:
 		return n.rh.columns
 
 	// Nodes that have the same schema as their source or their

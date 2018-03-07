@@ -385,10 +385,10 @@ func (v *planVisitor) visit(plan planNode) {
 
 	case *updateNode:
 		if v.observer.attr != nil {
-			v.observer.attr(name, "table", n.tableDesc.Name)
-			if len(n.tw.ru.UpdateCols) > 0 {
+			v.observer.attr(name, "table", n.run.tu.tableDesc().Name)
+			if len(n.run.tu.ru.UpdateCols) > 0 {
 				var buf bytes.Buffer
-				for i, col := range n.tw.ru.UpdateCols {
+				for i, col := range n.run.tu.ru.UpdateCols {
 					if i > 0 {
 						buf.WriteString(", ")
 					}
@@ -398,14 +398,15 @@ func (v *planVisitor) visit(plan planNode) {
 			}
 		}
 		if v.observer.expr != nil {
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
+			for i, cexpr := range n.run.computeExprs {
+				v.expr(name, "computed", i, cexpr)
 			}
-			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
-				v.expr(name, d, i, e)
-			})
+			for i, cexpr := range n.run.checkHelper.Exprs {
+				v.expr(name, "check", i, cexpr)
+			}
 		}
-		v.visit(n.run.rows)
+		// An updater has no sub-expressions, so nothing special to do here.
+		v.visit(n.source)
 
 	case *deleteNode:
 		if v.observer.attr != nil {

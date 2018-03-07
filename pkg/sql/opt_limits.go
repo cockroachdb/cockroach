@@ -143,7 +143,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *deleteNode:
 		p.setUnlimited(n.source)
 	case *updateNode:
-		p.setUnlimited(n.run.rows)
+		p.setUnlimited(n.source)
 	case *insertNode:
 		p.setUnlimited(n.run.rows)
 	case *createTableNode:

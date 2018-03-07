@@ -760,13 +760,9 @@ fetched: /ab/primary/2/1 -> NULL
 fetched: /ab/primary/2/2 -> NULL
 fetched: /ab/primary/2/6 -> NULL
 fetched: /ab/primary/3/9 -> NULL
-output row: [4 9]
 fetched: /ab/primary/4/10 -> NULL
-output row: [5 10]
 fetched: /ab/primary/42/51 -> NULL
-output row: [43 51]
 fetched: /ab/primary/43/52 -> NULL
-output row: [44 52]
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR DELETE FROM ab WHERE b > 6]
