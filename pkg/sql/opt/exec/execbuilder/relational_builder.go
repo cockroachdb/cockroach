@@ -29,8 +29,9 @@ import (
 type execPlan struct {
 	root exec.Node
 
-	// outputCols maps columns in the output set of a relational expression to
-	// indices in the result columns of the ExecNode.
+	// outputCols is a map from opt.ColumnIndex to exec.ColumnOrdinal. It maps
+	// columns in the output set of a relational expression to indices in the
+	// result columns of the exec.Node.
 	//
 	// The reason we need to keep track of this (instead of using just the
 	// relational properties) is that the relational properties don't force a
@@ -256,7 +257,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 	numAgg := aggregations.ChildCount()
 	groupingCols := *ev.Private().(*opt.ColSet)
 
-	groupingColIdx := make([]int, 0, groupingCols.Len())
+	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	var ep execPlan
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
 		idx, ok := input.outputCols.Get(i)
@@ -264,7 +265,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 			return execPlan{}, errors.Errorf("column %d not in input", i)
 		}
 		ep.outputCols.Set(i, len(groupingColIdx))
-		groupingColIdx = append(groupingColIdx, idx)
+		groupingColIdx = append(groupingColIdx, exec.ColumnOrdinal(idx))
 	}
 
 	aggColList := *aggregations.Private().(*opt.ColList)
@@ -273,7 +274,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 		fn := aggregations.Child(i)
 		funcDef := fn.Private().(opt.FuncDef)
 
-		argIdx := make([]int, fn.ChildCount())
+		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {
 			child := fn.Child(j)
 			if child.Operator() != opt.VariableOp {
@@ -284,7 +285,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 			if !ok {
 				return execPlan{}, errors.Errorf("column %d not in input", col)
 			}
-			argIdx[j] = idx
+			argIdx[j] = exec.ColumnOrdinal(idx)
 		}
 
 		aggInfos[i] = exec.AggInfo{
@@ -390,13 +391,13 @@ func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node,
 		}
 	}
 
-	cols := make([]int, len(colList))
+	cols := make([]exec.ColumnOrdinal, len(colList))
 	for i, col := range colList {
 		idx, ok := input.outputCols.Get(int(col))
 		if !ok {
 			return execPlan{}, errors.Errorf("column %d not in input", col)
 		}
-		cols[i] = idx
+		cols[i] = exec.ColumnOrdinal(idx)
 	}
 	return b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
 }
@@ -406,14 +407,14 @@ func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node,
 func (b *Builder) applyPresentation(
 	inputPlan execPlan, md *opt.Metadata, p opt.Presentation,
 ) (execPlan, error) {
-	cols := make([]int, len(p))
+	cols := make([]exec.ColumnOrdinal, len(p))
 	colNames := make([]string, len(p))
 	for i := range p {
 		idx, ok := inputPlan.outputCols.Get(int(p[i].Index))
 		if !ok {
 			return execPlan{}, errors.Errorf("presentation includes absent column %d", p[i].Index)
 		}
-		cols[i] = idx
+		cols[i] = exec.ColumnOrdinal(idx)
 		colNames[i] = p[i].Label
 	}
 	node, err := b.factory.ConstructSimpleProject(inputPlan.root, cols, colNames)

@@ -178,7 +178,7 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 
 // ConstructSimpleProject is part of the exec.Factory interface.
 func (ee *execEngine) ConstructSimpleProject(
-	n exec.Node, cols []int, colNames []string,
+	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
 	// Check if this is the identity projection, in which case we only need to
 	// rename columns.
@@ -186,7 +186,7 @@ func (ee *execEngine) ConstructSimpleProject(
 	if len(cols) == len(inputCols) {
 		identity := true
 		for i := range cols {
-			if cols[i] != i {
+			if cols[i] != exec.ColumnOrdinal(i) {
 				identity = false
 				break
 			}
@@ -208,7 +208,7 @@ func (ee *execEngine) ConstructSimpleProject(
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
 	for i, col := range cols {
-		v := r.ivarHelper.IndexedVar(col)
+		v := r.ivarHelper.IndexedVar(int(col))
 		r.render[i] = v
 		if colNames == nil {
 			r.columns[i].Name = inputCols[col].Name
@@ -293,13 +293,16 @@ func (ee *execEngine) ConstructJoin(
 
 // ConstructGroupBy is part of the exec.Factory interface.
 func (ee *execEngine) ConstructGroupBy(
-	input exec.Node, groupCols []int, aggregations []exec.AggInfo,
+	input exec.Node, groupCols []exec.ColumnOrdinal, aggregations []exec.AggInfo,
 ) (exec.Node, error) {
 	n := &groupNode{
 		plan:      input.(planNode),
 		funcs:     make([]*aggregateFuncHolder, 0, len(groupCols)+len(aggregations)),
 		columns:   make(sqlbase.ResultColumns, 0, len(groupCols)+len(aggregations)),
-		groupCols: groupCols,
+		groupCols: make([]int, len(groupCols)),
+	}
+	for i, col := range groupCols {
+		n.groupCols[i] = int(col)
 	}
 	inputCols := planColumns(n.plan)
 	for _, idx := range groupCols {
@@ -307,7 +310,7 @@ func (ee *execEngine) ConstructGroupBy(
 		f := n.newAggregateFuncHolder(
 			"", /* funcName */
 			inputCols[idx].Typ,
-			idx,
+			int(idx),
 			builtins.NewIdentAggregate,
 			ee.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
@@ -329,7 +332,7 @@ func (ee *execEngine) ConstructGroupBy(
 			}
 
 		case 1:
-			renderIdx = agg.ArgCols[0]
+			renderIdx = int(agg.ArgCols[0])
 			aggFn = func(evalCtx *tree.EvalContext) tree.AggregateFunc {
 				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx)
 			}

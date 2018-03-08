@@ -52,7 +52,7 @@ type Factory interface {
 	// more efficient version of ConstructRender.
 	// The colNames argument is optional; if it is nil, the names of the
 	// corresponding input columns are kept.
-	ConstructSimpleProject(n Node, cols []int, colNames []string) (Node, error)
+	ConstructSimpleProject(n Node, cols []ColumnOrdinal, colNames []string) (Node, error)
 
 	// ConstructRender returns a node that applies a projection on the results of
 	// the given input node. The projection can contain new expressions.
@@ -66,7 +66,7 @@ type Factory interface {
 	// ConstructGroupBy returns a node that runs an aggregation. If group columns
 	// are specified, a set of aggregations is performed for each group of values
 	// on those columns (otherwise there is a single group).
-	ConstructGroupBy(input Node, groupCols []int, aggregations []AggInfo) (Node, error)
+	ConstructGroupBy(input Node, groupCols []ColumnOrdinal, aggregations []AggInfo) (Node, error)
 
 	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
 	// operation (either the ALL or the DISTINCT version). The left and right
@@ -74,10 +74,13 @@ type Factory interface {
 	ConstructSetOp(typ tree.UnionType, all bool, left, right Node) (Node, error)
 }
 
+// ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
+type ColumnOrdinal int32
+
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {
 	FuncName   string
 	Builtin    *tree.Builtin
 	ResultType types.T
-	ArgCols    []int
+	ArgCols    []ColumnOrdinal
 }
