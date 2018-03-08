@@ -770,10 +770,13 @@ ordinality        0  ordinality  ·      ·                 (x, "ordinality")  w
 query TITTTTT
 EXPLAIN (METADATA) INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
 ----
-insert              0  insert    ·     ·        (b)     ·
- │                  0  ·         into  t(a, b)  ·       ·
- └── render         1  render    ·     ·        (x, y)  x=CONST; y=CONST
-      └── emptyrow  2  emptyrow  ·     ·        ()      ·
+render                             0  render    ·     ·        (b)        ·
+ └── spool                         1  spool     ·     ·        (a, b, c)  ·
+      └── run                      2  run       ·     ·        (a, b, c)  ·
+           └── insert              3  insert    ·     ·        (a, b, c)  ·
+                │                  3  ·         into  t(a, b)  ·          ·
+                └── render         4  render    ·     ·        (x, y)     x=CONST; y=CONST
+                     └── emptyrow  5  emptyrow  ·     ·        ()         ·
 
 query TITTTTT
 EXPLAIN (METADATA) DELETE FROM t WHERE a = 3 RETURNING b

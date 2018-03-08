@@ -9,15 +9,16 @@ CREATE TABLE t (
 query TTT
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
-insert       ·     ·
- │           into  t(k, v)
- └── values  ·     ·
-·            size  2 columns, 1 row
+count             ·     ·
+ └── insert       ·     ·
+      │           into  t(k, v)
+      └── values  ·     ·
+·                 size  2 columns, 1 row
 
 query I
 SELECT MAX("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
 ----
-1
+2
 
 statement ok
 INSERT INTO t VALUES (1, 2)

@@ -355,9 +355,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *insertNode:
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(n.tableDesc.Name)
+			buf.WriteString(n.run.ti.tableDesc().Name)
 			buf.WriteByte('(')
-			for i, col := range n.insertCols {
+			for i, col := range n.run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
@@ -368,17 +368,14 @@ func (v *planVisitor) visit(plan planNode) {
 		}
 
 		if v.observer.expr != nil {
-			for i, dexpr := range n.defaultExprs {
+			for i, dexpr := range n.run.defaultExprs {
 				v.expr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.checkHelper.Exprs {
+			for i, cexpr := range n.run.checkHelper.Exprs {
 				v.expr(name, "check", i, cexpr)
 			}
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
-			}
 		}
-		v.visit(n.run.rows)
+		v.visit(n.source)
 
 	case *upsertNode:
 		if v.observer.attr != nil {

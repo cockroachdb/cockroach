@@ -45,14 +45,14 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	case *updateNode:
 		return editNodeSpans(params, n.source, &n.run.tu)
 	case *insertNode:
-		if v, ok := n.run.editNodeRun.rows.(*valuesNode); ok {
+		if v, ok := n.source.(*valuesNode); ok {
 			// subqueries, even within valuesNodes, can be arbitrarily complex,
 			// so we can't run the valuesNode ahead of time if they are present.
 			if v.isConst {
 				return insertNodeWithValuesSpans(params, n, v)
 			}
 		}
-		return editNodeSpans(params, n.run.rows, n.run.tw)
+		return editNodeSpans(params, n.source, &n.run.ti)
 	case *upsertNode:
 		return editNodeSpans(params, n.run.rows, n.run.tw)
 	case *deleteNode:
@@ -164,12 +164,12 @@ func insertNodeWithValuesSpans(
 		// is a valuesNode. This is important, because it means that the result
 		// of all DEFAULT expressions will be retained from span collection to
 		// plan execution.
-		if a, e := len(values), len(n.insertCols); a < e {
+		if a, e := len(values), len(n.run.insertCols); a < e {
 			log.Fatalf(params.ctx, "missing columns for row; want %d, got %d", e, a)
 		}
 
 		// Determine the table spans that the current values tuple will mutate.
-		ti := n.run.editNodeRun.tw.(*tableInserter)
+		ti := &n.run.ti
 		primaryKey, secondaryKeys, err := ti.ri.EncodeIndexesForRow(values)
 		if err != nil {
 			return err

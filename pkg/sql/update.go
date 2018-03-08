@@ -713,9 +713,8 @@ func (p *planner) makeEditNode(
 // editNodeRun holds the runtime (execute) state needed to run
 // row-modifying statements.
 type editNodeRun struct {
-	rows      planNode
-	tw        tableWriter
-	resultRow tree.Datums
+	rows planNode
+	tw   tableWriter
 }
 
 func (r *editNodeRun) initEditNode(

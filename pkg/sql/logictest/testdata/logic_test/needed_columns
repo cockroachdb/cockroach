@@ -131,11 +131,12 @@ distinct        0  distinct  ·      ·           (v)              weak-key(v)
 query TITTTTT
 EXPLAIN (METADATA) INSERT INTO kv(k, v) SELECT 1, 2 FROM (SELECT 3 AS x, 4 AS y)
 ----
-insert                   0  insert    ·     ·         ()                        ·
- │                       0  ·         into  kv(k, v)  ·                         ·
- └── render              1  render    ·     ·         ("1", "2")                "1"=CONST; "2"=CONST
-      └── render         2  render    ·     ·         (x[omitted], y[omitted])  ·
-           └── emptyrow  3  emptyrow  ·     ·         ()                        ·
+count                         0  count     ·     ·         ()                        ·
+ └── insert                   1  insert    ·     ·         ()                        ·
+      │                       1  ·         into  kv(k, v)  ·                         ·
+      └── render              2  render    ·     ·         ("1", "2")                "1"=CONST; "2"=CONST
+           └── render         3  render    ·     ·         (x[omitted], y[omitted])  ·
+                └── emptyrow  4  emptyrow  ·     ·         ()                        ·
 
 # Propagation through DELETE.
 query TITTTTT

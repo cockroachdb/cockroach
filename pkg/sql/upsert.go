@@ -53,7 +53,7 @@ var _ autoCommitNode = &upsertNode{}
 func (p *planner) newUpsertNode(
 	ctx context.Context,
 	n *tree.Insert,
-	en editNodeBase,
+	desc *sqlbase.TableDescriptor,
 	ri sqlbase.RowInserter,
 	tn, alias *tree.TableName,
 	rows planNode,
@@ -66,7 +66,7 @@ func (p *planner) newUpsertNode(
 	// Extract the index that will detect upsert conflicts
 	// (conflictIndex) and the assignment expressions to use when
 	// conflicts are detected (updateExprs).
-	updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
+	updateExprs, conflictIndex, err := upsertExprsAndIndex(desc, *n.OnConflict, ri.InsertCols)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,10 @@ func (p *planner) newUpsertNode(
 	// Instantiate the upsert node.
 	un := upsertNodePool.Get().(*upsertNode)
 	*un = upsertNode{
-		editNodeBase: en,
+		editNodeBase: editNodeBase{
+			p:         p,
+			tableDesc: desc,
+		},
 		defaultExprs: defaultExprs,
 		computeExprs: computeExprs,
 		insertCols:   ri.InsertCols,
@@ -88,7 +91,7 @@ func (p *planner) newUpsertNode(
 		run: upsertRun{
 			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
 		},
-		checkHelper: fkTables[en.tableDesc.ID].CheckHelper,
+		checkHelper: fkTables[desc.ID].CheckHelper,
 	}
 	defer func() {
 		// If anything below fails, we don't want to leak
@@ -129,7 +132,7 @@ func (p *planner) newUpsertNode(
 		// updateCols may be legitimately empty (when there is no DO
 		// UPDATE clause). We set allowMutations because we need
 		// to populate all columns even those that are being added.
-		updateCols, err := p.processColumns(en.tableDesc, names,
+		updateCols, err := p.processColumns(desc, names,
 			false /* ensureColumns */, true /* allowMutations */)
 		if err != nil {
 			return nil, err
@@ -144,7 +147,7 @@ func (p *planner) newUpsertNode(
 		// SQL expressions. As described above, this also performs a
 		// semantic check, so it cannot be skipped on the fast path below.
 		helper, err := p.newUpsertHelper(
-			ctx, tn, en.tableDesc,
+			ctx, tn, desc,
 			ri.InsertCols,
 			updateCols,
 			updateExprs,
@@ -167,14 +170,14 @@ func (p *planner) newUpsertNode(
 			// Tables with secondary indexes are not eligible for fast path (it
 			// would be easy to add the new secondary index entry but we can't clean
 			// up the old one without the previous values).
-			len(en.tableDesc.Indexes) == 0 &&
+			len(desc.Indexes) == 0 &&
 			// When adding or removing a column in a schema change (mutation), the user
 			// can't specify it, which means we need to do a lookup and so we can't use
 			// the fast path. When adding or removing an index, same result, so the fast
 			// path is disabled during all mutations.
-			len(en.tableDesc.Mutations) == 0 &&
+			len(desc.Mutations) == 0 &&
 			// For the fast path, all columns must be specified in the insert.
-			len(ri.InsertCols) == len(en.tableDesc.Columns) &&
+			len(ri.InsertCols) == len(desc.Columns) &&
 			// We cannot use the fast path if we also have a RETURNING clause, because
 			// RETURNING wants to see only the updated rows.
 			!needRows
