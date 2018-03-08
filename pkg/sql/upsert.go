@@ -88,8 +88,12 @@ func (p *planner) newUpsertNode(
 		computeExprs: computeExprs,
 		insertCols:   ri.InsertCols,
 		computedCols: computedCols,
+
 		run: upsertRun{
-			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
+			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+				Cols:    desc.Columns,
+				Mapping: ri.InsertColIDtoRowIndex,
+			},
 		},
 		checkHelper: fkTables[desc.ID].CheckHelper,
 	}
@@ -233,12 +237,15 @@ type upsertRun struct {
 	// The following fields are populated during Start().
 	editNodeRun
 
-	insertColIDtoRowIndex map[sqlbase.ColumnID]int
-
 	rowIdxToRetIdx []int
 	rowTemplate    tree.Datums
 
 	rowsUpserted *sqlbase.RowContainer
+
+	// iVarContainerForComputedCols is used as a temporary buffer that
+	// holds the updated values for every column in the source, to
+	// serve as input for indexed vars contained in the computeExprs.
+	iVarContainerForComputedCols sqlbase.RowIndexedVarContainer
 
 	numRows   int
 	curRowIdx int
@@ -347,18 +354,19 @@ func (n *upsertNode) internalNext(params runParams) (bool, error) {
 	rowVals, err := GenerateInsertRow(
 		n.defaultExprs,
 		n.computeExprs,
-		n.run.insertColIDtoRowIndex,
 		n.insertCols,
 		n.computedCols,
 		*params.EvalContext(),
 		n.tableDesc,
 		n.run.rows.Values(),
+		&n.run.iVarContainerForComputedCols,
 	)
 	if err != nil {
 		return false, err
 	}
 
-	if err := n.checkHelper.LoadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
+	insertColIDtoRowIndex := n.run.iVarContainerForComputedCols.Mapping
+	if err := n.checkHelper.LoadRow(insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
 	if err := n.checkHelper.Check(params.EvalContext()); err != nil {
