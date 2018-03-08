@@ -415,7 +415,14 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
 	for _, table := range fixture.Generator.Tables() {
 		if err := workload.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
-			return err
+			return errors.Wrapf(err, `splitting %s`, table.Name)
+		}
+	}
+	if h, ok := fixture.Generator.(workload.Hookser); ok {
+		if hooks := h.Hooks(); hooks.PostLoad != nil {
+			if err := hooks.PostLoad(sqlDB); err != nil {
+				return errors.Wrap(err, `PostLoad hook`)
+			}
 		}
 	}
 	return nil
