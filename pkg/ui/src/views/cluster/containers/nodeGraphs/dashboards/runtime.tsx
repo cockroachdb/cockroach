@@ -1,12 +1,13 @@
 import React from "react";
+import _ from "lodash";
 
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
-import { GraphDashboardProps } from "./dashboardUtils";
+import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeSources, tooltipSelection } = props;
+  const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
 
   return [
     <LineGraph title="Live Node Count" tooltip="The number of live nodes in the cluster.">
@@ -97,6 +98,25 @@ export default function (props: GraphDashboardProps) {
       <Axis units={AxisUnits.Duration} label="cpu time">
         <Metric name="cr.node.sys.cpu.user.ns" title="User CPU Time" nonNegativeRate />
         <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Clock Offset"
+      sources={nodeSources}
+      tooltip={`Mean clock offset of each node against the rest of the cluster.`}
+    >
+      <Axis label="offset" units={AxisUnits.Duration}>
+        {
+          _.map(nodeIDs, (nid) => (
+            <Metric
+              key={nid}
+              name="cr.node.clock-offset.meannanos"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+            />
+          ))
+        }
       </Axis>
     </LineGraph>,
   ];
