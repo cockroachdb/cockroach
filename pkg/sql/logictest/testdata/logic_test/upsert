@@ -363,3 +363,15 @@ SELECT * FROM issue_17339 ORDER BY a;
 ----
 1 0
 2 1
+
+query TTT
+EXPLAIN (PLAN,EXPRS) UPSERT INTO kv TABLE kv ORDER BY v DESC
+----
+upsert          ·       ·
+ │              into    kv(k, v)
+ │              eval 0  v
+ └── sort       ·       ·
+      │         order   -v
+      └── scan  ·       ·
+·               table   kv@primary
+·               spans   ALL

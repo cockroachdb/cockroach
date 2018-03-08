@@ -259,7 +259,7 @@ type tableUpserter struct {
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	updateCols []sqlbase.ColumnDescriptor
-	evaler     tableUpsertEvaler
+	evaler     *upsertHelper
 
 	// Set by init.
 	txn                   *client.Txn
@@ -407,9 +407,8 @@ func (tu *tableUpserter) row(
 		return nil, err
 	}
 
-	_, err := tu.insertRows.AddRow(ctx, row)
 	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
-	return nil, err
+	return tu.insertRows.AddRow(ctx, row)
 }
 
 // flush commits to tu.txn any rows batched up in tu.insertRows.

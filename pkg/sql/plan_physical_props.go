@@ -53,8 +53,15 @@ func planPhysicalProps(plan planNode) physicalProps {
 		// TODO(knz): RETURNING is ordered by the PK.
 	case *deleteNode:
 		// TODO(knz): RETURNING is ordered by the PK.
-	case *updateNode:
-		// TODO(knz): RETURNING is ordered by the PK.
+	case *updateNode, *upsertNode:
+		// After an update, the original order may have been destroyed.
+		// For example, if the PK is updated by a SET expression.
+		// So we can't assume any ordering.
+		//
+		// TODO(knz/radu): this can be refined by an analysis which
+		// determines whether the columns that participate in the ordering
+		// of the source are being updated. If they are not, the source
+		// ordering can be propagated.
 
 	case *scanNode:
 		return n.props
