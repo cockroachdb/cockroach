@@ -330,6 +330,50 @@ project
       └── variable: kw.from [type=int, outer=(1)]
 
 exec-ddl
+CREATE TABLE xyzw (
+  x INT PRIMARY KEY,
+  y INT,
+  z INT,
+  w INT,
+  INDEX foo (z, y)
+)
+----
+TABLE xyzw
+ ├── x int not null
+ ├── y int
+ ├── z int
+ ├── w int
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX foo
+      ├── z int
+      ├── y int
+      └── x int not null
+
+build
+SELECT * FROM xyzw ORDER BY 1
+----
+scan
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── ordering: +1
+
+build
+SELECT * FROM xyzw ORDER BY x
+----
+scan
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ └── ordering: +1
+
+build
+SELECT * FROM xyzw ORDER BY y
+----
+sort
+ ├── columns: x:1(int!null) y:2(int) z:3(int) w:4(int)
+ ├── ordering: +2
+ └── scan
+      └── columns: xyzw.x:1(int!null) xyzw.y:2(int) xyzw.z:3(int) xyzw.w:4(int)
+
+exec-ddl
 CREATE TABLE boolean_table (
   id INTEGER PRIMARY KEY NOT NULL,
   value BOOLEAN

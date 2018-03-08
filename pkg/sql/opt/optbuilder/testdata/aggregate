@@ -720,6 +720,78 @@ SELECT COUNT(k, v) FROM t.kv
 error: unknown signature: count(int, int)
 
 build
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
+----
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: +2
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    ├── scan
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections [outer=(1,2)]
+      │         ├── variable: kv.v [type=int, outer=(2)]
+      │         └── variable: kv.k [type=int, outer=(1)]
+      └── aggregations [outer=(1)]
+           └── function: count [type=int, outer=(1)]
+                └── variable: kv.k [type=int, outer=(1)]
+
+build
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
+----
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: -2
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    ├── scan
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections [outer=(1,2)]
+      │         ├── variable: kv.v [type=int, outer=(2)]
+      │         └── variable: kv.k [type=int, outer=(1)]
+      └── aggregations [outer=(1)]
+           └── function: count [type=int, outer=(1)]
+                └── variable: kv.k [type=int, outer=(1)]
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
+----
+error: column name "k" not found
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
+----
+error: column name "k" not found
+
+build
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
+----
+sort
+ ├── columns: v:2(int) column5:5(int)
+ ├── ordering: -2
+ └── group-by
+      ├── columns: kv.v:2(int) column5:5(int)
+      ├── grouping columns: kv.v:2(int)
+      ├── project
+      │    ├── columns: kv.v:2(int) kv.k:1(int!null)
+      │    ├── scan
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+      │    └── projections [outer=(1,2)]
+      │         ├── variable: kv.v [type=int, outer=(2)]
+      │         └── variable: kv.k [type=int, outer=(1)]
+      └── aggregations [outer=(1)]
+           └── function: count [type=int, outer=(1)]
+                └── variable: kv.k [type=int, outer=(1)]
+
+build
 SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM t.kv
 ----
 group-by
@@ -871,6 +943,24 @@ group-by
       │    └── variable: kv.v [type=int, outer=(2)]
       └── function: max [type=int, outer=(2)]
            └── variable: kv.v [type=int, outer=(2)]
+
+build
+SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM kv ORDER BY k)
+----
+group-by
+ ├── columns: column5:5(int[]) column6:6(string[])
+ ├── project
+ │    ├── columns: kv.k:1(int!null) kv.s:4(string)
+ │    ├── scan
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    └── projections [outer=(1,4)]
+ │         ├── variable: kv.k [type=int, outer=(1)]
+ │         └── variable: kv.s [type=string, outer=(4)]
+ └── aggregations [outer=(1,4)]
+      ├── function: array_agg [type=int[], outer=(1)]
+      │    └── variable: kv.k [type=int, outer=(1)]
+      └── function: array_agg [type=string[], outer=(4)]
+           └── variable: kv.s [type=string, outer=(4)]
 
 build
 SELECT array_agg(s) FROM t.kv WHERE s IS NULL
@@ -1609,6 +1699,52 @@ project
       └── variable: column7 [type=int, outer=(7)]
 
 build
+SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
+----
+project
+ ├── columns: column6:6(string) b:2(int) column7:7(int)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: xor_bytes.b:2(int) column5:5(bytes) column7:7(int)
+ │    ├── ordering: +2
+ │    └── group-by
+ │         ├── columns: xor_bytes.b:2(int) column5:5(bytes) column7:7(int)
+ │         ├── grouping columns: xor_bytes.b:2(int)
+ │         ├── project
+ │         │    ├── columns: xor_bytes.b:2(int) xor_bytes.a:1(bytes) xor_bytes.c:3(int)
+ │         │    ├── scan
+ │         │    │    └── columns: xor_bytes.a:1(bytes) xor_bytes.b:2(int) xor_bytes.c:3(int) xor_bytes.rowid:4(int!null)
+ │         │    └── projections [outer=(1-3)]
+ │         │         ├── variable: xor_bytes.b [type=int, outer=(2)]
+ │         │         ├── variable: xor_bytes.a [type=bytes, outer=(1)]
+ │         │         └── variable: xor_bytes.c [type=int, outer=(3)]
+ │         └── aggregations [outer=(1,3)]
+ │              ├── function: xor_agg [type=bytes, outer=(1)]
+ │              │    └── variable: xor_bytes.a [type=bytes, outer=(1)]
+ │              └── function: xor_agg [type=int, outer=(3)]
+ │                   └── variable: xor_bytes.c [type=int, outer=(3)]
+ └── projections [outer=(2,5,7)]
+      ├── function: to_hex [type=string, outer=(5)]
+      │    └── variable: column5 [type=bytes, outer=(5)]
+      ├── variable: xor_bytes.b [type=int, outer=(2)]
+      └── variable: column7 [type=int, outer=(7)]
+
+build
+SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)
+----
+group-by
+ ├── columns: column2:2(bytes)
+ ├── values
+ │    ├── columns: column1:1(bytes)
+ │    ├── tuple [type=tuple{bytes}]
+ │    │    └── const: '\x01' [type=bytes]
+ │    └── tuple [type=tuple{bytes}]
+ │         └── const: '\x0101' [type=bytes]
+ └── aggregations [outer=(1)]
+      └── function: xor_agg [type=bytes, outer=(1)]
+           └── variable: column1 [type=bytes, outer=(1)]
+
+build
 SELECT MAX(true), MIN(true)
 ----
 group-by
@@ -1625,6 +1761,66 @@ group-by
       │    └── variable: column1 [type=bool, outer=(1)]
       └── function: min [type=bool, outer=(3)]
            └── variable: column3 [type=bool, outer=(3)]
+
+build
+SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+group-by
+ ├── columns: column5:5(string)
+ ├── project
+ │    ├── columns: kv.s:4(string)
+ │    ├── project
+ │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── projections [outer=(1,4)]
+ │    │         ├── variable: kv.s [type=string, outer=(4)]
+ │    │         └── variable: kv.k [type=int, outer=(1)]
+ │    └── projections [outer=(4)]
+ │         └── variable: kv.s [type=string, outer=(4)]
+ └── aggregations [outer=(4)]
+      └── function: concat_agg [type=string, outer=(4)]
+           └── variable: kv.s [type=string, outer=(4)]
+
+build
+SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+group-by
+ ├── columns: column5:5(jsonb)
+ ├── project
+ │    ├── columns: kv.s:4(string)
+ │    ├── project
+ │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── projections [outer=(1,4)]
+ │    │         ├── variable: kv.s [type=string, outer=(4)]
+ │    │         └── variable: kv.k [type=int, outer=(1)]
+ │    └── projections [outer=(4)]
+ │         └── variable: kv.s [type=string, outer=(4)]
+ └── aggregations [outer=(4)]
+      └── function: json_agg [type=jsonb, outer=(4)]
+           └── variable: kv.s [type=string, outer=(4)]
+
+build
+SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
+----
+group-by
+ ├── columns: column5:5(jsonb)
+ ├── project
+ │    ├── columns: kv.s:4(string)
+ │    ├── project
+ │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    │    ├── scan
+ │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    │    └── projections [outer=(1,4)]
+ │    │         ├── variable: kv.s [type=string, outer=(4)]
+ │    │         └── variable: kv.k [type=int, outer=(1)]
+ │    └── projections [outer=(4)]
+ │         └── variable: kv.s [type=string, outer=(4)]
+ └── aggregations [outer=(4)]
+      └── function: jsonb_agg [type=jsonb, outer=(4)]
+           └── variable: kv.s [type=string, outer=(4)]
 
 exec-ddl
 CREATE TABLE t.ab (
@@ -1703,6 +1899,24 @@ project
       └── tuple [type=tuple{int, int}, outer=(1,2)]
            ├── variable: ab.b [type=int, outer=(2)]
            └── variable: ab.a [type=int, outer=(1)]
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+----
+error: column name "k" not found
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+----
+error: aggregate function is not allowed in this context
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+----
+error: aggregate function is not allowed in this context
 
 build
 SELECT (k+v)/(v+w) FROM t.kv GROUP BY k+v, v+w;
