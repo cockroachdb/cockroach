@@ -348,10 +348,10 @@ func (p *planner) Update(
 			rowsNeeded:   rowsNeeded,
 			computedCols: computedCols,
 			computeExprs: computeExprs,
-			iVarContainerForComputedCols: rowIndexedVarContainer{
+			iVarContainerForComputedCols: RowIndexedVarContainer{
 				curSourceRow: make(tree.Datums, len(ru.FetchCols)),
-				cols:         desc.Columns,
-				mapping:      ru.FetchColIDtoRowIndex,
+				Cols:         desc.Columns,
+				Mapping:      ru.FetchColIDtoRowIndex,
 			},
 			sourceSlots:   sourceSlots,
 			updateValues:  make(tree.Datums, len(ru.UpdateCols)),
@@ -400,7 +400,7 @@ type updateRun struct {
 	// iVarContainerForComputedCols is used as a temporary buffer that
 	// holds the updated values for every column in the source, to
 	// serve as input for indexed vars contained in the computeExprs.
-	iVarContainerForComputedCols rowIndexedVarContainer
+	iVarContainerForComputedCols RowIndexedVarContainer
 
 	// sourceSlots is the helper that maps RHS expressions to LHS targets.
 	// This is necessary because there may be fewer RHS expressions than

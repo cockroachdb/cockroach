@@ -16,6 +16,7 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -49,4 +50,33 @@ func (rb *RowBuffer) Next() bool {
 	rb.output = rb.At(0)
 	rb.PopFirst()
 	return true
+}
+
+// RowIndexedVarContainer is a 1-row buffer that can be used to hold a
+// row for the purpose of evaluating an expression over it.
+type RowIndexedVarContainer struct {
+	curSourceRow tree.Datums
+	// Cols describe the columns in the current row.
+	Cols []sqlbase.ColumnDescriptor
+	// Mapping indicates in which order the columns are present in curSourceRow.
+	// Because the rows we have might not be permuted in the same way as the
+	// original table, we need to store a mapping between them.
+	Mapping map[sqlbase.ColumnID]int
+}
+
+// IndexedVarEval implements the tree.IVarContainer interface.
+func (r *RowIndexedVarContainer) IndexedVarEval(
+	idx int, ctx *tree.EvalContext,
+) (tree.Datum, error) {
+	return r.curSourceRow[r.Mapping[r.Cols[idx].ID]], nil
+}
+
+// IndexedVarResolvedType implements the tree.IVarContainer interface.
+func (r *RowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+	panic("unsupported")
+}
+
+// IndexedVarNodeFormatter implements the tree.IVarContainer interface.
+func (*RowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	return nil
 }

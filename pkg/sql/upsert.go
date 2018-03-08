@@ -88,8 +88,12 @@ func (p *planner) newUpsertNode(
 		computeExprs: computeExprs,
 		insertCols:   ri.InsertCols,
 		computedCols: computedCols,
+
 		run: upsertRun{
-			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
+			iVarContainerForComputedCols: RowIndexedVarContainer{
+				Cols:    desc.Columns,
+				Mapping: ri.InsertColIDtoRowIndex,
+			},
 		},
 		checkHelper: fkTables[desc.ID].CheckHelper,
 	}
@@ -233,12 +237,15 @@ type upsertRun struct {
 	// The following fields are populated during Start().
 	editNodeRun
 
-	insertColIDtoRowIndex map[sqlbase.ColumnID]int
-
 	rowIdxToRetIdx []int
 	rowTemplate    tree.Datums
 
 	rowsUpserted *sqlbase.RowContainer
+
+	// iVarContainerForComputedCols is used as a temporary buffer that
+	// holds the updated values for every column in the source, to
+	// serve as input for indexed vars contained in the computeExprs.
+	iVarContainerForComputedCols RowIndexedVarContainer
 
 	numRows   int
 	curRowIdx int
@@ -347,18 +354,19 @@ func (n *upsertNode) internalNext(params runParams) (bool, error) {
 	rowVals, err := GenerateInsertRow(
 		n.defaultExprs,
 		n.computeExprs,
-		n.run.insertColIDtoRowIndex,
 		n.insertCols,
 		n.computedCols,
 		*params.EvalContext(),
 		n.tableDesc,
 		n.run.rows.Values(),
+		&n.run.iVarContainerForComputedCols,
 	)
 	if err != nil {
 		return false, err
 	}
 
-	if err := n.checkHelper.LoadRow(n.run.insertColIDtoRowIndex, rowVals, false); err != nil {
+	insertColIDtoRowIndex := n.run.iVarContainerForComputedCols.Mapping
+	if err := n.checkHelper.LoadRow(insertColIDtoRowIndex, rowVals, false); err != nil {
 		return false, err
 	}
 	if err := n.checkHelper.Check(params.EvalContext()); err != nil {
@@ -443,7 +451,7 @@ type upsertHelper struct {
 	// ccIvarContainer buffers the current values after the upsert
 	// conflict resolution, to serve as input while evaluating
 	// computeExprs.
-	ccIvarContainer rowIndexedVarContainer
+	ccIvarContainer RowIndexedVarContainer
 
 	// This struct must be allocated on the heap and its location stay
 	// stable after construction because it implements
@@ -629,9 +637,9 @@ func (p *planner) newUpsertHelper(
 	//
 	// This will use the layout from the table columns. The mapping from
 	// column IDs to row datum positions is straightforward.
-	helper.ccIvarContainer = rowIndexedVarContainer{
-		cols:    tableDesc.Columns,
-		mapping: sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns),
+	helper.ccIvarContainer = RowIndexedVarContainer{
+		Cols:    tableDesc.Columns,
+		Mapping: sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns),
 	}
 
 	return helper, nil

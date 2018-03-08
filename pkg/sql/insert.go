@@ -254,14 +254,17 @@ func (p *planner) Insert(
 		source:  rows,
 		columns: columns,
 		run: insertRun{
-			ti:                    tableInserter{ri: ri},
-			checkHelper:           fkTables[desc.ID].CheckHelper,
-			rowsNeeded:            rowsNeeded,
-			computedCols:          computedCols,
-			computeExprs:          computeExprs,
-			defaultExprs:          defaultExprs,
-			insertCols:            ri.InsertCols,
-			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
+			ti:           tableInserter{ri: ri},
+			checkHelper:  fkTables[desc.ID].CheckHelper,
+			rowsNeeded:   rowsNeeded,
+			computedCols: computedCols,
+			computeExprs: computeExprs,
+			iVarContainerForComputedCols: RowIndexedVarContainer{
+				Cols:    desc.Columns,
+				Mapping: ri.InsertColIDtoRowIndex,
+			},
+			defaultExprs: defaultExprs,
+			insertCols:   ri.InsertCols,
 		},
 	}
 
@@ -292,6 +295,10 @@ type insertRun struct {
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
+	// iVarContainerForComputedCols is used as a temporary buffer that
+	// holds the updated values for every column in the source, to
+	// serve as input for indexed vars contained in the computeExprs.
+	iVarContainerForComputedCols RowIndexedVarContainer
 
 	// rowCount is the number of rows in the current batch.
 	rowCount int
@@ -312,8 +319,6 @@ type insertRun struct {
 	// rowsNeeded is set to populate resultRowBuffer and the row
 	// container.
 	rowIdxToRetIdx []int
-
-	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 
 	// autoCommit indicates whether the last KV batch processed by
 	// this update will also commit the KV txn.
@@ -463,12 +468,12 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	rowVals, err := GenerateInsertRow(
 		n.run.defaultExprs,
 		n.run.computeExprs,
-		n.run.insertColIDtoRowIndex,
 		n.run.insertCols,
 		n.run.computedCols,
 		*params.EvalContext(),
 		n.run.ti.tableDesc(),
 		sourceVals,
+		&n.run.iVarContainerForComputedCols,
 	)
 	if err != nil {
 		return err
@@ -526,29 +531,6 @@ func (n *insertNode) enableAutoCommit() {
 	n.run.autoCommit = autoCommitEnabled
 }
 
-// rowIndexedVarContainer is used to evaluate expressions over various rows.
-type rowIndexedVarContainer struct {
-	curSourceRow tree.Datums
-	// Because the rows we have might not be permuted in the same way as the
-	// original table, we need to store a mapping between them.
-	cols    []sqlbase.ColumnDescriptor
-	mapping map[sqlbase.ColumnID]int
-}
-
-func (r *rowIndexedVarContainer) IndexedVarEval(
-	idx int, ctx *tree.EvalContext,
-) (tree.Datum, error) {
-	return r.curSourceRow[r.mapping[r.cols[idx].ID]], nil
-}
-
-func (r *rowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
-	panic("unsupported")
-}
-
-func (*rowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	return nil
-}
-
 // GenerateInsertRow prepares a row tuple for insertion. It fills in default
 // expressions, verifies non-nullable columns, and checks column widths.
 //
@@ -568,12 +550,12 @@ func (*rowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatt
 func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
-	insertColIDtoRowIndex map[sqlbase.ColumnID]int,
 	insertCols []sqlbase.ColumnDescriptor,
 	computedCols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,
 	tableDesc *sqlbase.TableDescriptor,
 	rowVals tree.Datums,
+	rowContainerForComputedVals *RowIndexedVarContainer,
 ) (tree.Datums, error) {
 	// The values for the row may be shorter than the number of columns being
 	// inserted into. Generate default values for those columns using the
@@ -601,10 +583,8 @@ func GenerateInsertRow(
 
 	// Generate the computed values, if needed.
 	if len(computeExprs) > 0 {
-		// Evaluate any computed columns. Since these obviously can reference other
-		// columns, we need an IVarContainer to be able to resolve column references.
-		iv := &rowIndexedVarContainer{rowVals, tableDesc.Columns, insertColIDtoRowIndex}
-		evalCtx.PushIVarContainer(iv)
+		rowContainerForComputedVals.curSourceRow = rowVals
+		evalCtx.PushIVarContainer(rowContainerForComputedVals)
 		for i := range computedCols {
 			// Note that even though the row is not fully constructed at this point,
 			// since we disallow computed columns from referencing other computed
@@ -614,16 +594,15 @@ func GenerateInsertRow(
 			if err != nil {
 				return nil, err
 			}
-			rowVals[insertColIDtoRowIndex[computedCols[i].ID]] = d
+			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d
 		}
-
 		evalCtx.PopIVarContainer()
 	}
 
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.Columns {
 		if !col.Nullable {
-			if i, ok := insertColIDtoRowIndex[col.ID]; !ok || rowVals[i] == tree.DNull {
+			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
 				return nil, sqlbase.NewNonNullViolationError(col.Name)
 			}
 		}

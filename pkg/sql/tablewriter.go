@@ -592,10 +592,10 @@ func (tu *tableUpserter) updateConflictingRow(
 
 	// Maybe the PK was updated by SET. We need to recompute a fresh PK
 	// for the current row from updatedRow. We use
-	// tu.evaler.ccIvarContainer.mapping which contains the suitable
+	// tu.evaler.ccIvarContainer.Mapping which contains the suitable
 	// mapping for the table columns already.
 	updatedConflictingRowPK, _, err := sqlbase.EncodeIndexKey(
-		tableDesc, &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.mapping, updatedRow, tu.indexKeyPrefix)
+		tableDesc, &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.Mapping, updatedRow, tu.indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
 	}
