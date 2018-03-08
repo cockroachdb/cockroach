@@ -17,7 +17,6 @@ package build
 import (
 	"fmt"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -56,7 +55,7 @@ var (
 
 // IsRelease returns true if the binary was produced by a "release" build.
 func IsRelease() bool {
-	return strings.HasPrefix(typ, "release")
+	return typ == "release"
 }
 
 // VersionPrefix returns the version prefix of the current build.
