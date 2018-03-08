@@ -572,18 +572,19 @@ var Builtins = map[string][]tree.Builtin{
 			Types:      tree.ArgTypes{{"data", types.Bytes}, {"format", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
-				data, format := string(*args[0].(*tree.DBytes)), string(tree.MustBeDString(args[1]))
-				if format != "hex" {
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for ENCODE")
+				data, format := *args[0].(*tree.DBytes), string(tree.MustBeDString(args[1]))
+				switch format {
+				case "hex":
+					var buf bytes.Buffer
+					lex.HexEncodeString(&buf, string(data))
+					return tree.NewDString(buf.String()), nil
+				case "escape":
+					return tree.NewDString(encodeEscape([]byte(data))), nil
+				default:
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' and 'escape' formats are supported for ENCODE")
 				}
-				if !utf8.ValidString(data) {
-					return nil, pgerror.NewError(pgerror.CodeCharacterNotInRepertoireError, "invalid UTF-8 sequence")
-				}
-				var buf bytes.Buffer
-				lex.HexEncodeString(&buf, data)
-				return tree.NewDString(buf.String()), nil
 			},
-			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" is supported).",
+			Info: "Encodes `data` in the text format specified by `format` (only \"hex\" and \"escape\" are supported).",
 		},
 	},
 
@@ -593,16 +594,24 @@ var Builtins = map[string][]tree.Builtin{
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (_ tree.Datum, err error) {
 				data, format := string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1]))
-				if format != "hex" {
-					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' format is supported for DECODE")
+				switch format {
+				case "hex":
+					decoded, err := hex.DecodeString(data)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(decoded)), nil
+				case "escape":
+					decoded, err := decodeEscape(data)
+					if err != nil {
+						return nil, err
+					}
+					return tree.NewDBytes(tree.DBytes(decoded)), nil
+				default:
+					return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError, "only 'hex' and 'escape' formats are supported for DECODE")
 				}
-				decoded, err := hex.DecodeString(data)
-				if err != nil {
-					return nil, err
-				}
-				return tree.NewDBytes(tree.DBytes(decoded)), nil
 			},
-			Info: "Decodes `data` as the format specified by `format` (only \"hex\" is supported).",
+			Info: "Decodes `data` as the format specified by `format` (only \"hex\" and \"escape\" are supported).",
 		},
 	},
 
@@ -3507,6 +3516,63 @@ func stringToArray(str string, delimPtr *string, nullStr *string) (tree.Datum, e
 		}
 		if err := result.Append(next); err != nil {
 			return nil, err
+		}
+	}
+	return result, nil
+}
+
+// encodeEscape implements the encode(..., 'escape') Postgres builtin. It's
+// described "escape converts zero bytes and high-bit-set bytes to octal
+// sequences (\nnn) and doubles backslashes."
+func encodeEscape(input []byte) string {
+	var result bytes.Buffer
+	start := 0
+	for i := range input {
+		if input[i] == 0 || input[i]&128 != 0 {
+			result.Write(input[start:i])
+			start = i + 1
+			result.WriteString(fmt.Sprintf(`\%03o`, input[i]))
+		} else if input[i] == '\\' {
+			result.Write(input[start:i])
+			start = i + 1
+			result.WriteString(`\\`)
+		}
+	}
+	result.Write(input[start:])
+	return result.String()
+}
+
+var errInvalidSyntaxForDecode = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "invalid syntax for decode(..., 'escape')")
+
+func isOctalDigit(c byte) bool {
+	return '0' <= c && c <= '7'
+}
+
+func decodeOctalTriplet(input string) byte {
+	return (input[0]-'0')*64 + (input[1]-'0')*8 + (input[2] - '0')
+}
+
+// decodeEscape implements the decode(..., 'escape') Postgres builtin. The
+// escape format is described as "escape converts zero bytes and high-bit-set
+// bytes to octal sequences (\nnn) and doubles backslashes."
+func decodeEscape(input string) ([]byte, error) {
+	result := make([]byte, 0, len(input))
+	for i := 0; i < len(input); i++ {
+		if input[i] == '\\' {
+			if i+1 < len(input) && input[i+1] == '\\' {
+				result = append(result, '\\')
+				i++
+			} else if i+3 < len(input) &&
+				isOctalDigit(input[i+1]) &&
+				isOctalDigit(input[i+2]) &&
+				isOctalDigit(input[i+3]) {
+				result = append(result, decodeOctalTriplet(input[i+1:i+4]))
+				i += 3
+			} else {
+				return nil, errInvalidSyntaxForDecode
+			}
+		} else {
+			result = append(result, input[i])
 		}
 	}
 	return result, nil

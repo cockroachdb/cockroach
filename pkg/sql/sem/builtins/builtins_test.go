@@ -15,7 +15,9 @@
 package builtins
 
 import (
+	"bytes"
 	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -109,5 +111,57 @@ func TestStringToArray(t *testing.T) {
 				t.Fatalf("expected %v, got %v", tc.expected, result)
 			}
 		})
+	}
+}
+
+func TestEscapeFormat(t *testing.T) {
+	testCases := []struct {
+		bytes []byte
+		str   string
+	}{
+		{[]byte{}, ``},
+		{[]byte{'a', 'b', 'c'}, `abc`},
+		{[]byte{'a', 'b', 'c', 'd'}, `abcd`},
+		{[]byte{'a', 'b', 0, 'd'}, `ab\000d`},
+		{[]byte{'a', 'b', 0, 0, 'd'}, `ab\000\000d`},
+		{[]byte{'a', 'b', 0, 'a', 'b', 'c', 0, 'd'}, `ab\000abc\000d`},
+		{[]byte{'a', 'b', 0, 0}, `ab\000\000`},
+		{[]byte{'a', 'b', '\\', 'd'}, `ab\\d`},
+		{[]byte{'a', 'b', 200, 'd'}, `ab\310d`},
+		{[]byte{'a', 'b', 7, 'd'}, "ab\x07d"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.str, func(t *testing.T) {
+			result := encodeEscape(tc.bytes)
+			if result != tc.str {
+				t.Fatalf("expected %q, got %q", tc.str, result)
+			}
+
+			decodedResult, err := decodeEscape(tc.str)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(decodedResult, tc.bytes) {
+				t.Fatalf("expected %q, got %#v", tc.bytes, decodedResult)
+			}
+		})
+	}
+}
+
+func TestEscapeFormatRandom(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		b := make([]byte, rand.Intn(100))
+		for j := 0; j < len(b); j++ {
+			b[j] = byte(rand.Intn(256))
+		}
+		str := encodeEscape(b)
+		decodedResult, err := decodeEscape(str)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(decodedResult, b) {
+			t.Fatalf("generated %#v, after round-tripping got %#v", b, decodedResult)
+		}
 	}
 }
