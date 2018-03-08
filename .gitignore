@@ -16,6 +16,7 @@ artifacts
 # cockroach-data, cockroach{,.race}-{darwin,linux,windows}-*
 /cockroach*
 /certs
+pkg/cmd/workload/workload
 # make stress, acceptance produce stress.test, acceptance.test
 *.test*
 
