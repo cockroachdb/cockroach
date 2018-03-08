@@ -16,11 +16,19 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"html/template"
 	"io"
 	"os"
+	"strings"
 
+	"io/ioutil"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/spf13/cobra"
 )
 
@@ -38,6 +46,41 @@ can resolve the hostnames in the configuration file, either by using full-qualif
 running haproxy in the same network.
 `,
 	RunE: MaybeDecorateGRPCError(runGenHAProxyCmd),
+}
+
+type haProxyNodeInfo struct {
+	NodeID   roachpb.NodeID
+	NodeAddr string
+	// The port on which health checks are performed.
+	CheckPort string
+}
+
+func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
+	fs := flag.NewFlagSet("haproxy", flag.ContinueOnError)
+	checkPort := fs.String(cliflags.ServerHTTPPort.Name, base.DefaultHTTPPort, "" /* usage */)
+
+	// Discard parsing output.
+	fs.SetOutput(ioutil.Discard)
+
+	nodeInfos := make([]haProxyNodeInfo, len(statuses))
+	for i, status := range statuses {
+		nodeInfos[i].NodeID = status.Desc.NodeID
+		nodeInfos[i].NodeAddr = status.Desc.Address.AddressField
+
+		*checkPort = base.DefaultHTTPPort
+		// Iterate over the arguments until the ServerHTTPPort flag is found and
+		// parse the remainder of the arguments. This is done because Parse returns
+		// when it encounters an undefined flag and we do not want to define all
+		// possible flags.
+		for i, arg := range status.Args {
+			if strings.Contains(arg, cliflags.ServerHTTPPort.Name) {
+				_ = fs.Parse(status.Args[i:])
+			}
+		}
+
+		nodeInfos[i].CheckPort = *checkPort
+	}
+	return nodeInfos
 }
 
 func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
@@ -75,7 +118,7 @@ func runGenHAProxyCmd(cmd *cobra.Command, args []string) error {
 		w = f
 	}
 
-	err = configTemplate.Execute(w, nodeStatuses.Nodes)
+	err = configTemplate.Execute(w, nodeStatusesToNodeInfos(nodeStatuses.Nodes))
 	if err != nil {
 		// Return earliest error, but still close the file.
 		_ = f.Close()
@@ -107,6 +150,7 @@ listen psql
     bind :26257
     mode tcp
     balance roundrobin
-{{range .}}    server cockroach{{.Desc.NodeID}} {{.Desc.Address.AddressField}} check
+    option httpchk GET /health?ready=1
+{{range .}}    server cockroach{{.NodeID}} {{.NodeAddr}} check port {{.CheckPort}}
 {{end}}
 `
