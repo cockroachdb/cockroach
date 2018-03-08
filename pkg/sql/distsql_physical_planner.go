@@ -398,7 +398,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 	case *createStatsNode:
 		return shouldDistribute, nil
 
-	case *insertNode, *updateNode, *deleteNode:
+	case *insertNode, *updateNode, *deleteNode, *upsertNode:
 		// This is a potential hot path.
 		return 0, mutationsNotSupportedError
 
