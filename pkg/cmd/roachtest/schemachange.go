@@ -51,13 +51,13 @@ func init() {
 		})
 		m.Wait()
 
-		c.Run(ctx, 1, `./workload init kv --drop`)
+		c.Run(ctx, 1, `./workload init kv --drop --db=test`)
 		for node := 1; node <= nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
-				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128`
+				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --db=test`
 				l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
