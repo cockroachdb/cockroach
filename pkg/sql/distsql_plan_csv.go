@@ -122,6 +122,7 @@ func (l *DistLoader) LoadCSV(
 	from []string,
 	to string,
 	comma, comment rune,
+	skip uint32,
 	nullif *string,
 	walltime int64,
 	splitSize int64,
@@ -142,6 +143,7 @@ func (l *DistLoader) LoadCSV(
 					Comma:   comma,
 					Comment: comment,
 					Nullif:  nullif,
+					Skip:    skip,
 				},
 				Progress: distsqlrun.JobProgress{
 					JobID: *job.ID(),
