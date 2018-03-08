@@ -682,11 +682,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 			// still be running after shutdownCtx's span has been finished.
 			ac := log.AmbientContext{}
 			ac.AddLogTag("server drain process", nil)
-			ctx := ac.AnnotateCtx(context.Background())
-			if _, err := s.Drain(ctx, server.GracefulDrainModes); err != nil {
-				log.Warning(ctx, err)
+			drainCtx := ac.AnnotateCtx(context.Background())
+			if _, err := s.Drain(drainCtx, server.GracefulDrainModes); err != nil {
+				log.Warning(drainCtx, err)
 			}
-			stopper.Stop(ctx)
+			stopper.Stop(drainCtx)
 		}()
 
 		// Don't return: we're shutting down gracefully.
