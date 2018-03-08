@@ -30,13 +30,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
-func checkGauge(t *testing.T, g *metric.Gauge, e int64) {
+func checkGauge(t *testing.T, id string, g *metric.Gauge, e int64) {
+	t.Helper()
 	if a := g.Value(); a != e {
-		t.Error(errors.Errorf("%s for store: actual %d != expected %d", g.GetName(), a, e))
+		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(), id, a, e))
 	}
 }
 
 func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
+	t.Helper()
 	var stores []*storage.Store
 	var wg sync.WaitGroup
 
@@ -81,17 +83,13 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 	wg.Wait()
 
 	for _, s := range stores {
-		fatalf := func(msg string, args ...interface{}) {
-			prefix := s.Ident.String() + ": "
-			t.Fatalf(prefix+msg, args...)
-		}
-
+		idString := s.Ident.String()
 		m := s.Metrics()
 
 		// Sanity check: LiveBytes is not zero (ensures we don't have
 		// zeroed out structures.)
 		if liveBytes := m.LiveBytes.Value(); liveBytes == 0 {
-			fatalf("expected livebytes to be non-zero, was zero")
+			t.Errorf("store %s; got zero live bytes, expected non-zero", idString)
 		}
 
 		// Compute real total MVCC statistics from store.
@@ -101,23 +99,23 @@ func verifyStats(t *testing.T, mtc *multiTestContext, storeIdxSlice ...int) {
 		}
 
 		// Ensure that real MVCC stats match computed stats.
-		checkGauge(t, m.LiveBytes, realStats.LiveBytes)
-		checkGauge(t, m.KeyBytes, realStats.KeyBytes)
-		checkGauge(t, m.ValBytes, realStats.ValBytes)
-		checkGauge(t, m.IntentBytes, realStats.IntentBytes)
-		checkGauge(t, m.LiveCount, realStats.LiveCount)
-		checkGauge(t, m.KeyCount, realStats.KeyCount)
-		checkGauge(t, m.ValCount, realStats.ValCount)
-		checkGauge(t, m.IntentCount, realStats.IntentCount)
-		checkGauge(t, m.SysBytes, realStats.SysBytes)
-		checkGauge(t, m.SysCount, realStats.SysCount)
+		checkGauge(t, idString, m.LiveBytes, realStats.LiveBytes)
+		checkGauge(t, idString, m.KeyBytes, realStats.KeyBytes)
+		checkGauge(t, idString, m.ValBytes, realStats.ValBytes)
+		checkGauge(t, idString, m.IntentBytes, realStats.IntentBytes)
+		checkGauge(t, idString, m.LiveCount, realStats.LiveCount)
+		checkGauge(t, idString, m.KeyCount, realStats.KeyCount)
+		checkGauge(t, idString, m.ValCount, realStats.ValCount)
+		checkGauge(t, idString, m.IntentCount, realStats.IntentCount)
+		checkGauge(t, idString, m.SysBytes, realStats.SysBytes)
+		checkGauge(t, idString, m.SysCount, realStats.SysCount)
 		// "Ages" will be different depending on how much time has passed. Even with
 		// a manual clock, this can be an issue in tests. Therefore, we do not
 		// verify them in this test.
+	}
 
-		if t.Failed() {
-			fatalf("verifyStats failed, aborting test.")
-		}
+	if t.Failed() {
+		t.Fatalf("verifyStats failed, aborting test.")
 	}
 
 	// Restart all Stores.
@@ -136,7 +134,7 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 		gauge *metric.Gauge
 		min   int64
 	}{
-		{m.RdbBlockCacheHits, 10},
+		{m.RdbBlockCacheHits, 4},
 		{m.RdbBlockCacheMisses, 0},
 		{m.RdbBlockCacheUsage, 0},
 		{m.RdbBlockCachePinnedUsage, 0},
@@ -156,7 +154,7 @@ func verifyRocksDBStats(t *testing.T, s *storage.Store) {
 
 func TestStoreMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("TODO(mrtracy): #9204")
+	t.Skip("TODO(mrtracy): #23574")
 
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
@@ -184,7 +182,7 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify range count is as expected
-	checkGauge(t, mtc.stores[0].Metrics().ReplicaCount, 2)
+	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Verify all stats on store0 after split.
 	verifyStats(t, mtc, 0)
@@ -204,7 +202,7 @@ func TestStoreMetrics(t *testing.T) {
 	mtc.waitForValues(roachpb.Key("z"), []int64{5, 5, 5})
 
 	// Verify all stats on store 0 and 1 after addition.
-	verifyStats(t, mtc, 0, 1)
+	verifyStats(t, mtc, 0, 1, 2)
 
 	// Create a transaction statement that fails, but will add an entry to the
 	// sequence cache. Regression test for #4969.
@@ -217,22 +215,27 @@ func TestStoreMetrics(t *testing.T) {
 	}
 
 	// Verify stats after sequence cache addition.
-	verifyStats(t, mtc, 0)
-	checkGauge(t, mtc.stores[0].Metrics().ReplicaCount, 2)
+	verifyStats(t, mtc, 0, 1, 2)
+	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 2)
 
 	// Unreplicate range from the first store.
-	mtc.unreplicateRange(replica.RangeID, 0)
+	testutils.SucceedsSoon(t, func() error {
+		if err := mtc.transferLeaseNonFatal(context.TODO(), replica.RangeID, 0, 1); err != nil {
+			t.Log(err)
+		}
+		return mtc.unreplicateRangeNonFatal(replica.RangeID, 0)
+	})
 
 	// Force GC Scan on store 0 in order to fully remove range.
 	mtc.stores[1].ForceReplicaGCScanAndProcess()
 	mtc.waitForValues(roachpb.Key("z"), []int64{0, 5, 5})
 
 	// Verify range count is as expected.
-	checkGauge(t, mtc.stores[0].Metrics().ReplicaCount, 1)
-	checkGauge(t, mtc.stores[1].Metrics().ReplicaCount, 1)
+	checkGauge(t, "store 0", mtc.stores[0].Metrics().ReplicaCount, 1)
+	checkGauge(t, "store 1", mtc.stores[1].Metrics().ReplicaCount, 1)
 
 	// Verify all stats on store0 and store1 after range is removed.
-	verifyStats(t, mtc, 0, 1)
+	verifyStats(t, mtc, 0, 1, 2)
 
 	verifyRocksDBStats(t, mtc.stores[0])
 	verifyRocksDBStats(t, mtc.stores[1])
