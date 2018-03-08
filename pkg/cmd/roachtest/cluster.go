@@ -83,12 +83,24 @@ func findBinary(binary, defValue string) (string, error) {
 		if gopath == "" {
 			return "", err
 		}
-		path = filepath.Join(gopath, "/src/github.com/cockroachdb/cockroach/", binary)
-		var err2 error
-		path, err2 = exec.LookPath(path)
-		if err2 != nil {
-			return "", err
+
+		var binSuffix string
+		if !local && clusterName != "local" {
+			binSuffix = ".docker_amd64"
 		}
+		dirs := []string{
+			"/src/github.com/cockroachdb/cockroach/",
+			"/src/github.com/cockroachdb/cockroach/bin" + binSuffix,
+		}
+		for _, dir := range dirs {
+			path = filepath.Join(gopath, dir, binary)
+			var err2 error
+			path, err2 = exec.LookPath(path)
+			if err2 == nil {
+				return filepath.Abs(path)
+			}
+		}
+		return "", err
 	}
 	return filepath.Abs(path)
 }
