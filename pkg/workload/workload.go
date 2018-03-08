@@ -91,6 +91,10 @@ type Hooks struct {
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
 	PreLoad func(*gosql.DB) error
+	// PostLoad is called after workload tables are created workload data is
+	// loaded. It called after restoring a fixture. This, for example, is where
+	// creating foreign keys should go.
+	PostLoad func(*gosql.DB) error
 }
 
 // Meta is used to register a Generator at init time and holds meta information
@@ -271,6 +275,13 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 			}
 		}
 	}
+
+	if hooks.PostLoad != nil {
+		if err := hooks.PostLoad(db); err != nil {
+			return 0, err
+		}
+	}
+
 	return size, nil
 }
 
