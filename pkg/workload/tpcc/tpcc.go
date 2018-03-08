@@ -38,6 +38,7 @@ type tpcc struct {
 	mix        string
 	doWaits    bool
 	workers    int
+	fks        bool
 	dbOverride string
 
 	txs         []tx
@@ -72,6 +73,7 @@ var tpccMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`db`:      {RuntimeOnly: true},
+			`fks`:     {RuntimeOnly: true},
 			`mix`:     {RuntimeOnly: true},
 			`wait`:    {RuntimeOnly: true},
 			`workers`: {RuntimeOnly: true},
@@ -92,6 +94,7 @@ var tpccMeta = workload.Meta{
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
+		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 
 		return g
 	},
@@ -116,6 +119,25 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			return initializeMix(w)
+		},
+		PostLoad: func(sqlDB *gosql.DB) error {
+			fkStmts := []string{
+				`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
+				`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)`,
+				`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
+				`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
+				`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
+				`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
+				`alter table stock add foreign key (s_i_id) references item (i_id)`,
+				`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
+				`alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`,
+			}
+			for _, fkStmt := range fkStmts {
+				if _, err := sqlDB.Exec(fkStmt); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }
