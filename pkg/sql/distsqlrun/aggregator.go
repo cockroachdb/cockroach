@@ -94,6 +94,7 @@ type aggregator struct {
 	rowSourceBase
 
 	accumulating bool
+	draining     bool
 	input        RowSource
 	inputTypes   []sqlbase.ColumnType
 	funcs        []*aggregateFuncHolder
@@ -204,6 +205,7 @@ func (ag *aggregator) close() {
 			}
 		}
 		ag.accumulating = false
+		ag.draining = true
 	}
 	ag.internalClose()
 }
@@ -271,6 +273,20 @@ func (ag *aggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		log.VEvent(ag.ctx, 1, "accumulation complete")
 
 		ag.row = make(sqlbase.EncDatumRow, len(ag.funcs))
+	}
+
+	if ag.draining {
+		for {
+			row, meta := ag.input.Next()
+			if row != nil {
+				continue
+			}
+			if meta != nil {
+				return nil, meta
+			}
+			break
+		}
+		ag.draining = false
 	}
 
 	if ag.closed || ag.consumerStatus != NeedMoreRows {
