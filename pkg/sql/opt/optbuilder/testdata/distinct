@@ -72,6 +72,75 @@ project
       └── variable: xyz.y [type=int, outer=(2)]
 
 build
+SELECT DISTINCT y, z FROM xyz ORDER BY z
+----
+sort
+ ├── columns: y:2(int) z:3(float)
+ ├── ordering: +3
+ └── group-by
+      ├── columns: xyz.y:2(int) xyz.z:3(float)
+      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── scan
+      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      └── aggregations
+
+build
+SELECT DISTINCT y, z FROM xyz ORDER BY y
+----
+sort
+ ├── columns: y:2(int) z:3(float)
+ ├── ordering: +2
+ └── group-by
+      ├── columns: xyz.y:2(int) xyz.z:3(float)
+      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── scan
+      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      └── aggregations
+
+build
+SELECT DISTINCT y, z FROM xyz ORDER BY y, z
+----
+sort
+ ├── columns: y:2(int) z:3(float)
+ ├── ordering: +2,+3
+ └── group-by
+      ├── columns: xyz.y:2(int) xyz.z:3(float)
+      ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
+      ├── scan
+      │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
+      └── aggregations
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT DISTINCT y + z FROM xyz ORDER by (y + z)
+----
+error: unsupported binary operator: <int> + <float>
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT DISTINCT y + z FROM xyz ORDER BY y + z
+----
+error: unsupported binary operator: <int> + <float>
+
+# TODO(rytaft): This query causes an error in Postgres, but it is supported by
+# CockroachDB with the semantics:
+#   SELECT y AS w FROM t GROUP BY y ORDER BY min(z);
+# We may decide to support this later, but for now this should cause an error.
+# TODO(rytaft): Improve this error message to be more descriptive. E.g., the
+# Postgres error message is "for SELECT DISTINCT, ORDER BY expressions must
+# appear in select list".
+build
+SELECT DISTINCT y AS w FROM xyz ORDER by z
+----
+error: column name "z" not found
+
+# TODO(rytaft): This is a bug. This query is valid.
+build
+SELECT DISTINCT y AS w FROM xyz ORDER by y
+----
+error: column name "y" not found
+
+build
 SELECT DISTINCT (y,z) FROM t.xyz
 ----
 group-by
@@ -242,3 +311,41 @@ group-by
  │         │    └── variable: xyz.y [type=int, outer=(2)]
  │         └── const: 3 [type=int]
  └── aggregations
+
+exec-ddl
+CREATE TABLE abcd (
+  a INT,
+  b INT,
+  c INT,
+  d INT NOT NULL,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX (d, b)
+)
+----
+TABLE abcd
+ ├── a int not null
+ ├── b int not null
+ ├── c int not null
+ ├── d int not null
+ ├── INDEX primary
+ │    ├── a int not null
+ │    ├── b int not null
+ │    └── c int not null
+ └── INDEX secondary
+      ├── d int not null
+      ├── b int not null
+      ├── a int not null (storing)
+      └── c int not null (storing)
+
+build
+SELECT DISTINCT 1, d, b FROM abcd ORDER BY d, b
+----
+sort
+ ├── columns: column5:5(int) d:4(int!null) b:2(int!null)
+ ├── ordering: +4,+2
+ └── group-by
+      ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
+      ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
+      ├── scan
+      │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
+      └── aggregations

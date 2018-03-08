@@ -84,19 +84,23 @@ project
       └── variable: onecolumn.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x)
+SELECT * FROM onecolumn AS a JOIN onecolumn as b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:1(int)
- ├── inner-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: onecolumn.x [type=int, outer=(3)]
+ │    ├── ordering: +1
+ │    └── inner-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: onecolumn.x [type=int, outer=(3)]
  └── projections [outer=(1)]
       └── variable: onecolumn.x [type=int, outer=(1)]
 
@@ -136,21 +140,48 @@ project
       └── variable: onecolumn.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:1(int)
- ├── left-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: onecolumn.x [type=int, outer=(3)]
+ │    ├── ordering: +1
+ │    └── left-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: onecolumn.x [type=int, outer=(3)]
  └── projections [outer=(1)]
       └── variable: onecolumn.x [type=int, outer=(1)]
+
+# Check that ORDER BY chokes on ambiguity if no table less columns
+# were introduced by USING. (#12239)
+# TODO(rytaft): This is a bug. This query is invalid.
+build
+SELECT * FROM onecolumn AS a, onecolumn AS b ORDER BY x
+----
+project
+ ├── columns: x:1(int) x:3(int)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │    ├── ordering: +1
+ │    └── inner-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         └── true [type=bool]
+ └── projections [outer=(1,3)]
+      ├── variable: onecolumn.x [type=int, outer=(1)]
+      └── variable: onecolumn.x [type=int, outer=(3)]
 
 build
 SELECT * FROM onecolumn AS a NATURAL LEFT OUTER JOIN onecolumn AS b
@@ -188,19 +219,23 @@ project
       └── variable: onecolumn.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM onecolumn AS a RIGHT OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:3(int)
- ├── right-join
+ ├── ordering: +3
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: onecolumn.x [type=int, outer=(3)]
+ │    ├── ordering: +3
+ │    └── right-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: onecolumn.x [type=int, outer=(3)]
  └── projections [outer=(3)]
       └── variable: onecolumn.x [type=int, outer=(3)]
 
@@ -256,107 +291,130 @@ TABLE othercolumn
       └── rowid int not null (hidden)
 
 build
-SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b ON a.x = b.x ORDER BY a.x,b.x
 ----
 project
  ├── columns: x:1(int) x:3(int)
- ├── full-join
+ ├── ordering: +1,+3
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: othercolumn.x [type=int, outer=(3)]
+ │    ├── ordering: +1,+3
+ │    └── full-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: othercolumn.x [type=int, outer=(3)]
  └── projections [outer=(1,3)]
       ├── variable: onecolumn.x [type=int, outer=(1)]
       └── variable: othercolumn.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x)
+SELECT * FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:5(int)
- ├── project
- │    ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    ├── full-join
- │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    │    ├── scan
- │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    │    ├── scan
- │    │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
- │    │    └── eq [type=bool, outer=(1,3)]
- │    │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │    │         └── variable: othercolumn.x [type=int, outer=(3)]
- │    └── projections [outer=(1-4)]
- │         ├── coalesce [type=int, outer=(1,3)]
- │         │    ├── variable: onecolumn.x [type=int, outer=(1)]
- │         │    └── variable: othercolumn.x [type=int, outer=(3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         ├── variable: onecolumn.rowid [type=int, outer=(2)]
- │         ├── variable: othercolumn.x [type=int, outer=(3)]
- │         └── variable: othercolumn.rowid [type=int, outer=(4)]
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int) x:5(int)
+ │    ├── ordering: +5
+ │    └── project
+ │         ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         ├── full-join
+ │         │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         │    ├── scan
+ │         │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
+ │         │    └── eq [type=bool, outer=(1,3)]
+ │         │         ├── variable: onecolumn.x [type=int, outer=(1)]
+ │         │         └── variable: othercolumn.x [type=int, outer=(3)]
+ │         └── projections [outer=(1-4)]
+ │              ├── coalesce [type=int, outer=(1,3)]
+ │              │    ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              │    └── variable: othercolumn.x [type=int, outer=(3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              ├── variable: onecolumn.rowid [type=int, outer=(2)]
+ │              ├── variable: othercolumn.x [type=int, outer=(3)]
+ │              └── variable: othercolumn.rowid [type=int, outer=(4)]
  └── projections [outer=(5)]
       └── variable: x [type=int, outer=(5)]
 
 # Check that the source columns can be selected separately from the
 # USING column (#12033).
 build
-SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x)
+SELECT x AS s, a.x, b.x FROM onecolumn AS a FULL OUTER JOIN othercolumn AS b USING(x) ORDER BY s
 ----
 project
  ├── columns: s:5(int) x:1(int) x:3(int)
- ├── project
- │    ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    ├── full-join
- │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    │    ├── scan
- │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    │    ├── scan
- │    │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
- │    │    └── eq [type=bool, outer=(1,3)]
- │    │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │    │         └── variable: othercolumn.x [type=int, outer=(3)]
- │    └── projections [outer=(1-4)]
- │         ├── coalesce [type=int, outer=(1,3)]
- │         │    ├── variable: onecolumn.x [type=int, outer=(1)]
- │         │    └── variable: othercolumn.x [type=int, outer=(3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         ├── variable: onecolumn.rowid [type=int, outer=(2)]
- │         ├── variable: othercolumn.x [type=int, outer=(3)]
- │         └── variable: othercolumn.rowid [type=int, outer=(4)]
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int) x:5(int)
+ │    ├── ordering: +5
+ │    └── project
+ │         ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         ├── full-join
+ │         │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         │    ├── scan
+ │         │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
+ │         │    └── eq [type=bool, outer=(1,3)]
+ │         │         ├── variable: onecolumn.x [type=int, outer=(1)]
+ │         │         └── variable: othercolumn.x [type=int, outer=(3)]
+ │         └── projections [outer=(1-4)]
+ │              ├── coalesce [type=int, outer=(1,3)]
+ │              │    ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              │    └── variable: othercolumn.x [type=int, outer=(3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              ├── variable: onecolumn.rowid [type=int, outer=(2)]
+ │              ├── variable: othercolumn.x [type=int, outer=(3)]
+ │              └── variable: othercolumn.rowid [type=int, outer=(4)]
  └── projections [outer=(1,3,5)]
       ├── variable: x [type=int, outer=(5)]
       ├── variable: onecolumn.x [type=int, outer=(1)]
       └── variable: othercolumn.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b
+SELECT * FROM onecolumn AS a NATURAL FULL OUTER JOIN othercolumn AS b ORDER BY x
 ----
 project
  ├── columns: x:5(int)
- ├── project
- │    ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    ├── full-join
- │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
- │    │    ├── scan
- │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    │    ├── scan
- │    │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
- │    │    └── eq [type=bool, outer=(1,3)]
- │    │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │    │         └── variable: othercolumn.x [type=int, outer=(3)]
- │    └── projections [outer=(1-4)]
- │         ├── coalesce [type=int, outer=(1,3)]
- │         │    ├── variable: onecolumn.x [type=int, outer=(1)]
- │         │    └── variable: othercolumn.x [type=int, outer=(3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         ├── variable: onecolumn.rowid [type=int, outer=(2)]
- │         ├── variable: othercolumn.x [type=int, outer=(3)]
- │         └── variable: othercolumn.rowid [type=int, outer=(4)]
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int) x:5(int)
+ │    ├── ordering: +5
+ │    └── project
+ │         ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         ├── full-join
+ │         │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) othercolumn.x:3(int) othercolumn.rowid:4(int)
+ │         │    ├── scan
+ │         │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: othercolumn.x:3(int) othercolumn.rowid:4(int!null)
+ │         │    └── eq [type=bool, outer=(1,3)]
+ │         │         ├── variable: onecolumn.x [type=int, outer=(1)]
+ │         │         └── variable: othercolumn.x [type=int, outer=(3)]
+ │         └── projections [outer=(1-4)]
+ │              ├── coalesce [type=int, outer=(1,3)]
+ │              │    ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              │    └── variable: othercolumn.x [type=int, outer=(3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              ├── variable: onecolumn.rowid [type=int, outer=(2)]
+ │              ├── variable: othercolumn.x [type=int, outer=(3)]
+ │              └── variable: othercolumn.rowid [type=int, outer=(4)]
  └── projections [outer=(5)]
       └── variable: x [type=int, outer=(5)]
+
+# TODO(rytaft): LIMIT not yet supported.
+# Check that a limit on the JOIN's result do not cause rows from the
+# JOIN operands to become invisible to the JOIN.
+#build
+#SELECT * FROM (SELECT x FROM onecolumn ORDER BY x DESC) NATURAL JOIN (VALUES (42)) AS v(x) LIMIT 1
+#----
 
 exec-ddl
 CREATE TABLE empty (x INT)
@@ -470,37 +528,45 @@ project
       └── variable: empty.x [type=int, outer=(1)]
 
 build
-SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y
+SELECT * FROM onecolumn AS a(x) LEFT OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
 ----
 project
  ├── columns: x:1(int) y:3(int)
- ├── left-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) empty.x:3(int) empty.rowid:4(int)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: empty.x [type=int, outer=(3)]
+ │    ├── ordering: +1
+ │    └── left-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) empty.x:3(int) empty.rowid:4(int)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: empty.x [type=int, outer=(3)]
  └── projections [outer=(1,3)]
       ├── variable: onecolumn.x [type=int, outer=(1)]
       └── variable: empty.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x)
+SELECT * FROM onecolumn AS a LEFT OUTER JOIN empty AS b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:1(int)
- ├── left-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) empty.x:3(int) empty.rowid:4(int)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: empty.x [type=int, outer=(3)]
+ │    ├── ordering: +1
+ │    └── left-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) empty.x:3(int) empty.rowid:4(int)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: empty.x [type=int, outer=(3)]
  └── projections [outer=(1)]
       └── variable: onecolumn.x [type=int, outer=(1)]
 
@@ -575,92 +641,108 @@ project
       └── variable: empty.x [type=int, outer=(3)]
 
 build
-SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y
+SELECT * FROM empty AS a(x) FULL OUTER JOIN onecolumn AS b(y) ON a.x = b.y ORDER BY b.y
 ----
 project
  ├── columns: x:1(int) y:3(int)
- ├── full-join
+ ├── ordering: +3
+ ├── sort
  │    ├── columns: empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int)
- │    ├── scan
- │    │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: empty.x [type=int, outer=(1)]
- │         └── variable: onecolumn.x [type=int, outer=(3)]
+ │    ├── ordering: +3
+ │    └── full-join
+ │         ├── columns: empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int)
+ │         ├── scan
+ │         │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: empty.x [type=int, outer=(1)]
+ │              └── variable: onecolumn.x [type=int, outer=(3)]
  └── projections [outer=(1,3)]
       ├── variable: empty.x [type=int, outer=(1)]
       └── variable: onecolumn.x [type=int, outer=(3)]
 
 build
-SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x)
+SELECT * FROM empty AS a FULL OUTER JOIN onecolumn AS b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:5(int)
- ├── project
- │    ├── columns: x:5(int) empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int)
- │    ├── full-join
- │    │    ├── columns: empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int)
- │    │    ├── scan
- │    │    │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
- │    │    ├── scan
- │    │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
- │    │    └── eq [type=bool, outer=(1,3)]
- │    │         ├── variable: empty.x [type=int, outer=(1)]
- │    │         └── variable: onecolumn.x [type=int, outer=(3)]
- │    └── projections [outer=(1-4)]
- │         ├── coalesce [type=int, outer=(1,3)]
- │         │    ├── variable: empty.x [type=int, outer=(1)]
- │         │    └── variable: onecolumn.x [type=int, outer=(3)]
- │         ├── variable: empty.x [type=int, outer=(1)]
- │         ├── variable: empty.rowid [type=int, outer=(2)]
- │         ├── variable: onecolumn.x [type=int, outer=(3)]
- │         └── variable: onecolumn.rowid [type=int, outer=(4)]
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int) x:5(int)
+ │    ├── ordering: +5
+ │    └── project
+ │         ├── columns: x:5(int) empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int)
+ │         ├── full-join
+ │         │    ├── columns: empty.x:1(int) empty.rowid:2(int) onecolumn.x:3(int) onecolumn.rowid:4(int)
+ │         │    ├── scan
+ │         │    │    └── columns: empty.x:1(int) empty.rowid:2(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: onecolumn.x:3(int) onecolumn.rowid:4(int!null)
+ │         │    └── eq [type=bool, outer=(1,3)]
+ │         │         ├── variable: empty.x [type=int, outer=(1)]
+ │         │         └── variable: onecolumn.x [type=int, outer=(3)]
+ │         └── projections [outer=(1-4)]
+ │              ├── coalesce [type=int, outer=(1,3)]
+ │              │    ├── variable: empty.x [type=int, outer=(1)]
+ │              │    └── variable: onecolumn.x [type=int, outer=(3)]
+ │              ├── variable: empty.x [type=int, outer=(1)]
+ │              ├── variable: empty.rowid [type=int, outer=(2)]
+ │              ├── variable: onecolumn.x [type=int, outer=(3)]
+ │              └── variable: onecolumn.rowid [type=int, outer=(4)]
  └── projections [outer=(5)]
       └── variable: x [type=int, outer=(5)]
 
 build
-SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y
+SELECT * FROM onecolumn AS a(x) FULL OUTER JOIN empty AS b(y) ON a.x = b.y ORDER BY a.x
 ----
 project
  ├── columns: x:1(int) y:3(int)
- ├── full-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int)
- │    ├── scan
- │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         └── variable: empty.x [type=int, outer=(3)]
+ │    ├── ordering: +1
+ │    └── full-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int)
+ │         ├── scan
+ │         │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              └── variable: empty.x [type=int, outer=(3)]
  └── projections [outer=(1,3)]
       ├── variable: onecolumn.x [type=int, outer=(1)]
       └── variable: empty.x [type=int, outer=(3)]
 
 build
-SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x)
+SELECT * FROM onecolumn AS a FULL OUTER JOIN empty AS b USING(x) ORDER BY x
 ----
 project
  ├── columns: x:5(int)
- ├── project
- │    ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int)
- │    ├── full-join
- │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int)
- │    │    ├── scan
- │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    │    ├── scan
- │    │    │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
- │    │    └── eq [type=bool, outer=(1,3)]
- │    │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │    │         └── variable: empty.x [type=int, outer=(3)]
- │    └── projections [outer=(1-4)]
- │         ├── coalesce [type=int, outer=(1,3)]
- │         │    ├── variable: onecolumn.x [type=int, outer=(1)]
- │         │    └── variable: empty.x [type=int, outer=(3)]
- │         ├── variable: onecolumn.x [type=int, outer=(1)]
- │         ├── variable: onecolumn.rowid [type=int, outer=(2)]
- │         ├── variable: empty.x [type=int, outer=(3)]
- │         └── variable: empty.rowid [type=int, outer=(4)]
+ ├── ordering: +5
+ ├── sort
+ │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int) x:5(int)
+ │    ├── ordering: +5
+ │    └── project
+ │         ├── columns: x:5(int) onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int)
+ │         ├── full-join
+ │         │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int) empty.x:3(int) empty.rowid:4(int)
+ │         │    ├── scan
+ │         │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: empty.x:3(int) empty.rowid:4(int!null)
+ │         │    └── eq [type=bool, outer=(1,3)]
+ │         │         ├── variable: onecolumn.x [type=int, outer=(1)]
+ │         │         └── variable: empty.x [type=int, outer=(3)]
+ │         └── projections [outer=(1-4)]
+ │              ├── coalesce [type=int, outer=(1,3)]
+ │              │    ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              │    └── variable: empty.x [type=int, outer=(3)]
+ │              ├── variable: onecolumn.x [type=int, outer=(1)]
+ │              ├── variable: onecolumn.rowid [type=int, outer=(2)]
+ │              ├── variable: empty.x [type=int, outer=(3)]
+ │              └── variable: empty.rowid [type=int, outer=(4)]
  └── projections [outer=(5)]
       └── variable: x [type=int, outer=(5)]
 
@@ -970,38 +1052,46 @@ project
       └── variable: b.b [type=bool, outer=(4)]
 
 build
-SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i
+SELECT * FROM a RIGHT OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
 ----
 project
  ├── columns: i:1(int) i:3(int) b:4(bool)
- ├── right-join
+ ├── ordering: +3,+4
+ ├── sort
  │    ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
- │    ├── scan
- │    │    └── columns: a.i:1(int) a.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: a.i [type=int, outer=(1)]
- │         └── variable: b.i [type=int, outer=(3)]
+ │    ├── ordering: +3,+4
+ │    └── right-join
+ │         ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+ │         ├── scan
+ │         │    └── columns: a.i:1(int) a.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: a.i [type=int, outer=(1)]
+ │              └── variable: b.i [type=int, outer=(3)]
  └── projections [outer=(1,3,4)]
       ├── variable: a.i [type=int, outer=(1)]
       ├── variable: b.i [type=int, outer=(3)]
       └── variable: b.b [type=bool, outer=(4)]
 
 build
-SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i
+SELECT * FROM a FULL OUTER JOIN b ON a.i = b.i ORDER BY b.i, b.b
 ----
 project
  ├── columns: i:1(int) i:3(int) b:4(bool)
- ├── full-join
+ ├── ordering: +3,+4
+ ├── sort
  │    ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int)
- │    ├── scan
- │    │    └── columns: a.i:1(int) a.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
- │    └── eq [type=bool, outer=(1,3)]
- │         ├── variable: a.i [type=int, outer=(1)]
- │         └── variable: b.i [type=int, outer=(3)]
+ │    ├── ordering: +3,+4
+ │    └── full-join
+ │         ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int)
+ │         ├── scan
+ │         │    └── columns: a.i:1(int) a.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: a.i [type=int, outer=(1)]
+ │              └── variable: b.i [type=int, outer=(3)]
  └── projections [outer=(1,3,4)]
       ├── variable: a.i [type=int, outer=(1)]
       ├── variable: b.i [type=int, outer=(3)]
@@ -1009,23 +1099,27 @@ project
 
 # Full outer join with filter predicate
 build
-SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2)
+SELECT * FROM a FULL OUTER JOIN b ON (a.i = b.i and a.i>2) ORDER BY a.i, b.i
 ----
 project
  ├── columns: i:1(int) i:3(int) b:4(bool)
- ├── full-join
+ ├── ordering: +1,+3
+ ├── sort
  │    ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int)
- │    ├── scan
- │    │    └── columns: a.i:1(int) a.rowid:2(int!null)
- │    ├── scan
- │    │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
- │    └── and [type=bool, outer=(1,3)]
- │         ├── eq [type=bool, outer=(1,3)]
- │         │    ├── variable: a.i [type=int, outer=(1)]
- │         │    └── variable: b.i [type=int, outer=(3)]
- │         └── gt [type=bool, outer=(1)]
- │              ├── variable: a.i [type=int, outer=(1)]
- │              └── const: 2 [type=int]
+ │    ├── ordering: +1,+3
+ │    └── full-join
+ │         ├── columns: a.i:1(int) a.rowid:2(int) b.i:3(int) b.b:4(bool) b.rowid:5(int)
+ │         ├── scan
+ │         │    └── columns: a.i:1(int) a.rowid:2(int!null)
+ │         ├── scan
+ │         │    └── columns: b.i:3(int) b.b:4(bool) b.rowid:5(int!null)
+ │         └── and [type=bool, outer=(1,3)]
+ │              ├── eq [type=bool, outer=(1,3)]
+ │              │    ├── variable: a.i [type=int, outer=(1)]
+ │              │    └── variable: b.i [type=int, outer=(3)]
+ │              └── gt [type=bool, outer=(1)]
+ │                   ├── variable: a.i [type=int, outer=(1)]
+ │                   └── const: 2 [type=int]
  └── projections [outer=(1,3,4)]
       ├── variable: a.i [type=int, outer=(1)]
       ├── variable: b.i [type=int, outer=(3)]
@@ -1033,35 +1127,39 @@ project
 
 # Check column orders and names.
 build
-SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x)
+SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) ORDER BY 1
 ----
 project
  ├── columns: x:1(int) x:3(int) y:4(int) b:6(int) d:8(int) e:9(int)
- ├── inner-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null) twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
- │    ├── inner-join
- │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null)
- │    │    ├── inner-join
- │    │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
- │    │    │    ├── scan
- │    │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
- │    │    │    ├── scan
- │    │    │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
- │    │    │    └── true [type=bool]
- │    │    ├── scan
- │    │    │    └── columns: onecolumn.x:6(int) onecolumn.rowid:7(int!null)
- │    │    └── eq [type=bool, outer=(3,6)]
- │    │         ├── variable: onecolumn.x [type=int, outer=(6)]
- │    │         └── variable: twocolumn.x [type=int, outer=(3)]
- │    ├── scan
- │    │    └── columns: twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
- │    └── and [type=bool, outer=(1,6,8)]
- │         ├── eq [type=bool, outer=(6,8)]
- │         │    ├── variable: onecolumn.x [type=int, outer=(6)]
- │         │    └── variable: twocolumn.x [type=int, outer=(8)]
- │         └── eq [type=bool, outer=(1,8)]
- │              ├── variable: twocolumn.x [type=int, outer=(8)]
- │              └── variable: onecolumn.x [type=int, outer=(1)]
+ │    ├── ordering: +1
+ │    └── inner-join
+ │         ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null) twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │         ├── inner-join
+ │         │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null) onecolumn.x:6(int) onecolumn.rowid:7(int!null)
+ │         │    ├── inner-join
+ │         │    │    ├── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null) twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │         │    │    ├── scan
+ │         │    │    │    └── columns: onecolumn.x:1(int) onecolumn.rowid:2(int!null)
+ │         │    │    ├── scan
+ │         │    │    │    └── columns: twocolumn.x:3(int) twocolumn.y:4(int) twocolumn.rowid:5(int!null)
+ │         │    │    └── true [type=bool]
+ │         │    ├── scan
+ │         │    │    └── columns: onecolumn.x:6(int) onecolumn.rowid:7(int!null)
+ │         │    └── eq [type=bool, outer=(3,6)]
+ │         │         ├── variable: onecolumn.x [type=int, outer=(6)]
+ │         │         └── variable: twocolumn.x [type=int, outer=(3)]
+ │         ├── scan
+ │         │    └── columns: twocolumn.x:8(int) twocolumn.y:9(int) twocolumn.rowid:10(int!null)
+ │         └── and [type=bool, outer=(1,6,8)]
+ │              ├── eq [type=bool, outer=(6,8)]
+ │              │    ├── variable: onecolumn.x [type=int, outer=(6)]
+ │              │    └── variable: twocolumn.x [type=int, outer=(8)]
+ │              └── eq [type=bool, outer=(1,8)]
+ │                   ├── variable: twocolumn.x [type=int, outer=(8)]
+ │                   └── variable: onecolumn.x [type=int, outer=(1)]
  └── projections [outer=(1,3,4,6,8,9)]
       ├── variable: onecolumn.x [type=int, outer=(1)]
       ├── variable: twocolumn.x [type=int, outer=(3)]
@@ -1095,26 +1193,30 @@ project
 
 # Check that a single column can have multiple table aliases.
 build
-SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x))
+SELECT * FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY x
 ----
 project
  ├── columns: x:1(int) y:2(int) y:5(int) y:8(int)
- ├── inner-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
- │    ├── inner-join
- │    │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
- │    │    ├── scan
- │    │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
- │    │    ├── scan
- │    │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
- │    │    └── eq [type=bool, outer=(1,4)]
- │    │         ├── variable: twocolumn.x [type=int, outer=(1)]
- │    │         └── variable: twocolumn.x [type=int, outer=(4)]
- │    ├── scan
- │    │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
- │    └── eq [type=bool, outer=(1,7)]
- │         ├── variable: twocolumn.x [type=int, outer=(1)]
- │         └── variable: twocolumn.x [type=int, outer=(7)]
+ │    ├── ordering: +1
+ │    └── inner-join
+ │         ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │         ├── inner-join
+ │         │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │         │    └── eq [type=bool, outer=(1,4)]
+ │         │         ├── variable: twocolumn.x [type=int, outer=(1)]
+ │         │         └── variable: twocolumn.x [type=int, outer=(4)]
+ │         ├── scan
+ │         │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │         └── eq [type=bool, outer=(1,7)]
+ │              ├── variable: twocolumn.x [type=int, outer=(1)]
+ │              └── variable: twocolumn.x [type=int, outer=(7)]
  └── projections [outer=(1,2,5,8)]
       ├── variable: twocolumn.x [type=int, outer=(1)]
       ├── variable: twocolumn.y [type=int, outer=(2)]
@@ -1122,26 +1224,30 @@ project
       └── variable: twocolumn.y [type=int, outer=(8)]
 
 build
-SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x))
+SELECT a.x AS s, b.x, c.x, a.y, b.y, c.y FROM (twocolumn AS a JOIN twocolumn AS b USING(x) JOIN twocolumn AS c USING(x)) ORDER BY s
 ----
 project
  ├── columns: s:1(int) x:4(int) x:7(int) y:2(int) y:5(int) y:8(int)
- ├── inner-join
+ ├── ordering: +1
+ ├── sort
  │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
- │    ├── inner-join
- │    │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
- │    │    ├── scan
- │    │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
- │    │    ├── scan
- │    │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
- │    │    └── eq [type=bool, outer=(1,4)]
- │    │         ├── variable: twocolumn.x [type=int, outer=(1)]
- │    │         └── variable: twocolumn.x [type=int, outer=(4)]
- │    ├── scan
- │    │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
- │    └── eq [type=bool, outer=(1,7)]
- │         ├── variable: twocolumn.x [type=int, outer=(1)]
- │         └── variable: twocolumn.x [type=int, outer=(7)]
+ │    ├── ordering: +1
+ │    └── inner-join
+ │         ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null) twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │         ├── inner-join
+ │         │    ├── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null) twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: twocolumn.x:1(int) twocolumn.y:2(int) twocolumn.rowid:3(int!null)
+ │         │    ├── scan
+ │         │    │    └── columns: twocolumn.x:4(int) twocolumn.y:5(int) twocolumn.rowid:6(int!null)
+ │         │    └── eq [type=bool, outer=(1,4)]
+ │         │         ├── variable: twocolumn.x [type=int, outer=(1)]
+ │         │         └── variable: twocolumn.x [type=int, outer=(4)]
+ │         ├── scan
+ │         │    └── columns: twocolumn.x:7(int) twocolumn.y:8(int) twocolumn.rowid:9(int!null)
+ │         └── eq [type=bool, outer=(1,7)]
+ │              ├── variable: twocolumn.x [type=int, outer=(1)]
+ │              └── variable: twocolumn.x [type=int, outer=(7)]
  └── projections [outer=(1,2,4,5,7,8)]
       ├── variable: twocolumn.x [type=int, outer=(1)]
       ├── variable: twocolumn.x [type=int, outer=(4)]
@@ -1319,6 +1425,42 @@ project
  │         └── variable: twocolumn.y [type=int, outer=(5)]
  └── projections [outer=(1)]
       └── variable: twocolumn.x [type=int, outer=(1)]
+
+build
+SELECT * FROM (SELECT * FROM (VALUES (9, 1), (8, 2)) AS a (u, k) ORDER BY k)
+  INNER JOIN (VALUES (1, 1), (2, 2)) AS b (k, w) USING (k) ORDER BY u
+----
+project
+ ├── columns: k:2(int) u:1(int) w:4(int)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: column1:1(int) column2:2(int) column1:3(int) column2:4(int)
+ │    ├── ordering: +1
+ │    └── inner-join
+ │         ├── columns: column1:1(int) column2:2(int) column1:3(int) column2:4(int)
+ │         ├── values
+ │         │    ├── columns: column1:1(int) column2:2(int)
+ │         │    ├── tuple [type=tuple{int, int}]
+ │         │    │    ├── const: 9 [type=int]
+ │         │    │    └── const: 1 [type=int]
+ │         │    └── tuple [type=tuple{int, int}]
+ │         │         ├── const: 8 [type=int]
+ │         │         └── const: 2 [type=int]
+ │         ├── values
+ │         │    ├── columns: column1:3(int) column2:4(int)
+ │         │    ├── tuple [type=tuple{int, int}]
+ │         │    │    ├── const: 1 [type=int]
+ │         │    │    └── const: 1 [type=int]
+ │         │    └── tuple [type=tuple{int, int}]
+ │         │         ├── const: 2 [type=int]
+ │         │         └── const: 2 [type=int]
+ │         └── eq [type=bool, outer=(2,3)]
+ │              ├── variable: column2 [type=int, outer=(2)]
+ │              └── variable: column1 [type=int, outer=(3)]
+ └── projections [outer=(1,2,4)]
+      ├── variable: column2 [type=int, outer=(2)]
+      ├── variable: column1 [type=int, outer=(1)]
+      └── variable: column2 [type=int, outer=(4)]
 
 # Tests for filter propagation through joins.
 
@@ -2488,7 +2630,7 @@ right-join
 # Test OUTER joins that are run in the distSQL merge joiner
 
 build
-SELECT * FROM (SELECT * FROM xyu) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv) AS xyv USING(x, y) WHERE x > 2
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) v:6(int)
@@ -2517,7 +2659,7 @@ project
       └── variable: xyv.v [type=int, outer=(6)]
 
 build
-SELECT * FROM (SELECT * FROM xyu) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv) AS xyv USING(x, y) WHERE x > 2
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
  ├── columns: x:4(int!null) y:5(int!null) u:3(int) v:6(int!null)
@@ -2546,7 +2688,7 @@ project
       └── variable: xyv.v [type=int, outer=(6)]
 
 build
-SELECT * FROM (SELECT * FROM xyu) AS xyu FULL OUTER JOIN (SELECT * FROM xyv) AS xyv USING(x, y) WHERE x > 2
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu FULL OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv USING(x, y) WHERE x > 2
 ----
 project
  ├── columns: x:7(int) y:8(int) u:3(int) v:6(int)
@@ -2590,7 +2732,7 @@ project
       └── variable: xyv.v [type=int, outer=(6)]
 
 build
-SELECT * FROM (SELECT * FROM xyu) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+SELECT * FROM (SELECT * FROM xyu ORDER BY x, y) AS xyu LEFT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 left-join
  ├── columns: x:1(int!null) y:2(int!null) u:3(int!null) x:4(int) y:5(int) v:6(int)
@@ -2615,7 +2757,7 @@ left-join
            └── const: 10 [type=int]
 
 build
-SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
+SELECT * FROM xyu RIGHT OUTER JOIN (SELECT * FROM xyv ORDER BY x, y) AS xyv ON xyu.x = xyv.x AND xyu.y = xyv.y AND xyu.x = 1 AND xyu.y < 10
 ----
 right-join
  ├── columns: x:1(int) y:2(int) u:3(int) x:4(int!null) y:5(int!null) v:6(int!null)
