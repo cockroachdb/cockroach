@@ -53,7 +53,9 @@ func init() {
 				t.Fatal(err)
 			}
 			defer l.close()
-			c.RunL(ctx, l, nodes[i].i, args...)
+			if err := c.RunL(ctx, l, nodes[i].i, args...); err != nil {
+				t.Fatal(err)
+			}
 		}
 		t.Status("initializing workload")
 		roachmartRun(ctx, 0, "./workload", "init", "roachmart")
