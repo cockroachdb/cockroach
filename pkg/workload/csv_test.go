@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
-	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
 func TestHandleCSV(t *testing.T) {
@@ -75,17 +75,20 @@ func TestHandleCSV(t *testing.T) {
 
 func BenchmarkWriteCSVRows(b *testing.B) {
 	ctx := context.Background()
-	gen := bank.FromRows(1000)
-	const limit = -1
+
+	var rows [][]interface{}
+	for _, table := range tpcc.FromWarehouses(1).Tables() {
+		rows = append(rows, table.InitialRowFn(0))
+	}
+	table := workload.Table{
+		InitialRowFn: func(rowIdx int) []interface{} { return rows[rowIdx] },
+	}
 
 	var buf bytes.Buffer
 	fn := func() {
-		for _, table := range gen.Tables() {
-			if _, err := workload.WriteCSVRows(
-				ctx, &buf, table, 0, table.InitialRowCount, limit,
-			); err != nil {
-				b.Fatalf(`%+v`, err)
-			}
+		const limit = -1
+		if _, err := workload.WriteCSVRows(ctx, &buf, table, 0, len(rows), limit); err != nil {
+			b.Fatalf(`%+v`, err)
 		}
 	}
 
