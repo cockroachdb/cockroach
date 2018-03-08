@@ -117,12 +117,14 @@ func (b *Builder) buildScan(
 	for i := 0; i < tbl.ColumnCount(); i++ {
 		col := tbl.Column(i)
 		colIndex := b.factory.Metadata().TableColumn(tblIndex, i)
+		name := tree.Name(col.ColName())
 		colProps := columnProps{
-			index:  colIndex,
-			name:   tree.Name(col.ColName()),
-			table:  *tn,
-			typ:    col.DatumType(),
-			hidden: col.IsHidden(),
+			index:    colIndex,
+			origName: name,
+			name:     name,
+			table:    *tn,
+			typ:      col.DatumType(),
+			hidden:   col.IsHidden(),
 		}
 
 		b.colMap = append(b.colMap, colProps)
@@ -140,11 +142,22 @@ func (b *Builder) buildScan(
 func (b *Builder) buildSelect(
 	stmt *tree.Select, inScope *scope,
 ) (out opt.GroupID, outScope *scope) {
+	wrapped := stmt.Select
+	orderBy := stmt.OrderBy
+
+	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
+		stmt = s.Select
+		wrapped = stmt.Select
+		if stmt.OrderBy != nil {
+			if orderBy != nil {
+				panic(errorf("multiple ORDER BY clauses not allowed"))
+			}
+			orderBy = stmt.OrderBy
+		}
+	}
+
 	// NB: The case statements are sorted lexicographically.
 	switch t := stmt.Select.(type) {
-	case *tree.ParenSelect:
-		out, outScope = b.buildSelect(t.Select, inScope)
-
 	case *tree.SelectClause:
 		out, outScope = b.buildSelectClause(stmt, inScope)
 
@@ -158,14 +171,16 @@ func (b *Builder) buildSelect(
 		panic(errorf("not yet implemented: select statement: %T", stmt.Select))
 	}
 
-	// TODO(rytaft): Add full support for ORDER BY expression. This simple
-	// version only supports ordering by projected columns. It does not support
-	// order by expressions, or ordering by FROM columns. Also, take care to
-	// correctly handle cases like `SELECT a FROM t ORDER BY c`. The ordered
-	// property can only contain refs to output columns, so the `c` column
-	// must be retained in the projection (and presentation property then omits
-	// it.
-	outScope.ordering = b.buildOrderBy(stmt.OrderBy, outScope)
+	if outScope.ordering == nil && orderBy != nil {
+		projectionsScope := outScope.push()
+		projectionsScope.cols = make([]columnProps, 0, len(outScope.cols))
+		projections := make([]opt.GroupID, 0, len(outScope.cols))
+		for i := range outScope.cols {
+			p := b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
+			projections = append(projections, p)
+		}
+		out, outScope = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
+	}
 
 	// TODO(rytaft): Support FILTER expression.
 	// TODO(peter): stmt.Limit
@@ -199,7 +214,15 @@ func (b *Builder) buildSelectClause(
 		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 	}
 
-	// TODO(rytaft): Handle Order By that can depend on from columns.
+	if stmt.OrderBy != nil {
+		// Wrap with distinct operator if it exists.
+		out, outScope = b.buildDistinct(out, sel.Distinct, projectionsScope.cols, outScope)
+
+		// OrderBy can reference columns from either the from/grouping clause or
+		// the projections clause.
+		out, outScope = b.buildOrderBy(stmt.OrderBy, out, projections, outScope, projectionsScope)
+		return out, outScope
+	}
 
 	// Don't add an unnecessary "pass through" project expression.
 	if !projectionsScope.hasSameColumns(outScope) {
@@ -209,7 +232,7 @@ func (b *Builder) buildSelectClause(
 	}
 
 	// Wrap with distinct operator if it exists.
-	out = b.buildDistinct(out, sel.Distinct, outScope.cols, outScope)
+	out, outScope = b.buildDistinct(out, sel.Distinct, outScope.cols, outScope)
 	return out, outScope
 }
 

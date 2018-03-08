@@ -23,28 +23,35 @@ import (
 //
 // in        contains the memo group ID of the input expression.
 // distinct  is true if this is a DISTINCT expression. If distinct is false,
-//           we just return `in`.
+//           we just return `in, inScope`.
 // byCols    is the set of columns in the DISTINCT expression. Since
 //           DISTINCT is equivalent to GROUP BY without any aggregations,
 //           byCols are essentially the grouping columns.
-// inScope   contains the name bindings that are visible for this DISTINCT
-//           expression (e.g., passed in from an enclosing statement).
 //
-// The return value corresponds to the top-level memo group ID for this
-// DISTINCT expression.
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
 func (b *Builder) buildDistinct(
 	in opt.GroupID, distinct bool, byCols []columnProps, inScope *scope,
-) opt.GroupID {
+) (out opt.GroupID, outScope *scope) {
 	if !distinct {
-		return in
+		return in, inScope
 	}
+
+	// After DISTINCT, FROM columns are no longer visible. As a side effect,
+	// ORDER BY cannot reference columns outside of the SELECT list. This
+	// will cause an error for queries like:
+	//   SELECT DISTINCT a FROM t ORDER BY b
+	// TODO(rytaft): This is not valid syntax in Postgres, but it works in
+	// CockroachDB, so we may need to support it eventually.
+	outScope = inScope.replace()
 
 	// Distinct is equivalent to group by without any aggregations.
 	var groupCols opt.ColSet
 	for i := range byCols {
 		groupCols.Add(int(byCols[i].index))
+		outScope.cols = append(outScope.cols, byCols[i])
 	}
 
 	aggList := b.constructList(opt.AggregationsOp, nil, nil)
-	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternPrivate(&groupCols))
+	return b.factory.ConstructGroupBy(in, aggList, b.factory.InternPrivate(&groupCols)), outScope
 }
