@@ -78,6 +78,8 @@ type partitioningTest struct {
 
 	// The following are all filled in by `parse()`.
 	parsed struct {
+		parsed bool
+
 		// tableName is `name` but escaped for use in SQL.
 		tableName string
 
@@ -103,6 +105,10 @@ type repartitioningTest struct {
 
 // parse fills in the various fields of `partitioningTest.parsed`.
 func (t *partitioningTest) parse() error {
+	if t.parsed.parsed {
+		return nil
+	}
+
 	t.parsed.tableName = tree.NameStringP(&t.name)
 	t.parsed.createStmt = fmt.Sprintf(t.schema, t.parsed.tableName)
 
@@ -179,6 +185,7 @@ func (t *partitioningTest) parse() error {
 		t.parsed.subzones = append(t.parsed.subzones, subzone)
 	}
 	t.parsed.zoneConfigStmts = zoneConfigStmts.String()
+	t.parsed.parsed = true
 
 	return nil
 }
@@ -1297,7 +1304,7 @@ func TestRepartitioning(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if tn.Table() != test.new.parsed.tableName || zs.Partition == "" {
+					if tn.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
 						// Ignore zone configs that do not target a partition of this table.
 						continue
 					}
