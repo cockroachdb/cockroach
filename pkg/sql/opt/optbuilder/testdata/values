@@ -28,18 +28,27 @@ VALUES (1), (2, 3)
 error: VALUES lists must all be the same length, expected 1 columns, found 2
 
 build
-VALUES (1), (1), (2), (3)
+VALUES (1), (1), (2), (3) ORDER BY 1 DESC
 ----
-values
+sort
  ├── columns: column1:1(int)
- ├── tuple [type=tuple{int}]
- │    └── const: 1 [type=int]
- ├── tuple [type=tuple{int}]
- │    └── const: 1 [type=int]
- ├── tuple [type=tuple{int}]
- │    └── const: 2 [type=int]
- └── tuple [type=tuple{int}]
-      └── const: 3 [type=int]
+ ├── ordering: -1
+ └── values
+      ├── columns: column1:1(int)
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 1 [type=int]
+      ├── tuple [type=tuple{int}]
+      │    └── const: 2 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 3 [type=int]
+
+# TODO(rytaft): Error message should be `pgcode 42703 column "z" does not exist`
+build
+VALUES (1), (1), (2), (3) ORDER BY z
+----
+error: column name "z" not found
 
 build
 VALUES ('this', 'is', 'a', 'test'), (1, 2, 3, 4)
