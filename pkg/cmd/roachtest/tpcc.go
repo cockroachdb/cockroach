@@ -45,10 +45,9 @@ func init() {
 	}
 
 	tests.Add("tpcc/w=1/nodes=3", func(t *test) {
-		concurrency := ifLocal("", " --concurrency=384")
-		runTPCC(t, 1, 3, " --wait=false"+concurrency)
+		runTPCC(t, 1, 3, " --wait=false")
 	})
 	tests.Add("tpmc/w=1/nodes=3", func(t *test) {
-		runTPCC(t, 1, 3, " --concurrency=10")
+		runTPCC(t, 1, 3, "")
 	})
 }
