@@ -211,19 +211,22 @@ export function nodeCapacityStats(n: NodeStatus$Properties): CapacityStats {
   };
 }
 
-export function getDisplayName(node: NodeStatus$Properties) {
-  return `${node.desc.address.address_field} (n${node.desc.node_id})`;
+export function getDisplayName(node: NodeStatus$Properties, decommissioned?: boolean) {
+  return `${decommissioned ? "[decommissioned] " : ""}${node.desc.address.address_field} (n${node.desc.node_id})`;
 }
 
 // nodeDisplayNameByIDSelector provides a unique, human-readable display name
 // for each node.
 export const nodeDisplayNameByIDSelector = createSelector(
   nodeStatusesSelector,
-  (nodeStatuses) => {
+  livenessStatusByNodeIDSelector,
+  (nodeStatuses, livenessStatusByNodeID) => {
     const result: {[key: string]: string} = {};
     if (!_.isEmpty(nodeStatuses)) {
       nodeStatuses.forEach(ns => {
-        result[ns.desc.node_id] = getDisplayName(ns);
+        result[ns.desc.node_id] = getDisplayName(
+          ns, livenessStatusByNodeID[ns.desc.node_id] === LivenessStatus.DECOMMISSIONED,
+        );
       });
     }
     return result;
