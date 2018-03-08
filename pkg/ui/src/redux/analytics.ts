@@ -14,7 +14,7 @@ type ClusterResponse = protos.cockroach.server.serverpb.ClusterResponse$Properti
  * TODO(mrtracy): It this list becomes more extensive, it might benefit from a
  * set of tests as a double-check.
  */
-const defaultRedactions = [
+export const defaultRedactions = [
     // When viewing a specific database, the database name and table are part of
     // the URL path.
     {
@@ -26,7 +26,23 @@ const defaultRedactions = [
         match: new RegExp("/database/.*/table/.*"),
         replace: "/database/[db]/table/[tbl]",
     },
+    // The clusterviz map page, which puts localities in the URL.
+    {
+        match: new RegExp("/overview/map((/.+)+)"),
+        useFunction: true, // I hate TypeScript.
+        replace: function countTiers(original: string, localities: string) {
+            const tierCount = localities.match(new RegExp("/", "g")).length;
+            let redactedLocalities = "";
+            for (let i = 0; i < tierCount; i++) {
+                redactedLocalities += "/[locality]";
+            }
+            return original.replace(localities, redactedLocalities);
+        },
+    },
 ];
+
+type PageTrackReplacementFunction = (match: string, ...args: any[]) => string;
+type PageTrackReplacement = string | PageTrackReplacementFunction;
 
 /**
  * A PageTrackRedaction describes a regular expression used to identify PII
@@ -36,7 +52,8 @@ const defaultRedactions = [
  */
 interface PageTrackRedaction {
     match: RegExp;
-    replace: string;
+    replace: PageTrackReplacement;
+    useFunction?: boolean; // I hate Typescript.
 }
 
 /**
@@ -168,12 +185,25 @@ export class AnalyticsSync {
      * pushPage pushes a single "page" event to the analytics service.
      */
     private pushPage = (userID: string, location: Location) => {
+
         // Loop through redactions, if any matches return the appropriate
         // redacted string.
         let path = location.pathname;
         _.each(this.redactions, (r) => {
             if (r.match.test(location.pathname)) {
-                path = r.replace;
+
+                // Apparently TypeScript doesn't know how to dispatch functions.
+                // If there are two function overloads defined (as with
+                // String.prototype.replace), it is unable to recognize that
+                // a union of the two types can be successfully passed in as a
+                // parameter of that function.  We have to explicitly
+                // disambiguate the types for it.
+                // See https://github.com/Microsoft/TypeScript/issues/14107
+                if (r.useFunction) {
+                    path = path.replace(r.match, r.replace as PageTrackReplacementFunction);
+                } else {
+                    path = path.replace(r.match, r.replace as string);
+                }
                 return false;
             }
         });
