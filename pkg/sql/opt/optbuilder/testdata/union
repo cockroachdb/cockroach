@@ -204,22 +204,88 @@ union
            ├── const: 1 [type=int]
            └── const: 1 [type=int]
 
+build
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC
+----
+sort
+ ├── columns: column1:3(int)
+ ├── ordering: -3
+ └── union-all
+      ├── columns: column1:3(int)
+      ├── left columns: column1:1(int)
+      ├── right columns: column1:2(int)
+      ├── values
+      │    ├── columns: column1:1(int)
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 2 [type=int]
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 2 [type=int]
+      └── values
+           ├── columns: column1:2(int)
+           ├── tuple [type=tuple{int}]
+           │    └── const: 1 [type=int]
+           ├── tuple [type=tuple{int}]
+           │    └── const: 3 [type=int]
+           └── tuple [type=tuple{int}]
+                └── const: 1 [type=int]
+
+# The ORDER BY applies to the UNION, not the last VALUES.
+build
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC
+----
+sort
+ ├── columns: column1:3(int)
+ ├── ordering: -3
+ └── union-all
+      ├── columns: column1:3(int)
+      ├── left columns: column1:1(int)
+      ├── right columns: column1:2(int)
+      ├── values
+      │    ├── columns: column1:1(int)
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 1 [type=int]
+      │    ├── tuple [type=tuple{int}]
+      │    │    └── const: 2 [type=int]
+      │    └── tuple [type=tuple{int}]
+      │         └── const: 2 [type=int]
+      └── values
+           ├── columns: column1:2(int)
+           ├── tuple [type=tuple{int}]
+           │    └── const: 1 [type=int]
+           ├── tuple [type=tuple{int}]
+           │    └── const: 3 [type=int]
+           └── tuple [type=tuple{int}]
+                └── const: 1 [type=int]
+
 # UNION with NULL columns in operands works.
 build
-VALUES (NULL) UNION ALL VALUES (1)
+VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
 ----
-union-all
+sort
  ├── columns: column1:3(int)
- ├── left columns: column1:1(unknown)
- ├── right columns: column1:2(int)
- ├── values
- │    ├── columns: column1:1(unknown)
- │    └── tuple [type=tuple{unknown}]
- │         └── null [type=unknown]
- └── values
-      ├── columns: column1:2(int)
-      └── tuple [type=tuple{int}]
-           └── const: 1 [type=int]
+ ├── ordering: +3
+ └── union-all
+      ├── columns: column1:3(int)
+      ├── left columns: column1:1(unknown)
+      ├── right columns: column1:2(int)
+      ├── values
+      │    ├── columns: column1:1(unknown)
+      │    └── tuple [type=tuple{unknown}]
+      │         └── null [type=unknown]
+      └── values
+           ├── columns: column1:2(int)
+           └── tuple [type=tuple{int}]
+                └── const: 1 [type=int]
 
 build
 VALUES (NULL) UNION ALL VALUES (NULL)
@@ -487,6 +553,73 @@ except-all
            └── variable: uniontest.v [type=int, outer=(5)]
 
 build
+(SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC
+----
+sort
+ ├── columns: v:7(int)
+ ├── ordering: -7
+ └── union-all
+      ├── columns: v:7(int)
+      ├── left columns: uniontest.v:2(int)
+      ├── right columns: uniontest.v:5(int)
+      ├── project
+      │    ├── columns: uniontest.v:2(int)
+      │    ├── select
+      │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+      │    │    ├── scan
+      │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+      │    │    └── eq [type=bool, outer=(1)]
+      │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+      │    │         └── const: 1 [type=int]
+      │    └── projections [outer=(2)]
+      │         └── variable: uniontest.v [type=int, outer=(2)]
+      └── project
+           ├── columns: uniontest.v:5(int)
+           ├── select
+           │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           │    ├── scan
+           │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           │    └── eq [type=bool, outer=(4)]
+           │         ├── variable: uniontest.k [type=int, outer=(4)]
+           │         └── const: 2 [type=int]
+           └── projections [outer=(5)]
+                └── variable: uniontest.v [type=int, outer=(5)]
+
+# The ORDER BY applies to the UNION, not the last SELECT.
+build
+SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2 ORDER BY 1 DESC
+----
+sort
+ ├── columns: v:7(int)
+ ├── ordering: -7
+ └── union-all
+      ├── columns: v:7(int)
+      ├── left columns: uniontest.v:2(int)
+      ├── right columns: uniontest.v:5(int)
+      ├── project
+      │    ├── columns: uniontest.v:2(int)
+      │    ├── select
+      │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+      │    │    ├── scan
+      │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
+      │    │    └── eq [type=bool, outer=(1)]
+      │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+      │    │         └── const: 1 [type=int]
+      │    └── projections [outer=(2)]
+      │         └── variable: uniontest.v [type=int, outer=(2)]
+      └── project
+           ├── columns: uniontest.v:5(int)
+           ├── select
+           │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           │    ├── scan
+           │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
+           │    └── eq [type=bool, outer=(4)]
+           │         ├── variable: uniontest.k [type=int, outer=(4)]
+           │         └── const: 2 [type=int]
+           └── projections [outer=(5)]
+                └── variable: uniontest.v [type=int, outer=(5)]
+
+build
 SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----
 union
@@ -606,25 +739,11 @@ SELECT 1 EXCEPT SELECT '3'
 ----
 error: EXCEPT types int and string cannot be matched
 
+# TODO(rytaft): Error message should be `pgcode 42703 column "z" does not exist`
 build
-SELECT 1 UNION SELECT 3
+SELECT 1 UNION SELECT 3 ORDER BY z
 ----
-union
- ├── columns: column1:3(int)
- ├── left columns: column1:1(int)
- ├── right columns: column2:2(int)
- ├── project
- │    ├── columns: column1:1(int)
- │    ├── values
- │    │    └── tuple [type=tuple{}]
- │    └── projections
- │         └── const: 1 [type=int]
- └── project
-      ├── columns: column2:2(int)
-      ├── values
-      │    └── tuple [type=tuple{}]
-      └── projections
-           └── const: 3 [type=int]
+error: column name "z" not found
 
 build
 SELECT ARRAY[1] UNION ALL SELECT ARRAY['foo']

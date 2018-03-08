@@ -1,0 +1,250 @@
+# tests adapted from logictest -- where
+
+exec-ddl
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT
+)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE kvString (
+  k STRING PRIMARY KEY,
+  v STRING
+)
+----
+TABLE kvstring
+ ├── k string not null
+ ├── v string
+ └── INDEX primary
+      └── k string not null
+
+build
+SELECT * FROM kv WHERE k IN (1, 3)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan
+ │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ └── in [type=bool, outer=(1)]
+      ├── variable: kv.k [type=int, outer=(1)]
+      └── tuple [type=tuple{int, int}]
+           ├── const: 1 [type=int]
+           └── const: 3 [type=int]
+
+build
+SELECT * FROM kv WHERE v IN (6)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan
+ │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ └── in [type=bool, outer=(2)]
+      ├── variable: kv.v [type=int, outer=(2)]
+      └── tuple [type=tuple{int}]
+           └── const: 6 [type=int]
+
+# TODO(rytaft) subqueries not yet implemented.
+#build
+#SELECT * FROM kv WHERE k IN (SELECT k FROM kv)
+#----
+#
+#build
+#SELECT * FROM kv WHERE (k,v) IN (SELECT * FROM kv)
+#----
+
+build
+SELECT * FROM kv WHERE nonexistent = 1
+----
+error: column name "nonexistent" not found
+
+build
+SELECT 'hello' LIKE v FROM kvString WHERE k LIKE 'like%' ORDER BY k
+----
+project
+ ├── columns: column3:3(bool)
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    │    └── ordering: +1
+ │    └── like [type=bool, outer=(1)]
+ │         ├── variable: kvstring.k [type=string, outer=(1)]
+ │         └── const: 'like%' [type=string]
+ └── projections [outer=(1,2)]
+      ├── like [type=bool, outer=(2)]
+      │    ├── const: 'hello' [type=string]
+      │    └── variable: kvstring.v [type=string, outer=(2)]
+      └── variable: kvstring.k [type=string, outer=(1)]
+
+build
+SELECT 'hello' SIMILAR TO v FROM kvString WHERE k SIMILAR TO 'like[1-2]' ORDER BY k
+----
+project
+ ├── columns: column3:3(bool)
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    │    └── ordering: +1
+ │    └── similar-to [type=bool, outer=(1)]
+ │         ├── variable: kvstring.k [type=string, outer=(1)]
+ │         └── const: 'like[1-2]' [type=string]
+ └── projections [outer=(1,2)]
+      ├── similar-to [type=bool, outer=(2)]
+      │    ├── const: 'hello' [type=string]
+      │    └── variable: kvstring.v [type=string, outer=(2)]
+      └── variable: kvstring.k [type=string, outer=(1)]
+
+build
+SELECT 'hello' ~ replace(v, '%', '.*') FROM kvString WHERE k ~ 'like[1-2]' ORDER BY k
+----
+project
+ ├── columns: column3:3(bool)
+ ├── ordering: +1
+ ├── select
+ │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: kvstring.k:1(string!null) kvstring.v:2(string)
+ │    │    └── ordering: +1
+ │    └── reg-match [type=bool, outer=(1)]
+ │         ├── variable: kvstring.k [type=string, outer=(1)]
+ │         └── const: 'like[1-2]' [type=string]
+ └── projections [outer=(1,2)]
+      ├── reg-match [type=bool, outer=(2)]
+      │    ├── const: 'hello' [type=string]
+      │    └── function: replace [type=string, outer=(2)]
+      │         ├── variable: kvstring.v [type=string, outer=(2)]
+      │         ├── const: '%' [type=string]
+      │         └── const: '.*' [type=string]
+      └── variable: kvstring.k [type=string, outer=(1)]
+
+# Test mixed type tuple comparison.
+
+build
+SELECT * FROM kv WHERE k IN (1, 5.0, 9)
+----
+select
+ ├── columns: k:1(int!null) v:2(int)
+ ├── scan
+ │    └── columns: kv.k:1(int!null) kv.v:2(int)
+ └── in [type=bool, outer=(1)]
+      ├── variable: kv.k [type=int, outer=(1)]
+      └── tuple [type=tuple{int, int, int}]
+           ├── const: 1 [type=int]
+           ├── const: 5 [type=int]
+           └── const: 9 [type=int]
+
+# Regression tests for #22670.
+exec-ddl
+CREATE TABLE ab (a INT, b INT)
+----
+TABLE ab
+ ├── a int
+ ├── b int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+build
+SELECT * FROM ab WHERE a IN (1, 3, 4)
+----
+project
+ ├── columns: a:1(int) b:2(int)
+ ├── select
+ │    ├── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    ├── scan
+ │    │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    └── in [type=bool, outer=(1)]
+ │         ├── variable: ab.a [type=int, outer=(1)]
+ │         └── tuple [type=tuple{int, int, int}]
+ │              ├── const: 1 [type=int]
+ │              ├── const: 3 [type=int]
+ │              └── const: 4 [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: ab.a [type=int, outer=(1)]
+      └── variable: ab.b [type=int, outer=(2)]
+
+build
+SELECT * FROM ab WHERE a IN (1, 3, 4, NULL)
+----
+project
+ ├── columns: a:1(int) b:2(int)
+ ├── select
+ │    ├── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    ├── scan
+ │    │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    └── in [type=bool, outer=(1)]
+ │         ├── variable: ab.a [type=int, outer=(1)]
+ │         └── tuple [type=tuple{int, int, int, unknown}]
+ │              ├── const: 1 [type=int]
+ │              ├── const: 3 [type=int]
+ │              ├── const: 4 [type=int]
+ │              └── null [type=unknown]
+ └── projections [outer=(1,2)]
+      ├── variable: ab.a [type=int, outer=(1)]
+      └── variable: ab.b [type=int, outer=(2)]
+
+build
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (3, 30), (4, 40))
+----
+project
+ ├── columns: a:1(int) b:2(int)
+ ├── select
+ │    ├── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    ├── scan
+ │    │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    └── in [type=bool, outer=(1,2)]
+ │         ├── tuple [type=tuple{int, int}, outer=(1,2)]
+ │         │    ├── variable: ab.a [type=int, outer=(1)]
+ │         │    └── variable: ab.b [type=int, outer=(2)]
+ │         └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+ │              ├── tuple [type=tuple{int, int}]
+ │              │    ├── const: 1 [type=int]
+ │              │    └── const: 10 [type=int]
+ │              ├── tuple [type=tuple{int, int}]
+ │              │    ├── const: 3 [type=int]
+ │              │    └── const: 30 [type=int]
+ │              └── tuple [type=tuple{int, int}]
+ │                   ├── const: 4 [type=int]
+ │                   └── const: 40 [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: ab.a [type=int, outer=(1)]
+      └── variable: ab.b [type=int, outer=(2)]
+
+build
+SELECT * FROM ab WHERE (a, b) IN ((1, 10), (4, NULL), (NULL, 50))
+----
+project
+ ├── columns: a:1(int) b:2(int)
+ ├── select
+ │    ├── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    ├── scan
+ │    │    └── columns: ab.a:1(int) ab.b:2(int) ab.rowid:3(int!null)
+ │    └── in [type=bool, outer=(1,2)]
+ │         ├── tuple [type=tuple{int, int}, outer=(1,2)]
+ │         │    ├── variable: ab.a [type=int, outer=(1)]
+ │         │    └── variable: ab.b [type=int, outer=(2)]
+ │         └── tuple [type=tuple{tuple{int, int}, tuple{int, unknown}, tuple{unknown, int}}]
+ │              ├── tuple [type=tuple{int, int}]
+ │              │    ├── const: 1 [type=int]
+ │              │    └── const: 10 [type=int]
+ │              ├── tuple [type=tuple{int, unknown}]
+ │              │    ├── const: 4 [type=int]
+ │              │    └── null [type=unknown]
+ │              └── tuple [type=tuple{unknown, int}]
+ │                   ├── null [type=unknown]
+ │                   └── const: 50 [type=int]
+ └── projections [outer=(1,2)]
+      ├── variable: ab.a [type=int, outer=(1)]
+      └── variable: ab.b [type=int, outer=(2)]
