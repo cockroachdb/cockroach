@@ -197,10 +197,8 @@ func (s *sortAllProcessor) fill() error {
 	ctx := s.evalCtx.Ctx()
 	// Attempt an in memory implementation of a sort. If this run fails with a
 	// memory error, fall back to use disk.
-	row, meta, err := s.fillWithContainer(ctx, s.rows)
-	if meta != nil {
-		s.meta = append(s.meta, *meta)
-	} else if err != nil {
+	row, err := s.fillWithContainer(ctx, s.rows)
+	if err != nil {
 		// TODO(asubiotto): A memory error could also be returned if a limit other
 		// than the COCKROACH_WORK_MEM was reached. We should distinguish between
 		// these cases and log the event to facilitate debugging of queries that
@@ -244,12 +242,7 @@ func (s *sortAllProcessor) fill() error {
 		}
 
 		// Continue and fill the rest of the rows from the input.
-		if _, meta, err := s.fillWithContainer(ctx, s.diskContainer); meta != nil {
-			// if we encounter metadata, we have to be careful: we can't return it
-			// right away. We save it for sending after we send all the rows we've
-			// already buffered.
-			s.meta = append(s.meta, *meta)
-		} else if err != nil {
+		if _, err := s.fillWithContainer(ctx, s.diskContainer); err != nil {
 			return err
 		}
 	}
@@ -261,12 +254,11 @@ func (s *sortAllProcessor) fill() error {
 // row is returned in order to not lose it.
 func (s *sortAllProcessor) fillWithContainer(
 	ctx context.Context, r sortableRowContainer,
-) (sqlbase.EncDatumRow, *ProducerMetadata, error) {
-	var meta *ProducerMetadata
+) (sqlbase.EncDatumRow, error) {
 	for {
-		row, inputMeta := s.input.Next()
-		if inputMeta != nil {
-			meta = inputMeta
+		row, meta := s.input.Next()
+		if meta != nil {
+			s.meta = append(s.meta, *meta)
 			continue
 		}
 		if row == nil {
@@ -274,7 +266,7 @@ func (s *sortAllProcessor) fillWithContainer(
 		}
 
 		if err := r.AddRow(ctx, row); err != nil {
-			return row, nil, err
+			return row, err
 		}
 	}
 	r.Sort(ctx)
@@ -282,7 +274,7 @@ func (s *sortAllProcessor) fillWithContainer(
 	s.i = r.NewIterator(ctx)
 	s.i.Rewind()
 
-	return nil, meta, nil
+	return nil, nil
 }
 
 func (s *sortAllProcessor) Run(wg *sync.WaitGroup) {
@@ -341,7 +333,9 @@ func (s *sortAllProcessor) producerMeta(err error) *ProducerMetadata {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		s.close()
-		return meta
+		if meta != nil {
+			return meta
+		}
 	}
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
@@ -497,7 +491,9 @@ func (s *sortTopKProcessor) producerMeta(err error) *ProducerMetadata {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		s.close()
-		return meta
+		if meta != nil {
+			return meta
+		}
 	}
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
@@ -681,7 +677,9 @@ func (s *sortChunksProcessor) producerMeta(err error) *ProducerMetadata {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		s.close()
-		return meta
+		if meta != nil {
+			return meta
+		}
 	}
 	if len(s.meta) > 0 {
 		meta := &s.meta[0]
