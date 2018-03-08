@@ -53,7 +53,6 @@ func TestDatabaseAccessors(t *testing.T) {
 
 	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.TODO())
-	defer leaktest.AfterTest(t)()
 
 	if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		if _, err := getDatabaseDescByID(ctx, txn, sqlbase.SystemDB.ID); err != nil {
