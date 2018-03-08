@@ -1,6 +1,9 @@
 show_trace_stmt ::=
-	'SHOW' opt_compact 'TRACE' 'FOR' 'SESSION'
-	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' 'SESSION'
-	| 'SHOW' opt_compact 'TRACE' 'FOR' explainable_stmt
-	| 'SHOW' opt_compact 'KV' 'TRACE' 'FOR' explainable_stmt
-	| 'SHOW' 'EXPERIMENTAL_REPLICA' 'TRACE' 'FOR' explainable_stmt
+	'SHOW' 'COMPACT' 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW'  'TRACE' 'FOR' 'SESSION'
+	| 'SHOW' 'COMPACT' 'KV' 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW'  'KV' 'TRACE' 'FOR' 'SESSION'
+	| 'SHOW' 'COMPACT' 'TRACE' 'FOR' explainable_stmt
+	| 'SHOW'  'TRACE' 'FOR' explainable_stmt
+	| 'SHOW' 'COMPACT' 'KV' 'TRACE' 'FOR' explainable_stmt
+	| 'SHOW'  'KV' 'TRACE' 'FOR' explainable_stmt
