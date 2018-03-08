@@ -1054,6 +1054,7 @@ func (m *multiTestContext) changeReplicas(
 
 // replicateRange replicates the given range onto the given stores.
 func (m *multiTestContext) replicateRange(rangeID roachpb.RangeID, dests ...int) {
+	m.t.Helper()
 	if err := m.replicateRangeNonFatal(rangeID, dests...); err != nil {
 		m.t.Fatal(err)
 	}
@@ -1098,6 +1099,7 @@ func (m *multiTestContext) replicateRangeNonFatal(rangeID roachpb.RangeID, dests
 
 // unreplicateRange removes a replica of the range from the dest store.
 func (m *multiTestContext) unreplicateRange(rangeID roachpb.RangeID, dest int) {
+	m.t.Helper()
 	if err := m.unreplicateRangeNonFatal(rangeID, dest); err != nil {
 		m.t.Fatal(err)
 	}
@@ -1155,9 +1157,21 @@ func (m *multiTestContext) waitForValues(key roachpb.Key, expected []int64) {
 func (m *multiTestContext) transferLease(
 	ctx context.Context, rangeID roachpb.RangeID, source int, dest int,
 ) {
+	if err := m.transferLeaseNonFatal(ctx, rangeID, source, dest); err != nil {
+		m.t.Fatal(err)
+	}
+}
+
+// transferLease transfers the lease for the given range from the source
+// replica to the target replica. Assumes that the caller knows who the
+// current leaseholder is.
+// Returns an error rather than calling m.t.Fatal upon error.
+func (m *multiTestContext) transferLeaseNonFatal(
+	ctx context.Context, rangeID roachpb.RangeID, source int, dest int,
+) error {
 	live := m.stores[dest] != nil && !m.stores[dest].IsDraining()
 	if !live {
-		m.t.Fatalf("can't transfer lease to down or draining node at index %d", dest)
+		return errors.Errorf("can't transfer lease to down or draining node at index %d", dest)
 	}
 
 	// Heartbeat the liveness record of the destination node to make sure that the
@@ -1172,19 +1186,21 @@ func (m *multiTestContext) transferLease(
 	m.mu.RUnlock()
 	l, err := nl.Self()
 	if err != nil {
-		m.t.Fatal(err)
+		return err
 	}
 	if err := nl.Heartbeat(ctx, l); err != nil {
-		m.t.Fatal(err)
+		return err
 	}
 
 	sourceRepl, err := m.stores[source].GetReplica(rangeID)
 	if err != nil {
-		m.t.Fatal(err)
+		return err
 	}
 	if err := sourceRepl.AdminTransferLease(context.Background(), m.idents[dest].StoreID); err != nil {
-		m.t.Fatal(err)
+		return err
 	}
+
+	return nil
 }
 
 // advanceClock advances the mtc's manual clock such that all
