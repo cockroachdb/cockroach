@@ -490,25 +490,30 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	}
 }
 
-// Run a command on the specified node.
+// Run a command on the specified node
 func (c *cluster) Run(ctx context.Context, node int, args ...string) {
-	c.RunL(ctx, c.l, node, args...)
-}
-
-// RunL runs a command on the specified node.
-func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string) {
-	if c.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
-	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
-	}
-	err := execCmd(ctx, l,
-		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
+	err := c.RunL(ctx, c.l, node, args...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
+}
+
+// RunE runs a command on the specified node, returning an error.
+func (c *cluster) RunE(ctx context.Context, node int, args ...string) error {
+	return c.RunL(ctx, c.l, node, args...)
+}
+
+// RunL runs a command on the specified node, returning an error.
+func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string) error {
+	if c.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return errors.New("test already failed")
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		return errors.New("interrupted")
+	}
+	return execCmd(ctx, l,
+		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
 }
 
 // Conn returns a SQL connection to the specified node.
