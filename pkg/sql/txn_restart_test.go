@@ -1576,6 +1576,25 @@ func TestDistSQLRetryableError(t *testing.T) {
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+
+	// Test that ORDER BY properly propagates retryable errors. The weird
+	// ordering criteria is to ensure that the ORDER BY is present and not elided
+	// because we're ordering on the primary key column.
+	restarted = false
+	rows, err := db.Query("SELECT * FROM t ORDER BY UPPER(num::TEXT)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	for rows.Next() {
+		count++
+	}
+	if count != 3 {
+		t.Fatalf("expected 3 rows, but found %d", count)
+	}
+	if !restarted {
+		t.Fatalf("expected the EvalFilter to restart the txn, but it didn't")
+	}
 }
 
 // TestRollbackToSavepointFromUnusualStates tests that issuing a ROLLBACK TO
