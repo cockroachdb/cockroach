@@ -259,7 +259,7 @@ type tableUpserter struct {
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
 	updateCols []sqlbase.ColumnDescriptor
-	evaler     tableUpsertEvaler
+	evaler     *upsertHelper
 
 	// Set by init.
 	txn                   *client.Txn
