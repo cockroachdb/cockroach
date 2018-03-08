@@ -819,7 +819,12 @@ var specs = []stmtSpec{
 	{name: "show_queries", stmt: "show_queries_stmt"},
 	{name: "show_sessions", stmt: "show_sessions_stmt"},
 	{name: "show_tables", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TABLES'")}},
-	{name: "show_trace", stmt: "show_trace_stmt"},
+	{
+		name:    "show_trace",
+		stmt:    "show_trace_stmt",
+		inline:  []string{"opt_compact"},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'EXPERIMENTAL_REPLICA'")},
+	},
 	{name: "show_transaction", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")}},
 	{name: "show_users", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'USERS'")}},
 	{name: "table_constraint", inline: []string{"constraint_elem", "opt_storing", "storing"}},
