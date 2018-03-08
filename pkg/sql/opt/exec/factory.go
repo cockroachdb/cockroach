@@ -50,6 +50,8 @@ type Factory interface {
 	// results of the given input node. A simple projection is one that does not
 	// involve new expressions; it's just a reshuffling of columns. This is a
 	// more efficient version of ConstructRender.
+	// The colNames argument is optional; if it is nil, the names of the
+	// corresponding input columns are kept.
 	ConstructSimpleProject(n Node, cols []int, colNames []string) (Node, error)
 
 	// ConstructRender returns a node that applies a projection on the results of
@@ -61,7 +63,15 @@ type Factory interface {
 	// using IndexedVars (first the left columns, then the right columns).
 	ConstructJoin(joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr) (Node, error)
 
+	// ConstructGroupBy returns a node that runs an aggregation. If group columns
+	// are specified, a set of aggregations is performed for each group of values
+	// on those columns (otherwise there is a single group).
 	ConstructGroupBy(input Node, groupCols []int, aggregations []AggInfo) (Node, error)
+
+	// ConstructSetOp returns a node that performs a UNION / INTERSECT / EXCEPT
+	// operation (either the ALL or the DISTINCT version). The left and right
+	// nodes must have the same number of columns.
+	ConstructSetOp(typ tree.UnionType, all bool, left, right Node) (Node, error)
 }
 
 // AggInfo represents an aggregation (see ConstructGroupBy).

@@ -192,7 +192,9 @@ func (ee *execEngine) ConstructSimpleProject(
 			}
 		}
 		if identity {
-			renameColumns(n, colNames)
+			if colNames != nil {
+				renameColumns(n, colNames)
+			}
 			return n, nil
 		}
 	}
@@ -205,10 +207,15 @@ func (ee *execEngine) ConstructSimpleProject(
 		columns:    make([]sqlbase.ResultColumn, len(cols)),
 	}
 	r.ivarHelper = tree.MakeIndexedVarHelper(r, len(src.info.SourceColumns))
-	for i := range cols {
-		v := r.ivarHelper.IndexedVar(cols[i])
+	for i, col := range cols {
+		v := r.ivarHelper.IndexedVar(col)
 		r.render[i] = v
-		r.columns[i] = sqlbase.ResultColumn{Name: colNames[i], Typ: v.ResolvedType()}
+		if colNames == nil {
+			r.columns[i].Name = inputCols[col].Name
+		} else {
+			r.columns[i].Name = colNames[i]
+		}
+		r.columns[i].Typ = v.ResolvedType()
 	}
 	return r, nil
 }
@@ -349,4 +356,11 @@ func (ee *execEngine) ConstructGroupBy(
 	n.run.addNullBucketIfEmpty = len(groupCols) == 0
 	n.run.buckets = make(map[string]struct{})
 	return n, nil
+}
+
+// ConstructSetOp is part of the exec.Factory interface.
+func (ee *execEngine) ConstructSetOp(
+	typ tree.UnionType, all bool, left, right exec.Node,
+) (exec.Node, error) {
+	return ee.planner.newUnionNode(typ, all, left.(planNode), right.(planNode))
 }
