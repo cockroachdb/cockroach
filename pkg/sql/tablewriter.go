@@ -93,7 +93,6 @@ const (
 	autoCommitEnabled
 )
 
-var _ tableWriter = (*tableInserter)(nil)
 var _ tableWriter = (*tableUpserter)(nil)
 
 // extendedTableWriter is a temporary interface introduced
@@ -122,6 +121,7 @@ type extendedTableWriter interface {
 
 var _ extendedTableWriter = (*tableUpdater)(nil)
 var _ extendedTableWriter = (*tableDeleter)(nil)
+var _ extendedTableWriter = (*tableInserter)(nil)
 
 // tableWriterBase is meant to be used to factor common code between
 // the other tableWriters.
@@ -176,54 +176,53 @@ func (tb *tableWriterBase) finalize(
 
 // tableInserter handles writing kvs and forming table rows for inserts.
 type tableInserter struct {
+	tableWriterBase
 	ri sqlbase.RowInserter
-
-	// Set by init.
-	txn *client.Txn
-	b   *client.Batch
 }
 
+// walkExprs is part of the tableWriter interface.
 func (ti *tableInserter) walkExprs(_ func(desc string, index int, expr tree.TypedExpr)) {}
 
+// init is part of the tableWriter interface.
 func (ti *tableInserter) init(txn *client.Txn, _ *tree.EvalContext) error {
-	ti.txn = txn
-	ti.b = txn.NewBatch()
+	ti.tableWriterBase.init(txn)
 	return nil
 }
 
+// row is part of the tableWriter interface.
 func (ti *tableInserter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
+	ti.batchSize++
 	return nil, ti.ri.InsertRow(ctx, ti.b, values, false, sqlbase.CheckFKs, traceKV)
 }
 
+// atBatchEnd is part of the extendedTableWriter interface.
+func (ti *tableInserter) atBatchEnd(_ context.Context) error { return nil }
+
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (ti *tableInserter) flushAndStartNewBatch(ctx context.Context) error {
+	return ti.tableWriterBase.flushAndStartNewBatch(ctx, ti.tableDesc())
+}
+
+// finalize is part of the tableWriter interface.
 func (ti *tableInserter) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, _ bool,
 ) (*sqlbase.RowContainer, error) {
-	var err error
-	if autoCommit == autoCommitEnabled {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		err = ti.txn.CommitInBatch(ctx, ti.b)
-	} else {
-		err = ti.txn.Run(ctx, ti.b)
-	}
-
-	if err != nil {
-		return nil, sqlbase.ConvertBatchError(ctx, ti.ri.Helper.TableDesc, ti.b)
-	}
-	return nil, nil
+	return nil, ti.tableWriterBase.finalize(ctx, autoCommit, ti.tableDesc())
 }
 
+// tableDesc is part of the tableWriter interface.
 func (ti *tableInserter) tableDesc() *sqlbase.TableDescriptor {
 	return ti.ri.Helper.TableDesc
 }
 
+// fkSpanCollector is part of the tableWriter interface.
 func (ti *tableInserter) fkSpanCollector() sqlbase.FkSpanCollector {
 	return ti.ri.Fks
 }
 
+// close is part of the tableWriter interface.
 func (ti *tableInserter) close(_ context.Context) {}
 
 type tableUpsertEvaler interface {
