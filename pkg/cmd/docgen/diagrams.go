@@ -463,6 +463,25 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
 	},
 	{
+		name:   "create_index_interleaved_stmt",
+		stmt:   "create_index_stmt",
+		match:  []*regexp.Regexp{regexp.MustCompile("'INTERLEAVE'")},
+		inline: []string{"opt_unique", "opt_storing", "opt_interleave"},
+		replace: map[string]string{
+			" opt_index_name":                      "",
+			" opt_partition_by":                    "",
+			" opt_using_gin":                       "",
+			"'ON' table_name '(' index_params ')'": "'...'",
+			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
+			"table_name '(' name_list":             "parent_table '(' interleave_prefix",
+		},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'CREATE' 'INVERTED'"),
+			regexp.MustCompile("'EXISTS'"),
+		},
+		unlink: []string{"stored_columns", "parent_table", "interleave_prefix"},
+	},
+	{
 		name:   "create_inverted_index_stmt",
 		stmt:   "create_index_stmt",
 		match:  []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
