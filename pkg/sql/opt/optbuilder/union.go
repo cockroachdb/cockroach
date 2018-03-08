@@ -81,7 +81,7 @@ func (b *Builder) buildUnion(
 				typ = r.typ
 			}
 
-			b.synthesizeColumn(outScope, string(l.name), typ)
+			b.synthesizeColumn(outScope, string(l.name), typ, nil)
 		}
 	}
 

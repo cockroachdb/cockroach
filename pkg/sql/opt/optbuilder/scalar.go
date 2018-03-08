@@ -342,7 +342,7 @@ func NewScalar(
 	}
 	sb.scope.builder = &sb.Builder
 	for i := range columnNames {
-		sb.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i])
+		sb.synthesizeColumn(&sb.scope, columnNames[i], columnTypes[i], nil)
 	}
 	return sb
 }

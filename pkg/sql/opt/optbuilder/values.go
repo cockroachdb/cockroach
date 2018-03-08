@@ -70,7 +70,7 @@ func (b *Builder) buildValuesClause(
 	for i := 0; i < numCols; i++ {
 		// The column names for VALUES are column1, column2, etc.
 		label := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, label, colTypes[i])
+		b.synthesizeColumn(outScope, label, colTypes[i], nil)
 	}
 
 	colList := colsToColList(outScope.cols)

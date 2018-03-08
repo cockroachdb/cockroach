@@ -101,15 +101,25 @@ func (b *Builder) expandStarAndResolveType(
 // label  This is an optional label for the new column (e.g., if specified with
 //        the AS keyword).
 // typ    The type of the column.
+// expr   The expression this column refers to (if any).
 //
 // The new column is returned as a columnProps object.
-func (b *Builder) synthesizeColumn(scope *scope, label string, typ types.T) *columnProps {
+func (b *Builder) synthesizeColumn(
+	scope *scope, label string, typ types.T, expr tree.TypedExpr,
+) *columnProps {
 	if label == "" {
 		label = fmt.Sprintf("column%d", len(b.colMap))
 	}
 
+	name := tree.Name(label)
 	colIndex := b.factory.Metadata().AddColumn(label, typ)
-	col := columnProps{name: tree.Name(label), typ: typ, index: colIndex}
+	col := columnProps{
+		origName: name,
+		name:     name,
+		typ:      typ,
+		index:    colIndex,
+		expr:     expr,
+	}
 	b.colMap = append(b.colMap, col)
 	scope.cols = append(scope.cols, col)
 	return &scope.cols[len(scope.cols)-1]
@@ -175,6 +185,53 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 	return int(ord)
 }
 
+// colIdxByProjectionAlias returns the corresponding index in columns of an expression
+// that may refer to a column alias.
+// If there are no aliases in columns that expr refers to, then -1 is returned.
+// This method is pertinent to ORDER BY and DISTINCT ON clauses that may refer
+// to a column alias.
+func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
+	index := -1
+
+	if vBase, ok := expr.(tree.VarName); ok {
+		v, err := vBase.NormalizeVarName()
+		if err != nil {
+			panic(builderError{err})
+		}
+
+		if c, ok := v.(*tree.ColumnItem); ok && c.TableName.Parts[0] == "" {
+			// Look for an output column that matches the name. This
+			// handles cases like:
+			//
+			//   SELECT a AS b FROM t ORDER BY b
+			//   SELECT DISTINCT ON (b) a AS b FROM t
+			target := c.ColumnName
+			for j, col := range scope.cols {
+				if col.name == target {
+					if index != -1 {
+						// There is more than one projection alias that matches the clause.
+						// Here, SQL92 is specific as to what should be done: if the
+						// underlying expression is known and it is equivalent, then just
+						// accept that and ignore the ambiguity. This plays nice with
+						// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
+						// ambiguity error.
+						if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
+							panic(builderError{pgerror.NewErrorf(
+								pgerror.CodeAmbiguousAliasError, "%s \"%s\" is ambiguous", op, target,
+							)})
+						}
+						// Use the index of the first matching column.
+						continue
+					}
+					index = j
+				}
+			}
+		}
+	}
+
+	return index
+}
+
 // flattenTuples extracts the members of tuples into a list of columns.
 func flattenTuples(exprs []tree.TypedExpr) []tree.TypedExpr {
 	// We want to avoid allocating new slices unless strictly necessary.
@@ -225,4 +282,24 @@ func colsToColList(cols []columnProps) opt.ColList {
 		colList[i] = cols[i].index
 	}
 	return colList
+}
+
+func findColByIndex(cols []columnProps, colIndex opt.ColumnIndex) *columnProps {
+	for i := range cols {
+		col := &cols[i]
+		if col.index == colIndex {
+			return col
+		}
+	}
+
+	return nil
+}
+
+func makePresentation(cols []columnProps) opt.Presentation {
+	presentation := make(opt.Presentation, len(cols))
+	for i := range cols {
+		col := &cols[i]
+		presentation[i] = opt.LabeledColumn{Label: string(col.name), Index: col.index}
+	}
+	return presentation
 }
