@@ -42,11 +42,12 @@ const TimeFormat = "2006/01/02 15:04:05"
 var (
 	// These variables are initialized via the linker -X flag in the
 	// top-level Makefile when compiling release binaries.
-	tag         = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
-	utcTime     string      // Build time in UTC (year/month/day hour:min:sec)
-	rev         string      // SHA-1 of this build (git rev-parse)
-	cgoCompiler = C.GoString(C.compilerVersion())
-	platform    = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
+	tag             = "unknown" // Tag of this build (git describe --tags w/ optional '-dirty' suffix)
+	utcTime         string      // Build time in UTC (year/month/day hour:min:sec)
+	rev             string      // SHA-1 of this build (git rev-parse)
+	cgoCompiler     = C.GoString(C.compilerVersion())
+	cgoTargetTriple string
+	platform        = fmt.Sprintf("%s %s", runtime.GOOS, runtime.GOARCH)
 	// Distribution is changed by the CCL init-time hook in non-APL builds.
 	Distribution = "OSS"
 	typ          string // Type of this build: <empty>, "development", or "release[-gnu|-musl]"
@@ -78,8 +79,12 @@ func init() {
 
 // Short returns a pretty printed build and version summary.
 func (b Info) Short() string {
+	platform := b.Platform
+	if b.CgoTargetTriple != "" {
+		platform = b.CgoTargetTriple
+	}
 	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
-		b.Distribution, b.Tag, b.Platform, b.Time, b.GoVersion)
+		b.Distribution, b.Tag, platform, b.Time, b.GoVersion)
 }
 
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
@@ -94,15 +99,16 @@ func (b Info) Timestamp() (int64, error) {
 // GetInfo returns an Info struct populated with the build information.
 func GetInfo() Info {
 	return Info{
-		GoVersion:    runtime.Version(),
-		Tag:          tag,
-		Time:         utcTime,
-		Revision:     rev,
-		CgoCompiler:  cgoCompiler,
-		Platform:     platform,
-		Distribution: Distribution,
-		Type:         typ,
-		Channel:      channel,
+		GoVersion:       runtime.Version(),
+		Tag:             tag,
+		Time:            utcTime,
+		Revision:        rev,
+		CgoCompiler:     cgoCompiler,
+		CgoTargetTriple: cgoTargetTriple,
+		Platform:        platform,
+		Distribution:    Distribution,
+		Type:            typ,
+		Channel:         channel,
 	}
 }
 
