@@ -17,17 +17,20 @@ package main
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach-go/crdb"
 )
 
 func init() {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
-	runCopy := func(t *test, rows, nodes int) {
+	runCopy := func(t *test, rows, nodes int, inTxn bool) {
 		// payload is the size of the payload column for each row in the Bank
 		// table. If this is adjusted, a new fixture may need to be generated.
 		const payload = 100
@@ -80,25 +83,44 @@ func init() {
 			// add up to well less than this limit.
 			rowsPerInsert := (60 << 20 /* 60MB */) / rowEstimate
 			t.Status("copying from bank_orig to bank")
-			for lastID := -1; lastID+1 < rows; {
-				if lastID > 0 {
-					t.Progress(float64(lastID+1) / float64(rows))
+
+			// querier is a common interface shared by sql.DB and sql.Tx. It
+			// can be replaced by https://github.com/golang/go/issues/14468 if
+			// that is ever resolved.
+			type querier interface {
+				QueryRow(query string, args ...interface{}) *gosql.Row
+			}
+			runCopy := func(qu querier) {
+				for lastID := -1; lastID+1 < rows; {
+					if lastID > 0 {
+						t.Progress(float64(lastID+1) / float64(rows))
+					}
+					q := fmt.Sprintf(`
+						SELECT id FROM [
+							INSERT INTO bank.bank
+							SELECT * FROM bank.bank_orig
+							WHERE id > %d
+							ORDER BY id ASC
+							LIMIT %d
+							RETURNING ID
+						]
+						ORDER BY id DESC
+						LIMIT 1`,
+						lastID, rowsPerInsert)
+					if err := qu.QueryRow(q).Scan(&lastID); err != nil {
+						t.Fatalf("failed to copy rows: %v", err)
+					}
 				}
-				q := fmt.Sprintf(`
-					SELECT id FROM [
-						INSERT INTO bank.bank
-						SELECT * FROM bank.bank_orig
-						WHERE id > %d
-						ORDER BY id ASC
-						LIMIT %d
-						RETURNING ID
-					]
-					ORDER BY id DESC
-					LIMIT 1`,
-					lastID, rowsPerInsert)
-				if err := db.QueryRow(q).Scan(&lastID); err != nil {
-					t.Fatalf("failed to copy rows: %v", err)
+			}
+			if inTxn {
+				if err := crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+					runCopy(tx)
+					return nil
+				}); err != nil {
+					t.Fatal(err)
 				}
+			} else {
+				runCopy(db)
 			}
 
 			rc := rangeCount()
@@ -117,14 +139,11 @@ func init() {
 	rows := int(1E7)
 	nodes := 9
 
-	tests.Add(
-		fmt.Sprintf("copy/bank/rows=%d,nodes=%d", rows, nodes),
-		func(t *test) {
-			if local {
-				rows = 1E6
-				nodes = 4
-				fmt.Printf("running with nodes=%d in local mode\n", nodes)
-			}
-			runCopy(t, rows, nodes)
-		})
+	for _, inTxn := range []bool{true, false} {
+		inTxn := inTxn
+		tests.Add(fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, nodes, inTxn),
+			func(t *test) {
+				runCopy(t, rows, nodes, inTxn)
+			})
+	}
 }
