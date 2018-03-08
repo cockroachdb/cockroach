@@ -50,7 +50,7 @@ func init() {
 
 			t.Status("importing TPCC fixture")
 			c.Run(ctx, 1, fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d --into-db tpcc {pgurl:1}", warehouses))
+				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
 
 			const stmtDelete = "DELETE FROM tpcc.stock"
 			run(stmtDelete)
