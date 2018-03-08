@@ -13,6 +13,14 @@ module.exports = function(config) {
     // base path that will be used to resolve all patterns (eg. files, exclude)
     basePath: "",
 
+    // redirect `console.log`s in test code to Karma's stdout.
+    // This is the default behavior in Karma 2.0; so we can remove when we upgrade.
+    browserConsoleLogOptions: {
+      format: "%b %T: %m",
+      level: "log",
+      terminal: true,
+    },
+
     // start these browsers
     // available browser launchers: https://npmjs.org/browse/keyword/karma-launcher
     browsers: ["jsdom"],
