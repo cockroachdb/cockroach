@@ -343,7 +343,7 @@ CPP_PROTOS_CCL_TARGET := bin/.cpp_ccl_protobuf_sources
 
 # Update the git hooks and install commands from dependencies whenever they
 # change.
-$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/returncheck | $(SUBMODULES_TARGET)
+$(BOOTSTRAP_TARGET): $(GITHOOKS) Gopkg.lock bin/backport bin/returncheck | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v \
 		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/client9/misspell/cmd/misspell \
