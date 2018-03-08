@@ -206,7 +206,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 
 var crashReportURL = func() string {
 	var defaultURL string
-	if build.IsRelease() {
+	if build.SeemsOfficial() {
 		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentry"
 	}
 	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)

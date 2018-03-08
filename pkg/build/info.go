@@ -58,6 +58,12 @@ func IsRelease() bool {
 	return typ == "release"
 }
 
+// SeemsOfficial reports whether this binary is likely to have come from an
+// official release channel.
+func SeemsOfficial() bool {
+	return channel == "official-binary" || channel == "source-archive"
+}
+
 // VersionPrefix returns the version prefix of the current build.
 func VersionPrefix() string {
 	v, err := version.NewVersion(tag)
