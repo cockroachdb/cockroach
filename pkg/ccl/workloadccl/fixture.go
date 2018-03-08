@@ -378,7 +378,7 @@ func MakeFixture(
 				fmt.Fprintf(&buf, `$%d`, i)
 			}
 			buf.WriteString(`) WITH transform=$1, nullif='NULL'`)
-			if _, err := sqlDB.ExecContext(gCtx, buf.String(), params...); err != nil {
+			if _, err := sqlDB.Exec(buf.String(), params...); err != nil {
 				return errors.Wrapf(err, `creating backup for table %s`, table.Name)
 			}
 			return nil
@@ -402,7 +402,7 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 			// The IMPORT ... CSV DATA command generates a backup with the table in
 			// database `csv`.
 			importStmt := fmt.Sprintf(`RESTORE csv.%s FROM $1 WITH into_db=$2`, table.TableName)
-			if _, err := sqlDB.ExecContext(gCtx, importStmt, table.BackupURI, database); err != nil {
+			if _, err := sqlDB.Exec(importStmt, table.BackupURI, database); err != nil {
 				return err
 			}
 			log.Infof(gCtx, `loaded %s`, table.TableName)
