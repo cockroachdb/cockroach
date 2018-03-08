@@ -45,13 +45,15 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	case *updateNode:
 		return editNodeSpans(params, &n.run.editNodeRun)
 	case *insertNode:
-		if v, ok := n.run.editNodeRun.rows.(*valuesNode); ok && !n.isUpsert() {
+		if v, ok := n.run.editNodeRun.rows.(*valuesNode); ok {
 			// subqueries, even within valuesNodes, can be arbitrarily complex,
 			// so we can't run the valuesNode ahead of time if they are present.
 			if v.isConst {
 				return insertNodeWithValuesSpans(params, n, v)
 			}
 		}
+		return editNodeSpans(params, &n.run.editNodeRun)
+	case *upsertNode:
 		return editNodeSpans(params, &n.run.editNodeRun)
 	case *deleteNode:
 		return editNodeSpans(params, &n.run.editNodeRun)

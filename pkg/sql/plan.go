@@ -197,18 +197,20 @@ var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
+var _ planNode = &upsertNode{}
 var _ planNode = &valueGenerator{}
 var _ planNode = &valuesNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &CreateUserNode{}
 var _ planNode = &DropUserNode{}
 
+var _ planNodeFastPath = &CreateUserNode{}
+var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &alterUserSetPasswordNode{}
 var _ planNodeFastPath = &createTableNode{}
-var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &deleteNode{}
-var _ planNodeFastPath = &DropUserNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
+var _ planNodeFastPath = &upsertNode{}
 
 // planTop is the struct that collects the properties
 // of an entire plan.
