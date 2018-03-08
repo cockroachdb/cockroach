@@ -242,7 +242,7 @@ select crdb_internal.set_vmodule('')
 query T
 select crdb_internal.node_executable_version()
 ----
-2.0
+2.0-1
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -324,4 +324,4 @@ select * from crdb_internal.kv_store_status
 query T
 select crdb_internal.node_executable_version()
 ----
-2.0
+2.0-1

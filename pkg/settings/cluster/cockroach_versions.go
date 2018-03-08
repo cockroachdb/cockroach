@@ -48,6 +48,7 @@ const (
 	VersionPerReplicaZoneConstraints
 	VersionLeasePreferences
 	Version2_0
+	VersionImportSkipRecords
 
 	// Add new versions here (step one of two).
 
@@ -187,6 +188,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// Version2_0 is CockroachDB v2.0. It's used for all v2.0.x patch releases.
 		Key:     Version2_0,
 		Version: roachpb.Version{Major: 2, Minor: 0},
+	},
+	{
+		// VersionImportSkipRecords is https://github.com/cockroachdb/cockroach/pull/23466
+		Key:     VersionImportSkipRecords,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 1},
 	},
 
 	// Add new versions here (step two of two).
