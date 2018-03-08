@@ -343,22 +343,22 @@ type Transaction struct {
 	LastHeartbeat cockroach_util_hlc.Timestamp `protobuf:"bytes,5,opt,name=last_heartbeat,json=lastHeartbeat" json:"last_heartbeat"`
 	// The original timestamp at which the transaction started. For serializable
 	// transactions, if the timestamp drifts from the original timestamp, the
-	// transaction will retry.
+	// transaction will retry unless we manage to "refresh the reads" - see
+	// refreshed_timestamp.
 	//
-	// This timestamp is the one at which all transactions will read. It is also,
-	// surprisingly, the timestamp at which transactions will provisionally
-	// _write_ (i.e. intents are written at this orig_timestamp and, after commit,
-	// when the intents are resolved, their timestamps are bumped to the to the
-	// commit timestamp).
+	// This timestamp is the one at which all transactions will read, unless
+	// refreshed_timestamp is set. It is also, surprisingly, the timestamp at
+	// which transactions will provisionally _write_ (i.e. intents are written at
+	// this orig_timestamp and, after commit, when the intents are resolved,
+	// their timestamps are bumped to the to the commit timestamp), if
+	// refreshed_timestamp isn't set.
 	// This is ultimately because of correctness concerns around SNAPSHOT
-	// transactions.  Note first that for SERIALIZABLE transactions, the original
-	// and commit timestamps must not diverge, and so an intent which may be
-	// committed is always written when both timestamps coincide.
+	// transactions.
 	//
-	// For a SNAPSHOT transaction however, this is not the case. Intuitively,
-	// one could think that the timestamp at which intents should be written
-	// should be the provisional commit timestamp, and while this is morally
-	// true, consider the following scenario, where txn1 is a SNAPSHOT txn:
+	// Intuitively, one could think that the timestamp at which intents should be
+	// written should be the provisional commit timestamp, and while this is
+	// morally true, consider the following scenario, where txn1 is a SNAPSHOT
+	// txn:
 	//
 	// - txn1 at orig_timestamp=5 reads key1: (value) 1.
 	// - txn1 writes elsewhere, has its commit timestamp increased to 20.
@@ -392,9 +392,11 @@ type Transaction struct {
 	MaxTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,7,opt,name=max_timestamp,json=maxTimestamp" json:"max_timestamp"`
 	// The refreshed timestamp is the timestamp at which the transaction
 	// can commit without necessitating a serializable restart. This
-	// value is forwarded to the transaction's current timestamp if the
-	// transaction coordinator is able to refresh all refreshable spans
-	// encountered during the course of the txn.
+	// value is forwarded to the transaction's current timestamp (meta.timestamp)
+	// if the transaction coordinator is able to refresh all refreshable spans
+	// encountered during the course of the txn. If set, this take precedence
+	// over orig_timestamp and is the timestamp at which the transaction both
+	// reads and writes going forward.
 	RefreshedTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,15,opt,name=refreshed_timestamp,json=refreshedTimestamp" json:"refreshed_timestamp"`
 	// A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
 	// as observed from their local clock during this transaction. The purpose of
