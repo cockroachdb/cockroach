@@ -115,7 +115,7 @@ func doExpandPlan(
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *insertNode:
-		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
+		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *upsertNode:
 		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
@@ -626,7 +626,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.source = p.simplifyOrderings(n.source, nil)
 
 	case *insertNode:
-		n.run.rows = p.simplifyOrderings(n.run.rows, nil)
+		n.source = p.simplifyOrderings(n.source, nil)
 
 	case *upsertNode:
 		n.run.rows = p.simplifyOrderings(n.run.rows, nil)

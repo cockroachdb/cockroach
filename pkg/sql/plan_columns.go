@@ -83,6 +83,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *updateNode:
 		return n.columns
+	case *insertNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -107,8 +109,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, sequenceSelectColumns)
 
 	// Nodes using the RETURNING helper.
-	case *insertNode:
-		return n.rh.columns
 	case *upsertNode:
 		return n.rh.columns
 
