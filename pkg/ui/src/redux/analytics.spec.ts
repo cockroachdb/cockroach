@@ -6,7 +6,7 @@ import { Location } from "history";
 import _ from "lodash";
 import { Store } from "redux";
 
-import { AnalyticsSync } from "./analytics";
+import { AnalyticsSync, defaultRedactions } from "./analytics";
 import { clusterReducerObj, nodesReducerObj } from "./apiReducers";
 import { AdminUIState, createAdminUIStore } from "./state";
 
@@ -129,6 +129,54 @@ describe("analytics listener", function() {
         properties: {
           path: "/test/[redacted]/path",
         },
+      });
+    });
+
+    function testRedaction(title: string, input: string, expected: string) {
+      return { title, input, expected };
+    }
+
+    ([
+      testRedaction(
+        "old database URL",
+        "/databases/database/foobar/table/baz",
+        "/databases/database/[db]/table/[tbl]",
+      ),
+      testRedaction(
+        "new database URL",
+        "/database/foobar/table/baz",
+        "/database/[db]/table/[tbl]",
+      ),
+      testRedaction(
+        "clusterviz map root",
+        "/overview/map/",
+        "/overview/map/",
+      ),
+      testRedaction(
+        "clusterviz map single locality",
+        "/overview/map/datacenter=us-west-1",
+        "/overview/map/[locality]",
+      ),
+      testRedaction(
+        "clusterviz map multiple localities",
+        "/overview/map/datacenter=us-west-1/rack=1234",
+        "/overview/map/[locality]/[locality]",
+      ),
+    ]).map(function ({ title, input, expected }) {
+      it(`applies a redaction for ${title}`, function () {
+        setClusterData();
+        const sync = new AnalyticsSync(analytics, store, defaultRedactions);
+
+        sync.page({ pathname: input } as Location);
+
+        assert.isTrue(pageSpy.calledOnce);
+        assert.deepEqual(pageSpy.args[0][0], {
+          userId: clusterID,
+          name: expected,
+          properties: {
+            path: expected,
+          },
+        });
       });
     });
   });
