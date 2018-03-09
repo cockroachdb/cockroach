@@ -319,6 +319,11 @@ func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
 	// We need to make sure that the two sides render the columns in the same
 	// order; otherwise we add projections.
 	//
+	// In most cases the projection is needed only to reorder the columns, but not
+	// always. For example:
+	//  (SELECT a, a, b FROM ab) UNION (SELECT x, y, z FROM xyz)
+	// The left input could be just a scan that produces two columns.
+	//
 	// TODO(radu): we don't have to respect the exact order in the two ColLists;
 	// if one side has the right columns but in a different permutation, we could
 	// set up a matching projection on the other side. For example:
@@ -369,35 +374,42 @@ func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
-// ensureColumns applies a projection as necessary to make the output match the
-// given list of columns.
-func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node, error) {
-	// Check if we need a projection.
-	//
-	// Note on why the lengths could be different when used by buildSetOp -
-	// consider this example:
-	//   (SELECT a, a, b FROM ab) UNION (SELECT x, y, z FROM xyz)
-	// The left input could be just a scan that produces two columns.
+// needProjection figures out what projection is needed on top of the input plan
+// to produce the given list of columns. If the input plan already produces
+// the columns (in the same order), returns needProj=false.
+func (b *Builder) needProjection(
+	input execPlan, colList opt.ColList,
+) (_ []exec.ColumnOrdinal, needProj bool) {
 	if input.outputCols.Len() == len(colList) {
-		needProj := false
+		identity := true
 		for i, col := range colList {
 			if idx, ok := input.outputCols.Get(int(col)); !ok || idx != i {
-				needProj = true
+				identity = false
 				break
 			}
 		}
-		if !needProj {
-			return input.root, nil
+		if identity {
+			return nil, false
 		}
 	}
-
 	cols := make([]exec.ColumnOrdinal, len(colList))
 	for i, col := range colList {
 		idx, ok := input.outputCols.Get(int(col))
 		if !ok {
-			return execPlan{}, errors.Errorf("column %d not in input", col)
+			panic(fmt.Sprintf("column %d not in input", col))
 		}
 		cols[i] = exec.ColumnOrdinal(idx)
+	}
+	return cols, true
+}
+
+// ensureColumns applies a projection as necessary to make the output match the
+// given list of columns.
+func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node, error) {
+	cols, needProj := b.needProjection(input, colList)
+	if !needProj {
+		// No projection necessary.
+		return input.root, nil
 	}
 	return b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
 }
@@ -405,19 +417,22 @@ func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node,
 // applyPresentation adds a projection to a plan to satisfy a required
 // Presentation property.
 func (b *Builder) applyPresentation(
-	inputPlan execPlan, md *opt.Metadata, p opt.Presentation,
+	input execPlan, md *opt.Metadata, p opt.Presentation,
 ) (execPlan, error) {
-	cols := make([]exec.ColumnOrdinal, len(p))
+	colList := make(opt.ColList, len(p))
 	colNames := make([]string, len(p))
 	for i := range p {
-		idx, ok := inputPlan.outputCols.Get(int(p[i].Index))
-		if !ok {
-			return execPlan{}, errors.Errorf("presentation includes absent column %d", p[i].Index)
-		}
-		cols[i] = exec.ColumnOrdinal(idx)
+		colList[i] = p[i].Index
 		colNames[i] = p[i].Label
 	}
-	node, err := b.factory.ConstructSimpleProject(inputPlan.root, cols, colNames)
+
+	cols, needProj := b.needProjection(input, colList)
+	if !needProj {
+		node, err := b.factory.RenameColumns(input.root, colNames)
+		return execPlan{root: node, outputCols: input.outputCols}, err
+	}
+
+	node, err := b.factory.ConstructSimpleProject(input.root, cols, colNames)
 	if err != nil {
 		return execPlan{}, err
 	}
