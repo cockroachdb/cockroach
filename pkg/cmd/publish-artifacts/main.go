@@ -218,6 +218,7 @@ func main() {
 				args = append(args, fmt.Sprintf("%s=%s", "GOFLAGS", extraArgs.goflags))
 				args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", extraArgs.suffix))
 				args = append(args, fmt.Sprintf("%s=%s", "TAGS", extraArgs.tags))
+				args = append(args, fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary"))
 				cmd := exec.Command("make", args...)
 				cmd.Dir = pkg.Dir
 				cmd.Stdout = os.Stdout

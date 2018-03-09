@@ -97,6 +97,7 @@ Build
 ClusterID
 Organization
 Version
+Channel
 
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
