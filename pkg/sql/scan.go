@@ -252,7 +252,15 @@ func (n *scanNode) limitHint() int64 {
 }
 
 // Initializes a scanNode with a table descriptor.
-// wantedColumns is optional.
+//
+// wantedColumns is optional. If it is non-nil, the scanNode produces these
+// columns in this order. Otherwise, it produces all the columns of the table.
+// Note that some columns might not actually have values, depending on
+// n.valNeededForCol (which ultimately controls what gets decoded).
+//
+// If addUnwantedAsHidden is set (along with wantedColumns), the columns that
+// are not wanted are still added at the end of the column list, as hidden
+// columns.
 func (n *scanNode) initTable(
 	ctx context.Context,
 	p *planner,
@@ -260,6 +268,7 @@ func (n *scanNode) initTable(
 	indexHints *tree.IndexHints,
 	scanVisibility scanVisibility,
 	wantedColumns []tree.ColumnID,
+	addUnwantedAsHidden bool,
 ) error {
 	n.desc = desc
 
@@ -276,7 +285,7 @@ func (n *scanNode) initTable(
 	}
 
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(p.curPlan.deps, scanVisibility, wantedColumns)
+	return n.initDescDefaults(p.curPlan.deps, scanVisibility, wantedColumns, addUnwantedAsHidden)
 }
 
 func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
@@ -316,8 +325,13 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 }
 
 // Either pick all columns or just those selected.
+//
+// See initTable for more info on wantedColumns and addUnwantedAsHidden
 func filterColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []tree.ColumnID, src []sqlbase.ColumnDescriptor,
+	dst []sqlbase.ColumnDescriptor,
+	wantedColumns []tree.ColumnID,
+	addUnwantedAsHidden bool,
+	src []sqlbase.ColumnDescriptor,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if wantedColumns == nil {
 		dst = append(dst, src...)
@@ -335,7 +349,9 @@ func filterColumns(
 				return nil, errors.Errorf("column [%d] does not exist", wc)
 			}
 		}
-		dst = appendUnselectedColumns(dst, wantedColumns, src)
+		if addUnwantedAsHidden {
+			dst = appendUnselectedColumns(dst, wantedColumns, src)
+		}
 	}
 	return dst, nil
 }
@@ -364,16 +380,21 @@ func appendUnselectedColumns(
 }
 
 // Initializes the column structures.
-// wantedColumns is optional.
+//
+// See initTable for more info on wantedColumns and addUnwantedAsHidden
+//
 // An error may be returned only if wantedColumns is set.
 func (n *scanNode) initDescDefaults(
-	planDeps planDependencies, scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
+	planDeps planDependencies,
+	scanVisibility scanVisibility,
+	wantedColumns []tree.ColumnID,
+	addUnwantedAsHidden bool,
 ) error {
 	n.scanVisibility = scanVisibility
 	n.index = &n.desc.PrimaryIndex
 	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
 	var err error
-	n.cols, err = filterColumns(n.cols, wantedColumns, n.desc.Columns)
+	n.cols, err = filterColumns(n.cols, wantedColumns, addUnwantedAsHidden, n.desc.Columns)
 	if err != nil {
 		return err
 	}

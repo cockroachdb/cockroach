@@ -355,7 +355,7 @@ func (p *planner) getPlanForDesc(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(ctx, p, desc, hints, scanVisibility, wantedColumns); err != nil {
+	if err := scan.initTable(ctx, p, desc, hints, scanVisibility, wantedColumns, true /* addUnwantedAsHidden */); err != nil {
 		return planDataSource{}, err
 	}
 
