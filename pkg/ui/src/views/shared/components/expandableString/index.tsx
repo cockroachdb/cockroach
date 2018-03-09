@@ -50,14 +50,14 @@ export class ExpandableString extends React.Component<ExpandableStringProps, Exp
 
     const neverCollapse = _.isNil(short) && long.length <= truncateLength + 2;
     if (neverCollapse) {
-      return <span>{ this.props.long }</span>;
+      return <span className="expandable__long">{ this.props.long }</span>;
     }
 
     const { expanded } = this.state;
     const icon = expanded ? collapseIcon : expandIcon;
     return (
       <div className="expandable" onClick={ this.onClick }>
-        { this.renderText(expanded) }
+        <span className="expandable__long">{ this.renderText(expanded) }</span>
         <span className="expandable__icon" dangerouslySetInnerHTML={ trustIcon(icon) } />
       </div>
     );
