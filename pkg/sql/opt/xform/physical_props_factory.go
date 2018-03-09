@@ -132,32 +132,33 @@ func (f physicalPropsFactory) constructChildProps(ev ExprView, nth int) opt.Phys
 
 	parentProps := ev.Physical()
 
-	var childProps opt.PhysicalProps
+	childProps := *parentProps
 	var changed bool
 
 	// Presentation property is provided by all the relational operators, so
 	// don't add it to childProps.
-	if parentProps.Presentation.Defined() {
+	if childProps.Presentation.Defined() {
+		childProps.Presentation = nil
 		changed = true
 	}
 
 	// Check for operators that might pass through the ordering property to
 	// input.
-	if parentProps.Ordering.Defined() {
+	if childProps.Ordering.Defined() {
 		switch ev.Operator() {
 		case opt.SelectOp, opt.ProjectOp:
 			if nth == 0 {
-				childProps.Ordering = parentProps.Ordering
 				break
 			}
 			fallthrough
 
 		default:
+			childProps.Ordering = nil
 			changed = true
 		}
 	}
 
-	// If properties haven't changed, then don't need to re-intern them.
+	// If properties haven't changed, no need to re-intern them.
 	if !changed {
 		return ev.required
 	}
