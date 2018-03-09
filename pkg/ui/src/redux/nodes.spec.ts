@@ -1,8 +1,13 @@
 import { assert } from "chai";
 
-import { NodeStatus$Properties } from "src/util/proto";
+import {MetricConstants, NodeStatus$Properties} from "src/util/proto";
 
-import { nodeDisplayNameByIDSelector, selectCommissionedNodeStatuses, LivenessStatus } from "./nodes";
+import {
+  nodeDisplayNameByIDSelector,
+  selectCommissionedNodeStatuses,
+  LivenessStatus,
+  sumNodeStats,
+} from "./nodes";
 import { nodesReducerObj  } from "./apiReducers";
 import { createAdminUIStore } from "./state";
 
@@ -123,5 +128,41 @@ describe("selectCommissionedNodeStatuses", function() {
 
       assert.deepEqual(result, expected);
     });
+  });
+});
+
+describe("sumNodeStats", function() {
+  it("sums stats from an array of nodes", function() {
+    // Each of these nodes only has half of its capacity "usable" for cockroach data.
+    // See diagram for what these stats mean:
+    // https://github.com/cockroachdb/cockroach/blob/31e4299ab73a43f539b1ba63ed86be5ee18685f6/pkg/storage/metrics.go#L145-L153
+    const nodeStatuses: NodeStatus$Properties[] = [
+      {
+        desc: { node_id: 1 },
+        metrics: {
+          [MetricConstants.capacity]: 100,
+          [MetricConstants.usedCapacity]: 10,
+          [MetricConstants.availableCapacity]: 40,
+        },
+      },
+      {
+        desc: { node_id: 2 },
+        metrics: {
+          [MetricConstants.capacity]: 100,
+          [MetricConstants.usedCapacity]: 10,
+          [MetricConstants.availableCapacity]: 40,
+        },
+      },
+    ];
+    const livenessStatusByNodeID: { [key: string]: LivenessStatus } = {
+      1: LivenessStatus.LIVE,
+      2: LivenessStatus.LIVE,
+    };
+    const actual = sumNodeStats(nodeStatuses, livenessStatusByNodeID);
+    assert.equal(actual.nodeCounts.healthy, 2);
+    assert.equal(actual.capacityTotal, 200);
+    assert.equal(actual.capacityUsed, 20);
+    // usable = used + available.
+    assert.equal(actual.capacityUsable, 100);
   });
 });
