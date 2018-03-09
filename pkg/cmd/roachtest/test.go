@@ -17,6 +17,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -42,9 +43,23 @@ func allTests() []string {
 	t := tests.List(nil)
 	r := make([]string, len(t))
 	for i := range t {
-		r[i] = t[i].name
+		r[i] = t[i].Name()
 	}
 	return r
+}
+
+type nodesSpec struct {
+	Count int
+	// TODO(peter): Replace this arbitrary argument passing with specific
+	// parameters, such as CPUs, LocalSSD, Geo, etc.
+	Args []interface{}
+}
+
+type testSpec struct {
+	Name  string
+	Help  string
+	Nodes nodesSpec
+	Run   func(ctx context.Context, t *test, c *cluster)
 }
 
 type registry struct {
@@ -53,11 +68,20 @@ type registry struct {
 }
 
 func (r *registry) Add(name string, fn func(*test)) {
-	if _, ok := r.m[name]; ok {
-		fmt.Fprintf(os.Stderr, "test %s already registered\n", name)
+	r.AddSpec(testSpec{
+		Name: name,
+		Run: func(_ context.Context, t *test, _ *cluster) {
+			fn(t)
+		},
+	})
+}
+
+func (r *registry) AddSpec(spec testSpec) {
+	if _, ok := r.m[spec.Name]; ok {
+		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
 		os.Exit(1)
 	}
-	r.m[name] = &test{name: name, fn: fn}
+	r.m[spec.Name] = &test{spec: &spec}
 }
 
 func (r *registry) List(filter []string) []*test {
@@ -73,7 +97,7 @@ func (r *registry) List(filter []string) []*test {
 	for _, t := range r.m {
 		var matched bool
 		for _, r := range re {
-			if r.MatchString(t.name) {
+			if r.MatchString(t.Name()) {
 				matched = true
 				break
 			}
@@ -84,7 +108,7 @@ func (r *registry) List(filter []string) []*test {
 	}
 
 	sort.Slice(results, func(i, j int) bool {
-		return results[i].name < results[j].name
+		return results[i].Name() < results[j].Name()
 	})
 	return results
 }
@@ -125,7 +149,7 @@ func (r *registry) Run(filter []string) int {
 		for i := range tests {
 			t := tests[i]
 			sem <- struct{}{}
-			fmt.Fprintf(r.out, "=== RUN   %s\n", t.name)
+			fmt.Fprintf(r.out, "=== RUN   %s\n", t.Name())
 			t.Status("starting")
 			status.Lock()
 			status.running[t] = struct{}{}
@@ -179,7 +203,7 @@ func (r *registry) Run(filter []string) int {
 				runningTests = append(runningTests, t)
 			}
 			sort.Slice(runningTests, func(i, j int) bool {
-				return runningTests[i].name < runningTests[j].name
+				return runningTests[i].Name() < runningTests[j].Name()
 			})
 			var buf bytes.Buffer
 			for _, t := range runningTests {
@@ -195,7 +219,7 @@ func (r *registry) Run(filter []string) int {
 					if statusProgress > 0 {
 						progStr = fmt.Sprintf("%.1f%%|", 100*statusProgress)
 					}
-					fmt.Fprintf(&buf, "[%4d] %s: %s (%s%s)\n", i, t.name, status,
+					fmt.Fprintf(&buf, "[%4d] %s: %s (%s%s)\n", i, t.Name(), status,
 						progStr, time.Duration(duration.Seconds()+0.5)*time.Second)
 				}
 			}
@@ -209,8 +233,7 @@ func (r *registry) Run(filter []string) int {
 }
 
 type test struct {
-	name   string
-	fn     func(*test)
+	spec   *testSpec
 	runner string
 	start  time.Time
 	end    time.Time
@@ -226,7 +249,7 @@ type test struct {
 }
 
 func (t *test) Name() string {
-	return t.name
+	return t.spec.Name
 }
 
 func (t *test) Status(args ...interface{}) {
@@ -343,9 +366,9 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			if !dryrun {
 				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
 				if t.Failed() {
-					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.name, dstr, t.mu.output)
+					fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, t.mu.output)
 				} else {
-					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.name, dstr)
+					fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
 				}
 			}
 
@@ -354,7 +377,13 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 
 		t.start = timeutil.Now()
 		if !dryrun {
-			t.fn(t)
+			ctx := context.Background()
+			var c *cluster
+			if t.spec.Nodes.Count > 0 {
+				c = newCluster(ctx, t, t.spec.Nodes.Count, t.spec.Nodes.Args...)
+				defer c.Destroy(ctx)
+			}
+			t.spec.Run(ctx, t, c)
 		}
 	}()
 }
