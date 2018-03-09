@@ -814,12 +814,17 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
 		exitFunc := l.exitFunc
+		exitCalled := make(chan struct{})
+		defer func() {
+			<-exitCalled
+		}()
 		go func() {
 			select {
 			case <-time.After(10 * time.Second):
 			case <-fatalTrigger:
 			}
 			exitFunc(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
+			close(exitCalled)
 		}()
 	} else if l.traceLocation.isSet() {
 		if l.traceLocation.match(file, line) {
