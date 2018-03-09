@@ -110,7 +110,10 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	scan := params.p.Scan()
 	scan.run.isCheck = true
 	if err := scan.initTable(
-		ctx, params.p, o.tableDesc, indexHints, publicColumns, columnIDs,
+		ctx, params.p, o.tableDesc, indexHints,
+		publicColumns,
+		columnIDs,
+		true, /* addUnwantedAsHidden */
 	); err != nil {
 		return err
 	}

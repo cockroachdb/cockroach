@@ -108,7 +108,12 @@ func (p *planner) makeIndexJoin(
 	table := p.Scan()
 	table.desc = origScan.desc
 	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
-	_ = table.initDescDefaults(p.curPlan.deps, origScan.scanVisibility, nil /* wantedColumns */)
+	_ = table.initDescDefaults(
+		p.curPlan.deps,
+		origScan.scanVisibility,
+		nil,   /* wantedColumns */
+		false, /* addUnwantedAsHidden */
+	)
 	table.initOrdering(0 /* exactPrefix */, p.EvalContext())
 	table.disableBatchLimit()
 

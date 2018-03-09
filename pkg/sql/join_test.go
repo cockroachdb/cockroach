@@ -33,7 +33,7 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 	p := planner{}
 	scan := p.Scan()
 	scan.desc = desc
-	err := scan.initDescDefaults(p.curPlan.deps, publicColumns, nil)
+	err := scan.initDescDefaults(p.curPlan.deps, publicColumns, nil, false /* addUnwantedAsHidden */)
 	if err != nil {
 		return nil, err
 	}
