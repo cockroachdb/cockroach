@@ -153,7 +153,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
 	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
 
-	fingerprintCols, err := params.p.QueryRow(params.ctx, sql)
+	fingerprintCols, err := params.p.queryRow(params.ctx, sql)
 	if err != nil {
 		return false, err
 	}
