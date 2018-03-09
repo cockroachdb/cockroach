@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type execPlan struct {
@@ -67,6 +68,17 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 	}
 }
 
+// getColumnOrdinal takes a column that is known to be produced by the execPlan
+// and returns the ordinal index of that column in the result columns of the
+// node.
+func (ep *execPlan) getColumnOrdinal(col opt.ColumnIndex) exec.ColumnOrdinal {
+	ord, ok := ep.outputCols.Get(int(col))
+	if !ok {
+		panic(fmt.Sprintf("column %d not in input", col))
+	}
+	return exec.ColumnOrdinal(ord)
+}
+
 func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	var ep execPlan
 	var err error
@@ -107,6 +119,9 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		ep, err = b.buildSetOp(ev)
+
+	case opt.SortOp:
+		ep, err = b.buildSort(ev)
 
 	default:
 		return execPlan{}, errors.Errorf("unsupported relational op %s", ev.Operator())
@@ -270,12 +285,8 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 	groupingColIdx := make([]exec.ColumnOrdinal, 0, groupingCols.Len())
 	var ep execPlan
 	for i, ok := groupingCols.Next(0); ok; i, ok = groupingCols.Next(i + 1) {
-		idx, ok := input.outputCols.Get(i)
-		if !ok {
-			return execPlan{}, errors.Errorf("column %d not in input", i)
-		}
 		ep.outputCols.Set(i, len(groupingColIdx))
-		groupingColIdx = append(groupingColIdx, exec.ColumnOrdinal(idx))
+		groupingColIdx = append(groupingColIdx, input.getColumnOrdinal(opt.ColumnIndex(i)))
 	}
 
 	aggColList := *aggregations.Private().(*opt.ColList)
@@ -291,11 +302,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 				return execPlan{}, errors.Errorf("only VariableOp args supported")
 			}
 			col := child.Private().(opt.ColumnIndex)
-			idx, ok := input.outputCols.Get(int(col))
-			if !ok {
-				return execPlan{}, errors.Errorf("column %d not in input", col)
-			}
-			argIdx[j] = exec.ColumnOrdinal(idx)
+			argIdx[j] = input.getColumnOrdinal(col)
 		}
 
 		aggInfos[i] = exec.AggInfo{
@@ -384,6 +391,29 @@ func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
+func (b *Builder) buildSort(ev xform.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	ordering := ev.Physical().Ordering
+	colOrd := make(sqlbase.ColumnOrdering, len(ordering))
+	for i, col := range ordering {
+		ord := input.getColumnOrdinal(col.Index())
+		colOrd[i].ColIdx = int(ord)
+		if col.Descending() {
+			colOrd[i].Direction = encoding.Descending
+		} else {
+			colOrd[i].Direction = encoding.Ascending
+		}
+	}
+	node, err := b.factory.ConstructSort(input.root, colOrd)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
+}
+
 // needProjection figures out what projection is needed on top of the input plan
 // to produce the given list of columns. If the input plan already produces
 // the columns (in the same order), returns needProj=false.
@@ -393,7 +423,7 @@ func (b *Builder) needProjection(
 	if input.outputCols.Len() == len(colList) {
 		identity := true
 		for i, col := range colList {
-			if idx, ok := input.outputCols.Get(int(col)); !ok || idx != i {
+			if ord, ok := input.outputCols.Get(int(col)); !ok || ord != i {
 				identity = false
 				break
 			}
@@ -404,11 +434,7 @@ func (b *Builder) needProjection(
 	}
 	cols := make([]exec.ColumnOrdinal, len(colList))
 	for i, col := range colList {
-		idx, ok := input.outputCols.Get(int(col))
-		if !ok {
-			panic(fmt.Sprintf("column %d not in input", col))
-		}
-		cols[i] = exec.ColumnOrdinal(idx)
+		cols[i] = input.getColumnOrdinal(col)
 	}
 	return cols, true
 }
