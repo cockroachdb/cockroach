@@ -78,6 +78,13 @@ type Clock struct {
 		// isMonitoringForwardClockJumps is a flag to ensure that only one jump monitoring
 		// goroutine is running per clock
 		isMonitoringForwardClockJumps bool
+
+		// WallTimeUpperBound is an upper bound to the HLC which has been
+		// successfully persisted.
+		// The wall time used by the HLC will always be lesser than this timestamp.
+		// If the physical time is greater than this value, it will cause a panic
+		// If this is set to 0, this validation is skipped
+		wallTimeUpperBound int64
 	}
 }
 
@@ -251,7 +258,21 @@ func (c *Clock) Now() Timestamp {
 		c.mu.timestamp.WallTime = physicalClock
 		c.mu.timestamp.Logical = 0
 	}
+
+	c.enforceWallTimeWithinBound()
 	return c.mu.timestamp
+}
+
+func (c *Clock) enforceWallTimeWithinBound() {
+	// WallTime should not cross the upper bound (if WallTimeUpperBound is set)
+	if c.mu.wallTimeUpperBound != 0 && c.mu.timestamp.WallTime > c.mu.wallTimeUpperBound {
+		log.Fatalf(
+			context.TODO(),
+			"wall time %d is not allowed to be greater than upper bound of %d.",
+			c.mu.timestamp.WallTime,
+			c.mu.wallTimeUpperBound,
+		)
+	}
 }
 
 // PhysicalNow returns the local wall time. It corresponds to the physicalClock
@@ -325,6 +346,8 @@ func (c *Clock) updateLocked(rt Timestamp, updateIfMaxOffsetExceeded bool) (Time
 		}
 		c.mu.timestamp.Logical++
 	}
+
+	c.enforceWallTimeWithinBound()
 	return c.mu.timestamp, err
 }
 
@@ -361,4 +384,39 @@ func (c *Clock) setMonitoringClockJump() bool {
 	isMonitoring := c.mu.isMonitoringForwardClockJumps
 	c.mu.isMonitoringForwardClockJumps = true
 	return isMonitoring
+}
+
+// RefreshHLCUpperBound persists the HLC upper bound and updates the in memory
+// value if the persist succeeds. delta is used to compute the upper bound.
+func (c *Clock) RefreshHLCUpperBound(persistFn func(int64) error, delta int64) error {
+	if delta < 0 {
+		return errors.Errorf("HLC upper bound delta %d should be positive", delta)
+	}
+	return c.persistHLCUpperBound(persistFn, c.Now().WallTime+delta)
+}
+
+// ResetHLCUpperBound persists a value of 0 as the HLC upper bound which
+// disables upper bound validation
+func (c *Clock) ResetHLCUpperBound(persistFn func(int64) error) error {
+	return c.persistHLCUpperBound(persistFn, 0 /* hlcUpperBound */)
+}
+
+// RefreshHLCUpperBound persists the HLC upper bound and updates the in memory
+// value if the persist succeeds
+func (c *Clock) persistHLCUpperBound(persistFn func(int64) error, hlcUpperBound int64) error {
+	if err := persistFn(hlcUpperBound); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.wallTimeUpperBound = hlcUpperBound
+	return nil
+}
+
+// WallTimeUpperBound returns the in memory value of upper bound to wall time
+func (c *Clock) WallTimeUpperBound() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.wallTimeUpperBound
 }
