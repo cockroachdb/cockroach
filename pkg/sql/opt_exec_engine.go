@@ -32,9 +32,11 @@ import (
 var _ exec.TestEngineFactory = &Executor{}
 
 // NewTestEngine is part of the exec.TestEngineFactory interface.
-func (e *Executor) NewTestEngine() exec.TestEngine {
+func (e *Executor) NewTestEngine(defaultDatabase string) exec.TestEngine {
 	txn := client.NewTxn(e.cfg.DB, e.cfg.NodeID.Get(), client.RootTxn)
 	p, cleanup := newInternalPlanner("opt", txn, "root", &MemoryMetrics{}, &e.cfg)
+	// TODO(radu): Setting this directly is a hack.
+	p.extendedEvalCtx.SessionData.Database = defaultDatabase
 	return newExecEngine(p, cleanup)
 }
 
