@@ -45,6 +45,29 @@ func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	f(b, db)
 }
 
+// Disable benchmarking with the experimental optimizer for now.
+const enableCockroachOpt = false
+
+func benchmarkCockroachOpt(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
+	if !enableCockroachOpt {
+		b.Skipf("Benchmark with experimental optimizer is disabled")
+	}
+
+	s, db, _ := serverutils.StartServer(
+		b, base.TestServerArgs{UseDatabase: "bench"})
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
+		b.Fatal(err)
+	}
+
+	if _, err := db.Exec(`SET EXPERIMENTAL_OPT=ON`); err != nil {
+		b.Fatal(err)
+	}
+
+	f(b, db)
+}
+
 func benchmarkMultinodeCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 	tc := testcluster.StartTestCluster(b, 3,
 		base.TestClusterArgs{
@@ -135,6 +158,7 @@ func benchmarkMySQL(b *testing.B, f func(b *testing.B, db *gosql.DB)) {
 func ForEachDB(b *testing.B, fn func(*testing.B, *gosql.DB)) {
 	for _, dbFn := range []func(*testing.B, func(*testing.B, *gosql.DB)){
 		benchmarkCockroach,
+		benchmarkCockroachOpt,
 		benchmarkMultinodeCockroach,
 		benchmarkPostgres,
 		benchmarkMySQL,
