@@ -165,9 +165,36 @@ type LabeledColumn struct {
 	Index ColumnIndex
 }
 
+// OrderingColumn is the ColumnIndex for a column that is part of an ordering,
+// except that it can be negated to indicate a descending ordering on that
+// column.
+type OrderingColumn int32
+
+// MakeOrderingColumn initializes an ordering column with a ColumnIndex and a
+// flag indicating whether the direction is descending.
+func MakeOrderingColumn(index ColumnIndex, descending bool) OrderingColumn {
+	if descending {
+		return OrderingColumn(-index)
+	}
+	return OrderingColumn(index)
+}
+
+// Index returns the ColumnIndex for this OrderingColumn.
+func (c OrderingColumn) Index() ColumnIndex {
+	if c < 0 {
+		return ColumnIndex(-c)
+	}
+	return ColumnIndex(c)
+}
+
+// Descending returns true if the ordering on this column is descending.
+func (c OrderingColumn) Descending() bool {
+	return c < 0
+}
+
 // Ordering defines the order of rows provided or required by an operator. A
 // negative value indicates descending order on the column index "-(value)".
-type Ordering []ColumnIndex
+type Ordering []OrderingColumn
 
 // Defined is true if a particular row ordering is required or provided.
 func (o Ordering) Defined() bool {
@@ -185,11 +212,12 @@ func (o Ordering) format(buf *bytes.Buffer) {
 		if i > 0 {
 			buf.WriteString(",")
 		}
-		if col >= 0 {
-			fmt.Fprintf(buf, "+%d", col)
+		if col.Descending() {
+			buf.WriteByte('-')
 		} else {
-			fmt.Fprintf(buf, "-%d", -col)
+			buf.WriteByte('+')
 		}
+		fmt.Fprintf(buf, "%d", col.Index())
 	}
 }
 
