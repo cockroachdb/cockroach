@@ -1,0 +1,949 @@
+# tests adapted from logictest -- order_by
+
+exec-raw
+CREATE DATABASE t;
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  c BOOLEAN
+)
+----
+
+exec-raw
+INSERT INTO t VALUES (1, 9, true), (2, 8, false), (3, 7, NULL)
+----
+
+exec
+SELECT c FROM t ORDER BY c
+----
+c:bool
+NULL
+false
+true
+
+exec-explain
+SELECT c FROM t ORDER BY c
+----
+sort            0  sort    ·         ·          (c)        +c
+ │              0  ·       order     +c         ·          ·
+ └── render     1  render  ·         ·          (c)        ·
+      │         1  ·       render 0  c          ·          ·
+      └── scan  2  scan    ·         ·          (a, b, c)  ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+exec
+SELECT c FROM t ORDER BY c DESC
+----
+c:bool
+true
+false
+NULL
+
+exec
+SELECT a, b FROM t ORDER BY b
+----
+a:int  b:int
+3      7
+2      8
+1      9
+
+exec-explain
+SELECT a, b FROM t ORDER BY b
+----
+sort            0  sort    ·         ·          (a, b)     +b
+ │              0  ·       order     +b         ·          ·
+ └── render     1  render  ·         ·          (a, b)     ·
+      │         1  ·       render 0  a          ·          ·
+      │         1  ·       render 1  b          ·          ·
+      └── scan  2  scan    ·         ·          (a, b, c)  ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+exec
+SELECT a, b FROM t ORDER BY b DESC
+----
+a:int  b:int
+1      9
+2      8
+3      7
+
+exec-explain
+SELECT a, b FROM t ORDER BY b DESC
+----
+sort            0  sort    ·         ·          (a, b)     -b
+ │              0  ·       order     -b         ·          ·
+ └── render     1  render  ·         ·          (a, b)     ·
+      │         1  ·       render 0  a          ·          ·
+      │         1  ·       render 1  b          ·          ·
+      └── scan  2  scan    ·         ·          (a, b, c)  ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+
+exec
+SELECT a FROM t ORDER BY 1 DESC
+----
+a:int
+3
+2
+1
+
+exec-explain
+SELECT a, b FROM t ORDER BY b LIMIT 2
+----
+sort            0  sort    ·         ·          (a, b)     +b
+ │              0  ·       order     +b         ·          ·
+ └── render     1  render  ·         ·          (a, b)     ·
+      │         1  ·       render 0  a          ·          ·
+      │         1  ·       render 1  b          ·          ·
+      └── scan  2  scan    ·         ·          (a, b, c)  ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+exec
+SELECT a, b FROM t ORDER BY b DESC LIMIT 2
+----
+a:int  b:int
+1      9
+2      8
+3      7
+
+# TODO(radu): this does not work. Unclear if we want to support it or not.
+#exec-explain
+#SELECT DISTINCT c FROM t ORDER BY b LIMIT 2
+#----
+#limit                     0  limit     ·         ·                (c)                 weak-key(c)
+# │                        0  ·         count     2                ·                   ·
+# └── distinct             1  distinct  ·         ·                (c)                 weak-key(c)
+#      └── sort            2  sort      ·         ·                (c)                 ·
+#           │              2  ·         order     +b               ·                   ·
+#           │              2  ·         strategy  iterative        ·                   ·
+#           └── render     3  render    ·         ·                (c, b)              ·
+#                │         3  ·         render 0  test.public.t.c  ·                   ·
+#                │         3  ·         render 1  test.public.t.b  ·                   ·
+#                └── scan  4  scan      ·         ·                (a[omitted], b, c)  a!=NULL; key(a)
+#·                         4  ·         table     t@primary        ·                   ·
+#·                         4  ·         spans     ALL              ·                   ·
+#
+#exec
+#SELECT DISTINCT c FROM t ORDER BY b DESC LIMIT 2
+#----
+#true
+#false
+#
+#exec
+#SELECT b FROM t ORDER BY a DESC
+#----
+#7
+#8
+#9
+#
+#exec-explain
+#SELECT b FROM t ORDER BY a DESC
+#----
+#nosort             ·      ·
+# │                 order  -a
+# └── render        ·      ·
+#      └── revscan  ·      ·
+#·                  table  t@primary
+#·                  spans  ALL
+
+# TODO(radu): LIMIT not yet supported.
+## Check that LIMIT propagates past nosort nodes.
+#exec-explain
+#SELECT b FROM t ORDER BY a LIMIT 1
+#----
+#limit                ·      ·
+# └── nosort          ·      ·
+#      │              order  +a
+#      └── render     ·      ·
+#           └── scan  ·      ·
+#·                    table  t@primary
+#·                    spans  ALL
+#·                    limit  1
+
+# TODO(radu): merge render nodes.
+exec-explain
+SELECT b FROM t ORDER BY a DESC, b ASC
+----
+render               0  render  ·         ·          (b)        ·
+ │                   0  ·       render 0  b          ·          ·
+ └── sort            1  sort    ·         ·          (a, b)     -a,+b
+      │              1  ·       order     -a,+b      ·          ·
+      └── render     2  render  ·         ·          (a, b)     ·
+           │         2  ·       render 0  a          ·          ·
+           │         2  ·       render 1  b          ·          ·
+           └── scan  3  scan    ·         ·          (a, b, c)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
+
+exec-explain
+SELECT b FROM t ORDER BY a DESC, b DESC
+----
+render               0  render  ·         ·          (b)        ·
+ │                   0  ·       render 0  b          ·          ·
+ └── sort            1  sort    ·         ·          (a, b)     -a,-b
+      │              1  ·       order     -a,-b      ·          ·
+      └── render     2  render  ·         ·          (a, b)     ·
+           │         2  ·       render 0  a          ·          ·
+           │         2  ·       render 1  b          ·          ·
+           └── scan  3  scan    ·         ·          (a, b, c)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
+
+exec-explain
+SELECT * FROM t ORDER BY (b, t.*)
+----
+sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  ·
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
+
+exec-explain
+SELECT * FROM t ORDER BY (b, a), c
+----
+sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  ·
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
+
+exec-explain
+SELECT * FROM t ORDER BY b, (a, c)
+----
+sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  ·
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
+
+exec-explain
+SELECT * FROM t ORDER BY (b, (a, c))
+----
+sort       0  sort  ·      ·          (a, b, c)  +b,+a,+c
+ │         0  ·     order  +b,+a,+c   ·          ·
+ └── scan  1  scan  ·      ·          (a, b, c)  ·
+·          1  ·     table  t@primary  ·          ·
+·          1  ·     spans  ALL        ·          ·
+
+exec-raw
+INSERT INTO t VALUES (4, 7), (5, 7)
+----
+
+exec
+SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
+----
+a:int  b:int
+3      7
+4      7
+5      7
+
+exec
+SELECT a, b FROM t ORDER BY b, a DESC
+----
+a:int  b:int
+5      7
+4      7
+3      7
+2      8
+1      9
+
+exec
+SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
+----
+a:int  b:int  ab:int
+5      7      12
+4      7      11
+3      7      10
+
+exec
+SELECT a FROM t ORDER BY a+b DESC, a
+----
+a:int
+5
+4
+1
+2
+3
+
+exec
+SELECT a FROM t ORDER BY (((a)))
+----
+a:int
+1
+2
+3
+4
+5
+
+exec
+(((SELECT a FROM t))) ORDER BY a DESC LIMIT 4
+----
+a:int
+5
+4
+3
+2
+1
+
+exec
+(((SELECT a FROM t ORDER BY a DESC LIMIT 4)))
+----
+a:int
+5
+4
+3
+2
+1
+
+# TODO(radu): functions as tables not yet implemented
+#exec
+#SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY 1
+#----
+#1 {1}
+#
+#exec
+#SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY GENERATE_SERIES
+#----
+#1 {1}
+#
+#exec
+#SELECT GENERATE_SERIES, ARRAY[GENERATE_SERIES] FROM GENERATE_SERIES(1, 1) ORDER BY -GENERATE_SERIES
+#----
+#1 {1}
+
+
+# Check that sort is skipped if the ORDER BY clause is constant.
+# TODO(radu): we don't optimize constant columns yet.
+exec-explain
+SELECT * FROM t ORDER BY 1+2
+----
+render               0  render  ·         ·          (a, b, c)                       ·
+ │                   0  ·       render 0  "t.a"      ·                               ·
+ │                   0  ·       render 1  "t.b"      ·                               ·
+ │                   0  ·       render 2  "t.c"      ·                               ·
+ └── sort            1  sort    ·         ·          ("t.a", "t.b", "t.c", column4)  +column4
+      │              1  ·       order     +column4   ·                               ·
+      └── render     2  render  ·         ·          ("t.a", "t.b", "t.c", column4)  ·
+           │         2  ·       render 0  a          ·                               ·
+           │         2  ·       render 1  b          ·                               ·
+           │         2  ·       render 2  c          ·                               ·
+           │         2  ·       render 3  3          ·                               ·
+           └── scan  3  scan    ·         ·          (a, b, c)                       ·
+·                    3  ·       table     t@primary  ·                               ·
+·                    3  ·       spans     ALL        ·                               ·
+
+exec-explain
+SELECT 1, * FROM t ORDER BY 1
+----
+sort            0  sort    ·         ·          (column4, a, b, c)  +column4
+ │              0  ·       order     +column4   ·                   ·
+ └── render     1  render  ·         ·          (column4, a, b, c)  ·
+      │         1  ·       render 0  1          ·                   ·
+      │         1  ·       render 1  a          ·                   ·
+      │         1  ·       render 2  b          ·                   ·
+      │         1  ·       render 3  c          ·                   ·
+      └── scan  2  scan    ·         ·          (a, b, c)           ·
+·               2  ·       table     t@primary  ·                   ·
+·               2  ·       spans     ALL        ·                   ·
+
+exec-explain
+SELECT * FROM t ORDER BY length('abc')
+----
+render               0  render  ·         ·              (a, b, c)                       ·
+ │                   0  ·       render 0  "t.a"          ·                               ·
+ │                   0  ·       render 1  "t.b"          ·                               ·
+ │                   0  ·       render 2  "t.c"          ·                               ·
+ └── sort            1  sort    ·         ·              ("t.a", "t.b", "t.c", column4)  +column4
+      │              1  ·       order     +column4       ·                               ·
+      └── render     2  render  ·         ·              ("t.a", "t.b", "t.c", column4)  ·
+           │         2  ·       render 0  a              ·                               ·
+           │         2  ·       render 1  b              ·                               ·
+           │         2  ·       render 2  c              ·                               ·
+           │         2  ·       render 3  length('abc')  ·                               ·
+           └── scan  3  scan    ·         ·              (a, b, c)                       ·
+·                    3  ·       table     t@primary      ·                               ·
+·                    3  ·       spans     ALL            ·                               ·
+
+# Check that the sort key reuses the existing render.
+exec-explain
+SELECT b+2 FROM t ORDER BY b+2
+----
+render                    0  render  ·         ·          (column4)           ·
+ │                        0  ·       render 0  column4    ·                   ·
+ └── sort                 1  sort    ·         ·          (column4, column5)  +column5
+      │                   1  ·       order     +column5   ·                   ·
+      └── render          2  render  ·         ·          (column4, column5)  ·
+           │              2  ·       render 0  b + 2      ·                   ·
+           │              2  ·       render 1  b + 2      ·                   ·
+           └── render     3  render  ·         ·          (b)                 ·
+                │         3  ·       render 0  b          ·                   ·
+                └── scan  4  scan    ·         ·          (a, b, c)           ·
+·                         4  ·       table     t@primary  ·                   ·
+·                         4  ·       spans     ALL        ·                   ·
+
+# Check that the sort picks up a renamed render properly.
+exec-explain
+SELECT b+2 AS y FROM t ORDER BY y
+----
+sort                 0  sort    ·         ·          (y)        +y
+ │                   0  ·       order     +y         ·          ·
+ └── render          1  render  ·         ·          (y)        ·
+      │              1  ·       render 0  b + 2      ·          ·
+      └── render     2  render  ·         ·          (b)        ·
+           │         2  ·       render 0  b          ·          ·
+           └── scan  3  scan    ·         ·          (a, b, c)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
+
+# Check that the sort reuses a render behind a rename properly.
+exec-explain
+SELECT b+2 AS y FROM t ORDER BY b+2
+----
+render                    0  render  ·         ·          (y)           ·
+ │                        0  ·       render 0  y          ·             ·
+ └── sort                 1  sort    ·         ·          (y, column5)  +column5
+      │                   1  ·       order     +column5   ·             ·
+      └── render          2  render  ·         ·          (y, column5)  ·
+           │              2  ·       render 0  b + 2      ·             ·
+           │              2  ·       render 1  b + 2      ·             ·
+           └── render     3  render  ·         ·          (b)           ·
+                │         3  ·       render 0  b          ·             ·
+                └── scan  4  scan    ·         ·          (a, b, c)     ·
+·                         4  ·       table     t@primary  ·             ·
+·                         4  ·       spans     ALL        ·             ·
+
+exec-raw
+CREATE TABLE abc (
+  a INT,
+  b INT,
+  c INT,
+  d CHAR,
+  PRIMARY KEY (a, b, c),
+  UNIQUE INDEX bc (b, c),
+  INDEX ba (b, a),
+  FAMILY (a, b, c),
+  FAMILY (d)
+)
+----
+
+exec-raw
+INSERT INTO abc VALUES (1, 2, 3, 'one'), (4, 5, 6, 'Two')
+----
+
+exec
+SELECT d FROM abc ORDER BY LOWER(d)
+----
+d:string
+one
+Two
+
+exec-explain
+SELECT * FROM abc ORDER BY a
+----
+scan  0  scan  ·      ·            (a, b, c, d)  ·
+·     0  ·     table  abc@primary  ·             ·
+·     0  ·     spans  ALL          ·             ·
+
+exec-explain
+SELECT a, b FROM abc ORDER BY b, a
+----
+sort            0  sort    ·         ·            (a, b)        +b,+a
+ │              0  ·       order     +b,+a        ·             ·
+ └── render     1  render  ·         ·            (a, b)        ·
+      │         1  ·       render 0  a            ·             ·
+      │         1  ·       render 1  b            ·             ·
+      └── scan  2  scan    ·         ·            (a, b, c, d)  ·
+·               2  ·       table     abc@primary  ·             ·
+·               2  ·       spans     ALL          ·             ·
+
+# The non-unique index ba includes column c (required to make the keys unique)
+# so the results will already be sorted.
+exec-explain
+SELECT a, b, c FROM abc ORDER BY b, a, c
+----
+sort            0  sort    ·         ·            (a, b, c)     +b,+a,+c
+ │              0  ·       order     +b,+a,+c     ·             ·
+ └── render     1  render  ·         ·            (a, b, c)     ·
+      │         1  ·       render 0  a            ·             ·
+      │         1  ·       render 1  b            ·             ·
+      │         1  ·       render 2  c            ·             ·
+      └── scan  2  scan    ·         ·            (a, b, c, d)  ·
+·               2  ·       table     abc@primary  ·             ·
+·               2  ·       spans     ALL          ·             ·
+
+# We use the WHERE condition to force the use of index ba.
+exec-explain
+SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
+----
+render               0  render  ·         ·            (a, b, c)     ·
+ │                   0  ·       render 0  a            ·             ·
+ │                   0  ·       render 1  b            ·             ·
+ │                   0  ·       render 2  c            ·             ·
+ └── filter          1  filter  ·         ·            (a, b, c, d)  ·
+      │              1  ·       filter    b > 10       ·             ·
+      └── sort       2  sort    ·         ·            (a, b, c, d)  +b,+a,+d
+           │         2  ·       order     +b,+a,+d     ·             ·
+           └── scan  3  scan    ·         ·            (a, b, c, d)  ·
+·                    3  ·       table     abc@primary  ·             ·
+·                    3  ·       spans     ALL          ·             ·
+
+# We cannot have rows with identical values for a,b,c so we don't need to
+# sort for d.
+exec-explain
+SELECT a, b, c, d FROM abc WHERE b > 10 ORDER BY b, a, c, d
+----
+filter          0  filter  ·       ·            (a, b, c, d)  ·
+ │              0  ·       filter  b > 10       ·             ·
+ └── sort       1  sort    ·       ·            (a, b, c, d)  +b,+a,+c,+d
+      │         1  ·       order   +b,+a,+c,+d  ·             ·
+      └── scan  2  scan    ·       ·            (a, b, c, d)  ·
+·               2  ·       table   abc@primary  ·             ·
+·               2  ·       spans   ALL          ·             ·
+
+exec-explain
+SELECT a, b FROM abc ORDER BY b, c
+----
+render                    0  render  ·         ·                  (a, b)                       ·
+ │                        0  ·       render 0  "abc.a"            ·                            ·
+ │                        0  ·       render 1  "abc.b"            ·                            ·
+ └── sort                 1  sort    ·         ·                  ("abc.a", "abc.b", "abc.c")  +"abc.b",+"abc.c"
+      │                   1  ·       order     +"abc.b",+"abc.c"  ·                            ·
+      └── render          2  render  ·         ·                  ("abc.a", "abc.b", "abc.c")  ·
+           │              2  ·       render 0  a                  ·                            ·
+           │              2  ·       render 1  b                  ·                            ·
+           │              2  ·       render 2  b                  ·                            ·
+           └── render     3  render  ·         ·                  (a, b)                       ·
+                │         3  ·       render 0  a                  ·                            ·
+                │         3  ·       render 1  b                  ·                            ·
+                └── scan  4  scan    ·         ·                  (a, b, c, d)                 ·
+·                         4  ·       table     abc@primary        ·                            ·
+·                         4  ·       spans     ALL                ·                            ·
+
+exec-explain
+SELECT a, b FROM abc ORDER BY b, c
+----
+render                    0  render  ·         ·                  (a, b)                       ·
+ │                        0  ·       render 0  "abc.a"            ·                            ·
+ │                        0  ·       render 1  "abc.b"            ·                            ·
+ └── sort                 1  sort    ·         ·                  ("abc.a", "abc.b", "abc.c")  +"abc.b",+"abc.c"
+      │                   1  ·       order     +"abc.b",+"abc.c"  ·                            ·
+      └── render          2  render  ·         ·                  ("abc.a", "abc.b", "abc.c")  ·
+           │              2  ·       render 0  a                  ·                            ·
+           │              2  ·       render 1  b                  ·                            ·
+           │              2  ·       render 2  b                  ·                            ·
+           └── render     3  render  ·         ·                  (a, b)                       ·
+                │         3  ·       render 0  a                  ·                            ·
+                │         3  ·       render 1  b                  ·                            ·
+                └── scan  4  scan    ·         ·                  (a, b, c, d)                 ·
+·                         4  ·       table     abc@primary        ·                            ·
+·                         4  ·       spans     ALL                ·                            ·
+
+exec-explain
+SELECT a, b FROM abc ORDER BY b, c, a
+----
+render                    0  render  ·         ·                           (a, b)                       ·
+ │                        0  ·       render 0  "abc.a"                     ·                            ·
+ │                        0  ·       render 1  "abc.b"                     ·                            ·
+ └── sort                 1  sort    ·         ·                           ("abc.a", "abc.b", "abc.c")  +"abc.b",+"abc.c",+"abc.a"
+      │                   1  ·       order     +"abc.b",+"abc.c",+"abc.a"  ·                            ·
+      └── render          2  render  ·         ·                           ("abc.a", "abc.b", "abc.c")  ·
+           │              2  ·       render 0  a                           ·                            ·
+           │              2  ·       render 1  b                           ·                            ·
+           │              2  ·       render 2  b                           ·                            ·
+           └── render     3  render  ·         ·                           (a, b)                       ·
+                │         3  ·       render 0  a                           ·                            ·
+                │         3  ·       render 1  b                           ·                            ·
+                └── scan  4  scan    ·         ·                           (a, b, c, d)                 ·
+·                         4  ·       table     abc@primary                 ·                            ·
+·                         4  ·       spans     ALL                         ·                            ·
+
+exec-explain
+SELECT a, b FROM abc ORDER BY b, c, a DESC
+----
+render                    0  render  ·         ·                           (a, b)                       ·
+ │                        0  ·       render 0  "abc.a"                     ·                            ·
+ │                        0  ·       render 1  "abc.b"                     ·                            ·
+ └── sort                 1  sort    ·         ·                           ("abc.a", "abc.b", "abc.c")  +"abc.b",+"abc.c",-"abc.a"
+      │                   1  ·       order     +"abc.b",+"abc.c",-"abc.a"  ·                            ·
+      └── render          2  render  ·         ·                           ("abc.a", "abc.b", "abc.c")  ·
+           │              2  ·       render 0  a                           ·                            ·
+           │              2  ·       render 1  b                           ·                            ·
+           │              2  ·       render 2  b                           ·                            ·
+           └── render     3  render  ·         ·                           (a, b)                       ·
+                │         3  ·       render 0  a                           ·                            ·
+                │         3  ·       render 1  b                           ·                            ·
+                └── scan  4  scan    ·         ·                           (a, b, c, d)                 ·
+·                         4  ·       table     abc@primary                 ·                            ·
+·                         4  ·       spans     ALL                         ·                            ·
+
+exec-explain
+SELECT a FROM abc ORDER BY a DESC
+----
+sort            0  sort    ·         ·            (a)           -a
+ │              0  ·       order     -a           ·             ·
+ └── render     1  render  ·         ·            (a)           ·
+      │         1  ·       render 0  a            ·             ·
+      └── scan  2  scan    ·         ·            (a, b, c, d)  ·
+·               2  ·       table     abc@primary  ·             ·
+·               2  ·       spans     ALL          ·             ·
+
+exec
+SELECT a FROM abc ORDER BY a DESC
+----
+a:int
+4
+1
+
+exec
+SELECT a FROM abc ORDER BY a DESC LIMIT 1
+----
+a:int
+4
+1
+
+exec
+SELECT a FROM abc ORDER BY a DESC OFFSET 1
+----
+a:int
+4
+1
+
+exec-explain
+SELECT c FROM abc WHERE b = 2 ORDER BY c
+----
+render                    0  render  ·         ·            (c)           ·
+ │                        0  ·       render 0  c            ·             ·
+ └── filter               1  filter  ·         ·            (b, c)        ·
+      │                   1  ·       filter    b = 2        ·             ·
+      └── sort            2  sort    ·         ·            (b, c)        +c
+           │              2  ·       order     +c           ·             ·
+           └── render     3  render  ·         ·            (b, c)        ·
+                │         3  ·       render 0  b            ·             ·
+                │         3  ·       render 1  c            ·             ·
+                └── scan  4  scan    ·         ·            (a, b, c, d)  ·
+·                         4  ·       table     abc@primary  ·             ·
+·                         4  ·       spans     ALL          ·             ·
+
+exec-explain
+SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
+----
+render                    0  render  ·         ·            (c)           ·
+ │                        0  ·       render 0  c            ·             ·
+ └── filter               1  filter  ·         ·            (b, c)        ·
+      │                   1  ·       filter    b = 2        ·             ·
+      └── sort            2  sort    ·         ·            (b, c)        -c
+           │              2  ·       order     -c           ·             ·
+           └── render     3  render  ·         ·            (b, c)        ·
+                │         3  ·       render 0  b            ·             ·
+                │         3  ·       render 1  c            ·             ·
+                └── scan  4  scan    ·         ·            (a, b, c, d)  ·
+·                         4  ·       table     abc@primary  ·             ·
+·                         4  ·       spans     ALL          ·             ·
+
+# Verify that the ordering of the primary index is still used for the outer sort.
+exec-explain
+SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
+----
+render                    0  render  ·         ·            (b, c, a)     ·
+ │                        0  ·       render 0  b            ·             ·
+ │                        0  ·       render 1  c            ·             ·
+ │                        0  ·       render 2  a            ·             ·
+ └── filter               1  filter  ·         ·            (a, b, c)     ·
+      │                   1  ·       filter    a = 1        ·             ·
+      └── sort            2  sort    ·         ·            (a, b, c)     +b,+c
+           │              2  ·       order     +b,+c        ·             ·
+           └── render     3  render  ·         ·            (a, b, c)     ·
+                │         3  ·       render 0  a            ·             ·
+                │         3  ·       render 1  b            ·             ·
+                │         3  ·       render 2  c            ·             ·
+                └── scan  4  scan    ·         ·            (a, b, c, d)  ·
+·                         4  ·       table     abc@primary  ·             ·
+·                         4  ·       spans     ALL          ·             ·
+
+exec-raw
+CREATE TABLE bar (id INT PRIMARY KEY, baz STRING, UNIQUE INDEX i_bar (baz))
+----
+
+exec-raw
+INSERT INTO bar VALUES (0, NULL), (1, NULL)
+----
+
+exec-explain
+SELECT * FROM bar ORDER BY baz, id
+----
+sort       0  sort  ·      ·            (id, baz)  +baz,+id
+ │         0  ·     order  +baz,+id     ·          ·
+ └── scan  1  scan  ·      ·            (id, baz)  ·
+·          1  ·     table  bar@primary  ·          ·
+·          1  ·     spans  ALL          ·          ·
+
+# Here rowsort is needed because the ORDER BY clause does not guarantee any
+# relative ordering between rows where baz is NULL. As we see above, because
+# this is a unique index, the ordering `+baz,+id` is deemed equivalent to just
+# `+baz`.
+exec
+SELECT * FROM bar ORDER BY baz, id
+----
+id:int  baz:string
+0       NULL
+1       NULL
+
+exec-raw
+CREATE TABLE abcd (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT,
+  INDEX abc (a, b, c)
+)
+----
+
+exec-raw
+INSERT INTO abcd VALUES (1, 4, 2, 3), (2, 3, 4, 1), (3, 2, 1, 2), (4, 4, 1, 1)
+----
+
+# Verify that render expressions after sorts perform correctly. We need the
+# rowsort as we're attempting to force a RENDER expression after the first
+# ORDER BY, to ensure it renders correctly, but the outer query doesn't
+# guarantee that it will preserve the order.
+
+exec rowsort
+SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
+----
+column5:int
+5
+5
+5
+8
+
+exec rowsort
+SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
+----
+column5:int
+4
+4
+5
+7
+
+# The following tests verify we recognize that sorting is not necessary
+exec-explain
+SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
+----
+filter               0  filter  ·         ·                    (a, b, c)     ·
+ │                   0  ·       filter    (a = 1) AND (b = 4)  ·             ·
+ └── sort            1  sort    ·         ·                    (a, b, c)     +c
+      │              1  ·       order     +c                   ·             ·
+      └── render     2  render  ·         ·                    (a, b, c)     ·
+           │         2  ·       render 0  a                    ·             ·
+           │         2  ·       render 1  b                    ·             ·
+           │         2  ·       render 2  c                    ·             ·
+           └── scan  3  scan    ·         ·                    (a, b, c, d)  ·
+·                    3  ·       table     abcd@primary         ·             ·
+·                    3  ·       spans     ALL                  ·             ·
+
+exec-explain
+SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
+----
+filter               0  filter  ·         ·                    (a, b, c)     ·
+ │                   0  ·       filter    (a = 1) AND (b = 4)  ·             ·
+ └── sort            1  sort    ·         ·                    (a, b, c)     +c,+b,+a
+      │              1  ·       order     +c,+b,+a             ·             ·
+      └── render     2  render  ·         ·                    (a, b, c)     ·
+           │         2  ·       render 0  a                    ·             ·
+           │         2  ·       render 1  b                    ·             ·
+           │         2  ·       render 2  c                    ·             ·
+           └── scan  3  scan    ·         ·                    (a, b, c, d)  ·
+·                    3  ·       table     abcd@primary         ·             ·
+·                    3  ·       spans     ALL                  ·             ·
+
+exec-explain
+SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
+----
+filter               0  filter  ·         ·                    (a, b, c)     ·
+ │                   0  ·       filter    (a = 1) AND (b = 4)  ·             ·
+ └── sort            1  sort    ·         ·                    (a, b, c)     +b,+a,+c
+      │              1  ·       order     +b,+a,+c             ·             ·
+      └── render     2  render  ·         ·                    (a, b, c)     ·
+           │         2  ·       render 0  a                    ·             ·
+           │         2  ·       render 1  b                    ·             ·
+           │         2  ·       render 2  c                    ·             ·
+           └── scan  3  scan    ·         ·                    (a, b, c, d)  ·
+·                    3  ·       table     abcd@primary         ·             ·
+·                    3  ·       spans     ALL                  ·             ·
+
+exec-explain
+SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
+----
+filter               0  filter  ·         ·                    (a, b, c)     ·
+ │                   0  ·       filter    (a = 1) AND (b = 4)  ·             ·
+ └── sort            1  sort    ·         ·                    (a, b, c)     +b,+c,+a
+      │              1  ·       order     +b,+c,+a             ·             ·
+      └── render     2  render  ·         ·                    (a, b, c)     ·
+           │         2  ·       render 0  a                    ·             ·
+           │         2  ·       render 1  b                    ·             ·
+           │         2  ·       render 2  c                    ·             ·
+           └── scan  3  scan    ·         ·                    (a, b, c, d)  ·
+·                    3  ·       table     abcd@primary         ·             ·
+·                    3  ·       spans     ALL                  ·             ·
+
+exec-raw
+CREATE TABLE nan (id INT PRIMARY KEY, x REAL)
+----
+
+exec-raw
+INSERT INTO nan VALUES (1, 0/0), (2, -1), (3, 1), (4, 0/0)
+----
+
+exec
+SELECT x FROM nan ORDER BY x
+----
+x:float
+NaN
+NaN
+-1.0
+1.0
+
+exec-explain
+SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+----
+sort         0  sort    ·              ·                 (x)  +x
+ │           0  ·       order          +x                ·    ·
+ └── values  1  values  ·              ·                 (x)  ·
+·            1  ·       size           1 column, 3 rows  ·    ·
+·            1  ·       row 0, expr 0  'a'               ·    ·
+·            1  ·       row 1, expr 0  'b'               ·    ·
+·            1  ·       row 2, expr 0  'c'               ·    ·
+
+# TODO(radu): ordinality not supported
+#exec-explain
+#SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
+#----
+#ordinality   ·     ·
+# └── values  ·     ·
+#·            size  1 column, 3 rows
+#
+#exec-explain
+#SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
+#----
+#sort              ·      ·
+# │                order  -"ordinality"
+# └── ordinality   ·      ·
+#      └── values  ·      ·
+#·                 size   1 column, 3 rows
+
+exec-explain
+SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
+----
+values  0  values  ·              ·                 (x)  ·
+·       0  ·       size           1 column, 3 rows  ·    ·
+·       0  ·       row 0, expr 0  'a'               ·    ·
+·       0  ·       row 1, expr 0  'b'               ·    ·
+·       0  ·       row 2, expr 0  'c'               ·    ·
+
+exec-explain
+SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
+----
+sort         0  sort    ·              ·                 (x)  +x
+ │           0  ·       order          +x                ·    ·
+ └── values  1  values  ·              ·                 (x)  ·
+·            1  ·       size           1 column, 3 rows  ·    ·
+·            1  ·       row 0, expr 0  'a'               ·    ·
+·            1  ·       row 1, expr 0  'b'               ·    ·
+·            1  ·       row 2, expr 0  'c'               ·    ·
+
+# TODO(radu): DML statements not supported yet.
+## Check that the ordering of the source does not propagate blindly to RETURNING.
+#exec-explain
+#INSERT INTO t(a, b) SELECT * FROM (SELECT 1 AS x, 2 AS y) ORDER BY x RETURNING b
+#----
+#insert              0  insert    ·     ·        (b)     ·
+# │                  0  ·         into  t(a, b)  ·       ·
+# └── render         1  render    ·     ·        (x, y)  x=CONST; y=CONST
+#      └── emptyrow  2  emptyrow  ·     ·        ()      ·
+#
+#exec-explain
+#DELETE FROM t WHERE a = 3 RETURNING b
+#----
+#delete     0  delete  ·      ·          (b)        ·
+# │         0  ·       from   t          ·          ·
+# └── scan  1  scan    ·      ·          (a, b, c)  a=CONST; key()
+#·          1  ·       table  t@primary  ·          ·
+#·          1  ·       spans  /3-/3/#    ·          ·
+#
+#exec-explain
+#UPDATE t SET c = TRUE RETURNING b
+#----
+#update          0  update  ·      ·          (b)                ·
+# │              0  ·       table  t          ·                  ·
+# │              0  ·       set    c          ·                  ·
+# └── render     1  render  ·      ·          (a, b, c, "true")  "true"=CONST; a!=NULL; key(a)
+#      └── scan  2  scan    ·      ·          (a, b, c)          a!=NULL; key(a)
+#·               2  ·       table  t@primary  ·                  ·
+#·               2  ·       spans  ALL        ·                  ·
+
+exec-raw
+CREATE TABLE uvwxyz (
+  u INT,
+  v INT,
+  w INT,
+  x INT,
+  y INT,
+  z INT,
+  INDEX ywxz (y, w, x, z, u, v),
+  INDEX ywz (y, w, z, x)
+)
+----
+
+# Verify that the outer ordering is propagated to index selection and we choose
+# the index that avoids any sorting.
+exec-explain
+SELECT * FROM (SELECT y, w, x FROM uvwxyz WHERE y = 1 ORDER BY w) ORDER BY w, x
+----
+render                    0  render  ·         ·               (y, w, x)                          ·
+ │                        0  ·       render 0  y               ·                                  ·
+ │                        0  ·       render 1  w               ·                                  ·
+ │                        0  ·       render 2  x               ·                                  ·
+ └── filter               1  filter  ·         ·               (w, x, y)                          ·
+      │                   1  ·       filter    y = 1           ·                                  ·
+      └── sort            2  sort    ·         ·               (w, x, y)                          +w,+x
+           │              2  ·       order     +w,+x           ·                                  ·
+           └── render     3  render  ·         ·               (w, x, y)                          ·
+                │         3  ·       render 0  w               ·                                  ·
+                │         3  ·       render 1  x               ·                                  ·
+                │         3  ·       render 2  y               ·                                  ·
+                └── scan  4  scan    ·         ·               (u, v, w, x, y, z, rowid[hidden])  ·
+·                         4  ·       table     uvwxyz@primary  ·                                  ·
+·                         4  ·       spans     ALL             ·                                  ·
+
+exec-raw
+CREATE TABLE blocks (
+  block_id  INT,
+  writer_id STRING,
+  block_num INT,
+  raw_bytes BYTES,
+  PRIMARY KEY (block_id, writer_id, block_num)
+)
+----
+
+# TODO(radu): LIMIT not supported yet.
+## Test that ordering goes "through" a renderNode that has a duplicate render of
+## an order-by column (#13696).
+#exec-explain
+#SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writer_id, block_num LIMIT 1
+#----
+#render          0  render  ·         ·                   (block_id, writer_id, block_num, block_id)                                      ·
+# │              0  ·       render 0  "blocks.block_id"   ·                                                                               ·
+# │              0  ·       render 1  "blocks.writer_id"  ·                                                                               ·
+# │              0  ·       render 2  "blocks.block_num"  ·                                                                               ·
+# │              0  ·       render 3  "blocks.block_id"   ·                                                                               ·
+# └── render     1  render  ·         ·                   ("blocks.block_id", "blocks.writer_id", "blocks.block_num", "blocks.block_id")  ·
+#      │         1  ·       render 0  block_id            ·                                                                               ·
+#      │         1  ·       render 1  writer_id           ·                                                                               ·
+#      │         1  ·       render 2  block_num           ·                                                                               ·
+#      │         1  ·       render 3  block_id            ·                                                                               ·
+#      └── scan  2  scan    ·         ·                   (block_id, writer_id, block_num, raw_bytes)                                     ·
+#·               2  ·       table     blocks@primary      ·                                                                               ·
+#·               2  ·       spans     ALL                 ·                                                                               ·
