@@ -47,6 +47,7 @@ run make bin/roachtest bin/workload
 if_tc tc_end_block "Compile Workload"
 
 if_tc tc_start_block "Run roachtest"
+chmod +x "$PWD/cockroach-linux-2.6.32-gnu-amd64"
 run bin/roachtest run \
   --cluster-id "${TC_BUILD_ID}" \
   --slack-token "${SLACK_TOKEN}" \
