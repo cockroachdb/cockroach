@@ -118,11 +118,20 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               },
               sort: (ns) => ns.started_at,
             },
-            // Bytes - displays the total persisted bytes maintained by the node.
+            // Stored - displays the total persisted bytes maintained by the node.
+            // "Used" would be ambiguous here, since this is only what's used for
+            // cockroach data, not the cockroach binary itself, the OS, and whatever
+            // else is using disk space.
             {
-              title: "Bytes",
+              title: "Stored",
               cell: (ns) => Bytes(BytesUsed(ns)),
               sort: (ns) => BytesUsed(ns),
+            },
+            // Capacity - displays the total hard drive capacity of this node.
+            {
+              title: "Capacity",
+              cell: (ns) => Bytes(ns.metrics[MetricConstants.capacity]),
+              sort: (ns) => ns.metrics[MetricConstants.capacity],
             },
             // Replicas - displays the total number of replicas on the node.
             {
