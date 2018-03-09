@@ -22,11 +22,8 @@ import (
 )
 
 func init() {
-	runKV := func(t *test, percent, nodes int) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1, "--local-ssd")
-		defer c.Destroy(ctx)
-
+	runKV := func(ctx context.Context, t *test, c *cluster, percent int) {
+		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, c.Range(1, nodes))
@@ -50,51 +47,48 @@ func init() {
 	for _, p := range []int{0, 95} {
 		p := p
 		for _, n := range []int{1, 3} {
-			n := n
-			tests.Add(fmt.Sprintf("kv%d/nodes=%d", p, n),
-				func(t *test) {
-					runKV(t, p, n)
-				})
+			tests.Add(testSpec{
+				Name:  fmt.Sprintf("kv%d/nodes=%d", p, n),
+				Nodes: nodes(n + 1),
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runKV(ctx, t, c, p)
+				},
+			})
 		}
 	}
 }
 
 func init() {
-	runSplits := func(t *test, nodes int) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1, "--local-ssd")
-		defer c.Destroy(ctx)
+	tests.Add(testSpec{
+		Name:  "splits/nodes=3",
+		Nodes: nodes(4),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			nodes := c.nodes - 1
+			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+			c.Start(ctx, c.Range(1, nodes))
 
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
-
-		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
-		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			splits := " --splits=" + ifLocal("2000", "500000")
-			cmd := fmt.Sprintf(
-				"./workload run kv --init --max-ops=1"+
-					concurrency+splits+
-					" {pgurl:1-%d}",
-				nodes)
-			c.Run(ctx, nodes+1, cmd)
-			return nil
-		})
-		m.Wait()
-	}
-
-	tests.Add("splits/nodes=3", func(t *test) {
-		runSplits(t, 3)
+			t.Status("running workload")
+			m := newMonitor(ctx, c, c.Range(1, nodes))
+			m.Go(func(ctx context.Context) error {
+				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+				splits := " --splits=" + ifLocal("2000", "500000")
+				cmd := fmt.Sprintf(
+					"./workload run kv --init --max-ops=1"+
+						concurrency+splits+
+						" {pgurl:1-%d}",
+					nodes)
+				c.Run(ctx, nodes+1, cmd)
+				return nil
+			})
+			m.Wait()
+		},
 	})
 }
 
 func init() {
-	runScalability := func(t *test, percent, nodes int) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1, "--local-ssd", "--machine-type", "n1-highcpu-8")
-		defer c.Destroy(ctx)
+	runScalability := func(ctx context.Context, t *test, c *cluster, percent int) {
+		nodes := c.nodes - 1
 
 		if !c.isLocal() {
 			var wg sync.WaitGroup
@@ -143,10 +137,13 @@ func init() {
 	if false {
 		for _, p := range []int{0, 95} {
 			p := p
-			tests.Add(fmt.Sprintf("kv%d/scale/nodes=6", p),
-				func(t *test) {
-					runScalability(t, p, 6)
-				})
+			tests.Add(testSpec{
+				Name:  fmt.Sprintf("kv%d/scale/nodes=6", p),
+				Nodes: nodes(7, cpu(8)),
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runScalability(ctx, t, c, p)
+				},
+			})
 		}
 	}
 }

@@ -35,12 +35,15 @@ func init() {
 	// Because of this, we stick to 3 nodes to avoid rebalancing-related
 	// snapshots. Once #16954 is addressed, we can increase this count so that
 	// splitting the single large range also triggers rebalancing.
-	const nodes = 3
+	const numNodes = 3
 
-	tests.Add(fmt.Sprintf("splits/size=%s,nodes=%d", bytesStr(size), nodes),
-		func(t *test) {
-			runSplit(t, size, nodes)
-		})
+	tests.Add(testSpec{
+		Name:  fmt.Sprintf("splits/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Nodes: nodes(numNodes),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSplit(ctx, t, c, size)
+		},
+	})
 }
 
 func bytesStr(size uint64) string {
@@ -51,7 +54,7 @@ func bytesStr(size uint64) string {
 // so by setting the max range size to a huge number before populating the
 // table. It then drops the range size back down to normal and watches as
 // the large range splits apart.
-func runSplit(t *test, size, nodes int) {
+func runSplit(ctx context.Context, t *test, c *cluster, size int) {
 	// payload is the size of the payload column for each row in the Bank
 	// table.
 	const payload = 100
@@ -64,10 +67,6 @@ func runSplit(t *test, size, nodes int) {
 	// rows is the number of rows we'll need to insert into the bank table
 	// to produce a range of roughly the right size.
 	rows := size / rowEstimate
-
-	ctx := context.Background()
-	c := newCluster(ctx, t, nodes)
-	defer c.Destroy(ctx)
 
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.All())
@@ -97,7 +96,7 @@ range_max_bytes: %d
 		// schema but before populating it. This is ok because upreplication
 		// occurs much faster than we can actually create a large range.
 		c.Run(ctx, 1, fmt.Sprintf("./workload init bank "+
-			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, nodes))
+			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
 
 		t.Status("checking for single range")
 		rangeCount := func() int {

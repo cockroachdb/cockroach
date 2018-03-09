@@ -21,10 +21,8 @@ import (
 )
 
 func init() {
-	runTPCC := func(t *test, warehouses, nodes int, extra string) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1)
-		defer c.Destroy(ctx)
+	runTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, extra string) {
+		nodes := c.nodes - 1
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
@@ -44,10 +42,18 @@ func init() {
 		m.Wait()
 	}
 
-	tests.Add("tpcc/w=1/nodes=3", func(t *test) {
-		runTPCC(t, 1, 3, " --wait=false")
+	tests.Add(testSpec{
+		Name:  "tpcc/w=1/nodes=3",
+		Nodes: nodes(4),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, 1, " --wait=false")
+		},
 	})
-	tests.Add("tpmc/w=1/nodes=3", func(t *test) {
-		runTPCC(t, 1, 3, "")
+	tests.Add(testSpec{
+		Name:  "tpmc/w=1/nodes=3",
+		Nodes: nodes(4),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, 1, "")
+		},
 	})
 }
