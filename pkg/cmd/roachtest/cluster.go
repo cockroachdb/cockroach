@@ -281,6 +281,64 @@ func (n nodeListOption) String() string {
 	return buf.String()
 }
 
+type nodeSpec struct {
+	Count       int
+	CPUs        int
+	MachineType string
+	Geo         bool
+}
+
+func (s *nodeSpec) args() []string {
+	var args []string
+	args = append(args, s.MachineType)
+	if s.Geo {
+		args = append(args, "--geo")
+	}
+	return args
+}
+
+type createOption interface {
+	apply(spec *nodeSpec)
+}
+
+type nodeCPUOption int
+
+func (o nodeCPUOption) apply(spec *nodeSpec) {
+	spec.CPUs = int(o)
+	if !local && clusterName != "local" {
+		spec.MachineType = fmt.Sprintf("--gce-machine-type=n1-highcpu-%d", spec.CPUs)
+	}
+}
+
+// cpu is a node option which requests nodes with the specified number of CPUs.
+func cpu(n int) nodeCPUOption {
+	return nodeCPUOption(n)
+}
+
+type nodeGeoOption struct{}
+
+func (o nodeGeoOption) apply(spec *nodeSpec) {
+	spec.Geo = true
+}
+
+// geo is a node option which requests geo-distributed nodes.
+func geo() nodeGeoOption {
+	return nodeGeoOption{}
+}
+
+// nodes is a helper method for creating a []nodeSpec given a node count and
+// options.
+func nodes(count int, opts ...createOption) []nodeSpec {
+	spec := nodeSpec{
+		Count: count,
+	}
+	cpu(4).apply(&spec)
+	for _, o := range opts {
+		o.apply(&spec)
+	}
+	return []nodeSpec{spec}
+}
+
 // cluster provides an interface for interacting with a set of machines,
 // starting and stopping a cockroach cluster on a subset of those machines, and
 // running load generators and other operations on the machines.
@@ -300,9 +358,17 @@ type cluster struct {
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
 // duration. The default lifetime of 12h is too long for some tests and will be
 // too short for others.
-func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *cluster {
+func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		t.Fatal("interrupted")
+	}
+
+	switch {
+	case len(nodes) == 0:
+		return nil
+	case len(nodes) > 1:
+		// TODO(peter): Need a motivating test that has different specs per node.
+		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
 	l, err := rootLogger(t.Name())
@@ -312,7 +378,7 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 
 	c := &cluster{
 		name:      makeClusterName(t),
-		nodes:     nodes,
+		nodes:     nodes[0].Count,
 		status:    func(...interface{}) {},
 		t:         t,
 		l:         l,
@@ -324,10 +390,8 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 	registerCluster(c)
 
 	if c.name != clusterName {
-		sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(nodes)}
-		for _, arg := range args {
-			sargs = append(sargs, fmt.Sprint(arg))
-		}
+		sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(c.nodes)}
+		sargs = append(sargs, nodes[0].args()...)
 		if zones != "" {
 			sargs = append(sargs, "--gce-zones="+zones)
 		}
@@ -376,6 +440,10 @@ func (c *cluster) Node(i int) nodeListOption {
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
+	if c == nil {
+		return
+	}
+
 	c.status("retrieving logs")
 	_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
 		filepath.Join(artifacts, c.t.Name(), "logs"))
