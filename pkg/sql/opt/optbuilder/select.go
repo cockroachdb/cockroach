@@ -16,8 +16,6 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -109,7 +107,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildScan(
-	tbl optbase.Table, tn *tree.TableName, inScope *scope,
+	tbl opt.Table, tn *tree.TableName, inScope *scope,
 ) (out opt.GroupID, outScope *scope) {
 	tblIndex := b.factory.Metadata().AddTable(tbl)
 

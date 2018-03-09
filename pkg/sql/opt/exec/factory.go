@@ -15,7 +15,7 @@
 package exec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -40,7 +40,7 @@ type Factory interface {
 
 	// ConstructScan returns a node that represents a scan of the given table.
 	// TODO(radu): support list of columns, index, index constraints
-	ConstructScan(table optbase.Table) (Node, error)
+	ConstructScan(table opt.Table) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.

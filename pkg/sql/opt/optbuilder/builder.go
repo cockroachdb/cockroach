@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -59,7 +58,7 @@ type Builder struct {
 	ctx     context.Context
 	semaCtx *tree.SemaContext
 	evalCtx *tree.EvalContext
-	catalog optbase.Catalog
+	catalog opt.Catalog
 
 	// Skip index 0 in order to reserve it to indicate the "unknown" column.
 	colMap []columnProps
@@ -71,7 +70,7 @@ func New(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	catalog optbase.Catalog,
+	catalog opt.Catalog,
 	factory opt.Factory,
 	stmt tree.Statement,
 ) *Builder {
