@@ -53,6 +53,7 @@ run bin/roachtest run \
   --cockroach "$PWD/cockroach-linux-2.6.32-gnu-amd64" \
   --workload "$PWD/bin/workload" \
   --artifacts "$artifacts" \
+  --zones "us-central1-b,us-west1-b,europe-west2-b" \
   --parallelism 5
 if_tc tc_end_block "Run roachtest"
 

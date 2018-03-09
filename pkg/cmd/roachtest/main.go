@@ -76,6 +76,8 @@ func main() {
 		&workload, "workload", "", "path to workload binary to use")
 	runCmd.Flags().StringVar(
 		&slackToken, "slack-token", "", "Slack bot token")
+	runCmd.Flags().StringVar(
+		&zones, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
