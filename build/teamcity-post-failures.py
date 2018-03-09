@@ -10,10 +10,13 @@ Requires the following environment variables:
 
 import json
 import os
+import re
+import subprocess
 import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from pkg_resources import parse_version
 from urllib.parse import urljoin, urlencode
 
 BASEURL = "https://teamcity.cockroachdb.com/httpAuth/app/rest/"
@@ -45,14 +48,45 @@ def collect_build_results(build_id):
                                             locator='count:100,status:FAILURE,build:(id:{0})'.format(build_id),
                                             fields='testOccurrence(details,name,duration,build(buildType(name)))')))
     for o in test_data.findall('./testOccurrence'):
-        test_name = '{0}/{1}'.format(o.find('build/buildType').attrib['name'], o.attrib['name'])
+        test_name = re.split(r"[/:]", o.attrib['name'])[0]  # remove subtests, if present
+        test_name = '{0}/{1}'.format(o.find('build/buildType').attrib['name'], test_name)
 
         test_log = '--- FAIL: {0}/{1} ({2:.3f}s)\n{3}\n'.format(
             o.find("build/buildType").attrib["name"],
             o.attrib["name"],
             int(o.attrib["duration"])/1000.,
-            o.find("details").text)
+            o.findtext("details"))
         yield (test_name, test_log)
+
+def get_probable_milestone():
+    try:
+        tag = subprocess.check_output(['git', 'describe', '--abbrev=0', '--tags'],
+            universal_newlines=True)
+    except subprocess.CalledProcessError as e:
+        print('warning: unable to load latest tag: {0}'.format(e))
+        print('issue will be posted without milestone')
+        return None
+
+    match = re.match(r'v(\d+\.\d+)', tag)
+    if not match:
+        print('unable to parse version {0}; issue will be posted without milestone'.format(tag))
+        return None
+    version = match.group(1)
+
+    try:
+        res = urllib.request.urlopen(
+            'https://api.github.com/repos/cockroachdb/cockroach/milestones?state=open')
+        milestones = json.loads(res.read().decode(res.info().get_param('charset') or 'utf-8'))
+    except (ValueError, urllib.error.HTTPError) as e:
+        print('warning: unable to load milestones: {0}'.format(e))
+        print('issue will be posted without milestone')
+        return None
+
+    for m in milestones:
+        if m['title'] == version:
+            return m['number']
+    print('no milestone matching {0}; issue will be posted without milestone'.format(version))
+    return None
 
 
 def create_issue(build_id, failed_tests):
@@ -63,7 +97,7 @@ def create_issue(build_id, failed_tests):
     """
     return {
         'title': 'teamcity: failed tests on {0}: {1}'.format(os.environ['TC_BUILD_BRANCH'],
-                                                             ', '.join(t[0] for t in failed_tests)),
+                                                             ', '.join(set(t[0] for t in failed_tests))),
         'body': '''\
 The following tests appear to have failed:
 
@@ -77,6 +111,7 @@ The following tests appear to have failed:
 Please assign, take a look and update the issue accordingly.
 '''.format(build_id, ''.join(t[1] for t in failed_tests)),
         'labels': ['test-failure', 'Robot'],
+        'milestone': get_probable_milestone(),
     }
 
 
