@@ -943,6 +943,7 @@ CREATE TABLE information_schema.tables (
 	TABLE_SCHEMA  STRING NOT NULL,
 	TABLE_NAME    STRING NOT NULL,
 	TABLE_TYPE    STRING NOT NULL,
+	is_insertable_into STRING NOT NULL,
 	VERSION       INT
 );`,
 	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -952,19 +953,23 @@ CREATE TABLE information_schema.tables (
 					return nil
 				}
 				tableType := tableTypeBaseTable
+				insertable := yesString
 				if isVirtualDescriptor(table) {
+					insertable = noString
 					tableType = tableTypeSystemView
 				} else if table.IsView() {
+					insertable = noString
 					tableType = tableTypeView
 				}
 				dbNameStr := tree.NewDString(db.Name)
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.Name)
 				return addRow(
-					dbNameStr, // table_catalog
-					scNameStr, // table_schema
-					tbNameStr, // table_name
-					tableType, // table_type
+					dbNameStr,                              // table_catalog
+					scNameStr,                              // table_schema
+					tbNameStr,                              // table_name
+					tableType,                              // table_type
+					insertable,                             // is_insertable_into
 					tree.NewDInt(tree.DInt(table.Version)), // version
 				)
 			})
