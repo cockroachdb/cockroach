@@ -52,3 +52,21 @@ func ToUnixMicros(t time.Time) int64 {
 func Unix(sec, nsec int64) time.Time {
 	return time.Unix(sec, nsec).UTC()
 }
+
+// SleepUntil sleeps until the given time. The current time is
+// refreshed every second in case there was a clock jump
+//
+// untilNanos is the target time to sleep till in epoch nanoseconds
+// currentTimeNanos is a function returning current time in epoch nanoseconds
+func SleepUntil(untilNanos int64, currentTimeNanos func() int64) {
+	for {
+		d := time.Duration(untilNanos - currentTimeNanos())
+		if d <= 0 {
+			break
+		}
+		if d > time.Second {
+			d = time.Second
+		}
+		time.Sleep(d)
+	}
+}
