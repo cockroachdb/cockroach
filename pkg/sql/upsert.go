@@ -174,14 +174,16 @@ func (p *planner) newUpsertNode(
 			// path is disabled during all mutations.
 			len(en.tableDesc.Mutations) == 0 &&
 			// For the fast path, all columns must be specified in the insert.
-			len(ri.InsertCols) == len(en.tableDesc.Columns)
+			len(ri.InsertCols) == len(en.tableDesc.Columns) &&
+			// We cannot use the fast path if we also have a RETURNING clause, because
+			// RETURNING wants to see only the updated rows.
+			!needRows
 
 		if enableFastPath {
 			// We then use the super-simple, super-fast writer. There's not
 			// much else to prepare.
 			un.tw = &fastTableUpserter{
-				ri:          ri,
-				collectRows: needRows,
+				ri: ri,
 			}
 		} else {
 			// General/slow path.
@@ -624,13 +626,9 @@ func (p *planner) newUpsertHelper(
 	//
 	// This will use the layout from the table columns. The mapping from
 	// column IDs to row datum positions is straightforward.
-	mapping := make(map[sqlbase.ColumnID]int)
-	for i, c := range tableDesc.Columns {
-		mapping[c.ID] = i
-	}
 	helper.ccIvarContainer = rowIndexedVarContainer{
 		cols:    tableDesc.Columns,
-		mapping: mapping,
+		mapping: sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns),
 	}
 
 	return helper, nil
