@@ -1,4 +1,4 @@
-// Copyright 2016 The Cockroach Authors.
+// Copyright 2018 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,19 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package main
+package cmdutil
 
 import (
-	"strings"
-	"testing"
+	"log"
+	"os"
 )
 
-func TestRunTC(t *testing.T) {
-	count := 0
-	runTC([]string{"master"}, func(buildID, branch string, opts map[string]string) {
-		count++
-		if branch != "master" {
-			t.Errorf("unexpected branch %q", branch)
-		}
-		if pkg, ok := opts["env.PKG"]; ok {
-			if strings.Contains(pkg, "/vendor/") {
-				t.Errorf("unexpected package %s", pkg)
-			}
-		} else {
-			t.Errorf("parameters did not include package: %+v", opts)
-		}
-	})
-	if count == 0 {
-		t.Fatal("no builds were created")
+// RequireEnv returns the value of the environment variable s. If s is unset or
+// blank, RequireEnv prints an error message and exits.
+func RequireEnv(s string) string {
+	v := os.Getenv(s)
+	if v == "" {
+		log.Fatalf("missing required environment variable %q", s)
 	}
+	return v
 }
