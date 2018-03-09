@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // TODO(Tobias): Figure out if it would make sense to save some
@@ -69,6 +70,14 @@ type Clock struct {
 		// lastPhysicalTime reports the last measured physical time. This
 		// is used to detect clock jumps.
 		lastPhysicalTime int64
+
+		// forwardClockJumpCheckEnabled specifies whether to panic on forward
+		// clock jumps
+		forwardClockJumpCheckEnabled bool
+
+		// isMonitoringForwardClockJumps is a flag to ensure that only one jump monitoring
+		// goroutine is running per clock
+		isMonitoringForwardClockJumps bool
 	}
 }
 
@@ -125,6 +134,71 @@ func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
 	}
 }
 
+// toleratedForwardClockJump is the tolerated forward jump. Jumps greater
+// than the returned value will cause if panic if forward clock jump check is
+// enabled
+func (c *Clock) toleratedForwardClockJump() time.Duration {
+	return c.maxOffset / 2
+}
+
+// StartMonitoringForwardClockJumps starts a goroutine to update the clock's
+// forwardClockJumpCheckEnabled based on the values pushed in
+// forwardClockJumpCheckEnabledCh.
+//
+// This also keeps lastPhysicalTime up to date to avoid spurious jump errors.
+//
+// A nil channel or a value of false pushed in forwardClockJumpCheckEnabledCh
+// disables checking clock jumps between two successive reads of the physical
+// clock.
+//
+// This should only be called once per clock, and will return an error if called
+// more than once
+//
+// tickerFn is used to create a new ticker
+//
+// tickCallback is called whenever maxForwardClockJumpCh or a ticker tick is
+// processed
+func (c *Clock) StartMonitoringForwardClockJumps(
+	forwardClockJumpCheckEnabledCh <-chan bool,
+	tickerFn func(d time.Duration) *time.Ticker,
+	tickCallback func(),
+) error {
+	alreadyMonitoring := c.setMonitoringClockJump()
+	if alreadyMonitoring {
+		return errors.New("clock jumps are already being monitored")
+	}
+
+	go func() {
+		// Create a ticker object which can be used in selects.
+		// This ticker is turned on / off based on forwardClockJumpCheckEnabledCh
+		ticker := tickerFn(time.Hour)
+		ticker.Stop()
+		refreshPhysicalNowItvl := c.toleratedForwardClockJump() / 2
+		for {
+			select {
+			case forwardClockJumpEnabled, ok := <-forwardClockJumpCheckEnabledCh:
+				ticker.Stop()
+				if !ok {
+					return
+				}
+				if forwardClockJumpEnabled {
+					// Forward jump check is enabled. Start the ticker
+					ticker = tickerFn(refreshPhysicalNowItvl)
+				}
+				c.setForwardJumpCheckEnabled(forwardClockJumpEnabled)
+			case <-ticker.C:
+				c.PhysicalNow()
+			}
+
+			if tickCallback != nil {
+				tickCallback()
+			}
+		}
+	}()
+
+	return nil
+}
+
 // MaxOffset returns the maximal clock offset to any node in the cluster.
 //
 // A value of 0 means offset checking is disabled.
@@ -142,6 +216,18 @@ func (c *Clock) getPhysicalClockLocked() int64 {
 		if interval > int64(c.maxOffset/10) {
 			c.mu.monotonicityErrorsCount++
 			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(-interval)/1e9)
+		}
+
+		if c.mu.forwardClockJumpCheckEnabled {
+			toleratedForwardClockJump := c.toleratedForwardClockJump()
+			if int64(toleratedForwardClockJump) <= -interval {
+				log.Fatalf(
+					context.TODO(),
+					"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
+					float64(-interval)/1e9,
+					float64(toleratedForwardClockJump)/1e9,
+				)
+			}
 		}
 	}
 
@@ -250,4 +336,29 @@ func (c *Clock) UpdateAndCheckMaxOffset(rt Timestamp) (Timestamp, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.updateLocked(rt, false)
+}
+
+// lastPhysicalTime returns the last physical time
+func (c *Clock) lastPhysicalTime() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.lastPhysicalTime
+}
+
+// setForwardJumpCheckEnabled atomically sets forwardClockJumpCheckEnabled
+func (c *Clock) setForwardJumpCheckEnabled(forwardJumpCheckEnabled bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.forwardClockJumpCheckEnabled = forwardJumpCheckEnabled
+}
+
+// setMonitoringClockJump atomically sets isMonitoringForwardClockJumps to true and
+// returns the old value. This is used to ensure that only one monitoring
+// goroutine is launched
+func (c *Clock) setMonitoringClockJump() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	isMonitoring := c.mu.isMonitoringForwardClockJumps
+	c.mu.isMonitoringForwardClockJumps = true
+	return isMonitoring
 }
