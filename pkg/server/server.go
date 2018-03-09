@@ -100,6 +100,13 @@ var (
 			"of the shutdown process",
 		0*time.Second,
 	)
+
+	maxClockJump = settings.RegisterDurationSetting(
+		"server.hlc.max_clock_jump",
+		"maximum forward jump allowed in physical clock. A value of 0 disables this check. "+
+			"If set, forward clock jumps greater than the set value will cause a panic",
+		0,
+	)
 )
 
 // Server is the cockroach server node.
@@ -155,10 +162,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
+	clock := hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	s := &Server{
 		st:       st,
 		mux:      http.NewServeMux(),
-		clock:    hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset)),
+		clock:    clock,
 		stopper:  stopper,
 		cfg:      cfg,
 		registry: metric.NewRegistry(),
@@ -691,6 +699,27 @@ func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
+// startMonitoringClockJumps starts a background task to monitor clock jumps
+// based on a cluster setting
+func (s *Server) startMonitoringClockJumps(ctx context.Context) {
+	maxClockJumpCh := make(chan time.Duration, 1)
+	s.stopper.AddCloser(stop.CloserFn(func() { close(maxClockJumpCh) }))
+
+	maxClockJump.SetOnChange(&s.st.SV, func() {
+		maxClockJumpCh <- maxClockJump.Get(&s.st.SV)
+	})
+
+	if err := s.clock.StartMonitoringClockJumps(
+		maxClockJumpCh,
+		time.NewTicker,
+		nil, /* tick callback */
+	); err != nil {
+		log.Fatal(ctx, err)
+	}
+
+	log.Info(ctx, "monitoring clock jumps based on server.hlc.max_clock_jump")
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -716,6 +745,7 @@ func (s *Server) Start(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
 	startTime := timeutil.Now()
+	s.startMonitoringClockJumps(ctx)
 
 	tlsConfig, err := s.cfg.GetServerTLSConfig()
 	if err != nil {

@@ -17,10 +17,14 @@ package hlc
 import (
 	"context"
 	"fmt"
+	"os"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
 )
 
 type Event uint8
@@ -95,6 +99,146 @@ func TestHLCEqual(t *testing.T) {
 	a = c.Now() // add one to logical clock from b
 	if b == a {
 		t.Errorf("expected %+v < %+v", b, a)
+	}
+}
+
+// isErrSimilar returns true of the expected error is similar to the
+// actual error
+func isErrSimilar(expected *regexp.Regexp, actual error) bool {
+	if actual == nil {
+		return expected == nil
+	}
+	// actual != nil
+	return expected != nil && expected.FindString(actual.Error()) != ""
+}
+
+func TestHLCPhysicalClockJump(t *testing.T) {
+	var fatal bool
+	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(func(r int) {
+		if r != 0 {
+			fatal = true
+		}
+	})
+
+	testCases := []struct {
+		name       string
+		actualJump time.Duration
+		maxJump    time.Duration
+		isFatal    bool
+	}{
+		{
+			name:       "small forward jump",
+			actualJump: 5 * time.Second,
+			maxJump:    50 * time.Second,
+			isFatal:    false,
+		},
+		{
+			name:       "large forward jump",
+			actualJump: 51 * time.Second,
+			maxJump:    50 * time.Second,
+			isFatal:    true,
+		},
+		{
+			name:       "large forward jump large thresh",
+			actualJump: 51 * time.Second,
+			maxJump:    70 * time.Second,
+			isFatal:    false,
+		},
+		{
+			name:       "small backward jump",
+			actualJump: -4 * time.Second,
+			maxJump:    50 * time.Second,
+			isFatal:    false,
+		},
+		{
+			name:       "large backward jump",
+			actualJump: -7 * time.Second,
+			maxJump:    50 * time.Second,
+			isFatal:    false,
+		},
+		{
+			name:       "large backward jump large thresh",
+			actualJump: -7 * time.Second,
+			maxJump:    90 * time.Second,
+			isFatal:    false,
+		},
+	}
+
+	maxJumpCh := make(chan time.Duration, 1)
+	defer close(maxJumpCh)
+
+	m := NewManualClock(1)
+	c := NewClock(m.UnixNano, time.Nanosecond)
+	var tickerDuration time.Duration
+	tickerCh := make(chan time.Time)
+	tickProcessedCh := make(chan struct{})
+	if err := c.StartMonitoringClockJumps(
+		maxJumpCh,
+		func(d time.Duration) *time.Ticker {
+			tickerDuration = d
+			ticker := time.NewTicker(d)
+			ticker.Stop()
+			ticker.C = tickerCh
+			return ticker
+		},
+		func() {
+			tickProcessedCh <- struct{}{}
+		},
+	); err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err := c.StartMonitoringClockJumps(
+		maxJumpCh,
+		time.NewTicker,
+		nil, /* tick callback */
+	); !isErrSimilar(regexp.MustCompile("already being monitored"), err) {
+		t.Error("expected an error when starting monitor goroutine twice")
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+
+			maxJumpCh <- test.maxJump
+			<-tickProcessedCh
+
+			fatal = false
+			t1 := c.Now()
+			a.Equal(false, fatal)
+
+			m.Increment(int64(test.actualJump))
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+
+			fatal = false
+			t2 := c.Now()
+			a.True(t1.Less(t2), fmt.Sprintf("expected %+v < %+v", t1, t2))
+			// This should not fatal as tickerCh has ticked
+			a.Equal(false, fatal)
+			// After ticker ticks, last physical time should be equal to physical now
+			lastPhysicalTime := c.lastPhysicalTime()
+			physicalNow := c.PhysicalNow()
+			a.Equal(lastPhysicalTime, physicalNow)
+
+			// Potentially a fatal jump depending on the test case
+			fatal = false
+			m.Increment(int64(test.actualJump))
+			t3 := c.Now()
+			a.True(t2.Less(t3), fmt.Sprintf("expected %+v < %+v", t2, t3))
+			a.Equal(test.isFatal, fatal)
+
+			a.True(
+				tickerDuration <= test.maxJump,
+				fmt.Sprintf(
+					"ticker duration %+v should be less than max jump %+v",
+					tickerDuration,
+					test.maxJump,
+				),
+			)
+		})
 	}
 }
 

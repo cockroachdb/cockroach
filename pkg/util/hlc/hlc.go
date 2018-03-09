@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // TODO(Tobias): Figure out if it would make sense to save some
@@ -69,6 +70,14 @@ type Clock struct {
 		// lastPhysicalTime reports the last measured physical time. This
 		// is used to detect clock jumps.
 		lastPhysicalTime int64
+
+		// maxClockJump is the maximum jump allowed for the physical clock between
+		// two successive clock reads. Setting this to 0 disables this validation.
+		maxClockJump time.Duration
+
+		// isMonitoringClockJumps is a flag to ensure that only one jump monitoring
+		// goroutine is running per clock
+		isMonitoringClockJumps bool
 	}
 }
 
@@ -125,6 +134,67 @@ func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
 	}
 }
 
+// StartMonitoringClockJumps starts a goroutine to update the clock's
+// maxClockJump based on the values pushed in maxClockJumpCh.
+//
+// This also keeps lastPhysicalTime up to date to avoid spurious jump errors.
+// maxClockJumpCh is a channel from which the tolerated clock physical jump
+// threshold is read.
+//
+// A nil channel or a value of 0 for maxClockJump disables checking clock
+// jumps between two successive reads of the physical clock.
+//
+// This should only be called once per clock, and will return an error if called
+// more than once
+//
+// tickerFn is used to create a new ticker
+//
+// tickCallback is called whenever maxClockJumpCh or a ticker tick is processed
+func (c *Clock) StartMonitoringClockJumps(
+	maxClockJumpCh <-chan time.Duration,
+	tickerFn func(d time.Duration) *time.Ticker,
+	tickCallback func(),
+) error {
+	alreadyMonitoring := c.setMonitoringClockJump()
+	if alreadyMonitoring {
+		return errors.New("clock jumps are already being monitored")
+	}
+
+	go func() {
+		ticker := tickerFn(c.maxOffset)
+		ticker.Stop()
+		for {
+			select {
+			case maxClockJump, ok := <-maxClockJumpCh:
+				ticker.Stop()
+				if !ok {
+					return
+				}
+
+				refreshLastUpdateTimeItvl := maxClockJump / 2
+				if refreshLastUpdateTimeItvl > 0 {
+					ticker = tickerFn(refreshLastUpdateTimeItvl)
+				}
+				c.updateMaxClockJump(maxClockJump)
+			case <-ticker.C:
+				c.PhysicalNow()
+			}
+
+			if tickCallback != nil {
+				tickCallback()
+			}
+		}
+	}()
+	return nil
+}
+
+// ToleratedOffset is a value lower than maxOffset which is can be used in
+// validations
+func ToleratedOffset(maxOffset time.Duration) time.Duration {
+	// Tolerate up to 80% of the maximum offset.
+	return maxOffset * 4 / 5
+}
+
 // MaxOffset returns the maximal clock offset to any node in the cluster.
 //
 // A value of 0 means offset checking is disabled.
@@ -142,6 +212,18 @@ func (c *Clock) getPhysicalClockLocked() int64 {
 		if interval > int64(c.maxOffset/10) {
 			c.mu.monotonicityErrorsCount++
 			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(-interval)/1e9)
+		}
+
+		toleratedJump := int64(ToleratedOffset(c.mu.maxClockJump))
+		if toleratedJump > 0 {
+			if interval < -toleratedJump {
+				log.Fatalf(
+					context.TODO(),
+					"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
+					float64(-interval)/1e9,
+					float64(c.mu.maxClockJump)/1e9,
+				)
+			}
 		}
 	}
 
@@ -250,4 +332,29 @@ func (c *Clock) UpdateAndCheckMaxOffset(rt Timestamp) (Timestamp, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.updateLocked(rt, false)
+}
+
+// lastPhysicalTime returns the last physical time
+func (c *Clock) lastPhysicalTime() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.lastPhysicalTime
+}
+
+// updateMaxClockJump atomically sets maxClockJump
+func (c *Clock) updateMaxClockJump(maxClockJump time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mu.maxClockJump = maxClockJump
+}
+
+// setMonitoringClockJump atomically sets isMonitoringClockJumps to true and
+// returns the old value. This is used to ensure that only one monitoring
+// goroutine is launched
+func (c *Clock) setMonitoringClockJump() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	isMonitoring := c.mu.isMonitoringClockJumps
+	c.mu.isMonitoringClockJumps = true
+	return isMonitoring
 }

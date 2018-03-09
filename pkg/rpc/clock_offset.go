@@ -236,8 +236,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 }
 
 func (r RemoteOffset) isHealthy(ctx context.Context, maxOffset time.Duration) bool {
-	// Tolerate up to 80% of the maximum offset.
-	toleratedOffset := maxOffset * 4 / 5
+	toleratedOffset := hlc.ToleratedOffset(maxOffset)
 
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
