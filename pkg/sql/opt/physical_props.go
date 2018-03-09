@@ -167,7 +167,7 @@ type LabeledColumn struct {
 
 // Ordering defines the order of rows provided or required by an operator. A
 // negative value indicates descending order on the column index "-(value)".
-type Ordering []ColumnIndex
+type Ordering []ColumnIndexAndDir
 
 // Defined is true if a particular row ordering is required or provided.
 func (o Ordering) Defined() bool {

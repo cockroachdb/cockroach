@@ -102,7 +102,7 @@ func (f physicalPropsFactory) canProvideOrdering(ev ExprView, required opt.Order
 		ordering := make(opt.Ordering, primary.ColumnCount())
 		for i := 0; i < primary.ColumnCount(); i++ {
 			idxCol := primary.Column(i)
-			ordering[i] = ev.Metadata().TableColumn(tblIdx, idxCol.Ordinal)
+			ordering[i] = opt.ColumnIndexAndDir(ev.Metadata().TableColumn(tblIdx, idxCol.Ordinal))
 			if idxCol.Descending {
 				// Negative metadata column index indicates descending order.
 				ordering[i] = -ordering[i]

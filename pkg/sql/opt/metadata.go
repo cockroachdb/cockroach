@@ -27,6 +27,10 @@ import (
 // for Metadata for more details.
 type ColumnIndex int32
 
+// ColumnIndexAndDir is like ColumnIndex, except that it can be negative to
+// indicate a reverse ordering on that column.
+type ColumnIndexAndDir int32
+
 // TableIndex uniquely identifies the usage of a table within the scope of a
 // query. The indexes of its columns start at the table index and proceed
 // sequentially from there. See the comment for Metadata for more details.

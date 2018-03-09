@@ -135,7 +135,7 @@ func (b *Builder) buildOrdering(
 
 	// Add the new columns to the ordering.
 	for i := start; i < len(orderByScope.cols); i++ {
-		index := orderByScope.cols[i].index
+		index := opt.ColumnIndexAndDir(orderByScope.cols[i].index)
 		if order.Direction == tree.Descending {
 			index = -index
 		}
