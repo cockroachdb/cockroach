@@ -106,6 +106,17 @@ var (
 		"If enabled, forward clock jumps > max_offset/2 will cause a panic.",
 		false,
 	)
+
+	persistHLCUpperBoundInterval = settings.RegisterDurationSetting(
+		"server.clock.persist_upper_bound_interval",
+		"the interval between persisting the wall time upper bound of the clock. The clock "+
+			"does not generate a wall time greater than the persisted timestamp and will panic if "+
+			"it sees a wall time greater than this value. When cockroach starts, it waits for the "+
+			"wall time to catch-up till this persisted timestamp. This guarantees monotonic wall "+
+			"time across server restarts. Not setting this or setting a value of 0 disables this "+
+			"feature.",
+		0,
+	)
 )
 
 // Server is the cockroach server node.
@@ -722,6 +733,192 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
 	log.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
 }
 
+// ensureClockMonotonicity sleeps till the wall time reaches
+// prevHLCUpperBound. prevHLCUpperBound > 0 implies we need to guarantee HLC
+// monotonicity across server restarts. prevHLCUpperBound is the last
+// successfully persisted timestamp greater then any wall time used by the
+// server.
+//
+// If prevHLCUpperBound is 0, the function sleeps up to max offset
+func ensureClockMonotonicity(
+	ctx context.Context,
+	clock *hlc.Clock,
+	startTime time.Time,
+	prevHLCUpperBound int64,
+	sleepUntilFn func(until int64, currTime func() int64),
+) {
+	var sleepUntil int64
+	if prevHLCUpperBound != 0 {
+		// Sleep until previous HLC upper bound to ensure wall time monotonicity
+		sleepUntil = prevHLCUpperBound + 1
+	} else {
+		// Previous HLC Upper bound is not known
+		// We might have to sleep a bit to protect against this node producing non-
+		// monotonic timestamps. Before restarting, its clock might have been driven
+		// by other nodes' fast clocks, but when we restarted, we lost all this
+		// information. For example, a client might have written a value at a
+		// timestamp that's in the future of the restarted node's clock, and if we
+		// don't do something, the same client's read would not return the written
+		// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
+		// than MaxOffset in the future (assuming that MaxOffset was not changed, see
+		// #9733).
+		//
+		// As an optimization for tests, we don't sleep if all the stores are brand
+		// new. In this case, the node will not serve anything anyway until it
+		// synchronizes with other nodes.
+
+		// Don't have to sleep for monotonicity when using clockless reads
+		// (nor can we, for we would sleep forever).
+		if maxOffset := clock.MaxOffset(); maxOffset != timeutil.ClocklessMaxOffset {
+			sleepUntil = startTime.UnixNano() + int64(maxOffset) + 1
+		}
+	}
+
+	currentWallTimeFn := func() int64 { /* function to report current time */
+		return clock.Now().WallTime
+	}
+	currentWallTime := currentWallTimeFn()
+	delta := time.Duration(sleepUntil - currentWallTime)
+	if delta > 0 {
+		log.Infof(
+			ctx,
+			"Sleeping till wall time %v to catches up to %v to ensure monotonicity. Delta: %v",
+			currentWallTime,
+			sleepUntil,
+			delta,
+		)
+		sleepUntilFn(sleepUntil, currentWallTimeFn)
+	}
+}
+
+// periodicallyPersistHLCUpperBound periodically persists an upper bound of
+// the HLC's wall time. The interval for persisting is read from
+// persistHLCUpperBoundIntervalCh. An interval of 0 disables persisting.
+//
+// persistHLCUpperBoundFn is used to persist the hlc upper bound, and should
+// return an error if the persist fails.
+//
+// tickerFn is used to create the ticker used for persisting
+//
+// tickCallback is called whenever a tick is processed
+func periodicallyPersistHLCUpperBound(
+	clock *hlc.Clock,
+	persistHLCUpperBoundIntervalCh chan time.Duration,
+	persistHLCUpperBoundFn func(int64) error,
+	tickerFn func(d time.Duration) *time.Ticker,
+	stopCh <-chan struct{},
+	tickCallback func(),
+) {
+	// Create a ticker which can be used in selects.
+	// This ticker is turned on / off based on persistHLCUpperBoundIntervalCh
+	ticker := tickerFn(time.Hour)
+	ticker.Stop()
+
+	// persistInterval is the interval used for persisting the
+	// an upper bound of the HLC
+	var persistInterval time.Duration
+	var ok bool
+
+	persistHLCUpperBound := func() {
+		if err := clock.RefreshHLCUpperBound(
+			persistHLCUpperBoundFn,
+			int64(persistInterval*3), /* delta to compute upper bound */
+		); err != nil {
+			log.Fatalf(
+				context.Background(),
+				"error persisting HLC upper bound: %v",
+				err,
+			)
+		}
+	}
+
+	for {
+		select {
+		case persistInterval, ok = <-persistHLCUpperBoundIntervalCh:
+			ticker.Stop()
+			if !ok {
+				return
+			}
+
+			if persistInterval > 0 {
+				ticker = tickerFn(persistInterval)
+				persistHLCUpperBound()
+				log.Info(context.Background(), "persisting HLC upper bound is enabled")
+			} else {
+				if err := clock.ResetHLCUpperBound(persistHLCUpperBoundFn); err != nil {
+					log.Fatalf(
+						context.Background(),
+						"error resetting hlc upper bound: %v",
+						err,
+					)
+				}
+				log.Info(context.Background(), "persisting HLC upper bound is disabled")
+			}
+
+		case <-ticker.C:
+			if persistInterval > 0 {
+				persistHLCUpperBound()
+			}
+
+		case <-stopCh:
+			ticker.Stop()
+			return
+		}
+
+		if tickCallback != nil {
+			tickCallback()
+		}
+	}
+}
+
+// startPersistingHLCUpperBound starts a goroutine to persist an upper bound
+// to the HLC.
+//
+// persistHLCUpperBoundFn is used to persist upper bound of the HLC, and should
+// return an error if the persist fails
+//
+// tickerFn is used to create a new ticker
+//
+// tickCallback is called whenever persistHLCUpperBoundCh or a ticker tick is
+// processed
+func (s *Server) startPersistingHLCUpperBound(
+	hlcUpperBoundExists bool,
+	persistHLCUpperBoundFn func(int64) error,
+	tickerFn func(d time.Duration) *time.Ticker,
+) {
+	persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
+	persistHLCUpperBoundInterval.SetOnChange(&s.st.SV, func() {
+		persistHLCUpperBoundIntervalCh <- persistHLCUpperBoundInterval.Get(&s.st.SV)
+	})
+
+	if hlcUpperBoundExists {
+		// The feature to persist upper bounds to wall times is enabled.
+		// Persist a new upper bound to continue guaranteeing monotonicity
+		// Going forward the goroutine launched below will take over persisting
+		// the upper bound
+		if err := s.clock.RefreshHLCUpperBound(
+			persistHLCUpperBoundFn,
+			int64(5*time.Second),
+		); err != nil {
+			log.Fatal(context.TODO(), err)
+		}
+	}
+
+	s.stopper.RunWorker(
+		context.TODO(),
+		func(context.Context) {
+			periodicallyPersistHLCUpperBound(
+				s.clock,
+				persistHLCUpperBoundIntervalCh,
+				persistHLCUpperBoundFn,
+				tickerFn,
+				s.stopper.ShouldStop(),
+				nil, /* tick callback */
+			)
+		},
+	)
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1070,30 +1267,25 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			msg)
 	}).Stop()
 
+	var hlcUpperBoundExists bool
 	if len(bootstrappedEngines) > 0 {
-		// We might have to sleep a bit to protect against this node producing non-
-		// monotonic timestamps. Before restarting, its clock might have been driven
-		// by other nodes' fast clocks, but when we restarted, we lost all this
-		// information. For example, a client might have written a value at a
-		// timestamp that's in the future of the restarted node's clock, and if we
-		// don't do something, the same client's read would not return the written
-		// value. So, we wait up to MaxOffset; we couldn't have served timestamps more
-		// than MaxOffset in the future (assuming that MaxOffset was not changed, see
-		// #9733).
-		//
-		// As an optimization for tests, we don't sleep if all the stores are brand
-		// new. In this case, the node will not serve anything anyway until it
-		// synchronizes with other nodes.
-		var sleepDuration time.Duration
-		// Don't have to sleep for monotonicity when using clockless reads
-		// (nor can we, for we would sleep forever).
-		if maxOffset := s.clock.MaxOffset(); maxOffset != timeutil.ClocklessMaxOffset {
-			sleepDuration = maxOffset - timeutil.Since(startTime)
+		hlcUpperBound, err := storage.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
+		if err != nil {
+			log.Fatal(ctx, err)
 		}
-		if sleepDuration > 0 {
-			log.Infof(ctx, "sleeping for %s to guarantee HLC monotonicity", sleepDuration)
-			time.Sleep(sleepDuration)
+
+		if hlcUpperBound > 0 {
+			hlcUpperBoundExists = true
 		}
+
+		ensureClockMonotonicity(
+			ctx,
+			s.clock,
+			startTime,
+			hlcUpperBound,
+			timeutil.SleepUntil,
+		)
+
 	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
 		// If the _unfiltered_ list of hosts from the --join flag is
 		// empty, then this node can bootstrap a new cluster. We disallow
@@ -1166,6 +1358,14 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		return err
 	}
 	log.Event(ctx, "started node")
+	s.startPersistingHLCUpperBound(
+		hlcUpperBoundExists,
+		func(t int64) error { /* function to persist upper bound of HLC to all stores */
+			return s.node.SetHLCUpperBound(context.Background(), t)
+		},
+		time.NewTicker,
+	)
+
 	s.execCfg.DistSQLPlanner.SetNodeDesc(s.node.Descriptor)
 
 	// Cluster ID should have been determined by this point.
