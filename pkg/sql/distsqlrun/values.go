@@ -113,7 +113,7 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		if row == nil && meta == nil {
 			if len(v.data) == 0 {
-				return nil, nil
+				return nil, v.producerMeta(nil /* err */)
 			}
 			// Push a chunk of data to the stream decoder.
 			m := &ProducerMessage{}
