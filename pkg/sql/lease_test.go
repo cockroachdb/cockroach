@@ -852,31 +852,26 @@ func TestTxnObeysTableModificationTime(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
-CREATE TABLE t.timestamp (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
 `); err != nil {
 		t.Fatal(err)
 	}
 
-	tx, err := sqlDB.Begin()
+	// A read-write transaction that uses the old version of the descriptor.
+	txReadWrite, err := sqlDB.Begin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Set the isolation level to Snapshot. This is because the test wants to
-	// check that this "old" transaction will not be allowed to commit at a new
-	// timestamp because of the "deadline" set according to its lease. So, the
-	// test will make sure that the txn is pushed. If the transaction were
-	// Serializable, then the push would cause it to restart regardless of the
-	// deadline.
-	if _, err := tx.Exec("SET TRANSACTION ISOLATION LEVEL SNAPSHOT"); err != nil {
+
+	// A read-only transaction that uses the old version of the descriptor.
+	txRead, err := sqlDB.Begin()
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Insert an entry so that the transaction is guaranteed to be
-	// assigned a timestamp.
-	if _, err := tx.Exec(`
-INSERT INTO t.timestamp VALUES ('a', 'b');
-`); err != nil {
+	// A write-only transaction that uses the old version of the descriptor.
+	txWrite, err := sqlDB.Begin()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -885,36 +880,114 @@ INSERT INTO t.timestamp VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 
-	rows, err := tx.Query(`SELECT * FROM t.kv`)
+	rows, err := txReadWrite.Query(`SELECT * FROM t.kv`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		// The transaction is unable to see column m.
-		var k, v, m string
-		if err := rows.Scan(&k, &v, &m); !testutils.IsError(
-			err, "expected 2 destination arguments in Scan, not 3",
-		) {
-			t.Fatalf("err = %v", err)
-		}
-		err = rows.Scan(&k, &v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if k != "a" || v != "b" {
-			t.Fatalf("didn't find expected row: %s %s", k, v)
+
+	checkSelectResults := func(rows *gosql.Rows) {
+		defer func() {
+			if err := rows.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+		for rows.Next() {
+			// The transaction is unable to see column m.
+			var k, v, m string
+			if err := rows.Scan(&k, &v, &m); !testutils.IsError(
+				err, "expected 2 destination arguments in Scan, not 3",
+			) {
+				t.Fatalf("err = %v", err)
+			}
+			err = rows.Scan(&k, &v)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if k != "a" || v != "b" {
+				t.Fatalf("didn't find expected row: %s %s", k, v)
+			}
 		}
 	}
 
-	// This INSERT will cause the transaction to be pushed past its deadline,
-	// which will be detected when we attempt to Commit() below.
-	if _, err := tx.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+	checkSelectResults(rows)
+
+	rows, err = txRead.Query(`SELECT * FROM t.kv`)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := tx.Commit(); !testutils.IsError(err, "transaction deadline exceeded") {
+	checkSelectResults(rows)
+
+	// Read-only transaction commits just fine.
+	if err := txRead.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// This INSERT will cause the transaction to be pushed,
+	// which will be detected when we attempt to Commit() below.
+	if _, err := txReadWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
+
+	// The transaction read at one timestamp and wrote at another so it
+	// has to be restarted because the spans read were modified by the backfill.
+	if err := txReadWrite.Commit(); !testutils.IsError(err,
+		"TransactionRetryError: retry txn \\(RETRY_SERIALIZABLE\\)") {
 		t.Fatalf("err = %v", err)
+	}
+
+	// This INSERT will cause the transaction to be pushed transparently,
+	// which will be detected when we attempt to Commit() below only because
+	// a deadline has been set.
+	if _, err := txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
+
+	deadlineError := "TransactionStatusError: transaction deadline exceeded"
+	if err := txWrite.Commit(); !testutils.IsError(err, deadlineError) {
+		t.Fatalf("err = %v", err)
+	}
+
+	// Test the deadline exceeded error with a CREATE/DROP INDEX.
+	schemaChanges := []struct{ sql string }{
+		{`CREATE INDEX foo on t.kv (v)`},
+		{`DROP INDEX t.kv@foo`},
+	}
+
+	for _, change := range schemaChanges {
+
+		txWrite, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+		txUpdate, err := sqlDB.Begin()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Modify the table descriptor.
+		if _, err := sqlDB.Exec(change.sql); err != nil {
+			t.Fatal(err)
+		}
+
+		// This INSERT will cause the transaction to be pushed transparently,
+		// which will be detected when we attempt to Commit() below only because
+		// a deadline has been set.
+		if _, err := txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := txWrite.Commit(); !testutils.IsError(err, deadlineError) {
+			t.Fatalf("err = %v", err)
+		}
+
+		if _, err := txUpdate.Exec(`UPDATE t.kv SET v = 'c' WHERE k = 'a';`); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := txUpdate.Commit(); !testutils.IsError(err, deadlineError) {
+			t.Fatalf("err = %v", err)
+		}
 	}
 }
 
