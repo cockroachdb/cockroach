@@ -30,7 +30,7 @@ func init() {
 	// This test imports a fully-populated Bank table. It then creates an empty
 	// Bank schema. Finally, it performs a series of `INSERT ... SELECT ...`
 	// statements to copy all data from the first table into the second table.
-	runCopy := func(t *test, rows, nodes int, inTxn bool) {
+	runCopy := func(ctx context.Context, t *test, c *cluster, rows int, inTxn bool) {
 		// payload is the size of the payload column for each row in the Bank
 		// table. If this is adjusted, a new fixture may need to be generated.
 		const payload = 100
@@ -40,10 +40,6 @@ func init() {
 		// in the table along with the size of each row's associated KV key.
 		const rowOverheadEstimate = 160
 		const rowEstimate = rowOverheadEstimate + payload
-
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes)
-		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
@@ -136,14 +132,17 @@ func init() {
 		m.Wait()
 	}
 
-	rows := int(1E7)
-	nodes := 9
+	const rows = int(1E7)
+	const numNodes = 9
 
 	for _, inTxn := range []bool{true, false} {
 		inTxn := inTxn
-		tests.Add(fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, nodes, inTxn),
-			func(t *test) {
-				runCopy(t, rows, nodes, inTxn)
-			})
+		tests.Add(testSpec{
+			Name:  fmt.Sprintf("copy/bank/rows=%d,nodes=%d,txn=%t", rows, numNodes, inTxn),
+			Nodes: nodes(numNodes),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runCopy(ctx, t, c, rows, inTxn)
+			},
+		})
 	}
 }

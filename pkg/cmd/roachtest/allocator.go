@@ -27,18 +27,14 @@ import (
 )
 
 func init() {
-	runAllocator := func(t *test, start, end int, maxStdDev float64) {
+	runAllocator := func(ctx context.Context, t *test, c *cluster, start int, maxStdDev float64) {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
-
-		ctx := context.Background()
-		c := newCluster(ctx, t, end, "--vmodule", "allocator=5,allocator_scorer=5,replicate_queue=5")
-		defer c.Destroy(ctx)
-
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 
 		// Start the first `start` nodes and restore the fixture
-		c.Start(ctx, c.Range(1, start))
+		args := startArgs("--args=--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5")
+		c.Start(ctx, c.Range(1, start), args)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
@@ -53,10 +49,10 @@ func init() {
 		m.Wait()
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
-		c.Start(ctx, c.Range(start+1, end))
+		c.Start(ctx, c.Range(start+1, c.nodes), args)
 
 		c.Run(ctx, 1, `./workload init kv --drop`)
-		for node := 1; node <= end; node++ {
+		for node := 1; node <= c.nodes; node++ {
 			node := node
 			// TODO(dan): Ideally, the test would fail if this queryload failed,
 			// but we can't put it in monitor as-is because the test deadlocks.
@@ -79,8 +75,20 @@ func init() {
 		m.Wait()
 	}
 
-	tests.Add(`upreplicate/1to3`, func(t *test) { runAllocator(t, 1, 3, 10.0) })
-	tests.Add(`rebalance/3to5`, func(t *test) { runAllocator(t, 3, 5, 42.0) })
+	tests.Add(testSpec{
+		Name:  `upreplicate/1to3`,
+		Nodes: nodes(3),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runAllocator(ctx, t, c, 1, 10.0)
+		},
+	})
+	tests.Add(testSpec{
+		Name:  `rebalance/3to5`,
+		Nodes: nodes(5),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runAllocator(ctx, t, c, 3, 42.0)
+		},
+	})
 }
 
 // printRebalanceStats prints the time it took for rebalancing to finish and the

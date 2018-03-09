@@ -22,38 +22,38 @@ import (
 )
 
 func init() {
-	tests.Add(`backup2TB`, func(t *test) {
-		const nodes = 10
+	tests.Add(testSpec{
+		Name:  `backup2TB`,
+		Nodes: nodes(10),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			nodes := c.nodes
 
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes)
-		defer c.Destroy(ctx)
+			c.status(`downloading store dumps`)
+			var wg sync.WaitGroup
+			for node := 1; node <= nodes; node++ {
+				node := node
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					c.Run(ctx, node, `mkdir -p /mnt/data1/cockroach`)
+					path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
+						`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
+						`stores=%d/%d.tgz`, nodes, node-1)
+					c.Run(ctx, node, `gsutil cat `+path+` | tar xvzf - -C /mnt/data1/cockroach/`)
+				}()
+			}
+			wg.Wait()
 
-		c.status(`downloading store dumps`)
-		var wg sync.WaitGroup
-		for node := 1; node <= nodes; node++ {
-			node := node
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				c.Run(ctx, node, `mkdir -p /mnt/data1/cockroach`)
-				path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
-					`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
-					`stores=%d/%d.tgz`, nodes, node-1)
-				c.Run(ctx, node, `gsutil cat `+path+` | tar xvzf - -C /mnt/data1/cockroach/`)
-			}()
-		}
-		wg.Wait()
-
-		c.Put(ctx, cockroach, "./cockroach")
-		c.Start(ctx)
-		m := newMonitor(ctx, c)
-		m.Go(func(ctx context.Context) error {
-			c.status(`running 2tb backup`)
-			c.Run(ctx, 1, `./cockroach sql --insecure -e "
+			c.Put(ctx, cockroach, "./cockroach")
+			c.Start(ctx)
+			m := newMonitor(ctx, c)
+			m.Go(func(ctx context.Context) error {
+				c.status(`running 2tb backup`)
+				c.Run(ctx, 1, `./cockroach sql --insecure -e "
 				BACKUP workload.bank TO 'gs://cockroachdb-backup-testing/`+c.name+`'"`)
-			return nil
-		})
-		m.Wait()
+				return nil
+			})
+			m.Wait()
+		},
 	})
 }

@@ -31,11 +31,8 @@ import (
 )
 
 func init() {
-	runVersion := func(t *test, version string, nodes int) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes+1)
-		defer c.Destroy(ctx)
-
+	runVersion := func(ctx context.Context, t *test, c *cluster, version string) {
+		nodes := c.nodes - 1
 		goos := ifLocal(runtime.GOOS, "linux")
 
 		b, err := binfetcher.Download(ctx, binfetcher.Options{
@@ -211,11 +208,13 @@ func init() {
 	}
 
 	const version = "v1.1.5"
-	for _, nodes := range []int{3, 5} {
-		tests.Add(
-			fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, nodes),
-			func(t *test) {
-				runVersion(t, version, nodes)
-			})
+	for _, n := range []int{3, 5} {
+		tests.Add(testSpec{
+			Name:  fmt.Sprintf("version/mixedWith=%s/nodes=%d", version, n),
+			Nodes: nodes(n + 1),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runVersion(ctx, t, c, version)
+			},
+		})
 	}
 }
