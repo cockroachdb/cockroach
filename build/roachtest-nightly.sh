@@ -42,9 +42,9 @@ run go get -u -v github.com/cockroachdb/roachprod
 run git -C "$(go env GOPATH)/src/github.com/cockroachdb/roachprod" rev-parse HEAD
 if_tc tc_end_block "Install roachprod"
 
-if_tc tc_start_block "Compile Workload"
+if_tc tc_start_block "Compile workload and roachtest"
 run make bin/roachtest bin/workload
-if_tc tc_end_block "Compile Workload"
+if_tc tc_end_block "Compile workload and roachtest"
 
 if_tc tc_start_block "Run roachtest"
 chmod +x "$PWD/cockroach-linux-2.6.32-gnu-amd64"
