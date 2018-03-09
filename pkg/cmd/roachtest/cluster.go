@@ -51,6 +51,7 @@ var (
 	clusterID   string
 	clusterWipe bool
 	username    = os.Getenv("ROACHPROD_USER")
+	zones       string
 )
 
 func ifLocal(trueVal, falseVal string) string {
@@ -326,6 +327,9 @@ func newCluster(ctx context.Context, t testI, nodes int, args ...interface{}) *c
 		sargs := []string{"roachprod", "create", c.name, "-n", fmt.Sprint(nodes)}
 		for _, arg := range args {
 			sargs = append(sargs, fmt.Sprint(arg))
+		}
+		if zones != "" {
+			sargs = append(sargs, "--gce-zones="+zones)
 		}
 
 		c.status("creating cluster")
