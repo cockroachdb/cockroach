@@ -1,11 +1,7 @@
 # tests adapted from logictest -- aggregate
 
 exec-raw
-CREATE DATABASE t
-----
-
-exec-raw
-CREATE TABLE t.kv (
+CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
   w INT,
@@ -14,7 +10,7 @@ CREATE TABLE t.kv (
 ----
 
 exec-explain
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM t.kv
+SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM kv
 ----
 group           0  group   ·             ·                   (column6, column8, column10, column12, column14, column16, column18, column20, column22, column24, column26)  ·
  │              0  ·       aggregate 0   min(column5)        ·                                                                                                             ·
@@ -45,32 +41,32 @@ group           0  group   ·             ·                   (column6, column8
 ·               2  ·       spans         ALL                 ·                                                                                                             ·
 
 exec
-SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM t.kv
+SELECT MIN(1), MAX(1), COUNT(1), SUM_INT(1), AVG(1), SUM(1), STDDEV(1), VARIANCE(1), BOOL_AND(true), BOOL_AND(false), XOR_AGG(b'\x01') FROM kv
 ----
 column6:int  column8:int  column10:int  column12:int  column14:decimal  column16:decimal  column18:decimal  column20:decimal  column22:bool  column24:bool  column26:bytes
 NULL         NULL         0             NULL          NULL              NULL              NULL              NULL              NULL           NULL           NULL
 
 # Aggregate functions return NULL if there are no rows.
 exec
-SELECT ARRAY_AGG(1) FROM t.kv
+SELECT ARRAY_AGG(1) FROM kv
 ----
 column6:int[]
 NULL
 
 exec
-SELECT JSON_AGG(1) FROM t.kv
+SELECT JSON_AGG(1) FROM kv
 ----
 column6:jsonb
 NULL
 
 exec
-SELECT JSONB_AGG(1) FROM t.kv
+SELECT JSONB_AGG(1) FROM kv
 ----
 column6:jsonb
 NULL
 
 exec-explain
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM t.kv
+SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 group           0  group   ·             ·                   (column5, column6, column7, column9, column10, column11, column12, column13, column15, column17, column19)  ·
  │              0  ·       aggregate 0   min(kv.v)           ·                                                                                                           ·
@@ -101,25 +97,25 @@ group           0  group   ·             ·                   (column5, column6
 ·               2  ·       spans         ALL                 ·                                                                                                           ·
 
 exec
-SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM t.kv
+SELECT MIN(v), MAX(v), COUNT(v), SUM_INT(1), AVG(v), SUM(v), STDDEV(v), VARIANCE(v), BOOL_AND(v = 1), BOOL_AND(v = 1), XOR_AGG(s::bytes) FROM kv
 ----
 column5:int  column6:int  column7:int  column9:int  column10:decimal  column11:decimal  column12:decimal  column13:decimal  column15:bool  column17:bool  column19:bytes
 NULL         NULL         0            NULL         NULL              NULL              NULL              NULL              NULL           NULL           NULL
 
 exec
-SELECT ARRAY_AGG(v) FROM t.kv
+SELECT ARRAY_AGG(v) FROM kv
 ----
 column5:int[]
 NULL
 
 exec
-SELECT JSON_AGG(v) FROM t.kv
+SELECT JSON_AGG(v) FROM kv
 ----
 column5:jsonb
 NULL
 
 exec
-SELECT JSONB_AGG(v) FROM t.kv
+SELECT JSONB_AGG(v) FROM kv
 ----
 column5:jsonb
 NULL
@@ -249,7 +245,7 @@ ARRAY[NULL]
 # The following test *must* occur before the first INSERT to the tables,
 # so that it can observe an empty table.
 exec
-SELECT COUNT(*), COALESCE(MAX(k), 1) FROM t.kv
+SELECT COUNT(*), COALESCE(MAX(k), 1) FROM kv
 ----
 column5:int  column7:int
 0            1
@@ -262,7 +258,7 @@ column5:int  column7:int
 #0
 
 exec-raw
-INSERT INTO t.kv VALUES
+INSERT INTO kv VALUES
 (1, 2, 3, 'a'),
 (3, 4, 5, 'a'),
 (5, NULL, 5, NULL),
@@ -274,33 +270,33 @@ INSERT INTO t.kv VALUES
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 # NB: The XOR result is 00 because \x01 is XOR'd an even number of times.
 exec
-SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM t.kv
+SELECT MIN(1), COUNT(1), MAX(1), SUM_INT(1), AVG(1)::float, SUM(1), STDDEV(1), VARIANCE(1)::float, BOOL_AND(true), BOOL_OR(true), TO_HEX(XOR_AGG(b'\x01')) FROM kv
 ----
 column6:int  column8:int  column10:int  column12:int  column15:float  column17:decimal  column19:decimal  column22:float  column24:bool  column26:bool  column29:string
 1            6            1             6             1.0             6                 0                 0.0             true           true           00
 
 # Aggregate functions triggers aggregation and computation for every row even when applied to a constant.
 exec
-SELECT ARRAY_AGG(1) FROM t.kv
+SELECT ARRAY_AGG(1) FROM kv
 ----
 column6:int[]
 ARRAY[1,1,1,1,1,1]
 
 exec
-SELECT JSON_AGG(1) FROM t.kv
+SELECT JSON_AGG(1) FROM kv
 ----
 column6:jsonb
 '[1, 1, 1, 1, 1, 1]'
 
 exec
-SELECT JSONB_AGG(1) FROM t.kv
+SELECT JSONB_AGG(1) FROM kv
 ----
 column6:jsonb
 '[1, 1, 1, 1, 1, 1]'
 
 # Even with no aggregate functions, grouping occurs in the presence of GROUP BY.
 exec rowsort
-SELECT 1 FROM t.kv GROUP BY v
+SELECT 1 FROM kv GROUP BY v
 ----
 column5:int
 1
@@ -309,13 +305,13 @@ column5:int
 
 # Presence of HAVING triggers aggregation, reducing results to one row (even without GROUP BY).
 exec
-SELECT 3 FROM t.kv HAVING TRUE
+SELECT 3 FROM kv HAVING TRUE
 ----
 column5:int
 3
 
 exec rowsort
-SELECT COUNT(*), k FROM t.kv GROUP BY k
+SELECT COUNT(*), k FROM kv GROUP BY k
 ----
 column5:int  k:int
 1            1
@@ -326,7 +322,7 @@ column5:int  k:int
 1            8
 
 exec-explain
-SELECT COUNT(*), k FROM t.kv GROUP BY 2
+SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
 render               0  render  ·            ·             (column5, k)    ·
  │                   0  ·       render 0     agg0          ·               ·
@@ -343,7 +339,7 @@ render               0  render  ·            ·             (column5, k)    ·
 
 # GROUP BY specified using column index works.
 exec rowsort
-SELECT COUNT(*), k FROM t.kv GROUP BY 2
+SELECT COUNT(*), k FROM kv GROUP BY 2
 ----
 column5:int  k:int
 1            1
@@ -355,7 +351,7 @@ column5:int  k:int
 
 # Grouping by more than one column works.
 exec rowsort
-SELECT v, COUNT(*), w FROM t.kv GROUP BY v, w
+SELECT v, COUNT(*), w FROM kv GROUP BY v, w
 ----
 v:int  column5:int  w:int
 NULL   1            5
@@ -366,7 +362,7 @@ NULL   1            5
 
 # Grouping by more than one column using column numbers works.
 exec rowsort
-SELECT v, COUNT(*), w FROM t.kv GROUP BY 1, 3
+SELECT v, COUNT(*), w FROM kv GROUP BY 1, 3
 ----
 v:int  column5:int  w:int
 NULL   1            5
@@ -377,7 +373,7 @@ NULL   1            5
 
 # Selecting and grouping on a function expression works.
 exec rowsort
-SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY UPPER(s)
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY UPPER(s)
 ----
 column6:int  column5:string
 1            NULL
@@ -386,20 +382,20 @@ column6:int  column5:string
 
 # Selecting and grouping on a constant works.
 exec
-SELECT COUNT(*) FROM t.kv GROUP BY 1+2
+SELECT COUNT(*) FROM kv GROUP BY 1+2
 ----
 column6:int
 6
 
 exec
-SELECT COUNT(*) FROM t.kv GROUP BY length('abc')
+SELECT COUNT(*) FROM kv GROUP BY length('abc')
 ----
 column6:int
 6
 
 # Selecting a function of something which is grouped works.
 exec rowsort
-SELECT COUNT(*), UPPER(s) FROM t.kv GROUP BY s
+SELECT COUNT(*), UPPER(s) FROM kv GROUP BY s
 ----
 column5:int  column6:string
 1            NULL
@@ -409,7 +405,7 @@ column5:int  column6:string
 
 # Selecting and grouping on a more complex expression works.
 exec-explain
-SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
+SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
 render               0  render  ·            ·             (column6, column5)  ·
  │                   0  ·       render 0     agg0          ·                   ·
@@ -425,7 +421,7 @@ render               0  render  ·            ·             (column6, column5) 
 ·                    3  ·       spans        ALL           ·                   ·
 
 exec rowsort
-SELECT COUNT(*), k+v FROM t.kv GROUP BY k+v
+SELECT COUNT(*), k+v FROM kv GROUP BY k+v
 ----
 column6:int  column5:int
 1            NULL
@@ -437,7 +433,7 @@ column6:int  column5:int
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 exec-explain
-SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
+SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 render               0  render  ·            ·                (column5, column6)      ·
  │                   0  ·       render 0     agg0             ·                       ·
@@ -455,7 +451,7 @@ render               0  render  ·            ·                (column5, column
 ·                    3  ·       spans        ALL              ·                       ·
 
 exec rowsort
-SELECT COUNT(*), k+v FROM t.kv GROUP BY k, v
+SELECT COUNT(*), k+v FROM kv GROUP BY k, v
 ----
 column5:int  column6:int
 1            NULL
@@ -467,7 +463,7 @@ column5:int  column6:int
 
 # Test case from #2761.
 exec rowsort
-SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM t.kv GROUP BY kv.v + kv.w
+SELECT count(kv.k) AS count_1, kv.v + kv.w AS lx FROM kv GROUP BY kv.v + kv.w
 ----
 count_1:int  lx:int
 1            NULL
@@ -477,7 +473,7 @@ count_1:int  lx:int
 2            5
 
 exec rowsort
-SELECT s, COUNT(*) FROM t.kv GROUP BY s HAVING COUNT(*) > 1
+SELECT s, COUNT(*) FROM kv GROUP BY s HAVING COUNT(*) > 1
 ----
 s:string  column5:int
 a         2
@@ -485,19 +481,19 @@ b         2
 
 #TODO(radu): DISTINCT not supported yet.
 #exec rowsort
-#SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM t.kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
+#SELECT UPPER(s), COUNT(DISTINCT s), COUNT(DISTINCT UPPER(s)) FROM kv GROUP BY UPPER(s) HAVING COUNT(DISTINCT s) > 1
 #----
 #column5:string  column6:int  column8:int
 #A               3            3
 #B               2            2
 
 exec rowsort
-SELECT MAX(k), MIN(v) FROM t.kv HAVING MIN(v) > 2
+SELECT MAX(k), MIN(v) FROM kv HAVING MIN(v) > 2
 ----
 column6:int  column5:int
 
 exec rowsort
-SELECT MAX(k), MIN(v) FROM t.kv HAVING MAX(v) > 2
+SELECT MAX(k), MIN(v) FROM kv HAVING MAX(v) > 2
 ----
 column6:int  column7:int
 8            2
@@ -509,7 +505,7 @@ column1:int
 1
 
 exec
-SELECT COUNT(k) FROM t.kv
+SELECT COUNT(k) FROM kv
 ----
 column5:int
 6
@@ -521,42 +517,42 @@ column2:int
 1
 
 exec
-SELECT COUNT(1) FROM t.kv
+SELECT COUNT(1) FROM kv
 ----
 column6:int
 6
 
 # TODO(radu): ORDER BY not implemented yet.
 #exec
-#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY v
+#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v
 #----
 #NULL 1
 #2 3
 #4 2
 #
 #exec
-#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY v DESC
+#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v DESC
 #----
 #4 2
 #2 3
 #NULL 1
 #
 #exec
-#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY COUNT(k) DESC
+#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k) DESC
 #----
 #2 3
 #4 2
 #NULL 1
 #
 #exec
-#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY v-COUNT(k)
+#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY v-COUNT(k)
 #----
 #NULL 1
 #2 3
 #4 2
 #
 #exec
-#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY 1 DESC
+#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY 1 DESC
 #----
 #4 2
 #2 3
@@ -564,25 +560,25 @@ column6:int
 
 # TODO(radu): column names should be "count".
 exec
-SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM t.kv
+SELECT COUNT(*), COUNT(k), COUNT(kv.v) FROM kv
 ----
 column5:int  column6:int  column7:int
 6            6            5
 
 exec
-SELECT COUNT(kv.*) FROM t.kv
+SELECT COUNT(kv.*) FROM kv
 ----
 column6:int
 6
 
 # TODO(radu): DISTINCT not supported yet.
 #exec
-#SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM t.kv
+#SELECT COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv
 #----
 #6 2 2
 #
 #exec rowsort
-#SELECT UPPER(s), COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM t.kv GROUP BY UPPER(s)
+#SELECT UPPER(s), COUNT(DISTINCT k), COUNT(DISTINCT v), COUNT(DISTINCT (v)) FROM kv GROUP BY UPPER(s)
 #----
 #A    3 2 2
 #B    2 1 1
@@ -591,33 +587,33 @@ column6:int
 #
 
 exec
-SELECT COUNT((k, v)) FROM t.kv
+SELECT COUNT((k, v)) FROM kv
 ----
 column6:int
 6
 
 #exec
-#SELECT COUNT(DISTINCT (k, v)) FROM t.kv
+#SELECT COUNT(DISTINCT (k, v)) FROM kv
 #----
 #6
 #
 #exec
-#SELECT COUNT(DISTINCT (k, (v))) FROM t.kv
+#SELECT COUNT(DISTINCT (k, (v))) FROM kv
 #----
 #6
 
 #TODO(radu): LIMIT not supported.
 #exec
-#SELECT COUNT((k, v)) FROM t.kv LIMIT 1
+#SELECT COUNT((k, v)) FROM kv LIMIT 1
 #----
 #6
 #
 #exec
-#SELECT COUNT((k, v)) FROM t.kv OFFSET 1
+#SELECT COUNT((k, v)) FROM kv OFFSET 1
 #----
 
 exec
-SELECT COUNT(k)+COUNT(kv.v) FROM t.kv
+SELECT COUNT(k)+COUNT(kv.v) FROM kv
 ----
 column7:int
 11
@@ -629,61 +625,61 @@ column2:int  column4:int
 0            1
 
 exec
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv
 ----
 column5:int  column6:int  column7:int  column8:int
 1            8            2            4
 
 # Even if no input rows match, we expect a row (of nulls).
 exec
-SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM t.kv WHERE k > 8
+SELECT MIN(k), MAX(k), MIN(v), MAX(v) FROM kv WHERE k > 8
 ----
 column5:int  column6:int  column7:int  column8:int
 NULL         NULL         NULL         NULL
 
 exec
-SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM t.kv ORDER BY k)
+SELECT ARRAY_AGG(k), ARRAY_AGG(s) FROM (SELECT k, s FROM kv ORDER BY k)
 ----
 column5:int[]       column6:string[]
 ARRAY[1,3,5,6,7,8]  ARRAY['a','a',NULL,'b','b','A']
 
 exec
-SELECT array_agg(s) FROM t.kv WHERE s IS NULL
+SELECT array_agg(s) FROM kv WHERE s IS NULL
 ----
 column5:string[]
 ARRAY[NULL]
 
 exec
-SELECT JSON_AGG(s) FROM t.kv WHERE s IS NULL
+SELECT JSON_AGG(s) FROM kv WHERE s IS NULL
 ----
 column5:jsonb
 '[null]'
 
 exec
-SELECT JSONB_AGG(s) FROM t.kv WHERE s IS NULL
+SELECT JSONB_AGG(s) FROM kv WHERE s IS NULL
 ----
 column5:jsonb
 '[null]'
 
 exec
-SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM t.kv
+SELECT AVG(k), AVG(v), SUM(k), SUM(v) FROM kv
 ----
 column5:decimal  column6:decimal  column7:decimal  column8:decimal
 5                2.8              30               14
 
 exec
-SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM t.kv
+SELECT AVG(k::decimal), AVG(v::decimal), SUM(k::decimal), SUM(v::decimal) FROM kv
 ----
 column6:decimal  column8:decimal  column10:decimal  column12:decimal
 5                2.8              30                14
 
 #exec
-#SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM t.kv
+#SELECT AVG(DISTINCT k), AVG(DISTINCT v), SUM(DISTINCT k), SUM(DISTINCT v) FROM kv
 #----
 #5 3 30 6
 
 exec
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM t.kv
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv
 ----
 column7:decimal
 14.0
@@ -691,13 +687,13 @@ column7:decimal
 # Verify things work with distsql when some of the nodes emit no results in the
 # local stage.
 exec
-SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM t.kv WHERE w*2 = k
+SELECT AVG(k) * 2.0 + MAX(v)::DECIMAL FROM kv WHERE w*2 = k
 ----
 column7:decimal
 14.0
 
 exec-explain
-SELECT COUNT(k) FROM t.kv
+SELECT COUNT(k) FROM kv
 ----
 group           0  group   ·            ·            (column5)     ·
  │              0  ·       aggregate 0  count(kv.k)  ·             ·
@@ -708,7 +704,7 @@ group           0  group   ·            ·            (column5)     ·
 ·               2  ·       spans        ALL          ·             ·
 
 exec-explain
-SELECT COUNT(k), SUM(k), MAX(k) FROM t.kv
+SELECT COUNT(k), SUM(k), MAX(k) FROM kv
 ----
 group           0  group   ·            ·            (column5, column6, column7)  ·
  │              0  ·       aggregate 0  count(kv.k)  ·                            ·
@@ -723,7 +719,7 @@ group           0  group   ·            ·            (column5, column6, column
 ·               2  ·       spans        ALL          ·                            ·
 
 exec-raw
-CREATE TABLE t.abc (
+CREATE TABLE abc (
   a CHAR PRIMARY KEY,
   b FLOAT,
   c BOOLEAN,
@@ -732,11 +728,11 @@ CREATE TABLE t.abc (
 ----
 
 exec-raw
-INSERT INTO t.abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
+INSERT INTO abc VALUES ('one', 1.5, true, 5::decimal), ('two', 2.0, false, 1.1::decimal)
 ----
 
 exec-explain
-SELECT MIN(a) FROM t.abc
+SELECT MIN(a) FROM abc
 ----
 group           0  group   ·            ·            (column5)     ·
  │              0  ·       aggregate 0  min(abc.a)   ·             ·
@@ -747,42 +743,42 @@ group           0  group   ·            ·            (column5)     ·
 ·               2  ·       spans        ALL          ·             ·
 
 exec
-SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM t.abc
+SELECT MIN(a), MIN(b), MIN(c), MIN(d) FROM abc
 ----
 column5:string  column6:float  column7:bool  column8:decimal
 one             1.5            false         1.1
 
 exec
-SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM t.abc
+SELECT MAX(a), MAX(b), MAX(c), MAX(d) FROM abc
 ----
 column5:string  column6:float  column7:bool  column8:decimal
 two             2.0            true          5
 
 exec
-SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM t.abc
+SELECT AVG(b), SUM(b), AVG(d), SUM(d) FROM abc
 ----
 column5:float  column6:float  column7:decimal  column8:decimal
 1.75           3.5            3.05             6.1
 
 # Verify summing of intervals
 exec-raw
-CREATE TABLE t.intervals (
+CREATE TABLE intervals (
   a INTERVAL PRIMARY KEY
 )
 ----
 
 exec-raw
-INSERT INTO t.intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INTERVAL '2 year 3 months 4 days 5 seconds'), (INTERVAL '10000ms')
+INSERT INTO intervals VALUES (INTERVAL '1 year 2 months 3 days 4 seconds'), (INTERVAL '2 year 3 months 4 days 5 seconds'), (INTERVAL '10000ms')
 ----
 
 exec
-SELECT SUM(a) FROM t.intervals
+SELECT SUM(a) FROM intervals
 ----
 column2:interval
 '3y5mon7d19s'
 
 exec-raw
-CREATE TABLE t.xyz (
+CREATE TABLE xyz (
   x INT PRIMARY KEY,
   y INT,
   z FLOAT,
@@ -795,17 +791,17 @@ CREATE TABLE t.xyz (
 ----
 
 exec-raw
-INSERT INTO t.xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
+INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 ----
 
 exec
-SELECT MIN(x) FROM t.xyz
+SELECT MIN(x) FROM xyz
 ----
 column4:int
 1
 
 exec-explain
-SELECT MIN(x) FROM t.xyz
+SELECT MIN(x) FROM xyz
 ----
 group           0  group   ·            ·            (column4)  ·
  │              0  ·       aggregate 0  min(xyz.x)   ·          ·
@@ -816,14 +812,14 @@ group           0  group   ·            ·            (column4)  ·
 ·               2  ·       spans        ALL          ·          ·
 
 exec
-SELECT MIN(x) FROM t.xyz WHERE x in (0, 4, 7)
+SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 column4:int
 4
 
 # TODO(radu): we don't yet optimize this by scanning one entry from the xy index.
 exec-explain
-SELECT MIN(x) FROM t.xyz WHERE x in (0, 4, 7)
+SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
 ----
 group                0  group   ·            ·               (column4)  ·
  │                   0  ·       aggregate 0  min(xyz.x)      ·          ·
@@ -836,14 +832,14 @@ group                0  group   ·            ·               (column4)  ·
 ·                    3  ·       spans        ALL             ·          ·
 
 exec
-SELECT MAX(x) FROM t.xyz
+SELECT MAX(x) FROM xyz
 ----
 column4:int
 7
 
 # TODO(radu): we don't yet optimize MIN/MAX by scanning one entry from the xy index.
 exec-explain
-SELECT MAX(x) FROM t.xyz
+SELECT MAX(x) FROM xyz
 ----
 group           0  group   ·            ·            (column4)  ·
  │              0  ·       aggregate 0  max(xyz.x)   ·          ·
@@ -854,13 +850,13 @@ group           0  group   ·            ·            (column4)  ·
 ·               2  ·       spans        ALL          ·          ·
 
 exec
-SELECT MIN(y) FROM t.xyz WHERE x = 1
+SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 column4:int
 2
 
 exec-explain
-SELECT MIN(y) FROM t.xyz WHERE x = 1
+SELECT MIN(y) FROM xyz WHERE x = 1
 ----
 group                0  group   ·            ·            (column4)  ·
  │                   0  ·       aggregate 0  min(xyz.y)   ·          ·
@@ -873,13 +869,13 @@ group                0  group   ·            ·            (column4)  ·
 ·                    3  ·       spans        ALL          ·          ·
 
 exec
-SELECT MAX(y) FROM t.xyz WHERE x = 1
+SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 column4:int
 2
 
 exec-explain
-SELECT MAX(y) FROM t.xyz WHERE x = 1
+SELECT MAX(y) FROM xyz WHERE x = 1
 ----
 group                0  group   ·            ·            (column4)  ·
  │                   0  ·       aggregate 0  max(xyz.y)   ·          ·
@@ -892,13 +888,13 @@ group                0  group   ·            ·            (column4)  ·
 ·                    3  ·       spans        ALL          ·          ·
 
 exec
-SELECT MIN(y) FROM t.xyz WHERE x = 7
+SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 column4:int
 NULL
 
 exec-explain
-SELECT MIN(y) FROM t.xyz WHERE x = 7
+SELECT MIN(y) FROM xyz WHERE x = 7
 ----
 group                0  group   ·            ·            (column4)  ·
  │                   0  ·       aggregate 0  min(xyz.y)   ·          ·
@@ -911,13 +907,13 @@ group                0  group   ·            ·            (column4)  ·
 ·                    3  ·       spans        ALL          ·          ·
 
 exec
-SELECT MAX(y) FROM t.xyz WHERE x = 7
+SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 column4:int
 NULL
 
 exec-explain
-SELECT MAX(y) FROM t.xyz WHERE x = 7
+SELECT MAX(y) FROM xyz WHERE x = 7
 ----
 group                0  group   ·            ·            (column4)  ·
  │                   0  ·       aggregate 0  max(xyz.y)   ·          ·
@@ -930,13 +926,13 @@ group                0  group   ·            ·            (column4)  ·
 ·                    3  ·       spans        ALL          ·          ·
 
 exec
-SELECT MIN(x) FROM t.xyz WHERE (y, z) = (2, 3.0)
+SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 column4:int
 1
 
 exec-explain
-SELECT MIN(x) FROM t.xyz WHERE (y, z) = (2, 3.0)
+SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ----
 group                0  group   ·            ·                      (column4)  ·
  │                   0  ·       aggregate 0  min(xyz.x)             ·          ·
@@ -949,13 +945,13 @@ group                0  group   ·            ·                      (column4) 
 ·                    3  ·       spans        ALL                    ·          ·
 
 exec
-SELECT MAX(x) FROM t.xyz WHERE (z, y) = (3.0, 2)
+SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 column4:int
 1
 
 exec-explain
-SELECT MAX(x) FROM t.xyz WHERE (z, y) = (3.0, 2)
+SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ----
 group                0  group   ·            ·                      (column4)  ·
  │                   0  ·       aggregate 0  max(xyz.x)             ·          ·
@@ -970,25 +966,25 @@ group                0  group   ·            ·                      (column4) 
 # VARIANCE/STDDEV
 
 exec
-SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM t.xyz
+SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz
 ----
 column4:decimal  column6:decimal  column8:float
 9                4.5              6.33333333333333
 
 exec
-SELECT VARIANCE(x) FROM t.xyz WHERE x = 10
+SELECT VARIANCE(x) FROM xyz WHERE x = 10
 ----
 column4:decimal
 NULL
 
 exec
-SELECT VARIANCE(x) FROM t.xyz WHERE x = 1
+SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 column4:decimal
 NULL
 
 exec-explain
-SELECT VARIANCE(x) FROM t.xyz WHERE x = 1
+SELECT VARIANCE(x) FROM xyz WHERE x = 1
 ----
 group                0  group   ·            ·                (column4)  ·
  │                   0  ·       aggregate 0  variance(xyz.x)  ·          ·
@@ -1001,13 +997,13 @@ group                0  group   ·            ·                (column4)  ·
 ·                    3  ·       spans        ALL              ·          ·
 
 exec
-SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM t.xyz
+SELECT STDDEV(x), STDDEV(y::decimal), round(STDDEV(z), 14) FROM xyz
 ----
 column4:decimal  column6:decimal        column8:float
 3                2.1213203435596425732  2.51661147842358
 
 exec
-SELECT STDDEV(x) FROM t.xyz WHERE x = 1
+SELECT STDDEV(x) FROM xyz WHERE x = 1
 ----
 column4:decimal
 NULL
@@ -1045,71 +1041,71 @@ NULL             NULL           NULL
 # TODO(radu): subqueries not supported yet.
 ## Ensure subqueries don't trigger aggregation.
 #exec
-#SELECT x > (SELECT avg(0)) FROM t.xyz LIMIT 1
+#SELECT x > (SELECT avg(0)) FROM xyz LIMIT 1
 #----
 #true
 
 exec-raw
-CREATE TABLE t.bools (b BOOL)
+CREATE TABLE bools (b BOOL)
 ----
 
 exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 column3:bool  column4:bool
 NULL          NULL
 
 exec-raw
-INSERT INTO t.bools VALUES (true), (true), (true)
+INSERT INTO bools VALUES (true), (true), (true)
 ----
 
 exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 column3:bool  column4:bool
 true          true
 
 exec-raw
-INSERT INTO t.bools VALUES (false), (false)
+INSERT INTO bools VALUES (false), (false)
 ----
 
 exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 column3:bool  column4:bool
 false         true
 
 exec-raw
-DELETE FROM t.bools WHERE b
+DELETE FROM bools WHERE b
 ----
 
 exec
-SELECT BOOL_AND(b), BOOL_OR(b) FROM t.bools
+SELECT BOOL_AND(b), BOOL_OR(b) FROM bools
 ----
 column3:bool  column4:bool
 false         false
 
 exec
-SELECT CONCAT_AGG(s) FROM (SELECT s FROM t.kv ORDER BY k)
+SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 column5:string
 aabbA
 
 exec
-SELECT JSON_AGG(s) FROM (SELECT s FROM t.kv ORDER BY k)
+SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 column5:jsonb
 '["a", "a", null, "b", "b", "A"]'
 
 exec
-SELECT JSONB_AGG(s) FROM (SELECT s FROM t.kv ORDER BY k)
+SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 ----
 column5:jsonb
 '["a", "a", null, "b", "b", "A"]'
 
 ## Tests for the single-row optimization.
 exec-raw
-CREATE TABLE t.ab (
+CREATE TABLE ab (
   a INT PRIMARY KEY,
   b INT,
   FAMILY (a),
@@ -1118,7 +1114,7 @@ CREATE TABLE t.ab (
 ----
 
 exec-raw
-INSERT INTO t.ab VALUES
+INSERT INTO ab VALUES
   (1, 10),
   (2, 20),
   (3, 30),
@@ -1128,7 +1124,7 @@ INSERT INTO t.ab VALUES
 
 # TODO(radu): we don't support the single-row optimization yet.
 #exec
-#EXPLAIN (EXPRS) SELECT MIN(a) FROM t.abc
+#EXPLAIN (EXPRS) SELECT MIN(a) FROM abc
 #----
 #group           ·            ·
 # │              aggregate 0  min(a)
@@ -1149,7 +1145,7 @@ INSERT INTO t.ab VALUES
 #output row: [1]
 #
 #exec
-#EXPLAIN (EXPRS) SELECT MAX(a) FROM t.abc
+#EXPLAIN (EXPRS) SELECT MAX(a) FROM abc
 #----
 #group              ·            ·
 # │                 aggregate 0  max(a)
@@ -1171,7 +1167,7 @@ INSERT INTO t.ab VALUES
 
 # TODO(radu): ORDER BY not supported yet.
 #exec-explain
-#SELECT v, COUNT(k) FROM t.kv GROUP BY v ORDER BY COUNT(k)
+#SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
 #----
 #sort                 ·            ·
 # │                   order        +count
@@ -1187,7 +1183,7 @@ INSERT INTO t.ab VALUES
 #·                    spans        ALL
 #
 #exec-explain
-#SELECT v, COUNT(*) FROM t.kv GROUP BY v ORDER BY COUNT(*)
+#SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
 #----
 #sort                 ·            ·
 # │                   order        +count
@@ -1202,7 +1198,7 @@ INSERT INTO t.ab VALUES
 #·                    spans        ALL
 #
 #exec-explain
-#SELECT v, COUNT(1) FROM t.kv GROUP BY v ORDER BY COUNT(1)
+#SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
 #----
 #sort                 ·            ·
 # │                   order        +count
@@ -1220,7 +1216,7 @@ INSERT INTO t.ab VALUES
 # TODO(radu): we don't propagate filters yet.
 ## Check that filters propagate through no-op aggregation.
 #exec
-#EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM t.kv GROUP BY v) WHERE v > 10
+#EXPLAIN(EXPRS) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
 #----
 #group           ·            ·
 # │              aggregate 0  v
@@ -1303,7 +1299,7 @@ INSERT INTO t.ab VALUES
 
 # Tests with * inside GROUP BY.
 exec-explain
-SELECT 1 FROM t.kv GROUP BY kv.*;
+SELECT 1 FROM kv GROUP BY kv.*;
 ----
 render          0  render  ·            ·           (column5)     ·
  │              0  ·       render 0     1           ·             ·
@@ -1318,7 +1314,7 @@ render          0  render  ·            ·           (column5)     ·
 ·               2  ·       spans        ALL         ·             ·
 
 exec
-SELECT 1 FROM t.kv GROUP BY kv.*;
+SELECT 1 FROM kv GROUP BY kv.*;
 ----
 column5:int
 1
@@ -1329,7 +1325,7 @@ column5:int
 1
 
 exec-explain
-SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*;
+SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 render                    0  render  ·            ·            (column9)                                  ·
  │                        0  ·       render 0     agg0         ·                                          ·
@@ -1357,7 +1353,7 @@ render                    0  render  ·            ·            (column9)      
 ·                         4  ·       spans        ALL          ·                                          ·
 
 exec rowsort
-SELECT SUM(abc.d) FROM t.kv JOIN t.abc ON kv.k >= abc.d GROUP BY kv.*;
+SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
 column9:decimal
 1.1
@@ -1462,11 +1458,11 @@ column9:decimal
 #10
 
 exec-raw
-CREATE TABLE t.xor_bytes (a bytes, b int, c int)
+CREATE TABLE xor_bytes (a bytes, b int, c int)
 ----
 
 exec-raw
-INSERT INTO t.xor_bytes VALUES
+INSERT INTO xor_bytes VALUES
   (b'\x01\x01', 1, 3),
   (b'\x02\x01', 1, 1),
   (b'\x04\x01', 2, -5),
@@ -1475,14 +1471,14 @@ INSERT INTO t.xor_bytes VALUES
 ----
 
 exec
-SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM t.xor_bytes
+SELECT TO_HEX(XOR_AGG(a)), XOR_AGG(c) FROM xor_bytes
 ----
 column6:string  column7:int
 1f01            6
 
 # TODO(radu): ORDER BY not supported.
 #exec
-#SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM t.xor_bytes GROUP BY b ORDER BY b
+#SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
 #----
 #0300  1   2
 #1c01  2   4
@@ -1494,22 +1490,22 @@ column2:bool  column4:bool
 true          true
 
 exec-raw
-DELETE FROM t.ab;
-INSERT INTO t.ab(a,b) VALUES (1,2), (3,4);
-CREATE TABLE t.xy(x STRING, y STRING);
-INSERT INTO t.xy(x, y) VALUES ('a', 'b'), ('c', 'd')
+DELETE FROM ab;
+INSERT INTO ab(a,b) VALUES (1,2), (3,4);
+CREATE TABLE xy(x STRING, y STRING);
+INSERT INTO xy(x, y) VALUES ('a', 'b'), ('c', 'd')
 ----
 
 # Grouping and rendering tuples.
 exec rowsort
-SELECT (b, a) FROM t.ab GROUP BY (b, a)
+SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 column3:tuple{int, int}
 (2, 1)
 (4, 3)
 
 exec-explain
-SELECT (b, a) FROM t.ab GROUP BY (b, a)
+SELECT (b, a) FROM ab GROUP BY (b, a)
 ----
 render          0  render  ·            ·           (column3)  ·
  │              0  ·       render 0     (b, a)      ·          ·
@@ -1522,7 +1518,7 @@ render          0  render  ·            ·           (column3)  ·
 ·               2  ·       spans        ALL         ·          ·
 
 exec rowsort
-SELECT MIN(y), (b, a) FROM t.ab, t.xy GROUP BY (x, (a, b))
+SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
 column6:string  column7:tuple{int, int}
 b               (2, 1)
@@ -1531,7 +1527,7 @@ d               (2, 1)
 d               (4, 3)
 
 exec-explain
-SELECT MIN(y), (b, a) FROM t.ab, t.xy GROUP BY (x, (a, b))
+SELECT MIN(y), (b, a) FROM ab, xy GROUP BY (x, (a, b))
 ----
 render                    0  render  ·            ·                 (column6, column7)                ·
  │                        0  ·       render 0     agg0              ·                                 ·
