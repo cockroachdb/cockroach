@@ -3077,7 +3077,7 @@ func (_f *factory) ConstructUnsupportedExpr(
 // ConstructScan constructs an expression for the Scan operator.
 // Scan returns a result set containing every row in the specified table. Rows
 // and columns are not expected to have any particular ordering. The private
-// Table field is a Metadata.TableIndex that references an optbase.Table
+// Table field is a Metadata.TableIndex that references an opt.Table
 // definition in the query's metadata.
 func (_f *factory) ConstructScan(
 	table opt.PrivateID,

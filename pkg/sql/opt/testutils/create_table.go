@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -113,7 +113,7 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 			// Only add columns that aren't already part of index.
 			found := false
 			for _, colDef := range def.Columns {
-				if idxCol.Column.ColName() == optbase.ColumnName(colDef.Column) {
+				if idxCol.Column.ColName() == opt.ColumnName(colDef.Column) {
 					found = true
 				}
 			}
@@ -136,7 +136,7 @@ func (tt *TestTable) addIndex(def *tree.IndexTableDef, typ indexType) {
 		// key columns.
 		found := false
 		for _, idxCol := range tt.PrimaryIndex.Columns {
-			if optbase.ColumnName(name) == idxCol.Column.ColName() {
+			if opt.ColumnName(name) == idxCol.Column.ColName() {
 				found = true
 			}
 		}
@@ -170,7 +170,7 @@ func (ti *TestIndex) addColumn(
 ) *TestColumn {
 	ord := tt.FindOrdinal(name)
 	col := tt.Column(ord)
-	idxCol := optbase.IndexColumn{
+	idxCol := opt.IndexColumn{
 		Column:     col,
 		Ordinal:    ord,
 		Descending: direction == tree.Descending,
@@ -185,10 +185,10 @@ func (ti *TestIndex) addColumn(
 }
 
 func (tt *TestTable) addPrimaryColumnIndex(col *TestColumn) {
-	idxCol := optbase.IndexColumn{Column: col}
+	idxCol := opt.IndexColumn{Column: col}
 	tt.PrimaryIndex = &TestIndex{
 		Name:    "primary",
-		Columns: []optbase.IndexColumn{idxCol},
+		Columns: []opt.IndexColumn{idxCol},
 		Unique:  1,
 	}
 }

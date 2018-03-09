@@ -17,12 +17,12 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// optCatalog implements the optbase.Catalog interface over the SchemaResolver
+// optCatalog implements the opt.Catalog interface over the SchemaResolver
 // interface for the use of the new optimizer. The interfaces are simplified to
 // only include what the optimizer needs, and certain common lookups are cached
 // for faster performance.
@@ -35,15 +35,15 @@ type optCatalog struct {
 	wrappers map[*sqlbase.TableDescriptor]*optTable
 }
 
-var _ optbase.Catalog = &optCatalog{}
+var _ opt.Catalog = &optCatalog{}
 
 // init allows the optCatalog wrapper to be inlined.
 func (oc *optCatalog) init(resolver SchemaResolver) {
 	oc.resolver = resolver
 }
 
-// FindTable is part of the optbase.Catalog interface.
-func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (optbase.Table, error) {
+// FindTable is part of the opt.Catalog interface.
+func (oc *optCatalog) FindTable(ctx context.Context, name *tree.TableName) (opt.Table, error) {
 	desc, err := ResolveExistingObject(ctx, oc.resolver, name, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
@@ -78,7 +78,7 @@ type optTable struct {
 	wrappers map[*sqlbase.IndexDescriptor]*optIndex
 }
 
-var _ optbase.Table = &optTable{}
+var _ opt.Table = &optTable{}
 
 func newOptTable(desc *sqlbase.TableDescriptor) *optTable {
 	ot := &optTable{}
@@ -92,33 +92,33 @@ func (ot *optTable) init(desc *sqlbase.TableDescriptor) {
 	ot.primary.init(ot, &desc.PrimaryIndex)
 }
 
-// TabName is part of the optbase.Table interface.
-func (ot *optTable) TabName() optbase.TableName {
-	return optbase.TableName(ot.desc.Name)
+// TabName is part of the opt.Table interface.
+func (ot *optTable) TabName() opt.TableName {
+	return opt.TableName(ot.desc.Name)
 }
 
-// ColumnCount is part of the optbase.Table interface.
+// ColumnCount is part of the opt.Table interface.
 func (ot *optTable) ColumnCount() int {
 	return len(ot.desc.Columns)
 }
 
-// Column is part of the optbase.Table interface.
-func (ot *optTable) Column(i int) optbase.Column {
+// Column is part of the opt.Table interface.
+func (ot *optTable) Column(i int) opt.Column {
 	return &ot.desc.Columns[i]
 }
 
-// Primary is part of the optbase.Table interface.
-func (ot *optTable) Primary() optbase.Index {
+// Primary is part of the opt.Table interface.
+func (ot *optTable) Primary() opt.Index {
 	return &ot.primary
 }
 
-// SecondaryCount is part of the optbase.Table interface.
+// SecondaryCount is part of the opt.Table interface.
 func (ot *optTable) SecondaryCount() int {
 	return len(ot.desc.Indexes)
 }
 
-// Secondary is part of the optbase.Table interface.
-func (ot *optTable) Secondary(i int) optbase.Index {
+// Secondary is part of the opt.Table interface.
+func (ot *optTable) Secondary(i int) opt.Index {
 	desc := &ot.desc.Indexes[i]
 
 	// Check to see if there's already a wrapper for this index descriptor.
@@ -154,7 +154,7 @@ type optIndex struct {
 	numUniqueCols int
 }
 
-var _ optbase.Index = &optIndex{}
+var _ opt.Index = &optIndex{}
 
 func newOptIndex(tbl *optTable, desc *sqlbase.IndexDescriptor) *optIndex {
 	oi := &optIndex{}
@@ -175,27 +175,27 @@ func (oi *optIndex) init(tbl *optTable, desc *sqlbase.IndexDescriptor) {
 	}
 }
 
-// IdxName is part of the optbase.Index interface.
+// IdxName is part of the opt.Index interface.
 func (oi *optIndex) IdxName() string {
 	return oi.desc.Name
 }
 
-// ColumnCount is part of the optbase.Index interface.
+// ColumnCount is part of the opt.Index interface.
 func (oi *optIndex) ColumnCount() int {
 	return oi.numCols
 }
 
-// UniqueColumnCount is part of the optbase.Index interface.
+// UniqueColumnCount is part of the opt.Index interface.
 func (oi *optIndex) UniqueColumnCount() int {
 	return oi.numUniqueCols
 }
 
-// Column is part of the optbase.Index interface.
-func (oi *optIndex) Column(i int) optbase.IndexColumn {
+// Column is part of the opt.Index interface.
+func (oi *optIndex) Column(i int) opt.IndexColumn {
 	length := len(oi.desc.ColumnIDs)
 	if i < length {
 		ord := oi.tbl.lookupColumnOrdinal(oi.desc.ColumnIDs[i])
-		return optbase.IndexColumn{
+		return opt.IndexColumn{
 			Column:     oi.tbl.Column(ord),
 			Ordinal:    ord,
 			Descending: oi.desc.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC,
@@ -206,10 +206,10 @@ func (oi *optIndex) Column(i int) optbase.IndexColumn {
 	length = len(oi.desc.ExtraColumnIDs)
 	if i < length {
 		ord := oi.tbl.lookupColumnOrdinal(oi.desc.ExtraColumnIDs[i])
-		return optbase.IndexColumn{Column: oi.tbl.Column(ord), Ordinal: ord}
+		return opt.IndexColumn{Column: oi.tbl.Column(ord), Ordinal: ord}
 	}
 
 	i -= length
 	ord := oi.tbl.lookupColumnOrdinal(oi.desc.StoreColumnIDs[i])
-	return optbase.IndexColumn{Column: oi.tbl.Column(ord), Ordinal: ord}
+	return opt.IndexColumn{Column: oi.tbl.Column(ord), Ordinal: ord}
 }
