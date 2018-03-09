@@ -48,7 +48,7 @@ func TestPhysicalProps(t *testing.T) {
 	}
 
 	// Add Ordering props.
-	ordering := Ordering{ColumnIndex(1), ColumnIndex(5)}
+	ordering := Ordering{1, 5}
 	props.Ordering = ordering
 	testPhysicalProps(t, props, "p:a:1,b:2 o:+1,+5")
 
@@ -60,7 +60,7 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("ordering should provide itself")
 	}
 
-	if !ordering.Provides(Ordering{ColumnIndex(1)}) {
+	if !ordering.Provides(Ordering{1}) {
 		t.Error("ordering should provide the prefix ordering")
 	}
 
