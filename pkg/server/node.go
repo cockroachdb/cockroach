@@ -468,6 +468,13 @@ func (n *Node) SetDraining(drain bool) error {
 	})
 }
 
+// SetFutureWallTime sets the future wall time on all of the node's underlying stores.
+func (n *Node) SetFutureWallTime(ctx context.Context, futureWallTime int64) error {
+	return n.stores.VisitStores(func(s *storage.Store) error {
+		return s.WriteFutureWallTime(ctx, futureWallTime)
+	})
+}
+
 // initStores initializes the Stores map from ID to Store. Stores are
 // added to the local sender if already bootstrapped. A bootstrapped
 // Store has a valid ident with cluster, node and Store IDs set. If
