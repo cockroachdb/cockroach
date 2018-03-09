@@ -1,5 +1,20 @@
 #!/bin/bash
 
+# This script looks for a cockroach binary at $PWD/cockroach-linux-2.6.32-gnu-amd64.
+#
+# On TeamCity, the cockroach binary is provided via an artifact dependency.
+# Locally, you can build a Linux binary into the right location via the builder:
+#
+#     $ build/builder.sh make build TYPE=release-linux-gnu
+#
+# Or you can download the latest tip of master with:
+#
+#     $ curl -L https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.LATEST -o cockroach-linux-2.6.32-gnu-amd64
+#     $ chmod +x cockroach-linux-2.6.32-gnu-amd64
+#
+# Above, you can replace "LATEST" with "release-X.X" to download the tip of a
+# release branch instead of master.
+
 set -eo pipefail
 
 source "$(dirname "$0")/teamcity-support.sh"
@@ -26,13 +41,6 @@ if_tc tc_start_block "Compile roachprod"
 run go get -u -v github.com/cockroachdb/roachprod
 run git -C "$(go env GOPATH)/src/github.com/cockroachdb/roachprod" rev-parse HEAD
 if_tc tc_end_block "Install roachprod"
-
-if_tc tc_start_block "Compile CockroachDB"
-run make build TYPE=release-linux-gnu
-# Use this instead of the `make build` above for faster debugging iteration.
-# run curl -L https://edge-binaries.cockroachdb.com/cockroach/cockroach.linux-gnu-amd64.LATEST -o cockroach-linux-2.6.32-gnu-amd64
-# run chmod +x cockroach-linux-2.6.32-gnu-amd64
-if_tc tc_end_block "Compile CockroachDB"
 
 if_tc tc_start_block "Compile Workload"
 run make bin/roachtest bin/workload
