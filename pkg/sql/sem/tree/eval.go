@@ -1923,6 +1923,21 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 }
 
+// This map contains the inverses for operators in the CmpOps map that have
+// inverses.
+var cmpOpsInverse map[ComparisonOperator]ComparisonOperator
+
+func init() {
+	cmpOpsInverse = make(map[ComparisonOperator]ComparisonOperator)
+	for cmpOpIdx := range comparisonOpName {
+		cmpOp := ComparisonOperator(cmpOpIdx)
+		newOp, _, _, _, _ := foldComparisonExpr(cmpOp, DNull, DNull)
+		if newOp != cmpOp {
+			cmpOpsInverse[newOp] = cmpOp
+		}
+	}
+}
+
 func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	switch op {
 	case EQ, IsNotDistinctFrom:
