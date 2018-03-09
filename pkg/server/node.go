@@ -468,6 +468,14 @@ func (n *Node) SetDraining(drain bool) error {
 	})
 }
 
+// SetHLCUpperBound sets the upper bound of the HLC wall time on all of the
+// node's underlying stores.
+func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error {
+	return n.stores.VisitStores(func(s *storage.Store) error {
+		return s.WriteHLCUpperBound(ctx, hlcUpperBound)
+	})
+}
+
 // initStores initializes the Stores map from ID to Store. Stores are
 // added to the local sender if already bootstrapped. A bootstrapped
 // Store has a valid ident with cluster, node and Store IDs set. If

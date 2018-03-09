@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -366,5 +367,173 @@ func TestHLCMonotonicityCheck(t *testing.T) {
 		if errCount != 1 {
 			t.Fatalf("clock backward jump below threshold was incorrectly detected by the monotonicity checker (from %s to %s)", secondTime, thirdTime)
 		}
+	}
+}
+
+func TestHLCEnforceWallTimeWithinBoundsInNow(t *testing.T) {
+	var fatal bool
+	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(func(r int) {
+		defer log.Flush()
+		if r != 0 {
+			fatal = true
+		}
+	})
+
+	testCases := []struct {
+		name               string
+		physicalTime       int64
+		wallTimeUpperBound int64
+		isFatal            bool
+	}{
+		{
+			name:               "physical time > upper bound",
+			physicalTime:       1000,
+			wallTimeUpperBound: 100,
+			isFatal:            true,
+		},
+		{
+			name:               "physical time < upper bound",
+			physicalTime:       1000,
+			wallTimeUpperBound: 1010,
+			isFatal:            false,
+		},
+		{
+			name:               "physical time = upper bound",
+			physicalTime:       1000,
+			wallTimeUpperBound: 1000,
+			isFatal:            false,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+			m := NewManualClock(test.physicalTime)
+			c := NewClock(m.UnixNano, time.Nanosecond)
+			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
+			fatal = false
+			c.Now()
+			a.Equal(test.isFatal, fatal)
+		})
+	}
+}
+
+func TestHLCEnforceWallTimeWithinBoundsInUpdate(t *testing.T) {
+	var fatal bool
+	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(func(r int) {
+		defer log.Flush()
+		if r != 0 {
+			fatal = true
+		}
+	})
+
+	testCases := []struct {
+		name               string
+		messageWallTime    int64
+		wallTimeUpperBound int64
+		isFatal            bool
+	}{
+		{
+			name:               "message time > upper bound",
+			messageWallTime:    1000,
+			wallTimeUpperBound: 100,
+			isFatal:            true,
+		},
+		{
+			name:               "message time < upper bound",
+			messageWallTime:    1000,
+			wallTimeUpperBound: 1010,
+			isFatal:            false,
+		},
+		{
+			name:               "message time = upper bound",
+			messageWallTime:    1000,
+			wallTimeUpperBound: 1000,
+			isFatal:            false,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+			m := NewManualClock(test.messageWallTime)
+			c := NewClock(m.UnixNano, time.Nanosecond)
+			c.mu.wallTimeUpperBound = test.wallTimeUpperBound
+			fatal = false
+			_, err := c.updateLocked(Timestamp{WallTime: test.messageWallTime}, true)
+			a.Nil(err)
+			a.Equal(test.isFatal, fatal)
+		})
+	}
+}
+
+func TestResetAndRefreshHLCUpperBound(t *testing.T) {
+	testCases := []struct {
+		name        string
+		delta       int64
+		persistErr  error
+		expectedErr *regexp.Regexp
+	}{
+		{
+			name:  "positive delta",
+			delta: 100,
+		},
+		{
+			name:        "negative delta",
+			delta:       -100,
+			expectedErr: regexp.MustCompile("HLC upper bound delta -100 should be positive"),
+		},
+		{
+			name:        "persist error",
+			delta:       100,
+			persistErr:  errors.New("test error"),
+			expectedErr: regexp.MustCompile("test error"),
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+			var persistedUpperBound int64
+
+			persistFn := func(d int64) error {
+				if test.persistErr != nil {
+					return test.persistErr
+				}
+				persistedUpperBound = d
+				return nil
+			}
+			m := NewManualClock(1)
+			c := NewClock(m.UnixNano, time.Nanosecond)
+			// Test Refresh Upper Bound
+			err := c.RefreshHLCUpperBound(persistFn, test.delta)
+			a.True(
+				isErrSimilar(test.expectedErr, err),
+				fmt.Sprintf(
+					"expected err %v not equal to actual err %v",
+					test.persistErr,
+					err,
+				),
+			)
+			if err == nil {
+				a.Equal(c.Now().WallTime+test.delta, persistedUpperBound)
+			}
+
+			// Test Reset Upper Bound
+			err = c.ResetHLCUpperBound(persistFn)
+			a.True(
+				test.persistErr == err,
+				fmt.Sprintf(
+					"expected err %v not equal to actual err %v",
+					test.persistErr,
+					err,
+				),
+			)
+			if err == nil {
+				a.Equal(int64(0), persistedUpperBound)
+			}
+		})
 	}
 }
