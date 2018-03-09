@@ -95,11 +95,11 @@ render     0  render  ·         ·          (column8)                          
 exec-explain
 SELECT NOT (a > 5 AND b >= 10) FROM t.t
 ----
-render     0  render  ·         ·                            (column8)                          ·
- │         0  ·       render 0  NOT ((a > 5) AND (b >= 10))  ·                                  ·
- └── scan  1  scan    ·         ·                            (a, b, c, d, j, s, rowid[hidden])  ·
-·          1  ·       table     t@primary                    ·                                  ·
-·          1  ·       spans     ALL                          ·                                  ·
+render     0  render  ·         ·                     (column8)                          ·
+ │         0  ·       render 0  (a <= 5) OR (b < 10)  ·                                  ·
+ └── scan  1  scan    ·         ·                     (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary             ·                                  ·
+·          1  ·       spans     ALL                   ·                                  ·
 
 exec-explain
 SELECT (a >= 5 AND b <= 10) OR (a <= 10 AND c > 5) FROM t.t
@@ -113,11 +113,11 @@ render     0  render  ·         ·                                             
 exec-explain
 SELECT NOT (a >= 5 OR b <= 10) AND NOT (c >= 10) FROM t.t
 ----
-render     0  render  ·         ·                                           (column8)                          ·
- │         0  ·       render 0  (NOT ((a >= 5) OR (b <= 10))) AND (c < 10)  ·                                  ·
- └── scan  1  scan    ·         ·                                           (a, b, c, d, j, s, rowid[hidden])  ·
-·          1  ·       table     t@primary                                   ·                                  ·
-·          1  ·       spans     ALL                                         ·                                  ·
+render     0  render  ·         ·                                    (column8)                          ·
+ │         0  ·       render 0  ((a < 5) AND (b > 10)) AND (c < 10)  ·                                  ·
+ └── scan  1  scan    ·         ·                                    (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                            ·                                  ·
+·          1  ·       spans     ALL                                  ·                                  ·
 
 
 exec-explain
@@ -415,3 +415,43 @@ column4:int
 4
 6
 NULL
+
+exec-explain
+SELECT a FROM t.t WHERE a BETWEEN b AND d
+----
+render          0  render  ·         ·                      (a)                                ·
+ │              0  ·       render 0  a                      ·                                  ·
+ └── filter     1  filter  ·         ·                      (a, b, c, d, j, s, rowid[hidden])  ·
+      │         1  ·       filter    (a >= b) AND (a <= d)  ·                                  ·
+      └── scan  2  scan    ·         ·                      (a, b, c, d, j, s, rowid[hidden])  ·
+·               2  ·       table     t@primary              ·                                  ·
+·               2  ·       spans     ALL                    ·                                  ·
+
+exec-explain
+SELECT a FROM t.t WHERE a NOT BETWEEN b AND d
+----
+render          0  render  ·         ·                   (a)                                ·
+ │              0  ·       render 0  a                   ·                                  ·
+ └── filter     1  filter  ·         ·                   (a, b, c, d, j, s, rowid[hidden])  ·
+      │         1  ·       filter    (a < b) OR (a > d)  ·                                  ·
+      └── scan  2  scan    ·         ·                   (a, b, c, d, j, s, rowid[hidden])  ·
+·               2  ·       table     t@primary           ·                                  ·
+·               2  ·       spans     ALL                 ·                                  ·
+
+exec-explain
+SELECT a BETWEEN SYMMETRIC b AND d FROM t.t
+----
+render     0  render  ·         ·                                                   (column8)                          ·
+ │         0  ·       render 0  ((a >= b) AND (a <= d)) OR ((a >= d) AND (a <= b))  ·                                  ·
+ └── scan  1  scan    ·         ·                                                   (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                           ·                                  ·
+·          1  ·       spans     ALL                                                 ·                                  ·
+
+exec-explain
+SELECT a NOT BETWEEN SYMMETRIC b AND d FROM t.t
+----
+render     0  render  ·         ·                                              (column8)                          ·
+ │         0  ·       render 0  ((a < b) OR (a > d)) AND ((a < d) OR (a > b))  ·                                  ·
+ └── scan  1  scan    ·         ·                                              (a, b, c, d, j, s, rowid[hidden])  ·
+·          1  ·       table     t@primary                                      ·                                  ·
+·          1  ·       spans     ALL                                            ·                                  ·

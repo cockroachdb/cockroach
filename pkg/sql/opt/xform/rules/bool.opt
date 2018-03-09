@@ -79,3 +79,17 @@ $item
 # EliminateNot discards a doubled Not operator.
 [EliminateNot, Normalize]
 (Not (Not $input:*)) => $input
+
+# NegateAnd converts the negation of a conjunction into a disjunction of
+# negations.
+[NegateAnd, Normalize]
+(Not (And $conditions:*))
+=>
+(Or (NegateConditions $conditions))
+
+# NegateOr converts the negation of a disjunction into a conjunction of
+# negations.
+[NegateOr, Normalize]
+(Not (Or $conditions:*))
+=>
+(And (NegateConditions $conditions))
