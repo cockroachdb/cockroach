@@ -8451,8 +8451,8 @@ func TestReplicaMetrics(t *testing.T) {
 			ReplicaMetrics{
 				Leader:          true,
 				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
+				Unavailable:     false,
+				Underreplicated: false,
 				BehindCount:     21,
 			}},
 		// Both replicas of a 2-replica range are up to date, but follower is dead.
@@ -8498,7 +8498,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Leader:          true,
 				RangeCounter:    true,
 				Unavailable:     false,
-				Underreplicated: true,
+				Underreplicated: false,
 				BehindCount:     31,
 			}},
 		// All replicas of a 3-replica range are live but two replicas are behind.
@@ -8506,8 +8506,8 @@ func TestReplicaMetrics(t *testing.T) {
 			ReplicaMetrics{
 				Leader:          true,
 				RangeCounter:    true,
-				Unavailable:     true,
-				Underreplicated: true,
+				Unavailable:     false,
+				Underreplicated: false,
 				BehindCount:     32,
 			}},
 		// All replicas of a 3-replica range are up to date, but one replica is dead.
@@ -8527,6 +8527,16 @@ func TestReplicaMetrics(t *testing.T) {
 				Unavailable:     true,
 				Underreplicated: true,
 				BehindCount:     30,
+			}},
+		// All replicas of a 3-replica range are up to date, but two replicas are
+		// dead, including the leader.
+		{3, 2, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(2),
+			ReplicaMetrics{
+				Leader:          false,
+				RangeCounter:    true,
+				Unavailable:     true,
+				Underreplicated: true,
+				BehindCount:     0,
 			}},
 		// Range has no leader, local replica is the range counter.
 		{3, 1, desc(1, 2, 3), status(0, progress(2, 2, 2)), live(1, 2, 3),
