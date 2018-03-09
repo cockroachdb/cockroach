@@ -58,5 +58,5 @@ type TestEngine interface {
 // sql package.
 type TestEngineFactory interface {
 	// NewTestEngine creates an execution engine.
-	NewTestEngine() TestEngine
+	NewTestEngine(defaultDatabase string) TestEngine
 }
