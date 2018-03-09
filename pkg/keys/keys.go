@@ -75,6 +75,12 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
+// StoreFutureWallTimeKey returns the key for the storing a wall clock time
+// greater than any used by the HLC
+func StoreFutureWallTimeKey() roachpb.Key {
+	return MakeStoreKey(localStoreFutureWallTimeSuffix, nil)
+}
+
 // StoreSuggestedCompactionKey returns a store-local key for a
 // suggested compaction. It combines the specified start and end keys.
 func StoreSuggestedCompactionKey(start, end roachpb.Key) roachpb.Key {

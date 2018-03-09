@@ -87,6 +87,10 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// localStoreFutureWallTimeSuffix stores a time in the future which is
+	// guaranteed to be greater than wall time of the HLC.
+	// This is used if server.clock.persist_wall_time is true
+	localStoreFutureWallTimeSuffix = []byte("mxtm")
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")

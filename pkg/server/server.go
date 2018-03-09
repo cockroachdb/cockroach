@@ -107,6 +107,16 @@ var (
 			"If set, forward clock jumps greater than the set value will cause a panic",
 		0,
 	)
+
+	persistFutureWallTime = settings.RegisterBoolSetting(
+		"server.clock.persist_future_wall_time",
+		"if set, a time larger than wall time is persisted periodically and HLC "+
+			"does not permit a timestamp greater than the persisted timestamp to be used. "+
+			"When cockroach starts, it waits for the physical time to catch-up till "+
+			"this persisted timestamp. This guarantees monotonic wall clock time across "+
+			"server restarts",
+		false,
+	)
 )
 
 // Server is the cockroach server node.
@@ -720,6 +730,28 @@ func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
 	log.Info(ctx, "monitoring clock jumps based on server.clock.max_forward_jump")
 }
 
+// startPersistingFutureWallTime starts a background task to persist a future
+// wall time based on a cluster setting. If future wall time is persisted,
+// wall time monotonicity is guaranteed across node restarts
+func (s *Server) startPersistingFutureWallTime(ctx context.Context, persistFn func(int64) error) {
+	persistWallTimeCh := make(chan bool, 1)
+	s.stopper.AddCloser(stop.CloserFn(func() { close(persistWallTimeCh) }))
+
+	persistFutureWallTime.SetOnChange(&s.st.SV, func() {
+		persistWallTimeCh <- persistFutureWallTime.Get(&s.st.SV)
+	})
+	if err := s.clock.StartPersistingFutureWallTime(
+		persistWallTimeCh,
+		persistFn,
+		time.NewTicker,
+		nil, /* tick callback */
+	); err != nil {
+		log.Fatal(ctx, err)
+	}
+
+	log.Info(ctx, "persisting wall clock time based on server.clock.persist_future_wall_time")
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1068,7 +1100,40 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			msg)
 	}).Stop()
 
+	persistFutureWallTimeRetryOptions := retry.Options{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     50 * time.Millisecond,
+		Multiplier:     2,
+	}
+	const numPersistFutureWallTimeReries = 5
+
 	if len(bootstrappedEngines) > 0 {
+		// If future wall times are being persisted, ensure wall time monotonicity across restarts
+		maxPersistedFutureWallTime, err := storage.ReadMaxFutureWallTime(ctx, bootstrappedEngines)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+		if err := s.clock.EnsureInitialWallTimeMonotonicity(
+			ctx,
+			maxPersistedFutureWallTime,
+			func(t int64) error { /* function to persist future wall time to bootstrapped stores */
+				return retry.WithMaxAttempts(
+					ctx,
+					persistFutureWallTimeRetryOptions,
+					numPersistFutureWallTimeReries,
+					func() error {
+						return storage.WriteFutureWallTimeToEngines(
+							ctx,
+							bootstrappedEngines,
+							t,
+						)
+					})
+			},
+			time.Sleep,
+		); err != nil {
+			log.Fatal(ctx, err)
+		}
+
 		// We might have to sleep a bit to protect against this node producing non-
 		// monotonic timestamps. Before restarting, its clock might have been driven
 		// by other nodes' fast clocks, but when we restarted, we lost all this
@@ -1164,6 +1229,19 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		return err
 	}
 	log.Event(ctx, "started node")
+	s.startPersistingFutureWallTime(
+		ctx,
+		func(t int64) error { /* function to persist future wall time to all stores */
+			return retry.WithMaxAttempts(
+				context.Background(), /* Persist periodically happens in another goroutine */
+				persistFutureWallTimeRetryOptions,
+				numPersistFutureWallTimeReries,
+				func() error {
+					return s.node.SetFutureWallTime(context.Background(), t)
+				})
+		},
+	)
+
 	s.execCfg.DistSQLPlanner.SetNodeDesc(s.node.Descriptor)
 
 	// Cluster ID should have been determined by this point.
