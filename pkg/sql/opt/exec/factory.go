@@ -72,6 +72,9 @@ type Factory interface {
 	// operation (either the ALL or the DISTINCT version). The left and right
 	// nodes must have the same number of columns.
 	ConstructSetOp(typ tree.UnionType, all bool, left, right Node) (Node, error)
+
+	// RenameColumns modifies the column names of a node.
+	RenameColumns(input Node, colNames []string) (Node, error)
 }
 
 // ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
