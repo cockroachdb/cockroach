@@ -191,11 +191,11 @@ func (p *planner) Insert(
 		// If the insert source was not a VALUES clause, then we have not
 		// already verified the expression length.
 		numExprs := len(planColumns(rows))
-		if numExprs > maxInsertIdx {
-			return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
-		}
 		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
 			return nil, err
+		}
+		if numExprs > maxInsertIdx {
+			return nil, cannotWriteToComputedColError(cols[maxInsertIdx])
 		}
 	}
 

@@ -388,6 +388,17 @@ SELECT v, k FROM kv5@a
 NULL a
 
 statement error INSERT has more expressions than target columns, 3 expressions for 2 targets
+INSERT INTO kv SELECT 'a', 'b', 'c'
+
+statement error INSERT has more expressions than target columns, 2 expressions for 1 targets
+INSERT INTO kv (k) SELECT 'a', 'b'
+
+statement error INSERT has more target columns than expressions, 1 expressions for 2 targets
+INSERT INTO kv5 (k, v) SELECT 'a'
+
+# INSERT ... VALUES take a separate code path from INSERT ... SELECT.
+
+statement error INSERT has more expressions than target columns, 3 expressions for 2 targets
 INSERT INTO kv VALUES ('a', 'b', 'c')
 
 statement error INSERT has more expressions than target columns, 2 expressions for 1 targets
