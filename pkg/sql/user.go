@@ -43,7 +43,7 @@ func GetUserHashedPassword(
 		defer cleanup()
 		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
 			`WHERE username=$1 AND "isRole" = false`
-		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
+		values, err := p.queryRow(ctx, getHashedPassword, normalizedUsername)
 		if err != nil {
 			return errors.Errorf("error looking up user %s", normalizedUsername)
 		}

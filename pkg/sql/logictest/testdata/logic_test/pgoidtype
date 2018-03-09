@@ -285,3 +285,8 @@ SELECT * FROM o WHERE a <= 4
 ----
 1
 4
+
+query B
+SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc LIMIT 1
+----
+false

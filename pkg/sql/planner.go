@@ -260,6 +260,8 @@ func newInternalPlanner(
 		txn, ts /* txnTimestamp */, ts, /* stmtTimestamp */
 		nil /* reCache */, s.statsCollector())
 
+	p.extendedEvalCtx.MemMetrics = memMetrics
+	p.extendedEvalCtx.ExecCfg = execCfg
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = &s.tables
 	acc := s.mon.MakeBoundAccount()
@@ -371,6 +373,16 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 
 // QueryRow implements the parser.EvalPlanner interface.
 func (p *planner) QueryRow(
+	ctx context.Context, sql string, args ...interface{},
+) (tree.Datums, error) {
+	origP := p
+	p, cleanup := newInternalPlanner("query rows", p.Txn(), p.User(), p.ExtendedEvalContext().MemMetrics, p.ExecCfg())
+	defer cleanup()
+	*p.SessionData() = *origP.SessionData()
+	return p.queryRow(ctx, sql, args...)
+}
+
+func (p *planner) queryRow(
 	ctx context.Context, sql string, args ...interface{},
 ) (tree.Datums, error) {
 	rows, _ /* cols */, err := p.queryRows(ctx, sql, args...)

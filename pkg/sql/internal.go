@@ -61,7 +61,7 @@ func (ie *InternalExecutor) QueryRowInTransaction(
 		opName, txn, security.RootUser, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
 	defer cleanup()
 	ie.initSession(p)
-	return p.QueryRow(ctx, statement, qargs...)
+	return p.queryRow(ctx, statement, qargs...)
 }
 
 // QueryRowsInTransaction executes the supplied SQL statement as part of the
