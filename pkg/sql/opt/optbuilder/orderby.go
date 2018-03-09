@@ -135,11 +135,11 @@ func (b *Builder) buildOrdering(
 
 	// Add the new columns to the ordering.
 	for i := start; i < len(orderByScope.cols); i++ {
-		index := orderByScope.cols[i].index
-		if order.Direction == tree.Descending {
-			index = -index
-		}
-		orderByScope.ordering = append(orderByScope.ordering, index)
+		col := opt.MakeOrderingColumn(
+			orderByScope.cols[i].index,
+			order.Direction == tree.Descending,
+		)
+		orderByScope.ordering = append(orderByScope.ordering, col)
 	}
 
 	return projections
