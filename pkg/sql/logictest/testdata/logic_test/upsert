@@ -16,6 +16,9 @@ SELECT * FROM kv ORDER BY (k, v)
 2 2
 3 3
 
+statement error multiple assignments to the same column
+INSERT INTO kv VALUES (4, 4), (2, 5), (6, 6) ON CONFLICT (k) DO UPDATE SET v = 1, v = 1
+
 statement ok
 INSERT INTO kv VALUES (4, 4), (2, 5), (6, 6) ON CONFLICT (k) DO UPDATE SET v = excluded.v
 
@@ -37,6 +40,7 @@ INSERT INTO kv VALUES (4, 10) ON CONFLICT DO UPDATE SET v = kv.v + 20
 statement error duplicate key value \(k\)=\(3\) violates unique constraint "primary"
 INSERT INTO kv VALUES (2, 10) ON CONFLICT (k) DO UPDATE SET k = 3, v = 10
 
+# Until #23660 is fixed.
 statement error UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time
 UPSERT INTO kv VALUES (10, 10), (10, 11)
 
@@ -49,17 +53,21 @@ INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING
 statement error there is no unique or exclusion constraint matching the ON CONFLICT specification
 INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT DO NOTHING
 
+# Until #23660 is fixed.
+statement error UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time
+INSERT INTO kv VALUES (14, 14), (14, 15) ON CONFLICT (k) DO UPDATE SET v = excluded.v + 1
+
 query II
 SELECT * FROM kv ORDER BY (k, v)
 ----
-1 32
-2 5
-3 8
-4 24
-6 6
-7 7
-11 12
-13 13
+1   32
+2   5
+3   8
+4   24
+6   6
+7   7
+11  12
+13  13
 
 query II
 INSERT INTO kv VALUES (10, 10), (11, 11) ON CONFLICT (k) DO UPDATE SET v = excluded.v RETURNING *
@@ -159,6 +167,7 @@ CREATE TABLE excluded (a INT PRIMARY KEY, b INT)
 statement error ambiguous source name: "excluded"
 INSERT INTO excluded VALUES (1, 1) ON CONFLICT (a) DO UPDATE SET b = excluded.b
 
+# Also test the statement is rejected on the fast path.
 statement error ambiguous source name: "excluded"
 UPSERT INTO excluded VALUES (1, 1)
 
@@ -298,17 +307,11 @@ SELECT * FROM issue_14052_2;
 ----
 1  UPDATED  1  2
 
-# Make sure the fast path isn't taken (repeating a column in the ON CONFLICT clause doesn't do anything)
-statement ok
+statement error multiple assignments to the same column
 INSERT INTO issue_14052_2 (id, name, createdAt, updatedAt) VALUES
   (1, 'FOO', 3, 3)
 ON CONFLICT (id) DO UPDATE
   SET id = excluded.id, name = excluded.name, name = excluded.name, name = excluded.name
-
-query ITII
-SELECT * FROM issue_14052_2;
-----
-1  FOO  1  2
 
 # Make sure the fast path isn't taken (all clauses in the set must be of the form x = excluded.x)
 statement ok
@@ -369,7 +372,6 @@ EXPLAIN (PLAN,EXPRS) UPSERT INTO kv TABLE kv ORDER BY v DESC
 ----
 upsert          ·       ·
  │              into    kv(k, v)
- │              eval 0  v
  └── sort       ·       ·
       │         order   -v
       └── scan  ·       ·
