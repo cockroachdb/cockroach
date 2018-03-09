@@ -1254,6 +1254,14 @@ query OOIIIIIB
 SELECT * FROM pg_catalog.pg_sequence
 ----
 
+## pg_catalog.pg_operator
+
+query OTOOTBBOOOOOOOO colnames
+SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
+----
+oid         oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
+3695865198  +        3572887043    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
+
 # Verify proper functionality of system information functions.
 
 query TT

@@ -33,6 +33,12 @@ type overloadImpl interface {
 	preferred() bool
 }
 
+// GetParamsAndReturnType gets the parameters and return type of an
+// overloadImpl.
+func GetParamsAndReturnType(impl overloadImpl) (TypeList, ReturnTyper) {
+	return impl.params(), impl.returnType()
+}
+
 // TypeList is a list of types representing a function parameter list.
 type TypeList interface {
 	// match checks if all types in the TypeList match the corresponding elements in types.
