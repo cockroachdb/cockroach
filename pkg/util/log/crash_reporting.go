@@ -37,6 +37,12 @@ import (
 )
 
 var (
+	// versionTag is expected to be set by our build process for the binaries
+	// which we actually expect to report crashes (i.e. official channels). It's
+	// the same as the build.Tag for published releases, and a simplified version
+	// otherwise that should result in those errors aggregating better.
+	versionTag = "development"
+
 	// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
 	//
 	// "diagnostics.reporting.enabled" enables reporting of metrics related to a
@@ -223,7 +229,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	}
 	info := build.GetInfo()
 	raven.SetRelease(info.Tag)
-	raven.SetEnvironment(info.Type)
+	raven.SetEnvironment(versionTag)
 	raven.SetTagsContext(map[string]string{
 		"cmd":          cmd,
 		"platform":     info.Platform,

@@ -709,7 +709,7 @@ $(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
 
 $(COCKROACH) build buildoss buildshort: BUILDMODE = build -i -o $(COCKROACH)
 
-BUILDINFO = .buildinfo/tag .buildinfo/rev
+BUILDINFO = .buildinfo/tag .buildinfo/tag-simple .buildinfo/rev
 
 # The build.utcTime format must remain in sync with TimeFormat in pkg/build/info.go.
 $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lintshort: \
@@ -718,7 +718,8 @@ $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lint
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
-	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)")
+	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)") \
+	-X "github.com/cockroachdb/cockroach/pkg/util/log.versionTag=$(shell cat .buildinfo/tag-simple)$(if $(BUILD_TAGGED_RELEASE),,-dev)"
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
@@ -912,6 +913,9 @@ $(ARCHIVE).tmp: $(ARCHIVE_EXTRAS)
 .buildinfo/tag: | .buildinfo
 	@{ git describe --tags --dirty 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
 
+.buildinfo/tag-simple: | .buildinfo
+	@{ git describe --tags --abbrev=0 2> /dev/null || git rev-parse --short HEAD; } | tr -d \\n > $@
+
 .buildinfo/rev: | .buildinfo
 	@git rev-parse HEAD > $@
 
@@ -919,6 +923,7 @@ ifneq ($(GIT_DIR),)
 # If we're in a Git checkout, we update the buildinfo information on every build
 # to keep it up-to-date.
 .buildinfo/tag: .ALWAYS_REBUILD
+.buildinfo/tag-simple: .ALWAYS_REBUILD
 .buildinfo/rev: .ALWAYS_REBUILD
 endif
 
