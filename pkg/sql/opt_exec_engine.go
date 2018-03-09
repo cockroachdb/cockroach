@@ -180,25 +180,11 @@ func (ee *execEngine) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.
 func (ee *execEngine) ConstructSimpleProject(
 	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
 ) (exec.Node, error) {
-	// Check if this is the identity projection, in which case we only need to
-	// rename columns.
-	inputCols := planColumns(n.(planNode))
-	if len(cols) == len(inputCols) {
-		identity := true
-		for i := range cols {
-			if cols[i] != exec.ColumnOrdinal(i) {
-				identity = false
-				break
-			}
-		}
-		if identity {
-			if colNames != nil {
-				renameColumns(n, colNames)
-			}
-			return n, nil
-		}
+	var inputCols sqlbase.ResultColumns
+	if colNames == nil {
+		// We will need the names of the input columns.
+		inputCols = planColumns(n.(planNode))
 	}
-
 	src := asDataSource(n)
 	r := &renderNode{
 		source:     src,
@@ -224,23 +210,6 @@ func (ee *execEngine) ConstructSimpleProject(
 func (ee *execEngine) ConstructRender(
 	n exec.Node, exprs tree.TypedExprs, colNames []string,
 ) (exec.Node, error) {
-	// Check if this is the identity projection, in which case we only need to
-	// rename columns.
-	inputCols := planColumns(n.(planNode))
-	if len(exprs) == len(inputCols) {
-		identity := true
-		for i := range exprs {
-			if v, ok := exprs[i].(*tree.IndexedVar); !ok || v.Idx != i {
-				identity = false
-				break
-			}
-		}
-		if identity {
-			renameColumns(n, colNames)
-			return n, nil
-		}
-	}
-
 	src := asDataSource(n)
 	r := &renderNode{
 		source:     src,
@@ -257,11 +226,13 @@ func (ee *execEngine) ConstructRender(
 	return r, nil
 }
 
-func renameColumns(n exec.Node, colNames []string) {
+// RenameColumns is part of the exec.Factory interface.
+func (ee *execEngine) RenameColumns(n exec.Node, colNames []string) (exec.Node, error) {
 	inputCols := planMutableColumns(n.(planNode))
 	for i := range inputCols {
 		inputCols[i].Name = colNames[i]
 	}
+	return n, nil
 }
 
 // ConstructJoin is part of the exec.Factory interface.
