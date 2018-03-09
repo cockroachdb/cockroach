@@ -547,11 +547,15 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
-	useDistSQL, err := shouldUseDistSQL(
-		ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner)
-	if err != nil {
-		res.SetError(err)
-		return nil
+	useDistSQL := false
+	// TODO(radu): for now, we restrict the optimizer to local execution.
+	if !useOptimizer {
+		useDistSQL, err = shouldUseDistSQL(
+			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner)
+		if err != nil {
+			res.SetError(err)
+			return nil
+		}
 	}
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
