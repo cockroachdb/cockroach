@@ -405,7 +405,7 @@ func (s LeaseStore) countLeases(
 		defer cleanup()
 		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
 			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
-		values, err := p.QueryRow(ctx, countLeases, descID, int(version), expiration)
+		values, err := p.queryRow(ctx, countLeases, descID, int(version), expiration)
 		if err != nil {
 			return err
 		}
