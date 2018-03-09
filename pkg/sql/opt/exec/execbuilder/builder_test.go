@@ -111,6 +111,11 @@ func TestBuild(t *testing.T) {
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
+			_, err := sqlDB.Exec("CREATE DATABASE test; SET DATABASE = test;")
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var allowUnsupportedExpr, rowSort bool
 
@@ -144,7 +149,7 @@ func TestBuild(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
-					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine()
+					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
 
 					// Build and optimize the opt expression tree.
@@ -237,7 +242,7 @@ func TestBuild(t *testing.T) {
 
 				case "catalog":
 					// Create the engine in order to get access to its catalog.
-					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine()
+					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
 
 					parts := strings.Split(d.Input, ".")
