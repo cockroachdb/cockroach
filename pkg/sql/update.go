@@ -99,7 +99,8 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	updateCols, err := p.processColumns(en.tableDesc, names)
+	updateCols, err := p.processColumns(en.tableDesc, names,
+		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
 	}

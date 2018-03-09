@@ -93,7 +93,8 @@ func (p *planner) Insert(
 		cols = en.tableDesc.Columns
 	} else {
 		var err error
-		if cols, err = p.processColumns(en.tableDesc, n.Columns); err != nil {
+		if cols, err = p.processColumns(en.tableDesc, n.Columns,
+			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
 	}
@@ -466,23 +467,34 @@ func GenerateInsertRow(
 
 // processColumns returns the column descriptors identified by the
 // given name list. It also checks that a given column name is only
-// listed once. If no column names are given (special case for
-// INSERT), the descriptors for all visible columns are returned.
+// listed once. If no column names are given (special case for INSERT)
+// and ensureColumns is set, the descriptors for all visible columns
+// are returned. If allowMutations is set, even columns undergoing
+// mutations are added.
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList,
+	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
-		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
-		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
-		// hidden columns. At present, the only hidden column is the implicit rowid
-		// primary key column.
-		return tableDesc.VisibleColumns(), nil
+		if ensureColumns {
+			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
+			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
+			// hidden columns. At present, the only hidden column is the implicit rowid
+			// primary key column.
+			return tableDesc.VisibleColumns(), nil
+		}
+		return nil, nil
 	}
 
 	cols := make([]sqlbase.ColumnDescriptor, len(nameList))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
-		col, err := tableDesc.FindActiveColumnByName(string(colName))
+		var col sqlbase.ColumnDescriptor
+		var err error
+		if allowMutations {
+			col, _, err = tableDesc.FindColumnByName(colName)
+		} else {
+			col, err = tableDesc.FindActiveColumnByName(string(colName))
+		}
 		if err != nil {
 			return nil, err
 		}
