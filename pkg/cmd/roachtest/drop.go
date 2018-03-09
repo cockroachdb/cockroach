@@ -30,11 +30,7 @@ func init() {
 	// by a truncation for the `stock` table (which contains warehouses*100k
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
-	runDrop := func(t *test, warehouses, nodes int) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, nodes)
-		defer c.Destroy(ctx)
-
+	runDrop := func(ctx context.Context, t *test, c *cluster, warehouses int) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
 		c.Start(ctx, c.All(), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
@@ -75,18 +71,18 @@ gc:
 	}
 
 	warehouses := 100
-	nodes := 9
 
-	tests.Add(
-		fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, nodes),
-		func(t *test) {
+	tests.Add(testSpec{
+		Name:  fmt.Sprintf("drop/tpcc/w=%d,nodes=9", warehouses),
+		Nodes: nodes(9),
+		Run: func(ctx context.Context, t *test, c *cluster) {
 			// NB: this is likely not going to work out in `-local` mode. Edit the
 			// numbers during iteration.
 			if local {
-				nodes = 4
 				warehouses = 1
-				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, nodes)
+				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, c.nodes)
 			}
-			runDrop(t, warehouses, nodes)
-		})
+			runDrop(ctx, t, c, warehouses)
+		},
+	})
 }

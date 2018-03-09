@@ -38,12 +38,8 @@ import (
 // Once DistSQL queries provide more testing knobs, these tests can likely be
 // replaced with unit tests.
 func init() {
-	runCancel := func(t *test, queries []string, warehouses, nodes int, useDistsql bool) {
-		ctx := context.Background()
-
-		c := newCluster(ctx, t, nodes)
-		defer c.Destroy(ctx)
-
+	runCancel := func(ctx context.Context, t *test, c *cluster,
+		queries []string, warehouses int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
 		c.Start(ctx, c.All())
@@ -110,7 +106,6 @@ func init() {
 	}
 
 	warehouses := 10
-	nodes := 3
 	queries := []string{
 		`SELECT * FROM tpcc.stock`,
 		`SELECT * FROM tpcc.stock WHERE s_quantity > 100`,
@@ -120,15 +115,19 @@ func init() {
 		`SELECT ol_number, sum(s_quantity) FROM tpcc.stock JOIN tpcc.order_line ON s_i_id=ol_i_id WHERE ol_number > 10 GROUP BY ol_number ORDER BY ol_number`,
 	}
 
-	tests.Add(
-		fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=%d", warehouses, nodes),
-		func(t *test) {
-			runCancel(t, queries, warehouses, nodes, true /* useDistsql */)
-		})
+	tests.Add(testSpec{
+		Name:  fmt.Sprintf("cancel/tpcc/distsql/w=%d,nodes=3", warehouses),
+		Nodes: nodes(3),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCancel(ctx, t, c, queries, warehouses, true /* useDistsql */)
+		},
+	})
 
-	tests.Add(
-		fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=%d", warehouses, nodes),
-		func(t *test) {
-			runCancel(t, queries, warehouses, nodes, false /* useDistsql */)
-		})
+	tests.Add(testSpec{
+		Name:  fmt.Sprintf("cancel/tpcc/local/w=%d,nodes=3", warehouses),
+		Nodes: nodes(3),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCancel(ctx, t, c, queries, warehouses, false /* useDistsql */)
+		},
+	})
 }
