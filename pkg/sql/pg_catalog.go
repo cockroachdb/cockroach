@@ -1098,6 +1098,13 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+var (
+	infixKind   = tree.NewDString("b")
+	prefixKind  = tree.NewDString("l")
+	postfixKind = tree.NewDString("r")
+	_           = postfixKind
+)
+
 // See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
 var pgCatalogOperatorTable = virtualSchemaTable{
 	schema: `
@@ -1119,7 +1126,71 @@ CREATE TABLE pg_catalog.pg_operator (
   oprjoin OID
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		nspOid := h.NamespaceOid(db, pgCatalogName)
+		addOp := func(opName string, kind tree.Datum, params tree.TypeList, returnTyper tree.ReturnTyper) error {
+			var leftType, rightType *tree.DOid
+			switch params.Length() {
+			case 1:
+				leftType = oidZero
+				rightType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+			case 2:
+				leftType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+				rightType = tree.NewDOid(tree.DInt(params.Types()[1].Oid()))
+			default:
+				return nil
+			}
+			returnType := tree.NewDOid(tree.DInt(returnTyper(nil).Oid()))
+			err := addRow(
+				h.OperatorOid(opName, leftType, rightType, returnType), // oid
+
+				tree.NewDString(opName), // oprname
+				nspOid,                  // oprnamespace
+				tree.DNull,              // oprowner
+				kind,                    // oprkind
+				tree.DBoolFalse,         // oprcanmerge
+				tree.DBoolFalse,         // oprcanhash
+				leftType,                // oprleft
+				rightType,               // oprright
+				returnType,              // oprresult
+				tree.DNull,              // oprcom
+				tree.DNull,              // oprnegate
+				tree.DNull,              // oprcode
+				tree.DNull,              // oprrest
+				tree.DNull,              // oprjoin
+			)
+			return err
+		}
+		for cmpOp, overloads := range tree.CmpOps {
+			for _, overload := range overloads {
+				params, returnType := tree.GetParamsAndReturnType(overload)
+				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
+					return err
+				}
+				if inverse, ok := cmpOp.Inverse(); ok {
+					if err := addOp(inverse.String(), infixKind, params, returnType); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for binOp, overloads := range tree.BinOps {
+			for _, overload := range overloads {
+				params, returnType := tree.GetParamsAndReturnType(overload)
+				if err := addOp(binOp.String(), infixKind, params, returnType); err != nil {
+					return err
+				}
+			}
+		}
+		for unaryOp, overloads := range tree.UnaryOps {
+			for _, overload := range overloads {
+				params, returnType := tree.GetParamsAndReturnType(overload)
+				if err := addOp(unaryOp.String(), prefixKind, params, returnType); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	},
 }
@@ -1930,6 +2001,16 @@ func (h oidHasher) writeUInt32(i uint32) {
 	}
 }
 
+func (h oidHasher) writeUInt64(i uint64) {
+	if err := binary.Write(h.h, binary.BigEndian, i); err != nil {
+		panic(err)
+	}
+}
+
+func (h oidHasher) writeOID(oid *tree.DOid) {
+	h.writeUInt64(uint64(oid.DInt))
+}
+
 type oidTypeTag uint8
 
 const (
@@ -1946,6 +2027,7 @@ const (
 	functionTypeTag
 	userTypeTag
 	collationTypeTag
+	operatorTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -2108,5 +2190,14 @@ func (h oidHasher) UserOid(username string) *tree.DOid {
 func (h oidHasher) CollationOid(collation string) *tree.DOid {
 	h.writeTypeTag(collationTypeTag)
 	h.writeStr(collation)
+	return h.getOid()
+}
+
+func (h oidHasher) OperatorOid(name string, leftType, rightType, returnType *tree.DOid) *tree.DOid {
+	h.writeTypeTag(operatorTypeTag)
+	h.writeStr(name)
+	h.writeOID(leftType)
+	h.writeOID(rightType)
+	h.writeOID(returnType)
 	return h.getOid()
 }
