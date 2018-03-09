@@ -181,7 +181,7 @@ export function sumNodeStats(
 
         result.capacityUsed += used;
         result.capacityAvailable += available;
-        result.capacityUsable = usable;
+        result.capacityUsable += usable;
         result.capacityTotal += n.metrics[MetricConstants.capacity];
         result.usedBytes += BytesUsed(n);
         result.usedMem += n.metrics[MetricConstants.rss];
