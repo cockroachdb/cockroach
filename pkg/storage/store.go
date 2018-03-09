@@ -1725,6 +1725,54 @@ func (s *Store) ReadLastUpTimestamp(ctx context.Context) (hlc.Timestamp, error) 
 	return timestamp, nil
 }
 
+// WriteHLCUpperBound records an upper bound to the wall time of the HLC
+func (s *Store) WriteHLCUpperBound(ctx context.Context, time int64) error {
+	ctx = s.AnnotateCtx(ctx)
+	ts := hlc.Timestamp{WallTime: time}
+	return engine.MVCCPutProto(
+		ctx,
+		s.Engine(),
+		nil,
+		keys.StoreHLCUpperBoundKey(),
+		hlc.Timestamp{},
+		nil,
+		&ts,
+	)
+}
+
+// ReadHLCUpperBound returns the upper bound to the wall time of the HLC
+// If this value does not exist 0 is returned
+func ReadHLCUpperBound(ctx context.Context, e engine.Engine) (int64, error) {
+	var timestamp hlc.Timestamp
+	ok, err := engine.MVCCGetProto(
+		ctx, e, keys.StoreHLCUpperBoundKey(), hlc.Timestamp{}, true, nil, &timestamp)
+	if err != nil {
+		return 0, err
+	} else if !ok {
+		return 0, nil
+	}
+	return timestamp.WallTime, nil
+}
+
+// ReadMaxHLCUpperBound returns the maximum of the stored hlc upper bounds
+// among all the engines. This value is optionally persisted by the HLC and the
+// it is guaranteed to be higher than any timestamp used by the HLC. If this
+// value is persisted, HLC wall clock monotonicity is guaranteed across server
+// restarts
+func ReadMaxHLCUpperBound(ctx context.Context, engines []engine.Engine) (int64, error) {
+	var hlcUpperBound int64
+	for _, e := range engines {
+		engineHLCUpperBound, err := ReadHLCUpperBound(ctx, e)
+		if err != nil {
+			return 0, err
+		}
+		if engineHLCUpperBound > hlcUpperBound {
+			hlcUpperBound = engineHLCUpperBound
+		}
+	}
+	return hlcUpperBound, nil
+}
+
 func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 	kvs, err := engine.Scan(
 		eng,
