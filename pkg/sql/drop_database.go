@@ -58,7 +58,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 	if dbDesc == nil {
 		// IfExists was specified and database was not found.
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	if err := p.CheckPrivilege(ctx, dbDesc, privilege.DROP); err != nil {

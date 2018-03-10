@@ -158,7 +158,7 @@ func (p *planner) selectIndex(
 			if spans, ok := c.ic.Spans(); ok && len(spans) == 0 {
 				// No spans (i.e. the filter is always false). Note that if a filter
 				// results in no constraints, ok would be false.
-				return &zeroNode{}, nil
+				return newZeroNode(s.resultColumns), nil
 			}
 		}
 	}
@@ -227,7 +227,7 @@ func (p *planner) selectIndex(
 
 	if len(s.spans) == 0 {
 		// There are no spans to scan.
-		return &zeroNode{}, nil
+		return newZeroNode(s.resultColumns), nil
 	}
 
 	s.origFilter = s.filter

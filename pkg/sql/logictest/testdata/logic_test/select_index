@@ -195,8 +195,7 @@ SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 1 AND b > 'b']
 query TTT
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-render       ·  ·
- └── norows  ·  ·
+norows  ·  ·
 
 query T
 SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
@@ -314,20 +313,17 @@ output row: [3 4]
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
-render       ·  ·
- └── norows  ·  ·
+norows  ·  ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
-render       ·  ·
- └── norows  ·  ·
+norows  ·  ·
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
-render       ·  ·
- └── norows  ·  ·
+norows  ·  ·
 
 # Make sure that mixed type comparison operations are not used
 # for selecting indexes.

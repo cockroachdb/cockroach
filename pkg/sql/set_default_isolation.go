@@ -51,5 +51,5 @@ func (p *planner) SetSessionCharacteristics(n *tree.SetSessionCharacteristics) (
 		return nil, pgerror.Unimplemented("default transaction priority",
 			"unsupported session default: transaction priority")
 	}
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }

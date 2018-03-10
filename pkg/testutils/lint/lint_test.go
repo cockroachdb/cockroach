@@ -948,6 +948,7 @@ func TestLint(t *testing.T) {
 				filter,
 				// _fsm.go files are allowed to dot-import the util/fsm package.
 				stream.GrepNot("_fsm.go.*should not use dot imports"),
+				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
 			), func(s string) {
 				t.Error(s)
 			}); err != nil {
