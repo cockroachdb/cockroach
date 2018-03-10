@@ -114,7 +114,8 @@ func newCopyMachine(
 	if err != nil {
 		return nil, err
 	}
-	cols, err := c.p.processColumns(en.tableDesc, n.Columns)
+	cols, err := c.p.processColumns(en.tableDesc, n.Columns,
+		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
 	}

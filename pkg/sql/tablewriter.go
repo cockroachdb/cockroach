@@ -219,9 +219,10 @@ type tableUpsertEvaler interface {
 	// should really be defined as those needed in distributed sql leaf nodes,
 	// which will necessarily include expr evaluation.
 
-	// eval returns the values for the update case of an upsert, given the row
-	// that would have been inserted and the existing (conflicting) values.
-	eval(insertRow tree.Datums, existingRow tree.Datums) (tree.Datums, error)
+	// eval populates into resultRow the values for the update case of
+	// an upsert, given the row that would have been inserted and the
+	// existing (conflicting) values.
+	eval(insertRow, existingRow, resultRow tree.Datums) (tree.Datums, error)
 
 	// evalComputedCols evaluates the computed columns for this upsert using the
 	// values in updatedRow and appends the results, in order, to appendTo,
@@ -235,31 +236,46 @@ type tableUpsertEvaler interface {
 
 // tableUpserter handles writing kvs and forming table rows for upserts.
 //
-// There are two distinct "modes" that tableUpserter can use, one of which is
-// selected during `init`. In the general mode, rows are batched up from calls
-// to `row` and upserted using `flush`, which uses 1 or 2 `client.Batch`s from
-// the init'd txn to fetch the existing (conflicting) values, followed by one
-// more `client.Batch` with the appropriate inserts and updates. In this case,
-// all necessary `client.Batch`s are created and run within the lifetime of
-// `flush`.
+// There are two distinct "modes" that tableUpserter can use, one of
+// which is selected by newUpsertNode(). In the general mode, rows to
+// be inserted are batched up from calls to `row` and then the upsert
+// is processed using finalize(). The other mode is the fast
+// path. See fastTableUpserter below.
 //
-// The other mode is the fast path. If certain conditions are met (no secondary
-// indexes, all table values being inserted, update expressions of the form `SET
-// a = excluded.a`) then the upsert can be done in one `client.Batch` and using
-// only `Put`s. In this case, the single batch is created during `init`,
-// operated on during `row`, and run during `finalize`. This is the same model
-// as the other `tableFoo`s, which are more simple than upsert.
+// In the general mode, the insert rows are accumulated in insertRows.
+// Then during finalize(), the final upsert processing occurs. This
+// uses 1 or 2 `client.Batch`s from the init'd txn to fetch the
+// existing (conflicting) values, followed by one more `client.Batch`
+// with the appropriate inserts and updates. In this case, all
+// necessary `client.Batch`s are created and run within the lifetime
+// of `finalize`.
+//
 type tableUpserter struct {
-	ri            sqlbase.RowInserter
+	ri sqlbase.RowInserter
+
+	// insertRows are the rows produced by the insertion data source.
+	// These are accumulated while iterating on the insertion data source.
+	insertRows sqlbase.RowContainer
+
+	// updateCols indicates which columns need an update during a
+	// conflict.  There is one entry per column descriptors in the
+	// table. However only the entries identified in the conflict clause
+	// of the original statement will be populated, to disambiguate
+	// columns that need an update from those that don't.
+	updateCols []sqlbase.ColumnDescriptor
+
 	conflictIndex sqlbase.IndexDescriptor
-	isUpsertAlias bool
 	alloc         *sqlbase.DatumAlloc
 	collectRows   bool
 	anyComputed   bool
 
 	// These are set for ON CONFLICT DO UPDATE, but not for DO NOTHING
-	updateCols []sqlbase.ColumnDescriptor
-	evaler     tableUpsertEvaler
+	evaler *upsertHelper
+
+	// updateValues is the temporary buffer for rows computed by
+	// evaler.eval(). It is reused from one row to the next to limit
+	// allocations.
+	updateValues tree.Datums
 
 	// Set by init.
 	txn                   *client.Txn
@@ -271,15 +287,10 @@ type tableUpserter struct {
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
 	fetcher               sqlbase.RowFetcher
 
-	// Used for the fast path.
-	fastPathBatch *client.Batch
-	fastPathKeys  map[string]struct{}
-
-	// Batched up in run/flush.
-	insertRows sqlbase.RowContainer
-
 	// Rows returned if collectRows is true.
 	rowsUpserted *sqlbase.RowContainer
+	// rowTemplate is used to prepare rows to add to rowsUpserted.
+	rowTemplate tree.Datums
 
 	// For allocation avoidance.
 	indexKeyPrefix []byte
@@ -302,28 +313,19 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		tu.evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
-	// TODO(dan): The fast path is currently only enabled when the UPSERT alias
-	// is explicitly selected by the user. It's possible to fast path some
-	// queries of the form INSERT ... ON CONFLICT, but the utility is low and
-	// there are lots of edge cases (that caused real correctness bugs #13437
-	// #13962). As a result, we've decided to remove this until after 1.0 and
-	// re-enable it then. See #14482.
-	enableFastPath := tu.isUpsertAlias &&
-		// Tables with secondary indexes are not eligible for fast path (it
-		// would be easy to add the new secondary index entry but we can't clean
-		// up the old one without the previous values).
-		len(tableDesc.Indexes) == 0 &&
-		// When adding or removing a column in a schema change (mutation), the user
-		// can't specify it, which means we need to do a lookup and so we can't use
-		// the fast path. When adding or removing an index, same result, so the fast
-		// path is disabled during all mutations.
-		len(tableDesc.Mutations) == 0 &&
-		// For the fast path, all columns must be specified in the insert.
-		len(tu.ri.InsertCols) == len(tableDesc.Columns)
-	if enableFastPath {
-		tu.fastPathBatch = tu.txn.NewBatch()
-		tu.fastPathKeys = make(map[string]struct{})
-		return nil
+	if tu.collectRows {
+		tu.rowsUpserted = sqlbase.NewRowContainer(
+			tu.evalCtx.Mon.MakeBoundAccount(),
+			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
+			tu.insertRows.Len(),
+		)
+
+		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain
+		// all the table columns. We need to pass values for all table columns
+		// to rh, in the correct order; we will use rowTemplate for this. We
+		// also need a table that maps row indices to rowTemplate indices to
+		// fill in the row values; any absent values will be NULLs.
+		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
 	}
 
 	// TODO(dan): This could be made tighter, just the rows needed for the ON
@@ -385,60 +387,18 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 func (tu *tableUpserter) row(
 	ctx context.Context, row tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	if tu.fastPathBatch != nil {
-		tableDesc := tu.tableDesc()
-		primaryKey, _, err := sqlbase.EncodeIndexKey(
-			tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
-		if err != nil {
-			return nil, err
-		}
-		if _, ok := tu.fastPathKeys[string(primaryKey)]; ok {
-			return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
-		}
-		tu.fastPathKeys[string(primaryKey)] = struct{}{}
-		err = tu.ri.InsertRow(ctx, tu.fastPathBatch, row, true, sqlbase.CheckFKs, traceKV)
-		if err != nil {
-			return nil, err
-		}
-
-		if tu.collectRows {
-			_, err = tu.insertRows.AddRow(ctx, row)
-		}
-		return nil, err
-	}
-
-	_, err := tu.insertRows.AddRow(ctx, row)
 	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
-	return nil, err
+	return tu.insertRows.AddRow(ctx, row)
 }
 
-// flush commits to tu.txn any rows batched up in tu.insertRows.
-func (tu *tableUpserter) flush(
+// finalize commits to tu.txn any rows batched up in tu.insertRows.
+func (tu *tableUpserter) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
 ) (*sqlbase.RowContainer, error) {
 	tableDesc := tu.tableDesc()
 	existingRows, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
 		return nil, err
-	}
-
-	var rowTemplate tree.Datums
-	if tu.collectRows {
-		tu.rowsUpserted = sqlbase.NewRowContainer(
-			tu.evalCtx.Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
-			tu.insertRows.Len(),
-		)
-
-		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain
-		// all the table columns. We need to pass values for all table columns
-		// to rh, in the correct order; we will use rowTemplate for this. We
-		// also need a table that maps row indices to rowTemplate indices to
-		// fill in the row values; any absent values will be NULLs.
-		rowTemplate = make(tree.Datums, len(tableDesc.Columns))
-		for i := range rowTemplate {
-			rowTemplate[i] = tree.DNull
-		}
 	}
 
 	colIDToRetIndex := map[sqlbase.ColumnID]int{}
@@ -463,69 +423,91 @@ func (tu *tableUpserter) flush(
 			}
 
 			if tu.collectRows {
+				// Pre-fill with NULLs.
+				for i := range tu.rowTemplate {
+					tu.rowTemplate[i] = tree.DNull
+				}
+				// Fill the other values from insertRow.
 				for i, val := range insertRow {
-					rowTemplate[rowIdxToRetIdx[i]] = val
+					tu.rowTemplate[rowIdxToRetIdx[i]] = val
 				}
 
-				_, err = tu.rowsUpserted.AddRow(ctx, rowTemplate)
+				_, err = tu.rowsUpserted.AddRow(ctx, tu.rowTemplate)
 				if err != nil {
 					return nil, err
 				}
 			}
 		} else {
-			// If len(tu.updateCols) == 0, then we're in the DO NOTHING case.
-			if len(tu.updateCols) > 0 {
-				existingValues := existingRow[:len(tu.ru.FetchCols)]
-				shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, existingValues)
+			if len(tu.updateCols) == 0 {
+				// If len(tu.updateCols) == 0, then we're in the DO NOTHING case.
+				// There is no update to be done.
+				continue
+			}
+
+			// Check the ON CONFLICT DO UPDATE WHERE ... clause.
+			existingValues := existingRow[:len(tu.ru.FetchCols)]
+			shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, existingValues)
+			if err != nil {
+				return nil, err
+			}
+			if !shouldUpdate {
+				// WHERE tells us there is nothing to do. Stop here.
+				continue
+			}
+
+			// Process the UPDATE ON CONFLICT.
+
+			// First compute all the updates via SET (or the pseudo-SET generated
+			// for UPSERT statements).
+			updateValues, err := tu.evaler.eval(insertRow, existingValues, tu.updateValues)
+			if err != nil {
+				return nil, err
+			}
+
+			// Now (re-)compute computed columns. This appends the computed
+			// columns at the end of updateValues.
+			//
+			// TODO(justin): We're currently wasteful here: we construct the
+			// result row *twice* because we need it once to evaluate any computed
+			// columns and again to actually perform the update. we need to find a
+			// way to reuse it. I'm not sure right now how best to factor this -
+			// suggestions welcome.
+			if tu.anyComputed {
+				newValues := make([]tree.Datum, len(existingValues))
+				copy(newValues, existingValues)
+				for i, updateValue := range updateValues {
+					newValues[tu.ru.FetchColIDtoRowIndex[tu.ru.UpdateCols[i].ID]] = updateValue
+				}
+
+				// Now that we have a complete row except for its computed columns,
+				// since the computed columns are at the end of the update row, we
+				// must evaluate the computed columns and add the results to the end
+				// of updateValues.
+				updateValues, err = tu.evaler.evalComputedCols(newValues, updateValues)
 				if err != nil {
 					return nil, err
-				}
-
-				if !shouldUpdate {
-					continue
-				}
-
-				updateValues, err := tu.evaler.eval(insertRow, existingValues)
-				if err != nil {
-					return nil, err
-				}
-
-				// TODO(justin): We're currently wasteful here: we construct the
-				// result row *twice* because we need it once to evaluate any computed
-				// columns and again to actually perform the update. we need to find a
-				// way to reuse it. I'm not sure right now how best to factor this -
-				// suggestions welcome.
-				if tu.anyComputed {
-					newValues := make([]tree.Datum, len(existingValues))
-					copy(newValues, existingValues)
-					for i, updateValue := range updateValues {
-						newValues[tu.ru.FetchColIDtoRowIndex[tu.ru.UpdateCols[i].ID]] = updateValue
-					}
-
-					// Now that we have a complete row except for its computed columns,
-					// since the computed columns are at the end of the update row, we
-					// must evaluate the computed columns and add the results to the end
-					// of updateValues.
-					updateValues, err = tu.evaler.evalComputedCols(newValues, updateValues)
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				updatedRow, err := tu.ru.UpdateRow(
-					ctx, b, existingValues, updateValues, sqlbase.CheckFKs, traceKV,
-				)
-				if err != nil {
-					return nil, err
-				}
-
-				if tu.collectRows {
-					_, err = tu.rowsUpserted.AddRow(ctx, updatedRow)
-					if err != nil {
-						return nil, err
-					}
 				}
 			}
+
+			// Queue the update in KV. This also returns an "update row"
+			// containing the updated values for every column in the
+			// table. This is useful for RETURNING, which we collect below.
+			updatedRow, err := tu.ru.UpdateRow(
+				ctx, b, existingValues, updateValues, sqlbase.CheckFKs, traceKV,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			if tu.collectRows {
+				_, err = tu.rowsUpserted.AddRow(ctx, updatedRow)
+				if err != nil {
+					return nil, err
+				}
+			}
+
+			// Keep the slice for reuse.
+			tu.updateValues = updateValues[:0]
 		}
 	}
 
@@ -668,36 +650,6 @@ func (tu *tableUpserter) fetchExisting(ctx context.Context, traceKV bool) ([]tre
 	return rows, nil
 }
 
-// finalize is part of the tableWriter interface.
-func (tu *tableUpserter) finalize(
-	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
-) (*sqlbase.RowContainer, error) {
-	if tu.fastPathBatch != nil {
-		if autoCommit == autoCommitEnabled {
-			// An auto-txn can commit the transaction with the batch. This is an
-			// optimization to avoid an extra round-trip to the transaction
-			// coordinator.
-			err := tu.txn.CommitInBatch(ctx, tu.fastPathBatch)
-			if err != nil {
-				return nil, err
-			}
-			if tu.collectRows {
-				return &tu.insertRows, nil
-			}
-			return nil, nil
-		}
-		err := tu.txn.Run(ctx, tu.fastPathBatch)
-		if err != nil {
-			return nil, err
-		}
-		if tu.collectRows {
-			return &tu.insertRows, nil
-		}
-		return nil, nil
-	}
-	return tu.flush(ctx, autoCommit, traceKV)
-}
-
 func (tu *tableUpserter) tableDesc() *sqlbase.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
@@ -710,6 +662,122 @@ func (tu *tableUpserter) close(ctx context.Context) {
 	tu.insertRows.Close(ctx)
 	if tu.rowsUpserted != nil {
 		tu.rowsUpserted.Close(ctx)
+	}
+}
+
+// fastTableUpserter implements the fast path for an upsert. See
+// tableUpserter above for the general case.
+//
+// If certain conditions are met (no secondary indexes, all table
+// values being inserted, update expressions of the form `SET a =
+// excluded.a`) then the upsert can be done in one `client.Batch` and
+// using only `Put`s. In this case, the single batch is created during
+// `init`, operated on during `row`, and run during `finalize`. This
+// is the same model as the other `tableFoo`s, which are more simple
+// than upsert.
+type fastTableUpserter struct {
+	ri sqlbase.RowInserter
+
+	// collectRows indicates whether the upserted rows should be
+	// collected in the row container.
+	collectRows  bool
+	upsertedRows *sqlbase.RowContainer
+
+	// fastPathKeys and indexKeyPrefix are used to detect that no
+	// duplicate row is being upserted.
+	fastPathKeys   map[string]struct{}
+	indexKeyPrefix []byte
+
+	// Set by init.
+	txn     *client.Txn
+	evalCtx *tree.EvalContext
+
+	// Used for the fast path.
+	fastPathBatch *client.Batch
+}
+
+func (tu *fastTableUpserter) walkExprs(_ func(_ string, _ int, _ tree.TypedExpr)) {}
+
+// init is part of the tableWriter interface.
+func (tu *fastTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
+	tableDesc := tu.tableDesc()
+
+	tu.txn = txn
+	tu.evalCtx = evalCtx
+	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+
+	if tu.collectRows {
+		tu.upsertedRows = sqlbase.NewRowContainer(
+			tu.evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		)
+	}
+
+	tu.fastPathKeys = make(map[string]struct{})
+	tu.fastPathBatch = tu.txn.NewBatch()
+	return nil
+}
+
+// row is part of the tableWriter interface.
+func (tu *fastTableUpserter) row(
+	ctx context.Context, row tree.Datums, traceKV bool,
+) (tree.Datums, error) {
+	tableDesc := tu.tableDesc()
+
+	// Verify we are not upserting a duplicate.
+	primaryKey, _, err := sqlbase.EncodeIndexKey(
+		tableDesc, &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, row, tu.indexKeyPrefix)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := tu.fastPathKeys[string(primaryKey)]; ok {
+		return nil, fmt.Errorf("UPSERT/ON CONFLICT DO UPDATE command cannot affect row a second time")
+	}
+	tu.fastPathKeys[string(primaryKey)] = struct{}{}
+
+	// Use the fast path, ignore conflicts.
+	if err := tu.ri.InsertRow(
+		ctx, tu.fastPathBatch, row, true /* ignoreConflicts */, sqlbase.CheckFKs, traceKV); err != nil {
+		return nil, err
+	}
+
+	if tu.collectRows {
+		_, err = tu.upsertedRows.AddRow(ctx, row)
+	}
+	return nil, err
+}
+
+// finalize is part of the tableWriter interface.
+func (tu *fastTableUpserter) finalize(
+	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
+) (*sqlbase.RowContainer, error) {
+	if autoCommit == autoCommitEnabled {
+		// An auto-txn can commit the transaction with the batch. This is an
+		// optimization to avoid an extra round-trip to the transaction
+		// coordinator.
+		if err := tu.txn.CommitInBatch(ctx, tu.fastPathBatch); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := tu.txn.Run(ctx, tu.fastPathBatch); err != nil {
+			return nil, err
+		}
+	}
+
+	return tu.upsertedRows, nil
+}
+
+func (tu *fastTableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
+	return tu.ri.Fks
+}
+
+func (tu *fastTableUpserter) tableDesc() *sqlbase.TableDescriptor {
+	return tu.ri.Helper.TableDesc
+}
+
+func (tu *fastTableUpserter) close(ctx context.Context) {
+	if tu.upsertedRows != nil {
+		tu.upsertedRows.Close(ctx)
+		tu.upsertedRows = nil
 	}
 }
 
