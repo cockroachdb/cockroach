@@ -10,81 +10,59 @@ TABLE a
  └── INDEX primary
       └── k int not null
 
-# --------------------------------------------------
-# FlattenAnd
-# --------------------------------------------------
-opt
-SELECT * FROM a WHERE k>1 AND k<5 AND f=3.5
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
 ----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── scan
- │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1,3)]
-      ├── gt [type=bool, outer=(1)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
-      ├── lt [type=bool, outer=(1)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 5 [type=int]
-      └── eq [type=bool, outer=(3)]
-           ├── variable: a.f [type=float, outer=(3)]
-           └── const: 3.5 [type=float]
+TABLE b
+ ├── x int not null
+ ├── z int
+ └── INDEX primary
+      └── x int not null
 
 # --------------------------------------------------
-# FlattenOr
+# EliminateEmptyAnd
 # --------------------------------------------------
 opt
-SELECT * FROM a WHERE k=1 OR i=2 OR f=3.5
+SELECT * FROM a WHERE True AND True
+----
+scan
+ └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+
+# --------------------------------------------------
+# EliminateEmptyOr
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE False OR False
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── or [type=bool, outer=(1-3)]
-      ├── eq [type=bool, outer=(1)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
+ └── false [type=bool]
+
+# --------------------------------------------------
+# EliminateSingletonAndOr
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE (i=5 OR False) AND (s<'foo' AND True)
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(2,4)]
       ├── eq [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 2 [type=int]
-      └── eq [type=bool, outer=(3)]
-           ├── variable: a.f [type=float, outer=(3)]
-           └── const: 3.5 [type=float]
-
-# --------------------------------------------------
-# FlattenAnd + FlattenOr
-#   Combine and/or ops.
-#   Use parentheses to make and/or tree right-heavy instead of left-heavy.
-# --------------------------------------------------
-opt
-SELECT * FROM a WHERE (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar')
-----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── scan
- │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1-4)]
-      ├── or [type=bool, outer=(1-3)]
-      │    ├── eq [type=bool, outer=(1)]
-      │    │    ├── variable: a.k [type=int, outer=(1)]
-      │    │    └── const: 1 [type=int]
-      │    ├── eq [type=bool, outer=(2)]
-      │    │    ├── variable: a.i [type=int, outer=(2)]
-      │    │    └── const: 2 [type=int]
-      │    └── eq [type=bool, outer=(3)]
-      │         ├── variable: a.f [type=float, outer=(3)]
-      │         └── const: 3.5 [type=float]
-      ├── eq [type=bool, outer=(4)]
-      │    ├── variable: a.s [type=string, outer=(4)]
-      │    └── const: 'foo' [type=string]
-      └── ne [type=bool, outer=(4)]
+      │    └── const: 5 [type=int]
+      └── lt [type=bool, outer=(4)]
            ├── variable: a.s [type=string, outer=(4)]
-           └── const: 'bar' [type=string]
+           └── const: 'foo' [type=string]
 
 # --------------------------------------------------
 # SimplifyAnd
 # --------------------------------------------------
+
+# Replace with False if any operand is false.
 opt
 SELECT * FROM a WHERE k=1 AND False AND f=3.5
 ----
@@ -103,6 +81,7 @@ select
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  └── false [type=bool]
 
+# Discard True operands.
 opt
 SELECT * FROM a WHERE true AND k=1
 ----
@@ -110,7 +89,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1)]
+ └── filters [type=bool, outer=(1)]
       └── eq [type=bool, outer=(1)]
            ├── variable: a.k [type=int, outer=(1)]
            └── const: 1 [type=int]
@@ -122,7 +101,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1,2)]
+ └── filters [type=bool, outer=(1,2)]
       ├── eq [type=bool, outer=(1)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
@@ -130,36 +109,53 @@ select
            ├── variable: a.i [type=int, outer=(2)]
            └── const: 2 [type=int]
 
+# No conditions left after rule.
 opt
 SELECT * FROM a WHERE true AND true
 ----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── scan
- │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── true [type=bool]
+scan
+ └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
 
-# --------------------------------------------------
-# SimplifyOr + EliminateSingletonOr
-# --------------------------------------------------
+# Flatten nested And operands.
 opt
-SELECT * FROM a WHERE k=1 OR (i=2 OR True)
+SELECT * FROM a WHERE (k>1 AND k<5) AND (f=3.5 AND s='foo')
 ----
 select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── true [type=bool]
+ └── filters [type=bool, outer=(1,3,4)]
+      ├── gt [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── const: 1 [type=int]
+      ├── lt [type=bool, outer=(1)]
+      │    ├── variable: a.k [type=int, outer=(1)]
+      │    └── const: 5 [type=int]
+      ├── eq [type=bool, outer=(3)]
+      │    ├── variable: a.f [type=float, outer=(3)]
+      │    └── const: 3.5 [type=float]
+      └── eq [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── const: 'foo' [type=string]
+
+# --------------------------------------------------
+# SimplifyOr
+# --------------------------------------------------
+
+# Replace with True if any operand is True.
+opt
+SELECT * FROM a WHERE k=1 OR (i=2 OR True)
+----
+scan
+ └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
 
 opt
 SELECT * FROM a WHERE k=1 OR True OR f=3.5
 ----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── scan
- │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── true [type=bool]
+scan
+ └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
 
+# Discard False operands.
 opt
 SELECT * FROM a WHERE false OR k=1
 ----
@@ -167,9 +163,10 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── eq [type=bool, outer=(1)]
-      ├── variable: a.k [type=int, outer=(1)]
-      └── const: 1 [type=int]
+ └── filters [type=bool, outer=(1)]
+      └── eq [type=bool, outer=(1)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── const: 1 [type=int]
 
 opt
 SELECT * FROM a WHERE k=1 OR i=2 OR false
@@ -178,14 +175,16 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── or [type=bool, outer=(1,2)]
-      ├── eq [type=bool, outer=(1)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── const: 1 [type=int]
-      └── eq [type=bool, outer=(2)]
-           ├── variable: a.i [type=int, outer=(2)]
-           └── const: 2 [type=int]
+ └── filters [type=bool, outer=(1,2)]
+      └── or [type=bool, outer=(1,2)]
+           ├── eq [type=bool, outer=(1)]
+           │    ├── variable: a.k [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           └── eq [type=bool, outer=(2)]
+                ├── variable: a.i [type=int, outer=(2)]
+                └── const: 2 [type=int]
 
+# No conditions left after rule.
 opt
 SELECT * FROM a WHERE false OR false
 ----
@@ -194,6 +193,29 @@ select
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
  └── false [type=bool]
+
+# Flatten nested Or operands.
+opt
+SELECT * FROM a WHERE (k=1 OR i=2) OR (f=3.5 OR s='foo')
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(1-4)]
+      └── or [type=bool, outer=(1-4)]
+           ├── eq [type=bool, outer=(1)]
+           │    ├── variable: a.k [type=int, outer=(1)]
+           │    └── const: 1 [type=int]
+           ├── eq [type=bool, outer=(2)]
+           │    ├── variable: a.i [type=int, outer=(2)]
+           │    └── const: 2 [type=int]
+           ├── eq [type=bool, outer=(3)]
+           │    ├── variable: a.f [type=float, outer=(3)]
+           │    └── const: 3.5 [type=float]
+           └── eq [type=bool, outer=(4)]
+                ├── variable: a.s [type=string, outer=(4)]
+                └── const: 'foo' [type=string]
 
 # --------------------------------------------------
 # SimplifyAnd + SimplifyOr
@@ -205,13 +227,71 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1)]
+ └── filters [type=bool, outer=(1)]
       ├── eq [type=bool, outer=(1)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       └── eq [type=bool, outer=(1)]
            ├── variable: a.k [type=int, outer=(1)]
            └── const: 2 [type=int]
+
+# Use parentheses to make and/or tree right-heavy instead of left-heavy.
+opt
+SELECT * FROM a WHERE (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar')
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── filters [type=bool, outer=(1-4)]
+      ├── or [type=bool, outer=(1-3)]
+      │    ├── eq [type=bool, outer=(1)]
+      │    │    ├── variable: a.k [type=int, outer=(1)]
+      │    │    └── const: 1 [type=int]
+      │    ├── eq [type=bool, outer=(2)]
+      │    │    ├── variable: a.i [type=int, outer=(2)]
+      │    │    └── const: 2 [type=int]
+      │    └── eq [type=bool, outer=(3)]
+      │         ├── variable: a.f [type=float, outer=(3)]
+      │         └── const: 3.5 [type=float]
+      ├── eq [type=bool, outer=(4)]
+      │    ├── variable: a.s [type=string, outer=(4)]
+      │    └── const: 'foo' [type=string]
+      └── ne [type=bool, outer=(4)]
+           ├── variable: a.s [type=string, outer=(4)]
+           └── const: 'bar' [type=string]
+
+# --------------------------------------------------
+# SimplifyFilters
+# --------------------------------------------------
+opt
+SELECT * FROM a WHERE Null
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── false [type=bool]
+
+opt
+SELECT * FROM a INNER JOIN b ON NULL
+----
+inner-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) z:7(int)
+ ├── scan
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ ├── scan
+ │    └── columns: b.x:6(int!null) b.z:7(int)
+ └── false [type=bool]
+
+opt
+SELECT * FROM a WHERE i=1 AND Null
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── scan
+ │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ └── false [type=bool]
 
 # --------------------------------------------------
 # FoldNullAndOr
@@ -223,7 +303,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── null [type=bool]
+ └── false [type=bool]
 
 opt
 SELECT * FROM a WHERE null or null
@@ -232,7 +312,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── null [type=bool]
+ └── false [type=bool]
 
 opt
 SELECT * FROM a WHERE null or (null and null and null) or null
@@ -241,7 +321,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── null [type=bool]
+ └── false [type=bool]
 
 # Don't fold.
 opt
@@ -251,13 +331,14 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── or [type=bool, outer=(1)]
-      ├── null [type=unknown]
-      └── and [type=bool, outer=(1)]
+ └── filters [type=bool, outer=(1)]
+      └── or [type=bool, outer=(1)]
            ├── null [type=unknown]
-           └── eq [type=bool, outer=(1)]
-                ├── variable: a.k [type=int, outer=(1)]
-                └── const: 1 [type=int]
+           └── and [type=bool, outer=(1)]
+                ├── null [type=unknown]
+                └── eq [type=bool, outer=(1)]
+                     ├── variable: a.k [type=int, outer=(1)]
+                     └── const: 1 [type=int]
 
 # --------------------------------------------------
 # NegateComparison
@@ -271,7 +352,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2)]
       ├── ne [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
@@ -301,7 +382,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2)]
       ├── not-in [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── tuple [type=tuple{int, int}]
@@ -329,7 +410,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(4)]
+ └── filters [type=bool, outer=(4)]
       ├── not-like [type=bool, outer=(4)]
       │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
@@ -351,7 +432,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(4)]
+ └── filters [type=bool, outer=(4)]
       ├── not-similar-to [type=bool, outer=(4)]
       │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
@@ -367,7 +448,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(4)]
+ └── filters [type=bool, outer=(4)]
       ├── not-reg-match [type=bool, outer=(4)]
       │    ├── variable: a.s [type=string, outer=(4)]
       │    └── const: 'foo' [type=string]
@@ -389,7 +470,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(5)]
+ └── filters [type=bool, outer=(5)]
       ├── not [type=bool, outer=(5)]
       │    └── contains [type=bool, outer=(5)]
       │         ├── const: '[1, 2]' [type=jsonb]
@@ -409,9 +490,10 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── contains [type=bool, outer=(5)]
-      ├── const: '[1, 2]' [type=jsonb]
-      └── variable: a.j [type=jsonb, outer=(5)]
+ └── filters [type=bool, outer=(5)]
+      └── contains [type=bool, outer=(5)]
+           ├── const: '[1, 2]' [type=jsonb]
+           └── variable: a.j [type=jsonb, outer=(5)]
 
 # --------------------------------------------------
 # NegateAnd + NegateComparison
@@ -423,13 +505,14 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── or [type=bool, outer=(1-3)]
-      ├── lt [type=bool, outer=(1,2)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      └── ge [type=bool, outer=(2,3)]
-           ├── variable: a.i [type=int, outer=(2)]
-           └── variable: a.f [type=float, outer=(3)]
+ └── filters [type=bool, outer=(1-3)]
+      └── or [type=bool, outer=(1-3)]
+           ├── lt [type=bool, outer=(1,2)]
+           │    ├── variable: a.k [type=int, outer=(1)]
+           │    └── variable: a.i [type=int, outer=(2)]
+           └── ge [type=bool, outer=(2,3)]
+                ├── variable: a.i [type=int, outer=(2)]
+                └── variable: a.f [type=float, outer=(3)]
 
 opt
 SELECT * FROM a WHERE NOT (k >= i AND i < f AND (i > 5 AND i < 10 AND f > 1))
@@ -438,22 +521,23 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── or [type=bool, outer=(1-3)]
-      ├── lt [type=bool, outer=(1,2)]
-      │    ├── variable: a.k [type=int, outer=(1)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      ├── ge [type=bool, outer=(2,3)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── variable: a.f [type=float, outer=(3)]
-      ├── le [type=bool, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 5 [type=int]
-      ├── ge [type=bool, outer=(2)]
-      │    ├── variable: a.i [type=int, outer=(2)]
-      │    └── const: 10 [type=int]
-      └── le [type=bool, outer=(3)]
-           ├── variable: a.f [type=float, outer=(3)]
-           └── const: 1.0 [type=float]
+ └── filters [type=bool, outer=(1-3)]
+      └── or [type=bool, outer=(1-3)]
+           ├── lt [type=bool, outer=(1,2)]
+           │    ├── variable: a.k [type=int, outer=(1)]
+           │    └── variable: a.i [type=int, outer=(2)]
+           ├── ge [type=bool, outer=(2,3)]
+           │    ├── variable: a.i [type=int, outer=(2)]
+           │    └── variable: a.f [type=float, outer=(3)]
+           ├── le [type=bool, outer=(2)]
+           │    ├── variable: a.i [type=int, outer=(2)]
+           │    └── const: 5 [type=int]
+           ├── ge [type=bool, outer=(2)]
+           │    ├── variable: a.i [type=int, outer=(2)]
+           │    └── const: 10 [type=int]
+           └── le [type=bool, outer=(3)]
+                ├── variable: a.f [type=float, outer=(3)]
+                └── const: 1.0 [type=float]
 
 
 # --------------------------------------------------
@@ -466,7 +550,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1-3)]
+ └── filters [type=bool, outer=(1-3)]
       ├── lt [type=bool, outer=(1,2)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── variable: a.i [type=int, outer=(2)]
@@ -486,7 +570,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1-3)]
+ └── filters [type=bool, outer=(1-3)]
       ├── lt [type=bool, outer=(1,2)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── variable: a.i [type=int, outer=(2)]
@@ -513,21 +597,22 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── or [type=bool, outer=(1-3)]
-      ├── and [type=bool, outer=(1-3)]
-      │    ├── lt [type=bool, outer=(1,2)]
-      │    │    ├── variable: a.k [type=int, outer=(1)]
-      │    │    └── variable: a.i [type=int, outer=(2)]
-      │    └── ge [type=bool, outer=(2,3)]
-      │         ├── variable: a.i [type=int, outer=(2)]
-      │         └── variable: a.f [type=float, outer=(3)]
-      └── and [type=bool, outer=(2,3)]
-           ├── le [type=bool, outer=(2)]
-           │    ├── variable: a.i [type=int, outer=(2)]
-           │    └── const: 5 [type=int]
-           └── le [type=bool, outer=(3)]
-                ├── variable: a.f [type=float, outer=(3)]
-                └── const: 1.0 [type=float]
+ └── filters [type=bool, outer=(1-3)]
+      └── or [type=bool, outer=(1-3)]
+           ├── and [type=bool, outer=(1-3)]
+           │    ├── lt [type=bool, outer=(1,2)]
+           │    │    ├── variable: a.k [type=int, outer=(1)]
+           │    │    └── variable: a.i [type=int, outer=(2)]
+           │    └── ge [type=bool, outer=(2,3)]
+           │         ├── variable: a.i [type=int, outer=(2)]
+           │         └── variable: a.f [type=float, outer=(3)]
+           └── and [type=bool, outer=(2,3)]
+                ├── le [type=bool, outer=(2)]
+                │    ├── variable: a.i [type=int, outer=(2)]
+                │    └── const: 5 [type=int]
+                └── le [type=bool, outer=(3)]
+                     ├── variable: a.f [type=float, outer=(3)]
+                     └── const: 1.0 [type=float]
 
 opt
 SELECT * FROM a WHERE NOT ((k >= i AND i < f) OR (i > 5 AND f > 1))
@@ -536,7 +621,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1-3)]
+ └── filters [type=bool, outer=(1-3)]
       ├── or [type=bool, outer=(1-3)]
       │    ├── lt [type=bool, outer=(1,2)]
       │    │    ├── variable: a.k [type=int, outer=(1)]
