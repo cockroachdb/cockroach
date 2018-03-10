@@ -19,6 +19,7 @@ var opLayoutTable = [...]opLayout{
 	opt.ProjectionsOp:     makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.AggregationsOp:    makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.ExistsOp:          makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.FiltersOp:         makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.AndOp:             makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.OrOp:              makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.NotOp:             makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
@@ -108,6 +109,7 @@ var isScalarLookup = [...]bool{
 	true,  // ProjectionsOp
 	true,  // AggregationsOp
 	true,  // ExistsOp
+	true,  // FiltersOp
 	true,  // AndOp
 	true,  // OrOp
 	true,  // NotOp
@@ -197,6 +199,7 @@ var isConstValueLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -286,6 +289,7 @@ var isBooleanLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	true,  // FiltersOp
 	true,  // AndOp
 	true,  // OrOp
 	true,  // NotOp
@@ -375,6 +379,7 @@ var isComparisonLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -464,6 +469,7 @@ var isBinaryLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -553,6 +559,7 @@ var isUnaryLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -642,6 +649,7 @@ var isRelationalLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -731,6 +739,7 @@ var isJoinLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -820,6 +829,7 @@ var isJoinApplyLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -909,6 +919,7 @@ var isEnforcerLookup = [...]bool{
 	false, // ProjectionsOp
 	false, // AggregationsOp
 	false, // ExistsOp
+	false, // FiltersOp
 	false, // AndOp
 	false, // OrOp
 	false, // NotOp
@@ -1331,6 +1342,38 @@ func (m *memoExpr) asExists() *existsExpr {
 		return nil
 	}
 	return (*existsExpr)(m)
+}
+
+// filtersExpr is a boolean And operator that only appears as the Filters child of
+// a Select operator, or the On child of a Join operator. For example:
+//   (Select
+//     (Scan a)
+//     (Filters (Gt (Variable a) 1) (Lt (Variable a) 5))
+//   )
+//
+// Normalization rules ensure that a Filters expression is always created if
+// there is at least one condition, so that other rules can rely on its presence
+// when matching, even in the case where there is only one condition. The
+// semantics of the Filters operator are identical to those of the And operator.
+type filtersExpr memoExpr
+
+func makeFiltersExpr(conditions opt.ListID) filtersExpr {
+	return filtersExpr{op: opt.FiltersOp, state: exprState{conditions.Offset, conditions.Length}}
+}
+
+func (e *filtersExpr) conditions() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *filtersExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFilters() *filtersExpr {
+	if m.op != opt.FiltersOp {
+		return nil
+	}
+	return (*filtersExpr)(m)
 }
 
 // andExpr is the boolean conjunction operator that evalutes to true if all of its
@@ -2623,7 +2666,10 @@ func (m *memoExpr) asValues() *valuesExpr {
 }
 
 // selectExpr filters rows from its input result set, based on the boolean filter
-// predicate expression. Rows which do not match the filter are discarded.
+// predicate expression. Rows which do not match the filter are discarded. While
+// the Filter operand can be any boolean expression, normalization rules will
+// typically convert it to a Filters operator in order to make conjunction list
+// matching easier.
 type selectExpr memoExpr
 
 func makeSelectExpr(input opt.GroupID, filter opt.GroupID) selectExpr {
