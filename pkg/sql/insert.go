@@ -39,23 +39,16 @@ var tableInserterPool = sync.Pool{
 	},
 }
 
-var tableUpserterPool = sync.Pool{
-	New: func() interface{} {
-		return &tableUpserter{}
-	},
-}
-
 type insertNode struct {
 	// The following fields are populated during makePlan.
 	editNodeBase
 	defaultExprs []tree.TypedExpr
 	computeExprs []tree.TypedExpr
-	n            *tree.Insert
 	checkHelper  *sqlbase.CheckHelper
 
 	insertCols   []sqlbase.ColumnDescriptor
 	computedCols []sqlbase.ColumnDescriptor
-	tw           tableWriter
+	tw           tableInserter
 
 	run insertRun
 
@@ -88,15 +81,9 @@ func (p *planner) Insert(
 	if err != nil {
 		return nil, err
 	}
-	isUpsertReturning := false
-	if n.OnConflict != nil {
-		if !n.OnConflict.DoNothing {
-			if err := p.CheckPrivilege(ctx, en.tableDesc, privilege.UPDATE); err != nil {
-				return nil, err
-			}
-		}
-		if _, ok := n.Returning.(*tree.ReturningExprs); ok {
-			isUpsertReturning = true
+	if n.OnConflict != nil && !n.OnConflict.DoNothing {
+		if err := p.CheckPrivilege(ctx, en.tableDesc, privilege.UPDATE); err != nil {
+			return nil, err
 		}
 	}
 
@@ -106,7 +93,8 @@ func (p *planner) Insert(
 		cols = en.tableDesc.Columns
 	} else {
 		var err error
-		if cols, err = p.processColumns(en.tableDesc, n.Columns); err != nil {
+		if cols, err = p.processColumns(en.tableDesc, n.Columns,
+			true /* ensureColumns */, false /* allowMutations */); err != nil {
 			return nil, err
 		}
 	}
@@ -222,96 +210,46 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	var tw tableWriter
-	if n.OnConflict == nil {
-		ti := tableInserterPool.Get().(*tableInserter)
-		*ti = tableInserter{ri: ri}
-		tw = ti
-	} else {
-		updateExprs, conflictIndex, err := upsertExprsAndIndex(en.tableDesc, *n.OnConflict, ri.InsertCols)
-		if err != nil {
-			return nil, err
-		}
-
-		if n.OnConflict.DoNothing {
-			// TODO(dan): Postgres allows ON CONFLICT DO NOTHING without specifying a
-			// conflict index, which means do nothing on any conflict. Support this if
-			// someone needs it.
-			tu := tableUpserterPool.Get().(*tableUpserter)
-			*tu = tableUpserter{
-				ri:            ri,
-				conflictIndex: *conflictIndex,
-				alloc:         &p.alloc,
-				collectRows:   isUpsertReturning,
-			}
-			tw = tu
-		} else {
-			names, err := p.namesForExprs(updateExprs)
-			if err != nil {
-				return nil, err
-			}
-			// Also include columns that are inactive because they should be
-			// updated.
-			updateCols := make([]sqlbase.ColumnDescriptor, len(names))
-			for i, n := range names {
-				col, _, err := en.tableDesc.FindColumnByName(n)
-				if err != nil {
-					return nil, err
-				}
-				updateCols[i] = col
-			}
-
-			// We also need to include any computed columns in the set of UpdateCols.
-			// They can't have been set explicitly so there's no chance of
-			// double-including a computed column.
-
-			// TODO(justin): we should size updateCols appropriately beforehand,
-			// but we'd need to know how many computed columns there are (and it
-			// would be more complicated if we only updated computed columns when
-			// necessary).
-			updateCols = append(updateCols, computedCols...)
-
-			helper, err := p.makeUpsertHelper(
-				ctx, tn, en.tableDesc, ri.InsertCols, updateCols, updateExprs, computeExprs, conflictIndex, n.OnConflict.Where,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			tu := tableUpserterPool.Get().(*tableUpserter)
-			*tu = tableUpserter{
-				ri:            ri,
-				alloc:         &p.alloc,
-				collectRows:   isUpsertReturning,
-				anyComputed:   len(computeExprs) >= 0,
-				fkTables:      fkTables,
-				updateCols:    updateCols,
-				conflictIndex: *conflictIndex,
-				evaler:        helper,
-				isUpsertAlias: n.OnConflict.IsUpsertAlias(),
-			}
-			tw = tu
-		}
+	if n.OnConflict != nil {
+		return p.newUpsertNode(
+			ctx, n, en, ri, tn, alias, rows,
+			defaultExprs, computeExprs, computedCols, fkTables, desiredTypes)
 	}
+	return newInsertNode(
+		ctx, n, en, ri, alias, rows, defaultExprs, computeExprs, computedCols,
+		fkTables[en.tableDesc.ID].CheckHelper, desiredTypes)
+}
 
+func newInsertNode(
+	ctx context.Context,
+	n *tree.Insert,
+	en editNodeBase,
+	ri sqlbase.RowInserter,
+	alias *tree.TableName,
+	rows planNode,
+	defaultExprs []tree.TypedExpr,
+	computeExprs []tree.TypedExpr,
+	computedCols []sqlbase.ColumnDescriptor,
+	checkHelper *sqlbase.CheckHelper,
+	desiredTypes []types.T,
+) (planNode, error) {
 	in := insertNodePool.Get().(*insertNode)
 	*in = insertNode{
-		n:            n,
 		editNodeBase: en,
 		defaultExprs: defaultExprs,
 		computeExprs: computeExprs,
 		insertCols:   ri.InsertCols,
 		computedCols: computedCols,
-		tw:           tw,
+		tw:           tableInserter{ri: ri},
 		run: insertRun{
 			insertColIDtoRowIndex: ri.InsertColIDtoRowIndex,
-			isUpsertReturning:     isUpsertReturning,
 		},
-		checkHelper: fkTables[en.tableDesc.ID].CheckHelper,
+		checkHelper: checkHelper,
 	}
 
 	if err := in.run.initEditNode(
-		ctx, &in.editNodeBase, rows, in.tw, alias, n.Returning, desiredTypes); err != nil {
+		ctx, &in.editNodeBase, rows, &in.tw, alias, n.Returning, desiredTypes); err != nil {
+		in.Close(ctx)
 		return nil, err
 	}
 
@@ -323,14 +261,10 @@ type insertRun struct {
 	// The following fields are populated during Start().
 	editNodeRun
 
-	isUpsertReturning     bool
 	insertColIDtoRowIndex map[sqlbase.ColumnID]int
 
 	rowIdxToRetIdx []int
 	rowTemplate    tree.Datums
-
-	doneUpserting bool
-	rowsUpserted  *sqlbase.RowContainer
 }
 
 func (n *insertNode) startExec(params runParams) error {
@@ -365,34 +299,10 @@ func (n *insertNode) startExec(params runParams) error {
 	return n.run.tw.init(params.p.txn, params.EvalContext())
 }
 
-func (n *insertNode) Next(params runParams) (bool, error) {
-	if n.run.isUpsertReturning {
-		hasRows, err := n.drain(params)
-		if hasRows {
-			n.run.resultRow = n.run.rowsUpserted.At(0)
-			n.run.rowsUpserted.PopFirst()
-		}
-		return hasRows, err
-	}
-
-	return n.internalNext(params)
-}
-
 func (n *insertNode) Close(ctx context.Context) {
 	n.tw.close(ctx)
-	n.run.rows.Close(ctx)
-	n.run.rows = nil
-	if n.run.rowsUpserted != nil {
-		n.run.rowsUpserted.Close(ctx)
-		n.run.rowsUpserted = nil
-	}
-	switch t := n.tw.(type) {
-	case *tableInserter:
-		*t = tableInserter{}
-		tableInserterPool.Put(t)
-	case *tableUpserter:
-		*t = tableUpserter{}
-		tableUpserterPool.Put(t)
+	if n.run.rows != nil {
+		n.run.rows.Close(ctx)
 	}
 	*n = insertNode{}
 	insertNodePool.Put(n)
@@ -402,52 +312,17 @@ func (n *insertNode) Values() tree.Datums {
 	return n.run.resultRow
 }
 
-// Because TableUpserter batches the upserts, we need to completely drain the
-// source and handle all the rows before returning from the first call to Next,
-// so that we can return an upserted row from each call to Values.
-func (n *insertNode) drain(params runParams) (bool, error) {
-	for !n.run.doneUpserting {
-		_, err := n.internalNext(params)
+func (n *insertNode) Next(params runParams) (bool, error) {
+	if err := params.p.cancelChecker.Check(); err != nil {
+		return false, err
+	}
+	if next, err := n.run.rows.Next(params); !next {
 		if err != nil {
 			return false, err
 		}
-	}
-	hasRows := n.run.rowsUpserted.Len() > 0
-	return hasRows, nil
-}
-
-func (n *insertNode) internalNext(params runParams) (bool, error) {
-	if next, err := n.run.rows.Next(params); !next {
-		if err == nil {
-			if err := params.p.cancelChecker.Check(); err != nil {
-				return false, err
-			}
-			// We're done. Finish the batch.
-			rows, err := n.tw.finalize(
-				params.ctx, n.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
-			if err != nil {
-				return false, err
-			}
-
-			if n.run.isUpsertReturning {
-				n.run.rowsUpserted = sqlbase.NewRowContainer(
-					params.EvalContext().Mon.MakeBoundAccount(),
-					sqlbase.ColTypeInfoFromResCols(n.rh.columns),
-					rows.Len(),
-				)
-				for i := 0; i < rows.Len(); i++ {
-					cooked, err := n.rh.cookResultRow(rows.At(i))
-					if err != nil {
-						return false, err
-					}
-					_, err = n.run.rowsUpserted.AddRow(params.ctx, cooked)
-					if err != nil {
-						return false, err
-					}
-				}
-				n.run.doneUpserting = true
-			}
-		}
+		// We're done. Finish the batch.
+		_, err := n.tw.finalize(
+			params.ctx, n.autoCommit, params.extendedEvalCtx.Tracing.KVTracingEnabled())
 		return false, err
 	}
 
@@ -477,12 +352,9 @@ func (n *insertNode) internalNext(params runParams) (bool, error) {
 		return false, err
 	}
 
-	// Handle regular INSERT ... RETURNING without ON CONFLICT clause
-	if !n.run.isUpsertReturning {
-		if n.run.rowTemplate != nil {
-			for i, val := range rowVals {
-				n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
-			}
+	if n.run.rowTemplate != nil {
+		for i, val := range rowVals {
+			n.run.rowTemplate[n.run.rowIdxToRetIdx[i]] = val
 		}
 
 		resultRow, err := n.rh.cookResultRow(n.run.rowTemplate)
@@ -595,23 +467,34 @@ func GenerateInsertRow(
 
 // processColumns returns the column descriptors identified by the
 // given name list. It also checks that a given column name is only
-// listed once. If no column names are given (special case for
-// INSERT), the descriptors for all visible columns are returned.
+// listed once. If no column names are given (special case for INSERT)
+// and ensureColumns is set, the descriptors for all visible columns
+// are returned. If allowMutations is set, even columns undergoing
+// mutations are added.
 func (p *planner) processColumns(
-	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList,
+	tableDesc *sqlbase.TableDescriptor, nameList tree.NameList, ensureColumns, allowMutations bool,
 ) ([]sqlbase.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
-		// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
-		// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
-		// hidden columns. At present, the only hidden column is the implicit rowid
-		// primary key column.
-		return tableDesc.VisibleColumns(), nil
+		if ensureColumns {
+			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
+			// (as opposed to INSERT INTO <table> (...) VALUES (...)) from writing
+			// hidden columns. At present, the only hidden column is the implicit rowid
+			// primary key column.
+			return tableDesc.VisibleColumns(), nil
+		}
+		return nil, nil
 	}
 
 	cols := make([]sqlbase.ColumnDescriptor, len(nameList))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
-		col, err := tableDesc.FindActiveColumnByName(string(colName))
+		var col sqlbase.ColumnDescriptor
+		var err error
+		if allowMutations {
+			col, _, err = tableDesc.FindColumnByName(colName)
+		} else {
+			col, err = tableDesc.FindActiveColumnByName(string(colName))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -752,10 +635,6 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 			more, less, numExprs, numCols)
 	}
 	return nil
-}
-
-func (n *insertNode) isUpsert() bool {
-	return n.n.OnConflict != nil
 }
 
 // enableAutoCommit is part of the autoCommitNode interface.

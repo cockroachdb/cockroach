@@ -107,6 +107,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.rh.columns
 	case *updateNode:
 		return n.rh.columns
+	case *upsertNode:
+		return n.rh.columns
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
