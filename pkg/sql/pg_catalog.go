@@ -1102,7 +1102,9 @@ var (
 	infixKind   = tree.NewDString("b")
 	prefixKind  = tree.NewDString("l")
 	postfixKind = tree.NewDString("r")
-	_           = postfixKind
+
+	// Avoid unused warning for constants.
+	_ = postfixKind
 )
 
 // See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
@@ -1139,7 +1141,8 @@ CREATE TABLE pg_catalog.pg_operator (
 				leftType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
 				rightType = tree.NewDOid(tree.DInt(params.Types()[1].Oid()))
 			default:
-				return nil
+				panic(fmt.Sprintf("Unexpected operator %s with %d params",
+					opName, params.Length()))
 			}
 			returnType := tree.NewDOid(tree.DInt(returnTyper(nil).Oid()))
 			err := addRow(
