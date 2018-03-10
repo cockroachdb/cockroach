@@ -1,0 +1,50 @@
+# =============================================================================
+# select.opt contains normalization rules for the Select operator.
+# =============================================================================
+
+
+# NormalizeSelectNullFilter maps a Null condition to a False condition.
+[NormalizeSelectNullFilter, Normalize]
+(Select
+    $input:*
+    (Null)
+)
+=>
+(Select
+    $input
+    (False)
+)
+
+# EnsureSelectFiltersAnd replaces an And operator in a Select filter with the
+# Filters operator. This allows other rules to rely upon the presence of the
+# Filters when matching. See comment at top of bool.opt for more details.
+[EnsureSelectFiltersAnd, Normalize]
+(Select
+    $input:*
+    (And $conditions:*)
+)
+=>
+(Select
+    $input
+    (Filters $conditions)
+)
+
+# EnsureSelectFilters adds a Filters operator to a Select's filter condition
+# if it does not already exist. This allows other rules to rely upon the
+# presence of the Filters when matching. See comment at top of bool.opt for
+# more details.
+[EnsureSelectFilters, Normalize]
+(Select
+    $input:*
+    $filter:^(Filters | And | True | False | Null)
+)
+=>
+(Select
+    $input
+    (Filters [ $filter ])
+)
+
+# EliminateSelect discards an unnecessary Select operator in the case where its
+# filter is always true.
+[EliminateSelect, Normalize]
+(Select $input:* (True)) => $input

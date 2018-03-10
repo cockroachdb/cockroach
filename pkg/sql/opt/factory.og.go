@@ -94,6 +94,20 @@ type Factory interface {
 	// ConstructExists constructs an expression for the Exists operator.
 	ConstructExists(input GroupID) GroupID
 
+	// ConstructFilters constructs an expression for the Filters operator.
+	// Filters is a boolean And operator that only appears as the Filters child of
+	// a Select operator, or the On child of a Join operator. For example:
+	//   (Select
+	//     (Scan a)
+	//     (Filters (Gt (Variable a) 1) (Lt (Variable a) 5))
+	//   )
+	//
+	// Normalization rules ensure that a Filters expression is always created if
+	// there is at least one condition, so that other rules can rely on its presence
+	// when matching. The semantics of the Filters operator are identical to those
+	// of the And operator.
+	ConstructFilters(conditions ListID) GroupID
+
 	// ConstructAnd constructs an expression for the And operator.
 	// And is the boolean conjunction operator that evalutes to true if all of its
 	// conditions evaluate to true. If the conditions list is empty, it evalutes to
@@ -299,7 +313,10 @@ type Factory interface {
 
 	// ConstructSelect constructs an expression for the Select operator.
 	// Select filters rows from its input result set, based on the boolean filter
-	// predicate expression. Rows which do not match the filter are discarded.
+	// predicate expression. Rows which do not match the filter are discarded. While
+	// the Filter operand can be any boolean expression, normalization rules will
+	// typically convert it to a Filters operator in order to make conjunction list
+	// matching easier.
 	ConstructSelect(input GroupID, filter GroupID) GroupID
 
 	// ConstructProject constructs an expression for the Project operator.

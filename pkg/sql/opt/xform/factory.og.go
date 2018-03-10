@@ -226,6 +226,60 @@ func (_f *factory) ConstructExists(
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_existsExpr)))
 }
 
+// ConstructFilters constructs an expression for the Filters operator.
+// Filters is a boolean And operator that only appears as the Filters child of
+// a Select operator, or the On child of a Join operator. For example:
+//   (Select
+//     (Scan a)
+//     (Filters (Gt (Variable a) 1) (Lt (Variable a) 5))
+//   )
+//
+// Normalization rules ensure that a Filters expression is always created if
+// there is at least one condition, so that other rules can rely on its presence
+// when matching. The semantics of the Filters operator are identical to those
+// of the And operator.
+func (_f *factory) ConstructFilters(
+	conditions opt.ListID,
+) opt.GroupID {
+	_filtersExpr := makeFiltersExpr(conditions)
+	_group := _f.mem.lookupGroupByFingerprint(_filtersExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_filtersExpr))
+	}
+
+	// [EliminateEmptyAnd]
+	{
+		if conditions.Length == 0 {
+			_f.reportOptimization()
+			_group = _f.ConstructTrue()
+			_f.mem.addAltFingerprint(_filtersExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullAndOr]
+	{
+		if conditions.Length > 0 {
+			_item := _f.mem.lookupList(conditions)[0]
+			_null := _f.mem.lookupNormExpr(_item).asNull()
+			if _null != nil {
+				if _f.listOnlyHasNulls(conditions) {
+					_f.reportOptimization()
+					_group = _f.ConstructNull(_f.boolType())
+					_f.mem.addAltFingerprint(_filtersExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_filtersExpr)))
+}
+
 // ConstructAnd constructs an expression for the And operator.
 // And is the boolean conjunction operator that evalutes to true if all of its
 // conditions evaluate to true. If the conditions list is empty, it evalutes to
@@ -243,16 +297,25 @@ func (_f *factory) ConstructAnd(
 		return _f.mem.memoizeNormExpr(memoExpr(_andExpr))
 	}
 
-	// [FlattenAnd]
+	// [EliminateEmptyAnd]
 	{
-		for _, _item := range _f.mem.lookupList(conditions) {
-			_and := _f.mem.lookupNormExpr(_item).asAnd()
-			if _and != nil {
-				_f.reportOptimization()
-				_group = _f.flattenAnd(conditions)
-				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
-				return _group
-			}
+		if conditions.Length == 0 {
+			_f.reportOptimization()
+			_group = _f.ConstructTrue()
+			_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EliminateSingletonAndOr]
+	{
+		if conditions.Length == 1 {
+			_item := _f.mem.lookupList(conditions)[0]
+			item := _item
+			_f.reportOptimization()
+			_group = item
+			_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
+			return _group
 		}
 	}
 
@@ -260,7 +323,7 @@ func (_f *factory) ConstructAnd(
 	{
 		for _, _item := range _f.mem.lookupList(conditions) {
 			_norm := _f.mem.lookupNormExpr(_item)
-			if _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
+			if _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
 				_f.reportOptimization()
 				_group = _f.simplifyAnd(conditions)
 				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
@@ -305,16 +368,25 @@ func (_f *factory) ConstructOr(
 		return _f.mem.memoizeNormExpr(memoExpr(_orExpr))
 	}
 
-	// [FlattenOr]
+	// [EliminateEmptyOr]
 	{
-		for _, _item := range _f.mem.lookupList(conditions) {
-			_or := _f.mem.lookupNormExpr(_item).asOr()
-			if _or != nil {
-				_f.reportOptimization()
-				_group = _f.flattenOr(conditions)
-				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
-				return _group
-			}
+		if conditions.Length == 0 {
+			_f.reportOptimization()
+			_group = _f.ConstructFalse()
+			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EliminateSingletonAndOr]
+	{
+		if conditions.Length == 1 {
+			_item := _f.mem.lookupList(conditions)[0]
+			item := _item
+			_f.reportOptimization()
+			_group = item
+			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
+			return _group
 		}
 	}
 
@@ -322,7 +394,7 @@ func (_f *factory) ConstructOr(
 	{
 		for _, _item := range _f.mem.lookupList(conditions) {
 			_norm := _f.mem.lookupNormExpr(_item)
-			if _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
+			if _norm.op == opt.OrOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
 				_f.reportOptimization()
 				_group = _f.simplifyOr(conditions)
 				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
@@ -344,18 +416,6 @@ func (_f *factory) ConstructOr(
 					return _group
 				}
 			}
-		}
-	}
-
-	// [EliminateSingletonOr]
-	{
-		if conditions.Length == 1 {
-			_item := _f.mem.lookupList(conditions)[0]
-			item := _item
-			_f.reportOptimization()
-			_group = item
-			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
-			return _group
 		}
 	}
 
@@ -3125,7 +3185,10 @@ func (_f *factory) ConstructValues(
 
 // ConstructSelect constructs an expression for the Select operator.
 // Select filters rows from its input result set, based on the boolean filter
-// predicate expression. Rows which do not match the filter are discarded.
+// predicate expression. Rows which do not match the filter are discarded. While
+// the Filter operand can be any boolean expression, normalization rules will
+// typically convert it to a Filters operator in order to make conjunction list
+// matching easier.
 func (_f *factory) ConstructSelect(
 	input opt.GroupID,
 	filter opt.GroupID,
@@ -3138,6 +3201,51 @@ func (_f *factory) ConstructSelect(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_selectExpr))
+	}
+
+	// [NormalizeSelectNullFilter]
+	{
+		_null := _f.mem.lookupNormExpr(filter).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureSelectFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(filter).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureSelectFilters]
+	{
+		_norm := _f.mem.lookupNormExpr(filter)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp || _norm.op == opt.NullOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EliminateSelect]
+	{
+		_true := _f.mem.lookupNormExpr(filter).asTrue()
+		if _true != nil {
+			_f.reportOptimization()
+			_group = input
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_selectExpr)))
@@ -3303,6 +3411,41 @@ func (_f *factory) ConstructInnerJoin(
 		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr))
 	}
 
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
 }
 
@@ -3320,6 +3463,41 @@ func (_f *factory) ConstructLeftJoin(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr))
+	}
+
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr)))
@@ -3341,6 +3519,41 @@ func (_f *factory) ConstructRightJoin(
 		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr))
 	}
 
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoin(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr)))
 }
 
@@ -3358,6 +3571,41 @@ func (_f *factory) ConstructFullJoin(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr))
+	}
+
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoin(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr)))
@@ -3379,6 +3627,41 @@ func (_f *factory) ConstructSemiJoin(
 		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr))
 	}
 
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr)))
 }
 
@@ -3396,6 +3679,41 @@ func (_f *factory) ConstructAntiJoin(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr))
+	}
+
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr)))
@@ -3420,6 +3738,41 @@ func (_f *factory) ConstructInnerJoinApply(
 		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr))
 	}
 
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr)))
 }
 
@@ -3437,6 +3790,41 @@ func (_f *factory) ConstructLeftJoinApply(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr))
+	}
+
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr)))
@@ -3458,6 +3846,41 @@ func (_f *factory) ConstructRightJoinApply(
 		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr))
 	}
 
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr)))
 }
 
@@ -3475,6 +3898,41 @@ func (_f *factory) ConstructFullJoinApply(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr))
+	}
+
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr)))
@@ -3496,6 +3954,41 @@ func (_f *factory) ConstructSemiJoinApply(
 		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr))
 	}
 
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr)))
 }
 
@@ -3513,6 +4006,41 @@ func (_f *factory) ConstructAntiJoinApply(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr))
+	}
+
+	// [NormalizeJoinNullOn]
+	{
+		_null := _f.mem.lookupNormExpr(on).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFalse())
+			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
 	}
 
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr)))
@@ -3738,7 +4266,7 @@ func (_f *factory) ConstructExceptAll(
 
 type dynConstructLookupFunc func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID
 
-var dynConstructLookup [84]dynConstructLookupFunc
+var dynConstructLookup [85]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -3799,6 +4327,11 @@ func init() {
 	// ExistsOp
 	dynConstructLookup[opt.ExistsOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
 		return f.ConstructExists(children[0])
+	}
+
+	// FiltersOp
+	dynConstructLookup[opt.FiltersOp] = func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID {
+		return f.ConstructFilters(f.InternList(children))
 	}
 
 	// AndOp

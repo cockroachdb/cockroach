@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/scalar.opt rules/bool.opt rules/comp.opt rules/numeric.opt
+//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/select.opt rules/join.opt rules/scalar.opt rules/bool.opt rules/comp.opt rules/numeric.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -475,47 +475,14 @@ func (f *factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.C
 //
 // ----------------------------------------------------------------------
 
-// flattenAnd constructs an And operator from the list of input conditions.
-// If any of the conditions is itself an And operator, then "flatten" it by
-// merging its conditions into the top-level list. Only one level of flattening
-// is necessary, since this pattern would have already matched any And operator
-// children.
-func (f *factory) flattenAnd(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length+1)
-	for _, item := range f.mem.lookupList(conditions) {
-		and := f.mem.lookupNormExpr(item).asAnd()
-		if and != nil {
-			list = append(list, f.mem.lookupList(and.conditions())...)
-		} else {
-			list = append(list, item)
-		}
-	}
-	return f.ConstructAnd(f.mem.internList(list))
-}
-
-// flattenOr constructs an Or operator from the list of input conditions. If
-// any of the conditions is itself an Or operator, then "flatten" it by merging
-// its conditions into the top-level list. Only one level of flattening is
-// necessary, since this pattern would have already matched any Or operator
-// children.
-func (f *factory) flattenOr(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length+1)
-	for _, item := range f.mem.lookupList(conditions) {
-		or := f.mem.lookupNormExpr(item).asOr()
-		if or != nil {
-			list = append(list, f.mem.lookupList(or.conditions())...)
-		} else {
-			list = append(list, item)
-		}
-	}
-	return f.ConstructOr(f.mem.internList(list))
-}
-
 // simplifyAnd removes True operands from an And operator, and eliminates the
-// And operator altogether if any operand is False. If, after simplification,
-// no operands remain, then simplifyAnd returns True.
+// And operator altogether if any operand is False. It also "flattens" any And
+// operator child by merging its conditions into the top-level list. Only one
+// level of flattening is necessary, since this pattern would have already
+// matched any And operator children. If, after simplification, no operands
+// remain, then simplifyAnd returns True.
 func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length-1)
+	list := make([]opt.GroupID, 0, conditions.Length+1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
 
@@ -523,8 +490,14 @@ func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 		case opt.FalseOp:
 			// Entire And evaluates to False if any operand is False.
 			return item
+
 		case opt.TrueOp:
 			// And operator skips True operands.
+
+		case opt.AndOp:
+			// Flatten nested And operands.
+			list = append(list, f.mem.lookupList(itemExpr.asAnd().conditions())...)
+
 		default:
 			list = append(list, item)
 		}
@@ -536,11 +509,14 @@ func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 	return f.ConstructAnd(f.mem.internList(list))
 }
 
-// simplifyOr removes False operands from an Or operator, and eliminates the
-// Or operator altogether if any operand is True. If, after simplification,
-// no operands remain, then simplifyOr returns False.
+// simplifyOr removes False operands from an Or operator, and eliminates the Or
+// operator altogether if any operand is True. It also "flattens" any Or
+// operator child by merging its conditions into the top-level list. Only one
+// level of flattening is necessary, since this pattern would have already
+// matched any Or operator children. If, after simplification, no operands
+// remain, then simplifyOr returns False.
 func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length-1)
+	list := make([]opt.GroupID, 0, conditions.Length+1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
 
@@ -548,8 +524,14 @@ func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 		case opt.TrueOp:
 			// Entire Or evaluates to True if any operand is True.
 			return item
+
 		case opt.FalseOp:
 			// Or operator skips False operands.
+
+		case opt.OrOp:
+			// Flatten nested Or operands.
+			list = append(list, f.mem.lookupList(itemExpr.asOr().conditions())...)
+
 		default:
 			list = append(list, item)
 		}
