@@ -117,5 +117,5 @@ func (p *planner) changePrivileges(
 	if err := p.txn.Run(ctx, b); err != nil {
 		return nil, err
 	}
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }

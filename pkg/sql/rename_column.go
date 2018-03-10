@@ -47,7 +47,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		return nil, err
 	}
 	if tableDesc == nil {
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
@@ -79,7 +79,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 
 	if n.Name == n.NewName {
 		// Noop.
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	if _, _, err := tableDesc.FindColumnByName(n.NewName); err == nil {
@@ -158,5 +158,5 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	//	return nil, err
 	// }
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }

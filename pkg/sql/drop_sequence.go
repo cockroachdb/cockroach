@@ -51,7 +51,7 @@ func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planN
 	}
 
 	if len(td) == 0 {
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	return &dropSequenceNode{

@@ -32,5 +32,5 @@ func (p *planner) Deallocate(ctx context.Context, s *tree.Deallocate) (planNode,
 				"prepared statement %q does not exist", s.Name)
 		}
 	}
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }

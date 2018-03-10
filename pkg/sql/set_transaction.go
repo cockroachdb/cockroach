@@ -20,5 +20,5 @@ import (
 
 // SetTransaction sets a transaction's isolation level
 func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {
-	return &zeroNode{}, p.extendedEvalCtx.TxnModesSetter.setTransactionModes(n.Modes)
+	return newZeroNode(nil /* columns */), p.extendedEvalCtx.TxnModesSetter.setTransactionModes(n.Modes)
 }

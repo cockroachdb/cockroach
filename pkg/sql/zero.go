@@ -18,21 +18,23 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
-
-// ZeroNode is the exported alias for zeroNode. Used by CCL.
-type ZeroNode = zeroNode
 
 // zeroNode is a planNode with no columns and no rows and is used for nodes that
 // have no results. (e.g. a table for which the filtering condition has a
-// contradiction)
+// contradiction).
 type zeroNode struct {
-	// We use planNodes as map keys, and zero-size structs are optimized to all
-	// point to the same location in memory. As a result, unless we include some
-	// field in this struct every zeroNode will have the same identity.
-	// In particular, the parallelization detector maps planNodes to go channels
-	// which this causes problems for (see TestParallelizeQueueNoDependencies).
-	_ interface{}
+	columns sqlbase.ResultColumns
+}
+
+func newZeroNode(columns sqlbase.ResultColumns) *zeroNode {
+	return &zeroNode{columns: columns}
+}
+
+// NewZeroNode is the exported version of makeZeroNode. Used by CCL.
+func NewZeroNode(columns sqlbase.ResultColumns) PlanNode {
+	return newZeroNode(columns)
 }
 
 func (z *zeroNode) Next(runParams) (bool, error) { return false, nil }

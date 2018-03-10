@@ -59,7 +59,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 	if tableDesc == nil {
 		// Noop.
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
@@ -106,7 +106,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		oldTn.Schema() == newTn.Schema() &&
 		oldTn.Table() == newTn.Table() {
 		// Noop.
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	tableDesc.SetName(newTn.Table())
@@ -153,7 +153,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	}
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
 
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
