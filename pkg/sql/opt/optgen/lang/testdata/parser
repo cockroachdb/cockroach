@@ -592,6 +592,56 @@ parse
 )
 
 #
+# Replace with construct list expression.
+#
+parse
+[ConstructList]
+(Op $left:* $right:*)
+=>
+(Op [$left "foo" [] [$right] AnotherOp])
+----
+(Root
+	Defines=(DefineSet)
+	Rules=(RuleSet
+		(Rule
+			Comments=(Comments)
+			Name="ConstructList"
+			Tags=(Tags)
+			Match=(Match
+				Names=(Names Op)
+				Args=(List
+					(Bind Label="left" Target=(MatchAny) Src=<test.opt:2:5>)
+					(Bind Label="right" Target=(MatchAny) Src=<test.opt:2:13>)
+				)
+				Src=<test.opt:2:1>
+			)
+			Replace=(Construct
+				Name=Op
+				Args=(List
+					(ConstructList
+						Items=(List
+							(Ref Label="left" Src=<test.opt:4:6>)
+							"foo"
+							(ConstructList Items=(List) Src=<test.opt:4:18>)
+							(ConstructList
+								Items=(List
+									(Ref Label="right" Src=<test.opt:4:22>)
+								)
+								Src=<test.opt:4:21>
+							)
+							AnotherOp
+						)
+						Src=<test.opt:4:5>
+					)
+				)
+				Src=<test.opt:4:1>
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+)
+
+#
 # Use dynamic construct name.
 #
 parse

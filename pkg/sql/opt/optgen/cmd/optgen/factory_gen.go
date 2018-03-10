@@ -429,6 +429,9 @@ func (g *factoryGen) genNestedExpr(e lang.Expr) {
 	case *lang.ConstructExpr:
 		g.genConstruct(t)
 
+	case *lang.ConstructListExpr:
+		g.genConstructList(t)
+
 	case *lang.CustomFuncExpr:
 		if t.Name == "OpName" {
 			// Handle OpName function that couldn't be statically resolved by
@@ -481,8 +484,8 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 		panic(fmt.Sprintf("unexpected name expression: %s", construct.Name))
 	}
 
-	for index, arg := range construct.Args {
-		if index != 0 {
+	for i, arg := range construct.Args {
+		if i != 0 {
 			g.w.write(", ")
 		}
 		g.genNestedExpr(arg)
@@ -493,6 +496,18 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 	} else {
 		g.w.write(")")
 	}
+}
+
+// genConstructList generates code to construct an interned list of items.
+func (g *factoryGen) genConstructList(list *lang.ConstructListExpr) {
+	g.w.write("_f.mem.internList([]opt.GroupID{")
+	for i, item := range list.Items {
+		if i != 0 {
+			g.w.write(", ")
+		}
+		g.genNestedExpr(item)
+	}
+	g.w.write("})")
 }
 
 // genDynamicConstructLookup generates a lookup table used by the factory's
