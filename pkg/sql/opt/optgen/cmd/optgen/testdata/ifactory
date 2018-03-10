@@ -48,7 +48,7 @@ type Factory interface {
 	// DynamicConstruct dynamically constructs an operator with the given type
 	// and operands. It is equivalent to a switch statement that calls the
 	// ConstructXXX method that corresponds to the given operator.
-	DynamicConstruct(op Operator, children []GroupID, private PrivateID) GroupID
+	DynamicConstruct(op Operator, operands DynamicOperands) GroupID
 
 	// ------------------------------------------------------------
 	// Scalar Operators
