@@ -31,7 +31,7 @@ func init() {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
 		ctx := context.Background()
-		c := newCluster(ctx, t, end)
+		c := newCluster(ctx, t, end, "--vmodule", "allocator=5,allocator_scorer=5,replicate_queue=5")
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "./cockroach")
@@ -127,6 +127,22 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 		l.printf("stdDev(replica count) = %.2f\n", stdDev)
 	}
 
+	// Output the number of ranges on each store.
+	{
+		rows, err := db.Query(`SELECT store_id, range_count FROM crdb_internal.kv_store_status`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var storeID, rangeCount int64
+			if err := rows.Scan(&storeID, &rangeCount); err != nil {
+				return err
+			}
+			l.printf("s%d has %d ranges\n", storeID, rangeCount)
+		}
+	}
+
 	return nil
 }
 
@@ -215,7 +231,7 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 
 			l.printf("%v\n", stats)
 			if stableInterval <= stats.ElapsedSinceLastEvent {
-				l.printf("num replicas stddev = %f, max = %f\n", stats.ReplicaCountStdDev, maxStdDev)
+				l.printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
 				if stats.ReplicaCountStdDev > maxStdDev {
 					_ = printRebalanceStats(l, db)
 					return errors.Errorf(
