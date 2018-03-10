@@ -1934,6 +1934,7 @@ func init() {
 		newOp, _, _, _, _ := foldComparisonExpr(cmpOp, DNull, DNull)
 		if newOp != cmpOp {
 			cmpOpsInverse[newOp] = cmpOp
+			cmpOpsInverse[cmpOp] = newOp
 		}
 	}
 }
