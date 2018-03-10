@@ -52,7 +52,27 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Memory Usage"
+      title="Memory Usage (per-node RSS)"
+      sources={nodeSources}
+      tooltip={`Per-node Resident Set Size.`}
+    >
+      <Axis units={AxisUnits.Bytes} label="memory usage">
+        {
+          _.map(nodeIDs, (nid) => {
+            return (
+              <Metric
+                name="cr.node.sys.rss"
+                title={nodeDisplayName(nodesSummary, nid)}
+                sources={[nid]}
+              />
+            );
+          })
+        }
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Memory Usage (aggregated)"
       sources={nodeSources}
       tooltip={(
         <div>
