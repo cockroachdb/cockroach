@@ -471,27 +471,33 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 	case *lang.NameExpr:
 		// Standard op construction function.
 		g.w.write("_f.Construct%s(", *t)
+		for i, arg := range construct.Args {
+			if i != 0 {
+				g.w.write(", ")
+			}
+			g.genNestedExpr(arg)
+		}
+		g.w.write(")")
 
 	case *lang.CustomFuncExpr:
 		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
-		g.w.write("_f.DynamicConstruct(_f.mem.lookupNormExpr(%s).op, []opt.GroupID{", ref.Label)
+		g.w.write(
+			"_f.DynamicConstruct(_f.mem.lookupNormExpr(%s).op, opt.DynamicOperands{",
+			ref.Label,
+		)
+		for i, arg := range construct.Args {
+			if i != 0 {
+				g.w.write(", ")
+			}
+			g.w.write("opt.DynamicID(")
+			g.genNestedExpr(arg)
+			g.w.write(")")
+		}
+		g.w.write("})")
 
 	default:
 		panic(fmt.Sprintf("unexpected name expression: %s", construct.Name))
-	}
-
-	for index, arg := range construct.Args {
-		if index != 0 {
-			g.w.write(", ")
-		}
-		g.genNestedExpr(arg)
-	}
-
-	if construct.Name.Op() == lang.CustomFuncOp {
-		g.w.write("}, 0)")
-	} else {
-		g.w.write(")")
 	}
 }
 
@@ -501,7 +507,7 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 func (g *factoryGen) genDynamicConstructLookup() {
 	defines := filterEnforcerDefines(g.compiled.Defines)
 
-	funcType := "func(f *factory, children []opt.GroupID, private opt.PrivateID) opt.GroupID"
+	funcType := "func(f *factory, operands opt.DynamicOperands) opt.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
 
 	g.w.writeIndent("var dynConstructLookup [%d]dynConstructLookupFunc\n\n", len(defines)+1)
@@ -523,15 +529,11 @@ func (g *factoryGen) genDynamicConstructLookup() {
 			}
 
 			if isListType(string(field.Type)) {
-				if i == 0 {
-					g.w.write("f.InternList(children)")
-				} else {
-					g.w.write("f.InternList(children[%d:])", i)
-				}
+				g.w.write("operands[%d].ListID()", i)
 			} else if isPrivateType(string(field.Type)) {
-				g.w.write("private")
+				g.w.write("opt.PrivateID(operands[%d])", i)
 			} else {
-				g.w.write("children[%d]", i)
+				g.w.write("opt.GroupID(operands[%d])", i)
 			}
 		}
 		g.w.write(")\n")
@@ -541,9 +543,9 @@ func (g *factoryGen) genDynamicConstructLookup() {
 
 	g.w.unnest("}\n\n")
 
-	args := "op opt.Operator, children []opt.GroupID, private opt.PrivateID"
+	args := "op opt.Operator, operands opt.DynamicOperands"
 	g.w.nest("func (f *factory) DynamicConstruct(%s) opt.GroupID {\n", args)
-	g.w.writeIndent("return dynConstructLookup[op](f, children, private)\n")
+	g.w.writeIndent("return dynConstructLookup[op](f, operands)\n")
 	g.w.unnest("}\n")
 }
 

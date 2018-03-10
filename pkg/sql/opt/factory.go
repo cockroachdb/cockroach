@@ -38,3 +38,23 @@ type ListID struct {
 // EmptyList is a list with zero elements. It begins at offset 1 because offset
 // 0 is reserved to indicate an invalid, uninitialized list.
 var EmptyList = ListID{Offset: 1, Length: 0}
+
+// DynamicID is used when dynamically creating operators using the factory's
+// DynamicConstruct method. Each operand, whether it be a group, a private, or
+// a list, is first converted to a DynamicID and then passed as one of the
+// DynamicOperands.
+type DynamicID uint64
+
+// MakeDynamicListID constructs a DynamicID from a ListID.
+func MakeDynamicListID(id ListID) DynamicID {
+	return (DynamicID(id.Offset) << 32) | DynamicID(id.Length)
+}
+
+// ListID converts the DynamicID to a ListID.
+func (id DynamicID) ListID() ListID {
+	return ListID{Offset: uint32(id >> 32), Length: uint32(id & 0xffffffff)}
+}
+
+// DynamicOperands is the list of operands passed to the factory's
+// DynamicConstruct method in order to dynamically create an operator.
+type DynamicOperands [MaxOperands]DynamicID
