@@ -28,6 +28,12 @@ import (
 // (and, or, plus, variable).
 type Operator uint16
 
+// MaxOperands is the maximum number of operands that an operator can have.
+// Increasing this limit can have a large memory impact, as every memo
+// expression uses memory for the max number of operands, even if it does not
+// have that many.
+const MaxOperands = 3
+
 // String returns the name of the operator as a string.
 func (i Operator) String() string {
 	if i >= Operator(len(opNames)-1) {

@@ -58,7 +58,7 @@ func (g *ifactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  // DynamicConstruct dynamically constructs an operator with the given type\n")
 	fmt.Fprintf(g.w, "  // and operands. It is equivalent to a switch statement that calls the\n")
 	fmt.Fprintf(g.w, "  // ConstructXXX method that corresponds to the given operator.\n")
-	fmt.Fprintf(g.w, "  DynamicConstruct(op Operator, children []GroupID, private PrivateID) GroupID\n\n")
+	fmt.Fprintf(g.w, "  DynamicConstruct(op Operator, operands DynamicOperands) GroupID\n\n")
 
 	g.genMethodsByTag("Scalar")
 	g.genMethodsByTag("Relational")
