@@ -214,7 +214,6 @@ var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &rowCountNode{}
 var _ planNodeFastPath = &serializeNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
-var _ planNodeFastPath = &upsertNode{}
 
 // planNodeRequireSpool serves as marker for nodes whose parent must
 // ensure that the node is fully run to completion (and the results
@@ -239,7 +238,6 @@ type planNodeSpooled interface {
 	spooled()
 }
 
-var _ planNodeSpooled = &upsertNode{}
 var _ planNodeSpooled = &spoolNode{}
 
 // planTop is the struct that collects the properties

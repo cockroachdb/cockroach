@@ -280,7 +280,7 @@ func (d *deleteNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if d.run.rowCount > 0 {
-		if err := d.run.td.atBatchEnd(params.ctx); err != nil {
+		if err := d.run.td.atBatchEnd(params.ctx, d.run.traceKV); err != nil {
 			return false, err
 		}
 
