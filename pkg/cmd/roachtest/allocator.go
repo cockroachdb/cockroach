@@ -27,7 +27,7 @@ import (
 )
 
 func init() {
-	runAllocator := func(t *test, start, end int) {
+	runAllocator := func(t *test, start, end int, maxStdDev float64) {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
 		ctx := context.Background()
@@ -74,13 +74,13 @@ func init() {
 		m = newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
-			return waitForRebalance(ctx, c.l, db)
+			return waitForRebalance(ctx, c.l, db, maxStdDev)
 		})
 		m.Wait()
 	}
 
-	tests.Add(`upreplicate/1to3`, func(t *test) { runAllocator(t, 1, 3) })
-	tests.Add(`rebalance/3to5`, func(t *test) { runAllocator(t, 3, 5) })
+	tests.Add(`upreplicate/1to3`, func(t *test) { runAllocator(t, 1, 3, 10.0) })
+	tests.Add(`rebalance/3to5`, func(t *test) { runAllocator(t, 3, 5, 42.0) })
 }
 
 // printRebalanceStats prints the time it took for rebalancing to finish and the
@@ -194,11 +194,10 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
-func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB) error {
+func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev float64) error {
 	// const statsInterval = 20 * time.Second
 	const statsInterval = 2 * time.Second
 	const stableInterval = 3 * time.Minute
-	const maxStdDev = 10.0
 
 	var statsTimer timeutil.Timer
 	defer statsTimer.Stop()
