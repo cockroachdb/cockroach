@@ -3,40 +3,88 @@ CREATE DATABASE t
 ----
 
 exec-raw
-CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT);
-INSERT INTO t.a VALUES (1, 1.0), (2, 2.0), (3, 3.0)
+CREATE TABLE t.a (x INT PRIMARY KEY, y FLOAT, s STRING);
+INSERT INTO t.a VALUES (1, 1.0, 'apple'), (2, 2.0, 'banana'), (3, 3.0, 'cherry')
 ----
 
 build
 SELECT * FROM t.a
 ----
 scan
- └── columns: x:1(int!null) y:2(float)
+ └── columns: x:1(int!null) y:2(float) s:3(string)
 
 exec-explain
 SELECT * FROM t.a
 ----
-scan  0  scan  ·      ·          (x, y)  ·
-·     0  ·     table  a@primary  ·       ·
-·     0  ·     spans  ALL        ·       ·
+scan  0  scan  ·      ·          (x, y, s)  ·
+·     0  ·     table  a@primary  ·          ·
+·     0  ·     spans  ALL        ·          ·
 
 exec
 SELECT * FROM t.a
 ----
-x:int  y:float
-1      1.0
-2      2.0
-3      3.0
+x:int  y:float  s:string
+1      1.0      apple
+2      2.0      banana
+3      3.0      cherry
 
-exec-raw
-CREATE TABLE t.b (x INT, y INT);
-INSERT INTO t.b VALUES (1, 10), (2, 20), (3, 30)
+# Test projecting subset of table columns.
+build
+SELECT s, x FROM t.a
 ----
+scan
+ └── columns: s:3(string) x:1(int!null)
+
+exec-explain
+SELECT s, x FROM t.a
+----
+render          0  render  ·         ·          (s, x)     ·
+ │              0  ·       render 0  s          ·          ·
+ │              0  ·       render 1  x          ·          ·
+ └── render     1  render  ·         ·          (x, s)     ·
+      │         1  ·       render 0  x          ·          ·
+      │         1  ·       render 1  s          ·          ·
+      └── scan  2  scan    ·         ·          (x, y, s)  ·
+·               2  ·       table     a@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+exec
+SELECT s, x FROM t.a
+----
+s:string  x:int
+apple     1
+banana    2
+cherry    3
 
 # Test with a hidden column.
-exec-explain
-SELECT x, y, rowid FROM t.b
+exec-raw
+CREATE TABLE t.b (x INT, y INT, s STRING);
+INSERT INTO t.b VALUES (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry')
 ----
-scan  0  scan  ·      ·          (x, y, rowid[hidden])  ·
-·     0  ·     table  b@primary  ·                      ·
-·     0  ·     spans  ALL        ·                      ·
+
+build
+SELECT s, x FROM t.b
+----
+scan
+ └── columns: s:3(string) x:1(int)
+
+exec
+SELECT s, x FROM t.b
+----
+s:string  x:int
+apple     1
+banana    2
+cherry    3
+
+exec-explain
+SELECT s, x FROM t.b
+----
+render          0  render  ·         ·          (s, x)                    ·
+ │              0  ·       render 0  s          ·                         ·
+ │              0  ·       render 1  x          ·                         ·
+ └── render     1  render  ·         ·          (x, s)                    ·
+      │         1  ·       render 0  x          ·                         ·
+      │         1  ·       render 1  s          ·                         ·
+      └── scan  2  scan    ·         ·          (x, y, s, rowid[hidden])  ·
+·               2  ·       table     b@primary  ·                         ·
+·               2  ·       spans     ALL        ·                         ·

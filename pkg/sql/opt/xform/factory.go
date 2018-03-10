@@ -101,6 +101,17 @@ func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
 
 // ----------------------------------------------------------------------
 //
+// Private extraction functions
+//   Helper functions that make extracting common private types easier.
+//
+// ----------------------------------------------------------------------
+
+func (f *factory) extractColList(private opt.PrivateID) opt.ColList {
+	return *f.mem.lookupPrivate(private).(*opt.ColList)
+}
+
+// ----------------------------------------------------------------------
+//
 // List functions
 //   General custom match and replace functions used to test and construct
 //   lists.
@@ -240,6 +251,48 @@ func (f *factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) b
 //
 // ----------------------------------------------------------------------
 
+// lookupLogical returns the given group's logical properties.
+func (f *factory) lookupLogical(group opt.GroupID) *LogicalProps {
+	return &f.mem.lookupGroup(group).logical
+}
+
+// lookupRelational returns the given group's logical relational properties.
+func (f *factory) lookupRelational(group opt.GroupID) *RelationalProps {
+	return f.mem.lookupGroup(group).logical.Relational
+}
+
+// outputCols is a helper function that extracts the set of columns projected
+// by the given operator. In addition to extracting columns from any relational
+// operator, outputCols can also extract columns from the Projections and
+// Aggregations scalar operators, which are used with Project and GroupBy.
+func (f *factory) outputCols(group opt.GroupID) opt.ColSet {
+	// Handle columns projected by relational operators.
+	logical := f.lookupLogical(group)
+	if logical.Relational != nil {
+		return f.lookupRelational(group).OutputCols
+	}
+
+	// Handle columns projected by Aggregations and Projections operators.
+	var colList opt.PrivateID
+	expr := f.mem.lookupNormExpr(group)
+	switch expr.op {
+	case opt.AggregationsOp:
+		colList = expr.asAggregations().cols()
+	case opt.ProjectionsOp:
+		colList = expr.asProjections().cols()
+	default:
+		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.op))
+	}
+
+	return opt.ColListToSet(f.extractColList(colList))
+}
+
+// outerCols returns the set of outer columns associated with the given group,
+// whether it be a relational or scalar operator.
+func (f *factory) outerCols(group opt.GroupID) opt.ColSet {
+	return f.lookupLogical(group).OuterCols()
+}
+
 // onlyConstants returns true if the scalar expression is a "constant
 // expression tree", meaning that it will always evaluate to the same result.
 // See the CommuteConst pattern comment for more details.
@@ -255,14 +308,164 @@ func (f *factory) onlyConstants(group opt.GroupID) bool {
 //
 // ----------------------------------------------------------------------
 
-// hasSameProjectionCols returns true if the given expression has the same set
-// of output columns that the given Projections expression has.
-func (f *factory) hasSameProjectionCols(group, projections opt.GroupID) bool {
-	groupOutputCols := f.mem.lookupGroup(group).logical.Relational.OutputCols
-	projectionsExpr := f.mem.lookupNormExpr(projections).asProjections()
-	colList := *f.mem.lookupPrivate(projectionsExpr.cols()).(*opt.ColList)
-	projectOutputCols := opt.ColListToSet(colList)
-	return groupOutputCols.Equals(projectOutputCols)
+// neededCols returns the set of columns needed by the given group. It is an
+// alias for outerCols that's used for clarity with the UnusedCols patterns.
+func (f *factory) neededCols(group opt.GroupID) opt.ColSet {
+	return f.outerCols(group)
+}
+
+// neededCols2 unions the set of columns needed by either of the given groups.
+func (f *factory) neededCols2(left, right opt.GroupID) opt.ColSet {
+	return f.outerCols(left).Union(f.outerCols(right))
+}
+
+// neededCols3 unions the set of columns needed by any of the given groups.
+func (f *factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
+	cols := f.outerCols(group1)
+	cols.UnionWith(f.outerCols(group2))
+	cols.UnionWith(f.outerCols(group3))
+	return cols
+}
+
+// groupByNeededCols unions the columns needed by either of a GroupBy's
+// operands - either aggregations or groupingCols. This case doesn't fit any
+// of the neededCols methods because groupingCols is a private, not a group.
+func (f *factory) groupByNeededCols(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
+	colSet := *f.mem.lookupPrivate(groupingCols).(*opt.ColSet)
+	return f.outerCols(aggs).Union(colSet)
+}
+
+// hasSameCols returns true if the two groups have an identical set of output
+// columns.
+func (f *factory) hasSameCols(left, right opt.GroupID) bool {
+	return f.outputCols(left).Equals(f.outputCols(right))
+}
+
+// hasUnusedColumns returns true if the target group has additional columns
+// that are not part of the neededCols set.
+func (f *factory) hasUnusedColumns(target opt.GroupID, neededCols opt.ColSet) bool {
+	return !f.outputCols(target).Difference(neededCols).Empty()
+}
+
+// filterUnusedColumns creates an expression that discards any outputs columns
+// of the given group that are not used. If the target expression type supports
+// column filtering (like Scan, Values, Projections, etc.), then create a new
+// instance of that operator that does the filtering. Otherwise, construct a
+// Project operator that wraps the operator and does the filtering.
+func (f *factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+	targetExpr := f.mem.lookupNormExpr(target)
+	switch targetExpr.op {
+	case opt.ScanOp:
+		return f.filterUnusedScanColumns(target, neededCols)
+
+	case opt.ValuesOp:
+		return f.filterUnusedValuesColumns(target, neededCols)
+	}
+
+	// Get the subset of the target group's output columns that are in the
+	// needed set (and discard those that aren't).
+	colSet := f.outputCols(target).Intersection(neededCols)
+	cnt := colSet.Len()
+
+	// Create a new list of groups to project, along with the list of column
+	// indexes to be projected. These will become inputs to the construction of
+	// the Projections or Aggregations operator.
+	groupList := make([]opt.GroupID, 0, cnt)
+	colList := make(opt.ColList, 0, cnt)
+
+	switch targetExpr.op {
+	case opt.ProjectionsOp, opt.AggregationsOp:
+		// Get groups from existing lists.
+		var existingList []opt.GroupID
+		var existingCols opt.ColList
+		if targetExpr.op == opt.ProjectionsOp {
+			existingList = f.mem.lookupList(targetExpr.asProjections().elems())
+			existingCols = f.extractColList(targetExpr.asProjections().cols())
+		} else {
+			existingList = f.mem.lookupList(targetExpr.asAggregations().aggs())
+			existingCols = f.extractColList(targetExpr.asAggregations().cols())
+		}
+
+		for i, group := range existingList {
+			// Only add groups that are part of the needed columns.
+			if neededCols.Contains(int(existingCols[i])) {
+				groupList = append(groupList, group)
+				colList = append(colList, existingCols[i])
+			}
+		}
+
+	default:
+		// Construct new variable groups for each output column that's needed.
+		colSet.ForEach(func(i int) {
+			v := f.ConstructVariable(f.InternPrivate(opt.ColumnIndex(i)))
+			groupList = append(groupList, v)
+			colList = append(colList, opt.ColumnIndex(i))
+		})
+	}
+
+	if targetExpr.op == opt.AggregationsOp {
+		return f.ConstructAggregations(f.InternList(groupList), f.InternPrivate(&colList))
+	}
+
+	projections := f.ConstructProjections(f.InternList(groupList), f.InternPrivate(&colList))
+	if targetExpr.op == opt.ProjectionsOp {
+		return projections
+	}
+
+	// Else wrap in Project operator.
+	return f.ConstructProject(target, projections)
+}
+
+// filterUnusedScanColumns constructs a new Scan operator based on the given
+// existing Scan operator, but projecting only the needed columns.
+func (f *factory) filterUnusedScanColumns(scan opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+	colSet := f.outputCols(scan).Intersection(neededCols)
+	scanExpr := f.mem.lookupNormExpr(scan).asScan()
+	existing := f.mem.lookupPrivate(scanExpr.def()).(*opt.ScanOpDef)
+	new := opt.ScanOpDef{Table: existing.Table, Cols: colSet}
+	return f.ConstructScan(f.mem.internPrivate(&new))
+}
+
+// filterUnusedValuesColumns constructs a new Values operator based on the
+// given existing Values operator. The new operator will have the same set of
+// rows, but containing only the needed columns. Other columns are discarded.
+func (f *factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+	valuesExpr := f.mem.lookupNormExpr(values).asValues()
+	existingCols := f.extractColList(valuesExpr.cols())
+	newCols := make(opt.ColList, 0, neededCols.Len())
+
+	existingRows := f.mem.lookupList(valuesExpr.rows())
+	newRows := make([]opt.GroupID, 0, len(existingRows))
+
+	// Create new list of columns that only contains needed columns.
+	for _, colIndex := range existingCols {
+		if !neededCols.Contains(int(colIndex)) {
+			continue
+		}
+		newCols = append(newCols, colIndex)
+	}
+
+	// newElems is used to store tuple values, and can be allocated once and
+	// reused repeatedly, since InternList will copy values to memo storage.
+	newElems := make([]opt.GroupID, len(newCols))
+
+	for _, row := range existingRows {
+		existingElems := f.mem.lookupList(f.mem.lookupNormExpr(row).asTuple().elems())
+
+		n := 0
+		for i, elem := range existingElems {
+			if !neededCols.Contains(int(existingCols[i])) {
+				continue
+			}
+
+			newElems[n] = elem
+			n++
+		}
+
+		newRows = append(newRows, f.ConstructTuple(f.InternList(newElems)))
+	}
+
+	return f.ConstructValues(f.InternList(newRows), f.InternPrivate(&newCols))
 }
 
 // ----------------------------------------------------------------------

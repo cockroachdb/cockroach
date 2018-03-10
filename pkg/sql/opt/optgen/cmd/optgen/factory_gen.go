@@ -475,7 +475,7 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 	case *lang.CustomFuncExpr:
 		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
-		g.w.write("_f.DynamicConstruct(_f.mem.lookupNormExpr(%s).op, []GroupID{", ref.Label)
+		g.w.write("_f.DynamicConstruct(_f.mem.lookupNormExpr(%s).op, []opt.GroupID{", ref.Label)
 
 	default:
 		panic(fmt.Sprintf("unexpected name expression: %s", construct.Name))
