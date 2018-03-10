@@ -108,7 +108,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		}
 	}
 
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }
 
 // truncateTable truncates the data of a table in a single transaction. It

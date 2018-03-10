@@ -46,5 +46,5 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
 			"unknown mode for DISCARD: %d", s.Mode)
 	}
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }

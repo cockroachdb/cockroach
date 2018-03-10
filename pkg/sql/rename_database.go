@@ -52,7 +52,7 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 
 	if n.Name == n.NewName {
 		// Noop.
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	// Check if any views depend on tables in the database. Because our views
@@ -106,5 +106,5 @@ func (p *planner) RenameDatabase(ctx context.Context, n *tree.RenameDatabase) (p
 	if err := p.renameDatabase(ctx, dbDesc, string(n.NewName)); err != nil {
 		return nil, err
 	}
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }
