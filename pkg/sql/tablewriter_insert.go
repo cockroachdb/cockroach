@@ -43,7 +43,7 @@ func (ti *tableInserter) row(
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
-func (ti *tableInserter) atBatchEnd(_ context.Context) error { return nil }
+func (ti *tableInserter) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
 // flushAndStartNewBatch is part of the extendedTableWriter interface.
 func (ti *tableInserter) flushAndStartNewBatch(ctx context.Context) error {

@@ -59,7 +59,7 @@ func (td *tableDeleter) finalize(
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
-func (td *tableDeleter) atBatchEnd(_ context.Context) error { return nil }
+func (td *tableDeleter) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
 func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,

@@ -93,8 +93,6 @@ const (
 	autoCommitEnabled
 )
 
-var _ tableWriter = (*tableUpserter)(nil)
-
 // extendedTableWriter is a temporary interface introduced
 // until all the tableWriters implement it. When that is achieved, it will be merged into
 // the main tableWriter interface.
@@ -106,7 +104,7 @@ type extendedTableWriter interface {
 	// still open at that point. It must not run the batch itself; that
 	// task is left to tableWriter.finalize() or flushAndStartNewBatch()
 	// below.
-	atBatchEnd(context.Context) error
+	atBatchEnd(context.Context, bool /* traceKV */) error
 
 	// flushAndStartNewBatch is called at the end of each batch but the last.
 	// This should flush the current batch.
@@ -215,7 +213,8 @@ type tableUpsertEvaler interface {
 // of `finalize`.
 //
 type tableUpserter struct {
-	ri sqlbase.RowInserter
+	twb tableWriterBase
+	ri  sqlbase.RowInserter
 
 	// insertRows are the rows produced by the insertion data source.
 	// These are accumulated while iterating on the insertion data source.
@@ -242,8 +241,6 @@ type tableUpserter struct {
 	updateValues tree.Datums
 
 	// Set by init.
-	txn                   *client.Txn
-	evalCtx               *tree.EvalContext
 	fkTables              sqlbase.TableLookupsByID // for fk checks in update case
 	ru                    sqlbase.RowUpdater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
@@ -259,30 +256,35 @@ type tableUpserter struct {
 	// back to indices in rowTemplate.
 	rowIdxToRetIdx []int
 
+	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
+	// collectRows is set, counted separately otherwise.
+	resultCount int
+
 	// For allocation avoidance.
 	indexKeyPrefix []byte
 }
 
+// walkExprs is part of the tableWriter interface.
 func (tu *tableUpserter) walkExprs(walk func(desc string, index int, expr tree.TypedExpr)) {
 	if tu.evaler != nil {
 		tu.evaler.walkExprs(walk)
 	}
 }
 
+// init is part of the tableWriter interface.
 func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
+	tu.twb.init(txn)
 	tableDesc := tu.tableDesc()
 
-	tu.txn = txn
-	tu.evalCtx = evalCtx
 	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 
 	tu.insertRows.Init(
-		tu.evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
 	if tu.collectRows {
 		tu.rowsUpserted = sqlbase.NewRowContainer(
-			tu.evalCtx.Mon.MakeBoundAccount(),
+			evalCtx.Mon.MakeBoundAccount(),
 			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
 			tu.insertRows.Len(),
 		)
@@ -321,7 +323,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 			tu.updateCols,
 			requestedCols,
 			sqlbase.RowUpdaterDefault,
-			tu.evalCtx,
+			evalCtx,
 			tu.alloc,
 		)
 		if err != nil {
@@ -338,7 +340,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 	}
 
 	tu.insertRows.Init(
-		tu.evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
+		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
 	var valNeededForCol util.FastIntSet
@@ -361,22 +363,50 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 	)
 }
 
+// row is part of the tableWriter interface.
 func (tu *tableUpserter) row(
 	ctx context.Context, row tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
-	// TODO(dan): If len(tu.insertRows) > some threshold, call flush().
+	tu.twb.batchSize++
 	return tu.insertRows.AddRow(ctx, row)
 }
 
-// finalize commits to tu.txn any rows batched up in tu.insertRows.
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (tu *tableUpserter) flushAndStartNewBatch(ctx context.Context) error {
+	tu.resultCount = 0
+	tu.insertRows.Clear(ctx)
+	if tu.collectRows {
+		tu.rowsUpserted.Clear(ctx)
+	}
+	return tu.twb.flushAndStartNewBatch(ctx, tu.tableDesc())
+}
+
+// finalize is part of the tableWriter interface.
 func (tu *tableUpserter) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
 ) (*sqlbase.RowContainer, error) {
+	return nil, tu.twb.finalize(ctx, autoCommit, tu.tableDesc())
+}
+
+// curBatchSize is part of the extendedTableWriter interface.
+// This overrides the basic implementation in tableWriterBase.
+func (tu *tableUpserter) curBatchSize() int { return tu.insertRows.Len() }
+
+// batchedCount is part of the batchedTableWriter interface.
+func (tu *tableUpserter) batchedCount() int { return tu.resultCount }
+
+// batchedValues is part of the batchedTableWriter interface.
+func (tu *tableUpserter) batchedValues(rowIdx int) tree.Datums {
+	return tu.rowsUpserted.At(rowIdx)
+}
+
+// atBatchEnd is part of the extendedTableWriter interface.
+func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 	// Fetch the information about which rows in tu.insertRows currently
 	// conflict with rows in-db.
 	existingRows, pkToRowIdx, conflictingPKs, err := tu.fetchExisting(ctx, traceKV)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// At this point existingRows contains data for the conflicting
@@ -390,7 +420,6 @@ func (tu *tableUpserter) finalize(
 	// discover the modified values.
 
 	tableDesc := tu.tableDesc()
-	b := tu.txn.NewBatch()
 
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
@@ -400,7 +429,7 @@ func (tu *tableUpserter) finalize(
 		// secondary index.
 		conflictingRowPK, err := tu.getConflictingRowPK(insertRow, i, conflictingPKs, tableDesc)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		// At this point, conflictingRowPK is either:
@@ -427,10 +456,14 @@ func (tu *tableUpserter) finalize(
 		if conflictingRowIdx == -1 {
 			// We don't have a conflict. This is a new row in KV. Create it.
 			resultRow, existingRows, err = tu.insertNonConflictingRow(
-				ctx, b, insertRow, conflictingRowPK, existingRows, pkToRowIdx, tableDesc, traceKV)
+				ctx, tu.twb.b, insertRow, conflictingRowPK, existingRows, pkToRowIdx, tableDesc, traceKV)
 			if err != nil {
-				return nil, err
+				return err
 			}
+
+			// We have processed a row, remember this for the rows affected
+			// count in case we're not populating rowsUpserted below.
+			tu.resultCount++
 		} else {
 			// There was a row already. Do we need to update it?
 
@@ -465,7 +498,7 @@ func (tu *tableUpserter) finalize(
 			conflictingRowValues := existingRow[:len(tu.ru.FetchCols)]
 			shouldUpdate, err := tu.evaler.shouldUpdate(insertRow, conflictingRowValues)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if !shouldUpdate {
 				// WHERE tells us there is nothing to do. Stop here.
@@ -477,13 +510,17 @@ func (tu *tableUpserter) finalize(
 
 			// We know there was a row already, and we know we need to update it. Do it.
 			resultRow, existingRows, err = tu.updateConflictingRow(
-				ctx, b, insertRow,
+				ctx, tu.twb.b, insertRow,
 				conflictingRowPK, conflictingRowIdx, conflictingRowValues,
 				existingRows, pkToRowIdx,
 				tableDesc, traceKV)
 			if err != nil {
-				return nil, err
+				return err
 			}
+
+			// We have processed a row, remember this for the rows affected
+			// count in case we're not populating rowsUpserted below.
+			tu.resultCount++
 		}
 
 		// Do we need to remember a result for RETURNING?
@@ -491,27 +528,20 @@ func (tu *tableUpserter) finalize(
 			// Yes, collect it.
 			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 
-	// The upsert resolution is finished.
-	// This has prepared a KV batch in b.
-	// Now run/commit the KV batch.
+	if tu.collectRows {
+		// If we have populate rowsUpserted, the consumer
+		// will want to know exactly how many rows there in there.
+		// Use that as final resultCount. This overrides any
+		// other value computed in the main loop above.
+		tu.resultCount = tu.rowsUpserted.Len()
+	}
 
-	if autoCommit == autoCommitEnabled {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		err = tu.txn.CommitInBatch(ctx, b)
-	} else {
-		err = tu.txn.Run(ctx, b)
-	}
-	if err != nil {
-		return nil, sqlbase.ConvertBatchError(ctx, tableDesc, b)
-	}
-	return tu.rowsUpserted, nil
+	return nil
 }
 
 // updateConflictingRow updates the existing row
@@ -808,7 +838,7 @@ func (tu *tableUpserter) upsertRowPKs(
 	// primary key can be constructed from the entries that come back. In this
 	// case, some spots in the slice will be nil (indicating no conflict) and the
 	// others will be conflicting rows.
-	b := tu.txn.NewBatch()
+	b := tu.twb.txn.NewBatch()
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
 		entries, err := sqlbase.EncodeSecondaryIndex(
@@ -825,7 +855,7 @@ func (tu *tableUpserter) upsertRowPKs(
 		}
 	}
 
-	if err := tu.txn.Run(ctx, b); err != nil {
+	if err := tu.twb.txn.Run(ctx, b); err != nil {
 		return nil, nil, err
 	}
 	conflictingPKs := make(map[int]roachpb.Key)
@@ -893,7 +923,7 @@ func (tu *tableUpserter) fetchExisting(
 
 	// Start retrieving the PKs.
 	// We don't limit batches here because the spans are unordered.
-	if err := tu.fetcher.StartScan(ctx, tu.txn, pkSpans, false /* no batch limits */, 0, traceKV); err != nil {
+	if err := tu.fetcher.StartScan(ctx, tu.twb.txn, pkSpans, false /* no batch limits */, 0, traceKV); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -926,14 +956,17 @@ func (tu *tableUpserter) fetchExisting(
 	return existingRows, pkToRowIdx, conflictingPKs, nil
 }
 
+// tableDesc is part of the tableWriter interface.
 func (tu *tableUpserter) tableDesc() *sqlbase.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
 
+// fkSpanCollector is part of the tableWriter interface.
 func (tu *tableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
 	return tu.ri.Fks
 }
 
+// close is part of the tableWriter interface.
 func (tu *tableUpserter) close(ctx context.Context) {
 	tu.insertRows.Close(ctx)
 	if tu.rowsUpserted != nil {
@@ -942,7 +975,7 @@ func (tu *tableUpserter) close(ctx context.Context) {
 }
 
 // fastTableUpserter implements the fast path for an upsert. See
-// tableUpserter above for the general case.
+// tableUpserter for the general case.
 //
 // If certain conditions are met (no secondary indexes, all table
 // values being inserted, update expressions of the form `SET a =
@@ -952,24 +985,16 @@ func (tu *tableUpserter) close(ctx context.Context) {
 // is the same model as the other `tableFoo`s, which are more simple
 // than upsert.
 type fastTableUpserter struct {
+	tableWriterBase
 	ri sqlbase.RowInserter
-
-	// Set by init.
-	txn     *client.Txn
-	evalCtx *tree.EvalContext
-
-	// Used for the fast path.
-	fastPathBatch *client.Batch
 }
 
+// walkExprs is part of the tableWriter interface.
 func (tu *fastTableUpserter) walkExprs(_ func(_ string, _ int, _ tree.TypedExpr)) {}
 
 // init is part of the tableWriter interface.
-func (tu *fastTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
-	tu.txn = txn
-	tu.evalCtx = evalCtx
-
-	tu.fastPathBatch = tu.txn.NewBatch()
+func (tu *fastTableUpserter) init(txn *client.Txn, _ *tree.EvalContext) error {
+	tu.tableWriterBase.init(txn)
 	return nil
 }
 
@@ -977,38 +1002,62 @@ func (tu *fastTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 func (tu *fastTableUpserter) row(
 	ctx context.Context, row tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
+	tu.batchSize++
 	// Use the fast path, ignore conflicts.
-	err := tu.ri.InsertRow(
-		ctx, tu.fastPathBatch, row, true /* ignoreConflicts */, sqlbase.CheckFKs, traceKV)
-	return nil, err
+	return nil, tu.ri.InsertRow(
+		ctx, tu.b, row, true /* ignoreConflicts */, sqlbase.CheckFKs, traceKV)
+}
+
+// batchedCount is part of the batchedTableWriter interface.
+func (tu *fastTableUpserter) batchedCount() int { return tu.batchSize }
+
+// batchedValues is part of the batchedTableWriter interface.
+// This is not implemented for the fast path on upsert. If a plan
+// needs result values, it should use tableUpserter instead.
+func (tu *fastTableUpserter) batchedValues(rowIdx int) tree.Datums {
+	panic("programmer error: tableUpserter should be used if values are needed")
+}
+
+// atBatchEnd is part of the extendedTableWriter interface.
+func (tu *fastTableUpserter) atBatchEnd(_ context.Context, _ bool) error { return nil }
+
+// flushAndStartNewBatch is part of the extendedTableWriter interface.
+func (tu *fastTableUpserter) flushAndStartNewBatch(ctx context.Context) error {
+	return tu.tableWriterBase.flushAndStartNewBatch(ctx, tu.tableDesc())
 }
 
 // finalize is part of the tableWriter interface.
 func (tu *fastTableUpserter) finalize(
 	ctx context.Context, autoCommit autoCommitOpt, traceKV bool,
 ) (*sqlbase.RowContainer, error) {
-	if autoCommit == autoCommitEnabled {
-		// An auto-txn can commit the transaction with the batch. This is an
-		// optimization to avoid an extra round-trip to the transaction
-		// coordinator.
-		if err := tu.txn.CommitInBatch(ctx, tu.fastPathBatch); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := tu.txn.Run(ctx, tu.fastPathBatch); err != nil {
-			return nil, err
-		}
-	}
-
-	return nil, nil
+	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
 }
 
+// fkSpanCollector is part of the tableWriter interface.
 func (tu *fastTableUpserter) fkSpanCollector() sqlbase.FkSpanCollector {
 	return tu.ri.Fks
 }
 
+// tableDesc is part of the tableWriter interface.
 func (tu *fastTableUpserter) tableDesc() *sqlbase.TableDescriptor {
 	return tu.ri.Helper.TableDesc
 }
 
+// close is part of the tableWriter interface.
 func (tu *fastTableUpserter) close(ctx context.Context) {}
+
+// batchedTableWriter is used for tableWriters that
+// do their work at the end of the current batch, currently
+// used for tableUpserter.
+type batchedTableWriter interface {
+	extendedTableWriter
+
+	// batchedCount returns the number of results in the current batch.
+	batchedCount() int
+
+	// batchedValues accesses one row in the current batch.
+	batchedValues(rowIdx int) tree.Datums
+}
+
+var _ batchedTableWriter = (*tableUpserter)(nil)
+var _ batchedTableWriter = (*fastTableUpserter)(nil)

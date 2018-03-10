@@ -380,9 +380,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *upsertNode:
 		if v.observer.attr != nil {
 			var buf bytes.Buffer
-			buf.WriteString(n.tableDesc.Name)
+			buf.WriteString(n.run.tw.tableDesc().Name)
 			buf.WriteByte('(')
-			for i, col := range n.insertCols {
+			for i, col := range n.run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
@@ -393,20 +393,17 @@ func (v *planVisitor) visit(plan planNode) {
 		}
 
 		if v.observer.expr != nil {
-			for i, dexpr := range n.defaultExprs {
+			for i, dexpr := range n.run.defaultExprs {
 				v.expr(name, "default", i, dexpr)
 			}
-			for i, cexpr := range n.checkHelper.Exprs {
+			for i, cexpr := range n.run.checkHelper.Exprs {
 				v.expr(name, "check", i, cexpr)
 			}
-			for i, rexpr := range n.rh.exprs {
-				v.expr(name, "returning", i, rexpr)
-			}
-			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
+			n.run.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 				v.expr(name, d, i, e)
 			})
 		}
-		v.visit(n.run.rows)
+		v.visit(n.source)
 
 	case *updateNode:
 		if v.observer.attr != nil {

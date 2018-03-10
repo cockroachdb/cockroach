@@ -51,7 +51,7 @@ func (tu *tableUpdater) rowForUpdate(
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
-func (tu *tableUpdater) atBatchEnd(_ context.Context) error { return nil }
+func (tu *tableUpdater) atBatchEnd(_ context.Context, _ bool) error { return nil }
 
 // flushAndStartNewBatch is part of the extendedTableWriter interface.
 func (tu *tableUpdater) flushAndStartNewBatch(ctx context.Context) error {

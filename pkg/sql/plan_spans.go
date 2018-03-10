@@ -54,7 +54,7 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 		}
 		return editNodeSpans(params, n.source, &n.run.ti)
 	case *upsertNode:
-		return editNodeSpans(params, n.run.rows, n.run.tw)
+		return editNodeSpans(params, n.source, n.run.tw)
 	case *deleteNode:
 		return editNodeSpans(params, n.source, &n.run.td)
 	case *rowCountNode:

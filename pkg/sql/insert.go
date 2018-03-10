@@ -230,14 +230,6 @@ func (p *planner) Insert(
 		return nil, err
 	}
 
-	// At this point, everything is ready for either an insertNode or an upserNode.
-	// If going for UPSERT, use a separate code path.
-	if n.OnConflict != nil {
-		return p.newUpsertNode(
-			ctx, n, desc, ri, tn, alias, rows,
-			defaultExprs, computeExprs, computedCols, fkTables, desiredTypes)
-	}
-
 	// rowsNeeded will help determine whether we need to allocate a
 	// rowsContainer.
 	rowsNeeded := resultsNeeded(n.Returning)
@@ -249,30 +241,47 @@ func (p *planner) Insert(
 		columns = sqlbase.ResultColumnsFromColDescs(desc.Columns)
 	}
 
-	in := insertNodePool.Get().(*insertNode)
-	*in = insertNode{
-		source:  rows,
-		columns: columns,
-		run: insertRun{
-			ti:           tableInserter{ri: ri},
-			checkHelper:  fkTables[desc.ID].CheckHelper,
-			rowsNeeded:   rowsNeeded,
-			computedCols: computedCols,
-			computeExprs: computeExprs,
-			iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
-				Cols:    desc.Columns,
-				Mapping: ri.InsertColIDtoRowIndex,
+	// At this point, everything is ready for either an insertNode or an upserNode.
+
+	var node batchedPlanNode
+
+	if n.OnConflict != nil {
+		// This is an UPSERT, or INSERT ... ON CONFLICT.
+		// The upsert path has a separate constructor.
+		node, err = p.newUpsertNode(
+			ctx, n, desc, ri, tn, alias, rows, rowsNeeded, columns,
+			defaultExprs, computeExprs, computedCols, fkTables, desiredTypes)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Regular path for INSERT.
+		in := insertNodePool.Get().(*insertNode)
+		*in = insertNode{
+			source:  rows,
+			columns: columns,
+			run: insertRun{
+				ti:           tableInserter{ri: ri},
+				checkHelper:  fkTables[desc.ID].CheckHelper,
+				rowsNeeded:   rowsNeeded,
+				computedCols: computedCols,
+				computeExprs: computeExprs,
+				iVarContainerForComputedCols: sqlbase.RowIndexedVarContainer{
+					Cols:    desc.Columns,
+					Mapping: ri.InsertColIDtoRowIndex,
+				},
+				defaultExprs: defaultExprs,
+				insertCols:   ri.InsertCols,
 			},
-			defaultExprs: defaultExprs,
-			insertCols:   ri.InsertCols,
-		},
+		}
+		node = in
 	}
 
 	// Finally, handle RETURNING, if any.
-	r, err := p.Returning(ctx, in, n.Returning, desiredTypes, alias)
+	r, err := p.Returning(ctx, node, n.Returning, desiredTypes, alias)
 	if err != nil {
 		// We close explicitly here to release the node to the pool.
-		in.Close(ctx)
+		node.Close(ctx)
 	}
 	return r, err
 }
@@ -435,7 +444,7 @@ func (n *insertNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if n.run.rowCount > 0 {
-		if err := n.run.ti.atBatchEnd(params.ctx); err != nil {
+		if err := n.run.ti.atBatchEnd(params.ctx, n.run.traceKV); err != nil {
 			return false, err
 		}
 
