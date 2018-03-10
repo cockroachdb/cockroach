@@ -71,9 +71,10 @@ select
  ├── scan
  │    ├── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
  │    └── ordering: +1,-2
- └── eq [type=bool, outer=(1)]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── const: 1 [type=int]
+ └── filters [type=bool, outer=(1)]
+      └── eq [type=bool, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
 
 # Pass through ordering to scan operator that can't support it.
 opt
@@ -87,9 +88,10 @@ select
  │    ├── ordering: -3
  │    └── scan
  │         └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
- └── eq [type=bool, outer=(1)]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── const: 1 [type=int]
+ └── filters [type=bool, outer=(1)]
+      └── eq [type=bool, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
 
 # --------------------------------------------------
 # Project operator (pass through).
@@ -164,9 +166,10 @@ project
  │    ├── scan
  │    │    ├── columns: a.x:1(int!null) a.y:2(float!null)
  │    │    └── ordering: +1,-2
- │    └── eq [type=bool, outer=(1)]
- │         ├── variable: a.x [type=int, outer=(1)]
- │         └── const: 1 [type=int]
+ │    └── filters [type=bool, outer=(1)]
+ │         └── eq [type=bool, outer=(1)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── const: 1 [type=int]
  └── projections [outer=(1,2)]
       ├── variable: a.y [type=float, outer=(2)]
       ├── minus [type=int, outer=(1)]
@@ -177,28 +180,29 @@ project
 memo
 SELECT y, x-1 FROM a WHERE x=1 ORDER BY x, y DESC
 ----
-[12: "p:y:2,column5:5 o:+1,-2"]
+[13: "p:y:2,column5:5 o:+1,-2"]
 memo
- ├── 12: (project 11 9)
+ ├── 13: (project 12 10)
  │    ├── "" [cost=0.0]
- │    │    └── best: (project 11 9)
+ │    │    └── best: (project 12 10)
  │    └── "p:y:2,column5:5 o:+1,-2" [cost=0.0]
- │         └── best: (project 11 9)
- ├── 11: (select 10 4)
+ │         └── best: (project 12 10)
+ ├── 12: (select 11 5)
  │    ├── "" [cost=0.0]
- │    │    └── best: (select 10 4)
+ │    │    └── best: (select 11 5)
  │    └── "o:+1,-2" [cost=0.0]
- │         └── best: (select 10 4)
- ├── 10: (scan a)
+ │         └── best: (select 11 5)
+ ├── 11: (scan a)
  │    ├── "" [cost=0.0]
  │    │    └── best: (scan a)
  │    └── "o:+1,-2" [cost=0.0]
  │         └── best: (scan a)
- ├── 9: (projections 6 8 2)
- ├── 8: (minus 2 7)
- ├── 7: (const 1)
- ├── 6: (variable a.y)
- ├── 5: (select 1 4)
+ ├── 10: (projections 7 9 2)
+ ├── 9: (minus 2 8)
+ ├── 8: (const 1)
+ ├── 7: (variable a.y)
+ ├── 6: (select 1 5)
+ ├── 5: (filters 4)
  ├── 4: (eq 2 3)
  ├── 3: (const 1)
  ├── 2: (variable a.x)
@@ -219,9 +223,10 @@ project
  │    │    ├── ordering: +2
  │    │    └── scan
  │    │         └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal)
- │    └── eq [type=bool, outer=(1)]
- │         ├── variable: a.x [type=int, outer=(1)]
- │         └── const: 1 [type=int]
+ │    └── filters [type=bool, outer=(1)]
+ │         └── eq [type=bool, outer=(1)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── const: 1 [type=int]
  └── projections [outer=(2,3)]
       ├── variable: a.y [type=float, outer=(2)]
       └── variable: a.z [type=decimal, outer=(3)]
@@ -229,27 +234,28 @@ project
 memo
 SELECT y, z FROM a WHERE x=1 ORDER BY y
 ----
-[11: "p:y:2,z:3 o:+2"]
+[12: "p:y:2,z:3 o:+2"]
 memo
- ├── 11: (project 10 8)
+ ├── 12: (project 11 9)
  │    ├── "" [cost=0.0]
- │    │    └── best: (project 10 8)
+ │    │    └── best: (project 11 9)
  │    └── "p:y:2,z:3 o:+2" [cost=0.0]
- │         └── best: (project 10 8)
- ├── 10: (select 9 4)
+ │         └── best: (project 11 9)
+ ├── 11: (select 10 5)
  │    ├── "" [cost=0.0]
- │    │    └── best: (select 9 4)
+ │    │    └── best: (select 10 5)
  │    └── "o:+2" [cost=0.0]
- │         └── best: (select 9 4)
- ├── 9: (scan a)
+ │         └── best: (select 10 5)
+ ├── 10: (scan a)
  │    ├── "" [cost=0.0]
  │    │    └── best: (scan a)
  │    └── "o:+2" [cost=0.0]
- │         └── best: (sort 9)
- ├── 8: (projections 6 7)
- ├── 7: (variable a.z)
- ├── 6: (variable a.y)
- ├── 5: (select 1 4)
+ │         └── best: (sort 10)
+ ├── 9: (projections 7 8)
+ ├── 8: (variable a.z)
+ ├── 7: (variable a.y)
+ ├── 6: (select 1 5)
+ ├── 5: (filters 4)
  ├── 4: (eq 2 3)
  ├── 3: (const 1)
  ├── 2: (variable a.x)

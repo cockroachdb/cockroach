@@ -112,14 +112,14 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedE
 
 func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
 	switch ev.Operator() {
-	case opt.AndOp, opt.OrOp:
+	case opt.AndOp, opt.OrOp, opt.FiltersOp:
 		expr := b.buildScalar(ctx, ev.Child(0))
 		for i, n := 1, ev.ChildCount(); i < n; i++ {
 			right := b.buildScalar(ctx, ev.Child(i))
-			if ev.Operator() == opt.AndOp {
-				expr = tree.NewTypedAndExpr(expr, right)
-			} else {
+			if ev.Operator() == opt.OrOp {
 				expr = tree.NewTypedOrExpr(expr, right)
+			} else {
+				expr = tree.NewTypedAndExpr(expr, right)
 			}
 		}
 		return expr
