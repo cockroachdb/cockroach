@@ -85,6 +85,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *insertNode:
 		return n.columns
+	case *upsertNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
@@ -107,10 +109,6 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.getColumns(mut, showTraceReplicaColumns)
 	case *sequenceSelectNode:
 		return n.getColumns(mut, sequenceSelectColumns)
-
-	// Nodes using the RETURNING helper.
-	case *upsertNode:
-		return n.rh.columns
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.

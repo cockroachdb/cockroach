@@ -53,11 +53,14 @@ query TTT
 EXPLAIN WITH a AS (UPSERT INTO t VALUES (2) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit             ·     ·
- └── upsert       ·     ·
-      │           into  t(x)
-      └── values  ·     ·
-·                 size  1 column, 1 row
+limit                       ·      ·
+ └── spool                  ·      ·
+      │                     limit  1
+      └── run               ·      ·
+           └── upsert       ·      ·
+                │           into   t(x)
+                └── values  ·      ·
+·                           size   1 column, 1 row
 
 # Ditto all mutations, with the statement source syntax.
 query TTT
@@ -103,11 +106,14 @@ limit                          ·      ·
 query TTT
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2) RETURNING x] LIMIT 1
 ----
-limit             ·     ·
- └── upsert       ·     ·
-      │           into  t(x)
-      └── values  ·     ·
-·                 size  1 column, 1 row
+limit                       ·      ·
+ └── spool                  ·      ·
+      │                     limit  1
+      └── run               ·      ·
+           └── upsert       ·      ·
+                │           into   t(x)
+                └── values  ·      ·
+·                           size   1 column, 1 row
 
 # Check that a spool is also inserted for other processings than LIMIT.
 query TTT

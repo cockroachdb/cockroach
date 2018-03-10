@@ -405,10 +405,11 @@ SELECT * FROM issue_17339 ORDER BY a;
 query TTT
 EXPLAIN (PLAN,EXPRS) UPSERT INTO kv TABLE kv ORDER BY v DESC
 ----
-upsert          ·       ·
- │              into    kv(k, v)
- └── sort       ·       ·
-      │         order   -v
-      └── scan  ·       ·
-·               table   kv@primary
-·               spans   ALL
+count                ·      ·
+ └── upsert          ·      ·
+      │              into   kv(k, v)
+      └── sort       ·      ·
+           │         order  -v
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  ALL

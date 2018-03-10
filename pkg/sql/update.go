@@ -522,7 +522,7 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 	}
 
 	if u.run.rowCount > 0 {
-		if err := u.run.tu.atBatchEnd(params.ctx); err != nil {
+		if err := u.run.tu.atBatchEnd(params.ctx, u.run.traceKV); err != nil {
 			return false, err
 		}
 
@@ -679,71 +679,6 @@ func (u *updateNode) Close(ctx context.Context) {
 // enableAutoCommit implements the autoCommitNode interface.
 func (u *updateNode) enableAutoCommit() {
 	u.run.autoCommit = autoCommitEnabled
-}
-
-// editNode (Base, Run) is shared between all row updating
-// statements (DELETE, UPDATE, INSERT).
-
-// editNodeBase holds the common (prepare+execute) state needed to run
-// row-modifying statements.
-type editNodeBase struct {
-	p         *planner
-	rh        *returningHelper
-	tableDesc *sqlbase.TableDescriptor
-}
-
-func (p *planner) makeEditNode(
-	ctx context.Context, tn *tree.TableName, priv privilege.Kind,
-) (editNodeBase, error) {
-	tableDesc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	if err != nil {
-		return editNodeBase{}, err
-	}
-
-	if err := p.CheckPrivilege(ctx, tableDesc, priv); err != nil {
-		return editNodeBase{}, err
-	}
-
-	return editNodeBase{
-		p:         p,
-		tableDesc: tableDesc,
-	}, nil
-}
-
-// editNodeRun holds the runtime (execute) state needed to run
-// row-modifying statements.
-type editNodeRun struct {
-	rows planNode
-	tw   tableWriter
-}
-
-func (r *editNodeRun) initEditNode(
-	ctx context.Context,
-	en *editNodeBase,
-	rows planNode,
-	tw tableWriter,
-	tn *tree.TableName,
-	re tree.ReturningClause,
-	desiredTypes []types.T,
-) error {
-	r.rows = rows
-	r.tw = tw
-
-	rh, err := en.p.newReturningHelper(ctx, re, desiredTypes, tn, en.tableDesc.Columns)
-	if err != nil {
-		return err
-	}
-	en.rh = rh
-
-	return nil
-}
-
-func (r *editNodeRun) startEditNode(params runParams, en *editNodeBase) error {
-	if sqlbase.IsSystemConfigID(en.tableDesc.GetID()) {
-		// Mark transaction as operating on the system DB.
-		return en.p.txn.SetSystemConfigTrigger()
-	}
-	return nil
 }
 
 // sourceSlot abstracts the idea that our update sources can either be tuples
