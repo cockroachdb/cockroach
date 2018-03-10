@@ -317,8 +317,8 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 // makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
-	// execEngine is both an exec.Factory and an optbase.Catalog. cleanup is
-	// not required on the engine, since planner is cleaned up elsewhere.
+	// execEngine is both an exec.Factory and an opt.Catalog. cleanup is not
+	// required on the engine, since planner is cleaned up elsewhere.
 	eng := newExecEngine(p, nil)
 	defer eng.Close()
 

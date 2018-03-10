@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -2551,24 +2551,24 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 	tree.Cascade:    ForeignKeyReference_CASCADE,
 }
 
-var _ optbase.Column = &ColumnDescriptor{}
+var _ opt.Column = &ColumnDescriptor{}
 
-// IsNullable is part of the optbase.Column interface.
+// IsNullable is part of the opt.Column interface.
 func (desc *ColumnDescriptor) IsNullable() bool {
 	return desc.Nullable
 }
 
-// ColName is part of the optbase.Column interface.
-func (desc *ColumnDescriptor) ColName() optbase.ColumnName {
-	return optbase.ColumnName(desc.Name)
+// ColName is part of the opt.Column interface.
+func (desc *ColumnDescriptor) ColName() opt.ColumnName {
+	return opt.ColumnName(desc.Name)
 }
 
-// DatumType is part of the optbase.Column interface.
+// DatumType is part of the opt.Column interface.
 func (desc *ColumnDescriptor) DatumType() types.T {
 	return desc.Type.ToDatumType()
 }
 
-// IsHidden is part of the optbase.Column interface.
+// IsHidden is part of the opt.Column interface.
 func (desc *ColumnDescriptor) IsHidden() bool {
 	return desc.Hidden
 }

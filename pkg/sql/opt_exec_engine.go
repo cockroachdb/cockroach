@@ -21,8 +21,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -60,7 +60,7 @@ func (ee *execEngine) Factory() exec.Factory {
 }
 
 // Catalog is part of the exec.TestEngine interface.
-func (ee *execEngine) Catalog() optbase.Catalog {
+func (ee *execEngine) Catalog() opt.Catalog {
 	return &ee.catalog
 }
 
@@ -137,7 +137,7 @@ func (ee *execEngine) ConstructValues(
 }
 
 // ConstructScan is part of the exec.Factory interface.
-func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
+func (ee *execEngine) ConstructScan(table opt.Table) (exec.Node, error) {
 	desc := table.(*optTable).desc
 
 	columns := make([]tree.ColumnID, len(desc.Columns))
