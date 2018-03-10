@@ -338,7 +338,8 @@ case where the substitution node was already present in the match pattern:
   [EliminateAnd]
   (And $left:* (True)) => $left
 
-Literal strings can be part of a replace pattern, or even all of it:
+Literal strings can be part of a replace pattern, or even all of it, if the
+intent is to construct a constant string node:
 
   (Concat "" "") => ""
 
@@ -362,8 +363,30 @@ the name of a custom function. For example:
   )
 
 Here, the ConcatFilters custom function is invoked in order to concatenate two
-filter lists together. While custom functions typically return a node, they can
-return other types if the context allows it.
+filter lists together. Function parameters can include nodes, lists (see the
+Constructing Lists section), operator names (see the Name parameters section),
+and the results of nested custom function calls. While custom functions
+typically return a node, they can return other types if they are parameters to
+other custom functions.
+
+Constructing Lists
+
+Lists can be constructed and passed as parameters to node construction
+expressions or custom replace functions. A list consists of multiple items that
+can be of any parameter type, including nodes, strings, custom function
+invocations, or lists. Here is an example:
+
+  [MergeSelectJoin]
+  (Select
+    (InnerJoin $left:* $right:* $on:*)
+    $filters:*
+  )
+  =>
+  (InnerJoin
+    $left
+    $right
+    (And [$on $filters])
+  )
 
 Dynamic Construction
 
@@ -469,9 +492,10 @@ grammar.
   match-list-empty    = '[' ']'
   match-any           = '*'
 
-  replace             = construct | ref | STRING
+  replace             = construct | construct-list | ref | STRING
   construct           = '(' construct-name replace* ')'
   construct-name      = name | construct
+  construct-list      = '[' replace* ']'
 
   name                = IDENT
   label               = IDENT
