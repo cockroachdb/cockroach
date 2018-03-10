@@ -17,7 +17,6 @@ package opt
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -93,7 +92,7 @@ type Metadata struct {
 	// tables maps from table index to the catalog metadata for the table. The
 	// table index is the index of the first column in the table. The remaining
 	// columns form a contiguous group following that index.
-	tables map[TableIndex]optbase.Table
+	tables map[TableIndex]Table
 }
 
 // NewMetadata constructs a new instance of metadata for the optimizer.
@@ -137,7 +136,7 @@ func (md *Metadata) ColumnType(index ColumnIndex) types.T {
 // AddTable indexes a new reference to a table within the query. Separate
 // references to the same table are assigned different table indexes (e.g. in
 // a self-join query).
-func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
+func (md *Metadata) AddTable(tbl Table) TableIndex {
 	tblIndex := TableIndex(md.NumColumns() + 1)
 
 	for i := 0; i < tbl.ColumnCount(); i++ {
@@ -150,7 +149,7 @@ func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
 	}
 
 	if md.tables == nil {
-		md.tables = make(map[TableIndex]optbase.Table)
+		md.tables = make(map[TableIndex]Table)
 	}
 
 	md.tables[tblIndex] = tbl
@@ -159,7 +158,7 @@ func (md *Metadata) AddTable(tbl optbase.Table) TableIndex {
 
 // Table looks up the catalog table associated with the given metadata index.
 // The same table can be associated with multiple metadata indexes.
-func (md *Metadata) Table(index TableIndex) optbase.Table {
+func (md *Metadata) Table(index TableIndex) Table {
 	return md.tables[index]
 }
 

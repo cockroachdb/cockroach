@@ -15,7 +15,7 @@
 package exec
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/optbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -27,7 +27,7 @@ import (
 // Each instance of TestEngine has an associated Catalog and Factory.
 type TestEngine interface {
 	// Catalog returns the Catalog associated with this engine
-	Catalog() optbase.Catalog
+	Catalog() opt.Catalog
 
 	// Factory returns the execution Factory associated with this engine, which
 	// can be used to create an execution plan.

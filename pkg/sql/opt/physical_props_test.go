@@ -12,15 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt
+package opt_test
 
 import (
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 func TestPhysicalProps(t *testing.T) {
 	// Empty props.
-	props := &PhysicalProps{}
+	props := &opt.PhysicalProps{}
 	testPhysicalProps(t, props, "")
 
 	if props.Defined() {
@@ -28,11 +30,11 @@ func TestPhysicalProps(t *testing.T) {
 	}
 
 	// Presentation props.
-	presentation := Presentation{
-		LabeledColumn{Label: "a", Index: 1},
-		LabeledColumn{Label: "b", Index: 2},
+	presentation := opt.Presentation{
+		opt.LabeledColumn{Label: "a", Index: 1},
+		opt.LabeledColumn{Label: "b", Index: 2},
 	}
-	props = &PhysicalProps{Presentation: presentation}
+	props = &opt.PhysicalProps{Presentation: presentation}
 	testPhysicalProps(t, props, "p:a:1,b:2")
 
 	if !presentation.Defined() {
@@ -43,12 +45,12 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("presentation should provide itself")
 	}
 
-	if presentation.Provides(Presentation{}) {
+	if presentation.Provides(opt.Presentation{}) {
 		t.Error("presentation should not provide the empty presentation")
 	}
 
 	// Add Ordering props.
-	ordering := Ordering{1, 5}
+	ordering := opt.Ordering{1, 5}
 	props.Ordering = ordering
 	testPhysicalProps(t, props, "p:a:1,b:2 o:+1,+5")
 
@@ -60,20 +62,20 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("ordering should provide itself")
 	}
 
-	if !ordering.Provides(Ordering{1}) {
+	if !ordering.Provides(opt.Ordering{1}) {
 		t.Error("ordering should provide the prefix ordering")
 	}
 
-	if (Ordering{}).Provides(ordering) {
+	if (opt.Ordering{}).Provides(ordering) {
 		t.Error("empty ordering should not provide ordering")
 	}
 
-	if !ordering.Provides(Ordering{}) {
+	if !ordering.Provides(opt.Ordering{}) {
 		t.Error("ordering should provide the empty ordering")
 	}
 }
 
-func testPhysicalProps(t *testing.T, physProps *PhysicalProps, expected string) {
+func testPhysicalProps(t *testing.T, physProps *opt.PhysicalProps, expected string) {
 	actual := physProps.Fingerprint()
 	if actual != expected {
 		t.Errorf("\nexpected: %s\nactual: %s", expected, actual)

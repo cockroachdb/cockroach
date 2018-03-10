@@ -12,17 +12,18 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt
+package opt_test
 
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestMetadataColumns(t *testing.T) {
-	md := NewMetadata()
+	md := opt.NewMetadata()
 
 	// Add standalone column.
 	colIndex := md.AddColumn("alias", types.Int)
@@ -66,7 +67,7 @@ func TestMetadataColumns(t *testing.T) {
 }
 
 func TestMetadataTables(t *testing.T) {
-	md := NewMetadata()
+	md := opt.NewMetadata()
 
 	// Add a table reference to the metadata.
 	a := &testutils.TestTable{Name: "a"}
