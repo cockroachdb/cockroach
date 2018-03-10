@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Node represents a node in the execution tree (currently maps to a
@@ -39,8 +40,9 @@ type Factory interface {
 	ConstructValues(rows [][]tree.TypedExpr, cols sqlbase.ResultColumns) (Node, error)
 
 	// ConstructScan returns a node that represents a scan of the given table.
-	// TODO(radu): support list of columns, index, index constraints
-	ConstructScan(table opt.Table) (Node, error)
+	// Only the given set of needed columns are part of the result.
+	// TODO(radu): support index, index constraints
+	ConstructScan(table opt.Table, needed ColumnOrdinalSet) (Node, error)
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.
@@ -79,6 +81,9 @@ type Factory interface {
 
 // ColumnOrdinal is the 0-based ordinal index of a column produced by a Node.
 type ColumnOrdinal int32
+
+// ColumnOrdinalSet contains a set of ColumnOrdinal values as ints.
+type ColumnOrdinalSet = util.FastIntSet
 
 // AggInfo represents an aggregation (see ConstructGroupBy).
 type AggInfo struct {

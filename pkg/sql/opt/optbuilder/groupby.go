@@ -112,7 +112,7 @@ type groupby struct {
 
 // aggregateInfo stores information about an aggregation function call.
 type aggregateInfo struct {
-	def  opt.FuncDef
+	def  opt.FuncOpDef
 	args []opt.GroupID
 }
 
@@ -365,7 +365,7 @@ func (b *Builder) buildGrouping(
 // buildAggregateFunction is called when we are building a function which is an
 // aggregate.
 func (b *Builder) buildAggregateFunction(
-	f *tree.FuncExpr, funcDef opt.FuncDef, label string, inScope *scope,
+	f *tree.FuncExpr, funcDef opt.FuncOpDef, label string, inScope *scope,
 ) (out opt.GroupID, col *columnProps) {
 	aggInScope, aggOutScope := inScope.startAggFunc()
 

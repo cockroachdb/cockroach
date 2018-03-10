@@ -590,7 +590,7 @@ func (_f *factory) ConstructSelect(
 					t := _e2.ChildGroup(0)
 					u := _e2.ChildGroup(1)
 					_f.reportOptimization()
-					_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(item).op, []GroupID{_f.ConstructSelect(t, u), _f.custom(item, opt.SelectOp)}, 0)
+					_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(item).op, []opt.GroupID{_f.ConstructSelect(t, u), _f.custom(item, opt.SelectOp)}, 0)
 					_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 					return _group
 				}

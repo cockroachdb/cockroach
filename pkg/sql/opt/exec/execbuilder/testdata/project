@@ -61,11 +61,13 @@ x:int  y:int
 exec-explain
 SELECT x + 1 FROM t.a
 ----
-render     0  render  ·         ·          (column3)  ·
- │         0  ·       render 0  x + 1      ·          ·
- └── scan  1  scan    ·         ·          (x, y)     ·
-·          1  ·       table     a@primary  ·          ·
-·          1  ·       spans     ALL        ·          ·
+render          0  render  ·         ·          (column3)  ·
+ │              0  ·       render 0  x + 1      ·          ·
+ └── render     1  render  ·         ·          (x)        ·
+      │         1  ·       render 0  x          ·          ·
+      └── scan  2  scan    ·         ·          (x, y)     ·
+·               2  ·       table     a@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
 
 exec
 SELECT x + 1 FROM t.a
@@ -182,13 +184,16 @@ x:int  y:int
 exec-explain
 SELECT x FROM t.b WHERE rowid > 0
 ----
-render          0  render  ·         ·          (x)                    ·
- │              0  ·       render 0  x          ·                      ·
- └── filter     1  filter  ·         ·          (x, y, rowid[hidden])  ·
-      │         1  ·       filter    rowid > 0  ·                      ·
-      └── scan  2  scan    ·         ·          (x, y, rowid[hidden])  ·
-·               2  ·       table     b@primary  ·                      ·
-·               2  ·       spans     ALL        ·                      ·
+render               0  render  ·         ·          (x)                    ·
+ │                   0  ·       render 0  x          ·                      ·
+ └── filter          1  filter  ·         ·          (x, rowid)             ·
+      │              1  ·       filter    rowid > 0  ·                      ·
+      └── render     2  render  ·         ·          (x, rowid)             ·
+           │         2  ·       render 0  x          ·                      ·
+           │         2  ·       render 1  rowid      ·                      ·
+           └── scan  3  scan    ·         ·          (x, y, rowid[hidden])  ·
+·                    3  ·       table     b@primary  ·                      ·
+·                    3  ·       spans     ALL        ·                      ·
 
 exec
 SELECT x FROM t.b WHERE rowid > 0
@@ -214,11 +219,12 @@ TABLE nocols
 exec-explain
 SELECT 1, * FROM t.nocols
 ----
-render     0  render  ·         ·               (column2)        ·
- │         0  ·       render 0  1               ·                ·
- └── scan  1  scan    ·         ·               (rowid[hidden])  ·
-·          1  ·       table     nocols@primary  ·                ·
-·          1  ·       spans     ALL             ·                ·
+render          0  render  ·         ·               (column2)        ·
+ │              0  ·       render 0  1               ·                ·
+ └── render     1  render  ·         ·               ()               ·
+      └── scan  2  scan    ·         ·               (rowid[hidden])  ·
+·               2  ·       table     nocols@primary  ·                ·
+·               2  ·       spans     ALL             ·                ·
 
 exec
 SELECT 1, * FROM t.nocols

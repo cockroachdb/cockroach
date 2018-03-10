@@ -159,17 +159,27 @@ func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
 }
 
 func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
-	tblIndex := ev.Private().(opt.TableIndex)
+	def := ev.Private().(*opt.ScanOpDef)
 	md := ev.Metadata()
-	tbl := md.Table(tblIndex)
-	node, err := b.factory.ConstructScan(tbl)
+	tbl := md.Table(def.Table)
+
+	// Construct subset of columns needed from scan.
+	n := 0
+	needed := exec.ColumnOrdinalSet{}
+	res := execPlan{}
+	for i := 0; i < tbl.ColumnCount(); i++ {
+		colIndex := md.TableColumn(def.Table, i)
+		if def.Cols.Contains(int(colIndex)) {
+			needed.Add(i)
+			res.outputCols.Set(int(colIndex), n)
+			n++
+		}
+	}
+	root, err := b.factory.ConstructScan(tbl, needed)
 	if err != nil {
 		return execPlan{}, err
 	}
-	res := execPlan{root: node}
-	for i := 0; i < tbl.ColumnCount(); i++ {
-		res.outputCols.Set(int(md.TableColumn(tblIndex, i)), i)
-	}
+	res.root = root
 	return res, nil
 }
 
@@ -272,7 +282,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 	aggInfos := make([]exec.AggInfo, numAgg)
 	for i := 0; i < numAgg; i++ {
 		fn := aggregations.Child(i)
-		funcDef := fn.Private().(opt.FuncDef)
+		funcDef := fn.Private().(opt.FuncOpDef)
 
 		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {

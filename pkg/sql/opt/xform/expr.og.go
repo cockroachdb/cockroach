@@ -2491,8 +2491,8 @@ func (m *memoExpr) asWhen() *whenExpr {
 }
 
 // functionExpr invokes a builtin SQL function like CONCAT or NOW, passing the given
-// arguments. The private field is an opt.FuncDef struct that provides the name
-// of the function as well as a pointer to the builtin overload definition.
+// arguments. The private field is an opt.FuncOpDef struct that provides the
+// name of the function as well as a pointer to the builtin overload definition.
 type functionExpr memoExpr
 
 func makeFunctionExpr(args opt.ListID, def opt.PrivateID) functionExpr {
@@ -2562,17 +2562,18 @@ func (m *memoExpr) asUnsupportedExpr() *unsupportedExprExpr {
 	return (*unsupportedExprExpr)(m)
 }
 
-// scanExpr returns a result set containing every row in the specified table. Rows
-// and columns are not expected to have any particular ordering. The private
-// Table field is a Metadata.TableIndex that references an opt.Table
-// definition in the query's metadata.
+// scanExpr returns a result set containing every row in the specified table. The
+// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+// well as the subset of columns to project from it. Rows and columns are not
+// expected to have any particular ordering unless a physical property requires
+// it.
 type scanExpr memoExpr
 
-func makeScanExpr(table opt.PrivateID) scanExpr {
-	return scanExpr{op: opt.ScanOp, state: exprState{uint32(table)}}
+func makeScanExpr(def opt.PrivateID) scanExpr {
+	return scanExpr{op: opt.ScanOp, state: exprState{uint32(def)}}
 }
 
-func (e *scanExpr) table() opt.PrivateID {
+func (e *scanExpr) def() opt.PrivateID {
 	return opt.PrivateID(e.state[0])
 }
 
@@ -3041,8 +3042,8 @@ func (m *memoExpr) asAntiJoinApply() *antiJoinApplyExpr {
 // operator). The arguments of the aggregations are columns from the input.
 type groupByExpr memoExpr
 
-func makeGroupByExpr(input opt.GroupID, aggregations opt.GroupID, groupingColumns opt.PrivateID) groupByExpr {
-	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(aggregations), uint32(groupingColumns)}}
+func makeGroupByExpr(input opt.GroupID, aggregations opt.GroupID, groupingCols opt.PrivateID) groupByExpr {
+	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(aggregations), uint32(groupingCols)}}
 }
 
 func (e *groupByExpr) input() opt.GroupID {
@@ -3053,7 +3054,7 @@ func (e *groupByExpr) aggregations() opt.GroupID {
 	return opt.GroupID(e.state[1])
 }
 
-func (e *groupByExpr) groupingColumns() opt.PrivateID {
+func (e *groupByExpr) groupingCols() opt.PrivateID {
 	return opt.PrivateID(e.state[2])
 }
 
