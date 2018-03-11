@@ -379,31 +379,35 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		isTxn   bool
 		isWTO   bool
 		isTSOff bool
+		iso     enginepb.IsolationType
 		exp1PC  bool
 	}{
-		{[]roachpb.RequestUnion{}, false, false, false, false},
-		{[]roachpb.RequestUnion{}, true, false, false, false},
-		{[]roachpb.RequestUnion{{Get: &roachpb.GetRequest{}}}, true, false, false, false},
-		{[]roachpb.RequestUnion{{Put: &roachpb.PutRequest{}}}, true, false, false, false},
-		{txnReqs[0 : len(txnReqs)-1], true, false, false, false},
-		{txnReqs[1:], true, false, false, false},
-		{txnReqs, true, false, false, true},
-		{txnReqs, true, true, false, false},
-		{txnReqs, true, false, true, false},
-		{txnReqs, true, true, true, false},
+		{[]roachpb.RequestUnion{}, false, false, false, enginepb.SERIALIZABLE, false},
+		{[]roachpb.RequestUnion{}, true, false, false, enginepb.SERIALIZABLE, false},
+		{[]roachpb.RequestUnion{{Get: &roachpb.GetRequest{}}}, true, false, false, enginepb.SERIALIZABLE, false},
+		{[]roachpb.RequestUnion{{Put: &roachpb.PutRequest{}}}, true, false, false, enginepb.SERIALIZABLE, false},
+		{txnReqs[0 : len(txnReqs)-1], true, false, false, enginepb.SERIALIZABLE, false},
+		{txnReqs[1:], true, false, false, enginepb.SERIALIZABLE, false},
+		{txnReqs, true, false, false, enginepb.SERIALIZABLE, true},
+		{txnReqs, true, false, false, enginepb.SNAPSHOT, true},
+		{txnReqs, true, true, false, enginepb.SERIALIZABLE, false},
+		{txnReqs, true, true, false, enginepb.SNAPSHOT, false},
+		{txnReqs, true, false, true, enginepb.SERIALIZABLE, false},
+		{txnReqs, true, false, true, enginepb.SNAPSHOT, false},
+		{txnReqs, true, true, true, enginepb.SERIALIZABLE, false},
+		{txnReqs, true, true, true, enginepb.SNAPSHOT, false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	for i, c := range testCases {
 		ba := roachpb.BatchRequest{Requests: c.bu}
 		if c.isTxn {
-			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, enginepb.SNAPSHOT, clock)
+			ba.Txn = newTransaction("txn", roachpb.Key("a"), 1, c.iso, clock)
 			if c.isWTO {
 				ba.Txn.WriteTooOld = true
 			}
-			ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			if c.isTSOff {
-				ba.Txn.Isolation = enginepb.SERIALIZABLE
+				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			}
 		}
 		if is1PC := isOnePhaseCommit(ba, &StoreTestingKnobs{}); is1PC != c.exp1PC {
@@ -9332,6 +9336,75 @@ func TestReplicaLocalRetries(t *testing.T) {
 				if rTS != expTS {
 					t.Fatalf("expected timestamp cache update for %s to %s; got %s", k, expTS, rTS)
 				}
+			}
+		})
+	}
+}
+
+// TestReplicaPushed1PC verifies that a transaction that has its
+// timestamp pushed while reading and then sends all its writes in a
+// 1PC batch correctly detects conflicts with writes between its
+// original and pushed timestamps. This was hypothesized as a possible
+// cause of https://github.com/cockroachdb/cockroach/issues/23176
+// but we were already guarding against this case. This test ensures
+// it stays that way.
+func TestReplicaPushed1PC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	tc.Start(t, stopper)
+
+	for _, isolation := range []enginepb.IsolationType{enginepb.SERIALIZABLE, enginepb.SNAPSHOT} {
+		t.Run(isolation.String(), func(t *testing.T) {
+			ctx := context.Background()
+			k := roachpb.Key(isolation.String())
+
+			// Start a transaction and assign its OrigTimestamp.
+			ts1 := tc.Clock().Now()
+			txn := roachpb.MakeTransaction("test", k, roachpb.NormalUserPriority, isolation, ts1, 0)
+
+			// Write a value outside the transaction.
+			tc.manualClock.Increment(10)
+			ts2 := tc.Clock().Now()
+			if err := engine.MVCCPut(ctx, tc.engine, nil, k, ts2, roachpb.MakeValueFromString("one"), nil); err != nil {
+				t.Fatalf("writing interfering value: %s", err)
+			}
+
+			// Push the transaction's timestamp. In real-world situations,
+			// the only thing that can push a read-only transaction's
+			// timestamp is ReadWithinUncertaintyIntervalError, but
+			// synthesizing one of those in this single-node test harness is
+			// tricky.
+			tc.manualClock.Increment(10)
+			ts3 := tc.Clock().Now()
+			txn.Timestamp.Forward(ts3)
+
+			// Execute the write phase of the transaction as a single batch,
+			// which must return a WRITE_TOO_OLD TransactionRetryError.
+			//
+			// TODO(bdarnell): When this test was written, in SNAPSHOT
+			// isolation we would attempt to execute the transaction on the
+			// 1PC path, see a timestamp mismatch, and then then throw the
+			// 1PC results away and re-execute it on the regular path (which
+			// would generate the WRITE_TOO_OLD error). We have added earlier
+			// timestamp checks for a small performance improvement, but
+			// this difference is difficult to observe in a test. If we had
+			// more detailed metrics we could assert that the 1PC path was
+			// not even attempted here.
+			var ba roachpb.BatchRequest
+			bt, h := beginTxnArgs(txn.Key, &txn)
+			ba.Header = h
+			put := putArgs(k, []byte("two"))
+			et, _ := endTxnArgs(&txn, true)
+			ba.Add(&bt, &put, &et)
+			if br, pErr := tc.Sender().Send(ctx, ba); pErr == nil {
+				t.Errorf("did not get expected error. resp=%s", br)
+			} else if trErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+				t.Errorf("expected TransactionRetryError, got %s", pErr)
+			} else if trErr.Reason != roachpb.RETRY_WRITE_TOO_OLD {
+				t.Errorf("expected RETRY_WRITE_TOO_OLD, got %s", trErr)
 			}
 		})
 	}
