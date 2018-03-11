@@ -39,16 +39,15 @@ x:int  y:int  x:int  z:int
 exec-explain
 SELECT * FROM t.a, t.b WHERE a.x = b.x
 ----
-filter          0  filter  ·       ·          (x, y, x, z)  ·
- │              0  ·       filter  x = x      ·             ·
- └── join       1  join    ·       ·          (x, y, x, z)  ·
-      │         1  ·       type    cross      ·             ·
-      ├── scan  2  scan    ·       ·          (x, y)        ·
-      │         2  ·       table   a@primary  ·             ·
-      │         2  ·       spans   ALL        ·             ·
-      └── scan  2  scan    ·       ·          (x, z)        ·
-·               2  ·       table   b@primary  ·             ·
-·               2  ·       spans   ALL        ·             ·
+join       0  join  ·         ·          (x, y, x, z)  ·
+ │         0  ·     type      inner      ·             ·
+ │         0  ·     equality  (x) = (x)  ·             ·
+ ├── scan  1  scan  ·         ·          (x, y)        ·
+ │         1  ·     table     a@primary  ·             ·
+ │         1  ·     spans     ALL        ·             ·
+ └── scan  1  scan  ·         ·          (x, z)        ·
+·          1  ·     table     b@primary  ·             ·
+·          1  ·     spans     ALL        ·             ·
 
 exec
 SELECT * FROM t.a, t.b WHERE a.x = b.x
