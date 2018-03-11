@@ -94,7 +94,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 	}
 
 	if len(td) == 0 {
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 	return &dropTableNode{n: n, td: td}, nil
 }

@@ -183,7 +183,7 @@ func grantRolePlanHook(
 		}
 	}
 
-	return &sql.ZeroNode{}, nil
+	return sql.NewZeroNode(nil /* columns */), nil
 }
 
 func revokeRolePlanHook(
@@ -277,7 +277,7 @@ func revokeRolePlanHook(
 		}
 	}
 
-	return &sql.ZeroNode{}, nil
+	return sql.NewZeroNode(nil /* columns */), nil
 }
 
 func init() {

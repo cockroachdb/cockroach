@@ -2336,3 +2336,12 @@ SELECT * FROM foo JOIN bar USING (a, b) WHERE foo.c = bar.c AND foo.d = bar.d
 1  1  1  1  1  1
 2  2  2  2  2  2
 3  3  3  3  3  3
+
+# Regression test for 23664.
+query III rowsort
+SELECT * FROM onecolumn AS a(x) RIGHT JOIN twocolumn ON false
+----
+NULL  44    51
+NULL  NULL  52
+NULL  42    53
+NULL  45    45

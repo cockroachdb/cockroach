@@ -31,7 +31,7 @@ import (
 )
 
 func newPlanNode() planNode {
-	return &zeroNode{}
+	return newZeroNode(nil /* columns */)
 }
 
 // assertLen asserts the number of plans in the ParallelizeQueue.

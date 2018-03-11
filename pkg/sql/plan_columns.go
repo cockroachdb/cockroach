@@ -77,6 +77,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.run.values.columns
 	case *showTraceNode:
 		return n.columns
+	case *zeroNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
