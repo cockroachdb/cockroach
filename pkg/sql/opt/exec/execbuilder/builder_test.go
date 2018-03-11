@@ -39,7 +39,14 @@ package execbuilder
 //  - exec
 //
 //    Builds a memo structure from a SQL statement, then builds an
-//    execution plan and runs it, outputting the results.
+//    execution plan and runs it, outputting the results. Supported args:
+//      - rowsort: if specified, the results are sorted. Used for queries where
+//        result ordering can be arbitrary.
+//
+//      - partialsort=(x,y,z..): if specified, the results are partially sorted,
+//        preserving the relative ordering of rows that differ on the specified
+//        columns (1-indexed). Used for queries which guarantee a partial order.
+//        See partialSort() for more information.
 //
 //  - exec-explain
 //
@@ -67,6 +74,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"text/tabwriter"
@@ -118,6 +126,7 @@ func TestBuild(t *testing.T) {
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 				var allowUnsupportedExpr, rowSort bool
+				var partialSortColumns []int
 
 				for _, arg := range d.CmdArgs {
 					switch arg.Key {
@@ -128,6 +137,17 @@ func TestBuild(t *testing.T) {
 						// We will sort the resulting rows before comparing with the
 						// expected result.
 						rowSort = true
+
+					case "partialsort":
+						// See partialSort().
+						partialSortColumns = make([]int, len(arg.Vals))
+						for i, colStr := range arg.Vals {
+							val, err := strconv.Atoi(colStr)
+							if err != nil {
+								t.Fatalf("error parsing partialSort argument: %s", err)
+							}
+							partialSortColumns[i] = val - 1
+						}
 
 					default:
 						d.Fatalf(t, "unknown argument: %s", arg.Key)
@@ -189,15 +209,9 @@ func TestBuild(t *testing.T) {
 					}
 
 					if rowSort {
-						sort.Slice(results, func(i, j int) bool {
-							for k := range results[i] {
-								cmp := results[i][k].Compare(&evalCtx, results[j][k])
-								if cmp != 0 {
-									return cmp < 0
-								}
-							}
-							return false
-						})
+						sortRows(results, &evalCtx)
+					} else if partialSortColumns != nil {
+						partialSort(results, partialSortColumns, &evalCtx)
 					}
 
 					// Format the results.
@@ -263,4 +277,76 @@ func TestBuild(t *testing.T) {
 			})
 		})
 	}
+}
+
+func sortRows(rows []tree.Datums, evalCtx *tree.EvalContext) {
+	sort.Slice(rows, func(i, j int) bool {
+		for k := range rows[i] {
+			cmp := rows[i][k].Compare(evalCtx, rows[j][k])
+			if cmp != 0 {
+				return cmp < 0
+			}
+		}
+		return false
+	})
+}
+
+// partialSort rearranges consecutive rows that have the same values on a
+// certain set of columns (orderedCols).
+//
+// More specifically: rows are partitioned into groups of consecutive rows that
+// have the same values for columns orderedCols. Inside each group, the rows are
+// sorted. The relative order of any two rows that differ on orderedCols is
+// preserved.
+//
+// This is useful when comparing results for a statement that guarantees a
+// partial, but not a total order. Consider:
+//
+//   SELECT a, b FROM ab ORDER BY a
+//
+// Some possible outputs for the same data:
+//   1 2        1 5        1 2
+//   1 5        1 4        1 4
+//   1 4   or   1 2   or   1 5
+//   2 3        2 2        2 3
+//   2 2        2 3        2 2
+//
+// After a partialSort with colStrs = {"1"} all become:
+//   1 2
+//   1 4
+//   1 5
+//   2 2
+//   2 3
+//
+// An incorrect output like:
+//   1 5                          1 2
+//   1 2                          1 5
+//   2 3          becomes:        2 2
+//   2 2                          2 3
+//   1 4                          1 4
+// and it is detected as different.
+func partialSort(results []tree.Datums, orderedCols []int, evalCtx *tree.EvalContext) {
+	if len(results) == 0 {
+		return
+	}
+
+	groupStart := 0
+	for rIdx := 1; rIdx < len(results); rIdx++ {
+		// See if this row belongs in the group with the previous row.
+		row := results[rIdx]
+		start := results[groupStart]
+		differs := false
+		for _, i := range orderedCols {
+			if start[i].Compare(evalCtx, row[i]) != 0 {
+				differs = true
+				break
+			}
+		}
+		if differs {
+			// Sort the group and start a new group with just this row in it.
+			sortRows(results[groupStart:rIdx], evalCtx)
+			groupStart = rIdx
+		}
+	}
+	sortRows(results[groupStart:], evalCtx)
 }
