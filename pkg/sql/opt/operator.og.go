@@ -65,6 +65,19 @@ const (
 
 	ExistsOp
 
+	// FiltersOp is a boolean And operator that only appears as the Filters child of
+	// a Select operator, or the On child of a Join operator. For example:
+	//   (Select
+	//     (Scan a)
+	//     (Filters (Gt (Variable a) 1) (Lt (Variable a) 5))
+	//   )
+	//
+	// Normalization rules ensure that a Filters expression is always created if
+	// there is at least one condition, so that other rules can rely on its presence
+	// when matching, even in the case where there is only one condition. The
+	// semantics of the Filters operator are identical to those of the And operator.
+	FiltersOp
+
 	// AndOp is the boolean conjunction operator that evalutes to true if all of its
 	// conditions evaluate to true. If the conditions list is empty, it evalutes to
 	// true.
@@ -218,7 +231,10 @@ const (
 	ValuesOp
 
 	// SelectOp filters rows from its input result set, based on the boolean filter
-	// predicate expression. Rows which do not match the filter are discarded.
+	// predicate expression. Rows which do not match the filter are discarded. While
+	// the Filter operand can be any boolean expression, normalization rules will
+	// typically convert it to a Filters operator in order to make conjunction list
+	// matching easier.
 	SelectOp
 
 	// ProjectOp modifies the set of columns returned by the input result set. Columns
@@ -364,9 +380,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
+const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 89, 91, 94, 96, 98, 100, 102, 104, 106, 108, 114, 118, 126, 132, 142, 152, 166, 175, 188, 199, 214, 216, 222, 230, 236, 241, 247, 251, 256, 260, 263, 272, 275, 278, 284, 291, 298, 307, 317, 331, 346, 357, 373, 377, 381, 385, 393, 401, 417, 421, 427, 433, 440, 450, 459, 469, 478, 487, 496, 512, 527, 543, 558, 573, 588, 596, 601, 610, 616, 625, 638, 648, 652}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 93, 96, 98, 101, 103, 105, 107, 109, 111, 113, 115, 121, 125, 133, 139, 149, 159, 173, 182, 195, 206, 221, 223, 229, 237, 243, 248, 254, 258, 263, 267, 270, 279, 282, 285, 291, 298, 305, 314, 324, 338, 353, 364, 380, 384, 388, 392, 400, 408, 424, 428, 434, 440, 447, 457, 466, 476, 485, 494, 503, 519, 534, 550, 565, 580, 595, 603, 608, 617, 623, 632, 645, 655, 659}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -380,6 +396,7 @@ var ScalarOperators = [...]Operator{
 	ProjectionsOp,
 	AggregationsOp,
 	ExistsOp,
+	FiltersOp,
 	AndOp,
 	OrOp,
 	NotOp,
@@ -441,6 +458,7 @@ var ConstValueOperators = [...]Operator{
 var BooleanOperators = [...]Operator{
 	TrueOp,
 	FalseOp,
+	FiltersOp,
 	AndOp,
 	OrOp,
 	NotOp,

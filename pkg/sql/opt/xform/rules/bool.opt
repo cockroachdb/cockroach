@@ -1,72 +1,99 @@
 # =============================================================================
-# bool.opt contains normalization rules for boolean And, Or, Not operators.
+# bool.opt contains normalization rules for boolean And, Or, Not, and Filters
+# operators.
+#
+# In order to make filter matching easier, the Filters rules create a Filters
+# operator to wrap the boolean conditions in Select and Join operators as a
+# list of AND'd expressions. For example:
+#   (InnerJoin
+#     (Scan a)
+#     (Scan b)
+#     (Filters
+#       (Eq (Variable a) (Variable b))
+#       (Gt (Variable b) (Const 5))
+#     )
+#   )
+#
+# Now other rules can rely upon the presence of the Filters when matching:
+#   (Select
+#     $input:*
+#     (Filters [ ... $conjunct:* ... ])
+#   )
 # =============================================================================
 
 
-# FlattenAnd ensures that And operators are never nested within one another. If
-# an And operator has another And as a child, then the child And is "flattened"
-# by merging its conditions into the parent And. Flattened And conditions are
-# easier to match and enumerate.
-[FlattenAnd, Normalize]
-(And
-    $conditions:[ ... (And) ... ]
+# EliminateEmptyAnd maps an empty And or Filters list to True.
+[EliminateEmptyAnd, Normalize]
+(And | Filters
+    $conditions:[]
 )
 =>
-(FlattenAnd $conditions)
+(True)
 
-# FlattenOr ensures that Or operators are never nested within one another. If
-# an Or operator has another Or as a child, then the child Or is "flattened" by
-# merging its conditions into the parent Or. Flattened Or conditions are easier
-# to match and enumerate.
-[FlattenOr, Normalize]
+# EliminateEmptyOr maps an empty Or list to False.
+[EliminateEmptyOr, Normalize]
 (Or
-    $conditions:[ ... (Or) ... ]
+    $conditions:[]
 )
 =>
-(FlattenOr $conditions)
+(False)
 
-# SimplifyAnd removes True operands from an And operator, and eliminates the
-# And operator altogether if any operand is False. If, after simplification,
-# no operands remain, then simplifyAnd returns True.
+# EliminateSingletonAndOr discards an And or Or operator that has only one
+# condition.
+[EliminateSingletonAndOr, Normalize]
+(And | Or
+    $conditions:[ $item:* ]
+)
+=>
+$item
+
+# SimplifyAnd simplifies the And operator in several possible ways:
+#   - Removes True operands
+#   - Replaces the And operator with False if any operand is False
+#   - Flattens nested And operands by merging their conditions into parent And
 # This rule is especially important when we build a simplified filter.
 [SimplifyAnd, Normalize]
 (And
-    $conditions:[ ... (True | False) ... ]
+    $conditions:[ ... (And | True | False) ... ]
 )
 =>
 (SimplifyAnd $conditions)
 
-# SimplifyOr removes False operands from an Or operator, and eliminates the
-# Or operator altogether if any operand is True. If, after simplification,
-# no operands remain, then simplifyOr returns False.
+# SimplifyOr simplifies the Or operator in several possible ways:
+#   - Removes False operands
+#   - Replaces the Or operator with True if any operand is True
+#   - Flattens nested Or operands by merging their conditions into parent Or
 # This rule is especially important when we build a simplified filter.
 [SimplifyOr, Normalize]
 (Or
-    $conditions:[ ... (True | False) ... ]
+    $conditions:[ ... (Or | True | False) ... ]
 )
 =>
 (SimplifyOr $conditions)
 
-# FoldNullAndOr replaces the operator with null if all of its operands are
-# null.
+# SimplifyFilters simplifies the Filters operator in several possible ways:
+#   - Removes True operands
+#   - Replaces the Filters operator with False if any operand is False or Null
+#   - Flattens nested And operands by merging their conditions into parent
+#
+# Note that the Null handling behavior is different than the SimplifyAnd rule,
+# because Filters only appears as a Select or Join filter condition, both of
+# which treat a Null filter conjunct exactly as if it were False.
+[SimplifyFilters, Normalize]
+(Filters
+    $conditions:[ ... (And | True | False | Null) ... ]
+)
+=>
+(SimplifyFilters $conditions)
+
+# FoldNullAndOr replaces the operator with Null if all of its operands are
+# Null.
 [FoldNullAndOr, Normalize]
 (And | Or
     $conditions:[ (Null) ... ] & (ListOnlyHasNulls $conditions)
 )
 =>
 (Null (BoolType))
-
-# TODO(radu): we don't yet eliminate singleton Ands because we assume filters
-# are always under an And.
-
-# EliminateSingletonOr replaces an Or node with a single condition with that
-# condition.
-[EliminateSingletonOr, Normalize]
-(Or
-    $conditions:[ $item:* ]
-)
-=>
-$item
 
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All

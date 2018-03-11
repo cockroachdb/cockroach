@@ -469,12 +469,16 @@ func (p *Parser) parseMatchList() Expr {
 	return &MatchListSingleExpr{Src: &src, MatchItem: matchItem}
 }
 
-// replace = construct | ref | name | STRING
+// replace = construct | construct-list | ref | name | STRING
 func (p *Parser) parseReplace() Expr {
 	switch p.scan() {
 	case LPAREN:
 		p.unscan()
 		return p.parseConstruct()
+
+	case LBRACKET:
+		p.unscan()
+		return p.parseConstructList()
 
 	case DOLLAR:
 		p.unscan()
@@ -514,12 +518,36 @@ func (p *Parser) parseConstruct() Expr {
 		}
 
 		p.unscan()
+		arg := p.parseReplace()
+		if arg == nil {
+			return nil
+		}
+
+		construct.Args = append(construct.Args, arg)
+	}
+}
+
+// construct-list = '[' replace* ']'
+func (p *Parser) parseConstructList() Expr {
+	if p.scan() != LBRACKET {
+		panic("caller should have checked for left bracket")
+	}
+
+	src := p.src
+
+	list := &ConstructListExpr{Src: &src}
+	for {
+		if p.scan() == RBRACKET {
+			return list
+		}
+
+		p.unscan()
 		item := p.parseReplace()
 		if item == nil {
 			return nil
 		}
 
-		construct.Args = append(construct.Args, item)
+		list.Items = append(list.Items, item)
 	}
 }
 
