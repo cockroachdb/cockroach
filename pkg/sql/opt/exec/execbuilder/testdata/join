@@ -35,20 +35,18 @@ x:int  y:int  x:int  z:int
 3      30     3      300
 3      30     4      400
 
-# We don't yet push the filter into the join.
 exec-explain
 SELECT * FROM t.a, t.b WHERE a.x = b.x
 ----
-filter          0  filter  ·       ·          (x, y, x, z)  ·
- │              0  ·       filter  x = x      ·             ·
- └── join       1  join    ·       ·          (x, y, x, z)  ·
-      │         1  ·       type    cross      ·             ·
-      ├── scan  2  scan    ·       ·          (x, y)        ·
-      │         2  ·       table   a@primary  ·             ·
-      │         2  ·       spans   ALL        ·             ·
-      └── scan  2  scan    ·       ·          (x, z)        ·
-·               2  ·       table   b@primary  ·             ·
-·               2  ·       spans   ALL        ·             ·
+join       0  join  ·         ·          (x, y, x, z)  ·
+ │         0  ·     type      inner      ·             ·
+ │         0  ·     equality  (x) = (x)  ·             ·
+ ├── scan  1  scan  ·         ·          (x, y)        ·
+ │         1  ·     table     a@primary  ·             ·
+ │         1  ·     spans     ALL        ·             ·
+ └── scan  1  scan  ·         ·          (x, z)        ·
+·          1  ·     table     b@primary  ·             ·
+·          1  ·     spans     ALL        ·             ·
 
 exec
 SELECT * FROM t.a, t.b WHERE a.x = b.x
@@ -172,3 +170,53 @@ x:int  y:int  z:int
 2      20     200
 3      30     300
 4      NULL   400
+
+# Select filters are pushed through join, down to scans.
+exec-explain
+SELECT * FROM t.a, t.b WHERE y > 10 AND z < 400
+----
+join            0  join    ·       ·          (x, y, x, z)  ·
+ │              0  ·       type    cross      ·             ·
+ ├── filter     1  filter  ·       ·          (x, y)        ·
+ │    │         1  ·       filter  y > 10     ·             ·
+ │    └── scan  2  scan    ·       ·          (x, y)        ·
+ │              2  ·       table   a@primary  ·             ·
+ │              2  ·       spans   ALL        ·             ·
+ └── filter     1  filter  ·       ·          (x, z)        ·
+      │         1  ·       filter  z < 400    ·             ·
+      └── scan  2  scan    ·       ·          (x, z)        ·
+·               2  ·       table   b@primary  ·             ·
+·               2  ·       spans   ALL        ·             ·
+
+exec
+SELECT * FROM t.a, t.b WHERE y > 10 AND z < 400
+----
+x:int  y:int  x:int  z:int
+2      20     2      200
+2      20     3      300
+3      30     2      200
+3      30     3      300
+
+# Join filter is pushed through join, down to scan.
+exec-explain
+SELECT * FROM t.a LEFT JOIN t.b ON a.x=b.x AND z < 300
+----
+join            0  join    ·         ·           (x, y, x, z)  ·
+ │              0  ·       type      left outer  ·             ·
+ │              0  ·       equality  (x) = (x)   ·             ·
+ ├── scan       1  scan    ·         ·           (x, y)        ·
+ │              1  ·       table     a@primary   ·             ·
+ │              1  ·       spans     ALL         ·             ·
+ └── filter     1  filter  ·         ·           (x, z)        ·
+      │         1  ·       filter    z < 300     ·             ·
+      └── scan  2  scan    ·         ·           (x, z)        ·
+·               2  ·       table     b@primary   ·             ·
+·               2  ·       spans     ALL         ·             ·
+
+exec
+SELECT * FROM t.a LEFT JOIN t.b ON a.x=b.x AND z < 300
+----
+x:int  y:int  x:int  z:int
+1      10     NULL   NULL
+2      20     2      200
+3      30     NULL   NULL

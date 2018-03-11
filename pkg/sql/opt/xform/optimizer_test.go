@@ -82,9 +82,11 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 		t.Fatalf("no testfiles found matching: %s", testdataGlob)
 	}
 
-	test := newOptimizerTest(t)
+	test := newOptimizerTest()
 	for _, path := range paths {
-		test.run(path)
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			test.run(t, path)
+		})
 	}
 }
 
@@ -97,9 +99,8 @@ type optimizerTest struct {
 	catalog *testutils.TestCatalog
 }
 
-func newOptimizerTest(t *testing.T) *optimizerTest {
+func newOptimizerTest() *optimizerTest {
 	return &optimizerTest{
-		t:       t,
 		ctx:     context.Background(),
 		semaCtx: tree.MakeSemaContext(false /* privileged */),
 		evalCtx: tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings()),
@@ -107,17 +108,18 @@ func newOptimizerTest(t *testing.T) *optimizerTest {
 	}
 }
 
-func (ot *optimizerTest) run(path string) {
-	datadriven.RunTest(ot.t, path, func(d *datadriven.TestData) string {
+func (ot *optimizerTest) run(t *testing.T, path string) {
+	datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+		ot.t = t
 		ot.d = d
 
 		if d.Cmd == "exec-ddl" {
-			return testutils.ExecuteTestDDL(ot.t, d.Input, ot.catalog)
+			return testutils.ExecuteTestDDL(t, d.Input, ot.catalog)
 		}
 
 		stmt, err := parser.ParseOne(d.Input)
 		if err != nil {
-			d.Fatalf(ot.t, "%v", err)
+			d.Fatalf(t, "%v", err)
 		}
 
 		switch d.Cmd {
@@ -175,7 +177,7 @@ func (ot *optimizerTest) run(path string) {
 			return fmt.Sprintf("[%d: \"%s\"]\n%s", root, props, ev.mem.String())
 
 		default:
-			d.Fatalf(ot.t, "unsupported command: %s", d.Cmd)
+			d.Fatalf(t, "unsupported command: %s", d.Cmd)
 			return ""
 		}
 	})

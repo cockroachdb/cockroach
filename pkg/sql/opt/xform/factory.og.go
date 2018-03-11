@@ -3234,6 +3234,107 @@ func (_f *factory) ConstructSelect(
 		}
 	}
 
+	// [MergeSelects]
+	{
+		_select := _f.mem.lookupNormExpr(input).asSelect()
+		if _select != nil {
+			input := _select.input()
+			innerFilter := _select.filter()
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.concatFilters(innerFilter, filter))
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownSelectJoinLeft]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.LeftJoinOp || _norm.op == opt.LeftJoinApplyOp {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			_filters := _f.mem.lookupNormExpr(filter).asFilters()
+			if _filters != nil {
+				list := _filters.conditions()
+				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+					condition := _item
+					if !_f.isCorrelated(condition, right) {
+						_f.reportOptimization()
+						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right)))), opt.DynamicID(right), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+						return _group
+					}
+				}
+			}
+		}
+	}
+
+	// [PushDownSelectJoinRight]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.RightJoinOp || _norm.op == opt.RightJoinApplyOp {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			_filters := _f.mem.lookupNormExpr(filter).asFilters()
+			if _filters != nil {
+				list := _filters.conditions()
+				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+					condition := _item
+					if !_f.isCorrelated(condition, left) {
+						_f.reportOptimization()
+						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left)))), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+						return _group
+					}
+				}
+			}
+		}
+	}
+
+	// [MergeSelectInnerJoin]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			_f.reportOptimization()
+			_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(right), opt.DynamicID(_f.concatFilters(on, filter))})
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownSelectGroupBy]
+	{
+		_groupBy := _f.mem.lookupNormExpr(input).asGroupBy()
+		if _groupBy != nil {
+			input := _groupBy.input()
+			aggregations := _groupBy.aggregations()
+			groupingCols := _groupBy.groupingCols()
+			if !_f.emptyGroupingCols(groupingCols) {
+				_filters := _f.mem.lookupNormExpr(filter).asFilters()
+				if _filters != nil {
+					list := _filters.conditions()
+					for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+						condition := _item
+						if !_f.isCorrelated(condition, aggregations) {
+							_f.reportOptimization()
+							_group = _f.ConstructSelect(_f.ConstructGroupBy(_f.ConstructSelect(input, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, aggregations))), aggregations, groupingCols), _f.ConstructFilters(_f.extractCorrelatedConditions(list, aggregations)))
+							_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+							return _group
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_selectExpr)))
 }
 
@@ -3421,6 +3522,40 @@ func (_f *factory) ConstructInnerJoin(
 		}
 	}
 
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
 }
 
@@ -3464,6 +3599,23 @@ func (_f *factory) ConstructLeftJoin(
 		}
 	}
 
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructLeftJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr)))
 }
 
@@ -3504,6 +3656,23 @@ func (_f *factory) ConstructRightJoin(
 			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
 			return _group
+		}
+	}
+
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructRightJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
 		}
 	}
 
@@ -3682,6 +3851,40 @@ func (_f *factory) ConstructInnerJoinApply(
 		}
 	}
 
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr)))
 }
 
@@ -3725,6 +3928,23 @@ func (_f *factory) ConstructLeftJoinApply(
 		}
 	}
 
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructLeftJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr)))
 }
 
@@ -3765,6 +3985,23 @@ func (_f *factory) ConstructRightJoinApply(
 			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
 			return _group
+		}
+	}
+
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructRightJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
 		}
 	}
 

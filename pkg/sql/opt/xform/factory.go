@@ -301,6 +301,12 @@ func (f *factory) onlyConstants(group opt.GroupID) bool {
 	return f.mem.lookupGroup(group).logical.Scalar.OuterCols.Empty()
 }
 
+// hasSameCols returns true if the two groups have an identical set of output
+// columns.
+func (f *factory) hasSameCols(left, right opt.GroupID) bool {
+	return f.outputCols(left).Equals(f.outputCols(right))
+}
+
 // ----------------------------------------------------------------------
 //
 // Project Rules
@@ -333,12 +339,6 @@ func (f *factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
 func (f *factory) groupByNeededCols(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
 	colSet := *f.mem.lookupPrivate(groupingCols).(*opt.ColSet)
 	return f.outerCols(aggs).Union(colSet)
-}
-
-// hasSameCols returns true if the two groups have an identical set of output
-// columns.
-func (f *factory) hasSameCols(left, right opt.GroupID) bool {
-	return f.outputCols(left).Equals(f.outputCols(right))
 }
 
 // hasUnusedColumns returns true if the target group has additional columns
@@ -466,6 +466,114 @@ func (f *factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.C
 	}
 
 	return f.ConstructValues(f.InternList(newRows), f.InternPrivate(&newCols))
+}
+
+// ----------------------------------------------------------------------
+//
+// Select Rules
+//   Custom match and replace functions used with select.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// emptyGroupingCols returns true if the given grouping columns for a GroupBy
+// operator are empty.
+func (f *factory) emptyGroupingCols(cols opt.PrivateID) bool {
+	return f.mem.lookupPrivate(cols).(*opt.ColSet).Empty()
+}
+
+// isCorrelated returns true if variables in the source expression reference
+// columns in the destination expression. For example:
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Eq (Variable a.x) (Const 1))
+//   )
+//
+// The (Eq) expression is correlated with the (Scan a) expression because it
+// references one of its columns. But the (Eq) expression is not correlated
+// with the (Scan b) expression.
+func (f *factory) isCorrelated(src, dst opt.GroupID) bool {
+	return f.outerCols(src).Intersects(f.outputCols(dst))
+}
+
+// extractCorrelatedConditions returns a new list containing only those
+// expressions from the given list that are correlated with the destination
+// expression. For example:
+//   (InnerJoin
+//     (Scan a)
+//     (Scan b)
+//     (Filters [
+//       (Eq (Variable a.x) (Variable b.x))
+//       (Gt (Variable a.x) (Const 1))
+//     ])
+//   )
+//
+// Calling extractCorrelatedConditions with the filter conditions list and
+// (Scan b) as the destination would extract the (Eq) expression, since it
+// references columns from b.
+func (f *factory) extractCorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
+	extracted := make([]opt.GroupID, 0, list.Length)
+	for _, item := range f.mem.lookupList(list) {
+		if f.isCorrelated(item, dst) {
+			extracted = append(extracted, item)
+		}
+	}
+	return f.mem.internList(extracted)
+}
+
+// extractUncorrelatedConditions is the inverse of extractCorrelatedConditions.
+// Instead of extracting correlated expressions, it extracts list expressions
+// that are *not* correlated with the destination.
+func (f *factory) extractUncorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
+	extracted := make([]opt.GroupID, 0, list.Length)
+	for _, item := range f.mem.lookupList(list) {
+		if !f.isCorrelated(item, dst) {
+			extracted = append(extracted, item)
+		}
+	}
+	return f.mem.internList(extracted)
+}
+
+// concatFilters creates a new Filters operator that contains conditions from
+// both the left and right boolean filter expressions. If the left or right
+// expression is itself a Filters operator, then it is "flattened" by merging
+// its conditions into the new Filters operator.
+func (f *factory) concatFilters(left, right opt.GroupID) opt.GroupID {
+	leftExpr := f.mem.lookupNormExpr(left)
+	rightExpr := f.mem.lookupNormExpr(right)
+
+	// Handle cases where left/right filters are constant boolean values.
+	if leftExpr.op == opt.TrueOp || rightExpr.op == opt.FalseOp {
+		return right
+	}
+	if rightExpr.op == opt.TrueOp || leftExpr.op == opt.FalseOp {
+		return left
+	}
+
+	// Determine how large to make the conditions slice (at least 2 slots).
+	cnt := 2
+	leftFiltersExpr := leftExpr.asFilters()
+	if leftFiltersExpr != nil {
+		cnt += int(leftFiltersExpr.conditions().Length) - 1
+	}
+	rightFiltersExpr := rightExpr.asFilters()
+	if rightFiltersExpr != nil {
+		cnt += int(rightFiltersExpr.conditions().Length) - 1
+	}
+
+	// Create the conditions slice and populate it.
+	conditions := make([]opt.GroupID, 0, cnt)
+	if leftFiltersExpr != nil {
+		conditions = append(conditions, f.mem.lookupList(leftFiltersExpr.conditions())...)
+	} else {
+		conditions = append(conditions, left)
+	}
+	if rightFiltersExpr != nil {
+		conditions = append(conditions, f.mem.lookupList(rightFiltersExpr.conditions())...)
+	} else {
+		conditions = append(conditions, right)
+	}
+	return f.ConstructFilters(f.InternList(conditions))
 }
 
 // ----------------------------------------------------------------------
