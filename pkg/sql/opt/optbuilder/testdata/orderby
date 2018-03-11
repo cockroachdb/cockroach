@@ -692,3 +692,67 @@ project
       ├── variable: blocks.writer_id [type=string, outer=(2)]
       ├── variable: blocks.block_num [type=int, outer=(3)]
       └── variable: blocks.block_id [type=int, outer=(1)]
+
+exec-ddl
+CREATE TABLE abcd (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  d INT
+)
+----
+TABLE abcd
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT a, b FROM abcd ORDER BY b, c
+----
+project
+ ├── columns: a:1(int!null) b:2(int)
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ │    ├── ordering: +2,+3
+ │    └── scan
+ │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ └── projections [outer=(1-3)]
+      ├── variable: abcd.a [type=int, outer=(1)]
+      ├── variable: abcd.b [type=int, outer=(2)]
+      └── variable: abcd.c [type=int, outer=(3)]
+
+build
+SELECT a FROM abcd ORDER BY b, c
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: +2,+3
+ ├── sort
+ │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ │    ├── ordering: +2,+3
+ │    └── scan
+ │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ └── projections [outer=(1-3)]
+      ├── variable: abcd.a [type=int, outer=(1)]
+      ├── variable: abcd.b [type=int, outer=(2)]
+      └── variable: abcd.c [type=int, outer=(3)]
+
+build
+SELECT a FROM abcd ORDER BY a, b, c
+----
+project
+ ├── columns: a:1(int!null)
+ ├── ordering: +1,+2,+3
+ ├── sort
+ │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ │    ├── ordering: +1,+2,+3
+ │    └── scan
+ │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ └── projections [outer=(1-3)]
+      ├── variable: abcd.a [type=int, outer=(1)]
+      ├── variable: abcd.b [type=int, outer=(2)]
+      └── variable: abcd.c [type=int, outer=(3)]
