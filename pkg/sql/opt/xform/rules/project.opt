@@ -1,5 +1,5 @@
 # =============================================================================
-# project.opt contains patterns which normalize the Project operator.
+# project.opt contains normalization rules for the Project operator.
 # =============================================================================
 
 

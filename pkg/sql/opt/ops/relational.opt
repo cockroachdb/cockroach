@@ -47,7 +47,10 @@ define Values {
 }
 
 # Select filters rows from its input result set, based on the boolean filter
-# predicate expression. Rows which do not match the filter are discarded.
+# predicate expression. Rows which do not match the filter are discarded. While
+# the Filter operand can be any boolean expression, normalization rules will
+# typically convert it to a Filters operator in order to make conjunction list
+# matching easier.
 [Relational]
 define Select {
     Input  Expr

@@ -97,6 +97,22 @@ define Exists {
     Input Expr
 }
 
+# Filters is a boolean And operator that only appears as the Filters child of
+# a Select operator, or the On child of a Join operator. For example:
+#   (Select
+#     (Scan a)
+#     (Filters (Gt (Variable a) 1) (Lt (Variable a) 5))
+#   )
+#
+# Normalization rules ensure that a Filters expression is always created if
+# there is at least one condition, so that other rules can rely on its presence
+# when matching, even in the case where there is only one condition. The
+# semantics of the Filters operator are identical to those of the And operator.
+[Scalar, Boolean]
+define Filters {
+    Conditions ExprList
+}
+
 # And is the boolean conjunction operator that evalutes to true if all of its
 # conditions evaluate to true. If the conditions list is empty, it evalutes to
 # true.

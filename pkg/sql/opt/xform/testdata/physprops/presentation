@@ -32,9 +32,10 @@ select
  ├── columns: y:2(int) x:1(int!null) y2:2(int)
  ├── scan
  │    └── columns: a.x:1(int!null) a.y:2(int)
- └── eq [type=bool, outer=(1)]
-      ├── variable: a.x [type=int, outer=(1)]
-      └── const: 1 [type=int]
+ └── filters [type=bool, outer=(1)]
+      └── eq [type=bool, outer=(1)]
+           ├── variable: a.x [type=int, outer=(1)]
+           └── const: 1 [type=int]
 
 # Project operator.
 opt

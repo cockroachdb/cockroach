@@ -23,7 +23,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1,2)]
+ └── filters [type=bool, outer=(1,2)]
       ├── gt [type=bool, outer=(1,2)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── plus [type=int, outer=(2)]
@@ -55,7 +55,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1,2,4)]
+ └── filters [type=bool, outer=(1,2,4)]
       ├── gt [type=bool, outer=(1,2)]
       │    ├── plus [type=int, outer=(1,2)]
       │    │    ├── variable: a.i [type=int, outer=(2)]
@@ -94,7 +94,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(2,3)]
+ └── filters [type=bool, outer=(2,3)]
       ├── eq [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int]
@@ -135,12 +135,13 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── eq [type=bool, outer=(4)]
-      ├── plus [type=timestamp, outer=(4)]
-      │    ├── cast: date [type=date, outer=(4)]
-      │    │    └── variable: a.s [type=string, outer=(4)]
-      │    └── const: '02:00:00' [type=time]
-      └── const: '2000-01-01 02:00:00+00:00' [type=timestamp]
+ └── filters [type=bool, outer=(4)]
+      └── eq [type=bool, outer=(4)]
+           ├── plus [type=timestamp, outer=(4)]
+           │    ├── cast: date [type=date, outer=(4)]
+           │    │    └── variable: a.s [type=string, outer=(4)]
+           │    └── const: '02:00:00' [type=time]
+           └── const: '2000-01-01 02:00:00+00:00' [type=timestamp]
 
 # --------------------------------------------------
 # NormalizeCmpMinusConst
@@ -159,7 +160,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(2,3)]
+ └── filters [type=bool, outer=(2,3)]
       ├── eq [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── plus [type=int]
@@ -202,12 +203,13 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── eq [type=bool, outer=(4)]
-      ├── minus [type=jsonb, outer=(4)]
-      │    ├── cast: jsonb [type=jsonb, outer=(4)]
-      │    │    └── variable: a.s [type=string, outer=(4)]
-      │    └── const: 1 [type=int]
-      └── const: '[1]' [type=jsonb]
+ └── filters [type=bool, outer=(4)]
+      └── eq [type=bool, outer=(4)]
+           ├── minus [type=jsonb, outer=(4)]
+           │    ├── cast: jsonb [type=jsonb, outer=(4)]
+           │    │    └── variable: a.s [type=string, outer=(4)]
+           │    └── const: 1 [type=int]
+           └── const: '[1]' [type=jsonb]
 
 # --------------------------------------------------
 # NormalizeCmpConstMinus
@@ -226,7 +228,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(2,3)]
+ └── filters [type=bool, outer=(2,3)]
       ├── eq [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── minus [type=int]
@@ -269,11 +271,12 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── eq [type=bool, outer=(2)]
-      ├── minus [type=jsonb, outer=(2)]
-      │    ├── const: '[1, 2]' [type=jsonb]
-      │    └── variable: a.i [type=int, outer=(2)]
-      └── const: '[1]' [type=jsonb]
+ └── filters [type=bool, outer=(2)]
+      └── eq [type=bool, outer=(2)]
+           ├── minus [type=jsonb, outer=(2)]
+           │    ├── const: '[1, 2]' [type=jsonb]
+           │    └── variable: a.i [type=int, outer=(2)]
+           └── const: '[1]' [type=jsonb]
 
 # --------------------------------------------------
 # NormalizeTupleEquality
@@ -285,7 +288,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(2-4)]
+ └── filters [type=bool, outer=(2-4)]
       ├── eq [type=bool, outer=(2)]
       │    ├── variable: a.i [type=int, outer=(2)]
       │    └── const: 1 [type=int]
@@ -308,7 +311,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── and [type=bool, outer=(1,2,4)]
+ └── filters [type=bool, outer=(1,2,4)]
       ├── eq [type=bool, outer=(1)]
       │    ├── variable: a.k [type=int, outer=(1)]
       │    └── const: 1 [type=int]
@@ -349,4 +352,4 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── null [type=bool]
+ └── false [type=bool]
