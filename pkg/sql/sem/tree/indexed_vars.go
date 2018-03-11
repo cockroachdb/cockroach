@@ -59,10 +59,7 @@ func (v *IndexedVar) Walk(_ Visitor) Expr {
 
 // TypeCheck is part of the Expr interface.
 func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
-	if ctx.IVarHelper == nil {
-		panic("indexed var had no SemaContext.IVarHelper during type checking")
-	}
-	if ctx.IVarHelper.container == nil || ctx.IVarHelper.container == unboundContainer {
+	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
 		// A more technically correct message would be to say that the
 		// reference is unbound and thus cannot be typed. However this is
 		// a tad bit too technical for the average SQL use case and
@@ -72,16 +69,16 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, er
 		return nil, pgerror.NewErrorf(
 			pgerror.CodeUndefinedColumnError, "column reference @%d not allowed in this context", v.Idx+1)
 	}
-	v.typ = ctx.IVarHelper.container.IndexedVarResolvedType(v.Idx)
+	v.typ = ctx.IVarContainer.IndexedVarResolvedType(v.Idx)
 	return v, nil
 }
 
 // Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
-	if ctx.IVarHelper.container == nil || ctx.IVarHelper.container == unboundContainer {
+	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
 		panic("indexed var must be bound to a container before evaluation")
 	}
-	return ctx.IVarHelper.container.IndexedVarEval(v.Idx, ctx)
+	return ctx.IVarContainer.IndexedVarEval(v.Idx, ctx)
 }
 
 // ResolvedType is part of the TypedExpr interface.
@@ -137,6 +134,11 @@ func NewIndexedVar(r int) *IndexedVar {
 type IndexedVarHelper struct {
 	vars      []IndexedVar
 	container IndexedVarContainer
+}
+
+// Container returns the container associated with the helper.
+func (h *IndexedVarHelper) Container() IndexedVarContainer {
+	return h.container
 }
 
 // BindIfUnbound ensures the IndexedVar is attached to this helper's container.

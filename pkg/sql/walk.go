@@ -341,6 +341,34 @@ func (v *planVisitor) visit(plan planNode) {
 			for i, rexpr := range n.rh.exprs {
 				v.expr(name, "returning", i, rexpr)
 			}
+		}
+		v.visit(n.run.rows)
+
+	case *upsertNode:
+		if v.observer.attr != nil {
+			var buf bytes.Buffer
+			buf.WriteString(n.tableDesc.Name)
+			buf.WriteByte('(')
+			for i, col := range n.insertCols {
+				if i > 0 {
+					buf.WriteString(", ")
+				}
+				buf.WriteString(col.Name)
+			}
+			buf.WriteByte(')')
+			v.observer.attr(name, "into", buf.String())
+		}
+
+		if v.observer.expr != nil {
+			for i, dexpr := range n.defaultExprs {
+				v.expr(name, "default", i, dexpr)
+			}
+			for i, cexpr := range n.checkHelper.Exprs {
+				v.expr(name, "check", i, cexpr)
+			}
+			for i, rexpr := range n.rh.exprs {
+				v.expr(name, "returning", i, rexpr)
+			}
 			n.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
 				v.expr(name, d, i, e)
 			})
@@ -538,6 +566,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&splitNode{}):                "split",
 	reflect.TypeOf(&unionNode{}):                "union",
 	reflect.TypeOf(&updateNode{}):               "update",
+	reflect.TypeOf(&upsertNode{}):               "upsert",
 	reflect.TypeOf(&valueGenerator{}):           "generator",
 	reflect.TypeOf(&valuesNode{}):               "values",
 	reflect.TypeOf(&windowNode{}):               "window",

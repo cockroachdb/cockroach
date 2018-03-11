@@ -99,7 +99,8 @@ func (p *planner) Update(
 		return nil, err
 	}
 
-	updateCols, err := p.processColumns(en.tableDesc, names)
+	updateCols, err := p.processColumns(en.tableDesc, names,
+		true /* ensureColumns */, false /* allowMutations */)
 	if err != nil {
 		return nil, err
 	}
@@ -340,8 +341,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 		}
 
 		iv := &rowIndexedVarContainer{newVals, u.tableDesc.Columns, u.tw.ru.FetchColIDtoRowIndex}
-		ivarHelper := tree.MakeIndexedVarHelper(iv, len(newVals))
-		params.EvalContext().IVarHelper = &ivarHelper
+		params.EvalContext().IVarContainer = iv
 
 		for i := range u.computedCols {
 			d, err := u.computeExprs[i].Eval(params.EvalContext())
@@ -352,7 +352,7 @@ func (u *updateNode) Next(params runParams) (bool, error) {
 		}
 	}
 
-	params.EvalContext().IVarHelper = nil
+	params.EvalContext().IVarContainer = nil
 
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.
@@ -553,7 +553,12 @@ func (p *planner) addOrMergeExpr(
 	return render.addOrReuseRender(col, expr, true), nil
 }
 
-// namesForExprs expands names in the tuples and subqueries in exprs.
+// namesForExprs collects all the names mentioned in the LHS of the
+// UpdateExprs.  That is, it will transform SET (a,b) = (1,2), b = 3,
+// (a,c) = 4 into [a,b,b,a,c].
+//
+// It also checks that the arity of the LHS and RHS match when
+// assigning tuples.
 func (p *planner) namesForExprs(exprs tree.UpdateExprs) (tree.NameList, error) {
 	var names tree.NameList
 	for _, expr := range exprs {

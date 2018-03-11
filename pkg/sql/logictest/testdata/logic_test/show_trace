@@ -219,21 +219,23 @@ SELECT span, operation, message FROM [SHOW KV TRACE FOR SESSION]
 5  dist sender  querying next range at /Table/52/1/1/0
 5  dist sender  r1: sending batch 1 Put, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 
-# We use SHOW KV TRACE FOR <stmt> here to reveal how the error shows up.
+statement error duplicate key value
+set tracing=kv;
+UPSERT INTO t.kv(k, v) VALUES (2,2)
+
 query ITT
-SELECT span, operation, message FROM [SHOW KV TRACE FOR UPSERT INTO t.kv(k, v) VALUES (2,2)]
+set tracing=off;
+SELECT span, operation, message FROM [SHOW KV TRACE FOR SESSION]
 ----
-2  consuming rows  output row: []
-0  sql txn         Scan /Table/52/1/{2-3}
-3  dist sender     querying next range at /Table/52/1/2
-3  dist sender     r1: sending batch 1 Scan to (n1,s1):1
-0  sql txn         fetched: /kv/primary/2/v -> /3
-0  sql txn         Put /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
-0  sql txn         Del /Table/52/2/3/0
-0  sql txn         CPut /Table/52/2/2/0 -> /BYTES/Š
-5  dist sender     querying next range at /Table/52/1/2/0
-5  dist sender     r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn to (n1,s1):1
-2  consuming rows  execution failed: duplicate key value (v)=(2) violates unique constraint "woo"
+2  sql txn      Scan /Table/52/1/{2-3}
+3  dist sender  querying next range at /Table/52/1/2
+3  dist sender  r1: sending batch 1 Scan to (n1,s1):1
+2  sql txn      fetched: /kv/primary/2/v -> /3
+2  sql txn      Put /Table/52/1/2/0 -> /TUPLE/2:2:Int/2
+2  sql txn      Del /Table/52/2/3/0
+2  sql txn      CPut /Table/52/2/2/0 -> /BYTES/Š
+5  dist sender  querying next range at /Table/52/1/2/0
+5  dist sender  r1: sending batch 1 Put, 1 CPut, 1 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 
 query ITT
 SET tracing=kv;
