@@ -1020,10 +1020,10 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    pronargs  pronargdefaults  prorettype  proargtypes  proallargtypes  proargmodes  proargdefaults
-substring  2         0                25          25, 20       NULL            NULL         NULL
-substring  3         0                25          25, 20, 20   NULL            NULL         NULL
-substring  2         0                25          25, 25       NULL            NULL         NULL
-substring  3         0                25          25, 25, 25   NULL            NULL         NULL
+substring  2         0                25          {25,20}      NULL            NULL         NULL
+substring  3         0                25          {25,20,20}   NULL            NULL         NULL
+substring  2         0                25          {25,25}      NULL            NULL         NULL
+substring  3         0                25          {25,25,25}   NULL            NULL         NULL
 
 query TTTTTT colnames
 SELECT proname, protrftypes, prosrc, probin, proconfig, proacl
@@ -1042,15 +1042,15 @@ FROM pg_catalog.pg_proc
 WHERE proname='least'
 ----
 proname  provariadic  pronargs  prorettype  proargtypes  proargmodes
-least    2283         1         2283        2283         {"v"}
+least    2283         1         2283        {2283}       {"v"}
 
 query TOIOTT colnames
 SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
 FROM pg_catalog.pg_proc
 WHERE proname='json_extract_path'
 ----
-proname              provariadic  pronargs  prorettype  proargtypes  proargmodes
-json_extract_path    25           2         3802        3802, 25     {"i","v"}
+proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
+json_extract_path  25           2         3802        {3802,25}    {"i","v"}
 
 ## pg_catalog.pg_range
 query IIIIII colnames
