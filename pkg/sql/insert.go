@@ -379,7 +379,7 @@ type rowIndexedVarContainer struct {
 func (r *rowIndexedVarContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
-	return r.curSourceRow[r.mapping[r.cols[idx].ID]].Eval(ctx)
+	return r.curSourceRow[r.mapping[r.cols[idx].ID]], nil
 }
 
 func (r *rowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
