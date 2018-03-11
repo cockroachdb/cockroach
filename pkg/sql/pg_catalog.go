@@ -21,7 +21,6 @@ import (
 	"hash"
 	"hash/fnv"
 	"reflect"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -1240,8 +1239,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	pronargs INT,
 	pronargdefaults INT,
 	prorettype OID,
-	proargtypes STRING,
-	proallargtypes STRING[],
+	proargtypes OIDVECTOR,
+	proallargtypes OID[],
 	proargmodes STRING[],
 	proargnames STRING[],
 	proargdefaults STRING,
@@ -1296,12 +1295,12 @@ CREATE TABLE pg_catalog.pg_proc (
 					}
 
 					argTypes := builtin.Types
-					dArgTypes := make([]string, len(argTypes.Types()))
-					for i, argType := range argTypes.Types() {
-						dArgType := argType.Oid()
-						dArgTypes[i] = strconv.Itoa(int(dArgType))
+					dArgTypes := tree.NewDArray(types.Oid)
+					for _, argType := range argTypes.Types() {
+						if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
+							return err
+						}
 					}
-					dArgTypeString := strings.Join(dArgTypes, ", ")
 
 					var argmodes tree.Datum
 					var variadicType tree.Datum
@@ -1352,16 +1351,16 @@ CREATE TABLE pg_catalog.pg_proc (
 						tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 						tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 						retType,                                         // prorettype
-						tree.NewDString(dArgTypeString), // proargtypes
-						tree.DNull,                      // proallargtypes
-						argmodes,                        // proargmodes
-						tree.DNull,                      // proargnames
-						tree.DNull,                      // proargdefaults
-						tree.DNull,                      // protrftypes
-						dSrc,                            // prosrc
-						tree.DNull,                      // probin
-						tree.DNull,                      // proconfig
-						tree.DNull,                      // proacl
+						tree.NewDOidVectorFromDArray(dArgTypes), // proargtypes
+						tree.DNull,                              // proallargtypes
+						argmodes,                                // proargmodes
+						tree.DNull,                              // proargnames
+						tree.DNull,                              // proargdefaults
+						tree.DNull,                              // protrftypes
+						dSrc,                                    // prosrc
+						tree.DNull,                              // probin
+						tree.DNull,                              // proconfig
+						tree.DNull,                              // proacl
 					)
 					if err != nil {
 						return err
