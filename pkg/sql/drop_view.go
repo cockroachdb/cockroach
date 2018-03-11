@@ -71,7 +71,7 @@ func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, err
 	}
 
 	if len(td) == 0 {
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 	return &dropViewNode{n: n, td: td}, nil
 }
