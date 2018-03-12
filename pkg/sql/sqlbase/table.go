@@ -480,6 +480,56 @@ func MakeKeyFromEncDatums(
 	return appendEncDatumsToKey(key, types, values, dirs, alloc)
 }
 
+// MakeFullKeyFromEncDatums creates a key by concatenating keyPrefix with
+// the encodings of the explicit EncDatum values followed by the encodings of
+// the implicit datum values. These values correspond to index.ColumnIDs and
+// index.ExtraColumnIDs respectively.
+//
+// MakeKeyFromEncDatums (see above) does not allow you to create a key
+// specifying the ExtraColumnIDs, so the result may not be a full key. This
+// function allows you to create a key by specifying the values for the
+// ExtraColumnID values as the implicitValues.
+func MakeFullKeyFromEncDatums(
+	explicitTypes []ColumnType,
+	explicitValues EncDatumRow,
+	implicitValues EncDatumRow,
+	tableDesc *TableDescriptor,
+	index *IndexDescriptor,
+	keyPrefix []byte,
+	alloc *DatumAlloc,
+) (roachpb.Key, error) {
+	prefix, err := MakeKeyFromEncDatums(explicitTypes, explicitValues, tableDesc, index, keyPrefix, alloc)
+	if err != nil {
+		return nil, err
+	}
+
+	primaryIndex := tableDesc.PrimaryIndex
+	extraColumns := index.ExtraColumnIDs
+	// PrimaryImplicitIdxs maps the position of the implicit column in the key
+	// to the appropriate column in the primary index.
+	primaryImplicitIdxs := make([]int, len(extraColumns))
+	for i, id := range extraColumns {
+		for j, primaryID := range primaryIndex.ColumnIDs {
+			if id == primaryID {
+				primaryImplicitIdxs[i] = j
+			}
+		}
+	}
+	implicitDirs := make([]IndexDescriptor_Direction, len(primaryImplicitIdxs))
+	for i, idx := range primaryImplicitIdxs {
+		implicitDirs[i] = primaryIndex.ColumnDirections[idx]
+	}
+	implicitTypes := make([]ColumnType, len(extraColumns))
+	for i, id := range extraColumns {
+		implicitTypes[i] = tableDesc.ColumnTypes()[id]
+	}
+	key, err := appendEncDatumsToKey(prefix, implicitTypes, implicitValues, implicitDirs, alloc)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
 // EncodeDatum encodes a datum (order-preserving encoding, suitable for keys).
 func EncodeDatum(b []byte, d tree.Datum) ([]byte, error) {
 	if values, ok := d.(*tree.DTuple); ok {
