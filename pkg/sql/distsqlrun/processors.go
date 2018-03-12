@@ -414,6 +414,7 @@ var procNameToLogTag = map[string]string{
 	sortChunksProcName:              "sortChunks",
 	tableReaderProcName:             "tableReader",
 	valuesProcName:                  "values",
+	zigzagJoinerProcName:            "zigzagJoiner",
 }
 
 func (pb *processorBase) init(
