@@ -30,6 +30,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -141,6 +143,23 @@ func TestReportUsage(t *testing.T) {
 	}
 	if _, err := db.Exec(`SET CLUSTER SETTING diagnostics.reporting.send_crash_reports = false`); err != nil {
 		t.Fatal(err)
+	}
+
+	for _, cmd := range []struct {
+		resource string
+		config   string
+	}{
+		{"TABLE system.rangelog", fmt.Sprintf(`constraints: [+zone=%[1]s, +%[1]s]`, elemName)},
+		{"TABLE system.rangelog", `{gc: {ttlseconds: 1}}`},
+		{"DATABASE system", `num_replicas: 5`},
+		{"DATABASE system", fmt.Sprintf(`constraints: {"+zone=%[1]s,+%[1]s": 2, +%[1]s: 1}`, elemName)},
+		{"DATABASE system", fmt.Sprintf(`experimental_lease_preferences: [[+zone=%[1]s,+%[1]s], [+%[1]s]]`, elemName)},
+	} {
+		if _, err := db.Exec(
+			fmt.Sprintf(`ALTER %s EXPERIMENTAL CONFIGURE ZONE '%s'`, cmd.resource, cmd.config),
+		); err != nil {
+			t.Fatalf("error applying zone config %q to %q: %v", cmd.config, cmd.resource, err)
+		}
 	}
 
 	if _, err := db.Exec(
@@ -397,6 +416,77 @@ func TestReportUsage(t *testing.T) {
 			t.Fatalf("expected report of altered setting %q", key)
 		} else if got != expected {
 			t.Fatalf("expected reported value of setting %q to be %q not %q", key, expected, got)
+		}
+	}
+
+	// Verify that we receive the four auto-populated zone configs plus the two
+	// modified above, and that their values are as expected.
+	for _, expectedID := range []int64{
+		keys.RootNamespaceID,
+		keys.LivenessRangesID,
+		keys.MetaRangesID,
+		keys.JobsTableID,
+		keys.RangeEventTableID,
+		keys.SystemDatabaseID,
+	} {
+		if _, ok := r.last.ZoneConfigs[expectedID]; !ok {
+			t.Errorf("didn't find expected ID %d in reported ZoneConfigs: %+v",
+				expectedID, r.last.ZoneConfigs)
+		}
+	}
+	hashedElemName := sql.HashForReporting(clusterSecret, elemName)
+	hashedZone := sql.HashForReporting(clusterSecret, "zone")
+	for id, zone := range r.last.ZoneConfigs {
+		if id == keys.RootNamespaceID {
+			if !reflect.DeepEqual(zone, config.DefaultZoneConfig()) {
+				t.Errorf("default zone config does not match: expected\n%+v got\n%+v",
+					config.DefaultZoneConfig(), zone)
+			}
+		}
+		if id == keys.RangeEventTableID {
+			if a, e := zone.GC.TTLSeconds, int32(1); a != e {
+				t.Errorf("expected zone %d GC.TTLSeconds = %d; got %d", id, e, a)
+			}
+			if a, e := zone.Constraints, []config.Constraints{
+				{
+					Constraints: []config.Constraint{
+						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
+						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
+					},
+				},
+			}; !reflect.DeepEqual(a, e) {
+				t.Errorf("expected zone %d Constraints = %+v; got %+v", id, e, a)
+			}
+		}
+		if id == keys.SystemDatabaseID {
+			if a, e := zone.Constraints, []config.Constraints{
+				{
+					NumReplicas: 1,
+					Constraints: []config.Constraint{{Value: hashedElemName, Type: config.Constraint_REQUIRED}},
+				},
+				{
+					NumReplicas: 2,
+					Constraints: []config.Constraint{
+						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
+						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
+					},
+				},
+			}; !reflect.DeepEqual(a, e) {
+				t.Errorf("expected zone %d Constraints = %+v; got %+v", id, e, a)
+			}
+			if a, e := zone.LeasePreferences, []config.LeasePreference{
+				{
+					Constraints: []config.Constraint{
+						{Key: hashedZone, Value: hashedElemName, Type: config.Constraint_REQUIRED},
+						{Value: hashedElemName, Type: config.Constraint_REQUIRED},
+					},
+				},
+				{
+					Constraints: []config.Constraint{{Value: hashedElemName, Type: config.Constraint_REQUIRED}},
+				},
+			}; !reflect.DeepEqual(a, e) {
+				t.Errorf("expected zone %d LeasePreferences = %+v; got %+v", id, e, a)
+			}
 		}
 	}
 
