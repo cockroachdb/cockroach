@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -615,3 +616,72 @@ func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]inter
 
 // pgxTestLogger implements pgx.Logger.
 var _ pgx.Logger = pgxTestLogger{}
+
+// Test that closing a client connection such that producing results rows
+// encounters network errors doesn't crash the server (#23694).
+//
+// We'll run a query that produces a bunch of rows and close the connection as
+// soon as the client received anything, this way ensuring that:
+// a) the query started executing when the connection is closed, and so it's
+// likely to observe a network error and not a context cancelation, and
+// b) the connection's server-side results buffer has overflowed, and so
+// attempting to produce results (through CommandResult.AddRow()) observes
+// network errors.
+func TestConnClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// Make the connections' results buffers really small so that it overflows
+		// when we produce a few results.
+		ConnResultsBufferBytes: 10,
+		// Andrei is too lazy to figure out the incantation for telling pgx about
+		// our test certs.
+		Insecure: true,
+	})
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "CREATE DATABASE test")
+	r.Exec(t, "CREATE TABLE test.test AS SELECT * FROM generate_series(1,100)")
+
+	host, ports, err := net.SplitHostPort(s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	port, err := strconv.Atoi(ports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We test both with and without DistSQL, as the way that network errors are
+	// observed depends on the engine.
+	testutils.RunTrueAndFalse(t, "useDistSQL", func(t *testing.T, useDistSQL bool) {
+		conn, err := pgx.Connect(pgx.ConnConfig{
+			Host:     host,
+			Port:     uint16(port),
+			User:     "root",
+			Database: "system",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var query string
+		if useDistSQL {
+			query = `SET DISTSQL = 'always'`
+		} else {
+			query = `SET DISTSQL = 'off'`
+		}
+		if _, err := conn.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+		rows, err := conn.Query("SELECT * FROM test.test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if hasResults := rows.Next(); !hasResults {
+			t.Fatal("expected results")
+		}
+		if err := conn.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
