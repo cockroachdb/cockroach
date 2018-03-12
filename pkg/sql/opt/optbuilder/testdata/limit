@@ -22,7 +22,7 @@ limit
  ├── project
  │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    ├── ordering: +1
- │    ├── scan
+ │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
  │    └── projections [outer=(1,2)]
@@ -42,7 +42,7 @@ limit
  │    ├── sort
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    ├── ordering: +2
- │    │    └── scan
+ │    │    └── scan t
  │    │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    └── projections [outer=(1,2)]
  │         ├── variable: t.k [type=int, outer=(1)]
@@ -56,7 +56,7 @@ limit
  ├── columns: k:1(int!null) v:2(int)
  ├── project
  │    ├── columns: t.k:1(int!null) t.v:2(int)
- │    ├── scan
+ │    ├── scan t
  │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    └── projections [outer=(1,2)]
  │         ├── variable: t.k [type=int, outer=(1)]
@@ -72,7 +72,7 @@ limit
  ├── project
  │    ├── columns: t.k:1(int!null)
  │    ├── ordering: +1
- │    ├── scan
+ │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
  │    └── projections [outer=(1)]
@@ -91,7 +91,7 @@ limit
  │    ├── project
  │    │    ├── columns: t.k:1(int!null)
  │    │    ├── ordering: +1
- │    │    ├── scan
+ │    │    ├── scan t
  │    │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    │    └── ordering: +1
  │    │    └── projections [outer=(1)]
@@ -108,7 +108,7 @@ offset
  ├── project
  │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    ├── ordering: +1
- │    ├── scan
+ │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
  │    └── projections [outer=(1,2)]
@@ -125,7 +125,7 @@ limit
  ├── project
  │    ├── columns: t.k:1(int!null)
  │    ├── ordering: +1
- │    ├── scan
+ │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
  │    └── projections [outer=(1)]
@@ -157,7 +157,7 @@ limit
  │    │    └── group-by
  │    │         ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
  │    │         ├── grouping columns: t.k:1(int!null) t.v:2(int)
- │    │         ├── scan
+ │    │         ├── scan t
  │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │         └── aggregations [outer=(3)]
  │    │              └── function: sum [type=decimal, outer=(3)]
@@ -179,7 +179,7 @@ limit
  │    └── group-by
  │         ├── columns: t.v:2(int)
  │         ├── grouping columns: t.v:2(int)
- │         ├── scan
+ │         ├── scan t
  │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │         └── aggregations
  └── const: 10 [type=int]

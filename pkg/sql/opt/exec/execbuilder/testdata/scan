@@ -10,7 +10,7 @@ INSERT INTO t.a VALUES (1, 1.0, 'apple'), (2, 2.0, 'banana'), (3, 3.0, 'cherry')
 build
 SELECT * FROM t.a
 ----
-scan
+scan a
  └── columns: x:1(int!null) y:2(float) s:3(string)
 
 exec-explain
@@ -32,7 +32,7 @@ x:int  y:float  s:string
 build
 SELECT s, x FROM t.a
 ----
-scan
+scan a
  └── columns: s:3(string) x:1(int!null)
 
 exec-explain
@@ -65,7 +65,7 @@ INSERT INTO t.b VALUES (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry')
 build
 SELECT s, x FROM t.b
 ----
-scan
+scan b
  └── columns: s:3(string) x:1(int)
 
 exec

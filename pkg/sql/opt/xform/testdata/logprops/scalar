@@ -22,7 +22,7 @@ SELECT * FROM a WHERE x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── lt [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -35,9 +35,9 @@ project
  ├── columns: column6:6(bool) column7:7(int)
  ├── inner-join
  │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
- │    ├── scan
+ │    ├── scan a
  │    │    └── columns: a.x:1(int!null) a.y:2(int)
- │    ├── scan
+ │    ├── scan b
  │    │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
  │    └── true [type=bool]
  └── projections [outer=(1,2,5)]

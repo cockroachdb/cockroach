@@ -16,7 +16,7 @@ project
  ├── group-by
  │    ├── columns: a.x:1(int!null) a.y:2(int) column4:4(float)
  │    ├── grouping columns: a.x:1(int!null) a.y:2(int)
- │    ├── scan
+ │    ├── scan a
  │    │    └── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
  │    └── aggregations [outer=(3)]
  │         └── function: sum [type=float, outer=(3)]

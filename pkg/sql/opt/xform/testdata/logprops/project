@@ -12,7 +12,7 @@ SELECT a.y, a.x+1, 1, a.x FROM a
 ----
 project
  ├── columns: y:2(int) column3:3(int) column4:4(int) x:1(int!null)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── variable: a.y [type=int, outer=(2)]
