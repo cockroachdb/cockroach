@@ -104,6 +104,12 @@ func CleanupTempDirs(recordPath string) error {
 			continue
 		}
 
+		// Check if the temporary directory exists; if it does not, skip over it.
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			log.Warningf(context.Background(), "could not locate previous temporary directory %s, might require manual cleanup, or might have already been cleaned up.", path)
+			continue
+		}
+
 		// Check if another Cockroach instance is using this temporary
 		// directory i.e. has a lock on the temp dir lock file.
 		flock, err := lockFile(filepath.Join(path, lockFilename))
