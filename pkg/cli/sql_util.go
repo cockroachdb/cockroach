@@ -452,10 +452,17 @@ func (r *sqlRows) ColumnTypeScanType(index int) reflect.Type {
 	return r.rows.ColumnTypeScanType(index)
 }
 
-func makeSQLConn(url string) *sqlConn {
-	return &sqlConn{
-		url: url,
+func makeSQLConn(urlStr string) (*sqlConn, error) {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return nil, err
 	}
+	if cliCtx.sqlConnDBName != "" {
+		u.Path = cliCtx.sqlConnDBName
+	}
+	return &sqlConn{
+		url: u.String(),
+	}, nil
 }
 
 // getPasswordAndMakeSQLClient prompts for a password if running in secure mode
@@ -463,7 +470,7 @@ func makeSQLConn(url string) *sqlConn {
 // Attempting to use security.RootUser without valid certificates will return an error.
 func getPasswordAndMakeSQLClient() (*sqlConn, error) {
 	if len(cliCtx.sqlConnURL) != 0 {
-		return makeSQLConn(cliCtx.sqlConnURL), nil
+		return makeSQLConn(cliCtx.sqlConnURL)
 	}
 	var user *url.Userinfo
 	if !baseCfg.Insecure && !baseCfg.ClientHasValidCerts(cliCtx.sqlConnUser) {
@@ -490,10 +497,9 @@ func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
 		if err != nil {
 			return nil, err
 		}
-		u.Path = cliCtx.sqlConnDBName
 		sqlURL = u.String()
 	}
-	return makeSQLConn(sqlURL), nil
+	return makeSQLConn(sqlURL)
 }
 
 type queryFunc func(conn *sqlConn) (*sqlRows, error)

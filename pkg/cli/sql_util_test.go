@@ -36,7 +36,10 @@ func TestConnRecover(t *testing.T) {
 	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
-	conn := makeSQLConn(url.String())
+	conn, err := makeSQLConn(url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer conn.Close()
 
 	// Sanity check to establish baseline.
@@ -95,7 +98,10 @@ func TestRunQuery(t *testing.T) {
 	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
 	defer cleanup()
 
-	conn := makeSQLConn(url.String())
+	conn, err := makeSQLConn(url.String())
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer conn.Close()
 
 	setCLIDefaultsForTests()
