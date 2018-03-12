@@ -76,6 +76,8 @@ const (
 
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
+
+	defaultConnResultsBufferBytes = 16 << 10
 )
 
 var productionSettingsWebpage = fmt.Sprintf(
@@ -241,6 +243,11 @@ type Config struct {
 	// deleted.
 	UseLegacyConnHandling bool
 
+	// ConnResultsBufferBytes is the size of the buffer in which each connection
+	// accumulates results set. Results are flushed to the network when this
+	// buffer overflows.
+	ConnResultsBufferBytes int
+
 	enginesCreated bool
 }
 
@@ -378,6 +385,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		},
 		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes),
+		ConnResultsBufferBytes: defaultConnResultsBufferBytes,
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 

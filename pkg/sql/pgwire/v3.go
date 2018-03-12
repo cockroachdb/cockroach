@@ -48,10 +48,6 @@ const (
 	authCleartextPassword int32 = 3
 )
 
-// connResultsBufferSizeBytes refers to the size of the result set which we
-// buffer into memory prior to flushing to the client.
-const connResultsBufferSizeBytes = 16 << 10
-
 // readTimeoutConn overloads net.Conn.Read by periodically calling
 // checkExitConds() and aborting the read if an error is returned.
 type readTimeoutConn struct {
@@ -1266,7 +1262,7 @@ func (c *v3Conn) flush(forceSend bool) error {
 		return nil
 	}
 
-	if forceSend || state.buf.Len() > connResultsBufferSizeBytes {
+	if forceSend || state.buf.Len() > c.executor.Cfg().ConnResultsBufferBytes {
 		state.hasSentResults = true
 		state.txnStartIdx = 0
 		if _, err := state.buf.WriteTo(c.wr); err != nil {

@@ -203,6 +203,10 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
 
+	if params.ConnResultsBufferBytes != 0 {
+		cfg.ConnResultsBufferBytes = params.ConnResultsBufferBytes
+	}
+
 	return cfg
 }
 
