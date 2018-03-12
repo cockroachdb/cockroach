@@ -42,6 +42,8 @@
 		JoinReaderSpec
 		SorterSpec
 		DistinctSpec
+		ZigzagJoinerSpec
+		Columns
 		MergeJoinerSpec
 		HashJoinerSpec
 		AggregatorSpec
