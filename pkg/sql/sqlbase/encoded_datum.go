@@ -441,6 +441,48 @@ func (r EncDatumRows) String(types []ColumnType) string {
 	return b.String()
 }
 
+// EncDatumRowContainer holds rows and can cycle through them.
+// Must be Reset upon initialization.
+type EncDatumRowContainer struct {
+	rows  EncDatumRows
+	index int
+}
+
+// Peek returns the current element at the top of the container.
+func (c *EncDatumRowContainer) Peek() EncDatumRow {
+	return c.rows[c.index]
+}
+
+// Pop returns the next row from the container. Will cycle through the rows
+// again if we reach the end.
+func (c *EncDatumRowContainer) Pop() EncDatumRow {
+	if c.index < 0 {
+		c.index = len(c.rows) - 1
+	}
+	row := c.rows[c.index]
+	c.index--
+	return row
+}
+
+// Push adds a row to the container.
+func (c *EncDatumRowContainer) Push(row EncDatumRow) {
+	c.rows = append(c.rows, row)
+	c.index = len(c.rows) - 1
+}
+
+// Reset clears the container and resets the indexes.
+// Must be called upon creating a container.
+func (c *EncDatumRowContainer) Reset() {
+	c.rows = c.rows[:0]
+	c.index = -1
+}
+
+// IsEmpty returns whether the container is "empty", which means that it's about
+// to cycle through its rows again on the next Pop.
+func (c *EncDatumRowContainer) IsEmpty() bool {
+	return c.index == -1
+}
+
 // EncDatumRowAlloc is a helper that speeds up allocation of EncDatumRows
 // (preferably of the same length).
 type EncDatumRowAlloc struct {
