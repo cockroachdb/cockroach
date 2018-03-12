@@ -27,11 +27,11 @@ import (
 )
 
 func init() {
-	runAllocator := func(t *test, start, end int) {
+	runAllocator := func(t *test, start, end int, maxStdDev float64) {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
 		ctx := context.Background()
-		c := newCluster(ctx, t, end)
+		c := newCluster(ctx, t, end, "--vmodule", "allocator=5,allocator_scorer=5,replicate_queue=5")
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "./cockroach")
@@ -74,13 +74,13 @@ func init() {
 		m = newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
-			return waitForRebalance(ctx, c.l, db)
+			return waitForRebalance(ctx, c.l, db, maxStdDev)
 		})
 		m.Wait()
 	}
 
-	tests.Add(`upreplicate/1to3`, func(t *test) { runAllocator(t, 1, 3) })
-	tests.Add(`rebalance/3to5`, func(t *test) { runAllocator(t, 3, 5) })
+	tests.Add(`upreplicate/1to3`, func(t *test) { runAllocator(t, 1, 3, 10.0) })
+	tests.Add(`rebalance/3to5`, func(t *test) { runAllocator(t, 3, 5, 42.0) })
 }
 
 // printRebalanceStats prints the time it took for rebalancing to finish and the
@@ -125,6 +125,22 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 			return err
 		}
 		l.printf("stdDev(replica count) = %.2f\n", stdDev)
+	}
+
+	// Output the number of ranges on each store.
+	{
+		rows, err := db.Query(`SELECT store_id, range_count FROM crdb_internal.kv_store_status`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var storeID, rangeCount int64
+			if err := rows.Scan(&storeID, &rangeCount); err != nil {
+				return err
+			}
+			l.printf("s%d has %d ranges\n", storeID, rangeCount)
+		}
 	}
 
 	return nil
@@ -194,11 +210,10 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 //
 // This method is crude but necessary. If we were to wait until range counts
 // were just about even, we'd miss potential post-rebalance thrashing.
-func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB) error {
+func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev float64) error {
 	// const statsInterval = 20 * time.Second
 	const statsInterval = 2 * time.Second
 	const stableInterval = 3 * time.Minute
-	const maxStdDev = 10.0
 
 	var statsTimer timeutil.Timer
 	defer statsTimer.Stop()
@@ -216,7 +231,7 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB) error {
 
 			l.printf("%v\n", stats)
 			if stableInterval <= stats.ElapsedSinceLastEvent {
-				l.printf("num replicas stddev = %f, max = %f\n", stats.ReplicaCountStdDev, maxStdDev)
+				l.printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
 				if stats.ReplicaCountStdDev > maxStdDev {
 					_ = printRebalanceStats(l, db)
 					return errors.Errorf(
