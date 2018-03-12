@@ -822,6 +822,8 @@ var specs = []stmtSpec{
 	{name: "show_trace", stmt: "show_trace_stmt"},
 	{name: "show_transaction", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TRANSACTION'")}},
 	{name: "show_users", stmt: "show_stmt", match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'USERS'")}},
+	{name: "split_index_at", stmt: "alter_split_index_stmt"},
+	{name: "split_table_at", stmt: "alter_split_stmt", unlink: []string{"table_name"}},
 	{name: "table_constraint", inline: []string{"constraint_elem", "opt_storing", "storing"}},
 	{
 		name:    "truncate_stmt",

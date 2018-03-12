@@ -1,0 +1,2 @@
+alter_split_index_stmt ::=
+	'ALTER' 'INDEX' table_name_with_index 'SPLIT' 'AT' select_stmt
