@@ -1208,13 +1208,15 @@ func doRestorePlan(
 	}
 
 	if !endTime.IsEmpty() {
+		ok := false
 		for _, b := range backupDescs {
 			// Find the backup that covers the requested time.
 			if b.StartTime.Less(endTime) && !b.EndTime.Less(endTime) {
+				ok = true
 				// Ensure that the backup actually has revision history.
 				if b.MVCCFilter != MVCCFilter_All {
 					return errors.Errorf(
-						"incompatible RESTORE timestamp (BACKUP needs option '%s')", backupOptRevisionHistory,
+						"incompatible RESTORE timestamp: BACKUP for requested time  needs option '%s'", backupOptRevisionHistory,
 					)
 				}
 				// Ensure that the revision history actually covers the requested time -
@@ -1224,10 +1226,15 @@ func doRestorePlan(
 				// the latest for ranges backed up.
 				if !b.RevisionStartTime.Less(endTime) {
 					return errors.Errorf(
-						"incompatible RESTORE timestamp (BACKUP only has revision history from %v)", b.RevisionStartTime,
+						"incompatible RESTORE timestamp: BACKUP for requested time only has revision history from %v", b.RevisionStartTime,
 					)
 				}
 			}
+		}
+		if !ok {
+			return errors.Errorf(
+				"incompatible RESTORE timestamp: supplied backups do not cover requested time",
+			)
 		}
 	}
 
