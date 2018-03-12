@@ -79,7 +79,7 @@ func runGetZone(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func runLsZones(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return usageAndError(cmd)
 	}
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func runRmZone(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func runSetZone(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach zone")
 	if err != nil {
 		return err
 	}

@@ -202,35 +202,38 @@ func (cfg *Config) GetCACertPath() (string, error) {
 	return cm.GetCACertPath()
 }
 
-// ClientHasValidCerts returns true if the specified client has a valid client cert and key.
-func (cfg *Config) ClientHasValidCerts(user string) bool {
-	_, _, err := cfg.GetClientCertPaths(user)
-	return err == nil
-}
-
-// PGURL returns the URL for the postgres endpoint.
-func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
-	options := url.Values{}
+// LoadSecurityOptions extends a url.Values with SSL settings suitable for
+// the given server config. It returns true if and only if the URL
+// already contained SSL config options.
+func (cfg *Config) LoadSecurityOptions(options url.Values, username string) error {
 	if cfg.Insecure {
 		options.Add("sslmode", "disable")
 	} else {
 		// Fetch CA cert. This is required.
 		caCertPath, err := cfg.GetCACertPath()
 		if err != nil {
-			return nil, didYouMeanInsecureError(err)
+			return didYouMeanInsecureError(err)
 		}
 		options.Add("sslmode", "verify-full")
 		options.Add("sslrootcert", caCertPath)
 
 		// Fetch certs, but don't fail, we may be using a password.
-		certPath, keyPath, err := cfg.GetClientCertPaths(user.Username())
+		certPath, keyPath, err := cfg.GetClientCertPaths(username)
 		if err == nil {
 			options.Add("sslcert", certPath)
 			options.Add("sslkey", keyPath)
 		}
 	}
-	options.Add("application_name", "cockroach")
+	return nil
+}
 
+// PGURL constructs a URL for the postgres endpoint, given a server
+// config. There is no default database set.
+func (cfg *Config) PGURL(user *url.Userinfo) (*url.URL, error) {
+	options := url.Values{}
+	if err := cfg.LoadSecurityOptions(options, user.Username()); err != nil {
+		return nil, err
+	}
 	return &url.URL{
 		Scheme:   "postgresql",
 		User:     user,

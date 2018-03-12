@@ -71,7 +71,7 @@ end_test
 
 start_test "Check that root cannot use password."
 # Run as root but with a non-existent certs directory.
-send "$argv sql --certs-dir=non-existent-dir\r"
+send "$argv sql --url='postgresql://root@localhost:26257?sslmode=verify-full'\r"
 eexpect "Error: connections with user root must use a client certificate"
 eexpect "Failed running \"sql\""
 end_test
