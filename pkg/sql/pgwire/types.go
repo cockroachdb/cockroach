@@ -171,8 +171,9 @@ func (b *writeBuffer) writeTextDatum(ctx context.Context, d tree.Datum, sessionL
 		// by braces.
 		begin, sep, end := "{", ",", "}"
 
-		if d.ResolvedType().Oid() == oid.T_int2vector {
-			// int2vectors are serialized as a string of space-separated values.
+		switch d.ResolvedType().Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+			// vectors are serialized as a string of space-separated values.
 			begin, sep, end = "", " ", ""
 		}
 
