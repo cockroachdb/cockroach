@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 type tableInfo struct {
@@ -63,6 +64,9 @@ type interleavedReaderJoiner struct {
 	// ancestorTablePos is the corresponding index of the ancestor table in
 	// tables.
 	ancestorTablePos int
+
+	rowNumCnt int32
+	id        string
 }
 
 var _ Processor = &interleavedReaderJoiner{}
@@ -148,6 +152,7 @@ func newInterleavedReaderJoiner(
 		ancestorTablePos:   ancestorTablePos,
 		ancestorJoinSide:   ancestorJoinSide,
 		descendantJoinSide: descendantJoinSide,
+		id:                 uuid.MakeV4().String(),
 	}
 
 	if err := irj.initRowFetcher(
@@ -364,6 +369,17 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 					break
 				}
 
+				if irj.flowCtx.testingKnobs.MetadataTestingEnabled {
+					irj.rowNumCnt++
+					irj.out.output.Push(nil /* row */, &ProducerMetadata{
+						RowNum: &RemoteProducerMetadata_RowNum{
+							RowNum:   irj.rowNumCnt,
+							ReaderId: irj.id,
+							LastMsg:  false,
+						},
+					})
+				}
+
 				irj.ancestorJoined = true
 
 				continue
@@ -381,11 +397,16 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 			irj.ancestorRow = nil
 		}
 
-		// Either a child row is read before an ancestor row is read
-		// (which is possible at the beginning of a span partition)
-		// or the child row cannot be joined with the ancestor row.
-		// We will need to try to emit the unmatched row if we have an
-		// OUTER join.
+		// Either a child row is read before an ancestor row is read (which is
+		// possible at the beginning of a span partition) or the child row cannot be
+		// joined with the ancestor row.  We will need to try to emit the unmatched
+		// row if we have an OUTER join.
+		//
+		// NOTE: to avoid making too much of a mess, we don't emit a corresponding
+		// RowNum for unmatched rows. This is still sufficient for testing purposes
+		// because the amount of metadata we send does not change the effectiveness
+		// of the test (though we still need to keep track of the amount of metadata
+		// we send so that the test can properly verify metadata propagation).
 		needMoreRows, err := irj.maybeEmitUnmatchedRow(ctx, tableRow, irj.descendantJoinSide)
 		if !needMoreRows || err != nil {
 			if err != nil {
@@ -396,6 +417,16 @@ func (irj *interleavedReaderJoiner) Run(wg *sync.WaitGroup) {
 	}
 
 	irj.sendMisplannedRangesMetadata(ctx)
+	if irj.flowCtx.testingKnobs.MetadataTestingEnabled {
+		meta := &ProducerMetadata{
+			RowNum: &RemoteProducerMetadata_RowNum{
+				RowNum:   irj.rowNumCnt,
+				ReaderId: irj.id,
+				LastMsg:  true,
+			},
+		}
+		irj.out.output.Push(nil /* row */, meta)
+	}
 	sendTraceData(ctx, irj.out.output)
 	irj.out.Close()
 }

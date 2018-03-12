@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -68,6 +69,7 @@ func newScrubTableReader(
 
 	tr.tableDesc = spec.Table
 	tr.limitHint = limitHint(spec.LimitHint, post)
+	tr.id = uuid.MakeV4().String()
 
 	if err := tr.init(post, ScrubTypes, flowCtx, nil /* evalCtx */, output); err != nil {
 		return nil, err

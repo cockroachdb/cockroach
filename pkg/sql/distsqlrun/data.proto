@@ -238,11 +238,17 @@ message RemoteProducerMetadata {
   message TraceData {
     repeated util.tracing.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
   }
+  message RowNum {
+    optional string reader_id = 1 [(gogoproto.nullable) = false];
+    optional int32 row_num = 2 [(gogoproto.nullable) = false];
+    optional bool last_msg = 3 [(gogoproto.nullable) = false];
+  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
     TraceData trace_data = 3;
     roachpb.TxnCoordMeta txn_meta = 4;
+    RowNum row_num = 5;
   }
 }
 
