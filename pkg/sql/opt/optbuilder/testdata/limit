@@ -1,0 +1,204 @@
+# tests adapted from logictest -- limit
+
+exec-ddl
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
+----
+TABLE t
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX secondary
+      ├── v int
+      └── k int not null
+
+build
+SELECT k, v FROM t ORDER BY k LIMIT 5
+----
+limit
+ ├── columns: k:1(int!null) v:2(int)
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │    └── ordering: +1
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: t.k [type=int, outer=(1)]
+ │         └── variable: t.v [type=int, outer=(2)]
+ └── const: 5 [type=int]
+
+build
+SELECT k, v FROM t ORDER BY v FETCH FIRST 5 ROWS ONLY
+----
+limit
+ ├── columns: k:1(int!null) v:2(int)
+ ├── ordering: +2
+ ├── project
+ │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── ordering: +2
+ │    ├── sort
+ │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan
+ │    │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: t.k [type=int, outer=(1)]
+ │         └── variable: t.v [type=int, outer=(2)]
+ └── const: 5 [type=int]
+
+build
+SELECT k, v FROM t LIMIT (1+2)
+----
+limit
+ ├── columns: k:1(int!null) v:2(int)
+ ├── project
+ │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── scan
+ │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: t.k [type=int, outer=(1)]
+ │         └── variable: t.v [type=int, outer=(2)]
+ └── const: 3 [type=int]
+
+build
+SELECT k FROM t ORDER BY k FETCH FIRST ROW ONLY
+----
+limit
+ ├── columns: k:1(int!null)
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: t.k:1(int!null)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │    └── ordering: +1
+ │    └── projections [outer=(1)]
+ │         └── variable: t.k [type=int, outer=(1)]
+ └── const: 1 [type=int]
+
+build
+SELECT k FROM t ORDER BY k OFFSET 3 ROWS FETCH NEXT ROW ONLY
+----
+limit
+ ├── columns: k:1(int!null)
+ ├── ordering: +1
+ ├── offset
+ │    ├── columns: t.k:1(int!null)
+ │    ├── ordering: +1
+ │    ├── project
+ │    │    ├── columns: t.k:1(int!null)
+ │    │    ├── ordering: +1
+ │    │    ├── scan
+ │    │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │    │    └── ordering: +1
+ │    │    └── projections [outer=(1)]
+ │    │         └── variable: t.k [type=int, outer=(1)]
+ │    └── const: 3 [type=int]
+ └── const: 1 [type=int]
+
+build
+SELECT k, v FROM t ORDER BY k OFFSET 5
+----
+offset
+ ├── columns: k:1(int!null) v:2(int)
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: t.k:1(int!null) t.v:2(int)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │    └── ordering: +1
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: t.k [type=int, outer=(1)]
+ │         └── variable: t.v [type=int, outer=(2)]
+ └── const: 5 [type=int]
+
+build
+SELECT k FROM t ORDER BY k FETCH FIRST (1+1) ROWS ONLY
+----
+limit
+ ├── columns: k:1(int!null)
+ ├── ordering: +1
+ ├── project
+ │    ├── columns: t.k:1(int!null)
+ │    ├── ordering: +1
+ │    ├── scan
+ │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │    └── ordering: +1
+ │    └── projections [outer=(1)]
+ │         └── variable: t.k [type=int, outer=(1)]
+ └── const: 2 [type=int]
+
+build
+SELECT k FROM T LIMIT k
+----
+error: column name "k" not found
+
+build
+SELECT k FROM T LIMIT v
+----
+error: column name "v" not found
+
+build
+SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+----
+limit
+ ├── columns: column4:4(decimal)
+ ├── ordering: -2
+ ├── project
+ │    ├── columns: column4:4(decimal) t.v:2(int)
+ │    ├── ordering: -2
+ │    ├── sort
+ │    │    ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
+ │    │    ├── ordering: -2
+ │    │    └── group-by
+ │    │         ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
+ │    │         ├── grouping columns: t.k:1(int!null) t.v:2(int)
+ │    │         ├── scan
+ │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │         └── aggregations [outer=(3)]
+ │    │              └── function: sum [type=decimal, outer=(3)]
+ │    │                   └── variable: t.w [type=int, outer=(3)]
+ │    └── projections [outer=(2,4)]
+ │         ├── variable: column4 [type=decimal, outer=(4)]
+ │         └── variable: t.v [type=int, outer=(2)]
+ └── const: 10 [type=int]
+
+build
+SELECT DISTINCT v FROM T ORDER BY v LIMIT 10
+----
+limit
+ ├── columns: v:2(int)
+ ├── ordering: +2
+ ├── sort
+ │    ├── columns: t.v:2(int)
+ │    ├── ordering: +2
+ │    └── group-by
+ │         ├── columns: t.v:2(int)
+ │         ├── grouping columns: t.v:2(int)
+ │         ├── scan
+ │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── aggregations
+ └── const: 10 [type=int]
+
+build
+VALUES (1,1), (2,2) ORDER BY 1 LIMIT 1
+----
+limit
+ ├── columns: column1:1(int) column2:2(int)
+ ├── ordering: +1
+ ├── sort
+ │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── ordering: +1
+ │    └── values
+ │         ├── columns: column1:1(int) column2:2(int)
+ │         ├── tuple [type=tuple{int, int}]
+ │         │    ├── const: 1 [type=int]
+ │         │    └── const: 1 [type=int]
+ │         └── tuple [type=tuple{int, int}]
+ │              ├── const: 2 [type=int]
+ │              └── const: 2 [type=int]
+ └── const: 1 [type=int]

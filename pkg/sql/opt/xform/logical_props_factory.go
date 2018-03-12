@@ -66,6 +66,9 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 
 	case opt.GroupByOp:
 		return f.constructGroupByProps(ev)
+
+	case opt.LimitOp, opt.OffsetOp:
+		return f.passThroughRelationalProps(ev, 0 /* inputChildIdx */)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -212,6 +215,16 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = opt.ColListToSet(*ev.Private().(*opt.ColList))
 	return props
+}
+
+// passThroughRelationalProps returns a copy of the relational properties of the
+// given child group.
+func (f logicalPropsFactory) passThroughRelationalProps(
+	ev ExprView, inputChildIdx int,
+) LogicalProps {
+	inputProps := ev.lookupChildGroup(inputChildIdx).logical
+	relPropsCopy := *inputProps.Relational
+	return LogicalProps{Relational: &relPropsCopy}
 }
 
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
