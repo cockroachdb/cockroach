@@ -38,3 +38,140 @@
 # filter is always true.
 [EliminateSelect, Normalize]
 (Select $input:* (True)) => $input
+
+# MergeSelects combines two nested Select operators into a single Select that
+# ANDs the filter conditions of the two Selects.
+[MergeSelects]
+(Select
+    (Select
+        $input:*
+        $innerFilter:*
+    )
+    $filter:*
+)
+=>
+(Select
+    $input
+    (ConcatFilters $innerFilter $filter)
+)
+
+# PushDownSelectJoinLeft pushes Select filter conditions into the left side of
+# an input Join. This is possible in the case of InnerJoin and LeftJoin, as
+# long as the condition has no dependencies on the right side of the join.
+# Right and Full joins are not eligible, since attempting to filter left rows
+# would just result in NULL left rows instead.
+#
+#   -- No row is returned for a.x=1, a.y=2, b.x=1, since the WHERE excludes it.
+#   SELECT * FROM a RIGHT JOIN b ON a.x=b.x WHERE a.y < 0
+#
+#   -- But if the filter is incorrectly pushed down in RIGHT/FULL JOIN case,
+#   -- then a row containing null values on the left side is returned.
+#   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a RIGHT JOIN b ON a.x=b.x
+#
+# Citations: [1]
+[PushDownSelectJoinLeft]
+(Select
+    $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $right) ... ])
+)
+=>
+(Select
+    ((OpName $input)
+        (Select
+            $left
+            (Filters (ExtractUncorrelatedConditions $list $right))
+        )
+        $right
+        $on
+    )
+    (Filters (ExtractCorrelatedConditions $list $right))
+)
+
+# PushDownSelectJoinRight is symmetric with PushdownSelectJoinLeft. It pushes
+# Select filter conditions into the right side of an input Join rather than
+# into the left side. See that rule's comments for more details.
+[PushDownSelectJoinRight]
+(Select
+    $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:(Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $left) ... ])
+)
+=>
+(Select
+    ((OpName $input)
+        $left
+        (Select
+            $right
+            (Filters (ExtractUncorrelatedConditions $list $left))
+        )
+        $on
+    )
+    (Filters (ExtractCorrelatedConditions $list $left))
+)
+
+# MergeSelectInnerJoin merges a Select operator with an InnerJoin input by
+# AND'ing the filter conditions of each and creating a new InnerJoin with that
+# On condition. This is only safe to do with InnerJoin in the general case
+# where the conditions could filter either left or right rows. The special case
+# where a condition filters only one or the other is already taken care of by
+# the PushDownSelectJoin rules.
+# NOTE: Keep this rule ordered after the PushDownSelectJoin rules, for
+#       performance reasons. It's better to push down below the join in a
+#       single step, when possible.
+[MergeSelectInnerJoin]
+(Select
+    $input:(InnerJoin | InnerJoinApply
+        $left:*
+        $right:*
+        $on:*
+    )
+    $filter:*
+)
+=>
+((OpName $input)
+    $left
+    $right
+    (ConcatFilters $on $filter)
+)
+
+# PushDownSelectGroupBy pushes a Select condition below a GroupBy in the case
+# where it does not reference any of the aggregation columns. This only works
+# if there are grouping columns. Otherwise, this is an instance of the "scalar"
+# GroupBy, which returns only one row, and which exhibits different behavior if
+# the input is empty:
+#   SELECT MAX(y) FROM a
+#
+# If "a" is empty, this returns a single row containing a null value. This is
+# different behavior than a GroupBy with grouping columns, which would return
+# the empty set for a similar query:
+#   SELECT MAX(y) FROM a GROUP BY x
+#
+# Citations: [2]
+[PushDownSelectGroupBy]
+(Select
+    (GroupBy
+        $input:*
+        $aggregations:*
+        $groupingCols:* & ^(EmptyGroupingCols $groupingCols)
+    )
+    (Filters $list:[ ... $condition:* & ^(IsCorrelated $condition $aggregations) ... ])
+)
+=>
+(Select
+    (GroupBy
+        (Select
+            $input
+            (Filters (ExtractUncorrelatedConditions $list $aggregations))
+        )
+        $aggregations
+        $groupingCols
+    )
+    (Filters (ExtractCorrelatedConditions $list $aggregations))
+)
