@@ -1,0 +1,2 @@
+alter_split_stmt ::=
+	'ALTER' 'TABLE' table_name 'SPLIT' 'AT' select_stmt
