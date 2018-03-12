@@ -58,6 +58,7 @@ message ColumnType {
     JSON = 18;
 
     INT2VECTOR = 200;
+    OIDVECTOR = 201;
   }
 
   enum VisibleType {

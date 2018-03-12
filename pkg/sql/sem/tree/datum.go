@@ -3191,6 +3191,12 @@ func NewDIntVectorFromDArray(d *DArray) Datum {
 	return wrapWithOid(d, oid.T_int2vector)
 }
 
+// NewDOidVectorFromDArray is a helper routine to create a *DOidVector
+// (implemented as a *DOidWrapper) initialized from an existing *DArray.
+func NewDOidVectorFromDArray(d *DArray) Datum {
+	return wrapWithOid(d, oid.T_oidvector)
+}
+
 // DatumTypeSize returns a lower bound on the total size of a Datum
 // of the given type in bytes, including memory that is
 // pointed at (even if shared between Datum instances) but excluding

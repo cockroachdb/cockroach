@@ -499,7 +499,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str>   NOT NOTHING NOTNULL NULL NULLIF
 %token <str>   NULLS NUMERIC
 
-%token <str>   OF OFF OFFSET OID ON ONLY OPTION OPTIONS OR
+%token <str>   OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
 %token <str>   ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED
 
 %token <str>   PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
@@ -5462,6 +5462,10 @@ const_typename:
   {
     $$.val = coltypes.Oid
   }
+| OIDVECTOR
+  {
+    $$.val = coltypes.OidVector
+  }
 | INT2VECTOR
   {
     $$.val = coltypes.Int2vector
@@ -7515,6 +7519,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OID
+| OIDVECTOR
 | OPTION
 | OPTIONS
 | ORDINALITY
