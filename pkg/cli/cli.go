@@ -87,7 +87,11 @@ Output build version information.
 		fmt.Fprintf(tw, "Build Tag:    %s\n", info.Tag)
 		fmt.Fprintf(tw, "Build Time:   %s\n", info.Time)
 		fmt.Fprintf(tw, "Distribution: %s\n", info.Distribution)
-		fmt.Fprintf(tw, "Platform:     %s\n", info.Platform)
+		fmt.Fprintf(tw, "Platform:     %s", info.Platform)
+		if info.CgoTargetTriple != "" {
+			fmt.Fprintf(tw, " (%s)", info.CgoTargetTriple)
+		}
+		fmt.Fprintln(tw)
 		fmt.Fprintf(tw, "Go Version:   %s\n", info.GoVersion)
 		fmt.Fprintf(tw, "C Compiler:   %s\n", info.CgoCompiler)
 		fmt.Fprintf(tw, "Build SHA-1:  %s\n", info.Revision)
