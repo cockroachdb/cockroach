@@ -257,3 +257,17 @@ query T
 SELECT "URL" FROM [EXPLAIN (DISTSQL) (SELECT l.k, r.k FROM (SELECT * FROM distsql_mj_test ORDER BY k) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k) r ON l.k = r.k)]
 ----
 https://cockroachdb.github.io/distsqlplan/decode.html?eJzEkkFr4zAQhe_7K5Y57RIVIifOwVDwNYUmJe2thOBaU1fF8bijMbSE_Pdi65DE1EpzKL1Jo_nemydmBxUZXGRbdJA8ggYFMawV1Ew5Okfcln3T3LxDMlZgq7qRtrxWkBMjJDsQKyVCAgu6ohoUGJTMll3TXgE1ckCcZAVCMturI1kdln3InkpcYWaQT8ShZrvN-CM11ol7Kzfb142gE1CwbCT5m2oY8teX-N8TS9861aNB8eiXw01-Mtx0UPyg2VTEBhlNfxfOt3wx4S1ygTdkq_6YJT7Lv1SP_l-zLV788fA9Ko0GQ8QnIc5s9QpdTZXDby32uE2ApkD_I44azvGOKe9s_HXZcV3BoBP_OvOXeeWf2gGPYR2EozAcBeH4BNZ9eBKEp2Hn6QXOUR-Og_C457ze__kMAAD__4m9mGY=
+
+statement ok
+CREATE TABLE tab0(pk INTEGER PRIMARY KEY, a INTEGER, b INTEGER);
+
+statement ok
+INSERT INTO tab0 VALUES(0,1,2);
+
+statement ok
+CREATE INDEX on tab0 (a);
+
+query III
+SELECT pk, a, b FROM tab0 WHERE a < 10 AND b = 2 ORDER BY a DESC, pk;
+----
+0 1 2
