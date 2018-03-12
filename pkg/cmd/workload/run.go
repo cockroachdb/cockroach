@@ -162,26 +162,34 @@ func workerRun(
 }
 
 func runInit(gen workload.Generator, urls []string, dbName string) error {
+	ctx := context.Background()
+
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
 
-	return runInitImpl(gen, initDB, dbName)
+	return runInitImpl(ctx, gen, initDB, dbName)
 }
 
-func runInitImpl(gen workload.Generator, initDB *gosql.DB, dbName string) error {
+func runInitImpl(
+	ctx context.Context, gen workload.Generator, initDB *gosql.DB, dbName string,
+) error {
 	if *drop {
-		if _, err := initDB.Exec(`DROP DATABASE IF EXISTS ` + dbName); err != nil {
+		if _, err := initDB.ExecContext(ctx, `DROP DATABASE IF EXISTS `+dbName); err != nil {
 			return err
 		}
 	}
-	if _, err := initDB.Exec(`CREATE DATABASE IF NOT EXISTS ` + dbName); err != nil {
+	if _, err := initDB.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS `+dbName); err != nil {
 		return err
 	}
 
 	const batchSize = -1
-	_, err := workload.Setup(initDB, gen, batchSize)
+	// TODO(dan): Don't hardcode this. Similar to dbOverride, this should be
+	// hooked up to a flag directly once once more of run.go moves inside
+	// workload.
+	const concurrency = 16
+	_, err := workload.Setup(ctx, initDB, gen, batchSize, concurrency)
 	return err
 }
 
@@ -194,7 +202,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}
 	if *doInit || *drop {
 		for {
-			err = runInitImpl(gen, initDB, dbName)
+			err = runInitImpl(ctx, gen, initDB, dbName)
 			if err == nil {
 				break
 			}
