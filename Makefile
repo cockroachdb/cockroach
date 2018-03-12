@@ -1234,3 +1234,5 @@ unsafe-clean: maintainer-clean unsafe-clean-c-deps
 .SECONDEXPANSION:
 bin/%: $$(shell find $(PKG_ROOT)/cmd/$$*) | $(SUBMODULES_TARGET)
 	@$(GO_INSTALL) -v $(PKG_ROOT)/cmd/$*
+
+bin/workload: $(SQLPARSER_TARGETS)
