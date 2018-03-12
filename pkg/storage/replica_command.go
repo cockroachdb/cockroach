@@ -713,6 +713,15 @@ func (r *Replica) AdminSplit(
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 10
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
+		// Admin commands always require the range lease to begin (see
+		// executeAdminBatch), but we may have lost it while in this retry loop.
+		// Without the lease, a replica's local descriptor can be arbitrarily
+		// stale, which will result in a ConditionFailedError. To avoid this,
+		// we make sure that we still have the lease before each attempt.
+		if _, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+			return roachpb.AdminSplitResponse{}, pErr
+		}
+
 		reply, _, pErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
 		// command with the updated descriptor.
