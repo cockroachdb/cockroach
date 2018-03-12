@@ -77,7 +77,7 @@ const (
 	minimumNetworkFileDescriptors     = 256
 	recommendedNetworkFileDescriptors = 5000
 
-	defaultConnResultsBufferBytes = 16 << 10
+	defaultConnResultsBufferBytes = 16 << 10 // 16 KiB
 )
 
 var productionSettingsWebpage = fmt.Sprintf(
