@@ -55,6 +55,12 @@ func (f *FilterArgs) InRaftCmd() bool {
 	return f.CmdID != ""
 }
 
+// ReplicaRequestFilter can be used in testing to influence the error returned
+// from a request before it is evaluated. Notably, the filter is run before the
+// request is added to the CommandQueue, so blocking in the filter will not
+// block interfering requests.
+type ReplicaRequestFilter func(roachpb.BatchRequest) *roachpb.Error
+
 // ReplicaCommandFilter may be used in tests through the StoreTestingKnobs to
 // intercept the handling of commands and artificially generate errors. Return
 // nil to continue with regular processing or non-nil to terminate processing

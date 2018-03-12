@@ -1878,6 +1878,12 @@ func (r *Replica) Send(
 		return nil, roachpb.NewError(err)
 	}
 
+	if filter := r.store.cfg.TestingKnobs.TestingRequestFilter; filter != nil {
+		if pErr := filter(ba); pErr != nil {
+			return nil, pErr
+		}
+	}
+
 	// Differentiate between admin, read-only and write.
 	var pErr *roachpb.Error
 	if useRaft {

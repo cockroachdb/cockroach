@@ -644,6 +644,12 @@ type StoreConfig struct {
 type StoreTestingKnobs struct {
 	EvalKnobs batcheval.TestingKnobs
 
+	// TestingRequestFilter is called before evaluating each command on a
+	// replica. The filter is run before the request is added to the
+	// CommandQueue, so blocking in the filter will not block interfering
+	// requests. If it returns an error, the command will not be evaluated.
+	TestingRequestFilter storagebase.ReplicaRequestFilter
+
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter storagebase.ReplicaProposalFilter
 
