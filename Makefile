@@ -151,14 +151,12 @@ else ifeq ($(TYPE),release-linux-gnu)
 # linked to avoid depending on the target's available libstdc++.
 XHOST_TRIPLE := x86_64-unknown-linux-gnu
 override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
-override GOFLAGS += -installsuffix release-gnu
 override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
 BUILD_TYPE := release
 else ifeq ($(TYPE),release-linux-musl)
 BUILD_TYPE := release
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static"
-override GOFLAGS += -installsuffix release
 override SUFFIX := $(SUFFIX)-linux-2.6.32-musl-amd64
 else ifeq ($(TYPE),release-darwin)
 XGOOS := darwin
@@ -702,7 +700,7 @@ buildshort: $(C_LIBS_CCL)
 $(COCKROACH) build go-install gotestdashi generate lint lintshort: $(C_LIBS_CCL)
 $(COCKROACH) build go-install generate: $(UI_ROOT)/distccl/bindata.go
 
-$(COCKROACH) build buildoss buildshort: BUILDMODE = build -i -o $(COCKROACH)
+$(COCKROACH) build buildoss buildshort: BUILDMODE = build -o $(COCKROACH)
 
 BUILDINFO = .buildinfo/tag .buildinfo/rev
 
@@ -742,12 +740,16 @@ start:
 .PHONY: testbuild
 testbuild: gotestdashi
 	$(XGO) list -tags '$(TAGS)' -f \
-	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
+	'$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o {{.Dir}}/{{.Name}}.test' $(PKG) | \
 	$(SHELL)
 
+# TODO(benesch): remove this target or give it a more sensible name. It's a
+# vestige from the pre-Go 1.10 era when we needed to run `go test -i` because
+# `go test` did not cache compilation of transitive packages. Removing it is
+# finicky because it's in the dependency graph of many other targets, so it's
+# best left to early in a release cycle.
 .PHONY: gotestdashi
-gotestdashi:
-	$(XGO) test -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -i $(PKG)
+gotestdashi: ;
 
 testshort: override TESTFLAGS += -short
 
@@ -809,7 +811,7 @@ stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace: gotestdashi
-	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -i -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
+	$(GO) list -tags '$(TAGS)' -f '$(XGO) test -v $(GOFLAGS) -tags '\''$(TAGS)'\'' -ldflags '\''$(LINKFLAGS)'\'' -c {{.ImportPath}} -o '\''{{.Dir}}'\''/stress.test && (cd '\''{{.Dir}}'\'' && if [ -f stress.test ]; then stress $(STRESSFLAGS) ./stress.test -test.run '\''$(TESTS)'\'' $(if $(BENCHES),-test.bench '\''$(BENCHES)'\'') -test.timeout $(TESTTIMEOUT) $(TESTFLAGS); fi)' $(PKG) | $(SHELL)
 
 .PHONY: upload-coverage
 upload-coverage: $(BOOTSTRAP_TARGET)
