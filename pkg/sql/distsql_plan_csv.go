@@ -69,6 +69,11 @@ func (b *RowResultWriter) SetError(err error) {
 	b.err = err
 }
 
+// OverwriteError is part of the rowResultWriter interface.
+func (b *RowResultWriter) OverwriteError(err error) {
+	b.err = err
+}
+
 // Err is part of the rowResultWriter interface.
 func (b *RowResultWriter) Err() error {
 	return b.err
@@ -99,6 +104,10 @@ func (c *callbackResultWriter) AddRow(ctx context.Context, row tree.Datums) erro
 }
 
 func (c *callbackResultWriter) SetError(err error) {
+	c.err = err
+}
+
+func (c *callbackResultWriter) OverwriteError(err error) {
 	c.err = err
 }
 

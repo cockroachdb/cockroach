@@ -1017,6 +1017,11 @@ func (c *v3Conn) SetError(err error) {
 	c.curStmtErr = err
 }
 
+// OverwriteError is part of the sql.StatementResult interface.
+func (c *v3Conn) OverwriteError(err error) {
+	c.curStmtErr = err
+}
+
 // Err is part of the sql.StatementResult interface.
 func (c *v3Conn) Err() error {
 	return c.curStmtErr

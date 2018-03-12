@@ -178,6 +178,8 @@ type StatementResult interface {
 
 	// SetError allows an error to be  stored on the StatementResult.
 	SetError(err error)
+	// OverwriteError allows an error on the StatementResult to be overwritten.
+	OverwriteError(err error)
 	// Err returns the error previously set with SetError(), if any.
 	Err() error
 }
@@ -202,12 +204,17 @@ func newBufferedWriter(acc mon.BoundAccount) *bufferedWriter {
 	return &bufferedWriter{acc: acc}
 }
 
-// SetError is part of the ResultsWriter interface.
+// SetError is part of the StatementResult interface.
 func (b *bufferedWriter) SetError(err error) {
 	b.err = err
 }
 
-// Err is part of the ResultsWriter interface.
+// OverwriteError is part of the StatementResult interface.
+func (b *bufferedWriter) OverwriteError(err error) {
+	b.err = err
+}
+
+// Err is part of the StatementResult interface.
 func (b *bufferedWriter) Err() error {
 	return b.err
 }

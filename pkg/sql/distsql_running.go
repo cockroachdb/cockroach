@@ -286,6 +286,7 @@ type rowResultWriter interface {
 	AddRow(ctx context.Context, row tree.Datums) error
 	IncrementRowsAffected(n int)
 	SetError(error)
+	OverwriteError(error)
 	Err() error
 }
 
@@ -298,6 +299,9 @@ type errOnlyResultWriter struct {
 var _ rowResultWriter = &errOnlyResultWriter{}
 
 func (w *errOnlyResultWriter) SetError(err error) {
+	w.err = err
+}
+func (w *errOnlyResultWriter) OverwriteError(err error) {
 	w.err = err
 }
 func (w *errOnlyResultWriter) Err() error {
@@ -360,6 +364,13 @@ func makeDistSQLReceiver(
 // to the resultWriter.
 func (r *distSQLReceiver) SetError(err error) {
 	r.resultWriter.SetError(err)
+}
+
+// OverwriteError provides a convenient way for a client to overwrite an error,
+// thus pretending that a query execution error happened. The error is passed
+// along to the resultWriter.
+func (r *distSQLReceiver) OverwriteError(err error) {
+	r.resultWriter.OverwriteError(err)
 }
 
 // Push is part of the RowReceiver interface.
