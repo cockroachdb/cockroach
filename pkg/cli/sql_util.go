@@ -449,38 +449,113 @@ func makeSQLConn(url string) *sqlConn {
 // getPasswordAndMakeSQLClient prompts for a password if running in secure mode
 // and no certificates have been supplied.
 // Attempting to use security.RootUser without valid certificates will return an error.
-func getPasswordAndMakeSQLClient() (*sqlConn, error) {
-	if len(cliCtx.sqlConnURL) != 0 {
-		return makeSQLConn(cliCtx.sqlConnURL), nil
+func getPasswordAndMakeSQLClient(appName string) (*sqlConn, error) {
+	return makeSQLClient(appName)
+}
+
+// makeURLFromFlags constructs a pg connection URL using the values
+// initialized by command-line flags.
+func makeURLFromFlags() (*url.URL, url.Values, error) {
+	userinfo := url.User(security.RootUser)
+	if cliCtx.sqlConnUser != "" {
+		userinfo = url.User(cliCtx.sqlConnUser)
 	}
-	var user *url.Userinfo
-	if !baseCfg.Insecure && !baseCfg.ClientHasValidCerts(cliCtx.sqlConnUser) {
-		if cliCtx.sqlConnUser == security.RootUser {
-			return nil, errors.Errorf("connections with user %s must use a client certificate", security.RootUser)
+	// Ensure that the user doesn't try to connect root without certificates,
+	// and ask for a password if needed.
+	if !cliCtx.Insecure && !baseCfg.ClientHasValidCerts(userinfo.Username()) {
+		if userinfo.Username() == security.RootUser {
+			return nil, nil, errors.Errorf("connections with user %s must use a client certificate",
+				userinfo.Username())
 		}
 
 		pwd, err := security.PromptForPassword()
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-
-		user = url.UserPassword(cliCtx.sqlConnUser, pwd)
-	} else {
-		user = url.User(cliCtx.sqlConnUser)
+		userinfo = url.UserPassword(userinfo.Username(), pwd)
 	}
-	return makeSQLClient(user)
+
+	host := serverCfg.Addr
+	if !strings.HasPrefix(cliCtx.Addr, ":") {
+		host = cliCtx.Addr
+	}
+
+	// Build the URL object.
+	baseURL := &url.URL{
+		Scheme: "postgresql",
+		Path:   cliCtx.sqlConnDBName,
+		Host:   host,
+		User:   userinfo,
+	}
+	options := url.Values{}
+	_, err := cliCtx.LoadSecurityOptions(options, userinfo.Username())
+	if err != nil {
+		return nil, nil, err
+	}
+	return baseURL, options, nil
 }
 
-func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
-	sqlURL := cliCtx.sqlConnURL
-	if len(sqlURL) == 0 {
-		u, err := sqlCtx.PGURL(user)
+// makeSQLClient connects to the database using the connection
+// settings set by the command-line flags. The value of --url, if any
+// is provided is used as the source of configuration; otherwise a URL
+// is constructed from the other command-line parameters.
+//
+// The appName given as argument is added to the URL even if --url is
+// specified, but only if the URL didn't already specify
+// application_name.
+func makeSQLClient(appName string) (*sqlConn, error) {
+	var baseURL *url.URL
+	var options url.Values
+
+	// Determine the starting point.
+	if cliCtx.sqlConnURL == "" {
+		var err error
+		baseURL, options, err = makeURLFromFlags()
 		if err != nil {
 			return nil, err
 		}
-		u.Path = cliCtx.sqlConnDBName
-		sqlURL = u.String()
+	} else {
+		// User-specified --url is the starting point.
+		var err error
+		baseURL, err = url.Parse(cliCtx.sqlConnURL)
+		if err != nil {
+			return nil, err
+		}
+		options, err = url.ParseQuery(baseURL.RawQuery)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check that any argument otherwise used to
+		// populate a URL, if --url was not specified, have
+		// not been specified if --url was.
+		if cliCtx.sqlConnDBName != "" {
+			log.Warning(context.Background(), "parameter --database ignored, using --url instead")
+		}
+		if cliCtx.sqlConnUser != "" {
+			log.Warning(context.Background(), "parameter --user ignored, using --url instead")
+		}
+		if !strings.HasPrefix(cliCtx.Addr, ":") {
+			log.Warning(context.Background(), "parameter --host ignored, using --url instead")
+		}
+		if cliCtx.Insecure {
+			log.Warning(context.Background(), "parameter --insecure ignored, using --url instead")
+		}
 	}
+
+	// Load the application name. It's not a command-line flag, so
+	// anything already in the URL should take priority.
+	if options.Get("application_name") == "" && appName != "" {
+		options.Set("application_name", appName)
+	}
+
+	baseURL.RawQuery = options.Encode()
+	sqlURL := baseURL.String()
+
+	if log.V(2) {
+		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
+	}
+
 	return makeSQLConn(sqlURL), nil
 }
 
