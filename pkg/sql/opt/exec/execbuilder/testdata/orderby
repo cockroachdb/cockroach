@@ -89,26 +89,26 @@ a:int
 2
 1
 
-# TODO(radu): LIMIT not supported.
-#exec-explain
-#SELECT a, b FROM t ORDER BY b LIMIT 2
-#----
-#sort            0  sort    ·         ·          (a, b)     +b
-# │              0  ·       order     +b         ·          ·
-# └── render     1  render  ·         ·          (a, b)     ·
-#      │         1  ·       render 0  a          ·          ·
-#      │         1  ·       render 1  b          ·          ·
-#      └── scan  2  scan    ·         ·          (a, b, c)  ·
-#·               2  ·       table     t@primary  ·          ·
-#·               2  ·       spans     ALL        ·          ·
-#
-#exec
-#SELECT a, b FROM t ORDER BY b DESC LIMIT 2
-#----
-#a:int  b:int
-#1      9
-#2      8
-#3      7
+exec-explain
+SELECT a, b FROM t ORDER BY b LIMIT 2
+----
+limit                0  limit   ·         ·          (a, b)     +b
+ │                   0  ·       count     2          ·          ·
+ └── sort            1  sort    ·         ·          (a, b)     +b
+      │              1  ·       order     +b         ·          ·
+      └── render     2  render  ·         ·          (a, b)     ·
+           │         2  ·       render 0  a          ·          ·
+           │         2  ·       render 1  b          ·          ·
+           └── scan  3  scan    ·         ·          (a, b, c)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
+
+exec
+SELECT a, b FROM t ORDER BY b DESC LIMIT 2
+----
+a:int  b:int
+1      9
+2      8
 
 # TODO(radu): this does not work. Unclear if we want to support it or not.
 #exec-explain
@@ -132,37 +132,42 @@ a:int
 #----
 #true
 #false
-#
-#exec
-#SELECT b FROM t ORDER BY a DESC
-#----
-#7
-#8
-#9
-#
-#exec-explain
-#SELECT b FROM t ORDER BY a DESC
-#----
-#nosort             ·      ·
-# │                 order  -a
-# └── render        ·      ·
-#      └── revscan  ·      ·
-#·                  table  t@primary
-#·                  spans  ALL
 
-# TODO(radu): LIMIT not yet supported.
-## Check that LIMIT propagates past nosort nodes.
-#exec-explain
-#SELECT b FROM t ORDER BY a LIMIT 1
-#----
-#limit                ·      ·
-# └── nosort          ·      ·
-#      │              order  +a
-#      └── render     ·      ·
-#           └── scan  ·      ·
-#·                    table  t@primary
-#·                    spans  ALL
-#·                    limit  1
+exec
+SELECT b FROM t ORDER BY a DESC
+----
+b:int
+7
+8
+9
+
+exec-explain
+SELECT b FROM t ORDER BY a DESC
+----
+render               0  render  ·         ·          (b)        ·
+ │                   0  ·       render 0  b          ·          ·
+ └── sort            1  sort    ·         ·          (a, b)     -a
+      │              1  ·       order     -a         ·          ·
+      └── render     2  render  ·         ·          (a, b)     ·
+           │         2  ·       render 0  a          ·          ·
+           │         2  ·       render 1  b          ·          ·
+           └── scan  3  scan    ·         ·          (a, b, c)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
+
+exec-explain
+SELECT b FROM t ORDER BY a LIMIT 1
+----
+render               0  render  ·         ·          (b)        ·
+ │                   0  ·       render 0  b          ·          ·
+ └── limit           1  limit   ·         ·          (a, b)     ·
+      │              1  ·       count     1          ·          ·
+      └── render     2  render  ·         ·          (a, b)     ·
+           │         2  ·       render 0  a          ·          ·
+           │         2  ·       render 1  b          ·          ·
+           └── scan  3  scan    ·         ·          (a, b, c)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
 
 exec-explain
 SELECT b FROM t ORDER BY a DESC, b ASC

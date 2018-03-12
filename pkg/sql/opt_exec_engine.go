@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/pkg/errors"
 
@@ -359,5 +360,33 @@ func (ee *execEngine) ConstructSort(
 		columns:  inputColumns,
 		ordering: ordering,
 		needSort: true,
+	}, nil
+}
+
+// ConstructLimit is part of the exec.Factory interface.
+func (ee *execEngine) ConstructLimit(
+	input exec.Node, limit int64, offset int64,
+) (exec.Node, error) {
+	var limitVal, offsetVal tree.Datum
+	if limit != math.MaxInt64 {
+		limitVal = tree.NewDInt(tree.DInt(limit))
+	}
+	if offset != 0 {
+		offsetVal = tree.NewDInt(tree.DInt(offset))
+	}
+	plan := input.(planNode)
+	// If the input plan is also a limitNode that has just an offset, and we are
+	// only applying a limit, update the existing node. This is useful because
+	// Limit and Offset are separate operators which result in separate calls to
+	// this function.
+	if l, ok := plan.(*limitNode); ok && l.countExpr == nil && offsetVal == nil {
+		l.countExpr = limitVal
+		return l, nil
+	}
+	return &limitNode{
+		plan:       plan,
+		evaluated:  true,
+		countExpr:  limitVal,
+		offsetExpr: offsetVal,
 	}, nil
 }
