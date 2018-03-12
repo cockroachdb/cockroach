@@ -128,6 +128,7 @@ message ProcessorCoreUnion {
   optional InterleavedReaderJoinerSpec interleavedReaderJoiner = 17;
   optional MetadataTestSenderSpec metadataTestSender = 18;
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
+  optional ZigzagJoinerSpec zigzagJoiner = 21;
 
   reserved 6, 12;
 }
@@ -271,6 +272,39 @@ message DistinctSpec {
   // considered, so rows A1,B1,C1,D1 and A1,B1,C1,D2 are considered equal and
   // only one of them (the first) is output.
   repeated uint32 distinct_columns = 2;
+}
+
+// ZigzagJoinerSpec is the specification for a zigzag join processor. The
+// processor's current implementation fetches the rows using internal
+// rowFetchers.
+//
+// The "internal columns" of a ZigzagJoiner (see ProcessorSpec) are the
+// concatenation of all of the columns of the tables specified. The columns
+// are populated if they are contained in the index specified for that table.
+message ZigzagJoinerSpec {
+  // TODO(pbardea): Replace these with inputs that conform to a RowSource-like
+  // interface.
+  repeated sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+
+  // An array of arrays. The array at eq_columns[side_idx] contains the
+  // equality columns for that side. All arrays in eq_columns should have
+  // equal length.
+  repeated Columns eq_columns = 2 [(gogoproto.nullable) = false];
+
+  repeated uint32 index_ids = 3 [packed = true];
+
+  // "ON" expression (in addition to the equality constraints captured by the
+  // orderings). Assuming that the left stream has N columns and the right
+  // stream has M columns, in this expression ordinal references @1 to @N refer
+  // to columns of the left stream and variables @(N+1) to @(N+M) refer to
+  // columns in the right stream.
+  optional Expression on_expr = 4 [(gogoproto.nullable) = false];
+
+  optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+}
+
+message Columns {
+  repeated uint32 columns = 1 [packed = true];
 }
 
 // MergeJoinerSpec is the specification for a merge join processor. The processor

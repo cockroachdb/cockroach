@@ -731,6 +731,7 @@ var procNameToLogTag = map[string]string{
 	sortChunksProcName:              "sortChunks",
 	tableReaderProcName:             "tableReader",
 	valuesProcName:                  "values",
+	zigzagJoinerProcName:            "zigzagJoiner",
 }
 
 // procStateOpts contains fields used by the processorBase's family of functions
