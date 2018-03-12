@@ -1490,6 +1490,119 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	}
 }
 
+// TestStoreSplitOnRemovedReplica prevents regression of #23673. In that issue,
+// it was observed that the retry loop in AdminSplit could go into an infinite
+// loop if the replica it was being run on had been removed from the range. The
+// loop now checks that the replica performing the split is the leaseholder
+// before each iteration.
+func TestStoreSplitOnRemovedReplica(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	leftKey := roachpb.Key("a")
+	splitKey := roachpb.Key("b")
+	rightKey := roachpb.Key("c")
+
+	var newDesc roachpb.RangeDescriptor
+	inFilter := make(chan struct{}, 1)
+	beginBlockingSplit := make(chan struct{})
+	finishBlockingSplit := make(chan struct{})
+	filter := func(ba roachpb.BatchRequest) *roachpb.Error {
+		// Block replica 1's attempt to perform the AdminSplit. We detect the
+		// split's range descriptor update and block until the rest of the test
+		// is ready. We then return a ConditionFailedError, simulating a
+		// descriptor update race.
+		if ba.Replica.NodeID == 1 {
+			for _, req := range ba.Requests {
+				if cput, ok := req.GetInner().(*roachpb.ConditionalPutRequest); ok {
+					leftDescKey := keys.RangeDescriptorKey(roachpb.RKey(leftKey))
+					if cput.Key.Equal(leftDescKey) {
+						var desc roachpb.RangeDescriptor
+						if err := cput.Value.GetProto(&desc); err != nil {
+							panic(err)
+						}
+
+						if desc.EndKey.Equal(splitKey) {
+							select {
+							case <-beginBlockingSplit:
+								select {
+								case inFilter <- struct{}{}:
+									// Let the test know we're in the filter.
+								default:
+								}
+								<-finishBlockingSplit
+
+								var val roachpb.Value
+								if err := val.SetProto(&newDesc); err != nil {
+									panic(err)
+								}
+								return roachpb.NewError(&roachpb.ConditionFailedError{
+									ActualValue: &val,
+								})
+							default:
+							}
+						}
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	var args base.TestClusterArgs
+	args.ReplicationMode = base.ReplicationManual
+	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+
+	tc := testcluster.StartTestCluster(t, 3, args)
+	defer tc.Stopper().Stop(context.TODO())
+
+	// Split the data range, mainly to avoid other splits getting in our way.
+	for _, k := range []roachpb.Key{leftKey, rightKey} {
+		if _, _, err := tc.SplitRange(k); err != nil {
+			t.Fatal(errors.Wrapf(err, "split at %s", k))
+		}
+	}
+
+	// Send an AdminSplit request to the replica. In the filter above we'll
+	// block the first cput in this split until we're ready to let it loose
+	// again, which will be after we remove the replica from the range.
+	splitRes := make(chan error)
+	close(beginBlockingSplit)
+	go func() {
+		_, _, err := tc.SplitRange(splitKey)
+		splitRes <- err
+	}()
+	<-inFilter
+
+	// Move the range from node 0 to node 1. Then add node 2 to the range.
+	// node 0 will never hear about this range descriptor update.
+	var err error
+	if newDesc, err = tc.AddReplicas(leftKey, tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tc.TransferRangeLease(newDesc, tc.Target(1)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tc.RemoveReplicas(leftKey, tc.Target(0)); err != nil {
+		t.Fatal(err)
+	}
+	if newDesc, err = tc.AddReplicas(leftKey, tc.Target(2)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stop blocking the split request's cput. This will cause the cput to fail
+	// with a ConditionFailedError. The error will warrant a retry in
+	// AdminSplit's retry loop, but when the removed replica notices that it is
+	// no longer the leaseholder, it will return a NotLeaseholderError. This in
+	// turn will allow the AdminSplit to be re-routed to the new leaseholder,
+	// where it will succeed.
+	close(finishBlockingSplit)
+	if err = <-splitRes; err != nil {
+		t.Errorf("AdminSplit returned error: %v", err)
+	}
+}
+
 func TestStoreSplitGCThreshold(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := storage.TestStoreConfig(nil)
