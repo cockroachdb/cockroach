@@ -426,11 +426,6 @@ func (tu *tableUpserter) finalize(
 	tableDesc := tu.tableDesc()
 	b := tu.txn.NewBatch()
 
-	var resultPKs map[string]struct{}
-	if tu.collectRows {
-		resultPKs = make(map[string]struct{})
-	}
-
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
 
@@ -471,6 +466,9 @@ func (tu *tableUpserter) finalize(
 			}
 		}
 
+		// We'll use resultRow to produce a RETURNING row below, if one is needed.
+		var resultRow tree.Datums
+
 		// Do we have a conflict?
 		if existingRowIdx == -1 {
 			// We don't have a conflict. This is a new row in KV. Create it.
@@ -491,38 +489,28 @@ func (tu *tableUpserter) finalize(
 			}
 
 			// We now need a row that has the shape of the result row.
-			resultRow := insertRow
-			if len(resultRow) < len(tableDesc.Columns) {
-				// The row that was just inserted doesn't have this shape yet;
-				// it does not contain values for nullable columns.
-				// Build it using rowIdxToRetIdx.
-
-				resultRow = make(tree.Datums, len(tableDesc.Columns))
-				// Pre-fill with NULLs.
-				for i := range resultRow {
-					resultRow[i] = tree.DNull
-				}
-				// Fill the other values from insertRow.
-				for i, val := range insertRow {
-					resultRow[tu.rowIdxToRetIdx[i]] = val
-				}
-			}
+			resultRow = tu.makeResultFromInsertRow(insertRow, tableDesc.Columns)
 
 			// Then remember it for further upserts.
 			pkToRowIdx[string(upsertRowPK)] = len(existingRows)
 			existingRows = append(existingRows, resultRow)
-			if tu.collectRows {
-				resultPKs[string(upsertRowPK)] = struct{}{}
-			}
+		} else if len(tu.updateCols) == 0 {
+			// If len(tu.updateCols) == 0, then we're in the DO NOTHING
+			// case. There is no update to be done, also no result row to be collected.
+			// See the pg docs, e.g.: https://www.postgresql.org/docs/10/static/sql-insert.html
+			// """
+			// The optional RETURNING clause causes INSERT to compute and
+			// return value(s) based on each row actually inserted (or
+			// updated, if an ON CONFLICT DO UPDATE clause was used). This
+			// is primarily useful for obtaining values that were supplied
+			// by defaults, such as a serial sequence number. However, any
+			// expression using the table's columns is allowed. The syntax
+			// of the RETURNING list is identical to that of the output list
+			// of SELECT. Only rows that were successfully inserted or
+			// updated will be returned.
+			// ""
+			continue
 		} else {
-			// The row was already seen. Perhaps try to update it.
-			if len(tu.updateCols) == 0 {
-				// If len(tu.updateCols) == 0, then we're in the DO NOTHING
-				// case. There is no update to be done, also no result PK to
-				// be remembered.
-				continue
-			}
-
 			// existingRow carries the values previously seen in KV
 			// or newly inserted earlier in this batch.
 			existingRow := existingRows[existingRowIdx]
@@ -535,6 +523,9 @@ func (tu *tableUpserter) finalize(
 			}
 			if !shouldUpdate {
 				// WHERE tells us there is nothing to do. Stop here.
+				// There is also no RETURNING result.
+				// See https://www.postgresql.org/docs/10/static/sql-insert.html and the
+				// quoted exceirpt above.
 				continue
 			}
 
@@ -581,6 +572,9 @@ func (tu *tableUpserter) finalize(
 			if err != nil {
 				return nil, err
 			}
+
+			resultRow = updatedRow
+
 			// Keep the slice for reuse.
 			tu.updateValues = updateValues[:0]
 
@@ -605,12 +599,6 @@ func (tu *tableUpserter) finalize(
 				newExistingRowIdx = len(existingRows)
 				pkToRowIdx[string(newUpsertRowPK)] = newExistingRowIdx
 				existingRows = append(existingRows, updatedRow)
-
-				// Ditto for the result PKs.
-				if tu.collectRows {
-					delete(resultPKs, string(upsertRowPK))
-					resultPKs[string(newUpsertRowPK)] = struct{}{}
-				}
 			} else {
 				// If the PK has changed, we'll have a new rowIdx. In that case,
 				// remove the previous mapping.
@@ -618,21 +606,12 @@ func (tu *tableUpserter) finalize(
 					delete(pkToRowIdx, string(upsertRowPK))
 				}
 				copy(existingRows[newExistingRowIdx], updatedRow)
-
-				// Remember the PK for the result set.
-				if tu.collectRows {
-					resultPKs[string(newUpsertRowPK)] = struct{}{}
-				}
 			}
 		}
-	}
 
-	// Then optionally compute the set of upserted rows.
-	if tu.collectRows {
-		for resultPK := range resultPKs {
-			rowIdx := pkToRowIdx[resultPK]
-			insertRow := existingRows[rowIdx]
-			_, err = tu.rowsUpserted.AddRow(ctx, insertRow)
+		if tu.collectRows {
+			// Remember the result row for the RETURNING clause.
+			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return nil, err
 			}
@@ -651,6 +630,31 @@ func (tu *tableUpserter) finalize(
 		return nil, sqlbase.ConvertBatchError(ctx, tableDesc, b)
 	}
 	return tu.rowsUpserted, nil
+}
+
+func (tu *tableUpserter) makeResultFromInsertRow(
+	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
+) tree.Datums {
+	resultRow := insertRow
+	if len(resultRow) < len(cols) {
+		// The row that was just inserted doesn't have this shape yet;
+		// it does not contain values for nullable columns.
+		// Build it using rowIdxToRetIdx.
+
+		// TODO(nathan/knz): maybe reuse a buffer here to avoid a
+		// (re-)allocation.
+
+		resultRow = make(tree.Datums, len(cols))
+		// Pre-fill with NULLs.
+		for i := range resultRow {
+			resultRow[i] = tree.DNull
+		}
+		// Fill the other values from insertRow.
+		for i, val := range insertRow {
+			resultRow[tu.rowIdxToRetIdx[i]] = val
+		}
+	}
+	return resultRow
 }
 
 // upsertRowPKs returns the primary keys of every row in tu.insertRows

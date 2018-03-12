@@ -49,6 +49,7 @@ UPSERT INTO kv VALUES (10, 10), (10, 11)
 query II
 UPSERT INTO kv VALUES (11, 10), (11, 12) RETURNING k, v
 ----
+11 10
 11 12
 
 statement ok
@@ -83,10 +84,26 @@ SELECT * FROM kv ORDER BY (k, v)
 160 17
 
 query II rowsort
+UPSERT INTO kv(k) VALUES (6), (8) RETURNING k,v
+----
+8 NULL
+
+query II rowsort
 INSERT INTO kv VALUES (10, 10), (11, 11) ON CONFLICT (k) DO UPDATE SET v = excluded.v RETURNING *
 ----
 10 10
 11 11
+
+query II rowsort
+INSERT INTO kv VALUES (10, 2), (10, 3) ON CONFLICT (k) DO UPDATE SET v = excluded.v + kv.v RETURNING *
+----
+10 12
+10 15
+
+query II rowsort
+INSERT INTO kv VALUES (10, 14), (15, 15) ON CONFLICT (k) DO NOTHING RETURNING *
+----
+15 15
 
 statement ok
 CREATE TABLE abc (
