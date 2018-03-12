@@ -163,7 +163,14 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	case *TArray:
 		return types.TArray{Typ: CastTargetToDatumType(ct.ParamType)}
 	case *TVector:
-		return types.IntVector
+		switch ct.ParamType.(type) {
+		case *TInt:
+			return types.IntVector
+		case *TOid:
+			return types.OidVector
+		default:
+			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", t, ct.ParamType))
+		}
 	case *TOid:
 		return TOidToType(ct)
 	default:

@@ -38,9 +38,12 @@ var (
 	// Name is a type-alias for String with a different OID. Can be
 	// compared with ==.
 	Name = WrapTypeWithOid(String, oid.T_name)
-	// IntVector is a type-alias for a IntArray with a different OID. Can
+	// IntVector is a type-alias for an IntArray with a different OID. Can
 	// be compared with ==.
 	IntVector = WrapTypeWithOid(TArray{Int}, oid.T_int2vector)
+	// OidVector is a type-alias for an OidArray with a different OID. Can
+	// be compared with ==.
+	OidVector = WrapTypeWithOid(TArray{Oid}, oid.T_oidvector)
 	// NameArray is the type family of a DArray containing the Name alias type.
 	// Can be compared with ==.
 	NameArray T = TArray{Name}
@@ -86,6 +89,7 @@ var OidToType = map[oid.Oid]T{
 	oid.T__numeric:     TArray{Decimal},
 	oid.T_oid:          Oid,
 	oid.T__oid:         TArray{Oid},
+	oid.T_oidvector:    OidVector,
 	oid.T_regclass:     RegClass,
 	oid.T_regnamespace: RegNamespace,
 	oid.T_regproc:      RegProc,
@@ -121,6 +125,7 @@ var aliasedOidToName = map[oid.Oid]string{
 	oid.T_int4:       "int4",
 	oid.T_int8:       "int8",
 	oid.T_int2vector: "int2vector",
+	oid.T_oidvector:  "oidvector",
 	oid.T_text:       "text",
 	oid.T_bytea:      "bytea",
 	oid.T_varchar:    "varchar",

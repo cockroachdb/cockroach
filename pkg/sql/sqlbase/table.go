@@ -138,7 +138,9 @@ func populateTypeAttrs(base ColumnType, typ coltypes.T) (ColumnType, error) {
 			return ColumnType{}, err
 		}
 	case *coltypes.TVector:
-		if _, ok := t.ParamType.(*coltypes.TInt); !ok {
+		switch t.ParamType.(type) {
+		case *coltypes.TInt, *coltypes.TOid:
+		default:
 			return ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
 		}
 	case *coltypes.TOid:

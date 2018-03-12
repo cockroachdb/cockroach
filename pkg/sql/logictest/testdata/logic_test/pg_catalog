@@ -725,6 +725,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 24    regproc       3572887043    NULL      8       true      b
 25    text          3572887043    NULL      -1      false     b
 26    oid           3572887043    NULL      8       true      b
+30    oidvector     3572887043    NULL      -1      false     b
 700   float4        3572887043    NULL      8       true      b
 701   float8        3572887043    NULL      8       true      b
 869   inet          3572887043    NULL      24      true      b
@@ -779,6 +780,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 24    regproc       N            false           true          ,         0         0        0
 25    text          S            false           true          ,         0         0        1009
 26    oid           N            false           true          ,         0         0        1028
+30    oidvector     A            false           true          ,         0         26       0
 700   float4        N            false           true          ,         0         0        1021
 701   float8        N            false           true          ,         0         0        1022
 869   inet          I            false           true          ,         0         0        1041
@@ -833,6 +835,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 24    regproc       regprocin       regprocout       regprocrecv       regprocsend       0         0          0
 25    text          textin          textout          textrecv          textsend          0         0          0
 26    oid           oidin           oidout           oidrecv           oidsend           0         0          0
+30    oidvector     oidvectorin     oidvectorout     oidvectorrecv     oidvectorsend     0         0          0
 700   float4        float4in        float4out        float4recv        float4send        0         0          0
 701   float8        float8in        float8out        float8recv        float8send        0         0          0
 869   inet          inetin          inetout          inetrecv          inetsend          0         0          0
@@ -887,6 +890,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 24    regproc       NULL      NULL        false       0            -1
 25    text          NULL      NULL        false       0            -1
 26    oid           NULL      NULL        false       0            -1
+30    oidvector     NULL      NULL        false       0            -1
 700   float4        NULL      NULL        false       0            -1
 701   float8        NULL      NULL        false       0            -1
 869   inet          NULL      NULL        false       0            -1
@@ -941,6 +945,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 24    regproc       0         0             NULL           NULL        NULL
 25    text          0         1661428263    NULL           NULL        NULL
 26    oid           0         0             NULL           NULL        NULL
+30    oidvector     0         0             NULL           NULL        NULL
 700   float4        0         0             NULL           NULL        NULL
 701   float8        0         0             NULL           NULL        NULL
 869   inet          0         0             NULL           NULL        NULL
