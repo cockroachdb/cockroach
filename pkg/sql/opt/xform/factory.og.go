@@ -4118,9 +4118,53 @@ func (_f *factory) ConstructExceptAll(
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr)))
 }
 
+// ConstructLimit constructs an expression for the Limit operator.
+// Limit returns a limited subset of the results in the input relation.
+// The limit expression is a scalar value; the operator returns at most this many
+// rows. The private field is an *opt.Ordering which indicates the desired
+// row ordering (the first rows with respect to this ordering are returned).
+func (_f *factory) ConstructLimit(
+	input opt.GroupID,
+	limit opt.GroupID,
+	ordering opt.PrivateID,
+) opt.GroupID {
+	_limitExpr := makeLimitExpr(input, limit, ordering)
+	_group := _f.mem.lookupGroupByFingerprint(_limitExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_limitExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_limitExpr)))
+}
+
+// ConstructOffset constructs an expression for the Offset operator.
+// Offset filters out the first Offset rows of the input relation; used in
+// conjunction with Limit.
+func (_f *factory) ConstructOffset(
+	input opt.GroupID,
+	offset opt.GroupID,
+	ordering opt.PrivateID,
+) opt.GroupID {
+	_offsetExpr := makeOffsetExpr(input, offset, ordering)
+	_group := _f.mem.lookupGroupByFingerprint(_offsetExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_offsetExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_offsetExpr)))
+}
+
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [85]dynConstructLookupFunc
+var dynConstructLookup [87]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -4546,6 +4590,16 @@ func init() {
 	// ExceptAllOp
 	dynConstructLookup[opt.ExceptAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
 		return f.ConstructExceptAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// LimitOp
+	dynConstructLookup[opt.LimitOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructLimit(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// OffsetOp
+	dynConstructLookup[opt.OffsetOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructOffset(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
 	}
 
 }

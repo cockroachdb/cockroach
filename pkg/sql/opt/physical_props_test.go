@@ -41,12 +41,12 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("presentation should be defined")
 	}
 
-	if !presentation.Provides(presentation) {
-		t.Error("presentation should provide itself")
+	if !presentation.Equals(presentation) {
+		t.Error("presentation should equal itself")
 	}
 
-	if presentation.Provides(opt.Presentation{}) {
-		t.Error("presentation should not provide the empty presentation")
+	if presentation.Equals(opt.Presentation{}) {
+		t.Error("presentation should not equal the empty presentation")
 	}
 
 	// Add Ordering props.
@@ -72,6 +72,18 @@ func TestPhysicalProps(t *testing.T) {
 
 	if !ordering.Provides(opt.Ordering{}) {
 		t.Error("ordering should provide the empty ordering")
+	}
+
+	if !ordering.Equals(ordering) {
+		t.Error("ordering should be equal with itself")
+	}
+
+	if ordering.Equals(opt.Ordering{}) {
+		t.Error("ordering should not equal the empty ordering")
+	}
+
+	if (opt.Ordering{}).Equals(ordering) {
+		t.Error("empty ordering should not equal ordering")
 	}
 }
 
