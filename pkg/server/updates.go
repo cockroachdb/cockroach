@@ -33,6 +33,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
@@ -272,12 +273,12 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	n := s.node.recorder.GetStatusSummary(ctx)
 	info.Node = diagnosticspb.NodeInfo{NodeID: s.node.Descriptor.NodeID}
 
-	salt := sql.ClusterSecret.Get(&s.cfg.Settings.SV)
+	secret := sql.ClusterSecret.Get(&s.cfg.Settings.SV)
 	// Add in the localities.
 	for _, tier := range s.node.Descriptor.Locality.Tiers {
 		info.Node.Locality.Tiers = append(info.Node.Locality.Tiers, roachpb.Tier{
-			Key:   sql.HashForReporting(salt, tier.Key),
-			Value: sql.HashForReporting(salt, tier.Value),
+			Key:   sql.HashForReporting(secret, tier.Key),
+			Value: sql.HashForReporting(secret, tier.Value),
 		})
 	}
 
@@ -338,6 +339,28 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		}
 	}
 
+	if datums, _, err := (&sql.InternalExecutor{ExecCfg: s.execCfg}).QueryRows(
+		ctx,
+		"read-zone-configs",
+		"SELECT id, config FROM system.zones",
+	); err != nil {
+		log.Warning(ctx, err)
+	} else {
+		info.ZoneConfigs = make(map[int64]config.ZoneConfig)
+		for _, row := range datums {
+			id := int64(tree.MustBeDInt(row[0]))
+			configProto := []byte(*(row[1].(*tree.DBytes)))
+			var zone config.ZoneConfig
+			if err := protoutil.Unmarshal(configProto, &zone); err != nil {
+				log.Warningf(ctx, "unable to parse zone config %d: %v", id, err)
+				continue
+			}
+			var anonymizedZone config.ZoneConfig
+			anonymizeZoneConfig(&anonymizedZone, zone, secret)
+			info.ZoneConfigs[id] = anonymizedZone
+		}
+	}
+
 	if !s.cfg.UseLegacyConnHandling {
 		info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
 		s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
@@ -346,6 +369,46 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		s.sqlExecutor.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
 	}
 	return &info
+}
+
+func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret string) {
+	dst.RangeMinBytes = src.RangeMinBytes
+	dst.RangeMaxBytes = src.RangeMaxBytes
+	dst.GC.TTLSeconds = src.GC.TTLSeconds
+	dst.NumReplicas = src.NumReplicas
+	dst.Constraints = make([]config.Constraints, len(src.Constraints))
+	for i := range src.Constraints {
+		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas
+		dst.Constraints[i].Constraints = make([]config.Constraint, len(src.Constraints[i].Constraints))
+		for j := range src.Constraints[i].Constraints {
+			dst.Constraints[i].Constraints[j].Type = src.Constraints[i].Constraints[j].Type
+			if key := src.Constraints[i].Constraints[j].Key; key != "" {
+				dst.Constraints[i].Constraints[j].Key = sql.HashForReporting(secret, key)
+			}
+			if val := src.Constraints[i].Constraints[j].Value; val != "" {
+				dst.Constraints[i].Constraints[j].Value = sql.HashForReporting(secret, val)
+			}
+		}
+	}
+	dst.LeasePreferences = make([]config.LeasePreference, len(src.LeasePreferences))
+	for i := range src.LeasePreferences {
+		dst.LeasePreferences[i].Constraints = make([]config.Constraint, len(src.LeasePreferences[i].Constraints))
+		for j := range src.LeasePreferences[i].Constraints {
+			dst.LeasePreferences[i].Constraints[j].Type = src.LeasePreferences[i].Constraints[j].Type
+			if key := src.LeasePreferences[i].Constraints[j].Key; key != "" {
+				dst.LeasePreferences[i].Constraints[j].Key = sql.HashForReporting(secret, key)
+			}
+			if val := src.LeasePreferences[i].Constraints[j].Value; val != "" {
+				dst.LeasePreferences[i].Constraints[j].Value = sql.HashForReporting(secret, val)
+			}
+		}
+	}
+	dst.Subzones = make([]config.Subzone, len(src.Subzones))
+	for i := range src.Subzones {
+		dst.Subzones[i].IndexID = src.Subzones[i].IndexID
+		dst.Subzones[i].PartitionName = sql.HashForReporting(secret, src.Subzones[i].PartitionName)
+		anonymizeZoneConfig(&dst.Subzones[i].Config, src.Subzones[i].Config, secret)
+	}
 }
 
 func (s *Server) reportDiagnostics(runningTime time.Duration) {

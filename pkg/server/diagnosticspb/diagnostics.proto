@@ -16,6 +16,7 @@ syntax = "proto3";
 package cockroach.server.diagnosticspb;
 option go_package = "diagnosticspb";
 
+import "config/zone.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
 import "sql/sqlbase/structured.proto";
@@ -29,6 +30,7 @@ message DiagnosticReport {
   map<string, int64> unimplemented_errors = 5;
   map<string, string> altered_settings = 6;
   map<string, int64> error_counts = 7;
+  map<int64, config.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
 }
 
 message NodeInfo {
