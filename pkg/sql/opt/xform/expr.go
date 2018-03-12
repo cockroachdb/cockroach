@@ -261,6 +261,12 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 
 	fmt.Fprintf(&buf, "%v", ev.op)
 
+	switch ev.Operator() {
+	case opt.ScanOp:
+		tblIndex := ev.Private().(*opt.ScanOpDef).Table
+		fmt.Fprintf(&buf, " %s", ev.Metadata().Table(tblIndex).TabName())
+	}
+
 	logProps := ev.Logical()
 	physProps := ev.Physical()
 

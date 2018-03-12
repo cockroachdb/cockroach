@@ -32,7 +32,7 @@ SELECT a.x FROM t.a
 ----
 project
  ├── columns: x:1(int!null)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1)]
       └── variable: a.x [type=int, outer=(1)]
@@ -40,7 +40,7 @@ project
 build
 SELECT a.x, a.y FROM t.a
 ----
-scan
+scan a
  └── columns: x:1(int!null) y:2(float)
 
 build
@@ -48,7 +48,7 @@ SELECT a.y, a.x FROM t.a
 ----
 project
  ├── columns: y:2(float) x:1(int!null)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1,2)]
       ├── variable: a.y [type=float, outer=(2)]
@@ -57,7 +57,7 @@ project
 build
 SELECT * FROM t.a
 ----
-scan
+scan a
  └── columns: x:1(int!null) y:2(float)
 
 # Note that an explicit projection operator is added for table b (unlike for
@@ -67,7 +67,7 @@ SELECT * FROM t.b
 ----
 project
  ├── columns: x:1(int) y:2(float)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
  └── projections [outer=(1,2)]
       ├── variable: b.x [type=int, outer=(1)]
@@ -78,7 +78,7 @@ SELECT (a.x + 3) AS "X", false AS "Y" FROM t.a
 ----
 project
  ├── columns: X:3(int) Y:4(bool)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1)]
       ├── plus [type=int, outer=(1)]
@@ -91,7 +91,7 @@ SELECT *, ((x < y) OR x > 1000) FROM t.a
 ----
 project
  ├── columns: x:1(int!null) y:2(float) column3:3(bool)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1,2)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -109,7 +109,7 @@ SELECT a.*, true FROM t.a
 ----
 project
  ├── columns: x:1(int!null) y:2(float) column3:3(bool)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(float)
  └── projections [outer=(1,2)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -123,7 +123,7 @@ project
  ├── columns: column5:5(int) column6:6(float)
  ├── project
  │    ├── columns: column3:3(int) column4:4(float)
- │    ├── scan
+ │    ├── scan a
  │    │    └── columns: a.x:1(int!null) a.y:2(float)
  │    └── projections [outer=(1,2)]
  │         ├── plus [type=int, outer=(1)]
@@ -145,7 +145,7 @@ SELECT rowid FROM b;
 ----
 project
  ├── columns: rowid:3(int!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
  └── projections [outer=(3)]
       └── variable: b.rowid [type=int, outer=(3)]
@@ -160,7 +160,7 @@ SELECT rowid FROM (SELECT rowid FROM b)
 ----
 project
  ├── columns: rowid:3(int!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
  └── projections [outer=(3)]
       └── variable: b.rowid [type=int, outer=(3)]
@@ -170,7 +170,7 @@ SELECT q.r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
  ├── columns: r:3(int!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
  └── projections [outer=(3)]
       └── variable: b.rowid [type=int, outer=(3)]
@@ -180,7 +180,7 @@ SELECT r FROM (SELECT rowid FROM b) AS q(r)
 ----
 project
  ├── columns: r:3(int!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
  └── projections [outer=(3)]
       └── variable: b.rowid [type=int, outer=(3)]
@@ -205,7 +205,7 @@ SELECT rowid::string FROM b
 ----
 project
  ├── columns: column4:4(string)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(int) b.y:2(float) b.rowid:3(int!null)
  └── projections [outer=(3)]
       └── cast: string [type=string, outer=(3)]

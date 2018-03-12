@@ -21,7 +21,7 @@ TABLE b
 opt
 SELECT a.y, a.x, a.y y2 FROM a
 ----
-scan
+scan a
  └── columns: y:2(int) x:1(int!null) y2:2(int)
 
 # Select operator.
@@ -30,7 +30,7 @@ SELECT a.y, a.x, a.y y2 FROM a WHERE x=1
 ----
 select
  ├── columns: y:2(int) x:1(int!null) y2:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── filters [type=bool, outer=(1)]
       └── eq [type=bool, outer=(1)]
@@ -43,7 +43,7 @@ SELECT 1+a.y AS plus, a.x FROM a
 ----
 project
  ├── columns: plus:3(int) x:1(int!null)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── plus [type=int, outer=(2)]
@@ -57,9 +57,9 @@ SELECT b.x, rowid, a.y, a.x, a.y y2, b.y FROM a, b
 ----
 inner-join
  ├── columns: x:3(int) rowid:5(int!null) y:2(int) x:1(int!null) y2:2(int) y:4(float)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:3(int) b.y:4(float) b.rowid:5(int!null)
  └── true [type=bool]
 
@@ -70,7 +70,7 @@ SELECT MAX(y), y, y, x FROM a GROUP BY a.x, a.y
 group-by
  ├── columns: column3:3(int) y:2(int) y:2(int) x:1(int!null)
  ├── grouping columns: a.x:1(int!null) a.y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── aggregations [outer=(2)]
       └── function: max [type=int, outer=(2)]

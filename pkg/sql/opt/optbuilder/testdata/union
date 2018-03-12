@@ -383,7 +383,7 @@ union
  │    ├── columns: uniontest.v:2(int)
  │    ├── select
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    ├── scan
+ │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -394,7 +394,7 @@ union
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    ├── scan
+      │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    └── eq [type=bool, outer=(4)]
       │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -413,7 +413,7 @@ union-all
  │    ├── columns: uniontest.v:2(int)
  │    ├── select
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    ├── scan
+ │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -424,7 +424,7 @@ union-all
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    ├── scan
+      │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    └── eq [type=bool, outer=(4)]
       │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -443,7 +443,7 @@ intersect
  │    ├── columns: uniontest.v:2(int)
  │    ├── select
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    ├── scan
+ │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -454,7 +454,7 @@ intersect
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    ├── scan
+      │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    └── eq [type=bool, outer=(4)]
       │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -473,7 +473,7 @@ intersect-all
  │    ├── columns: uniontest.v:2(int)
  │    ├── select
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    ├── scan
+ │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -484,7 +484,7 @@ intersect-all
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    ├── scan
+      │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    └── eq [type=bool, outer=(4)]
       │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -503,7 +503,7 @@ except
  │    ├── columns: uniontest.v:2(int)
  │    ├── select
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    ├── scan
+ │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -514,7 +514,7 @@ except
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    ├── scan
+      │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    └── eq [type=bool, outer=(4)]
       │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -533,7 +533,7 @@ except-all
  │    ├── columns: uniontest.v:2(int)
  │    ├── select
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    ├── scan
+ │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    └── eq [type=bool, outer=(1)]
  │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -544,7 +544,7 @@ except-all
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    ├── scan
+      │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    └── eq [type=bool, outer=(4)]
       │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -566,7 +566,7 @@ sort
       │    ├── columns: uniontest.v:2(int)
       │    ├── select
       │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
-      │    │    ├── scan
+      │    │    ├── scan uniontest
       │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
       │    │    └── eq [type=bool, outer=(1)]
       │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -577,7 +577,7 @@ sort
            ├── columns: uniontest.v:5(int)
            ├── select
            │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           │    ├── scan
+           │    ├── scan uniontest
            │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            │    └── eq [type=bool, outer=(4)]
            │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -600,7 +600,7 @@ sort
       │    ├── columns: uniontest.v:2(int)
       │    ├── select
       │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
-      │    │    ├── scan
+      │    │    ├── scan uniontest
       │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
       │    │    └── eq [type=bool, outer=(1)]
       │    │         ├── variable: uniontest.k [type=int, outer=(1)]
@@ -611,7 +611,7 @@ sort
            ├── columns: uniontest.v:5(int)
            ├── select
            │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           │    ├── scan
+           │    ├── scan uniontest
            │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            │    └── eq [type=bool, outer=(4)]
            │         ├── variable: uniontest.k [type=int, outer=(4)]
@@ -628,13 +628,13 @@ union
  ├── right columns: uniontest.k:4(int)
  ├── project
  │    ├── columns: uniontest.v:2(int)
- │    ├── scan
+ │    ├── scan uniontest
  │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    └── projections [outer=(2)]
  │         └── variable: uniontest.v [type=int, outer=(2)]
  └── project
       ├── columns: uniontest.k:4(int)
-      ├── scan
+      ├── scan uniontest
       │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       └── projections [outer=(4)]
            └── variable: uniontest.k [type=int, outer=(4)]
@@ -648,13 +648,13 @@ union-all
  ├── right columns: uniontest.k:4(int)
  ├── project
  │    ├── columns: uniontest.v:2(int)
- │    ├── scan
+ │    ├── scan uniontest
  │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    └── projections [outer=(2)]
  │         └── variable: uniontest.v [type=int, outer=(2)]
  └── project
       ├── columns: uniontest.k:4(int)
-      ├── scan
+      ├── scan uniontest
       │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       └── projections [outer=(4)]
            └── variable: uniontest.k [type=int, outer=(4)]
@@ -784,7 +784,7 @@ union
  ├── right columns: abc.a:4(string) abc.b:5(string) abc.c:6(string)
  ├── project
  │    ├── columns: xy.x:1(string!null) xy.x:1(string!null) xy.y:2(string!null)
- │    ├── scan
+ │    ├── scan xy
  │    │    └── columns: xy.x:1(string!null) xy.y:2(string!null) xy.rowid:3(int!null)
  │    └── projections [outer=(1,2)]
  │         ├── variable: xy.x [type=string, outer=(1)]
@@ -792,7 +792,7 @@ union
  │         └── variable: xy.y [type=string, outer=(2)]
  └── project
       ├── columns: abc.a:4(string) abc.b:5(string!null) abc.c:6(string!null)
-      ├── scan
+      ├── scan abc
       │    └── columns: abc.a:4(string) abc.b:5(string!null) abc.c:6(string!null) abc.rowid:7(int!null)
       └── projections [outer=(4-6)]
            ├── variable: abc.a [type=string, outer=(4)]

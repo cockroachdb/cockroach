@@ -23,7 +23,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: +3
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(3)]
       └── variable: t.c [type=bool, outer=(3)]
@@ -37,7 +37,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -3
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(3)]
       └── variable: t.c [type=bool, outer=(3)]
@@ -51,7 +51,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: +2
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -66,7 +66,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -2
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -81,7 +81,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1)]
       └── variable: t.a [type=int, outer=(1)]
@@ -107,7 +107,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -127,7 +127,7 @@ SELECT a AS foo, (a) AS foo FROM t ORDER BY foo
 project
  ├── columns: foo:1(int!null) foo:1(int!null)
  ├── ordering: +1
- ├── scan
+ ├── scan t
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    └── ordering: +1
  └── projections [outer=(1)]
@@ -142,7 +142,7 @@ SELECT a AS b, b AS c FROM t ORDER BY b
 project
  ├── columns: b:1(int!null) c:2(int)
  ├── ordering: +1
- ├── scan
+ ├── scan t
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    └── ordering: +1
  └── projections [outer=(1,2)]
@@ -158,7 +158,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -173,7 +173,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -188,7 +188,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.b [type=int, outer=(2)]
@@ -203,7 +203,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1,+2
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.b [type=int, outer=(2)]
@@ -218,7 +218,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1,-2
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.b [type=int, outer=(2)]
@@ -234,7 +234,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: +3
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1-3)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -248,7 +248,7 @@ SELECT * FROM t ORDER BY (b, t.*)
 sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+2,+3
- └── scan
+ └── scan t
       └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
 build
@@ -257,7 +257,7 @@ SELECT * FROM t ORDER BY (b, a), c
 sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+3
- └── scan
+ └── scan t
       └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
 build
@@ -266,7 +266,7 @@ SELECT * FROM t ORDER BY b, (a, c)
 sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+3
- └── scan
+ └── scan t
       └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
 build
@@ -275,7 +275,7 @@ SELECT * FROM t ORDER BY (b, (a, c))
 sort
  ├── columns: a:1(int!null) b:2(int) c:3(bool)
  ├── ordering: +2,+1,+3
- └── scan
+ └── scan t
       └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
 
 build
@@ -290,7 +290,7 @@ project
  │    ├── sort
  │    │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    │    ├── ordering: +2,+1
- │    │    └── scan
+ │    │    └── scan t
  │    │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    └── eq [type=bool, outer=(2)]
  │         ├── variable: t.b [type=int, outer=(2)]
@@ -308,7 +308,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: +2,-1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1,2)]
       ├── variable: t.a [type=int, outer=(1)]
@@ -324,7 +324,7 @@ sort
       ├── columns: t.a:1(int!null) t.b:2(int) ab:4(int)
       ├── select
       │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
-      │    ├── scan
+      │    ├── scan t
       │    │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       │    └── eq [type=bool, outer=(2)]
       │         ├── variable: t.b [type=int, outer=(2)]
@@ -344,7 +344,7 @@ sort
  ├── ordering: -4,+1
  └── project
       ├── columns: t.a:1(int!null) column4:4(int)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(1,2)]
            ├── variable: t.a [type=int, outer=(1)]
@@ -358,7 +358,7 @@ SELECT a FROM t ORDER BY (((a)))
 project
  ├── columns: a:1(int!null)
  ├── ordering: +1
- ├── scan
+ ├── scan t
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    └── ordering: +1
  └── projections [outer=(1)]
@@ -373,7 +373,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1)]
       └── variable: t.a [type=int, outer=(1)]
@@ -387,7 +387,7 @@ project
  ├── sort
  │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  │    ├── ordering: -1
- │    └── scan
+ │    └── scan t
  │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
  └── projections [outer=(1)]
       └── variable: t.a [type=int, outer=(1)]
@@ -479,7 +479,7 @@ sort
  ├── ordering: +4
  └── project
       ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(1-3)]
            ├── variable: t.a [type=int, outer=(1)]
@@ -495,7 +495,7 @@ sort
  ├── ordering: +4
  └── project
       ├── columns: column4:4(int) t.a:1(int!null) t.b:2(int) t.c:3(bool)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(1-3)]
            ├── const: 1 [type=int]
@@ -511,7 +511,7 @@ sort
  ├── ordering: +4
  └── project
       ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool) column4:4(int)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(1-3)]
            ├── variable: t.a [type=int, outer=(1)]
@@ -529,7 +529,7 @@ sort
  ├── ordering: +5
  └── project
       ├── columns: column4:4(int) column5:5(int)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(2)]
            ├── plus [type=int, outer=(2)]
@@ -548,7 +548,7 @@ sort
  ├── ordering: +4
  └── project
       ├── columns: y:4(int)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(2)]
            └── plus [type=int, outer=(2)]
@@ -564,7 +564,7 @@ sort
  ├── ordering: +5
  └── project
       ├── columns: y:4(int) column5:5(int)
-      ├── scan
+      ├── scan t
       │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
       └── projections [outer=(2)]
            ├── plus [type=int, outer=(2)]
@@ -592,7 +592,7 @@ SELECT * FROM bar ORDER BY baz, id
 sort
  ├── columns: id:1(int!null) baz:2(string)
  ├── ordering: +2,+1
- └── scan
+ └── scan bar
       └── columns: bar.id:1(int!null) bar.baz:2(string)
 
 exec-ddl
@@ -624,7 +624,7 @@ SELECT a+b FROM (SELECT * FROM abcd ORDER BY d)
 ----
 project
  ├── columns: column5:5(int)
- ├── scan
+ ├── scan abcd
  │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  └── projections [outer=(1,2)]
       └── plus [type=int, outer=(1,2)]
@@ -636,7 +636,7 @@ SELECT b+d FROM (SELECT * FROM abcd ORDER BY a,d)
 ----
 project
  ├── columns: column5:5(int)
- ├── scan
+ ├── scan abcd
  │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  └── projections [outer=(2,4)]
       └── plus [type=int, outer=(2,4)]
@@ -684,7 +684,7 @@ SELECT block_id,writer_id,block_num,block_id FROM blocks ORDER BY block_id, writ
 project
  ├── columns: block_id:1(int!null) writer_id:2(string!null) block_num:3(int!null) block_id:1(int!null)
  ├── ordering: +1,+2,+3
- ├── scan
+ ├── scan blocks
  │    ├── columns: blocks.block_id:1(int!null) blocks.writer_id:2(string!null) blocks.block_num:3(int!null) blocks.raw_bytes:4(bytes)
  │    └── ordering: +1,+2,+3
  └── projections [outer=(1-3)]
@@ -718,7 +718,7 @@ project
  ├── sort
  │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  │    ├── ordering: +2,+3
- │    └── scan
+ │    └── scan abcd
  │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  └── projections [outer=(1-3)]
       ├── variable: abcd.a [type=int, outer=(1)]
@@ -734,7 +734,7 @@ project
  ├── sort
  │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  │    ├── ordering: +2,+3
- │    └── scan
+ │    └── scan abcd
  │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  └── projections [outer=(1-3)]
       ├── variable: abcd.a [type=int, outer=(1)]
@@ -750,7 +750,7 @@ project
  ├── sort
  │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  │    ├── ordering: +1,+2,+3
- │    └── scan
+ │    └── scan abcd
  │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
  └── projections [outer=(1-3)]
       ├── variable: abcd.a [type=int, outer=(1)]
