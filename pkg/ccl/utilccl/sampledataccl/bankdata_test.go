@@ -34,7 +34,11 @@ func TestToBackup(t *testing.T) {
 	defer dirCleanupFn()
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: outerDir})
+	args := base.TestServerArgs{
+		ExternalIODir: outerDir,
+		UseDatabase:   "data",
+	}
+	s, db, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	const payloadBytes, ranges = 100, 10
@@ -57,7 +61,6 @@ func TestToBackup(t *testing.T) {
 					sqlDB := sqlutils.MakeSQLRunner(db)
 					sqlDB.Exec(t, `DROP DATABASE IF EXISTS data CASCADE`)
 					sqlDB.Exec(t, `CREATE DATABASE data`)
-					sqlDB.Exec(t, `USE data`)
 					sqlDB.Exec(t, `RESTORE data.* FROM $1`, `nodelocal:///`+dir)
 
 					var rowCount int

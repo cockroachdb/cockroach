@@ -33,19 +33,22 @@ func TestSetup(t *testing.T) {
 	}
 
 	tests := []struct {
-		meta      workload.Meta
-		flags     []string
-		batchSize int
+		meta        workload.Meta
+		flags       []string
+		batchSize   int
+		concurrency int
 	}{
 		{
-			meta:      get("roachmart"),
-			flags:     []string{"--users=10", "--orders=100"},
-			batchSize: 100,
+			meta:        get("roachmart"),
+			flags:       []string{"--users=10", "--orders=100"},
+			batchSize:   100,
+			concurrency: 4,
 		},
 	}
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	args := base.TestServerArgs{UseDatabase: "test"}
+	s, db, _ := serverutils.StartServer(t, args)
 	defer s.Stopper().Stop(ctx)
 
 	for _, test := range tests {
@@ -54,7 +57,6 @@ func TestSetup(t *testing.T) {
 			sqlDB := sqlutils.MakeSQLRunner(db)
 			sqlDB.Exec(t, `DROP DATABASE IF EXISTS test`)
 			sqlDB.Exec(t, `CREATE DATABASE test`)
-			sqlDB.Exec(t, `USE test`)
 
 			gen := test.meta.New()
 			if f, ok := gen.(workload.Flagser); ok {
@@ -63,13 +65,13 @@ func TestSetup(t *testing.T) {
 				}
 			}
 
-			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize); err != nil {
+			if _, err := workload.Setup(ctx, sqlDB.DB, gen, test.batchSize, test.concurrency); err != nil {
 				t.Fatalf("%+v", err)
 			}
 
 			for _, table := range gen.Tables() {
 				var c int
-				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM %s`, table.Name)).Scan(&c)
+				sqlDB.QueryRow(t, fmt.Sprintf(`SELECT COUNT(*) FROM "%s"`, table.Name)).Scan(&c)
 				if c != table.InitialRowCount {
 					t.Errorf(`%s: got %d rows expected %d`, table.Name, c, table.InitialRowCount)
 				}

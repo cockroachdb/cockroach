@@ -1101,6 +1101,7 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 			StoreSpecs: []base.StoreSpec{
 				{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{attr}}},
 			},
+			UseDatabase: "data",
 		}
 	}
 	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
@@ -1112,7 +1113,6 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 
 	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
 	sqlDB.Exec(t, `CREATE DATABASE data`)
-	sqlDB.Exec(t, `USE data`)
 
 	// Disabling store throttling vastly speeds up rebalancing.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.declined_reservation_timeout = '0s'`)
@@ -1241,7 +1241,6 @@ func TestRepartitioning(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/%s", test.old.name, test.new.name), func(t *testing.T) {
 			sqlDB.Exec(t, `DROP DATABASE IF EXISTS data`)
 			sqlDB.Exec(t, `CREATE DATABASE data`)
-			sqlDB.Exec(t, `USE data`)
 
 			{
 				if err := test.old.parse(); err != nil {
