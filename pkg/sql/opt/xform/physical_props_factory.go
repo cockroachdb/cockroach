@@ -111,6 +111,15 @@ func (f physicalPropsFactory) canProvideOrdering(ev ExprView, required opt.Order
 		}
 
 		return ordering.Provides(required)
+
+	case opt.LimitOp, opt.OffsetOp:
+		// Limit/Offset can provide the ordering that they in turn require of their
+		// input.
+		private := ev.Private()
+		if private == nil {
+			return false
+		}
+		return private.(*opt.Ordering).Provides(required)
 	}
 
 	return false
@@ -155,6 +164,18 @@ func (f physicalPropsFactory) constructChildProps(ev ExprView, nth int) opt.Phys
 		default:
 			childProps.Ordering = nil
 			changed = true
+		}
+	}
+
+	// Limit/Offset require the ordering in their private.
+	switch ev.Operator() {
+	case opt.LimitOp, opt.OffsetOp:
+		if nth == 0 {
+			private := ev.Private()
+			if private != nil {
+				childProps.Ordering = *private.(*opt.Ordering)
+				changed = true
+			}
 		}
 	}
 

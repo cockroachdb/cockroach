@@ -93,6 +93,15 @@ type SetOpColMap struct {
 	Out   ColList
 }
 
+// LimitOpDef defines the value of the Def private field for the Limit operator.
+// If Offset is 0, the operator returns the first Limit rows (with respect to
+// the desired ordering). Otherwise, the operator skips over the first Offset
+// rows and returns the following Limit rows.
+type LimitOpDef struct {
+	// Ordering is the required ordering on the input expression.
+	Ordering Ordering
+}
+
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic
 // tree comparison operator type.
 var ComparisonOpReverseMap = [...]tree.ComparisonOperator{

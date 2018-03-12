@@ -193,8 +193,8 @@ define Union {
 # opt.SetOpColMap for more details.
 [Relational]
 define Intersect {
-    Left  Expr
-    Right Expr
+    Left   Expr
+    Right  Expr
     ColMap SetOpColMap
 }
 
@@ -206,8 +206,8 @@ define Intersect {
 # for more details.
 [Relational]
 define Except {
-    Left  Expr
-    Right Expr
+    Left   Expr
+    Right  Expr
     ColMap SetOpColMap
 }
 
@@ -254,8 +254,8 @@ define UnionAll {
 # opt.SetOpColMap for more details.
 [Relational]
 define IntersectAll {
-    Left  Expr
-    Right Expr
+    Left   Expr
+    Right  Expr
     ColMap SetOpColMap
 }
 
@@ -279,7 +279,27 @@ define IntersectAll {
 # opt.SetOpColMap for more details.
 [Relational]
 define ExceptAll {
-    Left  Expr
-    Right Expr
+    Left   Expr
+    Right  Expr
     ColMap SetOpColMap
+}
+
+# Limit returns a limited subset of the results in the input relation.
+# The limit expression is a scalar value; the operator returns at most this many
+# rows. The private field is an *opt.Ordering which indicates the desired
+# row ordering (the first rows with respect to this ordering are returned).
+[Relational]
+define Limit {
+    Input    Expr
+    Limit    Expr
+    Ordering Ordering
+}
+
+# Offset filters out the first Offset rows of the input relation; used in
+# conjunction with Limit.
+[Relational]
+define Offset {
+    Input    Expr
+    Offset   Expr
+    Ordering Ordering
 }
