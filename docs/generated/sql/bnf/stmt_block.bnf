@@ -685,6 +685,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OID'
+	| 'OIDVECTOR'
 	| 'OPTION'
 	| 'OPTIONS'
 	| 'ORDINALITY'
@@ -1309,6 +1310,7 @@ const_typename ::=
 	| 'INET'
 	| 'BIGSERIAL'
 	| 'OID'
+	| 'OIDVECTOR'
 	| 'INT2VECTOR'
 	| 'identifier'
 

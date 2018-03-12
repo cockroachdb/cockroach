@@ -130,6 +130,9 @@ var (
 	RegProcedure = &TOid{Name: "REGPROCEDURE"}
 	// RegType is an immutable T instance.
 	RegType = &TOid{Name: "REGTYPE"}
+
+	// OidVector is an immutable T instance.
+	OidVector = &TVector{Name: "OIDVECTOR", ParamType: Oid}
 )
 
 var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "length for type bit must be at least 1")
