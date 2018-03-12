@@ -545,36 +545,25 @@ func (l *DockerCluster) RunInitCommand(ctx context.Context, nodeIdx int) {
 
 	log.Infof(ctx, "trying to initialize via %v", containerConfig.Cmd)
 	// This is called early in the bootstrap sequence, and the node may not have
-	// opened its ports yet. Retry appropriately.
-	//
-	// TODO(tschottdorf): production code wouldn't do it like this. Instead,
-	// you'd wait until the healthz endpoint indicates that the init command
-	// should be tried. Perhaps these subtleties should simply be folded into
-	// `./cockroach init` as users are likely to get this wrong.
-	//
-	// See #19791.
+	// opened its ports yet. Wait for the health endpoint to become available,
+	// because we only get one shot at running the init command. (Retrying the
+	// init command is dangerous [0].)
+	// [0]: https://github.com/cockroachdb/cockroach/pull/19753#issuecomment-341561452
 	maybePanic(retry.ForDuration(time.Minute, func() error {
-		err := l.OneShot(
-			ctx, defaultImage, types.ImagePullOptions{}, containerConfig, container.HostConfig{}, "init-command",
-		)
-
-		if err != nil {
-			// Run a health check in the hope that Init failed because a
-			// previously issued Init actually went through just fine.
-			url := l.URL(ctx, nodeIdx) + "/health"
-			resp, httpErr := HTTPClient.Get(url)
-			if httpErr != nil {
-				return errors.Wrap(err, httpErr.Error())
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				log.Warning(ctx, "init failed and server not healthy; retrying")
-				return err
-			}
+		url := l.URL(ctx, nodeIdx) + "/health"
+		resp, httpErr := HTTPClient.Get(url)
+		if httpErr != nil {
+			return httpErr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Warning(ctx, "server not healthy; retrying")
+			return errors.New("server not healthy")
 		}
 		return nil
 	}))
+	maybePanic(l.OneShot(ctx, defaultImage, types.ImagePullOptions{},
+		containerConfig, container.HostConfig{}, "init-command"))
 	log.Info(ctx, "cluster successfully initialized")
 }
 
