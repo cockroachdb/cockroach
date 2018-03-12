@@ -567,6 +567,65 @@ func TestShowQueries(t *testing.T) {
 	}
 }
 
+func TestShowSessions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var conn *gosql.DB
+
+	execKnobs := &sql.ExecutorTestingKnobs{}
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					SQLExecutor: execKnobs,
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn = tc.ServerConn(0)
+	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
+
+	const showSessions = "SELECT node_id, (now() - session_start)::FLOAT FROM [SHOW CLUSTER SESSIONS]"
+
+	rows, err := conn.Query(showSessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		count++
+
+		var nodeID int
+		var delta float64
+		if err := rows.Scan(&nodeID, &delta); err != nil {
+			t.Fatal(err)
+		}
+		if nodeID < 1 || nodeID > 2 {
+			t.Fatalf("invalid node ID: %d", nodeID)
+		}
+
+		// The delta measures how long ago or in the future (in seconds) the start
+		// time is. It must be "close to now", otherwise we have a problem with the
+		// time accounting.
+		if math.Abs(delta) > 10 {
+			t.Fatalf("start time too far in the past or the future: expected <10s, got %.3fs", delta)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if expectedCount := 1; count != expectedCount {
+		t.Fatalf("unexpected number of running sessions: %d, expected %d", count, expectedCount)
+	}
+}
+
 // TestShowJobs manually inserts a row into system.jobs and checks that the
 // encoded protobuf payload is properly decoded and visible in
 // crdb_internal.jobs.
