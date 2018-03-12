@@ -674,7 +674,7 @@ func Example_sql() {
 	// Output:
 	// sql -e show application_name
 	// application_name
-	// cockroach
+	// cockroach sql
 	// sql -e create database t; create table t.f (x int, y int); insert into t.f values (42, 69)
 	// INSERT 1
 	// sql -e select 3 -e select * from t.f

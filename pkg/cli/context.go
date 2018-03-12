@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -75,7 +74,7 @@ func initCLIDefaults() {
 	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.sqlConnURL = ""
-	cliCtx.sqlConnUser = security.RootUser
+	cliCtx.sqlConnUser = ""
 	cliCtx.sqlConnDBName = ""
 
 	sqlCtx.execStmts = nil

@@ -49,7 +49,7 @@ func runDump(cmd *cobra.Command, args []string) error {
 		return usageAndError(cmd)
 	}
 
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach dump")
 	if err != nil {
 		return err
 	}
