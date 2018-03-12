@@ -466,4 +466,16 @@ type Factory interface {
 	// of the ExceptAll with the output columns. See the comment above
 	// opt.SetOpColMap for more details.
 	ConstructExceptAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructLimit constructs an expression for the Limit operator.
+	// Limit returns a limited subset of the results in the input relation.
+	// The limit expression is a scalar value; the operator returns at most this many
+	// rows. The private field is an *opt.Ordering which indicates the desired
+	// row ordering (the first rows with respect to this ordering are returned).
+	ConstructLimit(input GroupID, limit GroupID, ordering PrivateID) GroupID
+
+	// ConstructOffset constructs an expression for the Offset operator.
+	// Offset filters out the first Offset rows of the input relation; used in
+	// conjunction with Limit.
+	ConstructOffset(input GroupID, offset GroupID, ordering PrivateID) GroupID
 }

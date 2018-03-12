@@ -111,6 +111,11 @@ func (f physicalPropsFactory) canProvideOrdering(ev ExprView, required opt.Order
 		}
 
 		return ordering.Provides(required)
+
+	case opt.LimitOp, opt.OffsetOp:
+		// Limit/Offset can provide the ordering that they in turn require of their
+		// input.
+		return ev.Private().(*opt.Ordering).Provides(required)
 	}
 
 	return false
@@ -132,34 +137,28 @@ func (f physicalPropsFactory) constructChildProps(ev ExprView, nth int) opt.Phys
 
 	parentProps := ev.Physical()
 
-	childProps := *parentProps
-	var changed bool
+	var childProps opt.PhysicalProps
 
 	// Presentation property is provided by all the relational operators, so
 	// don't add it to childProps.
-	if childProps.Presentation.Defined() {
-		childProps.Presentation = nil
-		changed = true
-	}
 
-	// Check for operators that might pass through the ordering property to
-	// input.
-	if childProps.Ordering.Defined() {
-		switch ev.Operator() {
-		case opt.SelectOp, opt.ProjectOp:
-			if nth == 0 {
-				break
-			}
-			fallthrough
+	// Ordering property.
+	switch ev.Operator() {
+	case opt.SelectOp, opt.ProjectOp:
+		if nth == 0 {
+			// Pass through the ordering.
+			childProps.Ordering = parentProps.Ordering
+		}
 
-		default:
-			childProps.Ordering = nil
-			changed = true
+	case opt.LimitOp, opt.OffsetOp:
+		// Limit/Offset require the ordering in their private.
+		if nth == 0 {
+			childProps.Ordering = *ev.Private().(*opt.Ordering)
 		}
 	}
 
 	// If properties haven't changed, no need to re-intern them.
-	if !changed {
+	if childProps.Equals(parentProps) {
 		return ev.required
 	}
 

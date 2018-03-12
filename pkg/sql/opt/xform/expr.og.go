@@ -92,6 +92,8 @@ var opLayoutTable = [...]opLayout{
 	opt.UnionAllOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.IntersectAllOp:    makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.ExceptAllOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.LimitOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.OffsetOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.SortOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 1 /*enforcer*/),
 }
 
@@ -182,6 +184,8 @@ var isScalarLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -272,6 +276,8 @@ var isConstValueLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -362,6 +368,8 @@ var isBooleanLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -452,6 +460,8 @@ var isComparisonLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -542,6 +552,8 @@ var isBinaryLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -632,6 +644,8 @@ var isUnaryLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -722,6 +736,8 @@ var isRelationalLookup = [...]bool{
 	true,  // UnionAllOp
 	true,  // IntersectAllOp
 	true,  // ExceptAllOp
+	true,  // LimitOp
+	true,  // OffsetOp
 	false, // SortOp
 }
 
@@ -812,6 +828,8 @@ var isJoinLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -902,6 +920,8 @@ var isJoinApplyLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	false, // SortOp
 }
 
@@ -992,6 +1012,8 @@ var isEnforcerLookup = [...]bool{
 	false, // UnionAllOp
 	false, // IntersectAllOp
 	false, // ExceptAllOp
+	false, // LimitOp
+	false, // OffsetOp
 	true,  // SortOp
 }
 
@@ -3357,4 +3379,68 @@ func (m *memoExpr) asExceptAll() *exceptAllExpr {
 		return nil
 	}
 	return (*exceptAllExpr)(m)
+}
+
+// limitExpr returns a limited subset of the results in the input relation.
+// The limit expression is a scalar value; the operator returns at most this many
+// rows. The private field is an *opt.Ordering which indicates the desired
+// row ordering (the first rows with respect to this ordering are returned).
+type limitExpr memoExpr
+
+func makeLimitExpr(input opt.GroupID, limit opt.GroupID, ordering opt.PrivateID) limitExpr {
+	return limitExpr{op: opt.LimitOp, state: exprState{uint32(input), uint32(limit), uint32(ordering)}}
+}
+
+func (e *limitExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *limitExpr) limit() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *limitExpr) ordering() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *limitExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLimit() *limitExpr {
+	if m.op != opt.LimitOp {
+		return nil
+	}
+	return (*limitExpr)(m)
+}
+
+// offsetExpr filters out the first Offset rows of the input relation; used in
+// conjunction with Limit.
+type offsetExpr memoExpr
+
+func makeOffsetExpr(input opt.GroupID, offset opt.GroupID, ordering opt.PrivateID) offsetExpr {
+	return offsetExpr{op: opt.OffsetOp, state: exprState{uint32(input), uint32(offset), uint32(ordering)}}
+}
+
+func (e *offsetExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *offsetExpr) offset() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *offsetExpr) ordering() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *offsetExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asOffset() *offsetExpr {
+	if m.op != opt.OffsetOp {
+		return nil
+	}
+	return (*offsetExpr)(m)
 }

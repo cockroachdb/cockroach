@@ -182,8 +182,11 @@ func (b *Builder) buildSelect(
 		out, outScope = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
 	}
 
+	if stmt.Limit != nil {
+		out, outScope = b.buildLimit(stmt.Limit, inScope, out, outScope)
+	}
+
 	// TODO(rytaft): Support FILTER expression.
-	// TODO(peter): stmt.Limit
 	return out, outScope
 }
 
@@ -192,7 +195,6 @@ func (b *Builder) buildSelect(
 // select clause in order to handle ORDER BY scoping rules. ORDER BY can sort
 // results using columns from the FROM/GROUP BY clause and/or from the
 // projection list.
-// TODO(rytaft): Add support for ORDER BY, DISTINCT and HAVING.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.

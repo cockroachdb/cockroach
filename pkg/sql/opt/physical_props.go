@@ -115,6 +115,11 @@ func (p *PhysicalProps) String() string {
 	return p.Fingerprint()
 }
 
+// Equals returns true if the two physical properties are identical.
+func (p *PhysicalProps) Equals(rhs *PhysicalProps) bool {
+	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(rhs.Ordering)
+}
+
 // Presentation specifies the naming, membership (including duplicates), and
 // order of result columns that are required of or provided by an operator.
 // While it cannot add unique columns, Presentation can rename, reorder,
@@ -128,15 +133,15 @@ func (p Presentation) Defined() bool {
 	return p != nil
 }
 
-// Provides returns true iff this presentation exactly matches the given
+// Equals returns true iff this presentation exactly matches the given
 // presentation.
-func (p Presentation) Provides(required Presentation) bool {
-	if len(p) != len(required) {
+func (p Presentation) Equals(rhs Presentation) bool {
+	if len(p) != len(rhs) {
 		return false
 	}
 
 	for i := 0; i < len(p); i++ {
-		if p[i] != required[i] {
+		if p[i] != rhs[i] {
 			return false
 		}
 	}
@@ -229,6 +234,20 @@ func (o Ordering) Provides(required Ordering) bool {
 
 	for i := range required {
 		if o[i] != required[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Equals returns true if the two orderings are identical.
+func (o Ordering) Equals(rhs Ordering) bool {
+	if len(o) != len(rhs) {
+		return false
+	}
+
+	for i := range o {
+		if o[i] != rhs[i] {
 			return false
 		}
 	}

@@ -365,6 +365,16 @@ const (
 	// opt.SetOpColMap for more details.
 	ExceptAllOp
 
+	// LimitOp returns a limited subset of the results in the input relation.
+	// The limit expression is a scalar value; the operator returns at most this many
+	// rows. The private field is an *opt.Ordering which indicates the desired
+	// row ordering (the first rows with respect to this ordering are returned).
+	LimitOp
+
+	// OffsetOp filters out the first Offset rows of the input relation; used in
+	// conjunction with Limit.
+	OffsetOp
+
 	// ------------------------------------------------------------
 	// Enforcer Operators
 	// ------------------------------------------------------------
@@ -380,9 +390,9 @@ const (
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-allsort"
+const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsort"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 93, 96, 98, 101, 103, 105, 107, 109, 111, 113, 115, 121, 125, 133, 139, 149, 159, 173, 182, 195, 206, 221, 223, 229, 237, 243, 248, 254, 258, 263, 267, 270, 279, 282, 285, 291, 298, 305, 314, 324, 338, 353, 364, 380, 384, 388, 392, 400, 408, 424, 428, 434, 440, 447, 457, 466, 476, 485, 494, 503, 519, 534, 550, 565, 580, 595, 603, 608, 617, 623, 632, 645, 655, 659}
+var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 93, 96, 98, 101, 103, 105, 107, 109, 111, 113, 115, 121, 125, 133, 139, 149, 159, 173, 182, 195, 206, 221, 223, 229, 237, 243, 248, 254, 258, 263, 267, 270, 279, 282, 285, 291, 298, 305, 314, 324, 338, 353, 364, 380, 384, 388, 392, 400, 408, 424, 428, 434, 440, 447, 457, 466, 476, 485, 494, 503, 519, 534, 550, 565, 580, 595, 603, 608, 617, 623, 632, 645, 655, 660, 666, 670}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -537,6 +547,8 @@ var RelationalOperators = [...]Operator{
 	UnionAllOp,
 	IntersectAllOp,
 	ExceptAllOp,
+	LimitOp,
+	OffsetOp,
 }
 
 var JoinOperators = [...]Operator{
