@@ -79,6 +79,11 @@ type Factory interface {
 	// by the input node.
 	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
 
+	// ConstructLimit returns a node that implements LIMIT and/or OFFSET on the
+	// results of the given node. If only an offset is desired, limit should be
+	// math.MaxInt64.
+	ConstructLimit(input Node, limit int64, offset int64) (Node, error)
+
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
 }
