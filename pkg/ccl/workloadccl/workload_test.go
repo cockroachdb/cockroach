@@ -33,14 +33,16 @@ func TestSetup(t *testing.T) {
 	}
 
 	tests := []struct {
-		meta      workload.Meta
-		flags     []string
-		batchSize int
+		meta        workload.Meta
+		flags       []string
+		batchSize   int
+		concurrency int
 	}{
 		{
-			meta:      get("roachmart"),
-			flags:     []string{"--users=10", "--orders=100"},
-			batchSize: 100,
+			meta:        get("roachmart"),
+			flags:       []string{"--users=10", "--orders=100"},
+			batchSize:   100,
+			concurrency: 4,
 		},
 	}
 
@@ -63,7 +65,7 @@ func TestSetup(t *testing.T) {
 				}
 			}
 
-			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize); err != nil {
+			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize, test.concurrency); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

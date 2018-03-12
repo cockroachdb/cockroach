@@ -42,13 +42,18 @@ func TestSetup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
-		rows      int
-		batchSize int
+		rows        int
+		batchSize   int
+		concurrency int
 	}{
-		{10, 1},
-		{10, 9},
-		{10, 10},
-		{10, 100},
+		{10, 1, 1},
+		{10, 9, 1},
+		{10, 10, 1},
+		{10, 100, 1},
+		{10, 1, 4},
+		{10, 9, 4},
+		{10, 10, 4},
+		{10, 100, 4},
 	}
 
 	ctx := context.Background()
@@ -62,7 +67,7 @@ func TestSetup(t *testing.T) {
 			sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
 
 			gen := bank.FromRows(test.rows)
-			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize); err != nil {
+			if _, err := workload.Setup(sqlDB.DB, gen, test.batchSize, test.concurrency); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

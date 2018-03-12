@@ -181,7 +181,11 @@ func runInitImpl(gen workload.Generator, initDB *gosql.DB, dbName string) error 
 	}
 
 	const batchSize = -1
-	_, err := workload.Setup(initDB, gen, batchSize)
+	// TODO(dan): Don't hardcode this. Similar to dbOverride, this should be
+	// hooked up to a flag directly once once more of run.go moves inside
+	// workload.
+	const concurrency = 16
+	_, err := workload.Setup(initDB, gen, batchSize, concurrency)
 	return err
 }
 

@@ -28,12 +28,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
 )
 
 // Generator represents one or more sql query loads and associated initial data.
@@ -214,11 +216,13 @@ func ApproxDatumSize(x interface{}) int64 {
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. The exact definition of this is deferred to the
 // ApproxDatumSize implementation.
-func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
+func Setup(db *gosql.DB, gen Generator, batchSize, concurrency int) (int64, error) {
 	if batchSize <= 0 {
 		batchSize = 1000
 	}
-	var insertStmtBuf bytes.Buffer
+	if concurrency < 1 {
+		concurrency = 1
+	}
 
 	tables := gen.Tables()
 	var hooks Hooks
@@ -226,7 +230,6 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 		hooks = h.Hooks()
 	}
 
-	var size int64
 	for _, table := range tables {
 		createStmt := fmt.Sprintf(`CREATE TABLE "%s" %s`, table.Name, table.Schema)
 		if _, err := db.Exec(createStmt); err != nil {
@@ -240,35 +243,53 @@ func Setup(db *gosql.DB, gen Generator, batchSize int) (int64, error) {
 		}
 	}
 
+	var size int64
 	for _, table := range tables {
-		for rowIdx := 0; rowIdx < table.InitialRowCount; {
-			insertStmtBuf.Reset()
-			fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
+		rowsPerWorker := table.InitialRowCount / concurrency
+		var g errgroup.Group
+		for i := 0; i < concurrency; i++ {
+			startIdx := i * rowsPerWorker
+			endIdx := startIdx + rowsPerWorker
+			if i == concurrency-1 {
+				// Account for any rounding error in rowsPerWorker.
+				endIdx = table.InitialRowCount
+			}
+			g.Go(func() error {
+				var insertStmtBuf bytes.Buffer
+				for rowIdx := startIdx; rowIdx < endIdx; {
+					insertStmtBuf.Reset()
+					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
 
-			var params []interface{}
-			for batchIdx := 0; batchIdx < batchSize && rowIdx < table.InitialRowCount; batchIdx++ {
-				if batchIdx != 0 {
-					insertStmtBuf.WriteString(`,`)
-				}
-				insertStmtBuf.WriteString(`(`)
-				row := table.InitialRowFn(rowIdx)
-				for i, datum := range row {
-					size += ApproxDatumSize(datum)
-					if i != 0 {
-						insertStmtBuf.WriteString(`,`)
+					var params []interface{}
+					for batchIdx := 0; batchIdx < batchSize && rowIdx < endIdx; batchIdx++ {
+						if batchIdx != 0 {
+							insertStmtBuf.WriteString(`,`)
+						}
+						insertStmtBuf.WriteString(`(`)
+						row := table.InitialRowFn(rowIdx)
+						for i, datum := range row {
+							atomic.AddInt64(&size, ApproxDatumSize(datum))
+							if i != 0 {
+								insertStmtBuf.WriteString(`,`)
+							}
+							fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
+						}
+						params = append(params, row...)
+						insertStmtBuf.WriteString(`)`)
+						rowIdx++
 					}
-					fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
+					if len(params) > 0 {
+						insertStmt := insertStmtBuf.String()
+						if _, err := db.Exec(insertStmt, params...); err != nil {
+							return errors.Wrapf(err, "failed insert into %s", table.Name)
+						}
+					}
 				}
-				params = append(params, row...)
-				insertStmtBuf.WriteString(`)`)
-				rowIdx++
-			}
-			if len(params) > 0 {
-				insertStmt := insertStmtBuf.String()
-				if _, err := db.Exec(insertStmt, params...); err != nil {
-					return 0, errors.Wrapf(err, "failed insert into %s", table.Name)
-				}
-			}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return 0, err
 		}
 	}
 	return size, nil
