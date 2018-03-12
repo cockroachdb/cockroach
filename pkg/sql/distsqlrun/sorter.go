@@ -147,11 +147,11 @@ func newSortAllProcessor(s *sorterBase) Processor {
 		limitedMon := mon.MakeMonitorInheritWithLimit(
 			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
 		)
-		limitedMon.Start(s.flowCtx.Ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+		limitedMon.Start(s.evalCtx.Ctx(), s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
 
 		rowContainerMon = &limitedMon
 	}
-	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
+	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.evalCtx, rowContainerMon)
 
 	return &sortAllProcessor{
 		sorterBase:      s,
