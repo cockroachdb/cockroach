@@ -15,6 +15,7 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -45,6 +46,11 @@ type tableReader struct {
 	// trailingMetadata contains producer metadata that is sent once the consumer
 	// status is not NeedMoreRows.
 	trailingMetadata []ProducerMetadata
+
+	sendRowNumMeta bool
+	sentLastMsg    bool
+	rowNumCnt      int32
+	id             string
 }
 
 var _ Processor = &tableReader{}
@@ -54,11 +60,13 @@ var _ RowSource = &tableReader{}
 func newTableReader(
 	flowCtx *FlowCtx, spec *TableReaderSpec, post *PostProcessSpec, output RowReceiver,
 ) (*tableReader, error) {
+	id := fmt.Sprintf("%d:%s", flowCtx.nodeID, uuid.MakeV4().String())
 	if flowCtx.nodeID == 0 {
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 	tr := &tableReader{
 		tableDesc: spec.Table,
+		id:        id,
 	}
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
@@ -164,6 +172,17 @@ func (tr *tableReader) producerMeta(err error) *ProducerMetadata {
 		}
 		tr.close()
 	}
+	if tr.flowCtx.testingKnobs.MetadataTestingEnabled && !tr.sentLastMsg {
+		meta := &ProducerMetadata{
+			RowNum: &RemoteProducerMetadata_RowNum{
+				RowNum:   tr.rowNumCnt,
+				ReaderId: tr.id,
+				LastMsg:  true,
+			},
+		}
+		tr.sentLastMsg = true
+		return meta
+	}
 	if len(tr.trailingMetadata) > 0 {
 		meta := &tr.trailingMetadata[0]
 		tr.trailingMetadata = tr.trailingMetadata[1:]
@@ -190,6 +209,18 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 
+	if tr.sendRowNumMeta {
+		tr.sendRowNumMeta = false
+		tr.rowNumCnt++
+		return nil, &ProducerMetadata{
+			RowNum: &RemoteProducerMetadata_RowNum{
+				RowNum:   tr.rowNumCnt,
+				ReaderId: tr.id,
+				LastMsg:  false,
+			},
+		}
+	}
+
 	if tr.closed || tr.consumerStatus != NeedMoreRows {
 		return nil, tr.producerMeta(nil /* err */)
 	}
@@ -206,6 +237,9 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		outRow, status, err := tr.out.ProcessRow(tr.ctx, row)
 		if outRow != nil {
+			if tr.flowCtx.testingKnobs.MetadataTestingEnabled {
+				tr.sendRowNumMeta = true
+			}
 			return outRow, nil
 		}
 		if outRow == nil && err == nil && status == NeedMoreRows {

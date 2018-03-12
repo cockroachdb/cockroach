@@ -16,10 +16,12 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/willf/bitset"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -272,6 +274,14 @@ type distSQLReceiver struct {
 	// A handler for clock signals arriving from remote nodes. This should update
 	// this node's clock.
 	updateClock func(observedTs hlc.Timestamp)
+
+	rowCounts map[string]rowNumCounter
+}
+
+type rowNumCounter struct {
+	expected, actual int32
+	seen             bitset.BitSet
+	err              error
 }
 
 // errWrap is a container for an error, for use with atomic.Value, which
@@ -342,6 +352,7 @@ func makeDistSQLReceiver(
 		txn:          txn,
 		updateClock:  updateClock,
 		stmtType:     stmtType,
+		rowCounts:    make(map[string]rowNumCounter),
 	}
 	// When the root transaction finishes (i.e. it is abandoned, aborted, or
 	// committed), ensure the flow is canceled so that we don't return results to
@@ -420,6 +431,28 @@ func (r *distSQLReceiver) Push(
 				r.resultWriter.SetError(errors.Errorf("error ingesting remote spans: %s", err))
 			}
 		}
+		if meta.RowNum != nil {
+			rowNum := meta.RowNum
+			rcnt, exists := r.rowCounts[rowNum.ReaderId]
+			if !exists {
+				rcnt.expected = -1
+			}
+			if rcnt.err != nil {
+				return r.status
+			}
+			if rowNum.LastMsg {
+				if rcnt.expected != -1 {
+					rcnt.err = errors.New("received more than one RowNum with LastMsg set")
+					r.rowCounts[rowNum.ReaderId] = rcnt
+					return r.status
+				}
+				rcnt.expected = rowNum.RowNum
+			} else {
+				rcnt.actual++
+				rcnt.seen.Set(uint(rowNum.RowNum - 1))
+			}
+			r.rowCounts[rowNum.ReaderId] = rcnt
+		}
 		return r.status
 	}
 	if r.resultWriter.Err() == nil && r.txnAbortedErr.Load() != nil {
@@ -479,6 +512,34 @@ func (r *distSQLReceiver) ProducerDone() {
 	}
 	if r.closed {
 		panic("double close")
+	}
+
+	overwriteResultError := func(err error) {
+		if r.resultWriter.Err() != nil {
+			log.Errorf(context.TODO(), "original query error: %s", r.resultWriter.Err())
+		}
+		r.OverwriteError(err)
+	}
+
+ReaderLoop:
+	for id, cnt := range r.rowCounts {
+		if cnt.err != nil {
+			overwriteResultError(cnt.err)
+			break ReaderLoop
+		}
+		if cnt.expected != cnt.actual {
+			overwriteResultError(fmt.Errorf(
+				"dropped metadata from reader %s: expected %d RowNum messages but got %d",
+				id, cnt.expected, cnt.actual))
+			break ReaderLoop
+		}
+		for i := 0; i < int(cnt.expected); i++ {
+			if !cnt.seen.Test(uint(i)) {
+				overwriteResultError(
+					fmt.Errorf("dropped metadata from reader %s: missing RowNum #%d", id, i+1))
+				break ReaderLoop
+			}
+		}
 	}
 	r.closed = true
 }

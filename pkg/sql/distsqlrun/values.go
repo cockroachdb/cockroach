@@ -15,9 +15,11 @@
 package distsqlrun
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // valuesProcessor is a processor that has no inputs and generates "pre-canned"
@@ -31,6 +33,11 @@ type valuesProcessor struct {
 
 	sd     StreamDecoder
 	rowBuf sqlbase.EncDatumRow
+
+	sendRowNumMeta bool
+	sentLastMsg    bool
+	rowNumCnt      int32
+	id             string
 }
 
 var _ Processor = &valuesProcessor{}
@@ -39,9 +46,11 @@ var _ RowSource = &valuesProcessor{}
 func newValuesProcessor(
 	flowCtx *FlowCtx, spec *ValuesCoreSpec, post *PostProcessSpec, output RowReceiver,
 ) (*valuesProcessor, error) {
+	id := fmt.Sprintf("%d:%s", flowCtx.nodeID, uuid.MakeV4().String())
 	v := &valuesProcessor{
 		columns: spec.Columns,
 		data:    spec.RawBytes,
+		id:      id,
 	}
 	types := make([]sqlbase.ColumnType, len(v.columns))
 	for i := range v.columns {
@@ -84,6 +93,16 @@ func (v *valuesProcessor) producerMeta(err error) *ProducerMetadata {
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		v.close()
 	}
+	if v.flowCtx.testingKnobs.MetadataTestingEnabled && meta == nil && !v.sentLastMsg {
+		meta = &ProducerMetadata{
+			RowNum: &RemoteProducerMetadata_RowNum{
+				RowNum:   v.rowNumCnt,
+				ReaderId: v.id,
+				LastMsg:  true,
+			},
+		}
+		v.sentLastMsg = true
+	}
 	return meta
 }
 
@@ -100,6 +119,17 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 
 		v.rowBuf = make(sqlbase.EncDatumRow, len(v.columns))
+	}
+	if v.sendRowNumMeta {
+		v.sendRowNumMeta = false
+		v.rowNumCnt++
+		return nil, &ProducerMetadata{
+			RowNum: &RemoteProducerMetadata_RowNum{
+				RowNum:   v.rowNumCnt,
+				ReaderId: v.id,
+				LastMsg:  false,
+			},
+		}
 	}
 	if v.closed {
 		return nil, v.producerMeta(nil /* err */)
@@ -140,6 +170,9 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				}
 			case DrainRequested:
 				continue
+			}
+			if v.flowCtx.testingKnobs.MetadataTestingEnabled {
+				v.sendRowNumMeta = true
 			}
 			return outRow, nil
 		}

@@ -501,6 +501,11 @@ type TestingKnobs struct {
 	// running flows to complete or give a grace period of minFlowDrainWait
 	// to incoming flows to register.
 	DrainFast bool
+
+	// MetadataTestingEnabled, if set, sends additional "RowNum" metadata through
+	// the flow graph to the gateway receiver, which checks whether or not it
+	// received every metadata message exactly once.
+	MetadataTestingEnabled bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

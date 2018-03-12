@@ -1014,6 +1014,12 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
+  name = "github.com/willf/bitset"
+  packages = ["."]
+  revision = "d860f346b89450988a379d7d705e83c58d1ea227"
+  version = "v1.1.3"
+
+[[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
   packages = [
@@ -1229,6 +1235,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8bda46b35139d318b4fda9ba890f573323a93a9343efc84052094710c1ba59ec"
+  inputs-digest = "272ca5229bbee82660e1dafd6487f5d9deea1fb45276728b22df26f5cca9015c"
   solver-name = "gps-cdcl"
   solver-version = 1

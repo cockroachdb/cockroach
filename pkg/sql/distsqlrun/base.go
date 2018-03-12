@@ -301,6 +301,10 @@ type ProducerMetadata struct {
 	// to be sent from leaf transactions to augment the root transaction,
 	// held by the flow's ultimate receiver.
 	TxnMeta *roachpb.TxnCoordMeta
+	// RowNum corresponds to a row produced by a "source" processor that takes no
+	// inputs. It is used in tests to verify that all metadata is forwarded
+	// exactly once to the receiver on the gateway node.
+	RowNum *RemoteProducerMetadata_RowNum
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to
