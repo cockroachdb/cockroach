@@ -38,7 +38,7 @@ func runGetUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return usageAndError(cmd)
 	}
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach user get")
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,7 @@ func runLsUsers(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		return usageAndError(cmd)
 	}
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach user ls")
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func runRmUser(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return usageAndError(cmd)
 	}
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach user rm")
 	if err != nil {
 		return err
 	}
@@ -137,7 +137,7 @@ func runSetUser(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	conn, err := getPasswordAndMakeSQLClient()
+	conn, err := getPasswordAndMakeSQLClient("cockroach user set")
 	if err != nil {
 		return err
 	}

@@ -461,38 +461,129 @@ func makeSQLConn(url string) *sqlConn {
 // getPasswordAndMakeSQLClient prompts for a password if running in secure mode
 // and no certificates have been supplied.
 // Attempting to use security.RootUser without valid certificates will return an error.
-func getPasswordAndMakeSQLClient() (*sqlConn, error) {
-	if len(cliCtx.sqlConnURL) != 0 {
-		return makeSQLConn(cliCtx.sqlConnURL), nil
-	}
-	var user *url.Userinfo
-	if !baseCfg.Insecure && !baseCfg.ClientHasValidCerts(cliCtx.sqlConnUser) {
-		if cliCtx.sqlConnUser == security.RootUser {
-			return nil, errors.Errorf("connections with user %s must use a client certificate", security.RootUser)
-		}
-
-		pwd, err := security.PromptForPassword()
-		if err != nil {
-			return nil, err
-		}
-
-		user = url.UserPassword(cliCtx.sqlConnUser, pwd)
-	} else {
-		user = url.User(cliCtx.sqlConnUser)
-	}
-	return makeSQLClient(user)
+func getPasswordAndMakeSQLClient(appName string) (*sqlConn, error) {
+	return makeSQLClient(appName)
 }
 
-func makeSQLClient(user *url.Userinfo) (*sqlConn, error) {
-	sqlURL := cliCtx.sqlConnURL
-	if len(sqlURL) == 0 {
-		u, err := sqlCtx.PGURL(user)
+// makeSQLClient connects to the database using the connection
+// settings set by the command-line flags. The value of --url, if any,
+// is used as a starting point, then the remaining command-line
+// arguments can override this. There are two exceptions:
+// - if the URL already specifies sslmode, then --insecure does not
+//   override this.
+// - the provided appName (by the caller) is not a command-line so
+//   it does not override if --url already specifies application_name.
+func makeSQLClient(appName string) (*sqlConn, error) {
+	var baseURL *url.URL
+
+	// Determine the starting point.
+	if cliCtx.sqlConnURL == "" {
+		// Default URL is the starting point.
+		baseURL = &url.URL{
+			Scheme: "postgresql",
+		}
+	} else {
+		// User-specified --url is the starting point.
+		var err error
+		baseURL, err = url.Parse(cliCtx.sqlConnURL)
 		if err != nil {
 			return nil, err
 		}
-		u.Path = cliCtx.sqlConnDBName
-		sqlURL = u.String()
 	}
+	options, err := url.ParseQuery(baseURL.RawQuery)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load the application name. It's not a command-line flag, so
+	// anything already in the URL should take priority.
+	if options.Get("application_name") == "" && appName != "" {
+		options.Set("application_name", appName)
+	}
+
+	// Load the current database.
+	if baseURL.Path != "" {
+		// We'll use that. Warn if there is something else specified.
+		if cliCtx.sqlConnDBName != "" {
+			log.Warningf(context.Background(), "--url already specifies database, ignoring --database")
+		}
+	} else {
+		// No database in URL. Use the one specified by --database or the default (no database).
+		baseURL.Path = cliCtx.sqlConnDBName
+	}
+
+	// Determine the server to use.
+	if baseURL.Host != "" && !strings.HasPrefix(baseURL.Host, ":") {
+		// We'll use that. Warn if there is something else specified.
+		if !strings.HasPrefix(cliCtx.Addr, ":") {
+			log.Warningf(context.Background(), "--url already specifies server, ignoring --host/--port")
+		}
+	} else {
+		// No value in URL, use value provided by --host/--port or default.
+		if !strings.HasPrefix(cliCtx.Addr, ":") {
+			baseURL.Host = cliCtx.Addr
+		} else {
+			baseURL.Host = serverCfg.Addr
+		}
+	}
+
+	// Determine which user to use in the connection.
+	var username string
+	if baseURL.User.Username() != "" {
+		// URL specifies user already. We'll use that. Warn if there is something else specified.
+		username = baseURL.User.Username()
+		if cliCtx.sqlConnUser != "" {
+			log.Warningf(context.Background(), "--url already specifies username, ignoring --user")
+		}
+	} else {
+		// No user in URL.
+		if cliCtx.sqlConnUser != "" {
+			// Command-line --user was used, use that to override.
+			username = cliCtx.sqlConnUser
+		} else {
+			// No user in URL or command line, use default.
+			username = security.RootUser
+		}
+		baseURL.User = url.User(username)
+	}
+
+	// Load the SSL settings. If sslmode is already specified in the
+	// URL, it won't be overwritten by LoadSecurityOptions.
+	securitySetByURL, err := cliCtx.LoadSecurityOptions(options, username)
+	if err != nil {
+		return nil, err
+	}
+	if securitySetByURL && cliCtx.Insecure {
+		// However if the user specifies --insecure and there was a sslmode
+		// already, we report the inconsistency.
+		log.Warningf(context.Background(), "--url already specifies SSL settings, ignoring --insecure")
+	}
+
+	// Ensure that the user doesn't try to connect root without certificates,
+	// and ask for a password if needed.
+	if (options.Get("sslmode") != "disable") && !baseCfg.ClientHasValidCerts(username) {
+		if username == security.RootUser {
+			return nil, errors.Errorf("connections with user %s must use a client certificate", username)
+		}
+
+		_, passwordSet := baseURL.User.Password()
+		if !passwordSet {
+			pwd, err := security.PromptForPassword()
+			if err != nil {
+				return nil, err
+			}
+			baseURL.User = url.UserPassword(username, pwd)
+		}
+	}
+
+	baseURL.RawQuery = options.Encode()
+
+	sqlURL := baseURL.String()
+
+	if log.V(2) {
+		log.Infof(context.Background(), "connecting with URL: %s", sqlURL)
+	}
+
 	return makeSQLConn(sqlURL), nil
 }
 
