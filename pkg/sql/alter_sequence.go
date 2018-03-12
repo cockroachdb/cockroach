@@ -44,7 +44,7 @@ func (p *planner) AlterSequence(ctx context.Context, n *tree.AlterSequence) (pla
 		return nil, err
 	}
 	if seqDesc == nil {
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	if err := p.CheckPrivilege(ctx, seqDesc, privilege.CREATE); err != nil {

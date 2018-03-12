@@ -46,7 +46,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 	if err != nil {
 		if n.IfExists {
 			// Noop.
-			return &zeroNode{}, nil
+			return newZeroNode(nil /* columns */), nil
 		}
 		// Index does not exist, but we want it to: error out.
 		return nil, err
@@ -70,7 +70,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 
 	if n.Index.Index == n.NewName {
 		// Noop.
-		return &zeroNode{}, nil
+		return newZeroNode(nil /* columns */), nil
 	}
 
 	if _, _, err := tableDesc.FindIndexByName(string(n.NewName)); err == nil {
@@ -98,5 +98,5 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 	//	return nil, err
 	// }
 	p.notifySchemaChange(tableDesc, sqlbase.InvalidMutationID)
-	return &zeroNode{}, nil
+	return newZeroNode(nil /* columns */), nil
 }
