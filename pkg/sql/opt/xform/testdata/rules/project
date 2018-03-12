@@ -259,14 +259,14 @@ project
 
 # Select nested in select.
 opt
-SELECT y FROM (SELECT * FROM a WHERE x = 5) a2 WHERE y::float = f
+SELECT y FROM (SELECT x, y, s, f+1.0 f FROM a WHERE x = 5) a2 WHERE y::float = f
 ----
 project
  ├── columns: y:2(int)
  ├── select
- │    ├── columns: a.y:2(int) a.f:3(float)
+ │    ├── columns: a.y:2(int) f:5(float)
  │    ├── project
- │    │    ├── columns: a.y:2(int) a.f:3(float)
+ │    │    ├── columns: a.y:2(int) f:5(float)
  │    │    ├── select
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.f:3(float)
  │    │    │    ├── scan
@@ -277,10 +277,12 @@ project
  │    │    │              └── const: 5 [type=int]
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: a.y [type=int, outer=(2)]
- │    │         └── variable: a.f [type=float, outer=(3)]
- │    └── filters [type=bool, outer=(2,3)]
- │         └── eq [type=bool, outer=(2,3)]
- │              ├── variable: a.f [type=float, outer=(3)]
+ │    │         └── plus [type=float, outer=(3)]
+ │    │              ├── variable: a.f [type=float, outer=(3)]
+ │    │              └── const: 1.0 [type=float]
+ │    └── filters [type=bool, outer=(2,5)]
+ │         └── eq [type=bool, outer=(2,5)]
+ │              ├── variable: f [type=float, outer=(5)]
  │              └── cast: float [type=float, outer=(2)]
  │                   └── variable: a.y [type=int, outer=(2)]
  └── projections [outer=(2)]
@@ -387,22 +389,30 @@ SELECT a.x+1, a.y/2, b.* FROM t.a INNER JOIN t.b ON a.x*a.x=b.x AND a.s||'o'='fo
 project
  ├── columns: column7:7(int) column8:8(decimal) x:5(int!null) z:6(int)
  ├── inner-join
- │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string) b.x:5(int!null) b.z:6(int)
- │    ├── scan
- │    │    └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null) b.z:6(int)
+ │    ├── project
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    └── filters [type=bool, outer=(4)]
+ │    │    │         └── eq [type=bool, outer=(4)]
+ │    │    │              ├── concat [type=string, outer=(4)]
+ │    │    │              │    ├── variable: a.s [type=string, outer=(4)]
+ │    │    │              │    └── const: 'o' [type=string]
+ │    │    │              └── const: 'foo' [type=string]
+ │    │    └── projections [outer=(1,2)]
+ │    │         ├── variable: a.x [type=int, outer=(1)]
+ │    │         └── variable: a.y [type=int, outer=(2)]
  │    ├── scan
  │    │    └── columns: b.x:5(int!null) b.z:6(int)
- │    └── filters [type=bool, outer=(1,4,5)]
- │         ├── eq [type=bool, outer=(1,5)]
- │         │    ├── variable: b.x [type=int, outer=(5)]
- │         │    └── mult [type=int, outer=(1)]
- │         │         ├── variable: a.x [type=int, outer=(1)]
- │         │         └── variable: a.x [type=int, outer=(1)]
- │         └── eq [type=bool, outer=(4)]
- │              ├── concat [type=string, outer=(4)]
- │              │    ├── variable: a.s [type=string, outer=(4)]
- │              │    └── const: 'o' [type=string]
- │              └── const: 'foo' [type=string]
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: b.x [type=int, outer=(5)]
+ │              └── mult [type=int, outer=(1)]
+ │                   ├── variable: a.x [type=int, outer=(1)]
+ │                   └── variable: a.x [type=int, outer=(1)]
  └── projections [outer=(1,2,5,6)]
       ├── plus [type=int, outer=(1)]
       │    ├── variable: a.x [type=int, outer=(1)]
@@ -480,7 +490,7 @@ project
 
 # Columns used by both projection and on condition, left join.
 opt
-SELECT b.*, a.x, a.y FROM t.b LEFT JOIN t.a ON b.x=a.x AND a.y<5
+SELECT b.*, a.x, a.y FROM t.b LEFT JOIN t.a ON b.x=a.x AND a.y<b.x
 ----
 left-join
  ├── columns: x:1(int!null) z:2(int) x:3(int) y:4(int)
@@ -492,9 +502,9 @@ left-join
       ├── eq [type=bool, outer=(1,3)]
       │    ├── variable: b.x [type=int, outer=(1)]
       │    └── variable: a.x [type=int, outer=(3)]
-      └── lt [type=bool, outer=(4)]
+      └── lt [type=bool, outer=(1,4)]
            ├── variable: a.y [type=int, outer=(4)]
-           └── const: 5 [type=int]
+           └── variable: b.x [type=int, outer=(1)]
 
 # Columns only used by on condition, right join
 opt
@@ -554,22 +564,30 @@ SELECT b.*, a.x+1, a.y/2 FROM t.b INNER JOIN t.a ON b.x=a.x*a.x AND a.s||'o'='fo
 project
  ├── columns: x:1(int!null) z:2(int) column7:7(int) column8:8(decimal)
  ├── inner-join
- │    ├── columns: b.x:1(int!null) b.z:2(int) a.x:3(int!null) a.y:4(int) a.s:6(string)
+ │    ├── columns: b.x:1(int!null) b.z:2(int) a.x:3(int!null) a.y:4(int)
  │    ├── scan
  │    │    └── columns: b.x:1(int!null) b.z:2(int)
- │    ├── scan
- │    │    └── columns: a.x:3(int!null) a.y:4(int) a.s:6(string)
- │    └── filters [type=bool, outer=(1,3,6)]
- │         ├── eq [type=bool, outer=(1,3)]
- │         │    ├── variable: b.x [type=int, outer=(1)]
- │         │    └── mult [type=int, outer=(3)]
- │         │         ├── variable: a.x [type=int, outer=(3)]
- │         │         └── variable: a.x [type=int, outer=(3)]
- │         └── eq [type=bool, outer=(6)]
- │              ├── concat [type=string, outer=(6)]
- │              │    ├── variable: a.s [type=string, outer=(6)]
- │              │    └── const: 'o' [type=string]
- │              └── const: 'foo' [type=string]
+ │    ├── project
+ │    │    ├── columns: a.x:3(int!null) a.y:4(int)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:3(int!null) a.y:4(int) a.s:6(string)
+ │    │    │    ├── scan
+ │    │    │    │    └── columns: a.x:3(int!null) a.y:4(int) a.s:6(string)
+ │    │    │    └── filters [type=bool, outer=(6)]
+ │    │    │         └── eq [type=bool, outer=(6)]
+ │    │    │              ├── concat [type=string, outer=(6)]
+ │    │    │              │    ├── variable: a.s [type=string, outer=(6)]
+ │    │    │              │    └── const: 'o' [type=string]
+ │    │    │              └── const: 'foo' [type=string]
+ │    │    └── projections [outer=(3,4)]
+ │    │         ├── variable: a.x [type=int, outer=(3)]
+ │    │         └── variable: a.y [type=int, outer=(4)]
+ │    └── filters [type=bool, outer=(1,3)]
+ │         └── eq [type=bool, outer=(1,3)]
+ │              ├── variable: b.x [type=int, outer=(1)]
+ │              └── mult [type=int, outer=(3)]
+ │                   ├── variable: a.x [type=int, outer=(3)]
+ │                   └── variable: a.x [type=int, outer=(3)]
  └── projections [outer=(1-4)]
       ├── variable: b.x [type=int, outer=(1)]
       ├── variable: b.z [type=int, outer=(2)]
@@ -855,28 +873,26 @@ SELECT a.x, b.z FROM a INNER JOIN b ON a.x=b.x WHERE a.y < 5
 ----
 project
  ├── columns: x:1(int!null) z:6(int)
- ├── select
- │    ├── columns: a.x:1(int!null) a.y:2(int) b.z:6(int)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) b.x:5(int!null) b.z:6(int)
  │    ├── project
- │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.z:6(int)
- │    │    ├── inner-join
- │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:5(int!null) b.z:6(int)
+ │    │    ├── columns: a.x:1(int!null)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
  │    │    │    ├── scan
  │    │    │    │    └── columns: a.x:1(int!null) a.y:2(int)
- │    │    │    ├── scan
- │    │    │    │    └── columns: b.x:5(int!null) b.z:6(int)
- │    │    │    └── filters [type=bool, outer=(1,5)]
- │    │    │         └── eq [type=bool, outer=(1,5)]
- │    │    │              ├── variable: a.x [type=int, outer=(1)]
- │    │    │              └── variable: b.x [type=int, outer=(5)]
- │    │    └── projections [outer=(1,2,6)]
- │    │         ├── variable: a.x [type=int, outer=(1)]
- │    │         ├── variable: a.y [type=int, outer=(2)]
- │    │         └── variable: b.z [type=int, outer=(6)]
- │    └── filters [type=bool, outer=(2)]
- │         └── lt [type=bool, outer=(2)]
- │              ├── variable: a.y [type=int, outer=(2)]
- │              └── const: 5 [type=int]
+ │    │    │    └── filters [type=bool, outer=(2)]
+ │    │    │         └── lt [type=bool, outer=(2)]
+ │    │    │              ├── variable: a.y [type=int, outer=(2)]
+ │    │    │              └── const: 5 [type=int]
+ │    │    └── projections [outer=(1)]
+ │    │         └── variable: a.x [type=int, outer=(1)]
+ │    ├── scan
+ │    │    └── columns: b.x:5(int!null) b.z:6(int)
+ │    └── filters [type=bool, outer=(1,5)]
+ │         └── eq [type=bool, outer=(1,5)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(5)]
  └── projections [outer=(1,6)]
       ├── variable: a.x [type=int, outer=(1)]
       └── variable: b.z [type=int, outer=(6)]
