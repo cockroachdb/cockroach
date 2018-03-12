@@ -75,6 +75,10 @@ type Factory interface {
 	// nodes must have the same number of columns.
 	ConstructSetOp(typ tree.UnionType, all bool, left, right Node) (Node, error)
 
+	// ConstructSort returns a node that performs a resorting of the rows produced
+	// by the input node.
+	ConstructSort(input Node, ordering sqlbase.ColumnOrdering) (Node, error)
+
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
 }

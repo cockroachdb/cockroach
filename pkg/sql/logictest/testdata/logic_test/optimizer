@@ -18,8 +18,12 @@ query II
 3  30
 
 # Select
-query error pq: building execution for non-relational operator sort
-SELECT * FROM test.t ORDER BY t.k+1
+query II
+SELECT * FROM test.t ORDER BY 1-t.k
+----
+3  30
+2  20
+1  10
 
 # SelectClause
 query II

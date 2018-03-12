@@ -52,8 +52,9 @@ func (b *Builder) buildOrderBy(
 	// ORDER BY PRIMARY KEY syntax.
 
 	for i := range orderBy {
-		p := b.buildOrdering(orderBy[i], orderByProjections, inScope, projectionsScope, orderByScope)
-		orderByProjections = append(orderByProjections, p...)
+		orderByProjections = b.buildOrdering(
+			orderBy[i], orderByProjections, inScope, projectionsScope, orderByScope,
+		)
 	}
 
 	out, outScope = b.buildOrderByProject(
@@ -63,6 +64,11 @@ func (b *Builder) buildOrderBy(
 
 }
 
+// buildOrdering sets up the projection(s) of a single ORDER BY argument.
+// Typically this is a single column, with the exception of *.
+//
+// The projections are appended to the projections slice (and the resulting
+// slice is returned). Corresponding columns are added to the orderByScope.
 func (b *Builder) buildOrdering(
 	order *tree.Order, projections []opt.GroupID, inScope, projectionsScope, orderByScope *scope,
 ) []opt.GroupID {
@@ -124,7 +130,7 @@ func (b *Builder) buildOrdering(
 	}
 
 	// Build each of the ORDER BY columns. As a side effect, this will append new
-	// columns to the end of outScope.cols.
+	// columns to the end of orderByScope.cols.
 	start := len(orderByScope.cols)
 	for _, e := range exprs {
 		// Ensure we can order on the given column.
