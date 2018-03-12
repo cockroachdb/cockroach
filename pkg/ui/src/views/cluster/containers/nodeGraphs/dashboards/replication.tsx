@@ -90,8 +90,8 @@ export default function (props: GraphDashboardProps) {
     <LineGraph title="Snapshots" sources={storeSources}>
       <Axis label="snapshots">
         <Metric name="cr.store.range.snapshots.generated" title="Generated" nonNegativeRate />
-        <Metric name="cr.store.range.snapshots.normal-applied" title="Normal-applied" nonNegativeRate />
-        <Metric name="cr.store.range.snapshots.preemptive-applied" title="Preemptive-applied" nonNegativeRate />
+        <Metric name="cr.store.range.snapshots.normal-applied" title="Applied (Raft-initiated)" nonNegativeRate />
+        <Metric name="cr.store.range.snapshots.preemptive-applied" title="Applied (Preemptive)" nonNegativeRate />
         <Metric name="cr.store.replicas.reserved" title="Reserved" nonNegativeRate />
       </Axis>
     </LineGraph>,
