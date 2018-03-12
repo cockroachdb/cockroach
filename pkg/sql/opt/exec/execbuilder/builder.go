@@ -42,7 +42,7 @@ func (b *Builder) Build() (exec.Node, error) {
 }
 
 func (b *Builder) build(ev xform.ExprView) (exec.Node, error) {
-	if !ev.IsRelational() {
+	if !ev.IsRelational() && !ev.IsEnforcer() {
 		return nil, errors.Errorf("building execution for non-relational operator %s", ev.Operator())
 	}
 	plan, err := b.buildRelational(ev)

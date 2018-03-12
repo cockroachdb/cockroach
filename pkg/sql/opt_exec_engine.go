@@ -347,3 +347,17 @@ func (ee *execEngine) ConstructSetOp(
 ) (exec.Node, error) {
 	return ee.planner.newUnionNode(typ, all, left.(planNode), right.(planNode))
 }
+
+// ConstructSort is part of the exec.Factory interface.
+func (ee *execEngine) ConstructSort(
+	input exec.Node, ordering sqlbase.ColumnOrdering,
+) (exec.Node, error) {
+	plan := input.(planNode)
+	inputColumns := planColumns(plan)
+	return &sortNode{
+		plan:     plan,
+		columns:  inputColumns,
+		ordering: ordering,
+		needSort: true,
+	}, nil
+}
