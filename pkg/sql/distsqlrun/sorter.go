@@ -132,37 +132,37 @@ var _ RowSource = &sortAllProcessor{}
 
 func newSortAllProcessor(s *sorterBase) Processor {
 	var rows memRowContainer
-	rowContainerMon := s.flowCtx.EvalCtx.Mon
 	useTempStorage := settingUseTempStorageSorts.Get(&s.flowCtx.Settings.SV) ||
 		s.flowCtx.testingKnobs.MemoryLimitBytes > 0
-	if useTempStorage {
-		// We will use the sortAllProcessor in this case and potentially fall
-		// back to disk.
-		// Limit the memory use by creating a child monitor with a hard limit.
-		// The processor will overflow to disk if this limit is not enough.
-		limit := s.flowCtx.testingKnobs.MemoryLimitBytes
-		if limit <= 0 {
-			limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
-		}
-		limitedMon := mon.MakeMonitorInheritWithLimit(
-			"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
-		)
-		limitedMon.Start(s.flowCtx.Ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
-
-		rowContainerMon = &limitedMon
-	}
-	rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), rowContainerMon)
 
 	return &sortAllProcessor{
-		sorterBase:      s,
-		rows:            &rows,
-		rowContainerMon: rowContainerMon,
-		useTempStorage:  useTempStorage,
+		sorterBase:     s,
+		rows:           &rows,
+		useTempStorage: useTempStorage,
 	}
 }
 
 func (s *sortAllProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	if s.maybeStart("sortAllProcessor", "sortAllProcessor") {
+		s.rowContainerMon = s.flowCtx.EvalCtx.Mon
+		if s.useTempStorage {
+			// We will use the sortAllProcessor in this case and potentially fall
+			// back to disk.
+			// Limit the memory use by creating a child monitor with a hard limit.
+			// The processor will overflow to disk if this limit is not enough.
+			limit := s.flowCtx.testingKnobs.MemoryLimitBytes
+			if limit <= 0 {
+				limit = settingWorkMemBytes.Get(&s.flowCtx.Settings.SV)
+			}
+			limitedMon := mon.MakeMonitorInheritWithLimit(
+				"sortall-limited", limit, s.flowCtx.EvalCtx.Mon,
+			)
+			limitedMon.Start(s.flowCtx.Ctx, s.flowCtx.EvalCtx.Mon, mon.BoundAccount{})
+
+			s.rowContainerMon = &limitedMon
+		}
+		s.rows.initWithMon(s.ordering, s.input.OutputTypes(), s.flowCtx.NewEvalCtx(), s.rowContainerMon)
+
 		if err := s.fill(); err != nil {
 			return nil, s.producerMeta(err)
 		}
