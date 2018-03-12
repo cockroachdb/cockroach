@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -448,6 +449,7 @@ func (s *Server) ServeConn(
 		appStats:         s.sqlStats.getStatsForApplication(args.ApplicationName),
 		planner:          planner{execCfg: s.cfg},
 	}
+	ex.phaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.tables = TableCollection{
 		leaseMgr:          s.cfg.LeaseManager,
 		databaseCache:     s.dbCache.getDatabaseCache(),
