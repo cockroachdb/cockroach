@@ -666,6 +666,9 @@ type StoreConfig struct {
 type StoreTestingKnobs struct {
 	EvalKnobs batcheval.TestingKnobs
 
+	// TestingRequestFilter is called before evaluating each command.
+	TestingRequestFilter storagebase.ReplicaRequestFilter
+
 	// TestingProposalFilter is called before proposing each command.
 	TestingProposalFilter storagebase.ReplicaProposalFilter
 
