@@ -202,3 +202,74 @@ limit
  │              ├── const: 2 [type=int]
  │              └── const: 2 [type=int]
  └── const: 1 [type=int]
+
+build
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3(int)
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: column1:3(int)
+ │    ├── ordering: -3
+ │    └── union-all
+ │         ├── columns: column1:3(int)
+ │         ├── left columns: column1:1(int)
+ │         ├── right columns: column1:2(int)
+ │         ├── values
+ │         │    ├── columns: column1:1(int)
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 2 [type=int]
+ │         │    └── tuple [type=tuple{int}]
+ │         │         └── const: 2 [type=int]
+ │         └── values
+ │              ├── columns: column1:2(int)
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 1 [type=int]
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 3 [type=int]
+ │              └── tuple [type=tuple{int}]
+ │                   └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+build
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3(int)
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: column1:3(int)
+ │    ├── ordering: -3
+ │    └── union-all
+ │         ├── columns: column1:3(int)
+ │         ├── left columns: column1:1(int)
+ │         ├── right columns: column1:2(int)
+ │         ├── values
+ │         │    ├── columns: column1:1(int)
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 2 [type=int]
+ │         │    └── tuple [type=tuple{int}]
+ │         │         └── const: 2 [type=int]
+ │         └── values
+ │              ├── columns: column1:2(int)
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 1 [type=int]
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 3 [type=int]
+ │              └── tuple [type=tuple{int}]
+ │                   └── const: 1 [type=int]
+ └── const: 2 [type=int]

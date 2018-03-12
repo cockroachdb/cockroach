@@ -144,6 +144,7 @@ func (b *Builder) buildSelect(
 ) (out opt.GroupID, outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
+	limit := stmt.Limit
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
@@ -153,6 +154,7 @@ func (b *Builder) buildSelect(
 				panic(errorf("multiple ORDER BY clauses not allowed"))
 			}
 			orderBy = stmt.OrderBy
+			limit = stmt.Limit
 		}
 	}
 
@@ -182,8 +184,8 @@ func (b *Builder) buildSelect(
 		out, outScope = b.buildOrderBy(orderBy, out, projections, outScope, projectionsScope)
 	}
 
-	if stmt.Limit != nil {
-		out, outScope = b.buildLimit(stmt.Limit, inScope, out, outScope)
+	if limit != nil {
+		out, outScope = b.buildLimit(limit, inScope, out, outScope)
 	}
 
 	// TODO(rytaft): Support FILTER expression.
