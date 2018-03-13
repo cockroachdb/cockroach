@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"flag"
 	"io"
 	"path/filepath"
@@ -45,9 +46,29 @@ func TestOptgen(t *testing.T) {
 
 				gen := optgen{useGoFmt: true, maxErrors: 2, stdErr: &buf}
 
+				gen.globResolver = func(pattern string) ([]string, error) {
+					switch pattern {
+					case "test.opt":
+						return []string{"test.opt"}, nil
+					case "all":
+						return []string{"test.opt", "test2.opt"}, nil
+					case "not-found.opt":
+						return []string{"notfound.opt"}, nil
+					default:
+						return nil, errors.New("invalid source")
+					}
+				}
+
 				// Resolve input file to the data-driven input text.
-				gen.resolver = func(name string) (io.Reader, error) {
-					return strings.NewReader(d.Input), nil
+				gen.fileResolver = func(name string) (io.Reader, error) {
+					switch name {
+					case "test.opt":
+						return strings.NewReader(d.Input), nil
+					case "test2.opt":
+						return strings.NewReader(""), nil
+					default:
+						return nil, errors.New("invalid filename")
+					}
 				}
 
 				args := make([]string, len(d.CmdArgs))

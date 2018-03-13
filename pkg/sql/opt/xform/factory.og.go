@@ -6,6 +6,1274 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
+// ConstructScan constructs an expression for the Scan operator.
+// Scan returns a result set containing every row in the specified table. The
+// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+// well as the subset of columns to project from it. Rows and columns are not
+// expected to have any particular ordering unless a physical property requires
+// it.
+func (_f *factory) ConstructScan(
+	def opt.PrivateID,
+) opt.GroupID {
+	_scanExpr := makeScanExpr(def)
+	_group := _f.mem.lookupGroupByFingerprint(_scanExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_scanExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_scanExpr)))
+}
+
+// ConstructValues constructs an expression for the Values operator.
+// Values returns a manufactured result set containing a constant number of rows.
+// specified by the Rows list field. Each row must contain the same set of
+// columns in the same order.
+//
+// The Rows field contains a list of Tuples, one for each row. Each tuple has
+// the same length (same with that of Cols).
+//
+// The Cols field contains the set of column indices returned by each row
+// as a *ColList. It is legal for Cols to be empty.
+func (_f *factory) ConstructValues(
+	rows opt.ListID,
+	cols opt.PrivateID,
+) opt.GroupID {
+	_valuesExpr := makeValuesExpr(rows, cols)
+	_group := _f.mem.lookupGroupByFingerprint(_valuesExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_valuesExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_valuesExpr)))
+}
+
+// ConstructSelect constructs an expression for the Select operator.
+// Select filters rows from its input result set, based on the boolean filter
+// predicate expression. Rows which do not match the filter are discarded. While
+// the Filter operand can be any boolean expression, normalization rules will
+// typically convert it to a Filters operator in order to make conjunction list
+// matching easier.
+func (_f *factory) ConstructSelect(
+	input opt.GroupID,
+	filter opt.GroupID,
+) opt.GroupID {
+	_selectExpr := makeSelectExpr(input, filter)
+	_group := _f.mem.lookupGroupByFingerprint(_selectExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_selectExpr))
+	}
+
+	// [EnsureSelectFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(filter).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureSelectFilters]
+	{
+		_norm := _f.mem.lookupNormExpr(filter)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EliminateSelect]
+	{
+		_true := _f.mem.lookupNormExpr(filter).asTrue()
+		if _true != nil {
+			_f.reportOptimization()
+			_group = input
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [MergeSelects]
+	{
+		_select := _f.mem.lookupNormExpr(input).asSelect()
+		if _select != nil {
+			input := _select.input()
+			innerFilter := _select.filter()
+			_f.reportOptimization()
+			_group = _f.ConstructSelect(input, _f.concatFilters(innerFilter, filter))
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownSelectJoinLeft]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.LeftJoinOp || _norm.op == opt.LeftJoinApplyOp {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			_filters := _f.mem.lookupNormExpr(filter).asFilters()
+			if _filters != nil {
+				list := _filters.conditions()
+				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+					condition := _item
+					if !_f.isCorrelated(condition, right) {
+						_f.reportOptimization()
+						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right)))), opt.DynamicID(right), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+						return _group
+					}
+				}
+			}
+		}
+	}
+
+	// [PushDownSelectJoinRight]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.RightJoinOp || _norm.op == opt.RightJoinApplyOp {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			_filters := _f.mem.lookupNormExpr(filter).asFilters()
+			if _filters != nil {
+				list := _filters.conditions()
+				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+					condition := _item
+					if !_f.isCorrelated(condition, left) {
+						_f.reportOptimization()
+						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left)))), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+						return _group
+					}
+				}
+			}
+		}
+	}
+
+	// [MergeSelectInnerJoin]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			_f.reportOptimization()
+			_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(right), opt.DynamicID(_f.concatFilters(on, filter))})
+			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownSelectGroupBy]
+	{
+		_groupBy := _f.mem.lookupNormExpr(input).asGroupBy()
+		if _groupBy != nil {
+			input := _groupBy.input()
+			aggregations := _groupBy.aggregations()
+			groupingCols := _groupBy.groupingCols()
+			if !_f.emptyGroupingCols(groupingCols) {
+				_filters := _f.mem.lookupNormExpr(filter).asFilters()
+				if _filters != nil {
+					list := _filters.conditions()
+					for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+						condition := _item
+						if !_f.isCorrelated(condition, aggregations) {
+							_f.reportOptimization()
+							_group = _f.ConstructSelect(_f.ConstructGroupBy(_f.ConstructSelect(input, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, aggregations))), aggregations, groupingCols), _f.ConstructFilters(_f.extractCorrelatedConditions(list, aggregations)))
+							_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
+							return _group
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_selectExpr)))
+}
+
+// ConstructProject constructs an expression for the Project operator.
+// Project modifies the set of columns returned by the input result set. Columns
+// can be removed, reordered, or renamed. In addition, new columns can be
+// synthesized. Projections is a scalar Projections list operator that contains
+// the list of expressions that describe the output columns. The Cols field of
+// the Projections operator provides the indexes of each of the output columns.
+func (_f *factory) ConstructProject(
+	input opt.GroupID,
+	projections opt.GroupID,
+) opt.GroupID {
+	_projectExpr := makeProjectExpr(input, projections)
+	_group := _f.mem.lookupGroupByFingerprint(_projectExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_projectExpr))
+	}
+
+	// [EliminateProject]
+	{
+		if _f.hasSameCols(input, projections) {
+			_f.reportOptimization()
+			_group = input
+			_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FilterUnusedProjectCols]
+	{
+		_project := _f.mem.lookupNormExpr(input).asProject()
+		if _project != nil {
+			innerInput := _project.input()
+			innerProjections := _project.projections()
+			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructProject(innerInput, _f.filterUnusedColumns(innerProjections, _f.neededCols(projections))), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedScanCols]
+	{
+		_scan := _f.mem.lookupNormExpr(input).asScan()
+		if _scan != nil {
+			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedSelectCols]
+	{
+		_select := _f.mem.lookupNormExpr(input).asSelect()
+		if _select != nil {
+			innerInput := _select.input()
+			filter := _select.filter()
+			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructSelect(_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)), filter), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedJoinLeftCols]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.isJoin() {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), opt.DynamicID(right), opt.DynamicID(on)}), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedJoinRightCols]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.isJoin() {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.filterUnusedColumns(right, _f.neededCols2(projections, on))), opt.DynamicID(on)}), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedAggCols]
+	{
+		_groupBy := _f.mem.lookupNormExpr(input).asGroupBy()
+		if _groupBy != nil {
+			innerInput := _groupBy.input()
+			aggregations := _groupBy.aggregations()
+			groupingCols := _groupBy.groupingCols()
+			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructGroupBy(innerInput, _f.filterUnusedColumns(aggregations, _f.neededCols(projections)), groupingCols), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedValueCols]
+	{
+		_values := _f.mem.lookupNormExpr(input).asValues()
+		if _values != nil {
+			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_projectExpr)))
+}
+
+// ConstructInnerJoin constructs an expression for the InnerJoin operator.
+// InnerJoin creates a result set that combines columns from its left and right
+// inputs, based upon its "on" join predicate. Rows which do not match the
+// predicate are filtered. While expressions in the predicate can refer to
+// columns projected by either the left or right inputs, the inputs are not
+// allowed to refer to the other's projected columns.
+func (_f *factory) ConstructInnerJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_innerJoinExpr := makeInnerJoinExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_innerJoinExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
+}
+
+// ConstructLeftJoin constructs an expression for the LeftJoin operator.
+func (_f *factory) ConstructLeftJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_leftJoinExpr := makeLeftJoinExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_leftJoinExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructLeftJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr)))
+}
+
+// ConstructRightJoin constructs an expression for the RightJoin operator.
+func (_f *factory) ConstructRightJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_rightJoinExpr := makeRightJoinExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_rightJoinExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructRightJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr)))
+}
+
+// ConstructFullJoin constructs an expression for the FullJoin operator.
+func (_f *factory) ConstructFullJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_fullJoinExpr := makeFullJoinExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_fullJoinExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr)))
+}
+
+// ConstructSemiJoin constructs an expression for the SemiJoin operator.
+func (_f *factory) ConstructSemiJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_semiJoinExpr := makeSemiJoinExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_semiJoinExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr)))
+}
+
+// ConstructAntiJoin constructs an expression for the AntiJoin operator.
+func (_f *factory) ConstructAntiJoin(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_antiJoinExpr := makeAntiJoinExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_antiJoinExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr)))
+}
+
+// ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
+// InnerJoinApply has the same join semantics as InnerJoin. However, unlike
+// InnerJoin, it allows the right input to refer to columns projected by the
+// left input.
+func (_f *factory) ConstructInnerJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_innerJoinApplyExpr := makeInnerJoinApplyExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_innerJoinApplyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructInnerJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr)))
+}
+
+// ConstructLeftJoinApply constructs an expression for the LeftJoinApply operator.
+func (_f *factory) ConstructLeftJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_leftJoinApplyExpr := makeLeftJoinApplyExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_leftJoinApplyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownJoinRight]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, left) {
+					_f.reportOptimization()
+					_group = _f.ConstructLeftJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
+					_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr)))
+}
+
+// ConstructRightJoinApply constructs an expression for the RightJoinApply operator.
+func (_f *factory) ConstructRightJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_rightJoinApplyExpr := makeRightJoinApplyExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_rightJoinApplyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [PushDownJoinLeft]
+	{
+		_filters := _f.mem.lookupNormExpr(on).asFilters()
+		if _filters != nil {
+			list := _filters.conditions()
+			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
+				condition := _item
+				if !_f.isCorrelated(condition, right) {
+					_f.reportOptimization()
+					_group = _f.ConstructRightJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
+					_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
+					return _group
+				}
+			}
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr)))
+}
+
+// ConstructFullJoinApply constructs an expression for the FullJoinApply operator.
+func (_f *factory) ConstructFullJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_fullJoinApplyExpr := makeFullJoinApplyExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_fullJoinApplyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr)))
+}
+
+// ConstructSemiJoinApply constructs an expression for the SemiJoinApply operator.
+func (_f *factory) ConstructSemiJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_semiJoinApplyExpr := makeSemiJoinApplyExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_semiJoinApplyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr)))
+}
+
+// ConstructAntiJoinApply constructs an expression for the AntiJoinApply operator.
+func (_f *factory) ConstructAntiJoinApply(
+	left opt.GroupID,
+	right opt.GroupID,
+	on opt.GroupID,
+) opt.GroupID {
+	_antiJoinApplyExpr := makeAntiJoinApplyExpr(left, right, on)
+	_group := _f.mem.lookupGroupByFingerprint(_antiJoinApplyExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr))
+	}
+
+	// [EnsureJoinFiltersAnd]
+	{
+		_and := _f.mem.lookupNormExpr(on).asAnd()
+		if _and != nil {
+			conditions := _and.conditions()
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(conditions))
+			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [EnsureJoinFilters]
+	{
+		filter := on
+		_norm := _f.mem.lookupNormExpr(on)
+		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
+			_f.reportOptimization()
+			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
+			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr)))
+}
+
+// ConstructGroupBy constructs an expression for the GroupBy operator.
+// GroupBy is an operator that is used for performing aggregations (for queries
+// with aggregate functions, HAVING clauses and/or group by expressions). It
+// groups results that are equal on the grouping columns and computes
+// aggregations as described by Aggregations (which is always an Aggregations
+// operator). The arguments of the aggregations are columns from the input.
+func (_f *factory) ConstructGroupBy(
+	input opt.GroupID,
+	aggregations opt.GroupID,
+	groupingCols opt.PrivateID,
+) opt.GroupID {
+	_groupByExpr := makeGroupByExpr(input, aggregations, groupingCols)
+	_group := _f.mem.lookupGroupByFingerprint(_groupByExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_groupByExpr))
+	}
+
+	// [FilterUnusedGroupByCols]
+	{
+		if _f.hasUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)) {
+			_f.reportOptimization()
+			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)), aggregations, groupingCols)
+			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_groupByExpr)))
+}
+
+// ConstructUnion constructs an expression for the Union operator.
+// Union is an operator used to combine the Left and Right input relations into
+// a single set containing rows from both inputs. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Union with the output columns. See the comment above opt.SetOpColMap
+// for more details.
+func (_f *factory) ConstructUnion(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_unionExpr := makeUnionExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_unionExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_unionExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionExpr)))
+}
+
+// ConstructIntersect constructs an expression for the Intersect operator.
+// Intersect is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that are also present in the Right relation. Duplicate rows are
+// discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Intersect with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructIntersect(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_intersectExpr := makeIntersectExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_intersectExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_intersectExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_intersectExpr)))
+}
+
+// ConstructExcept constructs an expression for the Except operator.
+// Except is an operator used to perform a set difference between the Left and
+// Right input relations. The result consists only of rows in the Left relation
+// that are not present in the Right relation. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Except with the output columns. See the comment above opt.SetOpColMap
+// for more details.
+func (_f *factory) ConstructExcept(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_exceptExpr := makeExceptExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_exceptExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptExpr)))
+}
+
+// ConstructUnionAll constructs an expression for the UnionAll operator.
+// UnionAll is an operator used to combine the Left and Right input relations
+// into a single set containing rows from both inputs. Duplicate rows are
+// not discarded. For example:
+//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       2    ->    1
+//     2       3          1
+//                        2
+//                        2
+//                        3
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the UnionAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructUnionAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_unionAllExpr := makeUnionAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_unionAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_unionAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionAllExpr)))
+}
+
+// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+// IntersectAll is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that have a corresponding row in the Right relation. Duplicate rows
+// are not discarded. This effectively creates a one-to-one mapping between the
+// Left and Right rows. For example:
+//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       1    ->    1
+//     1       2          2
+//     2       2          2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the IntersectAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructIntersectAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_intersectAllExpr := makeIntersectAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_intersectAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_intersectAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_intersectAllExpr)))
+}
+
+// ConstructExceptAll constructs an expression for the ExceptAll operator.
+// ExceptAll is an operator used to perform a set difference between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that do not have a corresponding row in the Right relation.
+// Duplicate rows are not discarded. This effectively creates a one-to-one
+// mapping between the Left and Right rows. For example:
+//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1    ->    1
+//     1       1          4
+//     1       2
+//     2       2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the ExceptAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+func (_f *factory) ConstructExceptAll(
+	left opt.GroupID,
+	right opt.GroupID,
+	colMap opt.PrivateID,
+) opt.GroupID {
+	_exceptAllExpr := makeExceptAllExpr(left, right, colMap)
+	_group := _f.mem.lookupGroupByFingerprint(_exceptAllExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr)))
+}
+
+// ConstructLimit constructs an expression for the Limit operator.
+// Limit returns a limited subset of the results in the input relation.
+// The limit expression is a scalar value; the operator returns at most this many
+// rows. The private field is an *opt.Ordering which indicates the desired
+// row ordering (the first rows with respect to this ordering are returned).
+func (_f *factory) ConstructLimit(
+	input opt.GroupID,
+	limit opt.GroupID,
+	ordering opt.PrivateID,
+) opt.GroupID {
+	_limitExpr := makeLimitExpr(input, limit, ordering)
+	_group := _f.mem.lookupGroupByFingerprint(_limitExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_limitExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_limitExpr)))
+}
+
+// ConstructOffset constructs an expression for the Offset operator.
+// Offset filters out the first Offset rows of the input relation; used in
+// conjunction with Limit.
+func (_f *factory) ConstructOffset(
+	input opt.GroupID,
+	offset opt.GroupID,
+	ordering opt.PrivateID,
+) opt.GroupID {
+	_offsetExpr := makeOffsetExpr(input, offset, ordering)
+	_group := _f.mem.lookupGroupByFingerprint(_offsetExpr.fingerprint())
+	if _group != 0 {
+		return _group
+	}
+
+	if !_f.allowOptimizations() {
+		return _f.mem.memoizeNormExpr(memoExpr(_offsetExpr))
+	}
+
+	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_offsetExpr)))
+}
+
 // ConstructSubquery constructs an expression for the Subquery operator.
 func (_f *factory) ConstructSubquery(
 	input opt.GroupID,
@@ -506,32 +1774,6 @@ func (_f *factory) ConstructEq(
 		return _f.mem.memoizeNormExpr(memoExpr(_eqExpr))
 	}
 
-	// [CommuteVar]
-	{
-		_variable := _f.mem.lookupNormExpr(left).asVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
-			if _variable2 != nil {
-				_f.reportOptimization()
-				_group = _f.ConstructEq(right, left)
-				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [CommuteConst]
-	{
-		if _f.onlyConstants(left) {
-			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
-				_group = _f.ConstructEq(right, left)
-				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
 	// [NormalizeCmpPlusConst]
 	{
 		_plus := _f.mem.lookupNormExpr(left).asPlus()
@@ -630,6 +1872,32 @@ func (_f *factory) ConstructEq(
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 			return _group
+		}
+	}
+
+	// [CommuteVar]
+	{
+		_variable := _f.mem.lookupNormExpr(left).asVariable()
+		if _variable == nil {
+			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
+			if _variable2 != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructEq(right, left)
+				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [CommuteConst]
+	{
+		if _f.onlyConstants(left) {
+			if !_f.onlyConstants(right) {
+				_f.reportOptimization()
+				_group = _f.ConstructEq(right, left)
+				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
+				return _group
+			}
 		}
 	}
 
@@ -1167,6 +2435,28 @@ func (_f *factory) ConstructNe(
 		return _f.mem.memoizeNormExpr(memoExpr(_neExpr))
 	}
 
+	// [FoldNullComparisonLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullComparisonRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.ConstructNull(_f.boolType())
+			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
 	// [CommuteVar]
 	{
 		_variable := _f.mem.lookupNormExpr(left).asVariable()
@@ -1190,28 +2480,6 @@ func (_f *factory) ConstructNe(
 				_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 				return _group
 			}
-		}
-	}
-
-	// [FoldNullComparisonLeft]
-	{
-		_null := _f.mem.lookupNormExpr(left).asNull()
-		if _null != nil {
-			_f.reportOptimization()
-			_group = _f.ConstructNull(_f.boolType())
-			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [FoldNullComparisonRight]
-	{
-		_null := _f.mem.lookupNormExpr(right).asNull()
-		if _null != nil {
-			_f.reportOptimization()
-			_group = _f.ConstructNull(_f.boolType())
-			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
-			return _group
 		}
 	}
 
@@ -2111,58 +3379,6 @@ func (_f *factory) ConstructPlus(
 		return _f.mem.memoizeNormExpr(memoExpr(_plusExpr))
 	}
 
-	// [CommuteVar]
-	{
-		_variable := _f.mem.lookupNormExpr(left).asVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
-			if _variable2 != nil {
-				_f.reportOptimization()
-				_group = _f.ConstructPlus(right, left)
-				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [CommuteConst]
-	{
-		if _f.onlyConstants(left) {
-			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
-				_group = _f.ConstructPlus(right, left)
-				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FoldNullBinaryLeft]
-	{
-		_null := _f.mem.lookupNormExpr(left).asNull()
-		if _null != nil {
-			if !_f.allowNullArgs(opt.PlusOp, left, right) {
-				_f.reportOptimization()
-				_group = _f.foldNullBinary(opt.PlusOp, left, right)
-				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FoldNullBinaryRight]
-	{
-		_null := _f.mem.lookupNormExpr(right).asNull()
-		if _null != nil {
-			if !_f.allowNullArgs(opt.PlusOp, left, right) {
-				_f.reportOptimization()
-				_group = _f.foldNullBinary(opt.PlusOp, left, right)
-				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
 	// [FoldPlusZero]
 	{
 		_const := _f.mem.lookupNormExpr(right).asConst()
@@ -2189,6 +3405,58 @@ func (_f *factory) ConstructPlus(
 		}
 	}
 
+	// [CommuteVar]
+	{
+		_variable := _f.mem.lookupNormExpr(left).asVariable()
+		if _variable == nil {
+			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
+			if _variable2 != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructPlus(right, left)
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [CommuteConst]
+	{
+		if _f.onlyConstants(left) {
+			if !_f.onlyConstants(right) {
+				_f.reportOptimization()
+				_group = _f.ConstructPlus(right, left)
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.PlusOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.PlusOp, left, right)
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.PlusOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.PlusOp, left, right)
+				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_plusExpr)))
 }
 
@@ -2205,6 +3473,19 @@ func (_f *factory) ConstructMinus(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_minusExpr))
+	}
+
+	// [FoldMinusZero]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isZero(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	// [FoldNullBinaryLeft]
@@ -2227,19 +3508,6 @@ func (_f *factory) ConstructMinus(
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
 				_f.reportOptimization()
 				_group = _f.foldNullBinary(opt.MinusOp, left, right)
-				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FoldMinusZero]
-	{
-		_const := _f.mem.lookupNormExpr(right).asConst()
-		if _const != nil {
-			if _f.isZero(right) {
-				_f.reportOptimization()
-				_group = left
 				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
 				return _group
 			}
@@ -2262,58 +3530,6 @@ func (_f *factory) ConstructMult(
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_multExpr))
-	}
-
-	// [CommuteVar]
-	{
-		_variable := _f.mem.lookupNormExpr(left).asVariable()
-		if _variable == nil {
-			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
-			if _variable2 != nil {
-				_f.reportOptimization()
-				_group = _f.ConstructMult(right, left)
-				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [CommuteConst]
-	{
-		if _f.onlyConstants(left) {
-			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
-				_group = _f.ConstructMult(right, left)
-				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FoldNullBinaryLeft]
-	{
-		_null := _f.mem.lookupNormExpr(left).asNull()
-		if _null != nil {
-			if !_f.allowNullArgs(opt.MultOp, left, right) {
-				_f.reportOptimization()
-				_group = _f.foldNullBinary(opt.MultOp, left, right)
-				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FoldNullBinaryRight]
-	{
-		_null := _f.mem.lookupNormExpr(right).asNull()
-		if _null != nil {
-			if !_f.allowNullArgs(opt.MultOp, left, right) {
-				_f.reportOptimization()
-				_group = _f.foldNullBinary(opt.MultOp, left, right)
-				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
-				return _group
-			}
-		}
 	}
 
 	// [FoldMultOne]
@@ -2342,6 +3558,58 @@ func (_f *factory) ConstructMult(
 		}
 	}
 
+	// [CommuteVar]
+	{
+		_variable := _f.mem.lookupNormExpr(left).asVariable()
+		if _variable == nil {
+			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
+			if _variable2 != nil {
+				_f.reportOptimization()
+				_group = _f.ConstructMult(right, left)
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [CommuteConst]
+	{
+		if _f.onlyConstants(left) {
+			if !_f.onlyConstants(right) {
+				_f.reportOptimization()
+				_group = _f.ConstructMult(right, left)
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryLeft]
+	{
+		_null := _f.mem.lookupNormExpr(left).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.MultOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.MultOp, left, right)
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FoldNullBinaryRight]
+	{
+		_null := _f.mem.lookupNormExpr(right).asNull()
+		if _null != nil {
+			if !_f.allowNullArgs(opt.MultOp, left, right) {
+				_f.reportOptimization()
+				_group = _f.foldNullBinary(opt.MultOp, left, right)
+				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_multExpr)))
 }
 
@@ -2360,6 +3628,19 @@ func (_f *factory) ConstructDiv(
 		return _f.mem.memoizeNormExpr(memoExpr(_divExpr))
 	}
 
+	// [FoldDivOne]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isOne(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	// [FoldNullBinaryLeft]
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
@@ -2386,19 +3667,55 @@ func (_f *factory) ConstructDiv(
 		}
 	}
 
-	// [FoldDivOne]
+<<<<<<< HEAD
+	// [FilterUnusedLimitCols]
 	{
-		_const := _f.mem.lookupNormExpr(right).asConst()
-		if _const != nil {
-			if _f.isOne(right) {
+		_limit := _f.mem.lookupNormExpr(input).asLimit()
+		if _limit != nil {
+			input := _limit.input()
+			limit := _limit.limit()
+			ordering := _limit.ordering()
+			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
 				_f.reportOptimization()
-				_group = left
-				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
+				_group = _f.ConstructProject(_f.ConstructLimit(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
 			}
 		}
 	}
 
+	// [FilterUnusedOffsetCols]
+	{
+		_offset := _f.mem.lookupNormExpr(input).asOffset()
+		if _offset != nil {
+			input := _offset.input()
+			offset := _offset.offset()
+			ordering := _offset.ordering()
+			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructOffset(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedJoinLeftCols]
+	{
+		_norm := _f.mem.lookupNormExpr(input)
+		if _norm.isJoin() {
+			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
+			left := _e.ChildGroup(0)
+			right := _e.ChildGroup(1)
+			on := _e.ChildGroup(2)
+			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), opt.DynamicID(right), opt.DynamicID(on)}), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+=======
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_divExpr)))
 }
 
@@ -2411,10 +3728,24 @@ func (_f *factory) ConstructFloorDiv(
 	_group := _f.mem.lookupGroupByFingerprint(_floorDivExpr.fingerprint())
 	if _group != 0 {
 		return _group
+>>>>>>> opt: Allow OptGen to accept Glob patterns
 	}
 
 	if !_f.allowOptimizations() {
 		return _f.mem.memoizeNormExpr(memoExpr(_floorDivExpr))
+	}
+
+	// [FoldDivOne]
+	{
+		_const := _f.mem.lookupNormExpr(right).asConst()
+		if _const != nil {
+			if _f.isOne(right) {
+				_f.reportOptimization()
+				_group = left
+				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
+				return _group
+			}
+		}
 	}
 
 	// [FoldNullBinaryLeft]
@@ -2437,19 +3768,6 @@ func (_f *factory) ConstructFloorDiv(
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
 				_f.reportOptimization()
 				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
-				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FoldDivOne]
-	{
-		_const := _f.mem.lookupNormExpr(right).asConst()
-		if _const != nil {
-			if _f.isOne(right) {
-				_f.reportOptimization()
-				_group = left
 				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
 				return _group
 			}
@@ -2885,17 +4203,6 @@ func (_f *factory) ConstructUnaryMinus(
 		return _f.mem.memoizeNormExpr(memoExpr(_unaryMinusExpr))
 	}
 
-	// [FoldNullUnary]
-	{
-		_null := _f.mem.lookupNormExpr(input).asNull()
-		if _null != nil {
-			_f.reportOptimization()
-			_group = _f.foldNullUnary(opt.UnaryMinusOp, input)
-			_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
 	// [InvertMinus]
 	{
 		_minus := _f.mem.lookupNormExpr(input).asMinus()
@@ -2918,6 +4225,17 @@ func (_f *factory) ConstructUnaryMinus(
 			input := _unaryMinus.input()
 			_f.reportOptimization()
 			_group = input
+			_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
+			return _group
+		}
+	}
+
+	// [FoldNullUnary]
+	{
+		_null := _f.mem.lookupNormExpr(input).asNull()
+		if _null != nil {
+			_f.reportOptimization()
+			_group = _f.foldNullUnary(opt.UnaryMinusOp, input)
 			_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
 			return _group
 		}
@@ -3085,12 +4403,19 @@ func (_f *factory) ConstructCoalesce(
 
 	// [EliminateCoalesce]
 	{
+<<<<<<< HEAD
+		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
+			_f.reportOptimization()
+			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)), aggregations, groupingCols)
+			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
+=======
 		if args.Length == 1 {
 			_item := _f.mem.lookupList(args)[0]
 			item := _item
 			_f.reportOptimization()
 			_group = item
 			_f.mem.addAltFingerprint(_coalesceExpr.fingerprint(), _group)
+>>>>>>> opt: Allow OptGen to accept Glob patterns
 			return _group
 		}
 	}
@@ -3131,1314 +4456,139 @@ func (_f *factory) ConstructUnsupportedExpr(
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unsupportedExprExpr)))
 }
 
-// ConstructScan constructs an expression for the Scan operator.
-// Scan returns a result set containing every row in the specified table. The
-// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
-// well as the subset of columns to project from it. Rows and columns are not
-// expected to have any particular ordering unless a physical property requires
-// it.
-func (_f *factory) ConstructScan(
-	def opt.PrivateID,
-) opt.GroupID {
-	_scanExpr := makeScanExpr(def)
-	_group := _f.mem.lookupGroupByFingerprint(_scanExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_scanExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_scanExpr)))
-}
-
-// ConstructValues constructs an expression for the Values operator.
-// Values returns a manufactured result set containing a constant number of rows.
-// specified by the Rows list field. Each row must contain the same set of
-// columns in the same order.
-//
-// The Rows field contains a list of Tuples, one for each row. Each tuple has
-// the same length (same with that of Cols).
-//
-// The Cols field contains the set of column indices returned by each row
-// as a *ColList. It is legal for Cols to be empty.
-func (_f *factory) ConstructValues(
-	rows opt.ListID,
-	cols opt.PrivateID,
-) opt.GroupID {
-	_valuesExpr := makeValuesExpr(rows, cols)
-	_group := _f.mem.lookupGroupByFingerprint(_valuesExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_valuesExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_valuesExpr)))
-}
-
-// ConstructSelect constructs an expression for the Select operator.
-// Select filters rows from its input result set, based on the boolean filter
-// predicate expression. Rows which do not match the filter are discarded. While
-// the Filter operand can be any boolean expression, normalization rules will
-// typically convert it to a Filters operator in order to make conjunction list
-// matching easier.
-func (_f *factory) ConstructSelect(
-	input opt.GroupID,
-	filter opt.GroupID,
-) opt.GroupID {
-	_selectExpr := makeSelectExpr(input, filter)
-	_group := _f.mem.lookupGroupByFingerprint(_selectExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_selectExpr))
-	}
-
-	// [EnsureSelectFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(filter).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructSelect(input, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureSelectFilters]
-	{
-		_norm := _f.mem.lookupNormExpr(filter)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructSelect(input, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EliminateSelect]
-	{
-		_true := _f.mem.lookupNormExpr(filter).asTrue()
-		if _true != nil {
-			_f.reportOptimization()
-			_group = input
-			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [MergeSelects]
-	{
-		_select := _f.mem.lookupNormExpr(input).asSelect()
-		if _select != nil {
-			input := _select.input()
-			innerFilter := _select.filter()
-			_f.reportOptimization()
-			_group = _f.ConstructSelect(input, _f.concatFilters(innerFilter, filter))
-			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownSelectJoinLeft]
-	{
-		_norm := _f.mem.lookupNormExpr(input)
-		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.LeftJoinOp || _norm.op == opt.LeftJoinApplyOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
-			_filters := _f.mem.lookupNormExpr(filter).asFilters()
-			if _filters != nil {
-				list := _filters.conditions()
-				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-					condition := _item
-					if !_f.isCorrelated(condition, right) {
-						_f.reportOptimization()
-						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right)))), opt.DynamicID(right), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
-						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-						return _group
-					}
-				}
-			}
-		}
-	}
-
-	// [PushDownSelectJoinRight]
-	{
-		_norm := _f.mem.lookupNormExpr(input)
-		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.RightJoinOp || _norm.op == opt.RightJoinApplyOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
-			_filters := _f.mem.lookupNormExpr(filter).asFilters()
-			if _filters != nil {
-				list := _filters.conditions()
-				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-					condition := _item
-					if !_f.isCorrelated(condition, left) {
-						_f.reportOptimization()
-						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left)))), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
-						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-						return _group
-					}
-				}
-			}
-		}
-	}
-
-	// [MergeSelectInnerJoin]
-	{
-		_norm := _f.mem.lookupNormExpr(input)
-		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
-			_f.reportOptimization()
-			_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(right), opt.DynamicID(_f.concatFilters(on, filter))})
-			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownSelectGroupBy]
-	{
-		_groupBy := _f.mem.lookupNormExpr(input).asGroupBy()
-		if _groupBy != nil {
-			input := _groupBy.input()
-			aggregations := _groupBy.aggregations()
-			groupingCols := _groupBy.groupingCols()
-			if !_f.emptyGroupingCols(groupingCols) {
-				_filters := _f.mem.lookupNormExpr(filter).asFilters()
-				if _filters != nil {
-					list := _filters.conditions()
-					for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-						condition := _item
-						if !_f.isCorrelated(condition, aggregations) {
-							_f.reportOptimization()
-							_group = _f.ConstructSelect(_f.ConstructGroupBy(_f.ConstructSelect(input, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, aggregations))), aggregations, groupingCols), _f.ConstructFilters(_f.extractCorrelatedConditions(list, aggregations)))
-							_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
-							return _group
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_selectExpr)))
-}
-
-// ConstructProject constructs an expression for the Project operator.
-// Project modifies the set of columns returned by the input result set. Columns
-// can be removed, reordered, or renamed. In addition, new columns can be
-// synthesized. Projections is a scalar Projections list operator that contains
-// the list of expressions that describe the output columns. The Cols field of
-// the Projections operator provides the indexes of each of the output columns.
-func (_f *factory) ConstructProject(
-	input opt.GroupID,
-	projections opt.GroupID,
-) opt.GroupID {
-	_projectExpr := makeProjectExpr(input, projections)
-	_group := _f.mem.lookupGroupByFingerprint(_projectExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_projectExpr))
-	}
-
-	// [EliminateProject]
-	{
-		if _f.hasSameCols(input, projections) {
-			_f.reportOptimization()
-			_group = input
-			_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [FilterUnusedProjectCols]
-	{
-		_project := _f.mem.lookupNormExpr(input).asProject()
-		if _project != nil {
-			innerInput := _project.input()
-			innerProjections := _project.projections()
-			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructProject(innerInput, _f.filterUnusedColumns(innerProjections, _f.neededCols(projections))), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedScanCols]
-	{
-		_scan := _f.mem.lookupNormExpr(input).asScan()
-		if _scan != nil {
-			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedSelectCols]
-	{
-		_select := _f.mem.lookupNormExpr(input).asSelect()
-		if _select != nil {
-			innerInput := _select.input()
-			filter := _select.filter()
-			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructSelect(_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)), filter), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedLimitCols]
-	{
-		_limit := _f.mem.lookupNormExpr(input).asLimit()
-		if _limit != nil {
-			input := _limit.input()
-			limit := _limit.limit()
-			ordering := _limit.ordering()
-			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructLimit(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedOffsetCols]
-	{
-		_offset := _f.mem.lookupNormExpr(input).asOffset()
-		if _offset != nil {
-			input := _offset.input()
-			offset := _offset.offset()
-			ordering := _offset.ordering()
-			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructOffset(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedJoinLeftCols]
-	{
-		_norm := _f.mem.lookupNormExpr(input)
-		if _norm.isJoin() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
-			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), opt.DynamicID(right), opt.DynamicID(on)}), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedJoinRightCols]
-	{
-		_norm := _f.mem.lookupNormExpr(input)
-		if _norm.isJoin() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
-			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.filterUnusedColumns(right, _f.neededCols2(projections, on))), opt.DynamicID(on)}), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedAggCols]
-	{
-		_groupBy := _f.mem.lookupNormExpr(input).asGroupBy()
-		if _groupBy != nil {
-			innerInput := _groupBy.input()
-			aggregations := _groupBy.aggregations()
-			groupingCols := _groupBy.groupingCols()
-			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructGroupBy(innerInput, _f.filterUnusedColumns(aggregations, _f.neededCols(projections)), groupingCols), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedValueCols]
-	{
-		_values := _f.mem.lookupNormExpr(input).asValues()
-		if _values != nil {
-			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_projectExpr)))
-}
-
-// ConstructInnerJoin constructs an expression for the InnerJoin operator.
-// InnerJoin creates a result set that combines columns from its left and right
-// inputs, based upon its "on" join predicate. Rows which do not match the
-// predicate are filtered. While expressions in the predicate can refer to
-// columns projected by either the left or right inputs, the inputs are not
-// allowed to refer to the other's projected columns.
-func (_f *factory) ConstructInnerJoin(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_innerJoinExpr := makeInnerJoinExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_innerJoinExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownJoinLeft]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
-					_group = _f.ConstructInnerJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
-					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	// [PushDownJoinRight]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
-					_group = _f.ConstructInnerJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
-					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinExpr)))
-}
-
-// ConstructLeftJoin constructs an expression for the LeftJoin operator.
-func (_f *factory) ConstructLeftJoin(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_leftJoinExpr := makeLeftJoinExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_leftJoinExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownJoinRight]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
-					_group = _f.ConstructLeftJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
-					_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinExpr)))
-}
-
-// ConstructRightJoin constructs an expression for the RightJoin operator.
-func (_f *factory) ConstructRightJoin(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_rightJoinExpr := makeRightJoinExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_rightJoinExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownJoinLeft]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
-					_group = _f.ConstructRightJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
-					_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinExpr)))
-}
-
-// ConstructFullJoin constructs an expression for the FullJoin operator.
-func (_f *factory) ConstructFullJoin(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_fullJoinExpr := makeFullJoinExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_fullJoinExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinExpr)))
-}
-
-// ConstructSemiJoin constructs an expression for the SemiJoin operator.
-func (_f *factory) ConstructSemiJoin(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_semiJoinExpr := makeSemiJoinExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_semiJoinExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinExpr)))
-}
-
-// ConstructAntiJoin constructs an expression for the AntiJoin operator.
-func (_f *factory) ConstructAntiJoin(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_antiJoinExpr := makeAntiJoinExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_antiJoinExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinExpr)))
-}
-
-// ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
-// InnerJoinApply has the same join semantics as InnerJoin. However, unlike
-// InnerJoin, it allows the right input to refer to columns projected by the
-// left input.
-func (_f *factory) ConstructInnerJoinApply(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_innerJoinApplyExpr := makeInnerJoinApplyExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_innerJoinApplyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownJoinLeft]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
-					_group = _f.ConstructInnerJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
-					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	// [PushDownJoinRight]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
-					_group = _f.ConstructInnerJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
-					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_innerJoinApplyExpr)))
-}
-
-// ConstructLeftJoinApply constructs an expression for the LeftJoinApply operator.
-func (_f *factory) ConstructLeftJoinApply(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_leftJoinApplyExpr := makeLeftJoinApplyExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_leftJoinApplyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownJoinRight]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
-					_group = _f.ConstructLeftJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
-					_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_leftJoinApplyExpr)))
-}
-
-// ConstructRightJoinApply constructs an expression for the RightJoinApply operator.
-func (_f *factory) ConstructRightJoinApply(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_rightJoinApplyExpr := makeRightJoinApplyExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_rightJoinApplyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [PushDownJoinLeft]
-	{
-		_filters := _f.mem.lookupNormExpr(on).asFilters()
-		if _filters != nil {
-			list := _filters.conditions()
-			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
-				condition := _item
-				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
-					_group = _f.ConstructRightJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
-					_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
-					return _group
-				}
-			}
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_rightJoinApplyExpr)))
-}
-
-// ConstructFullJoinApply constructs an expression for the FullJoinApply operator.
-func (_f *factory) ConstructFullJoinApply(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_fullJoinApplyExpr := makeFullJoinApplyExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_fullJoinApplyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_fullJoinApplyExpr)))
-}
-
-// ConstructSemiJoinApply constructs an expression for the SemiJoinApply operator.
-func (_f *factory) ConstructSemiJoinApply(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_semiJoinApplyExpr := makeSemiJoinApplyExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_semiJoinApplyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_semiJoinApplyExpr)))
-}
-
-// ConstructAntiJoinApply constructs an expression for the AntiJoinApply operator.
-func (_f *factory) ConstructAntiJoinApply(
-	left opt.GroupID,
-	right opt.GroupID,
-	on opt.GroupID,
-) opt.GroupID {
-	_antiJoinApplyExpr := makeAntiJoinApplyExpr(left, right, on)
-	_group := _f.mem.lookupGroupByFingerprint(_antiJoinApplyExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr))
-	}
-
-	// [EnsureJoinFiltersAnd]
-	{
-		_and := _f.mem.lookupNormExpr(on).asAnd()
-		if _and != nil {
-			conditions := _and.conditions()
-			_f.reportOptimization()
-			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(conditions))
-			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	// [EnsureJoinFilters]
-	{
-		filter := on
-		_norm := _f.mem.lookupNormExpr(on)
-		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
-			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
-			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_antiJoinApplyExpr)))
-}
-
-// ConstructGroupBy constructs an expression for the GroupBy operator.
-// GroupBy is an operator that is used for performing aggregations (for queries
-// with aggregate functions, HAVING clauses and/or group by expressions). It
-// groups results that are equal on the grouping columns and computes
-// aggregations as described by Aggregations (which is always an Aggregations
-// operator). The arguments of the aggregations are columns from the input.
-func (_f *factory) ConstructGroupBy(
-	input opt.GroupID,
-	aggregations opt.GroupID,
-	groupingCols opt.PrivateID,
-) opt.GroupID {
-	_groupByExpr := makeGroupByExpr(input, aggregations, groupingCols)
-	_group := _f.mem.lookupGroupByFingerprint(_groupByExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_groupByExpr))
-	}
-
-	// [FilterUnusedGroupByCols]
-	{
-		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
-			_f.reportOptimization()
-			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)), aggregations, groupingCols)
-			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
-			return _group
-		}
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_groupByExpr)))
-}
-
-// ConstructUnion constructs an expression for the Union operator.
-// Union is an operator used to combine the Left and Right input relations into
-// a single set containing rows from both inputs. Duplicate rows are discarded.
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the Union with the output columns. See the comment above opt.SetOpColMap
-// for more details.
-func (_f *factory) ConstructUnion(
-	left opt.GroupID,
-	right opt.GroupID,
-	colMap opt.PrivateID,
-) opt.GroupID {
-	_unionExpr := makeUnionExpr(left, right, colMap)
-	_group := _f.mem.lookupGroupByFingerprint(_unionExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_unionExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionExpr)))
-}
-
-// ConstructIntersect constructs an expression for the Intersect operator.
-// Intersect is an operator used to perform an intersection between the Left
-// and Right input relations. The result consists only of rows in the Left
-// relation that are also present in the Right relation. Duplicate rows are
-// discarded.
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the Intersect with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-func (_f *factory) ConstructIntersect(
-	left opt.GroupID,
-	right opt.GroupID,
-	colMap opt.PrivateID,
-) opt.GroupID {
-	_intersectExpr := makeIntersectExpr(left, right, colMap)
-	_group := _f.mem.lookupGroupByFingerprint(_intersectExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_intersectExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_intersectExpr)))
-}
-
-// ConstructExcept constructs an expression for the Except operator.
-// Except is an operator used to perform a set difference between the Left and
-// Right input relations. The result consists only of rows in the Left relation
-// that are not present in the Right relation. Duplicate rows are discarded.
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the Except with the output columns. See the comment above opt.SetOpColMap
-// for more details.
-func (_f *factory) ConstructExcept(
-	left opt.GroupID,
-	right opt.GroupID,
-	colMap opt.PrivateID,
-) opt.GroupID {
-	_exceptExpr := makeExceptExpr(left, right, colMap)
-	_group := _f.mem.lookupGroupByFingerprint(_exceptExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_exceptExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptExpr)))
-}
-
-// ConstructUnionAll constructs an expression for the UnionAll operator.
-// UnionAll is an operator used to combine the Left and Right input relations
-// into a single set containing rows from both inputs. Duplicate rows are
-// not discarded. For example:
-//   SELECT x FROM xx UNION ALL SELECT y FROM yy
-//     x       y         out
-//   -----   -----      -----
-//     1       1          1
-//     1       2    ->    1
-//     2       3          1
-//                        2
-//                        2
-//                        3
-//
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the UnionAll with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-func (_f *factory) ConstructUnionAll(
-	left opt.GroupID,
-	right opt.GroupID,
-	colMap opt.PrivateID,
-) opt.GroupID {
-	_unionAllExpr := makeUnionAllExpr(left, right, colMap)
-	_group := _f.mem.lookupGroupByFingerprint(_unionAllExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_unionAllExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_unionAllExpr)))
-}
-
-// ConstructIntersectAll constructs an expression for the IntersectAll operator.
-// IntersectAll is an operator used to perform an intersection between the Left
-// and Right input relations. The result consists only of rows in the Left
-// relation that have a corresponding row in the Right relation. Duplicate rows
-// are not discarded. This effectively creates a one-to-one mapping between the
-// Left and Right rows. For example:
-//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
-//     x       y         out
-//   -----   -----      -----
-//     1       1          1
-//     1       1    ->    1
-//     1       2          2
-//     2       2          2
-//     2       3
-//     4
-//
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the IntersectAll with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-func (_f *factory) ConstructIntersectAll(
-	left opt.GroupID,
-	right opt.GroupID,
-	colMap opt.PrivateID,
-) opt.GroupID {
-	_intersectAllExpr := makeIntersectAllExpr(left, right, colMap)
-	_group := _f.mem.lookupGroupByFingerprint(_intersectAllExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_intersectAllExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_intersectAllExpr)))
-}
-
-// ConstructExceptAll constructs an expression for the ExceptAll operator.
-// ExceptAll is an operator used to perform a set difference between the Left
-// and Right input relations. The result consists only of rows in the Left
-// relation that do not have a corresponding row in the Right relation.
-// Duplicate rows are not discarded. This effectively creates a one-to-one
-// mapping between the Left and Right rows. For example:
-//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
-//     x       y         out
-//   -----   -----      -----
-//     1       1    ->    1
-//     1       1          4
-//     1       2
-//     2       2
-//     2       3
-//     4
-//
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the ExceptAll with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-func (_f *factory) ConstructExceptAll(
-	left opt.GroupID,
-	right opt.GroupID,
-	colMap opt.PrivateID,
-) opt.GroupID {
-	_exceptAllExpr := makeExceptAllExpr(left, right, colMap)
-	_group := _f.mem.lookupGroupByFingerprint(_exceptAllExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_exceptAllExpr)))
-}
-
-// ConstructLimit constructs an expression for the Limit operator.
-// Limit returns a limited subset of the results in the input relation.
-// The limit expression is a scalar value; the operator returns at most this many
-// rows. The private field is an *opt.Ordering which indicates the desired
-// row ordering (the first rows with respect to this ordering are returned).
-func (_f *factory) ConstructLimit(
-	input opt.GroupID,
-	limit opt.GroupID,
-	ordering opt.PrivateID,
-) opt.GroupID {
-	_limitExpr := makeLimitExpr(input, limit, ordering)
-	_group := _f.mem.lookupGroupByFingerprint(_limitExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_limitExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_limitExpr)))
-}
-
-// ConstructOffset constructs an expression for the Offset operator.
-// Offset filters out the first Offset rows of the input relation; used in
-// conjunction with Limit.
-func (_f *factory) ConstructOffset(
-	input opt.GroupID,
-	offset opt.GroupID,
-	ordering opt.PrivateID,
-) opt.GroupID {
-	_offsetExpr := makeOffsetExpr(input, offset, ordering)
-	_group := _f.mem.lookupGroupByFingerprint(_offsetExpr.fingerprint())
-	if _group != 0 {
-		return _group
-	}
-
-	if !_f.allowOptimizations() {
-		return _f.mem.memoizeNormExpr(memoExpr(_offsetExpr))
-	}
-
-	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_offsetExpr)))
-}
-
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [87]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
 	dynConstructLookup[opt.UnknownOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
 		panic("op type not initialized")
+	}
+
+	// ScanOp
+	dynConstructLookup[opt.ScanOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructScan(opt.PrivateID(operands[0]))
+	}
+
+	// ValuesOp
+	dynConstructLookup[opt.ValuesOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructValues(operands[0].ListID(), opt.PrivateID(operands[1]))
+	}
+
+	// SelectOp
+	dynConstructLookup[opt.SelectOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructSelect(opt.GroupID(operands[0]), opt.GroupID(operands[1]))
+	}
+
+	// ProjectOp
+	dynConstructLookup[opt.ProjectOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructProject(opt.GroupID(operands[0]), opt.GroupID(operands[1]))
+	}
+
+	// InnerJoinOp
+	dynConstructLookup[opt.InnerJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructInnerJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// LeftJoinOp
+	dynConstructLookup[opt.LeftJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructLeftJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// RightJoinOp
+	dynConstructLookup[opt.RightJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructRightJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// FullJoinOp
+	dynConstructLookup[opt.FullJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructFullJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// SemiJoinOp
+	dynConstructLookup[opt.SemiJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructSemiJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// AntiJoinOp
+	dynConstructLookup[opt.AntiJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructAntiJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// InnerJoinApplyOp
+	dynConstructLookup[opt.InnerJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructInnerJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// LeftJoinApplyOp
+	dynConstructLookup[opt.LeftJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructLeftJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// RightJoinApplyOp
+	dynConstructLookup[opt.RightJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructRightJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// FullJoinApplyOp
+	dynConstructLookup[opt.FullJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructFullJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// SemiJoinApplyOp
+	dynConstructLookup[opt.SemiJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructSemiJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// AntiJoinApplyOp
+	dynConstructLookup[opt.AntiJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructAntiJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
+	}
+
+	// GroupByOp
+	dynConstructLookup[opt.GroupByOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructGroupBy(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// UnionOp
+	dynConstructLookup[opt.UnionOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructUnion(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// IntersectOp
+	dynConstructLookup[opt.IntersectOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructIntersect(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// ExceptOp
+	dynConstructLookup[opt.ExceptOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructExcept(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// UnionAllOp
+	dynConstructLookup[opt.UnionAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructUnionAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// IntersectAllOp
+	dynConstructLookup[opt.IntersectAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructIntersectAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// ExceptAllOp
+	dynConstructLookup[opt.ExceptAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructExceptAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// LimitOp
+	dynConstructLookup[opt.LimitOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructLimit(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
+	}
+
+	// OffsetOp
+	dynConstructLookup[opt.OffsetOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
+		return f.ConstructOffset(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
 	}
 
 	// SubqueryOp
@@ -4744,131 +4894,6 @@ func init() {
 	// UnsupportedExprOp
 	dynConstructLookup[opt.UnsupportedExprOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
 		return f.ConstructUnsupportedExpr(opt.PrivateID(operands[0]))
-	}
-
-	// ScanOp
-	dynConstructLookup[opt.ScanOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructScan(opt.PrivateID(operands[0]))
-	}
-
-	// ValuesOp
-	dynConstructLookup[opt.ValuesOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructValues(operands[0].ListID(), opt.PrivateID(operands[1]))
-	}
-
-	// SelectOp
-	dynConstructLookup[opt.SelectOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructSelect(opt.GroupID(operands[0]), opt.GroupID(operands[1]))
-	}
-
-	// ProjectOp
-	dynConstructLookup[opt.ProjectOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructProject(opt.GroupID(operands[0]), opt.GroupID(operands[1]))
-	}
-
-	// InnerJoinOp
-	dynConstructLookup[opt.InnerJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructInnerJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// LeftJoinOp
-	dynConstructLookup[opt.LeftJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructLeftJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// RightJoinOp
-	dynConstructLookup[opt.RightJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructRightJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// FullJoinOp
-	dynConstructLookup[opt.FullJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructFullJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// SemiJoinOp
-	dynConstructLookup[opt.SemiJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructSemiJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// AntiJoinOp
-	dynConstructLookup[opt.AntiJoinOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructAntiJoin(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// InnerJoinApplyOp
-	dynConstructLookup[opt.InnerJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructInnerJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// LeftJoinApplyOp
-	dynConstructLookup[opt.LeftJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructLeftJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// RightJoinApplyOp
-	dynConstructLookup[opt.RightJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructRightJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// FullJoinApplyOp
-	dynConstructLookup[opt.FullJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructFullJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// SemiJoinApplyOp
-	dynConstructLookup[opt.SemiJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructSemiJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// AntiJoinApplyOp
-	dynConstructLookup[opt.AntiJoinApplyOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructAntiJoinApply(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.GroupID(operands[2]))
-	}
-
-	// GroupByOp
-	dynConstructLookup[opt.GroupByOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructGroupBy(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// UnionOp
-	dynConstructLookup[opt.UnionOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructUnion(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// IntersectOp
-	dynConstructLookup[opt.IntersectOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructIntersect(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// ExceptOp
-	dynConstructLookup[opt.ExceptOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructExcept(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// UnionAllOp
-	dynConstructLookup[opt.UnionAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructUnionAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// IntersectAllOp
-	dynConstructLookup[opt.IntersectAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructIntersectAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// ExceptAllOp
-	dynConstructLookup[opt.ExceptAllOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructExceptAll(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// LimitOp
-	dynConstructLookup[opt.LimitOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructLimit(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
-	}
-
-	// OffsetOp
-	dynConstructLookup[opt.OffsetOp] = func(f *factory, operands opt.DynamicOperands) opt.GroupID {
-		return f.ConstructOffset(opt.GroupID(operands[0]), opt.GroupID(operands[1]), opt.PrivateID(operands[2]))
 	}
 
 }

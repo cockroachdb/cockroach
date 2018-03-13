@@ -21,6 +21,8 @@ The commands are:
 	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 
+The sources can be file names and/or filepath.Glob patterns.
+
 Flags:
   -out string
     	output file name of generated code
@@ -49,6 +51,8 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
+
+The sources can be file names and/or filepath.Glob patterns.
 
 Flags:
   -out string
@@ -80,6 +84,8 @@ The commands are:
 	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 
+The sources can be file names and/or filepath.Glob patterns.
+
 Flags:
   -out string
     	output file name of generated code
@@ -87,3 +93,17 @@ Flags:
 ERROR: unrecognized command
 ----
 ----
+
+#
+# Test invalid source.
+#
+optgen exprs invalid-source
+----
+ERROR: invalid source
+
+#
+# Test invalid filename.
+#
+optgen exprs test.opt not-found.opt
+----
+invalid filename

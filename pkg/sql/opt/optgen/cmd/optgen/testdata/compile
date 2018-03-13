@@ -47,6 +47,32 @@ define Not {
 )
 
 #
+# Test multiple input files from glob pattern.
+#
+optgen compile all
+define Gt {
+    left Expr
+    right Expr
+}
+----
+(Compiled
+	(Defines
+		(Define
+			Comments=(Comments)
+			Tags=(Tags)
+			Name="Gt"
+			Fields=(DefineFields
+				(DefineField Name="left" Type="Expr" Src=<test.opt:2:5>)
+				(DefineField Name="right" Type="Expr" Src=<test.opt:3:5>)
+			)
+			Src=<test.opt:1:1>
+		)
+	)
+	(Rules
+	)
+)
+
+#
 # Test single compile error.
 #
 optgen compile test.opt

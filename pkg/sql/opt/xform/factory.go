@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/select.opt rules/join.opt rules/limit.opt rules/scalar.opt rules/bool.opt rules/comp.opt rules/numeric.opt
+//go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs

@@ -60,8 +60,8 @@ func (g *ifactoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  // ConstructXXX method that corresponds to the given operator.\n")
 	fmt.Fprintf(g.w, "  DynamicConstruct(op Operator, operands DynamicOperands) GroupID\n\n")
 
-	g.genMethodsByTag("Scalar")
 	g.genMethodsByTag("Relational")
+	g.genMethodsByTag("Scalar")
 	fmt.Fprintf(w, "}\n")
 }
 

@@ -40,7 +40,7 @@
 #
 # NOTE: Ne is not part of the operator choices because it wasn't handled in
 #       normalize.go either. We can add once we've proved it's OK to do so.
-[NormalizeCmpPlusConst]
+[NormalizeCmpPlusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Plus
         $leftLeft:* & ^(OnlyConstants $leftLeft)
@@ -64,7 +64,7 @@
 #
 # See the NormalizeConstEqNe pattern for the definition of constant expression
 # tree. Other patterns will fold new constant expressions further.
-[NormalizeCmpMinusConst]
+[NormalizeCmpMinusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Minus
         $leftLeft:* & ^(OnlyConstants $leftLeft)
@@ -89,7 +89,7 @@
 # See the NormalizeConstEqNe pattern for the definition of constant expression
 # tree. Other patterns will switch the constant to the right side and fold the
 # constant expression if possible.
-[NormalizeCmpConstMinus]
+[NormalizeCmpConstMinus, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Minus
         $leftLeft:* & (OnlyConstants $leftLeft)
@@ -110,7 +110,7 @@
 #
 # This rule makes it easier to extract constraints from boolean expressions,
 # so that recognition code doesn't have to handle the tuple case separately.
-[NormalizeTupleEquality]
+[NormalizeTupleEquality, Normalize]
 (Eq (Tuple $left:*) (Tuple $right:*))
 =>
 (NormalizeTupleEquality $left $right)
