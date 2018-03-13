@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -135,10 +134,6 @@ type uncommittedDatabase struct {
 // end of each transaction on the session, or on hitting conditions such
 // as errors, or retries that result in transaction timestamp changes.
 type TableCollection struct {
-	// The timestamp used to pick tables. The timestamp falls within the
-	// validity window of every table in leasedTables.
-	timestamp hlc.Timestamp
-
 	// leaseMgr manages acquiring and releasing per-table leases.
 	leaseMgr *LeaseManager
 	// A collection of table descriptor valid for the timestamp.
@@ -184,17 +179,6 @@ type dbCacheSubscriber interface {
 	// until the callback declares success. The callback is repeatedly called as
 	// the cache is updated.
 	waitForCacheState(cond func(*databaseCache) (bool, error)) error
-}
-
-// Check if the timestamp used so far to pick tables has changed because
-// of a transaction retry.
-func (tc *TableCollection) resetForTxnRetry(ctx context.Context, txn *client.Txn) {
-	if tc.timestamp != (hlc.Timestamp{}) &&
-		tc.timestamp != txn.OrigTimestamp() {
-		if err := tc.releaseTables(ctx, dontBlockForDBCacheUpdate); err != nil {
-			log.Warningf(ctx, "error releasing tables")
-		}
-	}
 }
 
 // getTableVersion returns a table descriptor with a version suitable for
@@ -259,10 +243,6 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	// If the txn has been pushed the table collection is released and
-	// txn deadline is reset.
-	tc.resetForTxnRetry(ctx, flags.txn)
-
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
 		dbID, tn, flags.required); refuseFurtherLookup || err != nil {
 		return nil, nil, err
@@ -299,7 +279,7 @@ func (tc *TableCollection) getTableVersion(
 		// know how to deal with, so propagate the error.
 		return nil, nil, err
 	}
-	tc.timestamp = origTimestamp
+
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", tn)
 
@@ -327,10 +307,6 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 		return table, nil
 	}
-
-	// If the txn has been pushed the table collection is released and
-	// txn deadline is reset.
-	tc.resetForTxnRetry(ctx, txn)
 
 	for _, table := range tc.uncommittedTables {
 		if table.ID == tableID {
@@ -364,7 +340,7 @@ func (tc *TableCollection) getTableVersionByID(
 		}
 		return nil, err
 	}
-	tc.timestamp = origTimestamp
+
 	tc.leasedTables = append(tc.leasedTables, table)
 	log.VEventf(ctx, 2, "added table '%s' to table collection", table.Name)
 
@@ -403,7 +379,6 @@ func (tc *TableCollection) releaseLeases(ctx context.Context) {
 
 // releaseTables releases all tables currently held by the TableCollection.
 func (tc *TableCollection) releaseTables(ctx context.Context, opt releaseOpt) error {
-	tc.timestamp = hlc.Timestamp{}
 	if len(tc.leasedTables) > 0 {
 		log.VEventf(ctx, 2, "releasing %d tables", len(tc.leasedTables))
 		for _, table := range tc.leasedTables {
@@ -550,16 +525,11 @@ func (tc *TableCollection) getUncommittedTable(
 func (tc *TableCollection) getAllDescriptors(
 	ctx context.Context, txn *client.Txn,
 ) ([]sqlbase.DescriptorProto, error) {
-	// If the txn has been pushed the table collection is released and txn
-	// deadline is reset.
-	tc.resetForTxnRetry(ctx, txn)
-
 	if tc.allDescriptors == nil {
 		descs, err := GetAllDescriptors(ctx, txn)
 		if err != nil {
 			return nil, err
 		}
-		tc.timestamp = txn.OrigTimestamp()
 		tc.allDescriptors = descs
 	}
 	return tc.allDescriptors, nil
