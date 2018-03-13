@@ -12,6 +12,7 @@ build/builder.sh env \
 	make testrace \
 	PKG=./pkg/sql/logictest \
 	TESTFLAGS='-v' \
+	ENABLE_ROCKSDB_ASSERTIONS=1 \
 	2>&1 \
 	| tee artifacts/testlogicrace.log \
 	| go-test-teamcity
