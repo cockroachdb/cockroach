@@ -166,6 +166,11 @@ func evalExport(
 		// (non-incremental) and we're not exporting all versions.
 		if skipTombstones && args.StartTime.IsEmpty() && len(iter.UnsafeValue()) == 0 {
 			iter.NextKey()
+			if ok, err := iter.Valid(); err != nil {
+				return result.Result{}, err
+			} else if !ok {
+				break
+			}
 			continue
 		}
 
