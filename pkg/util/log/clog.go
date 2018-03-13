@@ -27,6 +27,7 @@ import (
 	stdLog "log"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -34,6 +35,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -588,6 +590,22 @@ func init() {
 	logging.fatalCh = make(chan struct{})
 
 	go flushDaemon()
+	go signalFlusher()
+}
+
+// signalFlusher flushes the log(s) every time SIGUSR1 is received.
+func signalFlusher() {
+	flushCh := make(chan os.Signal, 1)
+	signal.Notify(flushCh, syscall.SIGUSR1, syscall.SIGUSR2)
+
+	for sig := range flushCh {
+		Infof(context.Background(), "%s received, flushing logs", sig)
+		Flush()
+		if sig == syscall.SIGUSR2 {
+			Infof(context.Background(), "%s received, rotating logs", sig)
+			Rotate()
+		}
+	}
 }
 
 // LoggingToStderr returns true if log messages of the given severity
@@ -611,6 +629,16 @@ func Flush() {
 	for _, l := range secondaryLogRegistry.mu.loggers {
 		// Some loggers (e.g. the audit log) want to keep all the files.
 		l.logger.lockAndFlushAll()
+	}
+}
+
+// Rotate rotates all the currently open log files.
+func Rotate() {
+	logging.lockAndRotateFile()
+	secondaryLogRegistry.mu.Lock()
+	defer secondaryLogRegistry.mu.Unlock()
+	for _, l := range secondaryLogRegistry.mu.loggers {
+		l.logger.lockAndRotateFile()
 	}
 }
 
@@ -964,6 +992,16 @@ func (l *loggingT) exitLocked(err error) {
 	}
 	l.flushAndSync(true /*doSync*/)
 	l.exitFunc(2)
+}
+
+func (l *loggingT) lockAndRotateFile() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if sb, ok := l.file.(*syncBuffer); ok {
+		if err := sb.rotateFile(timeutil.Now()); err != nil {
+			l.exitLocked(err)
+		}
+	}
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
