@@ -109,9 +109,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 	scan := params.p.Scan()
 	scan.run.isCheck = true
-	if err := scan.initTable(
-		ctx, params.p, o.tableDesc, indexHints, publicColumns, columnIDs,
-	); err != nil {
+	colCfg := scanColumnsConfig{wantedColumns: columnIDs, addUnwantedAsHidden: true}
+	if err := scan.initTable(ctx, params.p, o.tableDesc, indexHints, colCfg); err != nil {
 		return err
 	}
 	plan := planNode(scan)
