@@ -98,6 +98,18 @@ CREATE SEQUENCE limit_test MAXVALUE 10 START WITH 11
 statement error pgcode 22023 START value \(5\) cannot be less than MINVALUE \(10\)
 CREATE SEQUENCE limit_test MINVALUE 10 START WITH 5
 
+statement error pgcode 22023 CACHE \(-1\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE -1
+
+statement error pgcode 22023 CACHE \(0\) must be greater than zero
+CREATE SEQUENCE cache_test CACHE 0
+
+statement error pgcode 0A000 CACHE values larger than 1 are not supported, found 5
+CREATE SEQUENCE cache_test CACHE 5
+
+statement error pgcode 0A000 CYCLE option is not supported
+CREATE SEQUENCE cycle_test CYCLE
+
 statement ok
 CREATE SEQUENCE ignored_options_test CACHE 1 NO CYCLE
 
@@ -110,7 +122,7 @@ query ITTITTTT colnames
 SELECT * FROM crdb_internal.create_statements WHERE descriptor_name = 'show_create_test'
 ----
 database_id  database_name  schema_name  descriptor_id  descriptor_type  descriptor_name   create_statement                                                                              state
-50           test           public       60             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC
+50           test           public       64             sequence         show_create_test  CREATE SEQUENCE show_create_test MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1  PUBLIC
 
 query TT colnames
 SHOW CREATE SEQUENCE show_create_test
