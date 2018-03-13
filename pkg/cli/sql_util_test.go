@@ -207,3 +207,47 @@ SET
 	}
 	b.Reset()
 }
+
+func TestTransactionRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	p := cliTestParams{t: t}
+	c := newCLITest(p)
+	defer c.cleanup()
+
+	url, cleanup := sqlutils.PGUrl(t, c.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanup()
+
+	conn := makeSQLConn(url.String())
+	defer conn.Close()
+
+	var tries int
+	err := conn.ExecTxn(func(conn *sqlConn) error {
+		tries++
+		if tries > 2 {
+			return nil
+		}
+
+		// Prevent automatic server-side retries.
+		rows, err := conn.Query(`SELECT now()`, nil)
+		if err != nil {
+			return err
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+
+		// Force a client-side retry.
+		rows, err = conn.Query(`SELECT crdb_internal.force_retry('1h')`, nil)
+		if err != nil {
+			return err
+		}
+		return rows.Close()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tries <= 2 {
+		t.Fatalf("expected transaction to require at least two tries, but it only required %d", tries)
+	}
+}
