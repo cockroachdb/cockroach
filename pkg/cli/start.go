@@ -29,7 +29,6 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"strings"
-	"syscall"
 	"text/tabwriter"
 	"time"
 
@@ -55,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -395,7 +395,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// the buffers in the signal handler below. If we started capturing
 	// signals later, some startup logging might be lost.
 	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signal.Notify(signalCh, drainSignals...)
 
 	// Set up a tracing span for the start process.  We want any logging
 	// happening beyond this point to be accounted to this start
@@ -747,17 +747,11 @@ func runStart(cmd *cobra.Command, args []string) error {
 	select {
 	case sig := <-signalCh:
 		// This new signal is not welcome, as it interferes with the graceful
-		// shutdown process. On Unix, a signal that was not handled gracefully by
-		// the application should be visible to other processes as an exit code
-		// encoded as 128+signal number.
-		//
-		// Also, on Unix, os.Signal is syscall.Signal and it's convertible to int.
-		return &cliError{
-			exitCode: 128 + int(sig.(syscall.Signal)),
-			severity: log.Severity_ERROR,
-			cause: errors.Errorf(
-				"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint),
-		}
+		// shutdown process.
+		log.Shout(ctx, log.Severity_ERROR, fmt.Sprintf(
+			"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint))
+		handleSignalDuringShutdown(sig)
+		panic("unreachable")
 
 	case <-time.After(time.Minute):
 		return errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
@@ -786,8 +780,7 @@ func reportConfiguration(ctx context.Context) {
 	// running as root in a multi-user environment, or using different
 	// uid/gid across runs in the same data directory. To determine
 	// this, it's easier if the information appears in the log file.
-	log.Infof(ctx, "process identity: uid %d euid %d gid %d egid %d",
-		syscall.Getuid(), syscall.Geteuid(), syscall.Getgid(), syscall.Getegid())
+	log.Infof(ctx, "process identity: %s", sysutil.ProcessIdentity())
 }
 
 func maybeWarnMemorySizes(ctx context.Context) {
