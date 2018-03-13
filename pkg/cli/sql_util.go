@@ -17,6 +17,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
 	"io"
@@ -27,13 +28,13 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	version "github.com/hashicorp/go-version"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -264,58 +265,45 @@ func (c *sqlConn) getServerValue(what, sql string) (driver.Value, bool) {
 	return dbVals[0], true
 }
 
+// sqlTxnShim implements the crdb.Tx interface.
+//
+// It exists to support crdb.ExecuteInTxn. Normally, we'd hand crdb.ExecuteInTxn
+// a sql.Txn, but sqlConn predates go1.8's support for multiple result sets and
+// so deals directly with the lib/pq driver. See #14964.
+type sqlTxnShim struct {
+	conn *sqlConn
+}
+
+func (t sqlTxnShim) Commit() error {
+	return t.conn.Exec(`COMMIT`, nil)
+}
+
+func (t sqlTxnShim) Rollback() error {
+	return t.conn.Exec(`ROLLBACK`, nil)
+}
+
+func (t sqlTxnShim) ExecContext(
+	_ context.Context, query string, values ...interface{},
+) (gosql.Result, error) {
+	if len(values) != 0 {
+		panic(fmt.Sprintf("sqlTxnShim.ExecContext must not be called with values"))
+	}
+	return nil, t.conn.Exec(query, nil)
+}
+
 // ExecTxn runs fn inside a transaction and retries it as needed.
 // On non-retryable failures, the transaction is aborted and rolled
 // back; on success, the transaction is committed.
 //
 // NOTE: the supplied closure should not have external side
 // effects beyond changes to the database.
-//
-// NB: this code is cribbed from cockroach-go/crdb and has been copied
-// because this code, pre-dating go1.8, deals with multiple result sets
-// direct with the driver. See #14964.
 func (c *sqlConn) ExecTxn(fn func(*sqlConn) error) (err error) {
-	// Start a transaction.
-	if err = c.Exec(`BEGIN`, nil); err != nil {
+	if err := c.Exec(`BEGIN`, nil); err != nil {
 		return err
 	}
-	defer func() {
-		if err == nil {
-			// Ignore commit errors. The tx has already been committed by RELEASE.
-			_ = c.Exec(`COMMIT`, nil)
-		} else {
-			// We always need to execute a Rollback() so sql.DB releases the
-			// connection.
-			_ = c.Exec(`ROLLBACK`, nil)
-		}
-	}()
-	// Specify that we intend to retry this txn in case of CockroachDB retryable
-	// errors.
-	if err = c.Exec(`SAVEPOINT cockroach_restart`, nil); err != nil {
-		return err
-	}
-
-	for {
-		err = fn(c)
-		if err == nil {
-			// RELEASE acts like COMMIT in CockroachDB. We use it since it gives us an
-			// opportunity to react to retryable errors, whereas tx.Commit() doesn't.
-			if err = c.Exec(`RELEASE SAVEPOINT cockroach_restart`, nil); err == nil {
-				return nil
-			}
-		}
-		// We got an error; let's see if it's a retryable one and, if so, restart. We look
-		// for either the standard PG errcode SerializationFailureError:40001 or the Cockroach extension
-		// errcode RetriableError:CR000. The Cockroach extension has been removed server-side, but support
-		// for it has been left here for now to maintain backwards compatibility.
-		pqErr, ok := pgerror.GetPGCause(err)
-		if retryable := ok && (pqErr.Code == "CR000" || pqErr.Code == "40001"); !retryable {
-			return err
-		}
-		if err = c.Exec(`ROLLBACK TO SAVEPOINT cockroach_restart`, nil); err != nil {
-			return err
-		}
-	}
+	return crdb.ExecuteInTx(context.TODO(), sqlTxnShim{c}, func() error {
+		return fn(c)
+	})
 }
 
 func (c *sqlConn) Exec(query string, args []driver.Value) error {
