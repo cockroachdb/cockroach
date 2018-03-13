@@ -3766,31 +3766,31 @@ create_view_stmt:
 // %SeeAlso: CREATE TABLE, SHOW INDEXES, SHOW CREATE INDEX,
 // WEBDOCS/create-index.html
 create_index_stmt:
-  CREATE opt_unique INDEX opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
+  CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
       Table:   $6.normalizableTableNameFromUnresolvedName(),
       Unique:  $2.bool(),
-      Columns: $8.idxElems(),
-      Storing: $10.nameList(),
-      Interleave: $11.interleave(),
-      PartitionBy: $12.partitionBy(),
-      Inverted: $13.bool(),
+      Columns: $9.idxElems(),
+      Storing: $11.nameList(),
+      Interleave: $12.interleave(),
+      PartitionBy: $13.partitionBy(),
+      Inverted: $7.bool(),
     }
   }
-| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
+| CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
   {
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
       Table:       $9.normalizableTableNameFromUnresolvedName(),
       Unique:      $2.bool(),
       IfNotExists: true,
-      Columns:     $11.idxElems(),
-      Storing:     $13.nameList(),
-      Interleave: $14.interleave(),
-      PartitionBy: $15.partitionBy(),
-      Inverted: $16.bool(),
+      Columns:     $12.idxElems(),
+      Storing:     $14.nameList(),
+      Interleave: $15.interleave(),
+      PartitionBy: $16.partitionBy(),
+      Inverted: $10.bool(),
     }
   }
 | CREATE INVERTED INDEX opt_index_name ON table_name '(' index_params ')'
