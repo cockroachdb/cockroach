@@ -173,7 +173,7 @@ func init() {
 				}
 				wg.Add(1)
 				sem <- struct{}{}
-				go func(m string) {
+				go func(m, name string) {
 					defer wg.Done()
 					defer func() { <-sem }()
 
@@ -228,7 +228,7 @@ func init() {
 					}
 					name = strings.Replace(name, "_stmt", "", 1)
 					write(filepath.Join(svgDir, name+".html"), []byte(body))
-				}(m)
+				}(m, name)
 			}
 			wg.Wait()
 		},
