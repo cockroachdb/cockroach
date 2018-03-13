@@ -287,7 +287,7 @@ project
  │    │    ├── sort
  │    │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    │    ├── ordering: +2
- │    │    │    └── scan
+ │    │    │    └── scan t
  │    │    │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── projections [outer=(1,2)]
  │    │         ├── variable: t.k [type=int, outer=(1)]
