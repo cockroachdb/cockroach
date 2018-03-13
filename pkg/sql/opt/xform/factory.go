@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/select.opt rules/join.opt rules/scalar.opt rules/bool.opt rules/comp.opt rules/numeric.opt
+//go:generate optgen -out factory.og.go factory ../ops/scalar.opt ../ops/relational.opt ../ops/enforcer.opt rules/project.opt rules/select.opt rules/join.opt rules/limit.opt rules/scalar.opt rules/bool.opt rules/comp.opt rules/numeric.opt
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -333,12 +333,22 @@ func (f *factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
 	return cols
 }
 
-// groupByNeededCols unions the columns needed by either of a GroupBy's
+// neededColsGroupBy unions the columns needed by either of a GroupBy's
 // operands - either aggregations or groupingCols. This case doesn't fit any
 // of the neededCols methods because groupingCols is a private, not a group.
-func (f *factory) groupByNeededCols(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
+func (f *factory) neededColsGroupBy(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
 	colSet := *f.mem.lookupPrivate(groupingCols).(*opt.ColSet)
 	return f.outerCols(aggs).Union(colSet)
+}
+
+// neededColsLimit unions the columns needed by Projections with the columns in
+// the Ordering of a Limit/Offset operator.
+func (f *factory) neededColsLimit(projections opt.GroupID, ordering opt.PrivateID) opt.ColSet {
+	colSet := f.outerCols(projections).Copy()
+	for _, col := range *f.mem.lookupPrivate(ordering).(*opt.Ordering) {
+		colSet.Add(int(col.Index()))
+	}
+	return colSet
 }
 
 // hasUnusedColumns returns true if the target group has additional columns

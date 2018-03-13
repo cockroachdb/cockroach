@@ -3411,6 +3411,38 @@ func (_f *factory) ConstructProject(
 		}
 	}
 
+	// [FilterUnusedLimitCols]
+	{
+		_limit := _f.mem.lookupNormExpr(input).asLimit()
+		if _limit != nil {
+			input := _limit.input()
+			limit := _limit.limit()
+			ordering := _limit.ordering()
+			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructLimit(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedOffsetCols]
+	{
+		_offset := _f.mem.lookupNormExpr(input).asOffset()
+		if _offset != nil {
+			input := _offset.input()
+			offset := _offset.offset()
+			ordering := _offset.ordering()
+			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
+				_f.reportOptimization()
+				_group = _f.ConstructProject(_f.ConstructOffset(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
 	// [FilterUnusedJoinLeftCols]
 	{
 		_norm := _f.mem.lookupNormExpr(input)
@@ -4160,9 +4192,9 @@ func (_f *factory) ConstructGroupBy(
 
 	// [FilterUnusedGroupByCols]
 	{
-		if _f.hasUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)) {
+		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
 			_f.reportOptimization()
-			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)), aggregations, groupingCols)
+			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)), aggregations, groupingCols)
 			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
 			return _group
 		}
