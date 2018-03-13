@@ -422,7 +422,9 @@ func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumn
 		n.colIdxMap[c.ID] = i
 	}
 	n.valNeededForCol = util.FastIntSet{}
-	n.valNeededForCol.AddRange(0, len(n.cols)-1)
+	if len(n.cols) > 0 {
+		n.valNeededForCol.AddRange(0, len(n.cols)-1)
+	}
 	n.run.row = make([]tree.Datum, len(n.cols))
 	n.filterVars = tree.MakeIndexedVarHelper(n, len(n.cols))
 	return nil

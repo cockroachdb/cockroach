@@ -76,7 +76,7 @@ type tableInfo struct {
 	colIdxMap map[ColumnID]int
 
 	// One value per column that is part of the key; each value is a column
-	// index (into cols).
+	// index (into cols); -1 if we don't need the value for that column.
 	indexColIdx []int
 
 	// -- Fields updated during a scan --
@@ -290,11 +290,18 @@ func (rf *RowFetcher) Init(
 		neededIndexCols := 0
 		table.indexColIdx = make([]int, len(indexColumnIDs))
 		for i, id := range indexColumnIDs {
-			colIdx := table.colIdxMap[id]
-			table.indexColIdx[i] = colIdx
-			if table.neededCols.Contains(int(id)) {
-				neededIndexCols++
-				table.neededValueColsByIdx.Remove(colIdx)
+			colIdx, ok := table.colIdxMap[id]
+			if ok {
+				table.indexColIdx[i] = colIdx
+				if table.neededCols.Contains(int(id)) {
+					neededIndexCols++
+					table.neededValueColsByIdx.Remove(colIdx)
+				}
+			} else {
+				table.indexColIdx[i] = -1
+				if table.neededCols.Contains(int(id)) {
+					panic(fmt.Sprintf("needed column %d not in colIdxMap", id))
+				}
 			}
 		}
 
@@ -634,7 +641,9 @@ func (rf *RowFetcher) processKV(
 
 		// Fill in the column values that are part of the index key.
 		for i := range table.keyVals {
-			table.row[table.indexColIdx[i]] = table.keyVals[i]
+			if idx := table.indexColIdx[i]; idx != -1 {
+				table.row[idx] = table.keyVals[i]
+			}
 		}
 
 		rf.valueColsFound = 0
@@ -1134,8 +1143,12 @@ func (rf *RowFetcher) finalizeRow() error {
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
 			if !table.cols[i].Nullable {
 				var indexColValues []string
-				for i := range table.indexColIdx {
-					indexColValues = append(indexColValues, table.row[i].String(&table.cols[i].Type))
+				for _, idx := range table.indexColIdx {
+					if idx != -1 {
+						indexColValues = append(indexColValues, table.row[idx].String(&table.cols[idx].Type))
+					} else {
+						indexColValues = append(indexColValues, "?")
+					}
 				}
 				if rf.isCheck {
 					return scrub.WrapError(scrub.UnexpectedNullValueError, errors.Errorf(
