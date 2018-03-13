@@ -64,6 +64,7 @@ var (
 // the map directly.
 var OidToType = map[oid.Oid]T{
 	oid.T_anyelement:   Any,
+	oid.T_anyarray:     TArray{Any},
 	oid.T_bool:         Bool,
 	oid.T__bool:        TArray{Bool},
 	oid.T_bytea:        Bytes,
@@ -131,6 +132,7 @@ var aliasedOidToName = map[oid.Oid]string{
 	oid.T_varchar:    "varchar",
 	oid.T_numeric:    "numeric",
 	oid.T_record:     "record",
+	oid.T_anyarray:   "anyarray",
 	oid.T__int2:      "_int2",
 	oid.T__int4:      "_int4",
 	oid.T__int8:      "_int8",
@@ -155,6 +157,7 @@ var aliasedOidToName = map[oid.Oid]string{
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
 var oidToArrayOid = map[oid.Oid]oid.Oid{
+	oid.T_anyelement:  oid.T_anyarray,
 	oid.T_bool:        oid.T__bool,
 	oid.T_bytea:       oid.T__bytea,
 	oid.T_name:        oid.T__name,
