@@ -238,13 +238,14 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 	}
 	defer delete(SystemAllowedPrivileges, id)
 
-	fooNoGrantPrivilegeErr := "user foo must not have GRANT privileges on this system object"
 	rootWrongPrivilegesErr := "user root must have exactly {SELECT} or {SELECT, GRANT} or {ALL} " +
-		"privileges on this system object"
+		"privileges on system object with ID=.*"
+	adminWrongPrivilegesErr := "user admin must have exactly {SELECT} or {SELECT, GRANT} or {ALL} " +
+		"privileges on system object with ID=.*"
 
 	{
 		// Valid: root user has one of the allowable privilege sets.
-		descriptor := NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.SELECT})
+		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.SELECT})
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
 		}
@@ -255,16 +256,16 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		// Invalid: foo has more privileges than root.
+		// Valid: foo has more privileges than root but still within allowed set.
 		descriptor.Grant("foo", privilege.List{privilege.GRANT})
-		if err := descriptor.Validate(id); !testutils.IsError(err, fooNoGrantPrivilegeErr) {
-			t.Fatalf("expected err=%s, got err=%v", fooNoGrantPrivilegeErr, err)
+		if err := descriptor.Validate(id); err != nil {
+			t.Fatal(err)
 		}
 	}
 
 	{
 		// Valid: root user has a different allowable privilege set.
-		descriptor := NewPrivilegeDescriptor(security.RootUser,
+		descriptor := NewCustomSuperuserPrivilegeDescriptor(
 			privilege.List{privilege.SELECT, privilege.GRANT})
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
@@ -291,14 +292,22 @@ func TestSystemPrivilegeValidate(t *testing.T) {
 
 	{
 		// Invalid: root has a non-allowable privilege set.
-		descriptor := NewPrivilegeDescriptor(security.RootUser, privilege.List{privilege.UPDATE})
+		descriptor := NewCustomSuperuserPrivilegeDescriptor(privilege.List{privilege.UPDATE})
 		if err := descriptor.Validate(id); !testutils.IsError(err, rootWrongPrivilegesErr) {
 			t.Fatalf("expected err=%s, got err=%v", rootWrongPrivilegesErr, err)
 		}
 
-		// Valid: root's invalid privileges are revoked and replaced with allowable privileges.
+		// Invalid: root's invalid privileges are revoked and replaced with allowable privileges,
+		// but admin is still wrong.
 		descriptor.Revoke(security.RootUser, privilege.List{privilege.UPDATE})
 		descriptor.Grant(security.RootUser, privilege.List{privilege.ALL})
+		if err := descriptor.Validate(id); !testutils.IsError(err, adminWrongPrivilegesErr) {
+			t.Fatalf("expected err=%s, got err=%v", adminWrongPrivilegesErr, err)
+		}
+
+		// Valid: admin's invalid privileges are revoked and replaced with allowable privileges.
+		descriptor.Revoke(AdminRole, privilege.List{privilege.UPDATE})
+		descriptor.Grant(AdminRole, privilege.List{privilege.ALL})
 		if err := descriptor.Validate(id); err != nil {
 			t.Fatal(err)
 		}

@@ -181,44 +181,100 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 	}
 }
 
+// MaybeAddAdminPrivileges adds privileges for the 'admin' role if needed.
+// These are exactly the same as the 'root' privileges.
+// Returns true if the privilege descriptor was modified.
+func (p *PrivilegeDescriptor) MaybeAddAdminPrivileges(id ID) bool {
+	superPrivileges := privilege.ALL.Mask()
+	if IsReservedID(id) {
+		// System databases and tables have custom maximum allowed privileges.
+		superPrivileges = SystemDesiredPrivileges(id).ToBitField()
+	}
+
+	userPriv := p.findOrCreateUser(AdminRole)
+	if userPriv.Privileges != superPrivileges {
+		// New user or different privileges: overwrite.
+		userPriv.Privileges = superPrivileges
+		return true
+	}
+
+	return false
+}
+
 // Validate is called when writing a database or table descriptor.
 // It takes the descriptor ID which is used to determine if
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
-// TODO(mberhault): we'll need to enforce minimum privileges
-// for the admin role as well, but we can't until migrations are done.
 func (p PrivilegeDescriptor) Validate(id ID) error {
-	rootPriv, ok := p.findUser(security.RootUser)
-	if !ok {
-		return fmt.Errorf("user %s does not have privileges", security.RootUser)
-	}
+	allowedPrivileges := privilege.Lists{{privilege.ALL}}
 	if IsReservedID(id) {
-		// System databases and tables have custom maximum allowed privileges.
-		allowedPrivileges, ok := SystemAllowedPrivileges[id]
+		var ok bool
+		allowedPrivileges, ok = SystemAllowedPrivileges[id]
 		if !ok {
 			return fmt.Errorf("no allowed privileges found for system object with ID=%d", id)
 		}
+	}
 
-		// The root user must match one of the allowed privilege sets exactly.
-		if !allowedPrivileges.Contains(rootPriv.Privileges) {
-			return fmt.Errorf("user %s must have exactly %s privileges on this system object",
-				security.RootUser, allowedPrivileges)
+	// Check "root" user.
+	if err := p.validateRequiredSuperuser(id, allowedPrivileges, security.RootUser); err != nil {
+		return err
+	}
+
+	// We expect an "admin" role. Check that it has desired superuser permissions.
+	if err := p.validateRequiredSuperuser(id, allowedPrivileges, AdminRole); err != nil {
+		return err
+	}
+
+	// For all non-super users, privileges must not exceed the allowed privileges.
+	for _, u := range p.Users {
+		if u.User == security.RootUser || u.User == AdminRole {
+			// We've already checked super users.
+			continue
 		}
 
-		// For all users, no other privileges must be granted.
-		if !isPrivilegeSet(rootPriv.Privileges, privilege.ALL) {
-			for _, u := range p.Users {
-				if remaining := u.Privileges &^ rootPriv.Privileges; remaining != 0 {
-					return fmt.Errorf("user %s must not have %s privileges on this system object",
-						u.User, privilege.ListFromBitField(remaining))
-				}
+		// userError will be non-nil at the end of the allowedPrivileges loop if the user's
+		// privilege is not allowed by any item in the list.
+		var userError error
+		for _, allowedPriv := range allowedPrivileges {
+			allowedBits := allowedPriv.ToBitField()
+			if isPrivilegeSet(allowedBits, privilege.ALL) {
+				// ALL privileges allowed: we can stop.
+				userError = nil
+				break
+			}
+
+			if remaining := u.Privileges &^ allowedBits; remaining != 0 {
+				userError = fmt.Errorf("user %s must not have %s privileges on system object with ID=%d",
+					u.User, privilege.ListFromBitField(remaining), id)
+			} else {
+				// Privileges allowed: reset error and break out.
+				userError = nil
+				break
 			}
 		}
-	} else if !isPrivilegeSet(rootPriv.Privileges, privilege.ALL) {
-		// Non-system databases and tables must preserve ALL
-		// privileges for the root user.
-		return fmt.Errorf("user %s does not have ALL privileges", security.RootUser)
+
+		if userError != nil {
+			return userError
+		}
 	}
+
+	return nil
+}
+
+func (p PrivilegeDescriptor) validateRequiredSuperuser(
+	id ID, allowedPrivileges privilege.Lists, user string,
+) error {
+	superPriv, ok := p.findUser(user)
+	if !ok {
+		return fmt.Errorf("user %s does not have privileges", user)
+	}
+
+	// The super users must match one of the allowed privilege sets exactly.
+	if !allowedPrivileges.Contains(superPriv.Privileges) {
+		return fmt.Errorf("user %s must have exactly %s privileges on system object with ID=%d",
+			user, allowedPrivileges, id)
+	}
+
 	return nil
 }
 

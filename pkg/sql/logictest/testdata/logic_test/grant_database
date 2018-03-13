@@ -16,8 +16,11 @@ a         pg_catalog          root   ALL
 a         public              admin  ALL
 a         public              root   ALL
 
-statement error user root does not have ALL privileges
+statement error user root must have exactly {ALL} privileges on system object with ID=.*
 REVOKE SELECT ON DATABASE a FROM root
+
+statement error user admin must have exactly {ALL} privileges on system object with ID=.*
+REVOKE SELECT ON DATABASE a FROM admin
 
 statement ok
 CREATE USER readwrite
