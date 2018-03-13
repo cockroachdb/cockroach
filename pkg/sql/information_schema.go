@@ -939,11 +939,12 @@ var (
 var informationSchemaTablesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE information_schema.tables (
-	TABLE_CATALOG STRING NOT NULL,
-	TABLE_SCHEMA  STRING NOT NULL,
-	TABLE_NAME    STRING NOT NULL,
-	TABLE_TYPE    STRING NOT NULL,
-	VERSION       INT
+	TABLE_CATALOG      STRING NOT NULL,
+	TABLE_SCHEMA       STRING NOT NULL,
+	TABLE_NAME         STRING NOT NULL,
+	TABLE_TYPE         STRING NOT NULL,
+	IS_INSERTABLE_INTO STRING NOT NULL,
+	VERSION            INT
 );`,
 	populate: func(ctx context.Context, p *planner, prefix *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, prefix, virtualMany,
@@ -952,19 +953,23 @@ CREATE TABLE information_schema.tables (
 					return nil
 				}
 				tableType := tableTypeBaseTable
+				insertable := yesString
 				if isVirtualDescriptor(table) {
 					tableType = tableTypeSystemView
+					insertable = noString
 				} else if table.IsView() {
 					tableType = tableTypeView
+					insertable = noString
 				}
 				dbNameStr := tree.NewDString(db.Name)
 				scNameStr := tree.NewDString(scName)
 				tbNameStr := tree.NewDString(table.Name)
 				return addRow(
-					dbNameStr, // table_catalog
-					scNameStr, // table_schema
-					tbNameStr, // table_name
-					tableType, // table_type
+					dbNameStr,                              // table_catalog
+					scNameStr,                              // table_schema
+					tbNameStr,                              // table_name
+					tableType,                              // table_type
+					insertable,                             // is_insertable_into
 					tree.NewDInt(tree.DInt(table.Version)), // version
 				)
 			})
