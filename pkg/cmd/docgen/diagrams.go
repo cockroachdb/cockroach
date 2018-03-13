@@ -832,9 +832,15 @@ var specs = []stmtSpec{
 		inline:  []string{"table_name_with_index"},
 		replace: map[string]string{"qualified_name": "table_name", "'@' name": "'@' index_name"},
 		unlink:  []string{"table_name", "index_name"}},
-	{name: "split_table_at",
+	{
+		name:   "sort_clause",
+		inline: []string{"sortby_list", "sortby", "opt_asc_desc"},
+	},
+	{
+		name:   "split_table_at",
 		stmt:   "alter_split_stmt",
-		unlink: []string{"table_name"}},
+		unlink: []string{"table_name"},
+	},
 	{name: "table_constraint", inline: []string{"constraint_elem", "opt_storing", "storing"}},
 	{
 		name:    "truncate_stmt",
