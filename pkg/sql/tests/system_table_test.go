@@ -124,12 +124,8 @@ func TestSystemTableLiterals(t *testing.T) {
 		{keys.LocationsTableID, sqlbase.LocationsTableSchema, sqlbase.LocationsTable, false},
 		{keys.RoleMembersTableID, sqlbase.RoleMembersTableSchema, sqlbase.RoleMembersTable, true},
 	} {
-		var privs *sqlbase.PrivilegeDescriptor
-		if test.hasAdmin {
-			privs = sqlbase.NewCustomSuperuserPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id))
-		} else {
-			privs = sqlbase.NewCustomRootPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id))
-		}
+		// Always create tables with "admin" privileges included, or CreateTestTableDescriptor fails.
+		privs := sqlbase.NewCustomSuperuserPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id))
 		gen, err := sql.CreateTestTableDescriptor(
 			context.TODO(),
 			keys.SystemDatabaseID,
@@ -138,8 +134,14 @@ func TestSystemTableLiterals(t *testing.T) {
 			privs,
 		)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("test: %+v, err: %v", test, err)
 		}
+		// Privileges for the admin user get automatically added in GetTable. We need to remove them
+		// for tables that only get it through migrations.
+		if !test.hasAdmin {
+			gen.Privileges = sqlbase.NewCustomRootPrivilegeDescriptor(sqlbase.SystemDesiredPrivileges(test.id))
+		}
+
 		if !proto.Equal(&test.pkg, &gen) {
 			diff := strings.Join(pretty.Diff(&test.pkg, &gen), "\n")
 			t.Errorf("%s table descriptor generated from CREATE TABLE statement does not match "+

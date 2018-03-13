@@ -155,7 +155,7 @@ func (s LeaseStore) acquire(
 		if err := filterTableState(tableDesc); err != nil {
 			return err
 		}
-		tableDesc.MaybeUpgradeFormatVersion()
+		tableDesc.MaybeFillInDescriptor()
 		// Once the descriptor is set it is immutable and care must be taken
 		// to not modify it.
 		table = &tableVersionState{
@@ -1487,7 +1487,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 					switch union := descriptor.Union.(type) {
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
-						table.MaybeUpgradeFormatVersion()
+						table.MaybeFillInDescriptor()
 						if err := table.ValidateTable(); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							return
