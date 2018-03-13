@@ -899,6 +899,12 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		option := &(*node)[i]
 		ctx.WriteByte(' ')
 		switch option.Name {
+		case SeqOptCycle, SeqOptNoCycle:
+			ctx.WriteString(option.Name)
+		case SeqOptCache:
+			ctx.WriteString(option.Name)
+			ctx.WriteByte(' ')
+			ctx.Printf("%d", *option.IntVal)
 		case SeqOptMaxValue, SeqOptMinValue:
 			if option.IntVal == nil {
 				ctx.WriteString("NO ")
@@ -922,6 +928,8 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 				ctx.WriteString("BY ")
 			}
 			ctx.Printf("%d", *option.IntVal)
+		default:
+			panic(fmt.Sprintf("unexpected SequenceOption: %v", option))
 		}
 	}
 }
@@ -937,10 +945,19 @@ type SequenceOption struct {
 
 // Names of options on CREATE SEQUENCE.
 const (
+	SeqOptAs        = "AS"
+	SeqOptCycle     = "CYCLE"
+	SeqOptNoCycle   = "NO CYCLE"
+	SeqOptOwnedBy   = "OWNED BY"
+	SeqOptCache     = "CACHE"
 	SeqOptIncrement = "INCREMENT"
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
+
+	// Avoid unused warning for constants.
+	_ = SeqOptAs
+	_ = SeqOptOwnedBy
 )
 
 // CreateUser represents a CREATE USER statement.
