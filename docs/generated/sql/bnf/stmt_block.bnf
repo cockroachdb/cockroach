@@ -571,8 +571,8 @@ create_database_stmt ::=
 	| 'CREATE' 'DATABASE' 'IF' 'NOT' 'EXISTS' database_name opt_with opt_template_clause opt_encoding_clause opt_lc_collate_clause opt_lc_ctype_clause
 
 create_index_stmt ::=
-	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
-	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_using_gin
+	'CREATE' opt_unique 'INDEX' opt_index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
+	| 'CREATE' opt_unique 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name opt_using_gin '(' index_params ')' opt_storing opt_interleave opt_partition_by
 	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' index_params ')'
 	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' index_params ')'
 
@@ -1152,6 +1152,10 @@ opt_unique ::=
 opt_index_name ::=
 	opt_name
 
+opt_using_gin ::=
+	'USING' 'GIN'
+	| 
+
 index_params ::=
 	( index_elem ) ( ( ',' index_elem ) )*
 
@@ -1165,10 +1169,6 @@ opt_interleave ::=
 
 opt_partition_by ::=
 	partition_by
-	| 
-
-opt_using_gin ::=
-	'USING' 'GIN'
 	| 
 
 index_name ::=
