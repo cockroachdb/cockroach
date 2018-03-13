@@ -1732,6 +1732,9 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	}
 
 	fullBackup, latestBackup := filepath.Join(dir, "full"), filepath.Join(dir, "latest")
+	incBackup, incLatestBackup := filepath.Join(dir, "inc"), filepath.Join(dir, "inc-latest")
+	inc2Backup, inc2LatestBackup := incBackup+".2", incLatestBackup+".2"
+
 	sqlDB.Exec(t,
 		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s WITH revision_history`, ts[2]),
 		fullBackup,
@@ -1782,16 +1785,32 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	           SELECT i, 4 FROM GENERATE_SERIES(0, $1 - 1) AS g(i)`, numAccounts)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[8])
 
-	incBackup := filepath.Join(dir, "inc")
 	sqlDB.Exec(t,
-		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2 WITH revision_history`,
+		fmt.Sprintf(`BACKUP DATABASE data TO $1 AS OF SYSTEM TIME %s INCREMENTAL FROM $2 WITH revision_history`, ts[5]),
 		incBackup, fullBackup,
 	)
+	sqlDB.Exec(t,
+		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3 WITH revision_history`,
+		inc2Backup, fullBackup, incBackup,
+	)
+
+	sqlDB.Exec(t,
+		fmt.Sprintf(`BACKUP DATABASE data TO $1	AS OF SYSTEM TIME %s INCREMENTAL FROM $2`, ts[5]),
+		incLatestBackup, latestBackup,
+	)
+	sqlDB.Exec(t,
+		`BACKUP DATABASE data TO $1 INCREMENTAL FROM $2, $3`,
+		inc2LatestBackup, latestBackup, incLatestBackup,
+	)
+
 	incTableBackup := filepath.Join(dir, "inctbl")
 	sqlDB.Exec(t,
 		`BACKUP data.bank TO $1 INCREMENTAL FROM $2 WITH revision_history`,
 		incTableBackup, fullTableBackup,
 	)
+
+	var after string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&after)
 
 	for i, timestamp := range ts {
 		name := fmt.Sprintf("ts%d", i)
@@ -1806,10 +1825,10 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 			// time-travel.
 			sqlDB.Exec(t,
 				fmt.Sprintf(
-					`RESTORE data.* FROM $1, $2 AS OF SYSTEM TIME %s WITH into_db='%s'`,
+					`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='%s'`,
 					timestamp, name,
 				),
-				fullBackup, incBackup,
+				fullBackup, incBackup, inc2Backup,
 			)
 			// Similarly restore the since-table backup -- since full DB and single table
 			// backups sometimes behave differently.
@@ -1852,11 +1871,35 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 		// The "latest" backup didn't specify ALL mvcc values, so we can't restore
 		// to times in the middle.
 		sqlDB.Exec(t, `CREATE DATABASE err`)
-		_, err := sqlDB.DB.Exec(
-			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[1]),
+
+		// fullBackup covers up to ts[2], inc to ts[5], inc2 to > ts[8].
+		if _, err := sqlDB.DB.Exec(
+			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, ts[3]),
+			fullBackup,
+		); !testutils.IsError(err, "incompatible RESTORE timestamp") {
+			t.Errorf("expected 'incompatible RESTORE timestamp' error got %+v", err)
+		}
+
+		for _, i := range ts {
+			if _, err := sqlDB.DB.Exec(
+				fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+				latestBackup,
+			); !testutils.IsError(err, "incompatible RESTORE timestamp") {
+				t.Errorf("%q: expected 'incompatible RESTORE timestamp' error got %+v", i, err)
+			}
+
+			if _, err := sqlDB.DB.Exec(
+				fmt.Sprintf(`RESTORE data.* FROM $1, $2, $3 AS OF SYSTEM TIME %s WITH into_db='err'`, i),
+				latestBackup, incLatestBackup, inc2LatestBackup,
+			); !testutils.IsError(err, "incompatible RESTORE timestamp") {
+				t.Errorf("%q: expected 'incompatible RESTORE timestamp' error got %+v", i, err)
+			}
+		}
+
+		if _, err := sqlDB.DB.Exec(
+			fmt.Sprintf(`RESTORE data.* FROM $1 AS OF SYSTEM TIME %s WITH into_db='err'`, after),
 			latestBackup,
-		)
-		if !testutils.IsError(err, "incompatible RESTORE timestamp") {
+		); !testutils.IsError(err, "incompatible RESTORE timestamp") {
 			t.Errorf("expected 'incompatible RESTORE timestamp' error got %+v", err)
 		}
 	})
@@ -1891,7 +1934,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 	if _, err := sqlDB.DB.Exec(
 		fmt.Sprintf(`RESTORE data.bank FROM $1 AS OF SYSTEM TIME %s`, preGC),
 		lateFullTableBackup,
-	); !testutils.IsError(err, `BACKUP only has revision history from`) {
+	); !testutils.IsError(err, `BACKUP for requested time only has revision history from`) {
 		t.Fatal(err)
 	}
 	if _, err := sqlDB.DB.Exec(
