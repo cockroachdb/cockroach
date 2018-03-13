@@ -17,6 +17,8 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { CustomMetricState, CustomMetricRow } from "./customMetric";
 import "./customgraph.styl";
 
+import { NodeStatus$Properties } from "../../../../util/proto";
+
 const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Count,
   AxisUnits.Bytes,
@@ -66,7 +68,7 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
 
       return _.keys(nodeStatuses[0].metrics).map(k => {
         const fullMetricName =
-          _.has(nodeStatuses[0].store_statuses[0].metrics, k)
+          isStoreMetric(nodeStatuses[0], k)
           ? "cr.store." + k
           : "cr.node." + k;
 
@@ -148,6 +150,7 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
   renderGraph() {
     const metrics = this.currentMetrics();
     const units = this.currentAxisUnits();
+    const { nodesSummary } = this.props;
     if (_.isEmpty(metrics)) {
       return (
         <section className="section">
@@ -164,17 +167,35 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
               {
                 metrics.map((m, i) => {
                   if (m.metric !== "") {
-                    return (
-                      <Metric
-                        key={i}
-                        title={m.metric}
-                        name={m.metric}
-                        aggregator={m.aggregator}
-                        downsampler={m.downsampler}
-                        derivative={m.derivative}
-                        sources={m.source === "" ? [] : [m.source]}
-                      />
-                    );
+                    if (m.perNode) {
+                      return _.map(nodesSummary.nodeIDs, (nodeID) => (
+                        <Metric
+                          key={"${i}${nodeID}"}
+                          title={`${nodeID}: ${m.metric} (${i})`}
+                          name={m.metric}
+                          aggregator={m.aggregator}
+                          downsampler={m.downsampler}
+                          derivative={m.derivative}
+                          sources={
+                            isStoreMetric(nodesSummary.nodeStatuses[0], m.metric)
+                            ? _.map(nodesSummary.storeIDsByNodeID[nodeID] || [], n => n.toString())
+                            : [nodeID]
+                          }
+                        />
+                      ));
+                    } else {
+                      return (
+                        <Metric
+                          key={i}
+                          title={`${m.metric} (${i}) `}
+                          name={m.metric}
+                          aggregator={m.aggregator}
+                          downsampler={m.downsampler}
+                          derivative={m.derivative}
+                          sources={m.source === "" ? [] : [m.source]}
+                        />
+                      );
+                    }
                   }
                   return "";
                 })
@@ -202,6 +223,7 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
               <td className="metric-table__header">Aggregator</td>
               <td className="metric-table__header">Rate</td>
               <td className="metric-table__header">Source</td>
+              <td className="metric-table__header">Per Node</td>
               <td className="metric-table__header metric-table__header--no-title"></td>
             </tr>
           </thead>
@@ -266,3 +288,7 @@ const mapDispatchToProps = {
 };
 
 export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomGraph));
+
+function isStoreMetric(nodeStatus: NodeStatus$Properties, metricName: string) {
+  return _.has(nodeStatus.store_statuses[0].metrics, metricName);
+}

@@ -236,6 +236,19 @@ export const nodeDisplayNameByIDSelector = createSelector(
   },
 );
 
+// selectStoreIDsByNodeID returns a map from node ID to a list of store IDs for
+// that node. Like nodeIDsSelector, the store ids are converted to strings.
+export const selectStoreIDsByNodeID = createSelector(
+  nodeStatusesSelector,
+  (nodeStatuses) => {
+    const result: {[key: string]: string[]} = {};
+    _.each(nodeStatuses, ns =>
+        result[ns.desc.node_id] = _.map(ns.store_statuses, ss => ss.desc.store_id.toString()),
+    );
+    return result;
+  },
+);
+
 /**
  * nodesSummarySelector returns a directory object containing a variety of
  * computed information based on the current nodes. This object is easy to
@@ -249,7 +262,8 @@ export const nodesSummarySelector = createSelector(
   nodeDisplayNameByIDSelector,
   livenessStatusByNodeIDSelector,
   livenessByNodeIDSelector,
-  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, nodeDisplayNameByID, livenessStatusByNodeID, livenessByNodeID) => {
+  selectStoreIDsByNodeID,
+  (nodeStatuses, nodeIDs, nodeStatusByID, nodeSums, nodeDisplayNameByID, livenessStatusByNodeID, livenessByNodeID, storeIDsByNodeID) => {
     return {
       nodeStatuses,
       nodeIDs,
@@ -258,6 +272,7 @@ export const nodesSummarySelector = createSelector(
       nodeDisplayNameByID,
       livenessStatusByNodeID,
       livenessByNodeID,
+      storeIDsByNodeID,
     };
   },
 );

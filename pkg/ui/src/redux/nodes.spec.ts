@@ -6,6 +6,7 @@ import * as protos from "src/js/protos";
 import {
   nodeDisplayNameByIDSelector,
   selectCommissionedNodeStatuses,
+  selectStoreIDsByNodeID,
   LivenessStatus,
   sumNodeStats,
 } from "./nodes";
@@ -108,6 +109,43 @@ describe("node data selectors", function() {
     it("returns empty collection for empty state", function() {
       const store = createAdminUIStore();
       assert.deepEqual(nodeDisplayNameByIDSelector(store.getState()), {});
+    });
+  });
+
+  describe("store IDs by node ID", function() {
+    it("correctly creates storeID map", function() {
+      const data = [
+        {
+          desc: { node_id: 1 },
+          store_statuses: [
+            { desc: { store_id: 1 }},
+            { desc: { store_id: 2 }},
+            { desc: { store_id: 3 }},
+          ],
+        },
+        {
+          desc: { node_id: 2 },
+          store_statuses: [
+            { desc: { store_id: 4 }},
+          ],
+        },
+        {
+          desc: { node_id: 3 },
+          store_statuses: [
+            { desc: { store_id: 5 }},
+            { desc: { store_id: 6 }},
+          ],
+        },
+      ];
+      const store = createAdminUIStore();
+      store.dispatch(nodesReducerObj.receiveData(data));
+      const state = store.getState();
+
+      assert.deepEqual(selectStoreIDsByNodeID(state), {
+        1: ["1", "2", "3"],
+        2: ["4"],
+        3: ["5", "6"],
+      });
     });
   });
 });
