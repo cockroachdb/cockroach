@@ -1,0 +1,26 @@
+# =============================================================================
+# limit.opt contains normalization rules for the Limit and Offset operators.
+# =============================================================================
+
+#[PushLimitThroughProject, Normalize]
+#(Limit
+#    (Project $input:* $projections:*)
+#    $limit:*
+#)
+#=>
+#(Project $input:* $projections:*)
+#(Project
+#    (Limit $input $limit)
+#    $projections
+#)
+#
+#[PushLimitThroughSelect, Normalize]
+#(Limit
+#    (Project $input:* $projections:*)
+#    $limit:*
+#)
+#=>
+#(Project
+#    (Limit $input $limit)
+#    $projections
+#)

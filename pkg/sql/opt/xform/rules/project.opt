@@ -62,6 +62,48 @@ $input
     $projections
 )
 
+# FilterUnusedLimitCols discards Limit input columns that are never used.
+[FilterUnusedLimitCols]
+(Project
+    (Limit
+        $input:*
+        $limit:*
+        $ordering:*
+    )
+    $projections:* & (HasUnusedColumns $input (projAndOrderingNeededCols $projections $ordering))
+)
+=>
+(Project
+    (Limit
+        (FilterUnusedColumns $input (projAndOrderingNeededCols $projections $ordering))
+        $limit
+        $ordering
+    )
+    $projections
+)
+
+# FilterUnusedOffsetCols discards Offset input columns that are never used.
+# Note: this rule is separate from FilterUnusedLimitCols because we can't access
+# the ordering private if using (Limit | Offset .. ).
+[FilterUnusedOffsetCols]
+(Project
+    (Offset
+        $input:*
+        $offset:*
+        $ordering:*
+    )
+    $projections:* & (HasUnusedColumns $input (projAndOrderingNeededCols $projections $ordering))
+)
+=>
+(Project
+    (Offset
+        (FilterUnusedColumns $input (projAndOrderingNeededCols $projections $ordering))
+        $offset
+        $ordering
+    )
+    $projections
+)
+
 # FilterUnusedJoinLeftCols discards columns on the left side of a join that are
 # never used.
 [FilterUnusedJoinLeftCols]

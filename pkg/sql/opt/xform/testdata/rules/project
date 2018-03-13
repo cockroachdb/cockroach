@@ -289,6 +289,71 @@ project
       └── variable: a.y [type=int, outer=(2)]
 
 # --------------------------------------------------
+# FilterUnusedLimitCols
+# --------------------------------------------------
+
+# The projection on top of Limit should trickle down and we shouldn't scan f.
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# --------------------------------------------------
+# FilterUnusedOffsetCols
+# --------------------------------------------------
+
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# --------------------------------------------------
+# FilterUnusedLimitCols + FilterUnusedOffsetCols
+# --------------------------------------------------
+
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    ├── sort
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │    ├── ordering: +2
+ │    │    │    └── scan a
+ │    │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# --------------------------------------------------
 # FilterUnusedJoinLeftCols
 # --------------------------------------------------
 
