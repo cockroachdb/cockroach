@@ -477,9 +477,9 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR, INDEX foo (v));
 			// Make index "foo" live so that we can read it.
 			mTest.makeMutationsActive()
 			if state == sqlbase.DescriptorMutation_DELETE_ONLY {
-				// updating "x" -> "w" is a noop on the index,
+				// updating "x" -> "w" will result in "x" being deleted from the index.
 				// updating "z" -> "z" results in "z" being deleted from the index.
-				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}, {"z"}})
+				mTest.CheckQueryResults(t, indexQuery, [][]string{{"y"}})
 			} else {
 				// updating "x" -> "w" results in the index updating from "x" -> "w",
 				// updating "z" -> "z" is a noop on the index.
