@@ -593,18 +593,14 @@ func init() {
 	go signalFlusher()
 }
 
-// signalFlusher flushes the log(s) every time SIGUSR1 is received.
+// signalFlusher flushes the log(s) every time SIGHUP is received.
 func signalFlusher() {
 	flushCh := make(chan os.Signal, 1)
-	signal.Notify(flushCh, syscall.SIGUSR1, syscall.SIGUSR2)
+	signal.Notify(flushCh, syscall.SIGHUP)
 
 	for sig := range flushCh {
 		Infof(context.Background(), "%s received, flushing logs", sig)
 		Flush()
-		if sig == syscall.SIGUSR2 {
-			Infof(context.Background(), "%s received, rotating logs", sig)
-			Rotate()
-		}
 	}
 }
 
@@ -629,16 +625,6 @@ func Flush() {
 	for _, l := range secondaryLogRegistry.mu.loggers {
 		// Some loggers (e.g. the audit log) want to keep all the files.
 		l.logger.lockAndFlushAll()
-	}
-}
-
-// Rotate rotates all the currently open log files.
-func Rotate() {
-	logging.lockAndRotateFile()
-	secondaryLogRegistry.mu.Lock()
-	defer secondaryLogRegistry.mu.Unlock()
-	for _, l := range secondaryLogRegistry.mu.loggers {
-		l.logger.lockAndRotateFile()
 	}
 }
 
@@ -987,16 +973,6 @@ func (l *loggingT) exitLocked(err error) {
 	}
 	l.flushAndSync(true /*doSync*/)
 	l.exitFunc(2)
-}
-
-func (l *loggingT) lockAndRotateFile() {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if sb, ok := l.file.(*syncBuffer); ok {
-		if err := sb.rotateFile(timeutil.Now()); err != nil {
-			l.exitLocked(err)
-		}
-	}
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the

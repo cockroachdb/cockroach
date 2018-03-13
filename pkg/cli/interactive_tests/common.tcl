@@ -107,15 +107,11 @@ proc stop_server {argv} {
     report "END STOP SERVER"
 }
 
-proc rotate_server_logs {} {
-    report "BEGIN ROTATE LOGS"
-    system "kill -USR2 `cat server_pid` 2>/dev/null"
-    report "END ROTATE LOGS"
-}
-
 proc flush_server_logs {} {
     report "BEGIN FLUSH LOGS"
-    system "kill -USR1 `cat server_pid` 2>/dev/null"
+    system "kill -HUP `cat server_pid` 2>/dev/null"
+    # Wait for flush to occur.
+    system "for i in `seq 1 3`; do grep 'hangup received, flushing logs' logs/db/logs/cockroach.log && exit 0; echo still waiting; sleep 1; done; echo 'server failed to flush logs?'; exit 1"
     report "END FLUSH LOGS"
 }
 
