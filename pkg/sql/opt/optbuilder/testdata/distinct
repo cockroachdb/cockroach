@@ -31,7 +31,7 @@ SELECT y, z FROM t.xyz
 ----
 project
  ├── columns: y:2(int) z:3(float)
- ├── scan
+ ├── scan xyz
  │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  └── projections [outer=(2,3)]
       ├── variable: xyz.y [type=int, outer=(2)]
@@ -45,7 +45,7 @@ group-by
  ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
  ├── project
  │    ├── columns: xyz.y:2(int) xyz.z:3(float)
- │    ├── scan
+ │    ├── scan xyz
  │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections [outer=(2,3)]
  │         ├── variable: xyz.y [type=int, outer=(2)]
@@ -62,7 +62,7 @@ project
  │    ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
  │    ├── project
  │    │    ├── columns: xyz.y:2(int) xyz.z:3(float)
- │    │    ├── scan
+ │    │    ├── scan xyz
  │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── projections [outer=(2,3)]
  │    │         ├── variable: xyz.y [type=int, outer=(2)]
@@ -80,7 +80,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
-      ├── scan
+      ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
       └── aggregations
 
@@ -93,7 +93,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
-      ├── scan
+      ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
       └── aggregations
 
@@ -106,7 +106,7 @@ sort
  └── group-by
       ├── columns: xyz.y:2(int) xyz.z:3(float)
       ├── grouping columns: xyz.y:2(int) xyz.z:3(float)
-      ├── scan
+      ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
       └── aggregations
 
@@ -148,7 +148,7 @@ group-by
  ├── grouping columns: column4:4(tuple{int, float})
  ├── project
  │    ├── columns: column4:4(tuple{int, float})
- │    ├── scan
+ │    ├── scan xyz
  │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections [outer=(2,3)]
  │         └── tuple [type=tuple{int, float}, outer=(2,3)]
@@ -167,7 +167,7 @@ group-by
  │    │    ├── grouping columns: xyz.y:2(int)
  │    │    ├── project
  │    │    │    ├── columns: xyz.y:2(int)
- │    │    │    ├── scan
+ │    │    │    ├── scan xyz
  │    │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    │    └── projections [outer=(2)]
  │    │    │         └── variable: xyz.y [type=int, outer=(2)]
@@ -186,7 +186,7 @@ group-by
  │    ├── columns: xyz.x:1(int!null)
  │    ├── select
  │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
- │    │    ├── scan
+ │    │    ├── scan xyz
  │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── gt [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
@@ -205,7 +205,7 @@ group-by
  │    ├── columns: xyz.z:3(float)
  │    ├── select
  │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
- │    │    ├── scan
+ │    │    ├── scan xyz
  │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    └── gt [type=bool, outer=(1)]
  │    │         ├── variable: xyz.x [type=int, outer=(1)]
@@ -227,7 +227,7 @@ group-by
  │    │    ├── grouping columns: xyz.x:1(int!null)
  │    │    ├── project
  │    │    │    ├── columns: xyz.x:1(int!null) xyz.x:1(int!null)
- │    │    │    ├── scan
+ │    │    │    ├── scan xyz
  │    │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    │    └── projections [outer=(1)]
  │    │    │         ├── variable: xyz.x [type=int, outer=(1)]
@@ -247,7 +247,7 @@ group-by
  ├── grouping columns: column4:4(int)
  ├── project
  │    ├── columns: column4:4(int)
- │    ├── scan
+ │    ├── scan xyz
  │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections [outer=(1,2)]
  │         └── plus [type=int, outer=(1,2)]
@@ -263,7 +263,7 @@ group-by
  ├── grouping columns: column4:4(int)
  ├── project
  │    ├── columns: column4:4(int)
- │    ├── scan
+ │    ├── scan xyz
  │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    └── projections
  │         └── const: 3 [type=int]
@@ -296,7 +296,7 @@ group-by
  │    │    ├── group-by
  │    │    │    ├── columns: xyz.x:1(int!null) xyz.y:2(int) column4:4(float)
  │    │    │    ├── grouping columns: xyz.x:1(int!null) xyz.y:2(int)
- │    │    │    ├── scan
+ │    │    │    ├── scan xyz
  │    │    │    │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(float)
  │    │    │    └── aggregations [outer=(3)]
  │    │    │         └── function: max [type=float, outer=(3)]
@@ -346,6 +346,6 @@ sort
  └── group-by
       ├── columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
       ├── grouping columns: abcd.b:2(int!null) abcd.d:4(int!null) column5:5(int)
-      ├── scan
+      ├── scan abcd
       │    └── columns: abcd.a:1(int!null) abcd.b:2(int!null) abcd.c:3(int!null) abcd.d:4(int!null)
       └── aggregations
