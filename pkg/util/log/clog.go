@@ -35,13 +35,13 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
 )
@@ -596,12 +596,12 @@ func init() {
 // signalFlusher flushes the log(s) every time SIGUSR1 is received.
 func signalFlusher() {
 	flushCh := make(chan os.Signal, 1)
-	signal.Notify(flushCh, syscall.SIGUSR1, syscall.SIGUSR2)
+	signal.Notify(flushCh, sysutil.MaybeSIGUSR1, sysutil.MaybeSIGUSR2)
 
 	for sig := range flushCh {
 		Infof(context.Background(), "%s received, flushing logs", sig)
 		Flush()
-		if sig == syscall.SIGUSR2 {
+		if sig == sysutil.MaybeSIGUSR2 {
 			Infof(context.Background(), "%s received, rotating logs", sig)
 			Rotate()
 		}
