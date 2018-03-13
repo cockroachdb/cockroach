@@ -787,6 +787,9 @@ func bestRebalanceTarget(
 			continue
 		}
 		target := option.candidates.selectGood(randGen)
+		if target == nil {
+			continue
+		}
 		existing := option.existingCandidates[len(option.existingCandidates)-1]
 		if betterRebalanceTarget(target, &existing, bestTarget, &replaces) == target {
 			bestIdx = i
