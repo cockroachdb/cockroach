@@ -599,25 +599,28 @@ SELECT COUNT((k, v)) FROM kv
 column6:int
 6
 
-#exec
-#SELECT COUNT(DISTINCT (k, v)) FROM kv
-#----
-#6
-#
-#exec
-#SELECT COUNT(DISTINCT (k, (v))) FROM kv
-#----
-#6
+exec
+SELECT COUNT(DISTINCT (k, v)) FROM kv
+----
+column6:int
+6
 
-#TODO(radu): LIMIT not supported.
-#exec
-#SELECT COUNT((k, v)) FROM kv LIMIT 1
-#----
-#6
-#
-#exec
-#SELECT COUNT((k, v)) FROM kv OFFSET 1
-#----
+exec
+SELECT COUNT(DISTINCT (k, (v))) FROM kv
+----
+column6:int
+6
+
+exec
+SELECT COUNT((k, v)) FROM kv LIMIT 1
+----
+column6:int
+6
+
+exec
+SELECT COUNT((k, v)) FROM kv OFFSET 1
+----
+column6:int
 
 exec
 SELECT COUNT(k)+COUNT(kv.v) FROM kv

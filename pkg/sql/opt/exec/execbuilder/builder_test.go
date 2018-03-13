@@ -29,12 +29,13 @@ package execbuilder
 //
 //    Runs a SQL statement against the database (not through the execbuilder).
 //
-//  - build
+//  - opt
 //
 //    Builds a memo structure from a SQL query and outputs a representation of
-//    the "expression view" of the memo structure. Note: tests for the build
-//    process belong in the optbuilder tests; this is here only to have the
-//    expression view in the testfiles (for documentation).
+//    the "expression view" of the memo structure, after normalization.
+//    Note: tests for the build process belong in the optbuilder tests; this is
+//    here only to have the expression view in the testfiles (for
+//    documentation).
 //
 //  - exec
 //
@@ -162,7 +163,7 @@ func TestBuild(t *testing.T) {
 					}
 					return ""
 
-				case "build", "exec", "exec-explain":
+				case "opt", "exec", "exec-explain":
 					// Parse the SQL.
 					stmt, err := parser.ParseOne(d.Input)
 					if err != nil {
@@ -184,7 +185,7 @@ func TestBuild(t *testing.T) {
 					}
 					ev := o.Optimize(root, props)
 
-					if d.Cmd == "build" {
+					if d.Cmd == "opt" {
 						return ev.String()
 					}
 

@@ -16,6 +16,7 @@ package execbuilder
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/pkg/errors"
 
@@ -119,6 +120,9 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		ep, err = b.buildSetOp(ev)
+
+	case opt.LimitOp, opt.OffsetOp:
+		ep, err = b.buildLimitOffset(ev)
 
 	case opt.SortOp:
 		ep, err = b.buildSort(ev)
@@ -389,6 +393,34 @@ func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
 		ep.outputCols.Set(int(col), i)
 	}
 	return ep, nil
+}
+
+// buildLimitOffset builds a plan for a LimitOp or OffsetOp
+func (b *Builder) buildLimitOffset(ev xform.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+	valueExpr := ev.Child(1)
+	if valueExpr.Operator() != opt.ConstOp {
+		return execPlan{}, errors.Errorf("only constant LIMIT/OFFSET supported")
+	}
+	datum := valueExpr.Private().(tree.Datum)
+	value, ok := datum.(*tree.DInt)
+	if !ok {
+		return execPlan{}, errors.Errorf("non-integer LIMIT/OFFSET")
+	}
+	var limit, offset int64
+	if ev.Operator() == opt.LimitOp {
+		limit, offset = int64(*value), 0
+	} else {
+		limit, offset = math.MaxInt64, int64(*value)
+	}
+	node, err := b.factory.ConstructLimit(input.root, limit, offset)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
 func (b *Builder) buildSort(ev xform.ExprView) (execPlan, error) {
