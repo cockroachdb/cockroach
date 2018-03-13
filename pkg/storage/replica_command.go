@@ -705,14 +705,15 @@ func runCommitTrigger(
 // AdminSplit divides the range into into two ranges using args.SplitKey.
 func (r *Replica) AdminSplit(
 	ctx context.Context, args roachpb.AdminSplitRequest,
-) (roachpb.AdminSplitResponse, *roachpb.Error) {
+) (reply roachpb.AdminSplitResponse, pErr *roachpb.Error) {
 	if len(args.SplitKey) == 0 {
 		return roachpb.AdminSplitResponse{}, roachpb.NewErrorf("cannot split range with no key provided")
 	}
+
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = 10
 	for retryable := retry.StartWithCtx(ctx, retryOpts); retryable.Next(); {
-		reply, _, pErr := r.adminSplitWithDescriptor(ctx, args, r.Desc())
+		reply, _, pErr = r.adminSplitWithDescriptor(ctx, args, r.Desc())
 		// On seeing a ConditionFailedError or an AmbiguousResultError, retry the
 		// command with the updated descriptor.
 		switch pErr.GetDetail().(type) {
@@ -722,7 +723,8 @@ func (r *Replica) AdminSplit(
 			return reply, pErr
 		}
 	}
-	return roachpb.AdminSplitResponse{}, roachpb.NewError(ctx.Err())
+	// If we broke out of the loop after MaxRetries, return the last error.
+	return roachpb.AdminSplitResponse{}, pErr
 }
 
 func maybeDescriptorChangedError(desc *roachpb.RangeDescriptor, err error) (string, bool) {
