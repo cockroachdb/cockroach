@@ -98,7 +98,7 @@ func (p *planner) changePrivileges(
 			}
 
 		case *sqlbase.TableDescriptor:
-			if err := d.Validate(ctx, p.txn); err != nil {
+			if err := d.Validate(ctx, p.txn, &p.extendedEvalCtx.Settings.Version); err != nil {
 				return nil, err
 			}
 			if err := d.SetUpVersion(); err != nil {

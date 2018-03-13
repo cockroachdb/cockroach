@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -166,7 +167,7 @@ func (s LeaseStore) acquire(
 
 		// ValidateTable instead of Validate, even though we have a txn available,
 		// so we don't block reads waiting for this table version.
-		if err := table.ValidateTable(); err != nil {
+		if err := table.ValidateTable(&cluster.MakeTestingClusterSettings().Version); err != nil {
 			return err
 		}
 
@@ -351,7 +352,7 @@ func (s LeaseStore) Publish(
 			tableDesc.ModificationTime = modTime
 			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
 				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
-			if err := tableDesc.ValidateTable(); err != nil {
+			if err := tableDesc.ValidateTable(&s.execCfg.Settings.Version); err != nil {
 				return err
 			}
 
@@ -1488,7 +1489,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeUpgradeFormatVersion()
-						if err := table.ValidateTable(); err != nil {
+						if err := table.ValidateTable(&m.execCfg.Settings.Version); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							return
 						}

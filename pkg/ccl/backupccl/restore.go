@@ -871,7 +871,7 @@ func WriteTableDescs(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn); err != nil {
+			if err := table.Validate(ctx, txn, nil); err != nil {
 				return errors.Wrapf(err, "validate table %d", table.ID)
 			}
 		}

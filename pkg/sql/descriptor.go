@@ -196,7 +196,7 @@ func getDescriptorByID(
 		// but it's worth it to avoid having to do the upgrade every time the
 		// descriptor is fetched. Our current test for this enforces compatibility
 		// backward and forward, so that'll have to be extended before this is done.
-		if err := table.Validate(ctx, txn); err != nil {
+		if err := table.Validate(ctx, txn, nil /* clusterVersion */); err != nil {
 			return err
 		}
 		*t = *table

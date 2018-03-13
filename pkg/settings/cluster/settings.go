@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -139,6 +140,13 @@ func (ecv *ExposedClusterVersion) Version() ClusterVersion {
 	return v
 }
 
+// Version returns the minimum cluster version the caller may assume is in
+// effect. It must not be called until the setting has been initialized.
+func (ecv *ExposedClusterVersion) HasBeenInitialized() bool {
+	v := *ecv.baseVersion.Load().(*ClusterVersion)
+	return v != ClusterVersion{}
+}
+
 // BootstrapVersion returns the version a newly initialized cluster should have.
 func (ecv *ExposedClusterVersion) BootstrapVersion() ClusterVersion {
 	return ClusterVersion{
@@ -169,6 +177,20 @@ func (ecv *ExposedClusterVersion) IsActive(versionKey VersionKey) bool {
 // permanently available (i.e. cannot be downgraded away).
 func (ecv *ExposedClusterVersion) IsMinSupported(versionKey VersionKey) bool {
 	return ecv.Version().IsMinSupported(versionKey)
+}
+
+// CheckVersion is like IsMinSupported but returns an appropriate error in the
+// case of a cluster version which is too low.
+func (ecv *ExposedClusterVersion) CheckVersion(versionKey VersionKey, feature string) error {
+	if !ecv.Version().IsMinSupported(versionKey) {
+		return pgerror.NewErrorf(
+			pgerror.CodeFeatureNotSupportedError,
+			"cluster version does not support %s (>= %s required)",
+			feature,
+			versionKey,
+		)
+	}
+	return nil
 }
 
 // MakeTestingClusterSettings returns a Settings object that has had its version

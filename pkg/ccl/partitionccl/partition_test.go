@@ -129,7 +129,7 @@ func (t *partitioningTest) parse() error {
 		if err != nil {
 			return err
 		}
-		if err := t.parsed.tableDesc.ValidateTable(); err != nil {
+		if err := t.parsed.tableDesc.ValidateTable(st.Settings.Version); err != nil {
 			return err
 		}
 	}
