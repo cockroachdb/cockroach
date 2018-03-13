@@ -16,7 +16,6 @@ package privilege
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -165,33 +164,4 @@ func ListFromStrings(strs []string) (List, error) {
 		ret[i] = k
 	}
 	return ret, nil
-}
-
-// Lists is a list of privilege lists
-type Lists []List
-
-// Contains returns whether the list of privilege lists contains exactly the
-// privilege list represented by bitfield m. This intentionally treats ALL and
-// {CREATE, ..., UPDATE} as distinct privilege lists.
-func (pls Lists) Contains(m uint32) bool {
-	for _, pl := range pls {
-		if pl.ToBitField() == m {
-			return true
-		}
-	}
-	return false
-}
-
-// String stringifies each constituent list of privileges, groups each inside of
-// {} braces, and joins them with " or ".
-//
-// Examples:
-//   {{SELECT}}.String() -> "{SELECT}"
-//   {{SELECT}, {SELECT, GRANT}}.String() -> "{SELECT} or {SELECT, GRANT}"
-func (pls Lists) String() string {
-	ret := make([]string, len(pls))
-	for i, pl := range pls {
-		ret[i] = fmt.Sprintf("{%s}", pl)
-	}
-	return strings.Join(ret, " or ")
 }
