@@ -1047,6 +1047,10 @@ func (db *DB) Query(
 		aggFn = aggregatingIterator.max
 	case tspb.TimeSeriesQueryAggregator_MIN:
 		aggFn = aggregatingIterator.min
+	default:
+		return nil, nil, fmt.Errorf(
+			"query specified unknown time series aggregator: %s", query.GetSourceAggregator().String(),
+		)
 	}
 
 	// Filter the result of the aggregation function through a leading edge
@@ -1124,7 +1128,6 @@ func makeDataSpans(
 	return sourceSpans, nil
 }
 
-// getExtractionFunction returns
 func getExtractionFunction(agg tspb.TimeSeriesQueryAggregator) (extractFn, error) {
 	switch agg {
 	case tspb.TimeSeriesQueryAggregator_AVG:
@@ -1136,7 +1139,7 @@ func getExtractionFunction(agg tspb.TimeSeriesQueryAggregator) (extractFn, error
 	case tspb.TimeSeriesQueryAggregator_MIN:
 		return (roachpb.InternalTimeSeriesSample).Minimum, nil
 	}
-	return nil, errors.Errorf("query specified unknown time series aggregator %s", agg.String())
+	return nil, errors.Errorf("query specified unknown time series downsampler %s", agg.String())
 }
 
 func downsampleSum(points ...roachpb.InternalTimeSeriesSample) float64 {
@@ -1177,7 +1180,6 @@ func downsampleAvg(points ...roachpb.InternalTimeSeriesSample) float64 {
 	return total / float64(count)
 }
 
-// getDownsampleFunction returns
 func getDownsampleFunction(agg tspb.TimeSeriesQueryAggregator) (downsampleFn, error) {
 	switch agg {
 	case tspb.TimeSeriesQueryAggregator_AVG:
@@ -1189,5 +1191,5 @@ func getDownsampleFunction(agg tspb.TimeSeriesQueryAggregator) (downsampleFn, er
 	case tspb.TimeSeriesQueryAggregator_MIN:
 		return downsampleMin, nil
 	}
-	return nil, errors.Errorf("query specified unknown time series aggregator %s", agg.String())
+	return nil, errors.Errorf("query specified unknown time series downsampler %s", agg.String())
 }

@@ -1494,3 +1494,60 @@ func TestQueryWorkerMemoryMonitor(t *testing.T) {
 	t.Logf("total allocations for query: %d\n", memStatsAfter.TotalAlloc-memStatsBefore.TotalAlloc)
 	t.Logf("maximum allocations for query monitor: %d\n", limitedMon.MaximumBytes())
 }
+
+// TestQueryBadRequests confirms that the query method returns gentle errors for
+// obviously bad incoming data.
+func TestQueryBadRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tm := newTestModel(t)
+	tm.Start()
+	defer tm.Stop()
+
+	account := tm.workerMemMonitor.MakeBoundAccount()
+	defer account.Close(context.TODO())
+
+	// Query with a downsampler that is invalid, expect error.
+	downsampler := (tspb.TimeSeriesQueryAggregator)(999)
+	_, _, err := tm.DB.Query(
+		context.TODO(), tspb.Query{
+			Name:        "metric.test",
+			Downsampler: downsampler.Enum(),
+		}, resolution1ns, 10, 0, 10000, 0, &account, tm.workerMemMonitor,
+	)
+	errorStr := "unknown time series downsampler"
+	if !testutils.IsError(err, errorStr) {
+		if err == nil {
+			t.Fatalf("bad query got no error, wanted to match %q", errorStr)
+		} else {
+			t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
+		}
+	}
+
+	// Query with a aggregator that is invalid, expect error.
+	aggregator := (tspb.TimeSeriesQueryAggregator)(999)
+	_, _, err = tm.DB.Query(
+		context.TODO(), tspb.Query{
+			Name:             "metric.test",
+			SourceAggregator: aggregator.Enum(),
+		}, resolution1ns, 10, 0, 10000, 0, &account, tm.workerMemMonitor,
+	)
+	errorStr = "unknown time series aggregator"
+	if !testutils.IsError(err, errorStr) {
+		if err == nil {
+			t.Fatalf("bad query got no error, wanted to match %q", errorStr)
+		} else {
+			t.Fatalf("bad query got error %q, wanted to match %q", err.Error(), errorStr)
+		}
+	}
+
+	// Query with an interpolator that is invalid, expect no error (default behavior is none).
+	derivative := (tspb.TimeSeriesQueryDerivative)(999)
+	_, _, err = tm.DB.Query(
+		context.TODO(), tspb.Query{
+			Derivative: derivative.Enum(),
+		}, resolution1ns, 10, 0, 10000, 0, &account, tm.workerMemMonitor,
+	)
+	if !testutils.IsError(err, "") {
+		t.Fatalf("bad query got error %q, wanted no error", err.Error())
+	}
+}
