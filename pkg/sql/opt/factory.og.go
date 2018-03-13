@@ -24,6 +24,198 @@ type Factory interface {
 	DynamicConstruct(op Operator, operands DynamicOperands) GroupID
 
 	// ------------------------------------------------------------
+	// Relational Operators
+	// ------------------------------------------------------------
+
+	// ConstructScan constructs an expression for the Scan operator.
+	// Scan returns a result set containing every row in the specified table. The
+	// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+	// well as the subset of columns to project from it. Rows and columns are not
+	// expected to have any particular ordering unless a physical property requires
+	// it.
+	ConstructScan(def PrivateID) GroupID
+
+	// ConstructValues constructs an expression for the Values operator.
+	// Values returns a manufactured result set containing a constant number of rows.
+	// specified by the Rows list field. Each row must contain the same set of
+	// columns in the same order.
+	//
+	// The Rows field contains a list of Tuples, one for each row. Each tuple has
+	// the same length (same with that of Cols).
+	//
+	// The Cols field contains the set of column indices returned by each row
+	// as a *ColList. It is legal for Cols to be empty.
+	ConstructValues(rows ListID, cols PrivateID) GroupID
+
+	// ConstructSelect constructs an expression for the Select operator.
+	// Select filters rows from its input result set, based on the boolean filter
+	// predicate expression. Rows which do not match the filter are discarded. While
+	// the Filter operand can be any boolean expression, normalization rules will
+	// typically convert it to a Filters operator in order to make conjunction list
+	// matching easier.
+	ConstructSelect(input GroupID, filter GroupID) GroupID
+
+	// ConstructProject constructs an expression for the Project operator.
+	// Project modifies the set of columns returned by the input result set. Columns
+	// can be removed, reordered, or renamed. In addition, new columns can be
+	// synthesized. Projections is a scalar Projections list operator that contains
+	// the list of expressions that describe the output columns. The Cols field of
+	// the Projections operator provides the indexes of each of the output columns.
+	ConstructProject(input GroupID, projections GroupID) GroupID
+
+	// ConstructInnerJoin constructs an expression for the InnerJoin operator.
+	// InnerJoin creates a result set that combines columns from its left and right
+	// inputs, based upon its "on" join predicate. Rows which do not match the
+	// predicate are filtered. While expressions in the predicate can refer to
+	// columns projected by either the left or right inputs, the inputs are not
+	// allowed to refer to the other's projected columns.
+	ConstructInnerJoin(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructLeftJoin constructs an expression for the LeftJoin operator.
+	ConstructLeftJoin(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructRightJoin constructs an expression for the RightJoin operator.
+	ConstructRightJoin(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructFullJoin constructs an expression for the FullJoin operator.
+	ConstructFullJoin(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructSemiJoin constructs an expression for the SemiJoin operator.
+	ConstructSemiJoin(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructAntiJoin constructs an expression for the AntiJoin operator.
+	ConstructAntiJoin(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
+	// InnerJoinApply has the same join semantics as InnerJoin. However, unlike
+	// InnerJoin, it allows the right input to refer to columns projected by the
+	// left input.
+	ConstructInnerJoinApply(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructLeftJoinApply constructs an expression for the LeftJoinApply operator.
+	ConstructLeftJoinApply(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructRightJoinApply constructs an expression for the RightJoinApply operator.
+	ConstructRightJoinApply(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructFullJoinApply constructs an expression for the FullJoinApply operator.
+	ConstructFullJoinApply(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructSemiJoinApply constructs an expression for the SemiJoinApply operator.
+	ConstructSemiJoinApply(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructAntiJoinApply constructs an expression for the AntiJoinApply operator.
+	ConstructAntiJoinApply(left GroupID, right GroupID, on GroupID) GroupID
+
+	// ConstructGroupBy constructs an expression for the GroupBy operator.
+	// GroupBy is an operator that is used for performing aggregations (for queries
+	// with aggregate functions, HAVING clauses and/or group by expressions). It
+	// groups results that are equal on the grouping columns and computes
+	// aggregations as described by Aggregations (which is always an Aggregations
+	// operator). The arguments of the aggregations are columns from the input.
+	ConstructGroupBy(input GroupID, aggregations GroupID, groupingCols PrivateID) GroupID
+
+	// ConstructUnion constructs an expression for the Union operator.
+	// Union is an operator used to combine the Left and Right input relations into
+	// a single set containing rows from both inputs. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Union with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
+	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructIntersect constructs an expression for the Intersect operator.
+	// Intersect is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that are also present in the Right relation. Duplicate rows are
+	// discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Intersect with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructIntersect(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructExcept constructs an expression for the Except operator.
+	// Except is an operator used to perform a set difference between the Left and
+	// Right input relations. The result consists only of rows in the Left relation
+	// that are not present in the Right relation. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Except with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
+	ConstructExcept(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructUnionAll constructs an expression for the UnionAll operator.
+	// UnionAll is an operator used to combine the Left and Right input relations
+	// into a single set containing rows from both inputs. Duplicate rows are
+	// not discarded. For example:
+	//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       2    ->    1
+	//     2       3          1
+	//                        2
+	//                        2
+	//                        3
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the UnionAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructUnionAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructIntersectAll constructs an expression for the IntersectAll operator.
+	// IntersectAll is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that have a corresponding row in the Right relation. Duplicate rows
+	// are not discarded. This effectively creates a one-to-one mapping between the
+	// Left and Right rows. For example:
+	//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       1    ->    1
+	//     1       2          2
+	//     2       2          2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the IntersectAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructIntersectAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructExceptAll constructs an expression for the ExceptAll operator.
+	// ExceptAll is an operator used to perform a set difference between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that do not have a corresponding row in the Right relation.
+	// Duplicate rows are not discarded. This effectively creates a one-to-one
+	// mapping between the Left and Right rows. For example:
+	//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1    ->    1
+	//     1       1          4
+	//     1       2
+	//     2       2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the ExceptAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ConstructExceptAll(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ConstructLimit constructs an expression for the Limit operator.
+	// Limit returns a limited subset of the results in the input relation.
+	// The limit expression is a scalar value; the operator returns at most this many
+	// rows. The private field is an *opt.Ordering which indicates the desired
+	// row ordering (the first rows with respect to this ordering are returned).
+	ConstructLimit(input GroupID, limit GroupID, ordering PrivateID) GroupID
+
+	// ConstructOffset constructs an expression for the Offset operator.
+	// Offset filters out the first Offset rows of the input relation; used in
+	// conjunction with Limit.
+	ConstructOffset(input GroupID, offset GroupID, ordering PrivateID) GroupID
+
+	// ------------------------------------------------------------
 	// Scalar Operators
 	// ------------------------------------------------------------
 
@@ -286,196 +478,4 @@ type Factory interface {
 	// UnsupportedExpr is used for interfacing with the old planner code. It can
 	// encapsulate a TypedExpr that is otherwise not supported by the optimizer.
 	ConstructUnsupportedExpr(value PrivateID) GroupID
-
-	// ------------------------------------------------------------
-	// Relational Operators
-	// ------------------------------------------------------------
-
-	// ConstructScan constructs an expression for the Scan operator.
-	// Scan returns a result set containing every row in the specified table. The
-	// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
-	// well as the subset of columns to project from it. Rows and columns are not
-	// expected to have any particular ordering unless a physical property requires
-	// it.
-	ConstructScan(def PrivateID) GroupID
-
-	// ConstructValues constructs an expression for the Values operator.
-	// Values returns a manufactured result set containing a constant number of rows.
-	// specified by the Rows list field. Each row must contain the same set of
-	// columns in the same order.
-	//
-	// The Rows field contains a list of Tuples, one for each row. Each tuple has
-	// the same length (same with that of Cols).
-	//
-	// The Cols field contains the set of column indices returned by each row
-	// as a *ColList. It is legal for Cols to be empty.
-	ConstructValues(rows ListID, cols PrivateID) GroupID
-
-	// ConstructSelect constructs an expression for the Select operator.
-	// Select filters rows from its input result set, based on the boolean filter
-	// predicate expression. Rows which do not match the filter are discarded. While
-	// the Filter operand can be any boolean expression, normalization rules will
-	// typically convert it to a Filters operator in order to make conjunction list
-	// matching easier.
-	ConstructSelect(input GroupID, filter GroupID) GroupID
-
-	// ConstructProject constructs an expression for the Project operator.
-	// Project modifies the set of columns returned by the input result set. Columns
-	// can be removed, reordered, or renamed. In addition, new columns can be
-	// synthesized. Projections is a scalar Projections list operator that contains
-	// the list of expressions that describe the output columns. The Cols field of
-	// the Projections operator provides the indexes of each of the output columns.
-	ConstructProject(input GroupID, projections GroupID) GroupID
-
-	// ConstructInnerJoin constructs an expression for the InnerJoin operator.
-	// InnerJoin creates a result set that combines columns from its left and right
-	// inputs, based upon its "on" join predicate. Rows which do not match the
-	// predicate are filtered. While expressions in the predicate can refer to
-	// columns projected by either the left or right inputs, the inputs are not
-	// allowed to refer to the other's projected columns.
-	ConstructInnerJoin(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructLeftJoin constructs an expression for the LeftJoin operator.
-	ConstructLeftJoin(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructRightJoin constructs an expression for the RightJoin operator.
-	ConstructRightJoin(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructFullJoin constructs an expression for the FullJoin operator.
-	ConstructFullJoin(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructSemiJoin constructs an expression for the SemiJoin operator.
-	ConstructSemiJoin(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructAntiJoin constructs an expression for the AntiJoin operator.
-	ConstructAntiJoin(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructInnerJoinApply constructs an expression for the InnerJoinApply operator.
-	// InnerJoinApply has the same join semantics as InnerJoin. However, unlike
-	// InnerJoin, it allows the right input to refer to columns projected by the
-	// left input.
-	ConstructInnerJoinApply(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructLeftJoinApply constructs an expression for the LeftJoinApply operator.
-	ConstructLeftJoinApply(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructRightJoinApply constructs an expression for the RightJoinApply operator.
-	ConstructRightJoinApply(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructFullJoinApply constructs an expression for the FullJoinApply operator.
-	ConstructFullJoinApply(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructSemiJoinApply constructs an expression for the SemiJoinApply operator.
-	ConstructSemiJoinApply(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructAntiJoinApply constructs an expression for the AntiJoinApply operator.
-	ConstructAntiJoinApply(left GroupID, right GroupID, on GroupID) GroupID
-
-	// ConstructGroupBy constructs an expression for the GroupBy operator.
-	// GroupBy is an operator that is used for performing aggregations (for queries
-	// with aggregate functions, HAVING clauses and/or group by expressions). It
-	// groups results that are equal on the grouping columns and computes
-	// aggregations as described by Aggregations (which is always an Aggregations
-	// operator). The arguments of the aggregations are columns from the input.
-	ConstructGroupBy(input GroupID, aggregations GroupID, groupingCols PrivateID) GroupID
-
-	// ConstructUnion constructs an expression for the Union operator.
-	// Union is an operator used to combine the Left and Right input relations into
-	// a single set containing rows from both inputs. Duplicate rows are discarded.
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the Union with the output columns. See the comment above opt.SetOpColMap
-	// for more details.
-	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
-
-	// ConstructIntersect constructs an expression for the Intersect operator.
-	// Intersect is an operator used to perform an intersection between the Left
-	// and Right input relations. The result consists only of rows in the Left
-	// relation that are also present in the Right relation. Duplicate rows are
-	// discarded.
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the Intersect with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	ConstructIntersect(left GroupID, right GroupID, colMap PrivateID) GroupID
-
-	// ConstructExcept constructs an expression for the Except operator.
-	// Except is an operator used to perform a set difference between the Left and
-	// Right input relations. The result consists only of rows in the Left relation
-	// that are not present in the Right relation. Duplicate rows are discarded.
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the Except with the output columns. See the comment above opt.SetOpColMap
-	// for more details.
-	ConstructExcept(left GroupID, right GroupID, colMap PrivateID) GroupID
-
-	// ConstructUnionAll constructs an expression for the UnionAll operator.
-	// UnionAll is an operator used to combine the Left and Right input relations
-	// into a single set containing rows from both inputs. Duplicate rows are
-	// not discarded. For example:
-	//   SELECT x FROM xx UNION ALL SELECT y FROM yy
-	//     x       y         out
-	//   -----   -----      -----
-	//     1       1          1
-	//     1       2    ->    1
-	//     2       3          1
-	//                        2
-	//                        2
-	//                        3
-	//
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the UnionAll with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	ConstructUnionAll(left GroupID, right GroupID, colMap PrivateID) GroupID
-
-	// ConstructIntersectAll constructs an expression for the IntersectAll operator.
-	// IntersectAll is an operator used to perform an intersection between the Left
-	// and Right input relations. The result consists only of rows in the Left
-	// relation that have a corresponding row in the Right relation. Duplicate rows
-	// are not discarded. This effectively creates a one-to-one mapping between the
-	// Left and Right rows. For example:
-	//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
-	//     x       y         out
-	//   -----   -----      -----
-	//     1       1          1
-	//     1       1    ->    1
-	//     1       2          2
-	//     2       2          2
-	//     2       3
-	//     4
-	//
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the IntersectAll with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	ConstructIntersectAll(left GroupID, right GroupID, colMap PrivateID) GroupID
-
-	// ConstructExceptAll constructs an expression for the ExceptAll operator.
-	// ExceptAll is an operator used to perform a set difference between the Left
-	// and Right input relations. The result consists only of rows in the Left
-	// relation that do not have a corresponding row in the Right relation.
-	// Duplicate rows are not discarded. This effectively creates a one-to-one
-	// mapping between the Left and Right rows. For example:
-	//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
-	//     x       y         out
-	//   -----   -----      -----
-	//     1       1    ->    1
-	//     1       1          4
-	//     1       2
-	//     2       2
-	//     2       3
-	//     4
-	//
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the ExceptAll with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	ConstructExceptAll(left GroupID, right GroupID, colMap PrivateID) GroupID
-
-	// ConstructLimit constructs an expression for the Limit operator.
-	// Limit returns a limited subset of the results in the input relation.
-	// The limit expression is a scalar value; the operator returns at most this many
-	// rows. The private field is an *opt.Ordering which indicates the desired
-	// row ordering (the first rows with respect to this ordering are returned).
-	ConstructLimit(input GroupID, limit GroupID, ordering PrivateID) GroupID
-
-	// ConstructOffset constructs an expression for the Offset operator.
-	// Offset filters out the first Offset rows of the input relation; used in
-	// conjunction with Limit.
-	ConstructOffset(input GroupID, offset GroupID, ordering PrivateID) GroupID
 }

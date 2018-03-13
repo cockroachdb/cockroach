@@ -63,7 +63,7 @@ $input
 )
 
 # FilterUnusedLimitCols discards Limit input columns that are never used.
-[FilterUnusedLimitCols]
+[FilterUnusedLimitCols, Normalize]
 (Project
     (Limit
         $input:*
@@ -85,7 +85,7 @@ $input
 # FilterUnusedOffsetCols discards Offset input columns that are never used.
 # Note: this rule is separate from FilterUnusedLimitCols because we can't access
 # the ordering private if using (Limit | Offset .. ).
-[FilterUnusedOffsetCols]
+[FilterUnusedOffsetCols, Normalize]
 (Project
     (Offset
         $input:*

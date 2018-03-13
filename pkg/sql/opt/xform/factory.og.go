@@ -80,7 +80,7 @@ func (_f *factory) ConstructSelect(
 		_and := _f.mem.lookupNormExpr(filter).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureSelectFiltersAnd)
 			_group = _f.ConstructSelect(input, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 			return _group
@@ -91,7 +91,7 @@ func (_f *factory) ConstructSelect(
 	{
 		_norm := _f.mem.lookupNormExpr(filter)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureSelectFilters)
 			_group = _f.ConstructSelect(input, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 			return _group
@@ -102,7 +102,7 @@ func (_f *factory) ConstructSelect(
 	{
 		_true := _f.mem.lookupNormExpr(filter).asTrue()
 		if _true != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateSelect)
 			_group = input
 			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 			return _group
@@ -115,7 +115,7 @@ func (_f *factory) ConstructSelect(
 		if _select != nil {
 			input := _select.input()
 			innerFilter := _select.filter()
-			_f.reportOptimization()
+			_f.reportOptimization(MergeSelects)
 			_group = _f.ConstructSelect(input, _f.concatFilters(innerFilter, filter))
 			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 			return _group
@@ -136,7 +136,7 @@ func (_f *factory) ConstructSelect(
 				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, right) {
-						_f.reportOptimization()
+						_f.reportOptimization(PushDownSelectJoinLeft)
 						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right)))), opt.DynamicID(right), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
 						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 						return _group
@@ -160,7 +160,7 @@ func (_f *factory) ConstructSelect(
 				for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 					condition := _item
 					if !_f.isCorrelated(condition, left) {
-						_f.reportOptimization()
+						_f.reportOptimization(PushDownSelectJoinRight)
 						_group = _f.ConstructSelect(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left)))), opt.DynamicID(on)}), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
 						_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 						return _group
@@ -178,7 +178,7 @@ func (_f *factory) ConstructSelect(
 			left := _e.ChildGroup(0)
 			right := _e.ChildGroup(1)
 			on := _e.ChildGroup(2)
-			_f.reportOptimization()
+			_f.reportOptimization(MergeSelectInnerJoin)
 			_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(right), opt.DynamicID(_f.concatFilters(on, filter))})
 			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 			return _group
@@ -199,7 +199,7 @@ func (_f *factory) ConstructSelect(
 					for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 						condition := _item
 						if !_f.isCorrelated(condition, aggregations) {
-							_f.reportOptimization()
+							_f.reportOptimization(PushDownSelectGroupBy)
 							_group = _f.ConstructSelect(_f.ConstructGroupBy(_f.ConstructSelect(input, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, aggregations))), aggregations, groupingCols), _f.ConstructFilters(_f.extractCorrelatedConditions(list, aggregations)))
 							_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 							return _group
@@ -236,7 +236,7 @@ func (_f *factory) ConstructProject(
 	// [EliminateProject]
 	{
 		if _f.hasSameCols(input, projections) {
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateProject)
 			_group = input
 			_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 			return _group
@@ -250,7 +250,7 @@ func (_f *factory) ConstructProject(
 			innerInput := _project.input()
 			innerProjections := _project.projections()
 			if _f.hasUnusedColumns(innerProjections, _f.neededCols(projections)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedProjectCols)
 				_group = _f.ConstructProject(_f.ConstructProject(innerInput, _f.filterUnusedColumns(innerProjections, _f.neededCols(projections))), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
@@ -263,7 +263,7 @@ func (_f *factory) ConstructProject(
 		_scan := _f.mem.lookupNormExpr(input).asScan()
 		if _scan != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedScanCols)
 				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
@@ -278,8 +278,40 @@ func (_f *factory) ConstructProject(
 			innerInput := _select.input()
 			filter := _select.filter()
 			if _f.hasUnusedColumns(innerInput, _f.neededCols2(projections, filter)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedSelectCols)
 				_group = _f.ConstructProject(_f.ConstructSelect(_f.filterUnusedColumns(innerInput, _f.neededCols2(projections, filter)), filter), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedLimitCols]
+	{
+		_limit := _f.mem.lookupNormExpr(input).asLimit()
+		if _limit != nil {
+			input := _limit.input()
+			limit := _limit.limit()
+			ordering := _limit.ordering()
+			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
+				_f.reportOptimization(FilterUnusedLimitCols)
+				_group = _f.ConstructProject(_f.ConstructLimit(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering), projections)
+				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
+				return _group
+			}
+		}
+	}
+
+	// [FilterUnusedOffsetCols]
+	{
+		_offset := _f.mem.lookupNormExpr(input).asOffset()
+		if _offset != nil {
+			input := _offset.input()
+			offset := _offset.offset()
+			ordering := _offset.ordering()
+			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
+				_f.reportOptimization(FilterUnusedOffsetCols)
+				_group = _f.ConstructProject(_f.ConstructOffset(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
 			}
@@ -295,7 +327,7 @@ func (_f *factory) ConstructProject(
 			right := _e.ChildGroup(1)
 			on := _e.ChildGroup(2)
 			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedJoinLeftCols)
 				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), opt.DynamicID(right), opt.DynamicID(on)}), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
@@ -312,7 +344,7 @@ func (_f *factory) ConstructProject(
 			right := _e.ChildGroup(1)
 			on := _e.ChildGroup(2)
 			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedJoinRightCols)
 				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.filterUnusedColumns(right, _f.neededCols2(projections, on))), opt.DynamicID(on)}), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
@@ -328,7 +360,7 @@ func (_f *factory) ConstructProject(
 			aggregations := _groupBy.aggregations()
 			groupingCols := _groupBy.groupingCols()
 			if _f.hasUnusedColumns(aggregations, _f.neededCols(projections)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedAggCols)
 				_group = _f.ConstructProject(_f.ConstructGroupBy(innerInput, _f.filterUnusedColumns(aggregations, _f.neededCols(projections)), groupingCols), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
@@ -341,7 +373,7 @@ func (_f *factory) ConstructProject(
 		_values := _f.mem.lookupNormExpr(input).asValues()
 		if _values != nil {
 			if _f.hasUnusedColumns(input, _f.neededCols(projections)) {
-				_f.reportOptimization()
+				_f.reportOptimization(FilterUnusedValueCols)
 				_group = _f.ConstructProject(_f.filterUnusedColumns(input, _f.neededCols(projections)), projections)
 				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
 				return _group
@@ -378,7 +410,7 @@ func (_f *factory) ConstructInnerJoin(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
 			return _group
@@ -390,7 +422,7 @@ func (_f *factory) ConstructInnerJoin(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructInnerJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
 			return _group
@@ -405,7 +437,7 @@ func (_f *factory) ConstructInnerJoin(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinLeft)
 					_group = _f.ConstructInnerJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
 					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
 					return _group
@@ -422,7 +454,7 @@ func (_f *factory) ConstructInnerJoin(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinRight)
 					_group = _f.ConstructInnerJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
 					_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
 					return _group
@@ -455,7 +487,7 @@ func (_f *factory) ConstructLeftJoin(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
 			return _group
@@ -467,7 +499,7 @@ func (_f *factory) ConstructLeftJoin(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructLeftJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
 			return _group
@@ -482,7 +514,7 @@ func (_f *factory) ConstructLeftJoin(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinRight)
 					_group = _f.ConstructLeftJoin(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
 					_f.mem.addAltFingerprint(_leftJoinExpr.fingerprint(), _group)
 					return _group
@@ -515,7 +547,7 @@ func (_f *factory) ConstructRightJoin(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
 			return _group
@@ -527,7 +559,7 @@ func (_f *factory) ConstructRightJoin(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructRightJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
 			return _group
@@ -542,7 +574,7 @@ func (_f *factory) ConstructRightJoin(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinLeft)
 					_group = _f.ConstructRightJoin(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
 					_f.mem.addAltFingerprint(_rightJoinExpr.fingerprint(), _group)
 					return _group
@@ -575,7 +607,7 @@ func (_f *factory) ConstructFullJoin(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
 			return _group
@@ -587,7 +619,7 @@ func (_f *factory) ConstructFullJoin(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructFullJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_fullJoinExpr.fingerprint(), _group)
 			return _group
@@ -618,7 +650,7 @@ func (_f *factory) ConstructSemiJoin(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
 			return _group
@@ -630,7 +662,7 @@ func (_f *factory) ConstructSemiJoin(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructSemiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_semiJoinExpr.fingerprint(), _group)
 			return _group
@@ -661,7 +693,7 @@ func (_f *factory) ConstructAntiJoin(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
 			return _group
@@ -673,7 +705,7 @@ func (_f *factory) ConstructAntiJoin(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructAntiJoin(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_antiJoinExpr.fingerprint(), _group)
 			return _group
@@ -707,7 +739,7 @@ func (_f *factory) ConstructInnerJoinApply(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -719,7 +751,7 @@ func (_f *factory) ConstructInnerJoinApply(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructInnerJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -734,7 +766,7 @@ func (_f *factory) ConstructInnerJoinApply(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinLeft)
 					_group = _f.ConstructInnerJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
 					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
 					return _group
@@ -751,7 +783,7 @@ func (_f *factory) ConstructInnerJoinApply(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinRight)
 					_group = _f.ConstructInnerJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
 					_f.mem.addAltFingerprint(_innerJoinApplyExpr.fingerprint(), _group)
 					return _group
@@ -784,7 +816,7 @@ func (_f *factory) ConstructLeftJoinApply(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -796,7 +828,7 @@ func (_f *factory) ConstructLeftJoinApply(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructLeftJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -811,7 +843,7 @@ func (_f *factory) ConstructLeftJoinApply(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, left) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinRight)
 					_group = _f.ConstructLeftJoinApply(left, _f.ConstructSelect(right, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, left))), _f.ConstructFilters(_f.extractCorrelatedConditions(list, left)))
 					_f.mem.addAltFingerprint(_leftJoinApplyExpr.fingerprint(), _group)
 					return _group
@@ -844,7 +876,7 @@ func (_f *factory) ConstructRightJoinApply(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -856,7 +888,7 @@ func (_f *factory) ConstructRightJoinApply(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructRightJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -871,7 +903,7 @@ func (_f *factory) ConstructRightJoinApply(
 			for _, _item := range _f.mem.lookupList(_filters.conditions()) {
 				condition := _item
 				if !_f.isCorrelated(condition, right) {
-					_f.reportOptimization()
+					_f.reportOptimization(PushDownJoinLeft)
 					_group = _f.ConstructRightJoinApply(_f.ConstructSelect(left, _f.ConstructFilters(_f.extractUncorrelatedConditions(list, right))), right, _f.ConstructFilters(_f.extractCorrelatedConditions(list, right)))
 					_f.mem.addAltFingerprint(_rightJoinApplyExpr.fingerprint(), _group)
 					return _group
@@ -904,7 +936,7 @@ func (_f *factory) ConstructFullJoinApply(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -916,7 +948,7 @@ func (_f *factory) ConstructFullJoinApply(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructFullJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_fullJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -947,7 +979,7 @@ func (_f *factory) ConstructSemiJoinApply(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -959,7 +991,7 @@ func (_f *factory) ConstructSemiJoinApply(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructSemiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_semiJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -990,7 +1022,7 @@ func (_f *factory) ConstructAntiJoinApply(
 		_and := _f.mem.lookupNormExpr(on).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFiltersAnd)
 			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(conditions))
 			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -1002,7 +1034,7 @@ func (_f *factory) ConstructAntiJoinApply(
 		filter := on
 		_norm := _f.mem.lookupNormExpr(on)
 		if !(_norm.op == opt.FiltersOp || _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp) {
-			_f.reportOptimization()
+			_f.reportOptimization(EnsureJoinFilters)
 			_group = _f.ConstructAntiJoinApply(left, right, _f.ConstructFilters(_f.mem.internList([]opt.GroupID{filter})))
 			_f.mem.addAltFingerprint(_antiJoinApplyExpr.fingerprint(), _group)
 			return _group
@@ -1035,9 +1067,9 @@ func (_f *factory) ConstructGroupBy(
 
 	// [FilterUnusedGroupByCols]
 	{
-		if _f.hasUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)) {
-			_f.reportOptimization()
-			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.groupByNeededCols(aggregations, groupingCols)), aggregations, groupingCols)
+		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
+			_f.reportOptimization(FilterUnusedGroupByCols)
+			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)), aggregations, groupingCols)
 			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
 			return _group
 		}
@@ -1522,7 +1554,7 @@ func (_f *factory) ConstructFilters(
 	// [EliminateEmptyAnd]
 	{
 		if conditions.Length == 0 {
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateEmptyAnd)
 			_group = _f.ConstructTrue()
 			_f.mem.addAltFingerprint(_filtersExpr.fingerprint(), _group)
 			return _group
@@ -1534,7 +1566,7 @@ func (_f *factory) ConstructFilters(
 		for _, _item := range _f.mem.lookupList(conditions) {
 			_norm := _f.mem.lookupNormExpr(_item)
 			if _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp || _norm.op == opt.NullOp {
-				_f.reportOptimization()
+				_f.reportOptimization(SimplifyFilters)
 				_group = _f.simplifyFilters(conditions)
 				_f.mem.addAltFingerprint(_filtersExpr.fingerprint(), _group)
 				return _group
@@ -1565,7 +1597,7 @@ func (_f *factory) ConstructAnd(
 	// [EliminateEmptyAnd]
 	{
 		if conditions.Length == 0 {
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateEmptyAnd)
 			_group = _f.ConstructTrue()
 			_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
 			return _group
@@ -1577,7 +1609,7 @@ func (_f *factory) ConstructAnd(
 		if conditions.Length == 1 {
 			_item := _f.mem.lookupList(conditions)[0]
 			item := _item
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateSingletonAndOr)
 			_group = item
 			_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
 			return _group
@@ -1589,7 +1621,7 @@ func (_f *factory) ConstructAnd(
 		for _, _item := range _f.mem.lookupList(conditions) {
 			_norm := _f.mem.lookupNormExpr(_item)
 			if _norm.op == opt.AndOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
-				_f.reportOptimization()
+				_f.reportOptimization(SimplifyAnd)
 				_group = _f.simplifyAnd(conditions)
 				_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
 				return _group
@@ -1604,7 +1636,7 @@ func (_f *factory) ConstructAnd(
 			_null := _f.mem.lookupNormExpr(_item).asNull()
 			if _null != nil {
 				if _f.listOnlyHasNulls(conditions) {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldNullAndOr)
 					_group = _f.ConstructNull(_f.boolType())
 					_f.mem.addAltFingerprint(_andExpr.fingerprint(), _group)
 					return _group
@@ -1636,7 +1668,7 @@ func (_f *factory) ConstructOr(
 	// [EliminateEmptyOr]
 	{
 		if conditions.Length == 0 {
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateEmptyOr)
 			_group = _f.ConstructFalse()
 			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 			return _group
@@ -1648,7 +1680,7 @@ func (_f *factory) ConstructOr(
 		if conditions.Length == 1 {
 			_item := _f.mem.lookupList(conditions)[0]
 			item := _item
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateSingletonAndOr)
 			_group = item
 			_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 			return _group
@@ -1660,7 +1692,7 @@ func (_f *factory) ConstructOr(
 		for _, _item := range _f.mem.lookupList(conditions) {
 			_norm := _f.mem.lookupNormExpr(_item)
 			if _norm.op == opt.OrOp || _norm.op == opt.TrueOp || _norm.op == opt.FalseOp {
-				_f.reportOptimization()
+				_f.reportOptimization(SimplifyOr)
 				_group = _f.simplifyOr(conditions)
 				_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 				return _group
@@ -1675,7 +1707,7 @@ func (_f *factory) ConstructOr(
 			_null := _f.mem.lookupNormExpr(_item).asNull()
 			if _null != nil {
 				if _f.listOnlyHasNulls(conditions) {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldNullAndOr)
 					_group = _f.ConstructNull(_f.boolType())
 					_f.mem.addAltFingerprint(_orExpr.fingerprint(), _group)
 					return _group
@@ -1712,7 +1744,7 @@ func (_f *factory) ConstructNot(
 			right := _e.ChildGroup(1)
 			_contains := _f.mem.lookupNormExpr(input).asContains()
 			if _contains == nil {
-				_f.reportOptimization()
+				_f.reportOptimization(NegateComparison)
 				_group = _f.negateComparison(_f.mem.lookupNormExpr(input).op, left, right)
 				_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
 				return _group
@@ -1725,7 +1757,7 @@ func (_f *factory) ConstructNot(
 		_not := _f.mem.lookupNormExpr(input).asNot()
 		if _not != nil {
 			input := _not.input()
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateNot)
 			_group = input
 			_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
 			return _group
@@ -1737,7 +1769,7 @@ func (_f *factory) ConstructNot(
 		_and := _f.mem.lookupNormExpr(input).asAnd()
 		if _and != nil {
 			conditions := _and.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(NegateAnd)
 			_group = _f.ConstructOr(_f.negateConditions(conditions))
 			_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
 			return _group
@@ -1749,7 +1781,7 @@ func (_f *factory) ConstructNot(
 		_or := _f.mem.lookupNormExpr(input).asOr()
 		if _or != nil {
 			conditions := _or.conditions()
-			_f.reportOptimization()
+			_f.reportOptimization(NegateOr)
 			_group = _f.ConstructAnd(_f.negateConditions(conditions))
 			_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
 			return _group
@@ -1784,7 +1816,7 @@ func (_f *factory) ConstructEq(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpPlusConst)
 							_group = _f.ConstructEq(leftLeft, _f.ConstructMinus(right, leftRight))
 							_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 							return _group
@@ -1805,7 +1837,7 @@ func (_f *factory) ConstructEq(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpMinusConst)
 							_group = _f.ConstructEq(leftLeft, _f.ConstructPlus(right, leftRight))
 							_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 							return _group
@@ -1826,7 +1858,7 @@ func (_f *factory) ConstructEq(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpConstMinus)
 							_group = _f.ConstructEq(_f.ConstructMinus(leftLeft, right), leftRight)
 							_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 							return _group
@@ -1845,7 +1877,7 @@ func (_f *factory) ConstructEq(
 			_tuple2 := _f.mem.lookupNormExpr(right).asTuple()
 			if _tuple2 != nil {
 				right := _tuple2.elems()
-				_f.reportOptimization()
+				_f.reportOptimization(NormalizeTupleEquality)
 				_group = _f.normalizeTupleEquality(left, right)
 				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 				return _group
@@ -1857,7 +1889,7 @@ func (_f *factory) ConstructEq(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 			return _group
@@ -1868,7 +1900,7 @@ func (_f *factory) ConstructEq(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 			return _group
@@ -1881,7 +1913,7 @@ func (_f *factory) ConstructEq(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructEq(right, left)
 				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 				return _group
@@ -1893,7 +1925,7 @@ func (_f *factory) ConstructEq(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructEq(right, left)
 				_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 				return _group
@@ -1925,7 +1957,7 @@ func (_f *factory) ConstructLt(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.LtOp, left, right)
 				_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 				return _group
@@ -1937,7 +1969,7 @@ func (_f *factory) ConstructLt(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConstInequality)
 				_group = _f.commuteInequality(opt.LtOp, left, right)
 				_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 				return _group
@@ -1955,7 +1987,7 @@ func (_f *factory) ConstructLt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpPlusConst)
 							_group = _f.ConstructLt(leftLeft, _f.ConstructMinus(right, leftRight))
 							_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 							return _group
@@ -1976,7 +2008,7 @@ func (_f *factory) ConstructLt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpMinusConst)
 							_group = _f.ConstructLt(leftLeft, _f.ConstructPlus(right, leftRight))
 							_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 							return _group
@@ -1997,7 +2029,7 @@ func (_f *factory) ConstructLt(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpConstMinus)
 							_group = _f.ConstructLt(_f.ConstructMinus(leftLeft, right), leftRight)
 							_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 							return _group
@@ -2012,7 +2044,7 @@ func (_f *factory) ConstructLt(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 			return _group
@@ -2023,7 +2055,7 @@ func (_f *factory) ConstructLt(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 			return _group
@@ -2054,7 +2086,7 @@ func (_f *factory) ConstructGt(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.GtOp, left, right)
 				_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 				return _group
@@ -2066,7 +2098,7 @@ func (_f *factory) ConstructGt(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConstInequality)
 				_group = _f.commuteInequality(opt.GtOp, left, right)
 				_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 				return _group
@@ -2084,7 +2116,7 @@ func (_f *factory) ConstructGt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpPlusConst)
 							_group = _f.ConstructGt(leftLeft, _f.ConstructMinus(right, leftRight))
 							_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 							return _group
@@ -2105,7 +2137,7 @@ func (_f *factory) ConstructGt(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpMinusConst)
 							_group = _f.ConstructGt(leftLeft, _f.ConstructPlus(right, leftRight))
 							_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 							return _group
@@ -2126,7 +2158,7 @@ func (_f *factory) ConstructGt(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpConstMinus)
 							_group = _f.ConstructGt(_f.ConstructMinus(leftLeft, right), leftRight)
 							_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 							return _group
@@ -2141,7 +2173,7 @@ func (_f *factory) ConstructGt(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 			return _group
@@ -2152,7 +2184,7 @@ func (_f *factory) ConstructGt(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_gtExpr.fingerprint(), _group)
 			return _group
@@ -2183,7 +2215,7 @@ func (_f *factory) ConstructLe(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.LeOp, left, right)
 				_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 				return _group
@@ -2195,7 +2227,7 @@ func (_f *factory) ConstructLe(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConstInequality)
 				_group = _f.commuteInequality(opt.LeOp, left, right)
 				_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 				return _group
@@ -2213,7 +2245,7 @@ func (_f *factory) ConstructLe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpPlusConst)
 							_group = _f.ConstructLe(leftLeft, _f.ConstructMinus(right, leftRight))
 							_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 							return _group
@@ -2234,7 +2266,7 @@ func (_f *factory) ConstructLe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpMinusConst)
 							_group = _f.ConstructLe(leftLeft, _f.ConstructPlus(right, leftRight))
 							_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 							return _group
@@ -2255,7 +2287,7 @@ func (_f *factory) ConstructLe(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpConstMinus)
 							_group = _f.ConstructLe(_f.ConstructMinus(leftLeft, right), leftRight)
 							_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 							return _group
@@ -2270,7 +2302,7 @@ func (_f *factory) ConstructLe(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 			return _group
@@ -2281,7 +2313,7 @@ func (_f *factory) ConstructLe(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_leExpr.fingerprint(), _group)
 			return _group
@@ -2312,7 +2344,7 @@ func (_f *factory) ConstructGe(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVarInequality)
 				_group = _f.commuteInequality(opt.GeOp, left, right)
 				_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 				return _group
@@ -2324,7 +2356,7 @@ func (_f *factory) ConstructGe(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConstInequality)
 				_group = _f.commuteInequality(opt.GeOp, left, right)
 				_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 				return _group
@@ -2342,7 +2374,7 @@ func (_f *factory) ConstructGe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpPlusConst)
 							_group = _f.ConstructGe(leftLeft, _f.ConstructMinus(right, leftRight))
 							_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 							return _group
@@ -2363,7 +2395,7 @@ func (_f *factory) ConstructGe(
 				if _f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.PlusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpMinusConst)
 							_group = _f.ConstructGe(leftLeft, _f.ConstructPlus(right, leftRight))
 							_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 							return _group
@@ -2384,7 +2416,7 @@ func (_f *factory) ConstructGe(
 				if !_f.onlyConstants(leftRight) {
 					if _f.onlyConstants(right) {
 						if _f.canConstructBinary(opt.MinusOp, leftLeft, right) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeCmpConstMinus)
 							_group = _f.ConstructGe(_f.ConstructMinus(leftLeft, right), leftRight)
 							_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 							return _group
@@ -2399,7 +2431,7 @@ func (_f *factory) ConstructGe(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 			return _group
@@ -2410,7 +2442,7 @@ func (_f *factory) ConstructGe(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_geExpr.fingerprint(), _group)
 			return _group
@@ -2439,7 +2471,7 @@ func (_f *factory) ConstructNe(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 			return _group
@@ -2450,7 +2482,7 @@ func (_f *factory) ConstructNe(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 			return _group
@@ -2463,7 +2495,7 @@ func (_f *factory) ConstructNe(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructNe(right, left)
 				_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 				return _group
@@ -2475,7 +2507,7 @@ func (_f *factory) ConstructNe(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructNe(right, left)
 				_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 				return _group
@@ -2508,7 +2540,7 @@ func (_f *factory) ConstructIn(
 			_tuple := _f.mem.lookupNormExpr(right).asTuple()
 			if _tuple != nil {
 				if _tuple.elems().Length != 0 {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldNullInNonEmpty)
 					_group = _f.ConstructNull(_f.boolType())
 					_f.mem.addAltFingerprint(_inExpr.fingerprint(), _group)
 					return _group
@@ -2524,7 +2556,7 @@ func (_f *factory) ConstructIn(
 			_tuple := _f.mem.lookupNormExpr(right).asTuple()
 			if _tuple != nil {
 				if _tuple.elems().Length == 0 {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldNullInEmpty)
 					_group = _f.ConstructFalse()
 					_f.mem.addAltFingerprint(_inExpr.fingerprint(), _group)
 					return _group
@@ -2539,7 +2571,7 @@ func (_f *factory) ConstructIn(
 		if _tuple != nil {
 			elems := _tuple.elems()
 			if !_f.isSortedUniqueList(elems) {
-				_f.reportOptimization()
+				_f.reportOptimization(NormalizeInConst)
 				_group = _f.ConstructIn(left, _f.ConstructTuple(_f.constructSortedUniqueList(elems)))
 				_f.mem.addAltFingerprint(_inExpr.fingerprint(), _group)
 				return _group
@@ -2555,7 +2587,7 @@ func (_f *factory) ConstructIn(
 				_item := _f.mem.lookupList(_tuple.elems())[0]
 				_null := _f.mem.lookupNormExpr(_item).asNull()
 				if _null != nil {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldInNull)
 					_group = _f.ConstructNull(_f.boolType())
 					_f.mem.addAltFingerprint(_inExpr.fingerprint(), _group)
 					return _group
@@ -2589,7 +2621,7 @@ func (_f *factory) ConstructNotIn(
 			_tuple := _f.mem.lookupNormExpr(right).asTuple()
 			if _tuple != nil {
 				if _tuple.elems().Length != 0 {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldNullInNonEmpty)
 					_group = _f.ConstructNull(_f.boolType())
 					_f.mem.addAltFingerprint(_notInExpr.fingerprint(), _group)
 					return _group
@@ -2605,7 +2637,7 @@ func (_f *factory) ConstructNotIn(
 			_tuple := _f.mem.lookupNormExpr(right).asTuple()
 			if _tuple != nil {
 				if _tuple.elems().Length == 0 {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldNullNotInEmpty)
 					_group = _f.ConstructTrue()
 					_f.mem.addAltFingerprint(_notInExpr.fingerprint(), _group)
 					return _group
@@ -2620,7 +2652,7 @@ func (_f *factory) ConstructNotIn(
 		if _tuple != nil {
 			elems := _tuple.elems()
 			if !_f.isSortedUniqueList(elems) {
-				_f.reportOptimization()
+				_f.reportOptimization(NormalizeInConst)
 				_group = _f.ConstructNotIn(left, _f.ConstructTuple(_f.constructSortedUniqueList(elems)))
 				_f.mem.addAltFingerprint(_notInExpr.fingerprint(), _group)
 				return _group
@@ -2636,7 +2668,7 @@ func (_f *factory) ConstructNotIn(
 				_item := _f.mem.lookupList(_tuple.elems())[0]
 				_null := _f.mem.lookupNormExpr(_item).asNull()
 				if _null != nil {
-					_f.reportOptimization()
+					_f.reportOptimization(FoldInNull)
 					_group = _f.ConstructNull(_f.boolType())
 					_f.mem.addAltFingerprint(_notInExpr.fingerprint(), _group)
 					return _group
@@ -2667,7 +2699,7 @@ func (_f *factory) ConstructLike(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_likeExpr.fingerprint(), _group)
 			return _group
@@ -2678,7 +2710,7 @@ func (_f *factory) ConstructLike(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_likeExpr.fingerprint(), _group)
 			return _group
@@ -2707,7 +2739,7 @@ func (_f *factory) ConstructNotLike(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notLikeExpr.fingerprint(), _group)
 			return _group
@@ -2718,7 +2750,7 @@ func (_f *factory) ConstructNotLike(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notLikeExpr.fingerprint(), _group)
 			return _group
@@ -2747,7 +2779,7 @@ func (_f *factory) ConstructILike(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_iLikeExpr.fingerprint(), _group)
 			return _group
@@ -2758,7 +2790,7 @@ func (_f *factory) ConstructILike(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_iLikeExpr.fingerprint(), _group)
 			return _group
@@ -2787,7 +2819,7 @@ func (_f *factory) ConstructNotILike(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notILikeExpr.fingerprint(), _group)
 			return _group
@@ -2798,7 +2830,7 @@ func (_f *factory) ConstructNotILike(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notILikeExpr.fingerprint(), _group)
 			return _group
@@ -2827,7 +2859,7 @@ func (_f *factory) ConstructSimilarTo(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_similarToExpr.fingerprint(), _group)
 			return _group
@@ -2838,7 +2870,7 @@ func (_f *factory) ConstructSimilarTo(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_similarToExpr.fingerprint(), _group)
 			return _group
@@ -2867,7 +2899,7 @@ func (_f *factory) ConstructNotSimilarTo(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notSimilarToExpr.fingerprint(), _group)
 			return _group
@@ -2878,7 +2910,7 @@ func (_f *factory) ConstructNotSimilarTo(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notSimilarToExpr.fingerprint(), _group)
 			return _group
@@ -2907,7 +2939,7 @@ func (_f *factory) ConstructRegMatch(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_regMatchExpr.fingerprint(), _group)
 			return _group
@@ -2918,7 +2950,7 @@ func (_f *factory) ConstructRegMatch(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_regMatchExpr.fingerprint(), _group)
 			return _group
@@ -2947,7 +2979,7 @@ func (_f *factory) ConstructNotRegMatch(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notRegMatchExpr.fingerprint(), _group)
 			return _group
@@ -2958,7 +2990,7 @@ func (_f *factory) ConstructNotRegMatch(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notRegMatchExpr.fingerprint(), _group)
 			return _group
@@ -2987,7 +3019,7 @@ func (_f *factory) ConstructRegIMatch(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_regIMatchExpr.fingerprint(), _group)
 			return _group
@@ -2998,7 +3030,7 @@ func (_f *factory) ConstructRegIMatch(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_regIMatchExpr.fingerprint(), _group)
 			return _group
@@ -3027,7 +3059,7 @@ func (_f *factory) ConstructNotRegIMatch(
 	{
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonLeft)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notRegIMatchExpr.fingerprint(), _group)
 			return _group
@@ -3038,7 +3070,7 @@ func (_f *factory) ConstructNotRegIMatch(
 	{
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullComparisonRight)
 			_group = _f.ConstructNull(_f.boolType())
 			_f.mem.addAltFingerprint(_notRegIMatchExpr.fingerprint(), _group)
 			return _group
@@ -3069,7 +3101,7 @@ func (_f *factory) ConstructIs(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructIs(right, left)
 				_f.mem.addAltFingerprint(_isExpr.fingerprint(), _group)
 				return _group
@@ -3081,7 +3113,7 @@ func (_f *factory) ConstructIs(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructIs(right, left)
 				_f.mem.addAltFingerprint(_isExpr.fingerprint(), _group)
 				return _group
@@ -3113,7 +3145,7 @@ func (_f *factory) ConstructIsNot(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructIsNot(right, left)
 				_f.mem.addAltFingerprint(_isNotExpr.fingerprint(), _group)
 				return _group
@@ -3125,7 +3157,7 @@ func (_f *factory) ConstructIsNot(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructIsNot(right, left)
 				_f.mem.addAltFingerprint(_isNotExpr.fingerprint(), _group)
 				return _group
@@ -3175,7 +3207,7 @@ func (_f *factory) ConstructBitand(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructBitand(right, left)
 				_f.mem.addAltFingerprint(_bitandExpr.fingerprint(), _group)
 				return _group
@@ -3187,7 +3219,7 @@ func (_f *factory) ConstructBitand(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructBitand(right, left)
 				_f.mem.addAltFingerprint(_bitandExpr.fingerprint(), _group)
 				return _group
@@ -3200,7 +3232,7 @@ func (_f *factory) ConstructBitand(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.BitandOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.BitandOp, left, right)
 				_f.mem.addAltFingerprint(_bitandExpr.fingerprint(), _group)
 				return _group
@@ -3213,7 +3245,7 @@ func (_f *factory) ConstructBitand(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.BitandOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.BitandOp, left, right)
 				_f.mem.addAltFingerprint(_bitandExpr.fingerprint(), _group)
 				return _group
@@ -3245,7 +3277,7 @@ func (_f *factory) ConstructBitor(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructBitor(right, left)
 				_f.mem.addAltFingerprint(_bitorExpr.fingerprint(), _group)
 				return _group
@@ -3257,7 +3289,7 @@ func (_f *factory) ConstructBitor(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructBitor(right, left)
 				_f.mem.addAltFingerprint(_bitorExpr.fingerprint(), _group)
 				return _group
@@ -3270,7 +3302,7 @@ func (_f *factory) ConstructBitor(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.BitorOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.BitorOp, left, right)
 				_f.mem.addAltFingerprint(_bitorExpr.fingerprint(), _group)
 				return _group
@@ -3283,7 +3315,7 @@ func (_f *factory) ConstructBitor(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.BitorOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.BitorOp, left, right)
 				_f.mem.addAltFingerprint(_bitorExpr.fingerprint(), _group)
 				return _group
@@ -3315,7 +3347,7 @@ func (_f *factory) ConstructBitxor(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructBitxor(right, left)
 				_f.mem.addAltFingerprint(_bitxorExpr.fingerprint(), _group)
 				return _group
@@ -3327,7 +3359,7 @@ func (_f *factory) ConstructBitxor(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructBitxor(right, left)
 				_f.mem.addAltFingerprint(_bitxorExpr.fingerprint(), _group)
 				return _group
@@ -3340,7 +3372,7 @@ func (_f *factory) ConstructBitxor(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.BitxorOp, left, right)
 				_f.mem.addAltFingerprint(_bitxorExpr.fingerprint(), _group)
 				return _group
@@ -3353,7 +3385,7 @@ func (_f *factory) ConstructBitxor(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.BitxorOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.BitxorOp, left, right)
 				_f.mem.addAltFingerprint(_bitxorExpr.fingerprint(), _group)
 				return _group
@@ -3384,7 +3416,7 @@ func (_f *factory) ConstructPlus(
 		_const := _f.mem.lookupNormExpr(right).asConst()
 		if _const != nil {
 			if _f.isZero(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldPlusZero)
 				_group = left
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -3397,7 +3429,7 @@ func (_f *factory) ConstructPlus(
 		_const := _f.mem.lookupNormExpr(left).asConst()
 		if _const != nil {
 			if _f.isZero(left) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldZeroPlus)
 				_group = right
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -3411,7 +3443,7 @@ func (_f *factory) ConstructPlus(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructPlus(right, left)
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -3423,7 +3455,7 @@ func (_f *factory) ConstructPlus(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructPlus(right, left)
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -3436,7 +3468,7 @@ func (_f *factory) ConstructPlus(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.PlusOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.PlusOp, left, right)
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -3449,7 +3481,7 @@ func (_f *factory) ConstructPlus(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.PlusOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.PlusOp, left, right)
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -3480,7 +3512,7 @@ func (_f *factory) ConstructMinus(
 		_const := _f.mem.lookupNormExpr(right).asConst()
 		if _const != nil {
 			if _f.isZero(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldMinusZero)
 				_group = left
 				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
 				return _group
@@ -3493,7 +3525,7 @@ func (_f *factory) ConstructMinus(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.MinusOp, left, right)
 				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
 				return _group
@@ -3506,7 +3538,7 @@ func (_f *factory) ConstructMinus(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.MinusOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.MinusOp, left, right)
 				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
 				return _group
@@ -3537,7 +3569,7 @@ func (_f *factory) ConstructMult(
 		_const := _f.mem.lookupNormExpr(right).asConst()
 		if _const != nil {
 			if _f.isOne(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldMultOne)
 				_group = left
 				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
 				return _group
@@ -3550,7 +3582,7 @@ func (_f *factory) ConstructMult(
 		_const := _f.mem.lookupNormExpr(left).asConst()
 		if _const != nil {
 			if _f.isOne(left) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldOneMult)
 				_group = right
 				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
 				return _group
@@ -3564,7 +3596,7 @@ func (_f *factory) ConstructMult(
 		if _variable == nil {
 			_variable2 := _f.mem.lookupNormExpr(right).asVariable()
 			if _variable2 != nil {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteVar)
 				_group = _f.ConstructMult(right, left)
 				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
 				return _group
@@ -3576,7 +3608,7 @@ func (_f *factory) ConstructMult(
 	{
 		if _f.onlyConstants(left) {
 			if !_f.onlyConstants(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(CommuteConst)
 				_group = _f.ConstructMult(right, left)
 				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
 				return _group
@@ -3589,7 +3621,7 @@ func (_f *factory) ConstructMult(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.MultOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.MultOp, left, right)
 				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
 				return _group
@@ -3602,7 +3634,7 @@ func (_f *factory) ConstructMult(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.MultOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.MultOp, left, right)
 				_f.mem.addAltFingerprint(_multExpr.fingerprint(), _group)
 				return _group
@@ -3633,7 +3665,7 @@ func (_f *factory) ConstructDiv(
 		_const := _f.mem.lookupNormExpr(right).asConst()
 		if _const != nil {
 			if _f.isOne(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldDivOne)
 				_group = left
 				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
 				return _group
@@ -3646,7 +3678,7 @@ func (_f *factory) ConstructDiv(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.DivOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.DivOp, left, right)
 				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
 				return _group
@@ -3659,7 +3691,7 @@ func (_f *factory) ConstructDiv(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.DivOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.DivOp, left, right)
 				_f.mem.addAltFingerprint(_divExpr.fingerprint(), _group)
 				return _group
@@ -3667,55 +3699,6 @@ func (_f *factory) ConstructDiv(
 		}
 	}
 
-<<<<<<< HEAD
-	// [FilterUnusedLimitCols]
-	{
-		_limit := _f.mem.lookupNormExpr(input).asLimit()
-		if _limit != nil {
-			input := _limit.input()
-			limit := _limit.limit()
-			ordering := _limit.ordering()
-			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructLimit(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), limit, ordering), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedOffsetCols]
-	{
-		_offset := _f.mem.lookupNormExpr(input).asOffset()
-		if _offset != nil {
-			input := _offset.input()
-			offset := _offset.offset()
-			ordering := _offset.ordering()
-			if _f.hasUnusedColumns(input, _f.neededColsLimit(projections, ordering)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.ConstructOffset(_f.filterUnusedColumns(input, _f.neededColsLimit(projections, ordering)), offset, ordering), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-	}
-
-	// [FilterUnusedJoinLeftCols]
-	{
-		_norm := _f.mem.lookupNormExpr(input)
-		if _norm.isJoin() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
-			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
-				_f.reportOptimization()
-				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), opt.DynamicID(right), opt.DynamicID(on)}), projections)
-				_f.mem.addAltFingerprint(_projectExpr.fingerprint(), _group)
-				return _group
-			}
-		}
-=======
 	return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(_divExpr)))
 }
 
@@ -3728,7 +3711,6 @@ func (_f *factory) ConstructFloorDiv(
 	_group := _f.mem.lookupGroupByFingerprint(_floorDivExpr.fingerprint())
 	if _group != 0 {
 		return _group
->>>>>>> opt: Allow OptGen to accept Glob patterns
 	}
 
 	if !_f.allowOptimizations() {
@@ -3740,7 +3722,7 @@ func (_f *factory) ConstructFloorDiv(
 		_const := _f.mem.lookupNormExpr(right).asConst()
 		if _const != nil {
 			if _f.isOne(right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldDivOne)
 				_group = left
 				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
 				return _group
@@ -3753,7 +3735,7 @@ func (_f *factory) ConstructFloorDiv(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
 				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
 				return _group
@@ -3766,7 +3748,7 @@ func (_f *factory) ConstructFloorDiv(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.FloorDivOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FloorDivOp, left, right)
 				_f.mem.addAltFingerprint(_floorDivExpr.fingerprint(), _group)
 				return _group
@@ -3797,7 +3779,7 @@ func (_f *factory) ConstructMod(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.ModOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.ModOp, left, right)
 				_f.mem.addAltFingerprint(_modExpr.fingerprint(), _group)
 				return _group
@@ -3810,7 +3792,7 @@ func (_f *factory) ConstructMod(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.ModOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.ModOp, left, right)
 				_f.mem.addAltFingerprint(_modExpr.fingerprint(), _group)
 				return _group
@@ -3841,7 +3823,7 @@ func (_f *factory) ConstructPow(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.PowOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.PowOp, left, right)
 				_f.mem.addAltFingerprint(_powExpr.fingerprint(), _group)
 				return _group
@@ -3854,7 +3836,7 @@ func (_f *factory) ConstructPow(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.PowOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.PowOp, left, right)
 				_f.mem.addAltFingerprint(_powExpr.fingerprint(), _group)
 				return _group
@@ -3885,7 +3867,7 @@ func (_f *factory) ConstructConcat(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.ConcatOp, left, right)
 				_f.mem.addAltFingerprint(_concatExpr.fingerprint(), _group)
 				return _group
@@ -3898,7 +3880,7 @@ func (_f *factory) ConstructConcat(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.ConcatOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.ConcatOp, left, right)
 				_f.mem.addAltFingerprint(_concatExpr.fingerprint(), _group)
 				return _group
@@ -3929,7 +3911,7 @@ func (_f *factory) ConstructLShift(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.LShiftOp, left, right)
 				_f.mem.addAltFingerprint(_lShiftExpr.fingerprint(), _group)
 				return _group
@@ -3942,7 +3924,7 @@ func (_f *factory) ConstructLShift(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.LShiftOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.LShiftOp, left, right)
 				_f.mem.addAltFingerprint(_lShiftExpr.fingerprint(), _group)
 				return _group
@@ -3973,7 +3955,7 @@ func (_f *factory) ConstructRShift(
 		_null := _f.mem.lookupNormExpr(left).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.RShiftOp, left, right)
 				_f.mem.addAltFingerprint(_rShiftExpr.fingerprint(), _group)
 				return _group
@@ -3986,7 +3968,7 @@ func (_f *factory) ConstructRShift(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.RShiftOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.RShiftOp, left, right)
 				_f.mem.addAltFingerprint(_rShiftExpr.fingerprint(), _group)
 				return _group
@@ -4019,7 +4001,7 @@ func (_f *factory) ConstructFetchVal(
 		if _null != nil {
 			right := index
 			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.FetchValOp, left, right)
 				_f.mem.addAltFingerprint(_fetchValExpr.fingerprint(), _group)
 				return _group
@@ -4034,7 +4016,7 @@ func (_f *factory) ConstructFetchVal(
 		_null := _f.mem.lookupNormExpr(index).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.FetchValOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchValOp, left, right)
 				_f.mem.addAltFingerprint(_fetchValExpr.fingerprint(), _group)
 				return _group
@@ -4067,7 +4049,7 @@ func (_f *factory) ConstructFetchText(
 		if _null != nil {
 			right := index
 			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
 				_f.mem.addAltFingerprint(_fetchTextExpr.fingerprint(), _group)
 				return _group
@@ -4082,7 +4064,7 @@ func (_f *factory) ConstructFetchText(
 		_null := _f.mem.lookupNormExpr(index).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.FetchTextOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchTextOp, left, right)
 				_f.mem.addAltFingerprint(_fetchTextExpr.fingerprint(), _group)
 				return _group
@@ -4115,7 +4097,7 @@ func (_f *factory) ConstructFetchValPath(
 		if _null != nil {
 			right := path
 			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
 				_f.mem.addAltFingerprint(_fetchValPathExpr.fingerprint(), _group)
 				return _group
@@ -4130,7 +4112,7 @@ func (_f *factory) ConstructFetchValPath(
 		_null := _f.mem.lookupNormExpr(path).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.FetchValPathOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchValPathOp, left, right)
 				_f.mem.addAltFingerprint(_fetchValPathExpr.fingerprint(), _group)
 				return _group
@@ -4163,7 +4145,7 @@ func (_f *factory) ConstructFetchTextPath(
 		if _null != nil {
 			right := path
 			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryLeft)
 				_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
 				_f.mem.addAltFingerprint(_fetchTextPathExpr.fingerprint(), _group)
 				return _group
@@ -4178,7 +4160,7 @@ func (_f *factory) ConstructFetchTextPath(
 		_null := _f.mem.lookupNormExpr(path).asNull()
 		if _null != nil {
 			if !_f.allowNullArgs(opt.FetchTextPathOp, left, right) {
-				_f.reportOptimization()
+				_f.reportOptimization(FoldNullBinaryRight)
 				_group = _f.foldNullBinary(opt.FetchTextPathOp, left, right)
 				_f.mem.addAltFingerprint(_fetchTextPathExpr.fingerprint(), _group)
 				return _group
@@ -4210,7 +4192,7 @@ func (_f *factory) ConstructUnaryMinus(
 			left := _minus.left()
 			right := _minus.right()
 			if _f.canConstructBinary(opt.MinusOp, right, left) {
-				_f.reportOptimization()
+				_f.reportOptimization(InvertMinus)
 				_group = _f.ConstructMinus(right, left)
 				_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
 				return _group
@@ -4223,7 +4205,7 @@ func (_f *factory) ConstructUnaryMinus(
 		_unaryMinus := _f.mem.lookupNormExpr(input).asUnaryMinus()
 		if _unaryMinus != nil {
 			input := _unaryMinus.input()
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateUnaryMinus)
 			_group = input
 			_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
 			return _group
@@ -4234,7 +4216,7 @@ func (_f *factory) ConstructUnaryMinus(
 	{
 		_null := _f.mem.lookupNormExpr(input).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullUnary)
 			_group = _f.foldNullUnary(opt.UnaryMinusOp, input)
 			_f.mem.addAltFingerprint(_unaryMinusExpr.fingerprint(), _group)
 			return _group
@@ -4262,7 +4244,7 @@ func (_f *factory) ConstructUnaryComplement(
 	{
 		_null := _f.mem.lookupNormExpr(input).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullUnary)
 			_group = _f.foldNullUnary(opt.UnaryComplementOp, input)
 			_f.mem.addAltFingerprint(_unaryComplementExpr.fingerprint(), _group)
 			return _group
@@ -4290,7 +4272,7 @@ func (_f *factory) ConstructCast(
 	// [EliminateCast]
 	{
 		if _f.hasType(input, typ) {
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateCast)
 			_group = input
 			_f.mem.addAltFingerprint(_castExpr.fingerprint(), _group)
 			return _group
@@ -4301,7 +4283,7 @@ func (_f *factory) ConstructCast(
 	{
 		_null := _f.mem.lookupNormExpr(input).asNull()
 		if _null != nil {
-			_f.reportOptimization()
+			_f.reportOptimization(FoldNullCast)
 			_group = _f.ConstructNull(typ)
 			_f.mem.addAltFingerprint(_castExpr.fingerprint(), _group)
 			return _group
@@ -4403,19 +4385,12 @@ func (_f *factory) ConstructCoalesce(
 
 	// [EliminateCoalesce]
 	{
-<<<<<<< HEAD
-		if _f.hasUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)) {
-			_f.reportOptimization()
-			_group = _f.ConstructGroupBy(_f.filterUnusedColumns(input, _f.neededColsGroupBy(aggregations, groupingCols)), aggregations, groupingCols)
-			_f.mem.addAltFingerprint(_groupByExpr.fingerprint(), _group)
-=======
 		if args.Length == 1 {
 			_item := _f.mem.lookupList(args)[0]
 			item := _item
-			_f.reportOptimization()
+			_f.reportOptimization(EliminateCoalesce)
 			_group = item
 			_f.mem.addAltFingerprint(_coalesceExpr.fingerprint(), _group)
->>>>>>> opt: Allow OptGen to accept Glob patterns
 			return _group
 		}
 	}
@@ -4426,7 +4401,7 @@ func (_f *factory) ConstructCoalesce(
 			_item := _f.mem.lookupList(args)[0]
 			_norm := _f.mem.lookupNormExpr(_item)
 			if _norm.isConstValue() {
-				_f.reportOptimization()
+				_f.reportOptimization(SimplifyCoalesce)
 				_group = _f.simplifyCoalesce(args)
 				_f.mem.addAltFingerprint(_coalesceExpr.fingerprint(), _group)
 				return _group

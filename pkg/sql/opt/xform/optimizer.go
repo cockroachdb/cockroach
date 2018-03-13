@@ -22,6 +22,10 @@ import (
 	"golang.org/x/tools/container/intsets"
 )
 
+//go:generate optgen -out rule_name.og.go rulenames ../ops/*.opt rules/*.opt
+
+//go:generate stringer -output=rule_name_string.go -type=RuleName rule_name.og.go
+
 // OptimizeSteps is passed to NewOptimizer, and specifies the maximum number
 // of normalization and exploration transformations that will be applied by the
 // optimizer. This can be used to effectively disable the optimizer (if set to
@@ -71,6 +75,12 @@ func NewOptimizer(evalCtx *tree.EvalContext, maxSteps OptimizeSteps) *Optimizer 
 // Optimize method in order to find the lowest cost plan.
 func (o *Optimizer) Factory() opt.Factory {
 	return o.f
+}
+
+// LastRuleName returns the last rule that was triggered by the optimizer. This
+// is useful for single-stepping through optimizer rule applications.
+func (o *Optimizer) LastRuleName() RuleName {
+	return o.f.lastRuleName
 }
 
 // Optimize returns the expression which satisfies the required physical
