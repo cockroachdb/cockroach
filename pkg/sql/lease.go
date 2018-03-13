@@ -166,7 +166,7 @@ func (s LeaseStore) acquire(
 
 		// ValidateTable instead of Validate, even though we have a txn available,
 		// so we don't block reads waiting for this table version.
-		if err := table.ValidateTable(); err != nil {
+		if err := table.ValidateTable(s.execCfg.Settings); err != nil {
 			return err
 		}
 
@@ -351,7 +351,7 @@ func (s LeaseStore) Publish(
 			tableDesc.ModificationTime = modTime
 			log.Infof(ctx, "publish: descID=%d (%s) version=%d mtime=%s",
 				tableDesc.ID, tableDesc.Name, tableDesc.Version, modTime.GoTime())
-			if err := tableDesc.ValidateTable(); err != nil {
+			if err := tableDesc.ValidateTable(s.execCfg.Settings); err != nil {
 				return err
 			}
 
@@ -1488,7 +1488,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 					case *sqlbase.Descriptor_Table:
 						table := union.Table
 						table.MaybeFillInDescriptor()
-						if err := table.ValidateTable(); err != nil {
+						if err := table.ValidateTable(m.execCfg.Settings); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %v", kv.Key, table)
 							return
 						}

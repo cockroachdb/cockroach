@@ -1772,7 +1772,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 		// Write the new TableDescriptors and flip the namespace entries over to
 		// them. After this call, any queries on a table will be served by the newly
 		// imported data.
-		if err := backupccl.WriteTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username); err != nil {
+		if err := backupccl.WriteTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username, r.settings); err != nil {
 			return errors.Wrapf(err, "creating table %q", details.Desc.Name)
 		}
 	}
