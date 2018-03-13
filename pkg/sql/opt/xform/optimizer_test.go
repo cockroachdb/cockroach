@@ -19,9 +19,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"testing"
-
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
@@ -65,8 +64,8 @@ func TestPhysicalProps(t *testing.T) {
 //
 //  - optsteps
 //
-//    Outputs the lowest cost tree for each step in optimization. Used for
-//    debugging the optimizer.
+//    Outputs the lowest cost tree for each step in optimization using the
+//    standard unified diff format. Used for debugging the optimizer.
 //
 //  - memo
 //
@@ -134,41 +133,7 @@ func (ot *optimizerTest) run(t *testing.T, path string) {
 		case "optsteps":
 			// optsteps command iteratively shows the output from each
 			// optimization step for debugging.
-			var buf bytes.Buffer
-			var prev, next string
-			for i := 0; ; i++ {
-				next = ot.optimizeExpr(stmt, OptimizeSteps(i)).String()
-				if prev == next {
-					// No change, so nothing more to optimize.
-					// TODO(andyk): this method of detecting changes won't work
-					// when we introduce exploration patterns.
-					break
-				}
-
-				if i == 0 {
-					// Output starting tree.
-					buf.WriteString(next)
-				} else {
-					diff := difflib.UnifiedDiff{
-						A:        difflib.SplitLines(prev),
-						B:        difflib.SplitLines(next),
-						FromFile: "Previous",
-						ToFile:   "Next",
-						Context:  100,
-					}
-
-					text, _ := difflib.GetUnifiedDiffString(diff)
-					buf.WriteString(strings.Trim(text, " \t\r\n") + "\n")
-				}
-
-				prev = next
-			}
-
-			// Output ending tree.
-			buf.WriteString("--- Previous\n")
-			buf.WriteString("+++ Next\n")
-			buf.WriteString(next)
-			return buf.String()
+			return ot.outputOptSteps(stmt)
 
 		case "memo":
 			ev := ot.optimizeExpr(stmt, OptimizeAll)
@@ -191,4 +156,52 @@ func (ot *optimizerTest) optimizeExpr(stmt tree.Statement, steps OptimizeSteps) 
 		ot.d.Fatalf(ot.t, "%v", err)
 	}
 	return o.Optimize(root, props)
+}
+
+// outputOptSteps returns a string that shows each optimization step using the
+// standard unified diff format. It is used for debugging the optimizer.
+func (ot *optimizerTest) outputOptSteps(stmt tree.Statement) string {
+	var buf bytes.Buffer
+	var prev, next string
+	for i := 0; ; i++ {
+		o := NewOptimizer(&ot.evalCtx, OptimizeSteps(i))
+		b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, o.Factory(), stmt)
+		root, props, err := b.Build()
+		if err != nil {
+			ot.d.Fatalf(ot.t, "%v", err)
+		}
+
+		next = o.Optimize(root, props).String()
+		if prev == next {
+			// No change, so nothing more to optimize.
+			// TODO(andyk): this method of detecting changes won't work
+			// when we introduce exploration patterns.
+			break
+		}
+
+		if i == 0 {
+			// Output starting tree.
+			buf.WriteString(next)
+		} else {
+			diff := difflib.UnifiedDiff{
+				A:        difflib.SplitLines(prev),
+				B:        difflib.SplitLines(next),
+				FromFile: "",
+				ToFile:   o.LastRuleName().String(),
+				Context:  100,
+			}
+
+			text, _ := difflib.GetUnifiedDiffString(diff)
+			buf.WriteString(strings.Trim(text, " \t\r\n") + "\n")
+		}
+
+		prev = next
+	}
+
+	// Output ending tree.
+	buf.WriteString("---\n")
+	buf.WriteString("+++\n")
+	buf.WriteString(next)
+
+	return buf.String()
 }

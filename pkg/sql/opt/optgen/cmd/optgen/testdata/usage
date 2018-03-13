@@ -20,6 +20,7 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
+	rulenames  generate enumeration of rule names
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -51,6 +52,7 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
+	rulenames  generate enumeration of rule names
 
 The sources can be file names and/or filepath.Glob patterns.
 
@@ -83,6 +85,7 @@ The commands are:
 	factory    generate expression tree creation and normalization functions
 	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
+	rulenames  generate enumeration of rule names
 
 The sources can be file names and/or filepath.Glob patterns.
 

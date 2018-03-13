@@ -115,7 +115,7 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 		g.genMatch(matchArg, fieldName, false /* noMatch */)
 	}
 
-	g.w.writeIndent("_f.reportOptimization()\n")
+	g.w.writeIndent("_f.reportOptimization(%s)\n", rule.Name)
 	g.w.writeIndent("_group = ")
 	g.genNestedExpr(rule.Replace)
 	g.w.newline()

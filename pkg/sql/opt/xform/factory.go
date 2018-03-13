@@ -48,6 +48,10 @@ type factory struct {
 	// This method is useful for debugging, in order to see intermediate
 	// optimization steps.
 	maxSteps OptimizeSteps
+
+	// lastRule stores the name of the last rule that was triggered, for
+	// debugging purposes.
+	lastRuleName RuleName
 }
 
 var _ opt.Factory = &factory{}
@@ -88,8 +92,10 @@ func (f *factory) allowOptimizations() bool {
 
 // reportOptimization is called when an optimization has been performed on the
 // tree. It decrements the maxSteps counter. Once that reaches zero, no further
-// optimizations will be performed.
-func (f *factory) reportOptimization() {
+// optimizations will be performed. It also stores the name of the rule that
+// was triggered, which is useful for debugging.
+func (f *factory) reportOptimization(name RuleName) {
+	f.lastRuleName = name
 	f.maxSteps--
 }
 
