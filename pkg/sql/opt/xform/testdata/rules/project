@@ -289,6 +289,184 @@ project
       └── variable: a.y [type=int, outer=(2)]
 
 # --------------------------------------------------
+# FilterUnusedLimitCols
+# --------------------------------------------------
+
+# The projection on top of Limit should trickle down and we shouldn't scan f.
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# We should scan x, y, s.
+opt
+SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
+----
+project
+ ├── columns: s:4(string)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# We should scan x, y, s.
+opt
+SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10)
+----
+project
+ ├── columns: x:1(int!null) s:4(string)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# --------------------------------------------------
+# FilterUnusedOffsetCols
+# --------------------------------------------------
+
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# We should scan x, y, s.
+opt
+SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y OFFSET 10)
+----
+project
+ ├── columns: s:4(string)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# We should scan x, y, s.
+opt
+SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null) s:4(string)
+ ├── offset
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    └── scan a
+ │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# --------------------------------------------------
+# FilterUnusedLimitCols + FilterUnusedOffsetCols
+# --------------------------------------------------
+
+opt
+SELECT x FROM (SELECT x, y, f FROM t.a ORDER BY y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── ordering: +2
+ │    │    ├── sort
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │    ├── ordering: +2
+ │    │    │    └── scan a
+ │    │    │         └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1)]
+      └── variable: a.x [type=int, outer=(1)]
+
+# We should scan x, y, s.
+opt
+SELECT s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: s:4(string)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    ├── sort
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    ├── ordering: +1,+2
+ │    │    │    └── scan a
+ │    │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# We should scan x, y, s.
+opt
+SELECT x, s FROM (SELECT x, y, f, s FROM t.a ORDER BY x, y LIMIT 10 OFFSET 10)
+----
+project
+ ├── columns: x:1(int!null) s:4(string)
+ ├── limit
+ │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    ├── offset
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    ├── ordering: +1,+2
+ │    │    ├── sort
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    ├── ordering: +1,+2
+ │    │    │    └── scan a
+ │    │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── const: 10 [type=int]
+ │    └── const: 10 [type=int]
+ └── projections [outer=(1,4)]
+      ├── variable: a.x [type=int, outer=(1)]
+      └── variable: a.s [type=string, outer=(4)]
+
+# --------------------------------------------------
 # FilterUnusedJoinLeftCols
 # --------------------------------------------------
 

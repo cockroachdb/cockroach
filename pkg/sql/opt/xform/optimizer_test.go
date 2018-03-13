@@ -132,7 +132,7 @@ func (ot *optimizerTest) run(t *testing.T, path string) {
 			return ot.optimizeExpr(stmt, OptimizeAll).String()
 
 		case "optsteps":
-			// optstep command iteratively outputs the output from each
+			// optsteps command iteratively shows the output from each
 			// optimization step for debugging.
 			var buf bytes.Buffer
 			var prev, next string
