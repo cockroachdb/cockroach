@@ -10,6 +10,10 @@ CREATE TABLE kv (
   v CHAR
 )
 
+query TT
+SELECT * FROM kv
+----
+
 statement ok
 INSERT INTO kv (k,v) VALUES ('a', 'b')
 
@@ -41,6 +45,23 @@ query TT
 SELECT * FROM kv
 ----
 a c
+
+statement ok
+BEGIN TRANSACTION
+
+query T
+SHOW TABLES
+----
+kv
+
+statement ok
+create table m3 (id integer, acol varchar(20), bcol timestamp)
+
+statement ok
+PREPARE x AS insert into m3 (id, acol) VALUES (1, 'text with ; sign')
+
+statement ok
+COMMIT TRANSACTION
 
 # Rollback a transaction before committing.
 
