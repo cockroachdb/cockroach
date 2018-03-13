@@ -178,19 +178,14 @@ func (p *PlaceholderInfo) SetType(name string, typ types.T) error {
 	return nil
 }
 
-// SetTypeHints resets the type and values in the map and replaces the
-// type hints map by an alias to src. If src is nil, the map is cleared.
-// The type hints map is aliased because the invoking code from
-// pgwire/v3.go for sql.Prepare needs to receive the updated type
-// assignments after Prepare completes.
+// SetTypeHints resets the type and values in the map.
 func (p *PlaceholderInfo) SetTypeHints(src PlaceholderTypes) {
-	if src != nil {
-		p.TypeHints = src
-		p.Types = PlaceholderTypes{}
-		p.Values = QueryArguments{}
-	} else {
-		p.Clear()
+	if src == nil {
+		panic("nil src")
 	}
+	p.TypeHints = src
+	p.Types = PlaceholderTypes{}
+	p.Values = QueryArguments{}
 }
 
 // IsUnresolvedPlaceholder returns whether expr is an unresolved placeholder. In

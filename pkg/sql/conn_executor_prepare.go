@@ -210,6 +210,7 @@ func (ex *connExecutor) prepare(
 			}
 		}
 		prepared.Types = p.semaCtx.Placeholders.Types
+		prepared.TypeHints = p.semaCtx.Placeholders.TypeHints
 		return nil
 	}(); err != nil {
 		return nil, err

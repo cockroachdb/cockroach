@@ -172,6 +172,9 @@ type sameTypedExprsTestCase struct {
 }
 
 func attemptTypeCheckSameTypedExprs(t *testing.T, idx int, test sameTypedExprsTestCase) {
+	if test.ptypes == nil {
+		test.ptypes = make(tree.PlaceholderTypes)
+	}
 	if test.expectedPTypes == nil {
 		test.expectedPTypes = make(tree.PlaceholderTypes)
 	}
@@ -316,7 +319,11 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 	for i, d := range testData {
 		ctx := tree.MakeSemaContext(false)
-		ctx.Placeholders.SetTypeHints(d.ptypes)
+		ptypes := d.ptypes
+		if ptypes == nil {
+			ptypes = make(tree.PlaceholderTypes)
+		}
+		ctx.Placeholders.SetTypeHints(ptypes)
 		desired := types.Any
 		if d.desired != nil {
 			desired = d.desired
