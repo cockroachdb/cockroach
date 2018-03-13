@@ -2551,10 +2551,10 @@ func (r *RocksDB) setAuxiliaryDir(d string) error {
 
 // IngestExternalFile links a file into the RocksDB log-structured merge-tree.
 func (r *RocksDB) IngestExternalFile(
-	ctx context.Context, path string, move, allowFileModification bool,
+	ctx context.Context, path string, allowFileModification bool,
 ) error {
 	return statusToError(C.DBIngestExternalFile(
-		r.rdb, goToCSlice([]byte(path)), C._Bool(move), C._Bool(allowFileModification),
+		r.rdb, goToCSlice([]byte(path)), C._Bool(true), C._Bool(allowFileModification),
 	))
 }
 
