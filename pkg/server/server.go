@@ -100,6 +100,12 @@ var (
 			"of the shutdown process",
 		0*time.Second,
 	)
+
+	forwardClockJumpCheckEnabled = settings.RegisterBoolSetting(
+		"server.clock.forward_jump_check_enabled",
+		"If enabled, forward clock jumps > max_offset/2 will cause a panic.",
+		false,
+	)
 )
 
 // Server is the cockroach server node.
@@ -155,10 +161,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
+	clock := hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	s := &Server{
 		st:       st,
 		mux:      http.NewServeMux(),
-		clock:    hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset)),
+		clock:    clock,
 		stopper:  stopper,
 		cfg:      cfg,
 		registry: metric.NewRegistry(),
@@ -693,6 +700,27 @@ func (s *singleListener) Addr() net.Addr {
 	return s.conn.LocalAddr()
 }
 
+// startMonitoringForwardClockJumps starts a background task to monitor forward
+// clock jumps based on a cluster setting
+func (s *Server) startMonitoringForwardClockJumps(ctx context.Context) {
+	forwardJumpCheckEnabled := make(chan bool, 1)
+	s.stopper.AddCloser(stop.CloserFn(func() { close(forwardJumpCheckEnabled) }))
+
+	forwardClockJumpCheckEnabled.SetOnChange(&s.st.SV, func() {
+		forwardJumpCheckEnabled <- forwardClockJumpCheckEnabled.Get(&s.st.SV)
+	})
+
+	if err := s.clock.StartMonitoringForwardClockJumps(
+		forwardJumpCheckEnabled,
+		time.NewTicker,
+		nil, /* tick callback */
+	); err != nil {
+		log.Fatal(ctx, err)
+	}
+
+	log.Info(ctx, "monitoring forward clock jumps based on server.clock.forward_jump_check_enabled")
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -718,6 +746,7 @@ func (s *Server) Start(ctx context.Context) error {
 	ctx = s.AnnotateCtx(ctx)
 
 	startTime := timeutil.Now()
+	s.startMonitoringForwardClockJumps(ctx)
 
 	tlsConfig, err := s.cfg.GetServerTLSConfig()
 	if err != nil {
