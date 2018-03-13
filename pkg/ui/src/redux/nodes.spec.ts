@@ -1,6 +1,7 @@
 import { assert } from "chai";
 
 import {MetricConstants, NodeStatus$Properties} from "src/util/proto";
+import * as protos from "src/js/protos";
 
 import {
   nodeDisplayNameByIDSelector,
@@ -8,11 +9,11 @@ import {
   LivenessStatus,
   sumNodeStats,
 } from "./nodes";
-import { nodesReducerObj  } from "./apiReducers";
+import { nodesReducerObj, livenessReducerObj } from "./apiReducers";
 import { createAdminUIStore } from "./state";
 
-function makeNodesState(...addresses: { id: number, address: string }[]) {
-  const data = addresses.map(addr => {
+function makeNodesState(...addresses: { id: number, address: string, status?: LivenessStatus }[]) {
+  const nodeData = addresses.map(addr => {
     return {
       desc : {
         node_id: addr.id,
@@ -22,8 +23,15 @@ function makeNodesState(...addresses: { id: number, address: string }[]) {
       },
     };
   });
+  const livenessData: {statuses: {[key: string]: LivenessStatus}} = {
+    statuses: {},
+  };
+  addresses.forEach(addr => {
+    livenessData.statuses[addr.id] = addr.status || LivenessStatus.LIVE;
+  });
   const store = createAdminUIStore();
-  store.dispatch(nodesReducerObj.receiveData(data));
+  store.dispatch(nodesReducerObj.receiveData(nodeData));
+  store.dispatch(livenessReducerObj.receiveData(new protos.cockroach.server.serverpb.LivenessResponse(livenessData)));
   return store.getState();
 }
 
@@ -66,6 +74,34 @@ describe("node data selectors", function() {
         5: "addressA (n5)",
         6: "addressC (n6)",
         7: "addressA (n7)",
+      });
+    });
+
+    it("adds decommissioned flag to decommissioned nodes", function() {
+      const state: any = makeNodesState(
+        { id: 1, address: "addressA", status: LivenessStatus.DECOMMISSIONED },
+        { id: 2, address: "addressB" },
+        { id: 3, address: "addressC", status: LivenessStatus.DECOMMISSIONED },
+        { id: 4, address: "addressD", status: LivenessStatus.DEAD },
+        { id: 5, address: "addressA", status: LivenessStatus.DECOMMISSIONED },
+        { id: 6, address: "addressC" },
+        { id: 7, address: "addressA" },
+        { id: 8, address: "addressE", status: LivenessStatus.DECOMMISSIONING },
+        { id: 9, address: "addressF", status: LivenessStatus.UNAVAILABLE },
+      );
+
+      const addressesByID = nodeDisplayNameByIDSelector(state);
+      assert.equal(addressesByID[1], "[decommissioned] addressA (n1)");
+      assert.deepEqual(addressesByID, {
+        1: "[decommissioned] addressA (n1)",
+        2: "addressB (n2)",
+        3: "[decommissioned] addressC (n3)",
+        4: "addressD (n4)",
+        5: "[decommissioned] addressA (n5)",
+        6: "addressC (n6)",
+        7: "addressA (n7)",
+        8: "addressE (n8)",
+        9: "addressF (n9)",
       });
     });
 

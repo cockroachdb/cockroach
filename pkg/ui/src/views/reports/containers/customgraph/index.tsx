@@ -42,12 +42,16 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
     (summary: NodesSummary) => summary.nodeDisplayNameByID,
     (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
       const base = [{value: "", label: "Cluster"}];
-      return base.concat(_.map(nodeStatuses, (ns) => {
-        return {
-          value: ns.desc.node_id.toString(),
-          label: nodeDisplayNameByID[ns.desc.node_id],
-        };
-      }));
+      return base.concat(_.chain(nodeStatuses)
+        .map(ns => {
+          return {
+            value: ns.desc.node_id.toString(),
+            label: nodeDisplayNameByID[ns.desc.node_id],
+          };
+        })
+        .sortBy(value => _.startsWith(value.label, "[decommissioned]"))
+        .value(),
+      );
     },
   );
 

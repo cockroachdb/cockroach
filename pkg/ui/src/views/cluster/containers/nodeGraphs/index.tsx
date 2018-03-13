@@ -17,7 +17,7 @@ import ClusterSummaryBar from "./summaryBar";
 import { AdminUIState } from "src/redux/state";
 import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import { hoverStateSelector, HoverState, hoverOn, hoverOff } from "src/redux/hover";
-import { nodesSummarySelector, NodesSummary } from "src/redux/nodes";
+import { nodesSummarySelector, NodesSummary, LivenessStatus } from "src/redux/nodes";
 import Alerts from "src/views/shared/containers/alerts";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
@@ -93,14 +93,18 @@ class NodeGraphs extends React.Component<NodeGraphsProps, {}> {
   private nodeDropdownOptions = createSelector(
     (summary: NodesSummary) => summary.nodeStatuses,
     (summary: NodesSummary) => summary.nodeDisplayNameByID,
-    (nodeStatuses, nodeDisplayNameByID): DropdownOption[] => {
+    (summary: NodesSummary) => summary.livenessStatusByNodeID,
+    (nodeStatuses, nodeDisplayNameByID, livenessStatusByNodeID): DropdownOption[] => {
       const base = [{value: "", label: "Cluster"}];
-      return base.concat(_.map(nodeStatuses, (ns) => {
-        return {
-          value: ns.desc.node_id.toString(),
-          label: nodeDisplayNameByID[ns.desc.node_id],
-        };
-      }));
+      return base.concat(
+        _.chain(nodeStatuses)
+          .filter(ns => livenessStatusByNodeID[ns.desc.node_id] !== LivenessStatus.DECOMMISSIONED)
+          .map(ns => ({
+            value: ns.desc.node_id.toString(),
+            label: nodeDisplayNameByID[ns.desc.node_id],
+          }))
+          .value(),
+      );
     },
   );
 
