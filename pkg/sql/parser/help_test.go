@@ -73,6 +73,7 @@ func TestContextualHelp(t *testing.T) {
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOB`},
 		{`CANCEL QUERY ??`, `CANCEL QUERY`},
+		{`CANCEL SESSION ??`, `CANCEL SESSION`},
 
 		{`CREATE UNIQUE ??`, `CREATE`},
 		{`CREATE UNIQUE INDEX ??`, `CREATE INDEX`},

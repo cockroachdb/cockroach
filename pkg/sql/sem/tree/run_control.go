@@ -57,3 +57,14 @@ func (node *CancelQuery) Format(ctx *FmtCtx) {
 	ctx.WriteString("CANCEL QUERY ")
 	ctx.FormatNode(node.ID)
 }
+
+// CancelSession represents a CANCEL SESSION statement.
+type CancelSession struct {
+	ID Expr
+}
+
+// Format implements the NodeFormatter interface.
+func (node *CancelSession) Format(ctx *FmtCtx) {
+	ctx.WriteString("CANCEL SESSION ")
+	ctx.FormatNode(node.ID)
+}

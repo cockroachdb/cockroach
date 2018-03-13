@@ -311,6 +311,7 @@ func TestParse(t *testing.T) {
 
 		{`CANCEL JOB a`},
 		{`CANCEL QUERY a`},
+		{`CANCEL SESSION a`},
 		{`RESUME JOB a`},
 		{`PAUSE JOB a`},
 
@@ -413,6 +414,8 @@ func TestParse(t *testing.T) {
 		{`PREPARE a (STRING) AS RESTORE DATABASE a FROM $1`},
 		{`PREPARE a AS CANCEL QUERY 1`},
 		{`PREPARE a (STRING) AS CANCEL QUERY $1`},
+		{`PREPARE a AS CANCEL SESSION 1`},
+		{`PREPARE a (STRING) AS CANCEL SESSION $1`},
 		{`PREPARE a AS CANCEL JOB 1`},
 		{`PREPARE a (INT) AS CANCEL JOB $1`},
 		{`PREPARE a AS PAUSE JOB 1`},

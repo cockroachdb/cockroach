@@ -606,6 +606,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> cancel_stmt
 %type <tree.Statement> cancel_job_stmt
 %type <tree.Statement> cancel_query_stmt
+%type <tree.Statement> cancel_session_stmt
 
 // SCRUB
 %type <tree.Statement> scrub_stmt
@@ -1666,11 +1667,12 @@ copy_from_stmt:
 
 // %Help: CANCEL
 // %Category: Group
-// %Text: CANCEL JOB, CANCEL QUERY
+// %Text: CANCEL JOB, CANCEL QUERY, CANCEL SESSION
 cancel_stmt:
-  cancel_job_stmt   // EXTEND WITH HELP: CANCEL JOB
-| cancel_query_stmt // EXTEND WITH HELP: CANCEL QUERY
-| CANCEL error      // SHOW HELP: CANCEL
+  cancel_job_stmt     // EXTEND WITH HELP: CANCEL JOB
+| cancel_query_stmt   // EXTEND WITH HELP: CANCEL QUERY
+| cancel_session_stmt // EXTEND WITH HELP: CANCEL SESSION
+| CANCEL error        // SHOW HELP: CANCEL
 
 // %Help: CANCEL JOB - cancel a background job
 // %Category: Misc
@@ -1693,6 +1695,17 @@ cancel_query_stmt:
     $$.val = &tree.CancelQuery{ID: $3.expr()}
   }
 | CANCEL QUERY error // SHOW HELP: CANCEL QUERY
+
+// %Help: CANCEL SESSION - cancel an open session
+// %Category: Misc
+// %Text: CANCEL SESSION <sessionid>
+// %SeeAlso: SHOW SESSIONS
+cancel_session_stmt:
+  CANCEL SESSION a_expr
+  {
+    $$.val = &tree.CancelSession{ID: $3.expr()}
+  }
+| CANCEL SESSION error // SHOW HELP: CANCEL SESSION
 
 comment_stmt:
   COMMENT ON TABLE table_name IS comment_text
@@ -2844,6 +2857,7 @@ opt_compact:
 // %Help: SHOW SESSIONS - list open client sessions
 // %Category: Misc
 // %Text: SHOW [CLUSTER | LOCAL] SESSIONS
+// %SeeAlso: CANCEL SESSION
 show_sessions_stmt:
   SHOW SESSIONS
   {
