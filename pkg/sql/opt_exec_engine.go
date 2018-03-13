@@ -144,25 +144,19 @@ func (ee *execEngine) ConstructScan(
 	desc := table.(*optTable).desc
 	// Create a scanNode.
 	scan := ee.planner.Scan()
-	if err := scan.initTable(
-		context.TODO(), ee.planner, desc, nil /* hints */, publicColumnsCfg,
-	); err != nil {
+	colCfg := scanColumnsConfig{
+		wantedColumns: make([]tree.ColumnID, 0, cols.Len()),
+	}
+	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
+		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.Columns[c].ID))
+	}
+	if err := scan.initTable(context.TODO(), ee.planner, desc, nil /* hints */, colCfg); err != nil {
 		return nil, err
 	}
 	var err error
 	scan.spans, err = unconstrainedSpans(desc, &desc.PrimaryIndex)
 	if err != nil {
 		return nil, err
-	}
-	scan.valNeededForCol = cols.Copy()
-	l := cols.Len()
-	if l != len(desc.Columns) {
-		// Only a subset of columns should be projected.
-		ordinals := make([]exec.ColumnOrdinal, 0, l)
-		cols.ForEach(func(ord int) {
-			ordinals = append(ordinals, exec.ColumnOrdinal(ord))
-		})
-		return ee.ConstructSimpleProject(scan, ordinals, nil)
 	}
 	return scan, nil
 }
