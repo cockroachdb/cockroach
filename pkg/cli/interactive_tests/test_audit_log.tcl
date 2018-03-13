@@ -41,9 +41,10 @@ eexpect root@
 system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
 end_test
 
-# force rotate the logs: the test below must not see the
-# log entries that were already generated above.
-rotate_server_logs
+# Flush and truncate the logs. The test below must not see the log entries that
+# were already generated above.
+flush_server_logs
+system "truncate -s0 $logfile"
 
 # Check the log indeed is empty
 system "if grep -q helloworld $logfile; then false; fi"
