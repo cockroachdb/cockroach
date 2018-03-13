@@ -760,6 +760,97 @@ SELECT EXISTS(SELECT * FROM t.foo);
 	}
 }
 
+// TestDescriptorRefreshOnRetry tests that all descriptors acquired by
+// a query are properly released before the query is retried.
+func TestDescriptorRefreshOnRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+
+	fooRelease := make(chan struct{}, 10)
+	fooAcquiredCount := int32(0)
+	fooReleaseCount := int32(0)
+
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "foo" {
+						atomic.AddInt32(&fooAcquiredCount, 1)
+					}
+				},
+				LeaseReleasedEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "foo" {
+						atomic.AddInt32(&fooReleaseCount, 1)
+						close(fooRelease)
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.foo (v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if atomic.LoadInt32(&fooAcquiredCount) > 0 {
+		t.Fatalf("CREATE TABLE has acquired a descriptor")
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+		SELECT * FROM t.foo;
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Descriptor has been acquired.
+	if atomic.LoadInt32(&fooAcquiredCount) != 1 {
+		t.Fatal("descriptor not acquired")
+	}
+
+	// Descriptor has not been released.
+	if atomic.LoadInt32(&fooReleaseCount) > 0 {
+		t.Fatal("released descriptor")
+	}
+
+	if _, err := tx.Exec(
+		"SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)"); !testutils.IsError(
+		err, `forced by crdb_internal\.force_retry\(\)`) {
+		t.Fatal(err)
+	}
+
+	if atomic.LoadInt32(&fooAcquiredCount) > 1 {
+		t.Fatal("descriptor reacquired")
+	}
+
+	// Now wait for the release to happen. We use a local timer
+	// to make the test fail faster if it needs to fail.
+	timeout := time.After(5 * time.Second)
+	select {
+	case <-timeout:
+		t.Fatal("lease from sub-query was not released")
+	case <-fooRelease:
+	}
+
+	if atomic.LoadInt32(&fooReleaseCount) != 1 {
+		t.Fatal("didnt release descriptor")
+	}
+
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Test that a transaction created way in the past will use the correct
 // table descriptor and will thus obey the modififcation time of the
 // table descriptor.
