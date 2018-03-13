@@ -752,17 +752,15 @@ func runStart(cmd *cobra.Command, args []string) error {
 		// encoded as 128+signal number.
 		//
 		// Also, on Unix, os.Signal is syscall.Signal and it's convertible to int.
-		returnErr = &cliError{
+		return &cliError{
 			exitCode: 128 + int(sig.(syscall.Signal)),
 			severity: log.Severity_ERROR,
 			cause: errors.Errorf(
 				"received signal '%s' during shutdown, initiating hard shutdown%s", sig, hardShutdownHint),
 		}
-		// NB: we do not return here to go through log.Flush below.
 
 	case <-time.After(time.Minute):
-		returnErr = errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
-		// NB: we do not return here to go through log.Flush below.
+		return errors.Errorf("time limit reached, initiating hard shutdown%s", hardShutdownHint)
 
 	case <-stopper.IsStopped():
 		const msgDone = "server drained and shutdown completed"
