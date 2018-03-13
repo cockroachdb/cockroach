@@ -152,7 +152,7 @@ func (n *createTableNode) startExec(params runParams) error {
 	// We need to validate again after adding the FKs.
 	// Only validate the table because backreferences aren't created yet.
 	// Everything is validated below.
-	if err := desc.ValidateTable(); err != nil {
+	if err := desc.ValidateTable(params.p.EvalContext().Settings); err != nil {
 		return err
 	}
 
@@ -177,7 +177,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn); err != nil {
+	if err := desc.Validate(params.ctx, params.p.txn, params.extendedEvalCtx.Settings); err != nil {
 		return err
 	}
 
@@ -666,7 +666,7 @@ func (p *planner) saveNonmutationAndNotify(ctx context.Context, td *sqlbase.Tabl
 	if err := td.SetUpVersion(); err != nil {
 		return err
 	}
-	if err := td.ValidateTable(); err != nil {
+	if err := td.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
 		return err
 	}
 	if err := p.writeTableDesc(ctx, td); err != nil {

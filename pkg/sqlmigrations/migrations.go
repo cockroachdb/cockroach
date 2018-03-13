@@ -831,7 +831,7 @@ func grantAdminPrivileges(ctx context.Context, r runner) error {
 				}
 			case *sqlbase.TableDescriptor:
 				_ = d.MaybeUpgradeFormatVersion()
-				if err := d.Validate(ctx, txn); err != nil {
+				if err := d.Validate(ctx, txn, nil); err != nil {
 					return err
 				}
 			}
