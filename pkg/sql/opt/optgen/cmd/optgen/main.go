@@ -22,9 +22,13 @@ import (
 	"go/format"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
+
+type globResolver func(pattern string) (matches []string, err error)
 
 type genFunc func(compiled *lang.CompiledExpr, w io.Writer)
 
@@ -53,9 +57,15 @@ type optgen struct {
 	// redirected.
 	stdErr io.Writer
 
-	// resolver is called to open an input file of the specified name. Tests
+	// globResolver is called to map from source arguments to a set of file
+	// names, using filepath.Glob syntax. The files will then be resolved by
+	// fileResolver. Tests can hook this in order to avoid actually listing
+	// files/directories on disk.
+	globResolver globResolver
+
+	// fileResolver is called to open an input file of the specified name. Tests
 	// can hook this in order to avoid actually opening files on disk.
-	resolver lang.FileResolver
+	fileResolver lang.FileResolver
 
 	// cmdLine stores the set of flags used to invoke the Optgen tool.
 	cmdLine *flag.FlagSet
@@ -96,11 +106,30 @@ func (g *optgen) run(args ...string) bool {
 		return false
 	}
 
-	compiler := lang.NewCompiler(sources...)
+	// Set glob resolver if it hasn't yet been set.
+	if g.globResolver == nil {
+		g.globResolver = filepath.Glob
+	}
 
-	if g.resolver != nil {
+	// Map sources to a set of files using the glob resolver.
+	files := make([]string, 0, len(sources))
+	for _, source := range sources {
+		matches, err := g.globResolver(source)
+		if err != nil {
+			g.reportError(err)
+			return false
+		}
+		files = append(files, matches...)
+	}
+
+	// Sort the files so that output is stable.
+	sort.Strings(files)
+
+	compiler := lang.NewCompiler(files...)
+
+	if g.fileResolver != nil {
 		// Use caller-provided custom file resolver.
-		compiler.SetFileResolver(g.resolver)
+		compiler.SetFileResolver(g.fileResolver)
 	}
 
 	var errors []error
@@ -268,6 +297,9 @@ func (g *optgen) usage() {
 	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
 	fmt.Fprintf(g.stdErr, "\tifactory   generate interface for factory construct methods\n")
 	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")
+	fmt.Fprintf(g.stdErr, "\n")
+
+	fmt.Fprintf(g.stdErr, "The sources can be file names and/or filepath.Glob patterns.\n")
 	fmt.Fprintf(g.stdErr, "\n")
 
 	fmt.Fprintf(g.stdErr, "Flags:\n")

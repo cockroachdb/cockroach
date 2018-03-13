@@ -44,9 +44,9 @@ func (g *opsGen) genOperatorEnum() {
 	fmt.Fprintf(g.w, "const (\n")
 	fmt.Fprintf(g.w, "  UnknownOp Operator = iota\n\n")
 
-	g.genOperatorEnumByTag("Scalar")
-	g.genOperatorEnumByTag("Relational")
 	g.genOperatorEnumByTag("Enforcer")
+	g.genOperatorEnumByTag("Relational")
+	g.genOperatorEnumByTag("Scalar")
 
 	fmt.Fprintf(g.w, "  // NumOperators tracks the total count of operators.\n")
 	fmt.Fprintf(g.w, "  NumOperators\n")
@@ -57,15 +57,25 @@ func (g *opsGen) genOperatorNames() {
 	var names bytes.Buffer
 	var indexes bytes.Buffer
 
+	genByTag := func(tag string) {
+		for _, define := range g.compiled.Defines {
+			if !define.Tags.Contains(tag) {
+				continue
+			}
+
+			fmt.Fprintf(&indexes, "%d, ", names.Len())
+
+			// Trim the Op suffix and convert to "dash case".
+			fmt.Fprint(&names, dashCase(string(define.Name)))
+		}
+	}
+
 	fmt.Fprint(&names, "unknown")
 	fmt.Fprint(&indexes, "0, ")
 
-	for _, define := range g.compiled.Defines {
-		fmt.Fprintf(&indexes, "%d, ", names.Len())
-
-		// Trim the Op suffix and convert to "dash case".
-		fmt.Fprint(&names, dashCase(string(define.Name)))
-	}
+	genByTag("Enforcer")
+	genByTag("Relational")
+	genByTag("Scalar")
 
 	fmt.Fprintf(g.w, "const opNames = \"%s\"\n\n", names.String())
 

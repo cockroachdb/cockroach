@@ -97,10 +97,10 @@ func (g *exprsGen) genTagLookup() {
 		}
 
 		fmt.Fprintf(g.w, "var is%sLookup = [...]bool{\n", tag)
-		fmt.Fprintf(g.w, "  false, // UnknownOp\n\n")
+		fmt.Fprintf(g.w, "  opt.UnknownOp: false,\n\n")
 
 		for _, define := range g.compiled.Defines {
-			fmt.Fprintf(g.w, "  %v, // %sOp\n", define.Tags.Contains(tag), define.Name)
+			fmt.Fprintf(g.w, "  opt.%sOp: %v,\n", define.Name, define.Tags.Contains(tag))
 		}
 
 		fmt.Fprintf(g.w, "}\n\n")

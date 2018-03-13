@@ -51,19 +51,19 @@ type Factory interface {
 	DynamicConstruct(op Operator, operands DynamicOperands) GroupID
 
 	// ------------------------------------------------------------
-	// Scalar Operators
-	// ------------------------------------------------------------
-
-	// ConstructFuncCall constructs an expression for the FuncCall operator.
-	ConstructFuncCall(name GroupID, args ListID, def PrivateID) GroupID
-
-	// ------------------------------------------------------------
 	// Relational Operators
 	// ------------------------------------------------------------
 
 	// ConstructUnion constructs an expression for the Union operator.
 	// Union is a union operator.
 	ConstructUnion(left GroupID, right GroupID, colMap PrivateID) GroupID
+
+	// ------------------------------------------------------------
+	// Scalar Operators
+	// ------------------------------------------------------------
+
+	// ConstructFuncCall constructs an expression for the FuncCall operator.
+	ConstructFuncCall(name GroupID, args ListID, def PrivateID) GroupID
 }
 ----
 ----
