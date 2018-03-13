@@ -144,7 +144,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	}
 
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return nil, err
 	}
 	if err := p.txn.Put(ctx, descKey, sqlbase.WrapDescriptor(tableDesc)); err != nil {

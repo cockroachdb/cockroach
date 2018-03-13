@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -614,7 +615,7 @@ func TestValidateTableDesc(t *testing.T) {
 			}},
 	}
 	for i, d := range testData {
-		if err := d.desc.ValidateTable(); err == nil {
+		if err := d.desc.ValidateTable(cluster.MakeTestingClusterSettings()); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
 		} else if d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)

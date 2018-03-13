@@ -214,7 +214,7 @@ func (p *planner) dropIndexByName(
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn); err != nil {
+	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
 	mutationID, err := p.createSchemaChangeJob(ctx, tableDesc, jobDesc)
