@@ -33,7 +33,7 @@ FROM a
 ----
 project
  ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(int) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.k:1(int!null) a.i:2(int)
  └── projections [outer=(1,2)]
       ├── eq [type=bool, outer=(1,2)]
@@ -101,7 +101,7 @@ FROM a
 ----
 project
  ├── columns: column7:7(bool) column8:8(bool) column9:9(bool) column10:10(bool) column11:11(float) column12:12(int) column13:13(int) column14:14(int) column15:15(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float)
  └── projections [outer=(1-3)]
       ├── eq [type=bool, outer=(1,2)]
@@ -171,7 +171,7 @@ SELECT COALESCE(i) FROM a
 ----
 project
  ├── columns: column7:7(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.i:2(int)
  └── projections [outer=(2)]
       └── variable: a.i [type=int, outer=(2)]
@@ -184,7 +184,7 @@ SELECT COALESCE(NULL) FROM a
 ----
 project
  ├── columns: column7:7(unknown)
- ├── scan
+ ├── scan a
  └── projections
       └── null [type=unknown]
 
@@ -193,7 +193,7 @@ SELECT COALESCE(NULL, 'foo', s) FROM a
 ----
 project
  ├── columns: column7:7(string)
- ├── scan
+ ├── scan a
  └── projections
       └── const: 'foo' [type=string]
 
@@ -202,7 +202,7 @@ SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
 ----
 project
  ├── columns: column7:7(string)
- ├── scan
+ ├── scan a
  │    └── columns: a.s:4(string)
  └── projections [outer=(4)]
       └── coalesce [type=string, outer=(4)]
@@ -217,7 +217,7 @@ SELECT COALESCE(i, NULL, NULL) FROM a
 ----
 project
  ├── columns: column7:7(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.i:2(int)
  └── projections [outer=(2)]
       └── coalesce [type=int, outer=(2)]
@@ -233,7 +233,7 @@ SELECT i::int, arr::int[], '[1, 2]'::json::json, null::string::int FROM a
 ----
 project
  ├── columns: column7:7(int) column8:8(int[]) column9:9(jsonb) column10:10(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.i:2(int) a.arr:6(int[])
  └── projections [outer=(2,6)]
       ├── variable: a.i [type=int, outer=(2)]
@@ -247,7 +247,7 @@ SELECT i::float, arr::decimal[], s::json::json FROM a
 ----
 project
  ├── columns: column7:7(float) column8:8(decimal[]) column9:9(jsonb)
- ├── scan
+ ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
  └── projections [outer=(2,4,6)]
       ├── cast: float [type=float, outer=(2)]
@@ -279,7 +279,7 @@ SELECT +null::int, -null::int, ~null::int FROM a
 ----
 project
  ├── columns: column7:7(int) column8:8(int) column9:9(int)
- ├── scan
+ ├── scan a
  └── projections
       ├── null [type=int]
       ├── null [type=int]
@@ -306,7 +306,7 @@ FROM a
 ----
 project
  ├── columns: column7:7(int) column8:8(int) column9:9(decimal) column10:10(decimal) column11:11(float) column12:12(float) column13:13(int) column14:14(int) column15:15(jsonb) column16:16(jsonb) column17:17(decimal[]) column18:18(string[]) column19:19(decimal[]) column20:20(float[])
- ├── scan
+ ├── scan a
  │    └── columns: a.i:2(int) a.arr:6(int[])
  └── projections [outer=(2,6)]
       ├── null [type=int]
@@ -344,7 +344,7 @@ SELECT null IN (i), null NOT IN (s) FROM a
 ----
 project
  ├── columns: column7:7(bool) column8:8(bool)
- ├── scan
+ ├── scan a
  └── projections
       ├── null [type=bool]
       └── null [type=bool]
@@ -357,7 +357,7 @@ SELECT i IN (null, null), k NOT IN (1 * null, null::int, 1 < null) FROM a
 ----
 project
  ├── columns: column7:7(bool) column8:8(bool)
- ├── scan
+ ├── scan a
  └── projections
       ├── null [type=bool]
       └── null [type=bool]
@@ -370,7 +370,7 @@ SELECT i IN (2, 1, 1, null, 3, null, 2, 3.0) FROM a
 ----
 project
  ├── columns: column7:7(bool)
- ├── scan
+ ├── scan a
  │    └── columns: a.i:2(int)
  └── projections [outer=(2)]
       └── in [type=bool, outer=(2)]
@@ -386,7 +386,7 @@ SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) FROM a
 ----
 project
  ├── columns: column7:7(bool)
- ├── scan
+ ├── scan a
  │    └── columns: a.s:4(string)
  └── projections [outer=(4)]
       └── not-in [type=bool, outer=(4)]

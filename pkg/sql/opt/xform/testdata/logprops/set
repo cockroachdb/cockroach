@@ -24,11 +24,11 @@ union
  ├── columns: x:6(int) y:7(int)
  ├── left columns: a.x:1(int) a.y:2(int)
  ├── right columns: b.x:3(int) b.z:4(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null)
-      ├── scan
+      ├── scan b
       │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       └── projections [outer=(3,4)]
            ├── variable: b.x [type=int, outer=(3)]
@@ -43,7 +43,7 @@ intersect
  ├── right columns: b.z:4(int) b.x:3(int) b.rowid:5(int)
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
- │    ├── scan
+ │    ├── scan a
  │    │    └── columns: a.x:1(int!null) a.y:2(int)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
@@ -51,7 +51,7 @@ intersect
  │         └── variable: a.x [type=int, outer=(1)]
  └── project
       ├── columns: b.z:4(int!null) b.x:3(int) b.rowid:5(int!null)
-      ├── scan
+      ├── scan b
       │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       └── projections [outer=(3-5)]
            ├── variable: b.z [type=int, outer=(4)]
@@ -67,7 +67,7 @@ except
  ├── right columns: b.x:3(int) b.z:4(int) b.z:4(int)
  ├── project
  │    ├── columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
- │    ├── scan
+ │    ├── scan a
  │    │    └── columns: a.x:1(int!null) a.y:2(int)
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
@@ -75,7 +75,7 @@ except
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null) b.z:4(int!null)
-      ├── scan
+      ├── scan b
       │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
       └── projections [outer=(3,4)]
            ├── variable: b.x [type=int, outer=(3)]

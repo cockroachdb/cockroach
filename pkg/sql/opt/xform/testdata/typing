@@ -31,7 +31,7 @@ SELECT a.x FROM a
 ----
 project
  ├── columns: x:1(int!null)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1)]
       └── variable: a.x [type=int, outer=(1)]
@@ -56,7 +56,7 @@ SELECT * FROM a WHERE x = $1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── eq [type=bool, outer=(1)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -68,7 +68,7 @@ SELECT (a.x, 1.5), a.y FROM a
 ----
 project
  ├── columns: column3:3(tuple{int, decimal}) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── tuple [type=tuple{int, decimal}, outer=(1)]
@@ -82,7 +82,7 @@ SELECT * FROM a WHERE a.x = 1 AND NOT (a.y = 2 OR a.y = 3.5)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── and [type=bool, outer=(1,2)]
       ├── eq [type=bool, outer=(1)]
@@ -103,7 +103,7 @@ SELECT * FROM a WHERE a.x = 1 AND a.x <> 2
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── and [type=bool, outer=(1)]
       ├── eq [type=bool, outer=(1)]
@@ -119,7 +119,7 @@ SELECT * FROM a WHERE a.x >= 1 AND a.x <= 10 AND a.y > 1 AND a.y < 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── and [type=bool, outer=(1,2)]
       ├── and [type=bool, outer=(1,2)]
@@ -143,7 +143,7 @@ SELECT * FROM a WHERE a.x IN (1, 2) AND a.y NOT IN (3, 4)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── and [type=bool, outer=(1,2)]
       ├── in [type=bool, outer=(1)]
@@ -163,7 +163,7 @@ SELECT * FROM b WHERE b.x LIKE '%foo%' AND b.x NOT LIKE '%bar%'
 ----
 select
  ├── columns: x:1(string!null) z:2(decimal!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
  └── and [type=bool, outer=(1)]
       ├── like [type=bool, outer=(1)]
@@ -179,7 +179,7 @@ SELECT * FROM b WHERE b.x ILIKE '%foo%' AND b.x NOT ILIKE '%bar%'
 ----
 select
  ├── columns: x:1(string!null) z:2(decimal!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
  └── and [type=bool, outer=(1)]
       ├── i-like [type=bool, outer=(1)]
@@ -195,7 +195,7 @@ SELECT * FROM b WHERE b.x ~ 'foo' AND b.x !~ 'bar' AND b.x ~* 'foo' AND b.x !~* 
 ----
 select
  ├── columns: x:1(string!null) z:2(decimal!null)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
  └── and [type=bool, outer=(1)]
       ├── and [type=bool, outer=(1)]
@@ -219,7 +219,7 @@ SELECT * FROM a WHERE a.x IS DISTINCT FROM a.y AND a.x IS NULL
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── and [type=bool, outer=(1,2)]
       ├── is-not [type=bool, outer=(1,2)]
@@ -235,7 +235,7 @@ SELECT a.x & a.y, a.x | a.y, a.x # a.y FROM a
 ----
 project
  ├── columns: column3:3(int) column4:4(int) column5:5(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── bitand [type=int, outer=(1,2)]
@@ -254,7 +254,7 @@ SELECT a.x + 1.5, DATE '2000-01-01' - 15, 10.10 * a.x, 1 / a.y, a.x // 1.5 FROM 
 ----
 project
  ├── columns: column3:3(decimal) column4:4(date) column5:5(decimal) column6:6(decimal) column7:7(decimal)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── plus [type=decimal, outer=(1)]
@@ -279,7 +279,7 @@ SELECT 100.1 % a.x, a.x ^ 2.5, a.x << 3, a.y >> 2 FROM a
 ----
 project
  ├── columns: column3:3(decimal) column4:4(decimal) column5:5(int) column6:6(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── mod [type=decimal, outer=(1)]
@@ -301,7 +301,7 @@ SELECT b.x || 'more' FROM b
 ----
 project
  ├── columns: column3:3(string)
- ├── scan
+ ├── scan b
  │    └── columns: b.x:1(string!null) b.z:2(decimal!null)
  └── projections [outer=(1)]
       └── concat [type=string, outer=(1)]
@@ -314,7 +314,7 @@ SELECT -a.y, ~a.x FROM a
 ----
 project
  ├── columns: column3:3(int) column4:4(int)
- ├── scan
+ ├── scan a
  │    └── columns: a.x:1(int!null) a.y:2(int)
  └── projections [outer=(1,2)]
       ├── unary-minus [type=int, outer=(2)]
@@ -328,7 +328,7 @@ SELECT arr || arr, arr || NULL, NULL || arr FROM unusual
 ----
 project
  ├── columns: column3:3(int[]) column4:4(int[]) column5:5(int[])
- ├── scan
+ ├── scan unusual
  │    └── columns: unusual.x:1(int!null) unusual.arr:2(int[])
  └── projections [outer=(2)]
       ├── concat [type=int[], outer=(2)]
@@ -347,7 +347,7 @@ SELECT x || arr, arr || x, x || NULL, NULL || x FROM unusual
 ----
 project
  ├── columns: column3:3(int[]) column4:4(int[]) column5:5(int[]) column6:6(int[])
- ├── scan
+ ├── scan unusual
  │    └── columns: unusual.x:1(int!null) unusual.arr:2(int[])
  └── projections [outer=(1,2)]
       ├── concat [type=int[], outer=(1,2)]
