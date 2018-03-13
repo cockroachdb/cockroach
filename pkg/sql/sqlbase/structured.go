@@ -472,10 +472,21 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 	return buf.String()
 }
 
-// MaybeUpgradeFormatVersion transforms the TableDescriptor to the latest
+// MaybeFillInDescriptor performs any modifications needed to the table descriptor.
+// This includes format upgrades and optional changes that can be handled by all version
+// (for example: additional default privileges).
+// Returns true if any changes were made.
+func (desc *TableDescriptor) MaybeFillInDescriptor() bool {
+	changedVersion := desc.maybeUpgradeFormatVersion()
+	changedPrivileges := desc.Privileges.MaybeFixPrivileges(desc.ID)
+	return changedVersion || changedPrivileges
+}
+
+// maybeUpgradeFormatVersion transforms the TableDescriptor to the latest
 // FormatVersion (if it's not already there) and returns true if any changes
 // were made.
-func (desc *TableDescriptor) MaybeUpgradeFormatVersion() bool {
+// This method should be called through MaybeFillInDescriptor, not directly.
+func (desc *TableDescriptor) maybeUpgradeFormatVersion() bool {
 	if desc.FormatVersion >= InterleavedFormatVersion {
 		return false
 	}
@@ -1037,14 +1048,14 @@ func (desc *TableDescriptor) ValidateTable() error {
 
 	// We maintain forward compatibility, so if you see this error message with a
 	// version older that what this client supports, then there's a
-	// MaybeUpgradeFormatVersion missing from some codepath.
+	// MaybeFillInDescriptor missing from some codepath.
 	if v := desc.GetFormatVersion(); v != FamilyFormatVersion && v != InterleavedFormatVersion {
 		// TODO(dan): We're currently switching from FamilyFormatVersion to
 		// InterleavedFormatVersion. After a beta is released with this dual version
 		// support, then:
 		// - Upgrade the bidirectional reference version to that beta
 		// - Start constructing all TableDescriptors with InterleavedFormatVersion
-		// - Change MaybeUpgradeFormatVersion to output InterleavedFormatVersion
+		// - Change maybeUpgradeFormatVersion to output InterleavedFormatVersion
 		// - Change this check to only allow InterleavedFormatVersion
 		return fmt.Errorf(
 			"table %q is encoded using using version %d, but this client only supports version %d and %d",

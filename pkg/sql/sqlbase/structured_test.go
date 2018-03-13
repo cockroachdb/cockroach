@@ -1250,7 +1250,7 @@ func TestMaybeUpgradeFormatVersion(t *testing.T) {
 	}
 	for i, test := range tests {
 		desc := test.desc
-		upgraded := desc.MaybeUpgradeFormatVersion()
+		upgraded := desc.maybeUpgradeFormatVersion()
 		if upgraded != test.expUpgrade {
 			t.Fatalf("%d: expected upgraded=%t, but got upgraded=%t", i, test.expUpgrade, upgraded)
 		}
