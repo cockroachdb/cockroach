@@ -134,6 +134,20 @@ func (n *createTableNode) startExec(params runParams) error {
 		privs = sqlbase.NewDefaultPrivilegeDescriptor()
 	}
 
+	if !params.extendedEvalCtx.ExecCfg.Settings.Version.IsMinSupported(cluster.Version2_0) {
+		for _, def := range n.n.Defs {
+			if d, ok := def.(*tree.ColumnTableDef); ok {
+				if _, ok := d.Type.(*coltypes.TJSON); ok {
+					pgerror.CodeIndeterminateDatatypeError
+					return errors.New("cluster version does not support JSONB (>= 2.0 required)")
+				}
+				if d.Computed.Computed {
+					return errors.New("cluster version does not support computed columns (>= 2.0 required)")
+				}
+			}
+		}
+	}
+
 	var desc sqlbase.TableDescriptor
 	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()

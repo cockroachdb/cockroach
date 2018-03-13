@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 type createSequenceNode struct {
@@ -70,6 +72,10 @@ func (n *createSequenceNode) startExec(params runParams) error {
 	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB)
 	if err != nil {
 		return err
+	}
+
+	if !params.extendedEvalCtx.ExecCfg.Settings.Version.IsMinSupported(cluster.Version2_0) {
+		return errors.New("cluster version does not support sequences (>= 2.0 required)")
 	}
 
 	// Inherit permissions from the database descriptor.

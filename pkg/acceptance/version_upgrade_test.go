@@ -109,6 +109,65 @@ func (bv binaryVersionUpgrade) checkNode(
 	}
 }
 
+type feature struct {
+	name              string
+	minAllowedVersion string
+	query             string
+}
+
+var features = []feature{
+	feature{
+		name:              "JSONB",
+		minAllowedVersion: "2.0-0",
+		query: `
+		CREATE DATABASE IF NOT EXISTS test;
+		CREATE TABLE test.t (j JSONB);
+		DROP TABLE test.t;`,
+	},
+	feature{
+		name:              "Sequences",
+		minAllowedVersion: "2.0-0",
+		query: `
+		CREATE DATABASE IF NOT EXISTS test;
+		CREATE SEQUENCE test.test_sequence;
+		DROP SEQUENCE test.test_sequence;`,
+	},
+	feature{
+		name:              "Computed Columns",
+		minAllowedVersion: "2.0-0",
+		query: `
+		CREATE DATABASE IF NOT EXISTS test;
+		CREATE TABLE test.t (x INT AS (3) STORED);
+		DROP TABLE test.t;`,
+	},
+}
+
+func testFeature(ctx context.Context, t *testing.T, c cluster.Cluster, f feature, cv string) {
+	db := makePGClient(t, c.PGUrl(ctx, 0 /* nodeId */))
+	defer db.Close()
+
+	minAllowedVersion, err := roachpb.ParseVersion(f.minAllowedVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	actualVersion, err := roachpb.ParseVersion(cv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = db.Exec(f.query)
+	if actualVersion.Less(minAllowedVersion) {
+		if err == nil {
+			t.Fatalf("expected %s to fail on cluster version %s", f.name, cv)
+		}
+	} else {
+		if err != nil {
+			t.Fatalf("expected %s to succeed on cluster version %s, got %s", f.name, cv, err)
+		}
+	}
+}
+
 // clusterVersionUpgrade performs a cluster version upgrade to its version.
 // It waits until all nodes have seen the upgraded cluster version.
 type clusterVersionUpgrade string
@@ -212,5 +271,10 @@ func testVersionUpgrade(ctx context.Context, t *testing.T, cfg cluster.TestConfi
 	for _, step := range steps {
 		t.Log(step.name())
 		step.run(ctx, t, c)
+		if s, ok := step.(clusterVersionUpgrade); ok {
+			for _, feature := range features {
+				testFeature(ctx, t, c, feature, string(s))
+			}
+		}
 	}
 }
