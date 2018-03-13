@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"syscall"
 	"testing"
 	"time"
 
@@ -27,23 +26,24 @@ import (
 	"github.com/pkg/errors"
 )
 
-var errSentinel = struct{ error }{} // explodes if Error() called
-var errFundamental = errors.Errorf("%s", "not recoverable :(")
-var errWrapped1 = errors.Wrap(errFundamental, "not recoverable :(")
-var errWrapped2 = errors.Wrapf(errWrapped1, "not recoverable :(")
-var errWrapped3 = errors.Wrap(errWrapped2, "not recoverable :(")
-var errWrappedSentinel = errors.Wrap(errors.Wrapf(errSentinel, "unseen"), "unsung")
+type safeErrorTestCase struct {
+	format string
+	rs     []interface{}
+	expErr string
+}
 
-func TestCrashReportingSafeError(t *testing.T) {
-	type testCase struct {
-		format string
-		rs     []interface{}
-		expErr string
-	}
+// Exposed globally so it can be injected with platform-specific tests.
+var safeErrorTestCases = func() []safeErrorTestCase {
+	var errSentinel = struct{ error }{} // explodes if Error() called
+	var errFundamental = errors.Errorf("%s", "not recoverable :(")
+	var errWrapped1 = errors.Wrap(errFundamental, "not recoverable :(")
+	var errWrapped2 = errors.Wrapf(errWrapped1, "not recoverable :(")
+	var errWrapped3 = errors.Wrap(errWrapped2, "not recoverable :(")
+	var errWrappedSentinel = errors.Wrap(errors.Wrapf(errSentinel, "unseen"), "unsung")
 
 	runtimeErr := &runtime.TypeAssertionError{}
 
-	testCases := []testCase{
+	return []safeErrorTestCase{
 		{
 			// Intended result of panic(context.DeadlineExceeded). Note that this is a known sentinel
 			// error but a safeError is returned.
@@ -81,10 +81,6 @@ func TestCrashReportingSafeError(t *testing.T) {
 			expErr: "?:0: outer %+v | crash_reporting_test.go:79: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
 		},
 		{
-			format: "", rs: []interface{}{os.NewSyscallError("write", syscall.ENOSPC)},
-			expErr: "?:0: *os.SyscallError: write: syscall.Errno: no space left on device",
-		},
-		{
 			// Verify that the special case still scrubs inside of the error.
 			format: "", rs: []interface{}{&os.LinkError{Op: "moo", Old: "sec", New: "cret", Err: errors.New("assumed safe")}},
 			expErr: "?:0: *os.LinkError: moo <redacted> <redacted>: assumed safe",
@@ -93,15 +89,17 @@ func TestCrashReportingSafeError(t *testing.T) {
 			// Verify that unknown sentinel errors print at least their type (regression test).
 			// Also, that its Error() is never called (since it would panic).
 			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:35: caused by *errors.withMessage: caused by crash_reporting_test.go:35: caused by *errors.withMessage: caused by struct { error }",
+			expErr: "?:0: %s | crash_reporting_test.go:42: caused by *errors.withMessage: caused by crash_reporting_test.go:42: caused by *errors.withMessage: caused by struct { error }",
 		},
 		{
 			format: "", rs: []interface{}{errWrapped3},
-			expErr: "?:0: crash_reporting_test.go:34: caused by *errors.withMessage: caused by crash_reporting_test.go:33: caused by *errors.withMessage: caused by crash_reporting_test.go:32: caused by *errors.withMessage: caused by crash_reporting_test.go:31",
+			expErr: "?:0: crash_reporting_test.go:41: caused by *errors.withMessage: caused by crash_reporting_test.go:40: caused by *errors.withMessage: caused by crash_reporting_test.go:39: caused by *errors.withMessage: caused by crash_reporting_test.go:38",
 		},
 	}
+}()
 
-	for _, test := range testCases {
+func TestCrashReportingSafeError(t *testing.T) {
+	for _, test := range safeErrorTestCases {
 		t.Run("", func(t *testing.T) {
 			err := ReportablesToSafeError(0, test.format, test.rs)
 			if err == nil {

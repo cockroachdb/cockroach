@@ -20,12 +20,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"syscall"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 
 	"github.com/pkg/errors"
 )
@@ -119,7 +119,7 @@ func (cm *CertificateManager) Metrics() CertificateMetrics {
 func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 	// Setup signal handler.
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGHUP)
+	signal.Notify(sigs, sysutil.MaybeSIGHUP)
 	go func() {
 		for {
 			select {
