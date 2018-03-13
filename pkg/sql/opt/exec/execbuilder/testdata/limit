@@ -124,3 +124,28 @@ k:int
 4
 2
 1
+
+exec-explain
+SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
+----
+render                    0  render  ·         ·          (k)        ·
+ │                        0  ·       render 0  k          ·          ·
+ └── limit                1  limit   ·         ·          (k, v)     +v
+      │                   1  ·       count     4          ·          ·
+      └── sort            2  sort    ·         ·          (k, v)     +v
+           │              2  ·       order     +v         ·          ·
+           └── render     3  render  ·         ·          (k, v)     ·
+                │         3  ·       render 0  k          ·          ·
+                │         3  ·       render 1  v          ·          ·
+                └── scan  4  scan    ·         ·          (k, v, w)  ·
+·                         4  ·       table     t@primary  ·          ·
+·                         4  ·       spans     ALL        ·          ·
+
+exec
+SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
+----
+k:int
+6
+4
+2
+1
