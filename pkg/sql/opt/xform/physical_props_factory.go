@@ -127,12 +127,14 @@ func (f physicalPropsFactory) canProvideOrdering(ev ExprView, required opt.Order
 // but provides any presentation requirement. This method is heavily called
 // during ExprView traversal, so performance is important.
 func (f physicalPropsFactory) constructChildProps(ev ExprView, nth int) opt.PhysicalPropsID {
-	// Fast path taken in common case when no properties are required of parent;
-	// in that case, no properties are required of children. This will change in
-	// the future when certain operators like MergeJoin require input properties
-	// from their children regardless of what's required of them.
 	if ev.required == opt.MinPhysPropsID {
-		return opt.MinPhysPropsID
+		switch ev.Operator() {
+		case opt.LimitOp, opt.OffsetOp:
+		default:
+			// Fast path taken in common case when no properties are required of
+			// parent and the operator itself does not require any properties.
+			return opt.MinPhysPropsID
+		}
 	}
 
 	parentProps := ev.Physical()

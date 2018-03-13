@@ -1,0 +1,126 @@
+exec-raw
+CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v));
+INSERT INTO t VALUES (1, 1, 1), (2, -4, 8), (3, 9, 27), (4, -16, 94), (5, 25, 125), (6, -36, 216)
+----
+
+exec-explain
+SELECT k, v FROM t ORDER BY k LIMIT 5
+----
+limit           0  limit   ·         ·          (k, v)     ·
+ │              0  ·       count     5          ·          ·
+ └── render     1  render  ·         ·          (k, v)     ·
+      │         1  ·       render 0  k          ·          ·
+      │         1  ·       render 1  v          ·          ·
+      └── scan  2  scan    ·         ·          (k, v, w)  ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+exec
+SELECT k, v FROM t ORDER BY k LIMIT 5
+----
+k:int  v:int
+1      1
+2      -4
+3      9
+4      -16
+5      25
+
+exec-explain
+SELECT k, v FROM t ORDER BY k OFFSET 5
+----
+limit           0  limit   ·         ·          (k, v)     ·
+ │              0  ·       offset    5          ·          ·
+ └── render     1  render  ·         ·          (k, v)     ·
+      │         1  ·       render 0  k          ·          ·
+      │         1  ·       render 1  v          ·          ·
+      └── scan  2  scan    ·         ·          (k, v, w)  ·
+·               2  ·       table     t@primary  ·          ·
+·               2  ·       spans     ALL        ·          ·
+
+exec
+SELECT k, v FROM t ORDER BY k OFFSET 5
+----
+k:int  v:int
+6      -36
+
+exec-explain
+SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
+----
+limit                0  limit   ·         ·          (k, v)     +v
+ │                   0  ·       count     5          ·          ·
+ │                   0  ·       offset    1          ·          ·
+ └── sort            1  sort    ·         ·          (k, v)     +v
+      │              1  ·       order     +v         ·          ·
+      └── render     2  render  ·         ·          (k, v)     ·
+           │         2  ·       render 0  k          ·          ·
+           │         2  ·       render 1  v          ·          ·
+           └── scan  3  scan    ·         ·          (k, v, w)  ·
+·                    3  ·       table     t@primary  ·          ·
+·                    3  ·       spans     ALL        ·          ·
+
+exec
+SELECT k, v FROM t ORDER BY v LIMIT (1+4) OFFSET 1
+----
+k:int  v:int
+4      -16
+2      -4
+1      1
+3      9
+5      25
+
+exec-explain
+SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+----
+render                         0  render  ·            ·          (column4)         ·
+ │                             0  ·       render 0     column4    ·                 ·
+ └── limit                     1  limit   ·            ·          (column4, "t.v")  ·
+      │                        1  ·       count        10         ·                 ·
+      └── render               2  render  ·            ·          (column4, "t.v")  ·
+           │                   2  ·       render 0     agg0       ·                 ·
+           │                   2  ·       render 1     v          ·                 ·
+           └── sort            3  sort    ·            ·          (k, v, agg0)      -v
+                │              3  ·       order        -v         ·                 ·
+                └── group      4  group   ·            ·          (k, v, agg0)      ·
+                     │         4  ·       aggregate 0  k          ·                 ·
+                     │         4  ·       aggregate 1  v          ·                 ·
+                     │         4  ·       aggregate 2  sum(w)     ·                 ·
+                     │         4  ·       group by     @1-@2      ·                 ·
+                     └── scan  5  scan    ·            ·          (k, v, w)         ·
+·                              5  ·       table        t@primary  ·                 ·
+·                              5  ·       spans        ALL        ·                 ·
+
+exec
+SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+----
+column4:decimal
+125
+27
+1
+8
+94
+216
+
+exec-explain
+SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
+----
+render                    0  render  ·         ·          (k)        ·
+ │                        0  ·       render 0  k          ·          ·
+ └── limit                1  limit   ·         ·          (k, v)     +v
+      │                   1  ·       count     4          ·          ·
+      └── sort            2  sort    ·         ·          (k, v)     +v
+           │              2  ·       order     +v         ·          ·
+           └── render     3  render  ·         ·          (k, v)     ·
+                │         3  ·       render 0  k          ·          ·
+                │         3  ·       render 1  v          ·          ·
+                └── scan  4  scan    ·         ·          (k, v, w)  ·
+·                         4  ·       table     t@primary  ·          ·
+·                         4  ·       spans     ALL        ·          ·
+
+exec
+SELECT k FROM (SELECT k, v FROM t ORDER BY v LIMIT 4)
+----
+k:int
+6
+4
+2
+1

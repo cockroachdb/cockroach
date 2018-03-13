@@ -58,32 +58,63 @@ column1:int  column2:int
 2            1
 3            4
 
-# TODO(radu): ORDER BY not supported yet.
-#exec
-#(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
-#----
-#3
-#2
-#
-## The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
-#exec
-#VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
-#----
-#3
-#2
-#
-## UNION with NULL columns in operands works.
-#exec
-#VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
-#----
-#NULL
-#1
-#
-#exec
-#VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
-#----
-#NULL
-#1
+opt
+(VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1)) ORDER BY 1 DESC LIMIT 2
+----
+limit
+ ├── columns: column1:3(int)
+ ├── ordering: -3
+ ├── sort
+ │    ├── columns: column1:3(int)
+ │    ├── ordering: -3
+ │    └── union-all
+ │         ├── columns: column1:3(int)
+ │         ├── left columns: column1:1(int)
+ │         ├── right columns: column1:2(int)
+ │         ├── values
+ │         │    ├── columns: column1:1(int)
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 1 [type=int]
+ │         │    ├── tuple [type=tuple{int}]
+ │         │    │    └── const: 2 [type=int]
+ │         │    └── tuple [type=tuple{int}]
+ │         │         └── const: 2 [type=int]
+ │         └── values
+ │              ├── columns: column1:2(int)
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 1 [type=int]
+ │              ├── tuple [type=tuple{int}]
+ │              │    └── const: 3 [type=int]
+ │              └── tuple [type=tuple{int}]
+ │                   └── const: 1 [type=int]
+ └── const: 2 [type=int]
+
+# The ORDER BY and LIMIT apply to the UNION, not the last VALUES.
+exec
+VALUES (1), (1), (1), (2), (2) UNION ALL VALUES (1), (3), (1) ORDER BY 1 DESC LIMIT 2
+----
+column1:int
+3
+2
+
+# UNION with NULL columns in operands works.
+exec
+VALUES (1) UNION ALL VALUES (NULL) ORDER BY 1
+----
+column1:int
+NULL
+1
+
+exec
+VALUES (NULL) UNION ALL VALUES (1) ORDER BY 1
+----
+column1:int
+NULL
+1
 
 exec
 VALUES (NULL) UNION ALL VALUES (NULL)
@@ -174,19 +205,20 @@ v:int
 2
 2
 
-# TODO(radu): ORDER BY, LIMIT not supported yet.
-#exec
-#(SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
-#----
-#3
-#2
-#
-## The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
-#exec
-#SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
-#----
-#3
-#2
+exec
+(SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2) ORDER BY 1 DESC LIMIT 2
+----
+v:int
+3
+2
+
+# The ORDER BY and LIMIT apply to the UNION, not the last SELECT.
+exec
+SELECT v FROM t.uniontest WHERE k = 1 UNION ALL SELECT v FROM t.uniontest WHERE k = 2 ORDER BY 1 DESC LIMIT 2
+----
+v:int
+3
+2
 
 exec-explain
 SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
