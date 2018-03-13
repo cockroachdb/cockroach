@@ -263,6 +263,9 @@ func buildOne(svc s3putter, o opts) {
 		args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", o.Suffix))
 		args = append(args, fmt.Sprintf("%s=%s", "TAGS", o.Tags))
 		args = append(args, fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary"))
+		if *isRelease {
+			args = append(args, fmt.Sprintf("%s=%s", "BUILD_TAGGED_RELEASE", "true"))
+		}
 		cmd := exec.Command("make", args...)
 		cmd.Dir = o.PkgDir
 		cmd.Stdout = os.Stdout
