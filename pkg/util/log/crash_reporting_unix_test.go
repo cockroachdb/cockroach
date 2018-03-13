@@ -12,22 +12,19 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package cli
+// +build !windows
+
+package log
 
 import (
 	"os"
+
+	"golang.org/x/sys/unix"
 )
 
-// drainSignals are the signals that will cause the server to drain and exit.
-var drainSignals = []os.Signal{os.Interrupt}
-
-func handleSignalDuringShutdown(os.Signal) {
-	// Windows doesn't indicate whether a process exited due to a signal in the
-	// exit code, so we don't need to do anything but exit with a failing code.
-	// The error message has already been printed.
-	os.Exit(1)
-}
-
-func maybeRerunBackground() (bool, error) {
-	return false, nil
+func init() {
+	safeErrorTestCases = append(safeErrorTestCases, safeErrorTestCase{
+		format: "", rs: []interface{}{os.NewSyscallError("write", unix.ENOSPC)},
+		expErr: "?:0: *os.SyscallError: write: syscall.Errno: no space left on device",
+	})
 }

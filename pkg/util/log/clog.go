@@ -27,7 +27,6 @@ import (
 	stdLog "log"
 	"math"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -35,13 +34,13 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
 )
@@ -595,10 +594,8 @@ func init() {
 
 // signalFlusher flushes the log(s) every time SIGHUP is received.
 func signalFlusher() {
-	flushCh := make(chan os.Signal, 1)
-	signal.Notify(flushCh, syscall.SIGHUP)
-
-	for sig := range flushCh {
+	ch := sysutil.RefreshSignaledChan()
+	for sig := range ch {
 		Infof(context.Background(), "%s received, flushing logs", sig)
 		Flush()
 	}
