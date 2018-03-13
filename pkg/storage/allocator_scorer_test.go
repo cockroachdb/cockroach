@@ -307,6 +307,100 @@ func TestBetterThan(t *testing.T) {
 	}
 }
 
+// TestBestRebalanceTarget constructs a hypothetical output of
+// rebalanceCandidates and verifies that bestRebalanceTarget properly returns
+// the candidates in the ideal order of preference and omits any that aren't
+// desirable.
+func TestBestRebalanceTarget(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	candidates := []rebalanceOptions{
+		{
+			candidates: []candidate{
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 11},
+					valid:          true,
+					necessary:      true,
+					diversityScore: 1.0,
+					rangeCount:     11,
+				},
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 12},
+					valid:          true,
+					necessary:      true,
+					diversityScore: 1.0,
+					rangeCount:     12,
+				},
+			},
+			existingCandidates: []candidate{
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 1},
+					valid:          true,
+					necessary:      true,
+					diversityScore: 0,
+					rangeCount:     1,
+				},
+			},
+		},
+		{
+			candidates: []candidate{
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 13},
+					valid:          true,
+					necessary:      true,
+					diversityScore: 1.0,
+					rangeCount:     13,
+				},
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 14},
+					valid:          false,
+					necessary:      false,
+					diversityScore: 0.0,
+					rangeCount:     14,
+				},
+			},
+			existingCandidates: []candidate{
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 2},
+					valid:          true,
+					necessary:      false,
+					diversityScore: 0,
+					rangeCount:     2,
+				},
+				{
+					store:          roachpb.StoreDescriptor{StoreID: 3},
+					valid:          false,
+					necessary:      false,
+					diversityScore: 0,
+					rangeCount:     3,
+				},
+			},
+		},
+	}
+
+	expected := []roachpb.StoreID{13, 11, 12}
+	allocRand := makeAllocatorRand(rand.NewSource(0))
+	var i int
+	for {
+		i++
+		target, existing := bestRebalanceTarget(allocRand, candidates)
+		if len(expected) == 0 {
+			if target == nil {
+				break
+			}
+			t.Errorf("round %d: expected nil, got target=%+v, existing=%+v", i, target, existing)
+			continue
+		}
+		if target == nil {
+			t.Errorf("round %d: expected s%d, got nil", i, expected[0])
+		} else if target.store.StoreID != expected[0] {
+			t.Errorf("round %d: expected s%d, got target=%+v, existing=%+v",
+				i, expected[0], target, existing)
+		}
+		expected = expected[1:]
+	}
+}
+
 func TestStoreHasReplica(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
