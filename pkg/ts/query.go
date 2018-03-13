@@ -929,20 +929,21 @@ func (db *DB) Query(
 	resultAccount *mon.BoundAccount,
 	workerMemMonitor *mon.BytesMonitor,
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
+	resolutionSampleDuration := queryResolution.SampleDuration()
 	// Verify that sampleDuration is a multiple of
 	// queryResolution.SampleDuration().
-	if sampleDuration < queryResolution.SampleDuration() {
+	if sampleDuration < resolutionSampleDuration {
 		return nil, nil, fmt.Errorf(
 			"sampleDuration %d was not less that queryResolution.SampleDuration %d",
 			sampleDuration,
-			queryResolution.SampleDuration(),
+			resolutionSampleDuration,
 		)
 	}
-	if sampleDuration%queryResolution.SampleDuration() != 0 {
+	if sampleDuration%resolutionSampleDuration != 0 {
 		return nil, nil, fmt.Errorf(
 			"sampleDuration %d is not a multiple of queryResolution.SampleDuration %d",
 			sampleDuration,
-			queryResolution.SampleDuration(),
+			resolutionSampleDuration,
 		)
 	}
 
@@ -950,8 +951,24 @@ func (db *DB) Query(
 	localAccount := workerMemMonitor.MakeBoundAccount()
 	defer localAccount.Close(ctx)
 
+	// Disallow queries in the future.
+	systemTime := timeutil.Now().UnixNano()
+	if startNanos > systemTime {
+		return nil, nil, nil
+	}
+	if endNanos > systemTime {
+		endNanos = systemTime
+	}
+
 	// Normalize startNanos to a sampleDuration boundary.
 	startNanos -= startNanos % sampleDuration
+
+	// If query is near the current moment and we are downsampling, normalize
+	// endNanos to avoid querying an incomplete datapoint.
+	if sampleDuration > resolutionSampleDuration &&
+		endNanos > systemTime-resolutionSampleDuration {
+		endNanos -= endNanos % sampleDuration
+	}
 
 	var rows []client.KeyValue
 	if len(query.Sources) == 0 {
@@ -1055,7 +1072,7 @@ func (db *DB) Query(
 
 	// Filter the result of the aggregation function through a leading edge
 	// filter.
-	cutoffNanos := timeutil.Now().UnixNano() - queryResolution.SampleDuration()
+	cutoffNanos := timeutil.Now().UnixNano() - resolutionSampleDuration
 	valueFn := iters.makeLeadingEdgeFilter(aggFn, cutoffNanos)
 
 	// Iterate over all requested offsets, recording a value from the
