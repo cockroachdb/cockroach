@@ -553,7 +553,6 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 	planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 	if err != nil {
-		res.SetError(err)
 		return err
 	}
 	recordStatementSummary(
@@ -570,6 +569,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 // execWithLocalEngine runs a plan using the local (non-distributed) SQL
 // engine.
 // If an error is returned, the connection needs to stop processing queries.
+// Such errors are also written to res.
 // Query execution errors are written to res; they are not returned.
 func (ex *connExecutor) execWithLocalEngine(
 	ctx context.Context, planner *planner, stmtType tree.StatementType, res RestrictedCommandResult,
@@ -611,6 +611,7 @@ func (ex *connExecutor) execWithLocalEngine(
 			return commErr
 		})
 		if commErr != nil {
+			res.SetError(commErr)
 			return commErr
 		}
 		if queryErr != nil {
