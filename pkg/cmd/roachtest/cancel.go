@@ -52,7 +52,7 @@ func init() {
 		m.Go(func(ctx context.Context) error {
 			t.Status("importing TPCC fixture")
 			c.Run(ctx, 1, fmt.Sprintf(
-				"./workload fixtures load tpcc --warehouses=%d --into-db tpcc {pgurl:1}", warehouses))
+				"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", warehouses))
 
 			conn := c.Conn(ctx, 1)
 			defer conn.Close()
