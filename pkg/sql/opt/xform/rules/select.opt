@@ -41,7 +41,7 @@
 
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
-[MergeSelects]
+[MergeSelects, Normalize]
 (Select
     (Select
         $input:*
@@ -69,7 +69,7 @@
 #   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a RIGHT JOIN b ON a.x=b.x
 #
 # Citations: [1]
-[PushDownSelectJoinLeft]
+[PushDownSelectJoinLeft, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
         $left:*
@@ -94,7 +94,7 @@
 # PushDownSelectJoinRight is symmetric with PushdownSelectJoinLeft. It pushes
 # Select filter conditions into the right side of an input Join rather than
 # into the left side. See that rule's comments for more details.
-[PushDownSelectJoinRight]
+[PushDownSelectJoinRight, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
         $left:*
@@ -125,7 +125,7 @@
 # NOTE: Keep this rule ordered after the PushDownSelectJoin rules, for
 #       performance reasons. It's better to push down below the join in a
 #       single step, when possible.
-[MergeSelectInnerJoin]
+[MergeSelectInnerJoin, Normalize]
 (Select
     $input:(InnerJoin | InnerJoinApply
         $left:*
@@ -154,7 +154,7 @@
 #   SELECT MAX(y) FROM a GROUP BY x
 #
 # Citations: [2]
-[PushDownSelectGroupBy]
+[PushDownSelectGroupBy, Normalize]
 (Select
     (GroupBy
         $input:*

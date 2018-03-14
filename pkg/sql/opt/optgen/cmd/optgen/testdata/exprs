@@ -77,9 +77,9 @@ var opLayoutTable = [...]opLayout{
 }
 
 var isEnforcerLookup = [...]bool{
-	false, // UnknownOp
+	opt.UnknownOp: false,
 
-	true, // SortOp
+	opt.SortOp: true,
 }
 
 func (ev ExprView) IsEnforcer() bool {
