@@ -11,6 +11,25 @@ import * as vector from "src/util/vector";
 
 // Box is an immutable construct for a box.
 export class Box {
+  // Compute a minimum bounding box for a supplied collection of boxes.
+  static boundingBox(...boxes: Box[]): Box {
+    if (_.isEmpty(boxes)) {
+      return null;
+    }
+
+    let top = Infinity;
+    let left = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+    for (let i = 0; i < boxes.length; i++) {
+      top = Math.min(top, boxes[i].top());
+      right = Math.max(right, boxes[i].right());
+      left = Math.min(left, boxes[i].left());
+      bottom = Math.max(bottom, boxes[i].bottom());
+    }
+    return new Box(left, top, right - left, bottom - top);
+  }
+
   constructor(private x: number, private y: number, private w: number, private h: number) { }
 
   width() {
@@ -81,7 +100,7 @@ export class ZoomTransformer {
     this._bounds = bounds;
     this._viewportSize = viewportSize;
     this._scale = this.minScale();
-    this._translate = vector.sub(vector.mult(viewportSize, 0.5 / this._scale), bounds.center());
+    this._translate =  vector.sub(vector.mult(this._viewportSize, 0.5), vector.mult(this._bounds.center(), this._scale));
   }
 
   minScale() {
@@ -116,6 +135,24 @@ export class ZoomTransformer {
     const newZoom = _.clone(this);
     newZoom._scale = scale;
     newZoom._translate = translate;
+    newZoom.adjustZoom();
+    return newZoom;
+  }
+
+  // zoomedToBoundingBox returns a ZoomTransformer which has been adjusted to
+  // exactly fit and center the provided bounding box.
+  zoomedToBox(bounding: Box): ZoomTransformer {
+    if (_.isNil(bounding)) {
+      return this;
+    }
+
+    const newZoom = _.clone(this);
+    const boundingSize = bounding.size();
+    newZoom._scale = Math.min(
+      this._viewportSize[0] / boundingSize[0],
+      this._viewportSize[1] / boundingSize[1],
+    );
+    newZoom._translate =  vector.sub(vector.mult(this._viewportSize, 0.5), vector.mult(bounding.center(), newZoom._scale));
     newZoom.adjustZoom();
     return newZoom;
   }
