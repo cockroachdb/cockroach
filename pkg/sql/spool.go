@@ -24,9 +24,12 @@ import (
 // spoolNode ensures that a child planNode is executed to completion
 // during the start phase. The results, if any, are collected. The
 // child node is guaranteed to run to completion.
+// If hardLimit is set, only that number of rows is collected, but
+// the child node is still run to completion.
 type spoolNode struct {
 	source    planNode
 	rows      *sqlbase.RowContainer
+	hardLimit int64
 	curRowIdx int
 }
 
@@ -52,9 +55,9 @@ func (s *spoolNode) startExec(params runParams) error {
 		0, /* rowCapacity */
 	)
 
-	// Accumulate all the rows. This also guarantees execution of the
-	// child node to completion, even if Next() is not called for every
-	// row.
+	// Accumulate all the rows up to the hardLimit, if any.
+	// This also guarantees execution of the child node to completion,
+	// even if Next() on the spool itself is not called for every row.
 	for {
 		next, err := s.source.Next(params)
 		if err != nil {
@@ -63,8 +66,10 @@ func (s *spoolNode) startExec(params runParams) error {
 		if !next {
 			break
 		}
-		if _, err := s.rows.AddRow(params.ctx, s.source.Values()); err != nil {
-			return err
+		if s.hardLimit == 0 || int64(s.rows.Len()) < s.hardLimit {
+			if _, err := s.rows.AddRow(params.ctx, s.source.Values()); err != nil {
+				return err
+			}
 		}
 	}
 	s.curRowIdx = -1
