@@ -254,6 +254,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *spoolNode:
+		if n.source, err = p.triggerFilterPropagation(ctx, n.source); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *createTableNode:
 		if n.n.As() {
 			if n.sourcePlan, err = p.triggerFilterPropagation(ctx, n.sourcePlan); err != nil {

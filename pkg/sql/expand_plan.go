@@ -29,7 +29,9 @@ import (
 // fails.
 func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, error) {
 	var err error
-	plan, err = doExpandPlan(ctx, p, noParams, plan)
+	topParams := noParamsBase
+	topParams.atTop = true
+	plan, err = doExpandPlan(ctx, p, topParams, plan)
 	if err != nil {
 		return plan, err
 	}
@@ -49,14 +51,60 @@ func (p *planner) expandPlan(ctx context.Context, plan planNode) (planNode, erro
 type expandParameters struct {
 	numRowsHint     int64
 	desiredOrdering sqlbase.ColumnOrdering
+
+	// spooledResults is set to true if one of the parents of the
+	// current plan either already provides spooling (e.g. upsertNode)
+	// or has required spooling (which means doExpandPlan will
+	// eventually add a spool). This is used to elide the insertion of a
+	// spool.
+	spooledResults bool
+
+	// atTop is set to true on the top-level call to doExpandPlan. Further
+	// recursive call set it to false. Used to elide the insertion of a spool
+	// for top-level nodes.
+	atTop bool
 }
 
-var noParams = expandParameters{numRowsHint: math.MaxInt64, desiredOrdering: nil}
+var noParamsBase = expandParameters{numRowsHint: math.MaxInt64, desiredOrdering: nil}
 
 // doExpandPlan is the algorithm that supports expandPlan().
 func doExpandPlan(
 	ctx context.Context, p *planner, params expandParameters, plan planNode,
 ) (planNode, error) {
+	// atTop remembers we're at the top level.
+	atTop := params.atTop
+
+	// needSpool will indicate at the end of the recursion whether
+	// a new spool stage is needed.
+	needSpool := false
+
+	// Determine what to do.
+	if _, ok := plan.(planNodeRequireSpool); ok {
+		// parentSpooled indicates that a parent node has already
+		// established the results will be spooled (i.e. accumulated at the
+		// start of execution).
+		parentSpooled := params.spooledResults
+
+		// At the top level, we ignore the spool requirement. If a parent
+		// is already spooled, we don't need to add a spool.
+		if !params.atTop && !parentSpooled {
+			// If the node requires a spool but we are already spooled, we
+			// won't need a new spool.
+			needSpool = true
+			// Although we're not spooled yet, needSpool will ensure we
+			// become spooled. Tell this to the children nodes.
+			params.spooledResults = true
+		}
+	} else if _, ok := plan.(planNodeSpooled); ok {
+		// Propagate this knowledge to the children nodes.
+		params.spooledResults = true
+	}
+	params.atTop = false
+	// Every recursion using noParams still wants to know about the
+	// current spooling status.
+	noParams := noParamsBase
+	noParams.spooledResults = params.spooledResults
+
 	var err error
 	switch n := plan.(type) {
 	case *createTableNode:
@@ -75,13 +123,21 @@ func doExpandPlan(
 		n.run.rows, err = doExpandPlan(ctx, p, noParams, n.run.rows)
 
 	case *explainDistSQLNode:
-		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+		// EXPLAIN only shows the structure of the plan, and wants to do
+		// so "as if" plan was at the top level w.r.t spool semantics.
+		explainParams := noParamsBase
+		explainParams.atTop = true
+		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
 
 	case *showTraceNode:
-		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+		// SHOW TRACE only shows the execution trace of the plan, and wants to do
+		// so "as if" plan was at the top level w.r.t spool semantics.
+		showTraceParams := noParamsBase
+		showTraceParams.atTop = true
+		n.plan, err = doExpandPlan(ctx, p, showTraceParams, n.plan)
 		if err != nil {
 			return plan, err
 		}
@@ -93,8 +149,12 @@ func doExpandPlan(
 		}
 
 	case *explainPlanNode:
+		// EXPLAIN only shows the structure of the plan, and wants to do
+		// so "as if" plan was at the top level w.r.t spool semantics.
+		explainParams := noParamsBase
+		explainParams.atTop = true
 		if n.expanded {
-			n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+			n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
 			if err != nil {
 				return plan, err
 			}
@@ -268,6 +328,24 @@ func doExpandPlan(
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}
+
+	if atTop || needSpool {
+		// Peel whatever spooling layers we have added prior to some elision above.
+		for {
+			if s, ok := plan.(*spoolNode); ok {
+				plan = s.source
+			} else {
+				break
+			}
+		}
+	}
+	// If we need a spool, add it now.
+	if needSpool {
+		// The parent of this node does not provide spooling yet, but
+		// spooling is required. Add it.
+		plan = p.makeSpool(plan)
+	}
+
 	return plan, err
 }
 
@@ -539,6 +617,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *limitNode:
 		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
+
+	case *spoolNode:
+		n.source = p.simplifyOrderings(n.source, usefulOrdering)
 
 	case *groupNode:
 		if n.needOnlyOneRow {

@@ -33,6 +33,8 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return planPhysicalProps(n.run.results)
 	case *limitNode:
 		return planPhysicalProps(n.plan)
+	case *spoolNode:
+		return planPhysicalProps(n.source)
 	case *indexJoinNode:
 		return planPhysicalProps(n.index)
 

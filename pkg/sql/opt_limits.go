@@ -131,6 +131,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *ordinalityNode:
 		p.applyLimit(n.source, numRows, soft)
 
+	case *spoolNode:
+		p.setUnlimited(n.source)
+
 	case *delayedNode:
 		if n.plan != nil {
 			p.applyLimit(n.plan, numRows, soft)

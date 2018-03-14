@@ -212,6 +212,34 @@ var _ planNodeFastPath = &deleteNode{}
 var _ planNodeFastPath = &setZoneConfigNode{}
 var _ planNodeFastPath = &upsertNode{}
 
+// planNodeRequireSpool serves as marker for nodes whose parent must
+// ensure that the node is fully run to completion (and the results
+// spooled) during the start phase. This is currently implemented by
+// all mutation statements except for upsert.
+type planNodeRequireSpool interface {
+	requireSpool()
+}
+
+var _ planNodeRequireSpool = &insertNode{}
+var _ planNodeRequireSpool = &deleteNode{}
+var _ planNodeRequireSpool = &updateNode{}
+
+// planNodeSpool serves as marker for nodes that can perform all their
+// execution during the start phase. This is different from the "fast
+// path" interface because a node that performs all its execution
+// during the start phase might still have some result rows and thus
+// not implement the fast path.
+//
+// This interface exists for the following optimization: nodes
+// that require spooling but are the children of a spooled node
+// do not require the introduction of an explicit spool.
+type planNodeSpooled interface {
+	spooled()
+}
+
+var _ planNodeSpooled = &upsertNode{}
+var _ planNodeSpooled = &spoolNode{}
+
 // planTop is the struct that collects the properties
 // of an entire plan.
 // Note: some additional per-statement state is also stored in
@@ -449,6 +477,13 @@ type autoCommitNode interface {
 	// interface).
 	enableAutoCommit()
 }
+
+var _ autoCommitNode = &createTableNode{}
+var _ autoCommitNode = &delayedNode{}
+var _ autoCommitNode = &deleteNode{}
+var _ autoCommitNode = &insertNode{}
+var _ autoCommitNode = &updateNode{}
+var _ autoCommitNode = &upsertNode{}
 
 // startExec calls startExec() on each planNode that supports
 // execStartable using a depth-first, post-order traversal.
