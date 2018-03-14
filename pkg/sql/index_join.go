@@ -99,7 +99,7 @@ type indexJoinNode struct {
 // node.
 func (p *planner) makeIndexJoin(
 	origScan *scanNode, exactPrefix int,
-) (resultPlan *indexJoinNode, indexScan *scanNode) {
+) (resultPlan *indexJoinNode, indexScan *scanNode, _ error) {
 	// Reuse the input argument's scanNode and its initialized parameters
 	// at a starting point to build the new indexScan node.
 	indexScan = origScan
@@ -108,7 +108,9 @@ func (p *planner) makeIndexJoin(
 	table := p.Scan()
 	table.desc = origScan.desc
 	// Note: initDescDefaults can only error out if its 3rd argument is not nil.
-	_ = table.initDescDefaults(p.curPlan.deps, origScan.scanVisibility, nil /* wantedColumns */)
+	if err := table.initDescDefaults(p.curPlan.deps, origScan.colCfg); err != nil {
+		return nil, nil, err
+	}
 	table.initOrdering(0 /* exactPrefix */, p.EvalContext())
 	table.disableBatchLimit()
 
@@ -192,7 +194,7 @@ func (p *planner) makeIndexJoin(
 		},
 	}
 
-	return node, indexScan
+	return node, indexScan, nil
 }
 
 // indexJoinRun stores the run-time state of indexJoinNode during local execution.
