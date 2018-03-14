@@ -1,0 +1,265 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── x int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE t.b (x INT PRIMARY KEY, z INT)
+----
+TABLE b
+ ├── x int not null
+ ├── z int
+ └── INDEX primary
+      └── x int not null
+
+# --------------------------------------------------
+# Use optstep.
+# --------------------------------------------------
+optsteps
+SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10
+----
+project
+ ├── columns: s:4(string)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+ │    ├── scan a
+ │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null) b.z:7(int)
+ │    └── and [type=bool, outer=(1,2,6)]
+ │         ├── eq [type=bool, outer=(1,6)]
+ │         │    ├── variable: a.x [type=int, outer=(1)]
+ │         │    └── variable: b.x [type=int, outer=(6)]
+ │         └── eq [type=bool, outer=(2)]
+ │              ├── plus [type=int, outer=(2)]
+ │              │    ├── variable: a.i [type=int, outer=(2)]
+ │              │    └── const: 1 [type=int]
+ │              └── const: 10 [type=int]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]
+--- 
++++ NormalizeCmpPlusConst
+@@ -1,20 +1,20 @@
+ project
+  ├── columns: s:4(string)
+  ├── inner-join
+  │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+  │    ├── scan a
+  │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  │    ├── scan b
+  │    │    └── columns: b.x:6(int!null) b.z:7(int)
+  │    └── and [type=bool, outer=(1,2,6)]
+  │         ├── eq [type=bool, outer=(1,6)]
+  │         │    ├── variable: a.x [type=int, outer=(1)]
+  │         │    └── variable: b.x [type=int, outer=(6)]
+  │         └── eq [type=bool, outer=(2)]
+- │              ├── plus [type=int, outer=(2)]
+- │              │    ├── variable: a.i [type=int, outer=(2)]
+- │              │    └── const: 1 [type=int]
+- │              └── const: 10 [type=int]
++ │              ├── variable: a.i [type=int, outer=(2)]
++ │              └── minus [type=int]
++ │                   ├── const: 10 [type=int]
++ │                   └── const: 1 [type=int]
+  └── projections [outer=(4)]
+       └── variable: a.s [type=string, outer=(4)]
+--- 
++++ EnsureJoinFiltersAnd
+@@ -1,20 +1,20 @@
+ project
+  ├── columns: s:4(string)
+  ├── inner-join
+  │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+  │    ├── scan a
+  │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+  │    ├── scan b
+  │    │    └── columns: b.x:6(int!null) b.z:7(int)
+- │    └── and [type=bool, outer=(1,2,6)]
++ │    └── filters [type=bool, outer=(1,2,6)]
+  │         ├── eq [type=bool, outer=(1,6)]
+  │         │    ├── variable: a.x [type=int, outer=(1)]
+  │         │    └── variable: b.x [type=int, outer=(6)]
+  │         └── eq [type=bool, outer=(2)]
+  │              ├── variable: a.i [type=int, outer=(2)]
+  │              └── minus [type=int]
+  │                   ├── const: 10 [type=int]
+  │                   └── const: 1 [type=int]
+  └── projections [outer=(4)]
+       └── variable: a.s [type=string, outer=(4)]
+--- 
++++ PushDownJoinLeft
+@@ -1,20 +1,23 @@
+ project
+  ├── columns: s:4(string)
+  ├── inner-join
+  │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+- │    ├── scan a
+- │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    ├── select
++ │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    │    ├── scan a
++ │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    │    └── filters [type=bool, outer=(2)]
++ │    │         └── eq [type=bool, outer=(2)]
++ │    │              ├── variable: a.i [type=int, outer=(2)]
++ │    │              └── minus [type=int]
++ │    │                   ├── const: 10 [type=int]
++ │    │                   └── const: 1 [type=int]
+  │    ├── scan b
+  │    │    └── columns: b.x:6(int!null) b.z:7(int)
+- │    └── filters [type=bool, outer=(1,2,6)]
+- │         ├── eq [type=bool, outer=(1,6)]
+- │         │    ├── variable: a.x [type=int, outer=(1)]
+- │         │    └── variable: b.x [type=int, outer=(6)]
+- │         └── eq [type=bool, outer=(2)]
+- │              ├── variable: a.i [type=int, outer=(2)]
+- │              └── minus [type=int]
+- │                   ├── const: 10 [type=int]
+- │                   └── const: 1 [type=int]
++ │    └── filters [type=bool, outer=(1,6)]
++ │         └── eq [type=bool, outer=(1,6)]
++ │              ├── variable: a.x [type=int, outer=(1)]
++ │              └── variable: b.x [type=int, outer=(6)]
+  └── projections [outer=(4)]
+       └── variable: a.s [type=string, outer=(4)]
+--- 
++++ FilterUnusedJoinLeftCols
+@@ -1,23 +1,28 @@
+ project
+  ├── columns: s:4(string)
+  ├── inner-join
+- │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) b.x:6(int!null) b.z:7(int)
+- │    ├── select
+- │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+- │    │    ├── scan a
+- │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+- │    │    └── filters [type=bool, outer=(2)]
+- │    │         └── eq [type=bool, outer=(2)]
+- │    │              ├── variable: a.i [type=int, outer=(2)]
+- │    │              └── minus [type=int]
+- │    │                   ├── const: 10 [type=int]
+- │    │                   └── const: 1 [type=int]
++ │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
++ │    ├── project
++ │    │    ├── columns: a.x:1(int!null) a.s:4(string)
++ │    │    ├── select
++ │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    │    │    ├── scan a
++ │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    │    │    └── filters [type=bool, outer=(2)]
++ │    │    │         └── eq [type=bool, outer=(2)]
++ │    │    │              ├── variable: a.i [type=int, outer=(2)]
++ │    │    │              └── minus [type=int]
++ │    │    │                   ├── const: 10 [type=int]
++ │    │    │                   └── const: 1 [type=int]
++ │    │    └── projections [outer=(1,4)]
++ │    │         ├── variable: a.x [type=int, outer=(1)]
++ │    │         └── variable: a.s [type=string, outer=(4)]
+  │    ├── scan b
+  │    │    └── columns: b.x:6(int!null) b.z:7(int)
+  │    └── filters [type=bool, outer=(1,6)]
+  │         └── eq [type=bool, outer=(1,6)]
+  │              ├── variable: a.x [type=int, outer=(1)]
+  │              └── variable: b.x [type=int, outer=(6)]
+  └── projections [outer=(4)]
+       └── variable: a.s [type=string, outer=(4)]
+--- 
++++ FilterUnusedSelectCols
+@@ -1,28 +1,28 @@
+ project
+  ├── columns: s:4(string)
+  ├── inner-join
+  │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
+  │    ├── project
+  │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  │    │    ├── select
+- │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  │    │    │    ├── scan a
+- │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
++ │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  │    │    │    └── filters [type=bool, outer=(2)]
+  │    │    │         └── eq [type=bool, outer=(2)]
+  │    │    │              ├── variable: a.i [type=int, outer=(2)]
+  │    │    │              └── minus [type=int]
+  │    │    │                   ├── const: 10 [type=int]
+  │    │    │                   └── const: 1 [type=int]
+  │    │    └── projections [outer=(1,4)]
+  │    │         ├── variable: a.x [type=int, outer=(1)]
+  │    │         └── variable: a.s [type=string, outer=(4)]
+  │    ├── scan b
+  │    │    └── columns: b.x:6(int!null) b.z:7(int)
+  │    └── filters [type=bool, outer=(1,6)]
+  │         └── eq [type=bool, outer=(1,6)]
+  │              ├── variable: a.x [type=int, outer=(1)]
+  │              └── variable: b.x [type=int, outer=(6)]
+  └── projections [outer=(4)]
+       └── variable: a.s [type=string, outer=(4)]
+--- 
++++ FilterUnusedJoinRightCols
+@@ -1,28 +1,28 @@
+ project
+  ├── columns: s:4(string)
+  ├── inner-join
+- │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null) b.z:7(int)
++ │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
+  │    ├── project
+  │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+  │    │    ├── select
+  │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  │    │    │    ├── scan a
+  │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+  │    │    │    └── filters [type=bool, outer=(2)]
+  │    │    │         └── eq [type=bool, outer=(2)]
+  │    │    │              ├── variable: a.i [type=int, outer=(2)]
+  │    │    │              └── minus [type=int]
+  │    │    │                   ├── const: 10 [type=int]
+  │    │    │                   └── const: 1 [type=int]
+  │    │    └── projections [outer=(1,4)]
+  │    │         ├── variable: a.x [type=int, outer=(1)]
+  │    │         └── variable: a.s [type=string, outer=(4)]
+  │    ├── scan b
+- │    │    └── columns: b.x:6(int!null) b.z:7(int)
++ │    │    └── columns: b.x:6(int!null)
+  │    └── filters [type=bool, outer=(1,6)]
+  │         └── eq [type=bool, outer=(1,6)]
+  │              ├── variable: a.x [type=int, outer=(1)]
+  │              └── variable: b.x [type=int, outer=(6)]
+  └── projections [outer=(4)]
+       └── variable: a.s [type=string, outer=(4)]
+---
++++
+project
+ ├── columns: s:4(string)
+ ├── inner-join
+ │    ├── columns: a.x:1(int!null) a.s:4(string) b.x:6(int!null)
+ │    ├── project
+ │    │    ├── columns: a.x:1(int!null) a.s:4(string)
+ │    │    ├── select
+ │    │    │    ├── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+ │    │    │    ├── scan a
+ │    │    │    │    └── columns: a.x:1(int!null) a.i:2(int) a.s:4(string)
+ │    │    │    └── filters [type=bool, outer=(2)]
+ │    │    │         └── eq [type=bool, outer=(2)]
+ │    │    │              ├── variable: a.i [type=int, outer=(2)]
+ │    │    │              └── minus [type=int]
+ │    │    │                   ├── const: 10 [type=int]
+ │    │    │                   └── const: 1 [type=int]
+ │    │    └── projections [outer=(1,4)]
+ │    │         ├── variable: a.x [type=int, outer=(1)]
+ │    │         └── variable: a.s [type=string, outer=(4)]
+ │    ├── scan b
+ │    │    └── columns: b.x:6(int!null)
+ │    └── filters [type=bool, outer=(1,6)]
+ │         └── eq [type=bool, outer=(1,6)]
+ │              ├── variable: a.x [type=int, outer=(1)]
+ │              └── variable: b.x [type=int, outer=(6)]
+ └── projections [outer=(4)]
+      └── variable: a.s [type=string, outer=(4)]

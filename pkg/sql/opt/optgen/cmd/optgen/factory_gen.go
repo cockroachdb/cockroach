@@ -81,12 +81,16 @@ func (g *factoryGen) genConstructFuncs() {
 		g.w.writeIndent("return _f.mem.memoizeNormExpr(memoExpr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
+		found := false
 		rules := g.compiled.LookupMatchingRules(string(define.Name))
-		if len(rules) > 0 {
-			for _, rule := range rules {
+		for _, rule := range rules {
+			// Only include normalization rules.
+			if rule.Tags.Contains("Normalize") {
 				g.genRule(rule)
+				found = true
 			}
-
+		}
+		if found {
 			g.w.newline()
 		}
 
@@ -111,7 +115,7 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 		g.genMatch(matchArg, fieldName, false /* noMatch */)
 	}
 
-	g.w.writeIndent("_f.reportOptimization()\n")
+	g.w.writeIndent("_f.reportOptimization(%s)\n", rule.Name)
 	g.w.writeIndent("_group = ")
 	g.genNestedExpr(rule.Replace)
 	g.w.newline()
@@ -525,7 +529,7 @@ func (g *factoryGen) genDynamicConstructLookup() {
 	funcType := "func(f *factory, operands opt.DynamicOperands) opt.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
 
-	g.w.writeIndent("var dynConstructLookup [%d]dynConstructLookupFunc\n\n", len(defines)+1)
+	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc\n\n")
 
 	g.w.nest("func init() {\n")
 	g.w.writeIndent("// UnknownOp\n")

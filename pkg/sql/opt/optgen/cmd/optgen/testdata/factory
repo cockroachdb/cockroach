@@ -68,7 +68,7 @@ func (_f *factory) ConstructFuncCall(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [3]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -103,7 +103,7 @@ define InnerJoin {
     Right Expr
 }
 
-[CommuteJoin]
+[CommuteJoin, Normalize]
 (InnerJoin $r:* $s:*) => (InnerJoin $s $r)
 ----
 ----
@@ -134,7 +134,7 @@ func (_f *factory) ConstructInnerJoin(
 	{
 		r := left
 		s := right
-		_f.reportOptimization()
+		_f.reportOptimization(CommuteJoin)
 		_group = _f.ConstructInnerJoin(s, r)
 		_f.mem.addAltFingerprint(_innerJoinExpr.fingerprint(), _group)
 		return _group
@@ -145,7 +145,7 @@ func (_f *factory) ConstructInnerJoin(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [2]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -195,7 +195,7 @@ define Minus {
 define Const {
 }
 
-[NormalizeVarPlus]
+[NormalizeVarPlus, Normalize]
 (Eq | Lt
     (Plus
         $leftLeft:^(Const)
@@ -245,7 +245,7 @@ func (_f *factory) ConstructEq(
 					_const3 := _f.mem.lookupNormExpr(right).asConst()
 					if _const3 != nil {
 						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeVarPlus)
 							_group = _f.ConstructEq(leftLeft, _f.constructBinary(opt.MinusOp, right, leftRight))
 							_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 							return _group
@@ -287,7 +287,7 @@ func (_f *factory) ConstructLt(
 					_const3 := _f.mem.lookupNormExpr(right).asConst()
 					if _const3 != nil {
 						if !_f.isInvalidBinary(opt.MinusOp, right, leftRight) {
-							_f.reportOptimization()
+							_f.reportOptimization(NormalizeVarPlus)
 							_group = _f.ConstructLt(leftLeft, _f.constructBinary(opt.MinusOp, right, leftRight))
 							_f.mem.addAltFingerprint(_ltExpr.fingerprint(), _group)
 							return _group
@@ -354,7 +354,7 @@ func (_f *factory) ConstructConst() opt.GroupID {
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [6]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -409,7 +409,7 @@ define Variable {
     Col ColumnIndex
 }
 
-[Concat]
+[Concat, Normalize]
 (Func "concat" $args:[ ... $item:^(Variable) & (IsEmpty $item) ... ])
 =>
 (Func "concat" (RemoveListItem $args $item))
@@ -446,7 +446,7 @@ func (_f *factory) ConstructFunc(
 				_variable := _f.mem.lookupNormExpr(_item).asVariable()
 				if _variable == nil {
 					if _f.isEmpty(item) {
-						_f.reportOptimization()
+						_f.reportOptimization(Concat)
 						_group = _f.ConstructFunc(m.mem.internPrivate(tree.NewDString("concat")), _f.removeListItem(args, item))
 						_f.mem.addAltFingerprint(_funcExpr.fingerprint(), _group)
 						return _group
@@ -478,7 +478,7 @@ func (_f *factory) ConstructVariable(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [3]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -537,7 +537,7 @@ define And {
     Right Expr
 }
 
-[Test]
+[Test, Normalize]
 (Select
     $input:^(Join|Union $r:* $s:*)
     $args:[ ... $item:(Join $t:* $u:*) ... ]
@@ -589,7 +589,7 @@ func (_f *factory) ConstructSelect(
 					_e2 := makeExprView(_f.mem, _item, opt.NormPhysPropsID)
 					t := _e2.ChildGroup(0)
 					u := _e2.ChildGroup(1)
-					_f.reportOptimization()
+					_f.reportOptimization(Test)
 					_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(item).op, opt.DynamicOperands{opt.DynamicID(_f.ConstructSelect(t, u)), opt.DynamicID(_f.custom(item, opt.SelectOp))})
 					_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
 					return _group
@@ -675,7 +675,7 @@ func (_f *factory) ConstructAnd(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [6]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -724,7 +724,7 @@ define List {
     Items ExprList
 }
 
-[List]
+[List, Normalize]
 (List $any:[
     ...
     (List $first:[
@@ -787,7 +787,7 @@ func (_f *factory) ConstructList(
 									if _list4 != nil {
 										empty := _list4.items()
 										if _list4.items().Length == 0 {
-											_f.reportOptimization()
+											_f.reportOptimization(List)
 											_group = _f.construct(any, first, last, single, empty)
 											_f.mem.addAltFingerprint(_listExpr.fingerprint(), _group)
 											return _group
@@ -807,7 +807,7 @@ func (_f *factory) ConstructList(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [2]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -838,7 +838,7 @@ define Join {
     On    Expr
 }
 
-[ConstructList]
+[ConstructList, Normalize]
 (Join $left:* $right:* $on:*)
 =>
 (Construct [] [ $left ] [ $left $right] [ [$on] ])
@@ -870,7 +870,7 @@ func (_f *factory) ConstructJoin(
 
 	// [ConstructList]
 	{
-		_f.reportOptimization()
+		_f.reportOptimization(ConstructList)
 		_group = _f.construct(_f.mem.internList([]opt.GroupID{}), _f.mem.internList([]opt.GroupID{left}), _f.mem.internList([]opt.GroupID{left, right}), _f.mem.internList([]opt.GroupID{_f.mem.internList([]opt.GroupID{on})}))
 		_f.mem.addAltFingerprint(_joinExpr.fingerprint(), _group)
 		return _group
@@ -881,7 +881,7 @@ func (_f *factory) ConstructJoin(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [2]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -914,7 +914,7 @@ define Op {
     Single Expr
 }
 
-[ListNot]
+[ListNot, Normalize]
 (Op
     $empty:(List ^[])
     $single:(List ^[ * ])
@@ -971,7 +971,7 @@ func (_f *factory) ConstructOp(
 				_list2 := _f.mem.lookupNormExpr(single).asList()
 				if _list2 != nil {
 					if _list2.items().Length != 1 {
-						_f.reportOptimization()
+						_f.reportOptimization(ListNot)
 						_group = _f.ConstructOp(empty, single)
 						_f.mem.addAltFingerprint(_opExpr.fingerprint(), _group)
 						return _group
@@ -986,7 +986,7 @@ func (_f *factory) ConstructOp(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [3]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1027,7 +1027,7 @@ define Ne {
     Right Expr
 }
 
-[Constant]
+[Constant, Normalize]
 (Eq
     (Eq (Eq) ^(Eq))
     ^(Eq (Eq) ^(Eq))
@@ -1035,7 +1035,7 @@ define Ne {
 =>
 "foo"
 
-[Dynamic]
+[Dynamic, Normalize]
 (Ne
     (Eq|Ne (Eq|Ne) ^(Eq|Ne))
     ^(Eq|Ne (Eq|Ne) ^(Eq|Ne))
@@ -1088,7 +1088,7 @@ func (_f *factory) ConstructEq(
 					}
 
 					if !_match {
-						_f.reportOptimization()
+						_f.reportOptimization(Constant)
 						_group = m.mem.internPrivate(tree.NewDString("foo"))
 						_f.mem.addAltFingerprint(_eqExpr.fingerprint(), _group)
 						return _group
@@ -1139,7 +1139,7 @@ func (_f *factory) ConstructNe(
 					}
 
 					if !_match {
-						_f.reportOptimization()
+						_f.reportOptimization(Dynamic)
 						_group = m.mem.internPrivate(tree.NewDString("foo"))
 						_f.mem.addAltFingerprint(_neExpr.fingerprint(), _group)
 						return _group
@@ -1154,7 +1154,7 @@ func (_f *factory) ConstructNe(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [3]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1198,7 +1198,7 @@ define Minus {
 
 define Null {}
 
-[Fold]
+[Fold, Normalize]
 (Binary
     $left:*
     (Null) & ^(HasNullableArgs (OpName) (AnotherFunc (OpName $left)))
@@ -1235,7 +1235,7 @@ func (_f *factory) ConstructPlus(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.hasNullableArgs(opt.PlusOp, _f.anotherFunc(_f.mem.lookupNormExpr(left).op)) {
-				_f.reportOptimization()
+				_f.reportOptimization(Fold)
 				_group = _f.ConstructNull()
 				_f.mem.addAltFingerprint(_plusExpr.fingerprint(), _group)
 				return _group
@@ -1266,7 +1266,7 @@ func (_f *factory) ConstructMinus(
 		_null := _f.mem.lookupNormExpr(right).asNull()
 		if _null != nil {
 			if !_f.hasNullableArgs(opt.MinusOp, _f.anotherFunc(_f.mem.lookupNormExpr(left).op)) {
-				_f.reportOptimization()
+				_f.reportOptimization(Fold)
 				_group = _f.ConstructNull()
 				_f.mem.addAltFingerprint(_minusExpr.fingerprint(), _group)
 				return _group
@@ -1294,7 +1294,7 @@ func (_f *factory) ConstructNull() opt.GroupID {
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [4]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp
@@ -1351,7 +1351,7 @@ define Not {
     Input Expr
 }
 
-[Invert]
+[Invert, Normalize]
 (Not $input:(Comparison $left:* $right:*) & ^(Contains) & (SomeOtherCondition $input))
 =>
 (Invert (OpName $input) $left $right)
@@ -1443,7 +1443,7 @@ func (_f *factory) ConstructNot(
 			_contains := _f.mem.lookupNormExpr(input).asContains()
 			if _contains == nil {
 				if _f.someOtherCondition(input) {
-					_f.reportOptimization()
+					_f.reportOptimization(Invert)
 					_group = _f.invert(_f.mem.lookupNormExpr(input).op, left, right)
 					_f.mem.addAltFingerprint(_notExpr.fingerprint(), _group)
 					return _group
@@ -1457,7 +1457,7 @@ func (_f *factory) ConstructNot(
 
 type dynConstructLookupFunc func(f *factory, operands opt.DynamicOperands) opt.GroupID
 
-var dynConstructLookup [5]dynConstructLookupFunc
+var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc
 
 func init() {
 	// UnknownOp

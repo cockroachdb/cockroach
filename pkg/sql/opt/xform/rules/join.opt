@@ -50,7 +50,7 @@
 #   SELECT * FROM (SELECT * FROM a WHERE a.y < 0) a LEFT JOIN b ON a.x=b.x
 #
 # Citations: [1]
-[PushDownJoinLeft]
+[PushDownJoinLeft, Normalize]
 (InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
     $left:*
     $right:*
@@ -69,7 +69,7 @@
 # PushDownJoinRight is symmetric with PushDownJoinLeft. It pushes Join filter
 # conditions into the right side of the join rather than into the left side.
 # See that rule's comments for more details.
-[PushDownJoinRight]
+[PushDownJoinRight, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:*
     $right:*

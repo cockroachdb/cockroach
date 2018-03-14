@@ -8,6 +8,32 @@ import (
 
 var opLayoutTable = [...]opLayout{
 	opt.UnknownOp:         0xFF, // will cause a crash if used
+	opt.SortOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 1 /*enforcer*/),
+	opt.ScanOp:            makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
+	opt.ValuesOp:          makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.SelectOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.ProjectOp:         makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.InnerJoinOp:       makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.LeftJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.RightJoinOp:       makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.FullJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.SemiJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.AntiJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.InnerJoinApplyOp:  makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.LeftJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.RightJoinApplyOp:  makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.FullJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.SemiJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.AntiJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
+	opt.GroupByOp:         makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.UnionOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.IntersectOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.ExceptOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.UnionAllOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.IntersectAllOp:    makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.ExceptAllOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.LimitOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
+	opt.OffsetOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.SubqueryOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.VariableOp:        makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
 	opt.ConstOp:           makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
@@ -69,952 +95,942 @@ var opLayoutTable = [...]opLayout{
 	opt.FunctionOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
 	opt.CoalesceOp:        makeOpLayout(0 /*base*/, 1 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
 	opt.UnsupportedExprOp: makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
-	opt.ScanOp:            makeOpLayout(0 /*base*/, 0 /*list*/, 1 /*priv*/, 0 /*enforcer*/),
-	opt.ValuesOp:          makeOpLayout(0 /*base*/, 1 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.SelectOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.ProjectOp:         makeOpLayout(2 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.InnerJoinOp:       makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.LeftJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.RightJoinOp:       makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.FullJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.SemiJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.AntiJoinOp:        makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.InnerJoinApplyOp:  makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.LeftJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.RightJoinApplyOp:  makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.FullJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.SemiJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.AntiJoinApplyOp:   makeOpLayout(3 /*base*/, 0 /*list*/, 0 /*priv*/, 0 /*enforcer*/),
-	opt.GroupByOp:         makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.UnionOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.IntersectOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.ExceptOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.UnionAllOp:        makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.IntersectAllOp:    makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.ExceptAllOp:       makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.LimitOp:           makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.OffsetOp:          makeOpLayout(2 /*base*/, 0 /*list*/, 3 /*priv*/, 0 /*enforcer*/),
-	opt.SortOp:            makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 1 /*enforcer*/),
-}
-
-var isScalarLookup = [...]bool{
-	false, // UnknownOp
-
-	true,  // SubqueryOp
-	true,  // VariableOp
-	true,  // ConstOp
-	true,  // NullOp
-	true,  // TrueOp
-	true,  // FalseOp
-	true,  // PlaceholderOp
-	true,  // TupleOp
-	true,  // ProjectionsOp
-	true,  // AggregationsOp
-	true,  // ExistsOp
-	true,  // FiltersOp
-	true,  // AndOp
-	true,  // OrOp
-	true,  // NotOp
-	true,  // EqOp
-	true,  // LtOp
-	true,  // GtOp
-	true,  // LeOp
-	true,  // GeOp
-	true,  // NeOp
-	true,  // InOp
-	true,  // NotInOp
-	true,  // LikeOp
-	true,  // NotLikeOp
-	true,  // ILikeOp
-	true,  // NotILikeOp
-	true,  // SimilarToOp
-	true,  // NotSimilarToOp
-	true,  // RegMatchOp
-	true,  // NotRegMatchOp
-	true,  // RegIMatchOp
-	true,  // NotRegIMatchOp
-	true,  // IsOp
-	true,  // IsNotOp
-	true,  // ContainsOp
-	true,  // BitandOp
-	true,  // BitorOp
-	true,  // BitxorOp
-	true,  // PlusOp
-	true,  // MinusOp
-	true,  // MultOp
-	true,  // DivOp
-	true,  // FloorDivOp
-	true,  // ModOp
-	true,  // PowOp
-	true,  // ConcatOp
-	true,  // LShiftOp
-	true,  // RShiftOp
-	true,  // FetchValOp
-	true,  // FetchTextOp
-	true,  // FetchValPathOp
-	true,  // FetchTextPathOp
-	true,  // UnaryMinusOp
-	true,  // UnaryComplementOp
-	true,  // CastOp
-	true,  // CaseOp
-	true,  // WhenOp
-	true,  // FunctionOp
-	true,  // CoalesceOp
-	true,  // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isConstValueLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	true,  // ConstOp
-	true,  // NullOp
-	true,  // TrueOp
-	true,  // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isBooleanLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	true,  // TrueOp
-	true,  // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	true,  // FiltersOp
-	true,  // AndOp
-	true,  // OrOp
-	true,  // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isComparisonLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	true,  // EqOp
-	true,  // LtOp
-	true,  // GtOp
-	true,  // LeOp
-	true,  // GeOp
-	true,  // NeOp
-	true,  // InOp
-	true,  // NotInOp
-	true,  // LikeOp
-	true,  // NotLikeOp
-	true,  // ILikeOp
-	true,  // NotILikeOp
-	true,  // SimilarToOp
-	true,  // NotSimilarToOp
-	true,  // RegMatchOp
-	true,  // NotRegMatchOp
-	true,  // RegIMatchOp
-	true,  // NotRegIMatchOp
-	true,  // IsOp
-	true,  // IsNotOp
-	true,  // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isBinaryLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	true,  // BitandOp
-	true,  // BitorOp
-	true,  // BitxorOp
-	true,  // PlusOp
-	true,  // MinusOp
-	true,  // MultOp
-	true,  // DivOp
-	true,  // FloorDivOp
-	true,  // ModOp
-	true,  // PowOp
-	true,  // ConcatOp
-	true,  // LShiftOp
-	true,  // RShiftOp
-	true,  // FetchValOp
-	true,  // FetchTextOp
-	true,  // FetchValPathOp
-	true,  // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isUnaryLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	true,  // UnaryMinusOp
-	true,  // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isRelationalLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	true,  // ScanOp
-	true,  // ValuesOp
-	true,  // SelectOp
-	true,  // ProjectOp
-	true,  // InnerJoinOp
-	true,  // LeftJoinOp
-	true,  // RightJoinOp
-	true,  // FullJoinOp
-	true,  // SemiJoinOp
-	true,  // AntiJoinOp
-	true,  // InnerJoinApplyOp
-	true,  // LeftJoinApplyOp
-	true,  // RightJoinApplyOp
-	true,  // FullJoinApplyOp
-	true,  // SemiJoinApplyOp
-	true,  // AntiJoinApplyOp
-	true,  // GroupByOp
-	true,  // UnionOp
-	true,  // IntersectOp
-	true,  // ExceptOp
-	true,  // UnionAllOp
-	true,  // IntersectAllOp
-	true,  // ExceptAllOp
-	true,  // LimitOp
-	true,  // OffsetOp
-	false, // SortOp
-}
-
-var isJoinLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	true,  // InnerJoinOp
-	true,  // LeftJoinOp
-	true,  // RightJoinOp
-	true,  // FullJoinOp
-	true,  // SemiJoinOp
-	true,  // AntiJoinOp
-	true,  // InnerJoinApplyOp
-	true,  // LeftJoinApplyOp
-	true,  // RightJoinApplyOp
-	true,  // FullJoinApplyOp
-	true,  // SemiJoinApplyOp
-	true,  // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
-}
-
-var isJoinApplyLookup = [...]bool{
-	false, // UnknownOp
-
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	true,  // InnerJoinApplyOp
-	true,  // LeftJoinApplyOp
-	true,  // RightJoinApplyOp
-	true,  // FullJoinApplyOp
-	true,  // SemiJoinApplyOp
-	true,  // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	false, // SortOp
 }
 
 var isEnforcerLookup = [...]bool{
-	false, // UnknownOp
+	opt.UnknownOp: false,
 
-	false, // SubqueryOp
-	false, // VariableOp
-	false, // ConstOp
-	false, // NullOp
-	false, // TrueOp
-	false, // FalseOp
-	false, // PlaceholderOp
-	false, // TupleOp
-	false, // ProjectionsOp
-	false, // AggregationsOp
-	false, // ExistsOp
-	false, // FiltersOp
-	false, // AndOp
-	false, // OrOp
-	false, // NotOp
-	false, // EqOp
-	false, // LtOp
-	false, // GtOp
-	false, // LeOp
-	false, // GeOp
-	false, // NeOp
-	false, // InOp
-	false, // NotInOp
-	false, // LikeOp
-	false, // NotLikeOp
-	false, // ILikeOp
-	false, // NotILikeOp
-	false, // SimilarToOp
-	false, // NotSimilarToOp
-	false, // RegMatchOp
-	false, // NotRegMatchOp
-	false, // RegIMatchOp
-	false, // NotRegIMatchOp
-	false, // IsOp
-	false, // IsNotOp
-	false, // ContainsOp
-	false, // BitandOp
-	false, // BitorOp
-	false, // BitxorOp
-	false, // PlusOp
-	false, // MinusOp
-	false, // MultOp
-	false, // DivOp
-	false, // FloorDivOp
-	false, // ModOp
-	false, // PowOp
-	false, // ConcatOp
-	false, // LShiftOp
-	false, // RShiftOp
-	false, // FetchValOp
-	false, // FetchTextOp
-	false, // FetchValPathOp
-	false, // FetchTextPathOp
-	false, // UnaryMinusOp
-	false, // UnaryComplementOp
-	false, // CastOp
-	false, // CaseOp
-	false, // WhenOp
-	false, // FunctionOp
-	false, // CoalesceOp
-	false, // UnsupportedExprOp
-	false, // ScanOp
-	false, // ValuesOp
-	false, // SelectOp
-	false, // ProjectOp
-	false, // InnerJoinOp
-	false, // LeftJoinOp
-	false, // RightJoinOp
-	false, // FullJoinOp
-	false, // SemiJoinOp
-	false, // AntiJoinOp
-	false, // InnerJoinApplyOp
-	false, // LeftJoinApplyOp
-	false, // RightJoinApplyOp
-	false, // FullJoinApplyOp
-	false, // SemiJoinApplyOp
-	false, // AntiJoinApplyOp
-	false, // GroupByOp
-	false, // UnionOp
-	false, // IntersectOp
-	false, // ExceptOp
-	false, // UnionAllOp
-	false, // IntersectAllOp
-	false, // ExceptAllOp
-	false, // LimitOp
-	false, // OffsetOp
-	true,  // SortOp
+	opt.SortOp:            true,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isRelationalLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            true,
+	opt.ValuesOp:          true,
+	opt.SelectOp:          true,
+	opt.ProjectOp:         true,
+	opt.InnerJoinOp:       true,
+	opt.LeftJoinOp:        true,
+	opt.RightJoinOp:       true,
+	opt.FullJoinOp:        true,
+	opt.SemiJoinOp:        true,
+	opt.AntiJoinOp:        true,
+	opt.InnerJoinApplyOp:  true,
+	opt.LeftJoinApplyOp:   true,
+	opt.RightJoinApplyOp:  true,
+	opt.FullJoinApplyOp:   true,
+	opt.SemiJoinApplyOp:   true,
+	opt.AntiJoinApplyOp:   true,
+	opt.GroupByOp:         true,
+	opt.UnionOp:           true,
+	opt.IntersectOp:       true,
+	opt.ExceptOp:          true,
+	opt.UnionAllOp:        true,
+	opt.IntersectAllOp:    true,
+	opt.ExceptAllOp:       true,
+	opt.LimitOp:           true,
+	opt.OffsetOp:          true,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isJoinLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       true,
+	opt.LeftJoinOp:        true,
+	opt.RightJoinOp:       true,
+	opt.FullJoinOp:        true,
+	opt.SemiJoinOp:        true,
+	opt.AntiJoinOp:        true,
+	opt.InnerJoinApplyOp:  true,
+	opt.LeftJoinApplyOp:   true,
+	opt.RightJoinApplyOp:  true,
+	opt.FullJoinApplyOp:   true,
+	opt.SemiJoinApplyOp:   true,
+	opt.AntiJoinApplyOp:   true,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isJoinApplyLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  true,
+	opt.LeftJoinApplyOp:   true,
+	opt.RightJoinApplyOp:  true,
+	opt.FullJoinApplyOp:   true,
+	opt.SemiJoinApplyOp:   true,
+	opt.AntiJoinApplyOp:   true,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isScalarLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        true,
+	opt.VariableOp:        true,
+	opt.ConstOp:           true,
+	opt.NullOp:            true,
+	opt.TrueOp:            true,
+	opt.FalseOp:           true,
+	opt.PlaceholderOp:     true,
+	opt.TupleOp:           true,
+	opt.ProjectionsOp:     true,
+	opt.AggregationsOp:    true,
+	opt.ExistsOp:          true,
+	opt.FiltersOp:         true,
+	opt.AndOp:             true,
+	opt.OrOp:              true,
+	opt.NotOp:             true,
+	opt.EqOp:              true,
+	opt.LtOp:              true,
+	opt.GtOp:              true,
+	opt.LeOp:              true,
+	opt.GeOp:              true,
+	opt.NeOp:              true,
+	opt.InOp:              true,
+	opt.NotInOp:           true,
+	opt.LikeOp:            true,
+	opt.NotLikeOp:         true,
+	opt.ILikeOp:           true,
+	opt.NotILikeOp:        true,
+	opt.SimilarToOp:       true,
+	opt.NotSimilarToOp:    true,
+	opt.RegMatchOp:        true,
+	opt.NotRegMatchOp:     true,
+	opt.RegIMatchOp:       true,
+	opt.NotRegIMatchOp:    true,
+	opt.IsOp:              true,
+	opt.IsNotOp:           true,
+	opt.ContainsOp:        true,
+	opt.BitandOp:          true,
+	opt.BitorOp:           true,
+	opt.BitxorOp:          true,
+	opt.PlusOp:            true,
+	opt.MinusOp:           true,
+	opt.MultOp:            true,
+	opt.DivOp:             true,
+	opt.FloorDivOp:        true,
+	opt.ModOp:             true,
+	opt.PowOp:             true,
+	opt.ConcatOp:          true,
+	opt.LShiftOp:          true,
+	opt.RShiftOp:          true,
+	opt.FetchValOp:        true,
+	opt.FetchTextOp:       true,
+	opt.FetchValPathOp:    true,
+	opt.FetchTextPathOp:   true,
+	opt.UnaryMinusOp:      true,
+	opt.UnaryComplementOp: true,
+	opt.CastOp:            true,
+	opt.CaseOp:            true,
+	opt.WhenOp:            true,
+	opt.FunctionOp:        true,
+	opt.CoalesceOp:        true,
+	opt.UnsupportedExprOp: true,
+}
+
+var isConstValueLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           true,
+	opt.NullOp:            true,
+	opt.TrueOp:            true,
+	opt.FalseOp:           true,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isBooleanLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            true,
+	opt.FalseOp:           true,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         true,
+	opt.AndOp:             true,
+	opt.OrOp:              true,
+	opt.NotOp:             true,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isComparisonLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              true,
+	opt.LtOp:              true,
+	opt.GtOp:              true,
+	opt.LeOp:              true,
+	opt.GeOp:              true,
+	opt.NeOp:              true,
+	opt.InOp:              true,
+	opt.NotInOp:           true,
+	opt.LikeOp:            true,
+	opt.NotLikeOp:         true,
+	opt.ILikeOp:           true,
+	opt.NotILikeOp:        true,
+	opt.SimilarToOp:       true,
+	opt.NotSimilarToOp:    true,
+	opt.RegMatchOp:        true,
+	opt.NotRegMatchOp:     true,
+	opt.RegIMatchOp:       true,
+	opt.NotRegIMatchOp:    true,
+	opt.IsOp:              true,
+	opt.IsNotOp:           true,
+	opt.ContainsOp:        true,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isBinaryLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          true,
+	opt.BitorOp:           true,
+	opt.BitxorOp:          true,
+	opt.PlusOp:            true,
+	opt.MinusOp:           true,
+	opt.MultOp:            true,
+	opt.DivOp:             true,
+	opt.FloorDivOp:        true,
+	opt.ModOp:             true,
+	opt.PowOp:             true,
+	opt.ConcatOp:          true,
+	opt.LShiftOp:          true,
+	opt.RShiftOp:          true,
+	opt.FetchValOp:        true,
+	opt.FetchTextOp:       true,
+	opt.FetchValPathOp:    true,
+	opt.FetchTextPathOp:   true,
+	opt.UnaryMinusOp:      false,
+	opt.UnaryComplementOp: false,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+var isUnaryLookup = [...]bool{
+	opt.UnknownOp: false,
+
+	opt.SortOp:            false,
+	opt.ScanOp:            false,
+	opt.ValuesOp:          false,
+	opt.SelectOp:          false,
+	opt.ProjectOp:         false,
+	opt.InnerJoinOp:       false,
+	opt.LeftJoinOp:        false,
+	opt.RightJoinOp:       false,
+	opt.FullJoinOp:        false,
+	opt.SemiJoinOp:        false,
+	opt.AntiJoinOp:        false,
+	opt.InnerJoinApplyOp:  false,
+	opt.LeftJoinApplyOp:   false,
+	opt.RightJoinApplyOp:  false,
+	opt.FullJoinApplyOp:   false,
+	opt.SemiJoinApplyOp:   false,
+	opt.AntiJoinApplyOp:   false,
+	opt.GroupByOp:         false,
+	opt.UnionOp:           false,
+	opt.IntersectOp:       false,
+	opt.ExceptOp:          false,
+	opt.UnionAllOp:        false,
+	opt.IntersectAllOp:    false,
+	opt.ExceptAllOp:       false,
+	opt.LimitOp:           false,
+	opt.OffsetOp:          false,
+	opt.SubqueryOp:        false,
+	opt.VariableOp:        false,
+	opt.ConstOp:           false,
+	opt.NullOp:            false,
+	opt.TrueOp:            false,
+	opt.FalseOp:           false,
+	opt.PlaceholderOp:     false,
+	opt.TupleOp:           false,
+	opt.ProjectionsOp:     false,
+	opt.AggregationsOp:    false,
+	opt.ExistsOp:          false,
+	opt.FiltersOp:         false,
+	opt.AndOp:             false,
+	opt.OrOp:              false,
+	opt.NotOp:             false,
+	opt.EqOp:              false,
+	opt.LtOp:              false,
+	opt.GtOp:              false,
+	opt.LeOp:              false,
+	opt.GeOp:              false,
+	opt.NeOp:              false,
+	opt.InOp:              false,
+	opt.NotInOp:           false,
+	opt.LikeOp:            false,
+	opt.NotLikeOp:         false,
+	opt.ILikeOp:           false,
+	opt.NotILikeOp:        false,
+	opt.SimilarToOp:       false,
+	opt.NotSimilarToOp:    false,
+	opt.RegMatchOp:        false,
+	opt.NotRegMatchOp:     false,
+	opt.RegIMatchOp:       false,
+	opt.NotRegIMatchOp:    false,
+	opt.IsOp:              false,
+	opt.IsNotOp:           false,
+	opt.ContainsOp:        false,
+	opt.BitandOp:          false,
+	opt.BitorOp:           false,
+	opt.BitxorOp:          false,
+	opt.PlusOp:            false,
+	opt.MinusOp:           false,
+	opt.MultOp:            false,
+	opt.DivOp:             false,
+	opt.FloorDivOp:        false,
+	opt.ModOp:             false,
+	opt.PowOp:             false,
+	opt.ConcatOp:          false,
+	opt.LShiftOp:          false,
+	opt.RShiftOp:          false,
+	opt.FetchValOp:        false,
+	opt.FetchTextOp:       false,
+	opt.FetchValPathOp:    false,
+	opt.FetchTextPathOp:   false,
+	opt.UnaryMinusOp:      true,
+	opt.UnaryComplementOp: true,
+	opt.CastOp:            false,
+	opt.CaseOp:            false,
+	opt.WhenOp:            false,
+	opt.FunctionOp:        false,
+	opt.CoalesceOp:        false,
+	opt.UnsupportedExprOp: false,
+}
+
+func (ev ExprView) IsEnforcer() bool {
+	return isEnforcerLookup[ev.op]
+}
+
+func (ev ExprView) IsRelational() bool {
+	return isRelationalLookup[ev.op]
+}
+
+func (ev ExprView) IsJoin() bool {
+	return isJoinLookup[ev.op]
+}
+
+func (ev ExprView) IsJoinApply() bool {
+	return isJoinApplyLookup[ev.op]
 }
 
 func (ev ExprView) IsScalar() bool {
@@ -1041,20 +1057,20 @@ func (ev ExprView) IsUnary() bool {
 	return isUnaryLookup[ev.op]
 }
 
-func (ev ExprView) IsRelational() bool {
-	return isRelationalLookup[ev.op]
+func (me *memoExpr) isEnforcer() bool {
+	return isEnforcerLookup[me.op]
 }
 
-func (ev ExprView) IsJoin() bool {
-	return isJoinLookup[ev.op]
+func (me *memoExpr) isRelational() bool {
+	return isRelationalLookup[me.op]
 }
 
-func (ev ExprView) IsJoinApply() bool {
-	return isJoinApplyLookup[ev.op]
+func (me *memoExpr) isJoin() bool {
+	return isJoinLookup[me.op]
 }
 
-func (ev ExprView) IsEnforcer() bool {
-	return isEnforcerLookup[ev.op]
+func (me *memoExpr) isJoinApply() bool {
+	return isJoinApplyLookup[me.op]
 }
 
 func (me *memoExpr) isScalar() bool {
@@ -1081,20 +1097,822 @@ func (me *memoExpr) isUnary() bool {
 	return isUnaryLookup[me.op]
 }
 
-func (me *memoExpr) isRelational() bool {
-	return isRelationalLookup[me.op]
+// scanExpr returns a result set containing every row in the specified table. The
+// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+// well as the subset of columns to project from it. Rows and columns are not
+// expected to have any particular ordering unless a physical property requires
+// it.
+type scanExpr memoExpr
+
+func makeScanExpr(def opt.PrivateID) scanExpr {
+	return scanExpr{op: opt.ScanOp, state: exprState{uint32(def)}}
 }
 
-func (me *memoExpr) isJoin() bool {
-	return isJoinLookup[me.op]
+func (e *scanExpr) def() opt.PrivateID {
+	return opt.PrivateID(e.state[0])
 }
 
-func (me *memoExpr) isJoinApply() bool {
-	return isJoinApplyLookup[me.op]
+func (e *scanExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
 }
 
-func (me *memoExpr) isEnforcer() bool {
-	return isEnforcerLookup[me.op]
+func (m *memoExpr) asScan() *scanExpr {
+	if m.op != opt.ScanOp {
+		return nil
+	}
+	return (*scanExpr)(m)
+}
+
+// valuesExpr returns a manufactured result set containing a constant number of rows.
+// specified by the Rows list field. Each row must contain the same set of
+// columns in the same order.
+//
+// The Rows field contains a list of Tuples, one for each row. Each tuple has
+// the same length (same with that of Cols).
+//
+// The Cols field contains the set of column indices returned by each row
+// as a *ColList. It is legal for Cols to be empty.
+type valuesExpr memoExpr
+
+func makeValuesExpr(rows opt.ListID, cols opt.PrivateID) valuesExpr {
+	return valuesExpr{op: opt.ValuesOp, state: exprState{rows.Offset, rows.Length, uint32(cols)}}
+}
+
+func (e *valuesExpr) rows() opt.ListID {
+	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
+}
+
+func (e *valuesExpr) cols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *valuesExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asValues() *valuesExpr {
+	if m.op != opt.ValuesOp {
+		return nil
+	}
+	return (*valuesExpr)(m)
+}
+
+// selectExpr filters rows from its input result set, based on the boolean filter
+// predicate expression. Rows which do not match the filter are discarded. While
+// the Filter operand can be any boolean expression, normalization rules will
+// typically convert it to a Filters operator in order to make conjunction list
+// matching easier.
+type selectExpr memoExpr
+
+func makeSelectExpr(input opt.GroupID, filter opt.GroupID) selectExpr {
+	return selectExpr{op: opt.SelectOp, state: exprState{uint32(input), uint32(filter)}}
+}
+
+func (e *selectExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *selectExpr) filter() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *selectExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSelect() *selectExpr {
+	if m.op != opt.SelectOp {
+		return nil
+	}
+	return (*selectExpr)(m)
+}
+
+// projectExpr modifies the set of columns returned by the input result set. Columns
+// can be removed, reordered, or renamed. In addition, new columns can be
+// synthesized. Projections is a scalar Projections list operator that contains
+// the list of expressions that describe the output columns. The Cols field of
+// the Projections operator provides the indexes of each of the output columns.
+type projectExpr memoExpr
+
+func makeProjectExpr(input opt.GroupID, projections opt.GroupID) projectExpr {
+	return projectExpr{op: opt.ProjectOp, state: exprState{uint32(input), uint32(projections)}}
+}
+
+func (e *projectExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *projectExpr) projections() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *projectExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asProject() *projectExpr {
+	if m.op != opt.ProjectOp {
+		return nil
+	}
+	return (*projectExpr)(m)
+}
+
+// innerJoinExpr creates a result set that combines columns from its left and right
+// inputs, based upon its "on" join predicate. Rows which do not match the
+// predicate are filtered. While expressions in the predicate can refer to
+// columns projected by either the left or right inputs, the inputs are not
+// allowed to refer to the other's projected columns.
+type innerJoinExpr memoExpr
+
+func makeInnerJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinExpr {
+	return innerJoinExpr{op: opt.InnerJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *innerJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *innerJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *innerJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *innerJoinExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asInnerJoin() *innerJoinExpr {
+	if m.op != opt.InnerJoinOp {
+		return nil
+	}
+	return (*innerJoinExpr)(m)
+}
+
+type leftJoinExpr memoExpr
+
+func makeLeftJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) leftJoinExpr {
+	return leftJoinExpr{op: opt.LeftJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *leftJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *leftJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *leftJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *leftJoinExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLeftJoin() *leftJoinExpr {
+	if m.op != opt.LeftJoinOp {
+		return nil
+	}
+	return (*leftJoinExpr)(m)
+}
+
+type rightJoinExpr memoExpr
+
+func makeRightJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) rightJoinExpr {
+	return rightJoinExpr{op: opt.RightJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *rightJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *rightJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *rightJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *rightJoinExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asRightJoin() *rightJoinExpr {
+	if m.op != opt.RightJoinOp {
+		return nil
+	}
+	return (*rightJoinExpr)(m)
+}
+
+type fullJoinExpr memoExpr
+
+func makeFullJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) fullJoinExpr {
+	return fullJoinExpr{op: opt.FullJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *fullJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *fullJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *fullJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *fullJoinExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFullJoin() *fullJoinExpr {
+	if m.op != opt.FullJoinOp {
+		return nil
+	}
+	return (*fullJoinExpr)(m)
+}
+
+type semiJoinExpr memoExpr
+
+func makeSemiJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) semiJoinExpr {
+	return semiJoinExpr{op: opt.SemiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *semiJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *semiJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *semiJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *semiJoinExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSemiJoin() *semiJoinExpr {
+	if m.op != opt.SemiJoinOp {
+		return nil
+	}
+	return (*semiJoinExpr)(m)
+}
+
+type antiJoinExpr memoExpr
+
+func makeAntiJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) antiJoinExpr {
+	return antiJoinExpr{op: opt.AntiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *antiJoinExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *antiJoinExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *antiJoinExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *antiJoinExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asAntiJoin() *antiJoinExpr {
+	if m.op != opt.AntiJoinOp {
+		return nil
+	}
+	return (*antiJoinExpr)(m)
+}
+
+// innerJoinApplyExpr has the same join semantics as InnerJoin. However, unlike
+// InnerJoin, it allows the right input to refer to columns projected by the
+// left input.
+type innerJoinApplyExpr memoExpr
+
+func makeInnerJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinApplyExpr {
+	return innerJoinApplyExpr{op: opt.InnerJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *innerJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *innerJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *innerJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *innerJoinApplyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asInnerJoinApply() *innerJoinApplyExpr {
+	if m.op != opt.InnerJoinApplyOp {
+		return nil
+	}
+	return (*innerJoinApplyExpr)(m)
+}
+
+type leftJoinApplyExpr memoExpr
+
+func makeLeftJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) leftJoinApplyExpr {
+	return leftJoinApplyExpr{op: opt.LeftJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *leftJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *leftJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *leftJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *leftJoinApplyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLeftJoinApply() *leftJoinApplyExpr {
+	if m.op != opt.LeftJoinApplyOp {
+		return nil
+	}
+	return (*leftJoinApplyExpr)(m)
+}
+
+type rightJoinApplyExpr memoExpr
+
+func makeRightJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) rightJoinApplyExpr {
+	return rightJoinApplyExpr{op: opt.RightJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *rightJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *rightJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *rightJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *rightJoinApplyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asRightJoinApply() *rightJoinApplyExpr {
+	if m.op != opt.RightJoinApplyOp {
+		return nil
+	}
+	return (*rightJoinApplyExpr)(m)
+}
+
+type fullJoinApplyExpr memoExpr
+
+func makeFullJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) fullJoinApplyExpr {
+	return fullJoinApplyExpr{op: opt.FullJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *fullJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *fullJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *fullJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *fullJoinApplyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asFullJoinApply() *fullJoinApplyExpr {
+	if m.op != opt.FullJoinApplyOp {
+		return nil
+	}
+	return (*fullJoinApplyExpr)(m)
+}
+
+type semiJoinApplyExpr memoExpr
+
+func makeSemiJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) semiJoinApplyExpr {
+	return semiJoinApplyExpr{op: opt.SemiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *semiJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *semiJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *semiJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *semiJoinApplyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asSemiJoinApply() *semiJoinApplyExpr {
+	if m.op != opt.SemiJoinApplyOp {
+		return nil
+	}
+	return (*semiJoinApplyExpr)(m)
+}
+
+type antiJoinApplyExpr memoExpr
+
+func makeAntiJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) antiJoinApplyExpr {
+	return antiJoinApplyExpr{op: opt.AntiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
+}
+
+func (e *antiJoinApplyExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *antiJoinApplyExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *antiJoinApplyExpr) on() opt.GroupID {
+	return opt.GroupID(e.state[2])
+}
+
+func (e *antiJoinApplyExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asAntiJoinApply() *antiJoinApplyExpr {
+	if m.op != opt.AntiJoinApplyOp {
+		return nil
+	}
+	return (*antiJoinApplyExpr)(m)
+}
+
+// groupByExpr is an operator that is used for performing aggregations (for queries
+// with aggregate functions, HAVING clauses and/or group by expressions). It
+// groups results that are equal on the grouping columns and computes
+// aggregations as described by Aggregations (which is always an Aggregations
+// operator). The arguments of the aggregations are columns from the input.
+type groupByExpr memoExpr
+
+func makeGroupByExpr(input opt.GroupID, aggregations opt.GroupID, groupingCols opt.PrivateID) groupByExpr {
+	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(aggregations), uint32(groupingCols)}}
+}
+
+func (e *groupByExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *groupByExpr) aggregations() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *groupByExpr) groupingCols() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *groupByExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asGroupBy() *groupByExpr {
+	if m.op != opt.GroupByOp {
+		return nil
+	}
+	return (*groupByExpr)(m)
+}
+
+// unionExpr is an operator used to combine the Left and Right input relations into
+// a single set containing rows from both inputs. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Union with the output columns. See the comment above opt.SetOpColMap
+// for more details.
+type unionExpr memoExpr
+
+func makeUnionExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionExpr {
+	return unionExpr{op: opt.UnionOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *unionExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unionExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *unionExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *unionExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnion() *unionExpr {
+	if m.op != opt.UnionOp {
+		return nil
+	}
+	return (*unionExpr)(m)
+}
+
+// intersectExpr is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that are also present in the Right relation. Duplicate rows are
+// discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Intersect with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type intersectExpr memoExpr
+
+func makeIntersectExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectExpr {
+	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *intersectExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *intersectExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *intersectExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *intersectExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIntersect() *intersectExpr {
+	if m.op != opt.IntersectOp {
+		return nil
+	}
+	return (*intersectExpr)(m)
+}
+
+// exceptExpr is an operator used to perform a set difference between the Left and
+// Right input relations. The result consists only of rows in the Left relation
+// that are not present in the Right relation. Duplicate rows are discarded.
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the Except with the output columns. See the comment above opt.SetOpColMap
+// for more details.
+type exceptExpr memoExpr
+
+func makeExceptExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptExpr {
+	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *exceptExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *exceptExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *exceptExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *exceptExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asExcept() *exceptExpr {
+	if m.op != opt.ExceptOp {
+		return nil
+	}
+	return (*exceptExpr)(m)
+}
+
+// unionAllExpr is an operator used to combine the Left and Right input relations
+// into a single set containing rows from both inputs. Duplicate rows are
+// not discarded. For example:
+//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       2    ->    1
+//     2       3          1
+//                        2
+//                        2
+//                        3
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the UnionAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type unionAllExpr memoExpr
+
+func makeUnionAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionAllExpr {
+	return unionAllExpr{op: opt.UnionAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *unionAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *unionAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *unionAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *unionAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asUnionAll() *unionAllExpr {
+	if m.op != opt.UnionAllOp {
+		return nil
+	}
+	return (*unionAllExpr)(m)
+}
+
+// intersectAllExpr is an operator used to perform an intersection between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that have a corresponding row in the Right relation. Duplicate rows
+// are not discarded. This effectively creates a one-to-one mapping between the
+// Left and Right rows. For example:
+//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1          1
+//     1       1    ->    1
+//     1       2          2
+//     2       2          2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the IntersectAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type intersectAllExpr memoExpr
+
+func makeIntersectAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectAllExpr {
+	return intersectAllExpr{op: opt.IntersectAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *intersectAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *intersectAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *intersectAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *intersectAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asIntersectAll() *intersectAllExpr {
+	if m.op != opt.IntersectAllOp {
+		return nil
+	}
+	return (*intersectAllExpr)(m)
+}
+
+// exceptAllExpr is an operator used to perform a set difference between the Left
+// and Right input relations. The result consists only of rows in the Left
+// relation that do not have a corresponding row in the Right relation.
+// Duplicate rows are not discarded. This effectively creates a one-to-one
+// mapping between the Left and Right rows. For example:
+//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+//     x       y         out
+//   -----   -----      -----
+//     1       1    ->    1
+//     1       1          4
+//     1       2
+//     2       2
+//     2       3
+//     4
+//
+// The private field, ColMap, matches columns from the Left and Right inputs
+// of the ExceptAll with the output columns. See the comment above
+// opt.SetOpColMap for more details.
+type exceptAllExpr memoExpr
+
+func makeExceptAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptAllExpr {
+	return exceptAllExpr{op: opt.ExceptAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
+}
+
+func (e *exceptAllExpr) left() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *exceptAllExpr) right() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *exceptAllExpr) colMap() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *exceptAllExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asExceptAll() *exceptAllExpr {
+	if m.op != opt.ExceptAllOp {
+		return nil
+	}
+	return (*exceptAllExpr)(m)
+}
+
+// limitExpr returns a limited subset of the results in the input relation.
+// The limit expression is a scalar value; the operator returns at most this many
+// rows. The private field is an *opt.Ordering which indicates the desired
+// row ordering (the first rows with respect to this ordering are returned).
+type limitExpr memoExpr
+
+func makeLimitExpr(input opt.GroupID, limit opt.GroupID, ordering opt.PrivateID) limitExpr {
+	return limitExpr{op: opt.LimitOp, state: exprState{uint32(input), uint32(limit), uint32(ordering)}}
+}
+
+func (e *limitExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *limitExpr) limit() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *limitExpr) ordering() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *limitExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asLimit() *limitExpr {
+	if m.op != opt.LimitOp {
+		return nil
+	}
+	return (*limitExpr)(m)
+}
+
+// offsetExpr filters out the first Offset rows of the input relation; used in
+// conjunction with Limit.
+type offsetExpr memoExpr
+
+func makeOffsetExpr(input opt.GroupID, offset opt.GroupID, ordering opt.PrivateID) offsetExpr {
+	return offsetExpr{op: opt.OffsetOp, state: exprState{uint32(input), uint32(offset), uint32(ordering)}}
+}
+
+func (e *offsetExpr) input() opt.GroupID {
+	return opt.GroupID(e.state[0])
+}
+
+func (e *offsetExpr) offset() opt.GroupID {
+	return opt.GroupID(e.state[1])
+}
+
+func (e *offsetExpr) ordering() opt.PrivateID {
+	return opt.PrivateID(e.state[2])
+}
+
+func (e *offsetExpr) fingerprint() fingerprint {
+	return fingerprint(*e)
+}
+
+func (m *memoExpr) asOffset() *offsetExpr {
+	if m.op != opt.OffsetOp {
+		return nil
+	}
+	return (*offsetExpr)(m)
 }
 
 type subqueryExpr memoExpr
@@ -2625,822 +3443,4 @@ func (m *memoExpr) asUnsupportedExpr() *unsupportedExprExpr {
 		return nil
 	}
 	return (*unsupportedExprExpr)(m)
-}
-
-// scanExpr returns a result set containing every row in the specified table. The
-// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
-// well as the subset of columns to project from it. Rows and columns are not
-// expected to have any particular ordering unless a physical property requires
-// it.
-type scanExpr memoExpr
-
-func makeScanExpr(def opt.PrivateID) scanExpr {
-	return scanExpr{op: opt.ScanOp, state: exprState{uint32(def)}}
-}
-
-func (e *scanExpr) def() opt.PrivateID {
-	return opt.PrivateID(e.state[0])
-}
-
-func (e *scanExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asScan() *scanExpr {
-	if m.op != opt.ScanOp {
-		return nil
-	}
-	return (*scanExpr)(m)
-}
-
-// valuesExpr returns a manufactured result set containing a constant number of rows.
-// specified by the Rows list field. Each row must contain the same set of
-// columns in the same order.
-//
-// The Rows field contains a list of Tuples, one for each row. Each tuple has
-// the same length (same with that of Cols).
-//
-// The Cols field contains the set of column indices returned by each row
-// as a *ColList. It is legal for Cols to be empty.
-type valuesExpr memoExpr
-
-func makeValuesExpr(rows opt.ListID, cols opt.PrivateID) valuesExpr {
-	return valuesExpr{op: opt.ValuesOp, state: exprState{rows.Offset, rows.Length, uint32(cols)}}
-}
-
-func (e *valuesExpr) rows() opt.ListID {
-	return opt.ListID{Offset: e.state[0], Length: e.state[1]}
-}
-
-func (e *valuesExpr) cols() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *valuesExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asValues() *valuesExpr {
-	if m.op != opt.ValuesOp {
-		return nil
-	}
-	return (*valuesExpr)(m)
-}
-
-// selectExpr filters rows from its input result set, based on the boolean filter
-// predicate expression. Rows which do not match the filter are discarded. While
-// the Filter operand can be any boolean expression, normalization rules will
-// typically convert it to a Filters operator in order to make conjunction list
-// matching easier.
-type selectExpr memoExpr
-
-func makeSelectExpr(input opt.GroupID, filter opt.GroupID) selectExpr {
-	return selectExpr{op: opt.SelectOp, state: exprState{uint32(input), uint32(filter)}}
-}
-
-func (e *selectExpr) input() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *selectExpr) filter() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *selectExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asSelect() *selectExpr {
-	if m.op != opt.SelectOp {
-		return nil
-	}
-	return (*selectExpr)(m)
-}
-
-// projectExpr modifies the set of columns returned by the input result set. Columns
-// can be removed, reordered, or renamed. In addition, new columns can be
-// synthesized. Projections is a scalar Projections list operator that contains
-// the list of expressions that describe the output columns. The Cols field of
-// the Projections operator provides the indexes of each of the output columns.
-type projectExpr memoExpr
-
-func makeProjectExpr(input opt.GroupID, projections opt.GroupID) projectExpr {
-	return projectExpr{op: opt.ProjectOp, state: exprState{uint32(input), uint32(projections)}}
-}
-
-func (e *projectExpr) input() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *projectExpr) projections() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *projectExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asProject() *projectExpr {
-	if m.op != opt.ProjectOp {
-		return nil
-	}
-	return (*projectExpr)(m)
-}
-
-// innerJoinExpr creates a result set that combines columns from its left and right
-// inputs, based upon its "on" join predicate. Rows which do not match the
-// predicate are filtered. While expressions in the predicate can refer to
-// columns projected by either the left or right inputs, the inputs are not
-// allowed to refer to the other's projected columns.
-type innerJoinExpr memoExpr
-
-func makeInnerJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinExpr {
-	return innerJoinExpr{op: opt.InnerJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *innerJoinExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *innerJoinExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *innerJoinExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *innerJoinExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asInnerJoin() *innerJoinExpr {
-	if m.op != opt.InnerJoinOp {
-		return nil
-	}
-	return (*innerJoinExpr)(m)
-}
-
-type leftJoinExpr memoExpr
-
-func makeLeftJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) leftJoinExpr {
-	return leftJoinExpr{op: opt.LeftJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *leftJoinExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *leftJoinExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *leftJoinExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *leftJoinExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLeftJoin() *leftJoinExpr {
-	if m.op != opt.LeftJoinOp {
-		return nil
-	}
-	return (*leftJoinExpr)(m)
-}
-
-type rightJoinExpr memoExpr
-
-func makeRightJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) rightJoinExpr {
-	return rightJoinExpr{op: opt.RightJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *rightJoinExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *rightJoinExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *rightJoinExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *rightJoinExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asRightJoin() *rightJoinExpr {
-	if m.op != opt.RightJoinOp {
-		return nil
-	}
-	return (*rightJoinExpr)(m)
-}
-
-type fullJoinExpr memoExpr
-
-func makeFullJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) fullJoinExpr {
-	return fullJoinExpr{op: opt.FullJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *fullJoinExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *fullJoinExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *fullJoinExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *fullJoinExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asFullJoin() *fullJoinExpr {
-	if m.op != opt.FullJoinOp {
-		return nil
-	}
-	return (*fullJoinExpr)(m)
-}
-
-type semiJoinExpr memoExpr
-
-func makeSemiJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) semiJoinExpr {
-	return semiJoinExpr{op: opt.SemiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *semiJoinExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *semiJoinExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *semiJoinExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *semiJoinExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asSemiJoin() *semiJoinExpr {
-	if m.op != opt.SemiJoinOp {
-		return nil
-	}
-	return (*semiJoinExpr)(m)
-}
-
-type antiJoinExpr memoExpr
-
-func makeAntiJoinExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) antiJoinExpr {
-	return antiJoinExpr{op: opt.AntiJoinOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *antiJoinExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *antiJoinExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *antiJoinExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *antiJoinExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAntiJoin() *antiJoinExpr {
-	if m.op != opt.AntiJoinOp {
-		return nil
-	}
-	return (*antiJoinExpr)(m)
-}
-
-// innerJoinApplyExpr has the same join semantics as InnerJoin. However, unlike
-// InnerJoin, it allows the right input to refer to columns projected by the
-// left input.
-type innerJoinApplyExpr memoExpr
-
-func makeInnerJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) innerJoinApplyExpr {
-	return innerJoinApplyExpr{op: opt.InnerJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *innerJoinApplyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *innerJoinApplyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *innerJoinApplyExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *innerJoinApplyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asInnerJoinApply() *innerJoinApplyExpr {
-	if m.op != opt.InnerJoinApplyOp {
-		return nil
-	}
-	return (*innerJoinApplyExpr)(m)
-}
-
-type leftJoinApplyExpr memoExpr
-
-func makeLeftJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) leftJoinApplyExpr {
-	return leftJoinApplyExpr{op: opt.LeftJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *leftJoinApplyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *leftJoinApplyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *leftJoinApplyExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *leftJoinApplyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLeftJoinApply() *leftJoinApplyExpr {
-	if m.op != opt.LeftJoinApplyOp {
-		return nil
-	}
-	return (*leftJoinApplyExpr)(m)
-}
-
-type rightJoinApplyExpr memoExpr
-
-func makeRightJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) rightJoinApplyExpr {
-	return rightJoinApplyExpr{op: opt.RightJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *rightJoinApplyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *rightJoinApplyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *rightJoinApplyExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *rightJoinApplyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asRightJoinApply() *rightJoinApplyExpr {
-	if m.op != opt.RightJoinApplyOp {
-		return nil
-	}
-	return (*rightJoinApplyExpr)(m)
-}
-
-type fullJoinApplyExpr memoExpr
-
-func makeFullJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) fullJoinApplyExpr {
-	return fullJoinApplyExpr{op: opt.FullJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *fullJoinApplyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *fullJoinApplyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *fullJoinApplyExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *fullJoinApplyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asFullJoinApply() *fullJoinApplyExpr {
-	if m.op != opt.FullJoinApplyOp {
-		return nil
-	}
-	return (*fullJoinApplyExpr)(m)
-}
-
-type semiJoinApplyExpr memoExpr
-
-func makeSemiJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) semiJoinApplyExpr {
-	return semiJoinApplyExpr{op: opt.SemiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *semiJoinApplyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *semiJoinApplyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *semiJoinApplyExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *semiJoinApplyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asSemiJoinApply() *semiJoinApplyExpr {
-	if m.op != opt.SemiJoinApplyOp {
-		return nil
-	}
-	return (*semiJoinApplyExpr)(m)
-}
-
-type antiJoinApplyExpr memoExpr
-
-func makeAntiJoinApplyExpr(left opt.GroupID, right opt.GroupID, on opt.GroupID) antiJoinApplyExpr {
-	return antiJoinApplyExpr{op: opt.AntiJoinApplyOp, state: exprState{uint32(left), uint32(right), uint32(on)}}
-}
-
-func (e *antiJoinApplyExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *antiJoinApplyExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *antiJoinApplyExpr) on() opt.GroupID {
-	return opt.GroupID(e.state[2])
-}
-
-func (e *antiJoinApplyExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asAntiJoinApply() *antiJoinApplyExpr {
-	if m.op != opt.AntiJoinApplyOp {
-		return nil
-	}
-	return (*antiJoinApplyExpr)(m)
-}
-
-// groupByExpr is an operator that is used for performing aggregations (for queries
-// with aggregate functions, HAVING clauses and/or group by expressions). It
-// groups results that are equal on the grouping columns and computes
-// aggregations as described by Aggregations (which is always an Aggregations
-// operator). The arguments of the aggregations are columns from the input.
-type groupByExpr memoExpr
-
-func makeGroupByExpr(input opt.GroupID, aggregations opt.GroupID, groupingCols opt.PrivateID) groupByExpr {
-	return groupByExpr{op: opt.GroupByOp, state: exprState{uint32(input), uint32(aggregations), uint32(groupingCols)}}
-}
-
-func (e *groupByExpr) input() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *groupByExpr) aggregations() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *groupByExpr) groupingCols() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *groupByExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asGroupBy() *groupByExpr {
-	if m.op != opt.GroupByOp {
-		return nil
-	}
-	return (*groupByExpr)(m)
-}
-
-// unionExpr is an operator used to combine the Left and Right input relations into
-// a single set containing rows from both inputs. Duplicate rows are discarded.
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the Union with the output columns. See the comment above opt.SetOpColMap
-// for more details.
-type unionExpr memoExpr
-
-func makeUnionExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionExpr {
-	return unionExpr{op: opt.UnionOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
-}
-
-func (e *unionExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *unionExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *unionExpr) colMap() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *unionExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asUnion() *unionExpr {
-	if m.op != opt.UnionOp {
-		return nil
-	}
-	return (*unionExpr)(m)
-}
-
-// intersectExpr is an operator used to perform an intersection between the Left
-// and Right input relations. The result consists only of rows in the Left
-// relation that are also present in the Right relation. Duplicate rows are
-// discarded.
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the Intersect with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-type intersectExpr memoExpr
-
-func makeIntersectExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectExpr {
-	return intersectExpr{op: opt.IntersectOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
-}
-
-func (e *intersectExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *intersectExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *intersectExpr) colMap() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *intersectExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIntersect() *intersectExpr {
-	if m.op != opt.IntersectOp {
-		return nil
-	}
-	return (*intersectExpr)(m)
-}
-
-// exceptExpr is an operator used to perform a set difference between the Left and
-// Right input relations. The result consists only of rows in the Left relation
-// that are not present in the Right relation. Duplicate rows are discarded.
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the Except with the output columns. See the comment above opt.SetOpColMap
-// for more details.
-type exceptExpr memoExpr
-
-func makeExceptExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptExpr {
-	return exceptExpr{op: opt.ExceptOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
-}
-
-func (e *exceptExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *exceptExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *exceptExpr) colMap() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *exceptExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asExcept() *exceptExpr {
-	if m.op != opt.ExceptOp {
-		return nil
-	}
-	return (*exceptExpr)(m)
-}
-
-// unionAllExpr is an operator used to combine the Left and Right input relations
-// into a single set containing rows from both inputs. Duplicate rows are
-// not discarded. For example:
-//   SELECT x FROM xx UNION ALL SELECT y FROM yy
-//     x       y         out
-//   -----   -----      -----
-//     1       1          1
-//     1       2    ->    1
-//     2       3          1
-//                        2
-//                        2
-//                        3
-//
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the UnionAll with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-type unionAllExpr memoExpr
-
-func makeUnionAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) unionAllExpr {
-	return unionAllExpr{op: opt.UnionAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
-}
-
-func (e *unionAllExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *unionAllExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *unionAllExpr) colMap() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *unionAllExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asUnionAll() *unionAllExpr {
-	if m.op != opt.UnionAllOp {
-		return nil
-	}
-	return (*unionAllExpr)(m)
-}
-
-// intersectAllExpr is an operator used to perform an intersection between the Left
-// and Right input relations. The result consists only of rows in the Left
-// relation that have a corresponding row in the Right relation. Duplicate rows
-// are not discarded. This effectively creates a one-to-one mapping between the
-// Left and Right rows. For example:
-//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
-//     x       y         out
-//   -----   -----      -----
-//     1       1          1
-//     1       1    ->    1
-//     1       2          2
-//     2       2          2
-//     2       3
-//     4
-//
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the IntersectAll with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-type intersectAllExpr memoExpr
-
-func makeIntersectAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) intersectAllExpr {
-	return intersectAllExpr{op: opt.IntersectAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
-}
-
-func (e *intersectAllExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *intersectAllExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *intersectAllExpr) colMap() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *intersectAllExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asIntersectAll() *intersectAllExpr {
-	if m.op != opt.IntersectAllOp {
-		return nil
-	}
-	return (*intersectAllExpr)(m)
-}
-
-// exceptAllExpr is an operator used to perform a set difference between the Left
-// and Right input relations. The result consists only of rows in the Left
-// relation that do not have a corresponding row in the Right relation.
-// Duplicate rows are not discarded. This effectively creates a one-to-one
-// mapping between the Left and Right rows. For example:
-//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
-//     x       y         out
-//   -----   -----      -----
-//     1       1    ->    1
-//     1       1          4
-//     1       2
-//     2       2
-//     2       3
-//     4
-//
-// The private field, ColMap, matches columns from the Left and Right inputs
-// of the ExceptAll with the output columns. See the comment above
-// opt.SetOpColMap for more details.
-type exceptAllExpr memoExpr
-
-func makeExceptAllExpr(left opt.GroupID, right opt.GroupID, colMap opt.PrivateID) exceptAllExpr {
-	return exceptAllExpr{op: opt.ExceptAllOp, state: exprState{uint32(left), uint32(right), uint32(colMap)}}
-}
-
-func (e *exceptAllExpr) left() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *exceptAllExpr) right() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *exceptAllExpr) colMap() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *exceptAllExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asExceptAll() *exceptAllExpr {
-	if m.op != opt.ExceptAllOp {
-		return nil
-	}
-	return (*exceptAllExpr)(m)
-}
-
-// limitExpr returns a limited subset of the results in the input relation.
-// The limit expression is a scalar value; the operator returns at most this many
-// rows. The private field is an *opt.Ordering which indicates the desired
-// row ordering (the first rows with respect to this ordering are returned).
-type limitExpr memoExpr
-
-func makeLimitExpr(input opt.GroupID, limit opt.GroupID, ordering opt.PrivateID) limitExpr {
-	return limitExpr{op: opt.LimitOp, state: exprState{uint32(input), uint32(limit), uint32(ordering)}}
-}
-
-func (e *limitExpr) input() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *limitExpr) limit() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *limitExpr) ordering() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *limitExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asLimit() *limitExpr {
-	if m.op != opt.LimitOp {
-		return nil
-	}
-	return (*limitExpr)(m)
-}
-
-// offsetExpr filters out the first Offset rows of the input relation; used in
-// conjunction with Limit.
-type offsetExpr memoExpr
-
-func makeOffsetExpr(input opt.GroupID, offset opt.GroupID, ordering opt.PrivateID) offsetExpr {
-	return offsetExpr{op: opt.OffsetOp, state: exprState{uint32(input), uint32(offset), uint32(ordering)}}
-}
-
-func (e *offsetExpr) input() opt.GroupID {
-	return opt.GroupID(e.state[0])
-}
-
-func (e *offsetExpr) offset() opt.GroupID {
-	return opt.GroupID(e.state[1])
-}
-
-func (e *offsetExpr) ordering() opt.PrivateID {
-	return opt.PrivateID(e.state[2])
-}
-
-func (e *offsetExpr) fingerprint() fingerprint {
-	return fingerprint(*e)
-}
-
-func (m *memoExpr) asOffset() *offsetExpr {
-	if m.op != opt.OffsetOp {
-		return nil
-	}
-	return (*offsetExpr)(m)
 }

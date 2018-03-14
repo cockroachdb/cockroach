@@ -14,7 +14,7 @@
 $input
 
 # FilterUnusedProjectCols discards nested project columns that are never used.
-[FilterUnusedProjectCols]
+[FilterUnusedProjectCols, Normalize]
 (Project
     (Project
         $innerInput:*
@@ -33,7 +33,7 @@ $input
 
 # FilterUnusedScanCols discards Scan operator columns that are never used. The
 # needed columns are pushed down into the Scan's opt.ScanOpDef private.
-[FilterUnusedScanCols]
+[FilterUnusedScanCols, Normalize]
 (Project
     $input:(Scan)
     $projections:* & (HasUnusedColumns $input (NeededCols $projections))
@@ -45,7 +45,7 @@ $input
 )
 
 # FilterUnusedSelectCols discards Select input columns that are never used.
-[FilterUnusedSelectCols]
+[FilterUnusedSelectCols, Normalize]
 (Project
     (Select
         $innerInput:*
@@ -63,7 +63,7 @@ $input
 )
 
 # FilterUnusedLimitCols discards Limit input columns that are never used.
-[FilterUnusedLimitCols]
+[FilterUnusedLimitCols, Normalize]
 (Project
     (Limit
         $input:*
@@ -85,7 +85,7 @@ $input
 # FilterUnusedOffsetCols discards Offset input columns that are never used.
 # Note: this rule is separate from FilterUnusedLimitCols because we can't access
 # the ordering private if using (Limit | Offset .. ).
-[FilterUnusedOffsetCols]
+[FilterUnusedOffsetCols, Normalize]
 (Project
     (Offset
         $input:*
@@ -106,7 +106,7 @@ $input
 
 # FilterUnusedJoinLeftCols discards columns on the left side of a join that are
 # never used.
-[FilterUnusedJoinLeftCols]
+[FilterUnusedJoinLeftCols, Normalize]
 (Project
     $input:(Join
         $left:*
@@ -127,7 +127,7 @@ $input
 
 # FilterUnusedJoinRightCols discards columns on the right side of a join that
 # are never used.
-[FilterUnusedJoinRightCols]
+[FilterUnusedJoinRightCols, Normalize]
 (Project
     $input:(Join
         $left:*
@@ -148,7 +148,7 @@ $input
 
 # FilterUnusedAggCols discards aggregation columns in a GroupBy that are never
 # used.
-[FilterUnusedAggCols]
+[FilterUnusedAggCols, Normalize]
 (Project
     (GroupBy
         $innerInput:*
@@ -168,7 +168,7 @@ $input
 )
 
 # FilterUnusedGroupByCols discards GroupBy input columns that are never used.
-[FilterUnusedGroupByCols]
+[FilterUnusedGroupByCols, Normalize]
 (GroupBy
     $input:*
     $aggregations:*
@@ -182,7 +182,7 @@ $input
 )
 
 # FilterUnusedValueCols discards Values columns that are never used.
-[FilterUnusedValueCols]
+[FilterUnusedValueCols, Normalize]
 (Project
     $input:(Values)
     $projections:* & (HasUnusedColumns $input (NeededCols $projections))

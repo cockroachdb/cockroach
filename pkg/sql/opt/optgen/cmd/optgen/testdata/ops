@@ -20,12 +20,11 @@ const (
 	UnknownOp Operator = iota
 
 	// ------------------------------------------------------------
-	// Scalar Operators
+	// Enforcer Operators
 	// ------------------------------------------------------------
 
-	// LtOp is a comparison op. Don't replace Lt again.
-	// Lt shouldn't be replaced on the second line either.
-	LtOp
+	// SortOp is an enforcer.
+	SortOp
 
 	// ------------------------------------------------------------
 	// Relational Operators
@@ -34,19 +33,20 @@ const (
 	InnerJoinApplyOp
 
 	// ------------------------------------------------------------
-	// Enforcer Operators
+	// Scalar Operators
 	// ------------------------------------------------------------
 
-	// SortOp is an enforcer.
-	SortOp
+	// LtOp is a comparison op. Don't replace Lt again.
+	// Lt shouldn't be replaced on the second line either.
+	LtOp
 
 	// NumOperators tracks the total count of operators.
 	NumOperators
 )
 
-const opNames = "unknownltinner-join-applysort"
+const opNames = "unknownsortinner-join-applylt"
 
-var opIndexes = [...]uint32{0, 7, 9, 25, 29}
+var opIndexes = [...]uint32{0, 7, 11, 27, 29}
 
 var ScalarOperators = [...]Operator{
 	LtOp,

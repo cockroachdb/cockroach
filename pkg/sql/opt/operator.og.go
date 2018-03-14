@@ -6,6 +6,184 @@ const (
 	UnknownOp Operator = iota
 
 	// ------------------------------------------------------------
+	// Enforcer Operators
+	// ------------------------------------------------------------
+
+	// SortOp enforces the ordering of rows returned by its input expression. Rows can
+	// be sorted by one or more of the input columns, each of which can be sorted in
+	// either ascending or descending order. See the Ordering field in the
+	// PhysicalProps struct.
+	// TODO(andyk): Add the Ordering field.
+	SortOp
+
+	// ------------------------------------------------------------
+	// Relational Operators
+	// ------------------------------------------------------------
+
+	// ScanOp returns a result set containing every row in the specified table. The
+	// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
+	// well as the subset of columns to project from it. Rows and columns are not
+	// expected to have any particular ordering unless a physical property requires
+	// it.
+	ScanOp
+
+	// ValuesOp returns a manufactured result set containing a constant number of rows.
+	// specified by the Rows list field. Each row must contain the same set of
+	// columns in the same order.
+	//
+	// The Rows field contains a list of Tuples, one for each row. Each tuple has
+	// the same length (same with that of Cols).
+	//
+	// The Cols field contains the set of column indices returned by each row
+	// as a *ColList. It is legal for Cols to be empty.
+	ValuesOp
+
+	// SelectOp filters rows from its input result set, based on the boolean filter
+	// predicate expression. Rows which do not match the filter are discarded. While
+	// the Filter operand can be any boolean expression, normalization rules will
+	// typically convert it to a Filters operator in order to make conjunction list
+	// matching easier.
+	SelectOp
+
+	// ProjectOp modifies the set of columns returned by the input result set. Columns
+	// can be removed, reordered, or renamed. In addition, new columns can be
+	// synthesized. Projections is a scalar Projections list operator that contains
+	// the list of expressions that describe the output columns. The Cols field of
+	// the Projections operator provides the indexes of each of the output columns.
+	ProjectOp
+
+	// InnerJoinOp creates a result set that combines columns from its left and right
+	// inputs, based upon its "on" join predicate. Rows which do not match the
+	// predicate are filtered. While expressions in the predicate can refer to
+	// columns projected by either the left or right inputs, the inputs are not
+	// allowed to refer to the other's projected columns.
+	InnerJoinOp
+
+	LeftJoinOp
+
+	RightJoinOp
+
+	FullJoinOp
+
+	SemiJoinOp
+
+	AntiJoinOp
+
+	// InnerJoinApplyOp has the same join semantics as InnerJoin. However, unlike
+	// InnerJoin, it allows the right input to refer to columns projected by the
+	// left input.
+	InnerJoinApplyOp
+
+	LeftJoinApplyOp
+
+	RightJoinApplyOp
+
+	FullJoinApplyOp
+
+	SemiJoinApplyOp
+
+	AntiJoinApplyOp
+
+	// GroupByOp is an operator that is used for performing aggregations (for queries
+	// with aggregate functions, HAVING clauses and/or group by expressions). It
+	// groups results that are equal on the grouping columns and computes
+	// aggregations as described by Aggregations (which is always an Aggregations
+	// operator). The arguments of the aggregations are columns from the input.
+	GroupByOp
+
+	// UnionOp is an operator used to combine the Left and Right input relations into
+	// a single set containing rows from both inputs. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Union with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
+	UnionOp
+
+	// IntersectOp is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that are also present in the Right relation. Duplicate rows are
+	// discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Intersect with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	IntersectOp
+
+	// ExceptOp is an operator used to perform a set difference between the Left and
+	// Right input relations. The result consists only of rows in the Left relation
+	// that are not present in the Right relation. Duplicate rows are discarded.
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the Except with the output columns. See the comment above opt.SetOpColMap
+	// for more details.
+	ExceptOp
+
+	// UnionAllOp is an operator used to combine the Left and Right input relations
+	// into a single set containing rows from both inputs. Duplicate rows are
+	// not discarded. For example:
+	//   SELECT x FROM xx UNION ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       2    ->    1
+	//     2       3          1
+	//                        2
+	//                        2
+	//                        3
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the UnionAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	UnionAllOp
+
+	// IntersectAllOp is an operator used to perform an intersection between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that have a corresponding row in the Right relation. Duplicate rows
+	// are not discarded. This effectively creates a one-to-one mapping between the
+	// Left and Right rows. For example:
+	//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1          1
+	//     1       1    ->    1
+	//     1       2          2
+	//     2       2          2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the IntersectAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	IntersectAllOp
+
+	// ExceptAllOp is an operator used to perform a set difference between the Left
+	// and Right input relations. The result consists only of rows in the Left
+	// relation that do not have a corresponding row in the Right relation.
+	// Duplicate rows are not discarded. This effectively creates a one-to-one
+	// mapping between the Left and Right rows. For example:
+	//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
+	//     x       y         out
+	//   -----   -----      -----
+	//     1       1    ->    1
+	//     1       1          4
+	//     1       2
+	//     2       2
+	//     2       3
+	//     4
+	//
+	// The private field, ColMap, matches columns from the Left and Right inputs
+	// of the ExceptAll with the output columns. See the comment above
+	// opt.SetOpColMap for more details.
+	ExceptAllOp
+
+	// LimitOp returns a limited subset of the results in the input relation.
+	// The limit expression is a scalar value; the operator returns at most this many
+	// rows. The private field is an *opt.Ordering which indicates the desired
+	// row ordering (the first rows with respect to this ordering are returned).
+	LimitOp
+
+	// OffsetOp filters out the first Offset rows of the input relation; used in
+	// conjunction with Limit.
+	OffsetOp
+
+	// ------------------------------------------------------------
 	// Scalar Operators
 	// ------------------------------------------------------------
 
@@ -208,191 +386,69 @@ const (
 	// encapsulate a TypedExpr that is otherwise not supported by the optimizer.
 	UnsupportedExprOp
 
-	// ------------------------------------------------------------
-	// Relational Operators
-	// ------------------------------------------------------------
-
-	// ScanOp returns a result set containing every row in the specified table. The
-	// private Def field is an *opt.ScanOpDef that identifies the table to scan, as
-	// well as the subset of columns to project from it. Rows and columns are not
-	// expected to have any particular ordering unless a physical property requires
-	// it.
-	ScanOp
-
-	// ValuesOp returns a manufactured result set containing a constant number of rows.
-	// specified by the Rows list field. Each row must contain the same set of
-	// columns in the same order.
-	//
-	// The Rows field contains a list of Tuples, one for each row. Each tuple has
-	// the same length (same with that of Cols).
-	//
-	// The Cols field contains the set of column indices returned by each row
-	// as a *ColList. It is legal for Cols to be empty.
-	ValuesOp
-
-	// SelectOp filters rows from its input result set, based on the boolean filter
-	// predicate expression. Rows which do not match the filter are discarded. While
-	// the Filter operand can be any boolean expression, normalization rules will
-	// typically convert it to a Filters operator in order to make conjunction list
-	// matching easier.
-	SelectOp
-
-	// ProjectOp modifies the set of columns returned by the input result set. Columns
-	// can be removed, reordered, or renamed. In addition, new columns can be
-	// synthesized. Projections is a scalar Projections list operator that contains
-	// the list of expressions that describe the output columns. The Cols field of
-	// the Projections operator provides the indexes of each of the output columns.
-	ProjectOp
-
-	// InnerJoinOp creates a result set that combines columns from its left and right
-	// inputs, based upon its "on" join predicate. Rows which do not match the
-	// predicate are filtered. While expressions in the predicate can refer to
-	// columns projected by either the left or right inputs, the inputs are not
-	// allowed to refer to the other's projected columns.
-	InnerJoinOp
-
-	LeftJoinOp
-
-	RightJoinOp
-
-	FullJoinOp
-
-	SemiJoinOp
-
-	AntiJoinOp
-
-	// InnerJoinApplyOp has the same join semantics as InnerJoin. However, unlike
-	// InnerJoin, it allows the right input to refer to columns projected by the
-	// left input.
-	InnerJoinApplyOp
-
-	LeftJoinApplyOp
-
-	RightJoinApplyOp
-
-	FullJoinApplyOp
-
-	SemiJoinApplyOp
-
-	AntiJoinApplyOp
-
-	// GroupByOp is an operator that is used for performing aggregations (for queries
-	// with aggregate functions, HAVING clauses and/or group by expressions). It
-	// groups results that are equal on the grouping columns and computes
-	// aggregations as described by Aggregations (which is always an Aggregations
-	// operator). The arguments of the aggregations are columns from the input.
-	GroupByOp
-
-	// UnionOp is an operator used to combine the Left and Right input relations into
-	// a single set containing rows from both inputs. Duplicate rows are discarded.
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the Union with the output columns. See the comment above opt.SetOpColMap
-	// for more details.
-	UnionOp
-
-	// IntersectOp is an operator used to perform an intersection between the Left
-	// and Right input relations. The result consists only of rows in the Left
-	// relation that are also present in the Right relation. Duplicate rows are
-	// discarded.
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the Intersect with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	IntersectOp
-
-	// ExceptOp is an operator used to perform a set difference between the Left and
-	// Right input relations. The result consists only of rows in the Left relation
-	// that are not present in the Right relation. Duplicate rows are discarded.
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the Except with the output columns. See the comment above opt.SetOpColMap
-	// for more details.
-	ExceptOp
-
-	// UnionAllOp is an operator used to combine the Left and Right input relations
-	// into a single set containing rows from both inputs. Duplicate rows are
-	// not discarded. For example:
-	//   SELECT x FROM xx UNION ALL SELECT y FROM yy
-	//     x       y         out
-	//   -----   -----      -----
-	//     1       1          1
-	//     1       2    ->    1
-	//     2       3          1
-	//                        2
-	//                        2
-	//                        3
-	//
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the UnionAll with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	UnionAllOp
-
-	// IntersectAllOp is an operator used to perform an intersection between the Left
-	// and Right input relations. The result consists only of rows in the Left
-	// relation that have a corresponding row in the Right relation. Duplicate rows
-	// are not discarded. This effectively creates a one-to-one mapping between the
-	// Left and Right rows. For example:
-	//   SELECT x FROM xx INTERSECT ALL SELECT y FROM yy
-	//     x       y         out
-	//   -----   -----      -----
-	//     1       1          1
-	//     1       1    ->    1
-	//     1       2          2
-	//     2       2          2
-	//     2       3
-	//     4
-	//
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the IntersectAll with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	IntersectAllOp
-
-	// ExceptAllOp is an operator used to perform a set difference between the Left
-	// and Right input relations. The result consists only of rows in the Left
-	// relation that do not have a corresponding row in the Right relation.
-	// Duplicate rows are not discarded. This effectively creates a one-to-one
-	// mapping between the Left and Right rows. For example:
-	//   SELECT x FROM xx EXCEPT ALL SELECT y FROM yy
-	//     x       y         out
-	//   -----   -----      -----
-	//     1       1    ->    1
-	//     1       1          4
-	//     1       2
-	//     2       2
-	//     2       3
-	//     4
-	//
-	// The private field, ColMap, matches columns from the Left and Right inputs
-	// of the ExceptAll with the output columns. See the comment above
-	// opt.SetOpColMap for more details.
-	ExceptAllOp
-
-	// LimitOp returns a limited subset of the results in the input relation.
-	// The limit expression is a scalar value; the operator returns at most this many
-	// rows. The private field is an *opt.Ordering which indicates the desired
-	// row ordering (the first rows with respect to this ordering are returned).
-	LimitOp
-
-	// OffsetOp filters out the first Offset rows of the input relation; used in
-	// conjunction with Limit.
-	OffsetOp
-
-	// ------------------------------------------------------------
-	// Enforcer Operators
-	// ------------------------------------------------------------
-
-	// SortOp enforces the ordering of rows returned by its input expression. Rows can
-	// be sorted by one or more of the input columns, each of which can be sorted in
-	// either ascending or descending order. See the Ordering field in the
-	// PhysicalProps struct.
-	// TODO(andyk): Add the Ordering field.
-	SortOp
-
 	// NumOperators tracks the total count of operators.
 	NumOperators
 )
 
-const opNames = "unknownsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-exprscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsort"
+const opNames = "unknownsortscanvaluesselectprojectinner-joinleft-joinright-joinfull-joinsemi-joinanti-joininner-join-applyleft-join-applyright-join-applyfull-join-applysemi-join-applyanti-join-applygroup-byunionintersectexceptunion-allintersect-allexcept-alllimitoffsetsubqueryvariableconstnulltruefalseplaceholdertupleprojectionsaggregationsexistsfiltersandornoteqltgtlegeneinnot-inlikenot-likei-likenot-i-likesimilar-tonot-similar-toreg-matchnot-reg-matchreg-i-matchnot-reg-i-matchisis-notcontainsbitandbitorbitxorplusminusmultdivfloor-divmodpowconcatl-shiftr-shiftfetch-valfetch-textfetch-val-pathfetch-text-pathunary-minusunary-complementcastcasewhenfunctioncoalesceunsupported-expr"
 
-var opIndexes = [...]uint32{0, 7, 15, 23, 28, 32, 36, 41, 52, 57, 68, 80, 86, 93, 96, 98, 101, 103, 105, 107, 109, 111, 113, 115, 121, 125, 133, 139, 149, 159, 173, 182, 195, 206, 221, 223, 229, 237, 243, 248, 254, 258, 263, 267, 270, 279, 282, 285, 291, 298, 305, 314, 324, 338, 353, 364, 380, 384, 388, 392, 400, 408, 424, 428, 434, 440, 447, 457, 466, 476, 485, 494, 503, 519, 534, 550, 565, 580, 595, 603, 608, 617, 623, 632, 645, 655, 660, 666, 670}
+var opIndexes = [...]uint32{0, 7, 11, 15, 21, 27, 34, 44, 53, 63, 72, 81, 90, 106, 121, 137, 152, 167, 182, 190, 195, 204, 210, 219, 232, 242, 247, 253, 261, 269, 274, 278, 282, 287, 298, 303, 314, 326, 332, 339, 342, 344, 347, 349, 351, 353, 355, 357, 359, 361, 367, 371, 379, 385, 395, 405, 419, 428, 441, 452, 467, 469, 475, 483, 489, 494, 500, 504, 509, 513, 516, 525, 528, 531, 537, 544, 551, 560, 570, 584, 599, 610, 626, 630, 634, 638, 646, 654, 670}
+
+var EnforcerOperators = [...]Operator{
+	SortOp,
+}
+
+var RelationalOperators = [...]Operator{
+	ScanOp,
+	ValuesOp,
+	SelectOp,
+	ProjectOp,
+	InnerJoinOp,
+	LeftJoinOp,
+	RightJoinOp,
+	FullJoinOp,
+	SemiJoinOp,
+	AntiJoinOp,
+	InnerJoinApplyOp,
+	LeftJoinApplyOp,
+	RightJoinApplyOp,
+	FullJoinApplyOp,
+	SemiJoinApplyOp,
+	AntiJoinApplyOp,
+	GroupByOp,
+	UnionOp,
+	IntersectOp,
+	ExceptOp,
+	UnionAllOp,
+	IntersectAllOp,
+	ExceptAllOp,
+	LimitOp,
+	OffsetOp,
+}
+
+var JoinOperators = [...]Operator{
+	InnerJoinOp,
+	LeftJoinOp,
+	RightJoinOp,
+	FullJoinOp,
+	SemiJoinOp,
+	AntiJoinOp,
+	InnerJoinApplyOp,
+	LeftJoinApplyOp,
+	RightJoinApplyOp,
+	FullJoinApplyOp,
+	SemiJoinApplyOp,
+	AntiJoinApplyOp,
+}
+
+var JoinApplyOperators = [...]Operator{
+	InnerJoinApplyOp,
+	LeftJoinApplyOp,
+	RightJoinApplyOp,
+	FullJoinApplyOp,
+	SemiJoinApplyOp,
+	AntiJoinApplyOp,
+}
 
 var ScalarOperators = [...]Operator{
 	SubqueryOp,
@@ -521,60 +577,4 @@ var BinaryOperators = [...]Operator{
 var UnaryOperators = [...]Operator{
 	UnaryMinusOp,
 	UnaryComplementOp,
-}
-
-var RelationalOperators = [...]Operator{
-	ScanOp,
-	ValuesOp,
-	SelectOp,
-	ProjectOp,
-	InnerJoinOp,
-	LeftJoinOp,
-	RightJoinOp,
-	FullJoinOp,
-	SemiJoinOp,
-	AntiJoinOp,
-	InnerJoinApplyOp,
-	LeftJoinApplyOp,
-	RightJoinApplyOp,
-	FullJoinApplyOp,
-	SemiJoinApplyOp,
-	AntiJoinApplyOp,
-	GroupByOp,
-	UnionOp,
-	IntersectOp,
-	ExceptOp,
-	UnionAllOp,
-	IntersectAllOp,
-	ExceptAllOp,
-	LimitOp,
-	OffsetOp,
-}
-
-var JoinOperators = [...]Operator{
-	InnerJoinOp,
-	LeftJoinOp,
-	RightJoinOp,
-	FullJoinOp,
-	SemiJoinOp,
-	AntiJoinOp,
-	InnerJoinApplyOp,
-	LeftJoinApplyOp,
-	RightJoinApplyOp,
-	FullJoinApplyOp,
-	SemiJoinApplyOp,
-	AntiJoinApplyOp,
-}
-
-var JoinApplyOperators = [...]Operator{
-	InnerJoinApplyOp,
-	LeftJoinApplyOp,
-	RightJoinApplyOp,
-	FullJoinApplyOp,
-	SemiJoinApplyOp,
-	AntiJoinApplyOp,
-}
-
-var EnforcerOperators = [...]Operator{
-	SortOp,
 }
