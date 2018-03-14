@@ -69,6 +69,7 @@ const (
 	tpccCustomerSchemaInterleave = ` interleave in parent district (c_w_id, c_d_id)`
 	// No PK necessary for this table.
 	tpccHistorySchema = `(
+		rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
 		h_c_id   integer,
 		h_c_d_id integer,
 		h_c_w_id integer,
