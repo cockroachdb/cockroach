@@ -8,6 +8,7 @@
 
 import _ from "lodash";
 import * as vector from "src/util/vector";
+import * as d3 from "d3";
 
 // Box is an immutable construct for a box.
 export class Box {
@@ -17,16 +18,10 @@ export class Box {
       return null;
     }
 
-    let top = Infinity;
-    let left = Infinity;
-    let right = -Infinity;
-    let bottom = -Infinity;
-    for (let i = 0; i < boxes.length; i++) {
-      top = Math.min(top, boxes[i].top());
-      right = Math.max(right, boxes[i].right());
-      left = Math.min(left, boxes[i].left());
-      bottom = Math.max(bottom, boxes[i].bottom());
-    }
+    const left = d3.min(boxes, b => b.left());
+    const top = d3.min(boxes, b => b.top());
+    const right = d3.max(boxes, b => b.right());
+    const bottom = d3.max(boxes, b => b.bottom());
     return new Box(left, top, right - left, bottom - top);
   }
 
@@ -100,7 +95,7 @@ export class ZoomTransformer {
     this._bounds = bounds;
     this._viewportSize = viewportSize;
     this._scale = this.minScale();
-    this._translate =  vector.sub(vector.mult(this._viewportSize, 0.5), vector.mult(this._bounds.center(), this._scale));
+    this.centerOnBox(bounds);
   }
 
   minScale() {
@@ -139,8 +134,10 @@ export class ZoomTransformer {
     return newZoom;
   }
 
-  // zoomedToBoundingBox returns a ZoomTransformer which has been adjusted to
-  // exactly fit and center the provided bounding box.
+  // zoomedToBox returns a ZoomTransformer which has been adjusted to the
+  // maximum zoom such that the provided bounding box is centered and entirely
+  // in frame. Note that the resulting zoom will be adjusted if it does not fit
+  // inside the top-level bounds of the ZoomTransformer.
   zoomedToBox(bounding: Box): ZoomTransformer {
     if (_.isNil(bounding)) {
       return this;
@@ -152,9 +149,23 @@ export class ZoomTransformer {
       this._viewportSize[0] / boundingSize[0],
       this._viewportSize[1] / boundingSize[1],
     );
-    newZoom._translate =  vector.sub(vector.mult(this._viewportSize, 0.5), vector.mult(bounding.center(), newZoom._scale));
+    newZoom.centerOnBox(bounding);
     newZoom.adjustZoom();
     return newZoom;
+  }
+
+  // centerOnBox adjusts the zoom translation such that the provided box is
+  // exactly at the center of the viewport.
+  private centerOnBox(bounding: Box) {
+    this._translate = vector.sub(
+      // This represents the vector from the top-left origin (0, 0) to the
+      // center of the viewport.
+      vector.mult(this._viewportSize, 0.5),
+      // Subtract the vector representing the *scaled* location of the center
+      // of the target box. This gives the necessary adjustment from origin
+      // to move the center of the box to the center of the viewport.
+      vector.mult(bounding.center(), this._scale),
+    );
   }
 
   private adjustZoom() {
