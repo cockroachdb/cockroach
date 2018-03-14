@@ -35,11 +35,17 @@ func init() {
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
 
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {
 			run := func(stmt string) {
 				t.Status(stmt)
-				c.Run(ctx, 1, `./cockroach sql --insecure -e "`+stmt+`"`)
+				_, err := db.ExecContext(ctx, stmt)
+				if err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			run(`SET CLUSTER SETTING trace.debug.enable = true`)
@@ -47,6 +53,10 @@ func init() {
 			t.Status("importing TPCC fixture")
 			c.Run(ctx, 1, fmt.Sprintf(
 				"./workload fixtures load tpcc --warehouses=%d --db tpcc {pgurl:1}", warehouses))
+
+			// Drop a constraint that would get in the way of deleting from tpcc.stock.
+			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock"
+			run(stmtDropConstraint)
 
 			const stmtDelete = "DELETE FROM tpcc.stock"
 			run(stmtDelete)
