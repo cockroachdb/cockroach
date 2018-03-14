@@ -1521,6 +1521,60 @@ func TestJSONContains(t *testing.T) {
 	}
 }
 
+func TestAllPaths(t *testing.T) {
+	rng := rand.New(rand.NewSource(timeutil.Now().Unix()))
+
+	var countLeaves func(j JSON) int
+	countLeaves = func(j JSON) int {
+		j = j.MaybeDecode()
+		if j.isScalar() || j.Len() == 0 {
+			return 1
+		}
+		switch t := j.(type) {
+		case jsonArray:
+			ret := 0
+			for _, child := range t {
+				ret += countLeaves(child)
+			}
+			return ret
+		case jsonObject:
+			ret := 0
+			for _, kv := range t {
+				ret += countLeaves(kv.v)
+			}
+			return ret
+		default:
+			panic("Impossible case")
+		}
+	}
+
+	for i := 0; i < 1000; i++ {
+		j, err := Random(20, rng)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		allPaths, err := AllPaths(j)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		c := countLeaves(j)
+		if len(allPaths) != c {
+			t.Errorf("len(allPaths) is %d, should be %d", len(allPaths), c)
+		}
+		for _, path := range allPaths {
+			c, err := Contains(j, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !c {
+				t.Errorf("%s should contain path %s", j, path)
+			}
+		}
+	}
+}
+
 // TestPositiveRandomJSONContains randomly generates a JSON document, generates
 // a subdocument of it, then verifies that it matches under contains.
 func TestPositiveRandomJSONContains(t *testing.T) {

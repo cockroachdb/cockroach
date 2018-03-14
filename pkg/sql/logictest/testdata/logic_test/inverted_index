@@ -147,6 +147,9 @@ INSERT INTO d VALUES(18, '[]')
 statement ok
 INSERT INTO d VALUES (29,  NULL)
 
+statement ok
+INSERT INTO d VALUES (30,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
+
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
@@ -458,3 +461,54 @@ SELECT * from d where b @> 'null' ORDER BY a;
 ----
 11  null
 27  [true, false, null, 1.23, "a"]
+
+## Multi-path contains queries
+
+query IT
+SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
+----
+30  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query IT
+SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+30  {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
+----
+index-join  0  index-join  ·       ·                                    (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·       ·                                    (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table   d@foo_inv                            ·                ·
+ │          1  ·           spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd  ·                ·
+ └── scan   1  scan        ·       ·                                    (a, b)           ·
+·           1  ·           table   d@primary                            ·                ·
+·           1  ·           filter  b @> '{"f": "g"}'                    ·                ·
+
+query TITTTTT
+EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+----
+index-join  0  index-join  ·       ·                                                   (a, b)           b=CONST; a!=NULL; key(a)
+ ├── scan   1  scan        ·       ·                                                   (a, b[omitted])  b=CONST; a!=NULL; key(a)
+ │          1  ·           table   d@foo_inv                                           ·                ·
+ │          1  ·           spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd                 ·                ·
+ └── scan   1  scan        ·       ·                                                   (a, b)           ·
+·           1  ·           table   d@primary                                           ·                ·
+·           1  ·           filter  (b @> '{"a": {"d": "e"}}') AND (b @> '{"f": "g"}')  ·                ·
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b"}'
+----
+7  {"a": "b", "c": "d"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b", "f": "g"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "b", "c": "e"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "e", "c": "d"}'
+----

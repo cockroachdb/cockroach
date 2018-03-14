@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -54,7 +55,7 @@ func init() {
 		notRegIMatchOp:      {name: "not-regimatch"},
 		isOp:                {name: "is"},
 		isNotOp:             {name: "is-not"},
-		containsOp:          {name: "contains"},
+		containsOp:          {name: "contains", normalizeFn: normalizeContainsOp},
 		containedByOp:       {name: "contained-by", normalizeFn: normalizeContainedByOp},
 		jsonExistsOp:        {name: "exists"},
 		jsonAllExistsOp:     {name: "all-exists"},
@@ -338,6 +339,48 @@ func normalizeEqOp(e *Expr) {
 		// Note: this transformation is already performed by the TypedExpr
 		// NormalizeExpr, but we may be creating new such expressions above.
 		e.children[0], e.children[1] = rhs, lhs
+	}
+}
+
+func normalizeContainsOp(e *Expr) {
+	if e.op != containsOp {
+		panic(fmt.Sprintf("invalid call on %s", e))
+	}
+	if e.children[1].op != constOp {
+		return
+	}
+	datum := e.children[1].private.(tree.Datum)
+	dJson, ok := datum.(*tree.DJSON)
+	if !ok {
+		return
+	}
+	switch dJson.Type() {
+	case json.ArrayJSONType, json.ObjectJSONType:
+	default:
+		return
+	}
+	if dJson.Len() == 1 {
+		return
+	}
+
+	// Normalize a contains condition on an n-path JSON value to n contains
+	// conditions on a single-path JSON value.
+	paths, err := json.AllPaths(dJson.JSON)
+	if err != nil {
+		panic(fmt.Sprintf("programming error: %+v", err))
+	}
+	e.op = andOp
+	lhs := e.children[0]
+	e.children = make([]*Expr, len(paths))
+	for i := range paths {
+		e.children[i] = &Expr{
+			scalarProps: &scalarProps{typ: types.Bool},
+		}
+		rhs := &Expr{
+			scalarProps: &scalarProps{typ: types.JSON},
+		}
+		initConstExpr(rhs, tree.NewDJSON(paths[i]))
+		initBinaryExpr(e.children[i], containsOp, lhs, rhs)
 	}
 }
 
