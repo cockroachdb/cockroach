@@ -135,9 +135,8 @@ func (ee *execEngine) ConstructScan(table optbase.Table) (exec.Node, error) {
 	}
 	// Create a scanNode.
 	scan := ee.planner.Scan()
-	if err := scan.initTable(
-		context.TODO(), ee.planner, desc, nil /* hints */, publicColumns, columns,
-	); err != nil {
+	colCfg := scanColumnsConfig{wantedColumns: columns}
+	if err := scan.initTable(context.TODO(), ee.planner, desc, nil /* hints */, colCfg); err != nil {
 		return nil, err
 	}
 	var err error
