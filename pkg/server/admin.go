@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -155,6 +156,7 @@ func (s *adminServer) isNotFoundError(err error) bool {
 func (s *adminServer) NewContextAndSessionForRPC(
 	ctx context.Context, args sql.SessionArgs,
 ) (context.Context, *sql.Session) {
+	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.server.AnnotateCtx(ctx)
 	session := sql.NewSession(
 		ctx, args, s.server.sqlExecutor, s.memMetrics, nil /* conn */)
@@ -782,6 +784,8 @@ func (s *adminServer) RangeLog(
 		limit = defaultAPIEventLimit
 	}
 
+	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings())
+
 	// Execute the query.
 	q := makeSQLQuery()
 	q.Append(`SELECT timestamp, "rangeID", "storeID", "eventType", "otherRangeID", info `)
@@ -855,9 +859,17 @@ func (s *adminServer) RangeLog(
 				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", info))
 			}
 			if event.Info.NewDesc != nil {
+				if !includeRawKeys {
+					event.Info.NewDesc.StartKey = nil
+					event.Info.NewDesc.EndKey = nil
+				}
 				prettyInfo.NewDesc = event.Info.NewDesc.String()
 			}
 			if event.Info.UpdatedDesc != nil {
+				if !includeRawKeys {
+					event.Info.UpdatedDesc.StartKey = nil
+					event.Info.UpdatedDesc.EndKey = nil
+				}
 				prettyInfo.UpdatedDesc = event.Info.UpdatedDesc.String()
 			}
 			if event.Info.AddedReplica != nil {
