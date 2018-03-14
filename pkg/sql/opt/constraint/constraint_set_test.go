@@ -17,207 +17,207 @@ package constraint
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, cs *Set, expected string) {
+	keyCtx := testKeyContext()
+	evalCtx := keyCtx.EvalCtx
+
+	test := func(cs *Set, expected string) {
 		t.Helper()
 		if cs.String() != expected {
 			t.Errorf("\nexpected:\n%vactual:\n%v", expected, cs.String())
 		}
 	}
 
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	data := newSpanTestData(&evalCtx)
+	data := newSpanTestData(keyCtx)
 
 	// Simple AND case.
 	// @1 > 20
 	gt20 := NewForColumn(1, &data.spGt20)
-	test(t, &evalCtx, gt20, "/1: (/20 - ]\n")
+	test(gt20, "/1: (/20 - ]\n")
 
 	// @1 <= 40
 	le40 := NewForColumn(1, &data.spLe40)
-	test(t, &evalCtx, le40, "/1: [ - /40]\n")
+	test(le40, "/1: [ - /40]\n")
 
 	// @1 > 20 AND @1 <= 40
-	range2040 := gt20.Intersect(&evalCtx, le40)
-	test(t, &evalCtx, range2040, "/1: (/20 - /40]\n")
-	range2040 = le40.Intersect(&evalCtx, gt20)
-	test(t, &evalCtx, range2040, "/1: (/20 - /40]\n")
+	range2040 := gt20.Intersect(evalCtx, le40)
+	test(range2040, "/1: (/20 - /40]\n")
+	range2040 = le40.Intersect(evalCtx, gt20)
+	test(range2040, "/1: (/20 - /40]\n")
 
 	// Include constraint on multiple columns.
 	// (@1, @2) >= (10, 15)
-	gt1015 := NewForColumns([]opt.ColumnIndex{1, 2}, &data.spGe1015)
-	test(t, &evalCtx, gt1015, "/1/2: [/10/15 - ]\n")
+	gt1015 := NewForColumns([]opt.OrderingColumn{1, 2}, &data.spGe1015)
+	test(gt1015, "/1/2: [/10/15 - ]\n")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40
-	multi2 := le40.Intersect(&evalCtx, gt1015)
-	test(t, &evalCtx, multi2, ""+
+	multi2 := le40.Intersect(evalCtx, gt1015)
+	test(multi2, ""+
 		"/1: [ - /40]\n"+
 		"/1/2: [/10/15 - ]\n")
 
-	multi2 = gt1015.Intersect(&evalCtx, le40)
-	test(t, &evalCtx, multi2, ""+
+	multi2 = gt1015.Intersect(evalCtx, le40)
+	test(multi2, ""+
 		"/1: [ - /40]\n"+
 		"/1/2: [/10/15 - ]\n")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40 AND @2 < 80
 	lt80 := NewForColumn(2, &data.spLt80)
-	multi3 := lt80.Intersect(&evalCtx, multi2)
-	test(t, &evalCtx, multi3, ""+
+	multi3 := lt80.Intersect(evalCtx, multi2)
+	test(multi3, ""+
 		"/1: [ - /40]\n"+
 		"/1/2: [/10/15 - ]\n"+
 		"/2: [ - /80)\n")
 
-	multi3 = multi2.Intersect(&evalCtx, lt80)
-	test(t, &evalCtx, multi3, ""+
+	multi3 = multi2.Intersect(evalCtx, lt80)
+	test(multi3, ""+
 		"/1: [ - /40]\n"+
 		"/1/2: [/10/15 - ]\n"+
 		"/2: [ - /80)\n")
 
 	// Mismatched number of constraints in each set.
 	eq10 := NewForColumn(1, &data.spEq10)
-	mismatched := eq10.Intersect(&evalCtx, multi3)
-	test(t, &evalCtx, mismatched, ""+
+	mismatched := eq10.Intersect(evalCtx, multi3)
+	test(mismatched, ""+
 		"/1: [/10 - /10]\n"+
 		"/1/2: [/10/15 - ]\n"+
 		"/2: [ - /80)\n")
 
-	mismatched = multi3.Intersect(&evalCtx, eq10)
-	test(t, &evalCtx, mismatched, ""+
+	mismatched = multi3.Intersect(evalCtx, eq10)
+	test(mismatched, ""+
 		"/1: [/10 - /10]\n"+
 		"/1/2: [/10/15 - ]\n"+
 		"/2: [ - /80)\n")
 
 	// Multiple intersecting constraints on different columns.
-	diffCols := eq10.Intersect(&evalCtx, NewForColumn(2, &data.spGt20))
-	res := diffCols.Intersect(&evalCtx, multi3)
-	test(t, &evalCtx, res, ""+
+	diffCols := eq10.Intersect(evalCtx, NewForColumn(2, &data.spGt20))
+	res := diffCols.Intersect(evalCtx, multi3)
+	test(res, ""+
 		"/1: [/10 - /10]\n"+
 		"/1/2: [/10/15 - ]\n"+
 		"/2: (/20 - /80)\n")
 
-	res = multi3.Intersect(&evalCtx, diffCols)
-	test(t, &evalCtx, res, ""+
+	res = multi3.Intersect(evalCtx, diffCols)
+	test(res, ""+
 		"/1: [/10 - /10]\n"+
 		"/1/2: [/10/15 - ]\n"+
 		"/2: (/20 - /80)\n")
 
 	// Intersection results in Contradiction.
-	res = eq10.Intersect(&evalCtx, gt20)
-	test(t, &evalCtx, res, "contradiction\n")
-	res = gt20.Intersect(&evalCtx, eq10)
-	test(t, &evalCtx, res, "contradiction\n")
+	res = eq10.Intersect(evalCtx, gt20)
+	test(res, "contradiction\n")
+	res = gt20.Intersect(evalCtx, eq10)
+	test(res, "contradiction\n")
 
 	// Intersect with Unconstrained (identity op).
-	res = range2040.Intersect(&evalCtx, Unconstrained)
-	test(t, &evalCtx, res, "/1: (/20 - /40]\n")
-	res = Unconstrained.Intersect(&evalCtx, range2040)
-	test(t, &evalCtx, res, "/1: (/20 - /40]\n")
+	res = range2040.Intersect(evalCtx, Unconstrained)
+	test(res, "/1: (/20 - /40]\n")
+	res = Unconstrained.Intersect(evalCtx, range2040)
+	test(res, "/1: (/20 - /40]\n")
 
 	// Intersect with Contradiction (always contradiction).
-	res = eq10.Intersect(&evalCtx, Contradiction)
-	test(t, &evalCtx, res, "contradiction\n")
-	res = Contradiction.Intersect(&evalCtx, eq10)
-	test(t, &evalCtx, res, "contradiction\n")
+	res = eq10.Intersect(evalCtx, Contradiction)
+	test(res, "contradiction\n")
+	res = Contradiction.Intersect(evalCtx, eq10)
+	test(res, "contradiction\n")
 }
 
 func TestConstraintSetUnion(t *testing.T) {
-	test := func(t *testing.T, evalCtx *tree.EvalContext, cs *Set, expected string) {
+	keyCtx := testKeyContext()
+	evalCtx := keyCtx.EvalCtx
+	data := newSpanTestData(keyCtx)
+
+	test := func(cs *Set, expected string) {
 		t.Helper()
 		if cs.String() != expected {
 			t.Errorf("\nexpected:\n%vactual:\n%v", expected, cs.String())
 		}
 	}
 
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	data := newSpanTestData(&evalCtx)
-
 	// Simple OR case.
 	// @1 > 20
 	gt20 := NewForColumn(1, &data.spGt20)
-	test(t, &evalCtx, gt20, "/1: (/20 - ]\n")
+	test(gt20, "/1: (/20 - ]\n")
 
 	// @1 = 10
 	eq10 := NewForColumn(1, &data.spEq10)
-	test(t, &evalCtx, eq10, "/1: [/10 - /10]\n")
+	test(eq10, "/1: [/10 - /10]\n")
 
 	// @1 > 20 OR @1 = 10
-	gt20eq10 := gt20.Union(&evalCtx, eq10)
-	test(t, &evalCtx, gt20eq10, "/1: [/10 - /10] (/20 - ]\n")
-	gt20eq10 = eq10.Union(&evalCtx, gt20)
-	test(t, &evalCtx, gt20eq10, "/1: [/10 - /10] (/20 - ]\n")
+	gt20eq10 := gt20.Union(evalCtx, eq10)
+	test(gt20eq10, "/1: [/10 - /10] (/20 - ]\n")
+	gt20eq10 = eq10.Union(evalCtx, gt20)
+	test(gt20eq10, "/1: [/10 - /10] (/20 - ]\n")
 
 	// Combine constraints that result in full span and unconstrained result.
 	// @1 > 20 OR @1 = 10 OR @1 <= 40
 	le40 := NewForColumn(1, &data.spLe40)
-	res := gt20eq10.Union(&evalCtx, le40)
-	test(t, &evalCtx, res, "unconstrained\n")
-	res = le40.Union(&evalCtx, gt20eq10)
-	test(t, &evalCtx, res, "unconstrained\n")
+	res := gt20eq10.Union(evalCtx, le40)
+	test(res, "unconstrained\n")
+	res = le40.Union(evalCtx, gt20eq10)
+	test(res, "unconstrained\n")
 
 	// Include constraint on multiple columns and union with itself.
 	// (@1, @2) >= (10, 15)
-	gt1015 := NewForColumns([]opt.ColumnIndex{1, 2}, &data.spGe1015)
-	res = gt1015.Union(&evalCtx, gt1015)
-	test(t, &evalCtx, res, "/1/2: [/10/15 - ]\n")
+	gt1015 := NewForColumns([]opt.OrderingColumn{1, 2}, &data.spGe1015)
+	res = gt1015.Union(evalCtx, gt1015)
+	test(res, "/1/2: [/10/15 - ]\n")
 
 	// Union incompatible constraints (both are discarded).
 	// (@1, @2) >= (10, 15) OR @2 < 80
 	lt80 := NewForColumn(2, &data.spLt80)
-	res = gt1015.Union(&evalCtx, lt80)
-	test(t, &evalCtx, res, "unconstrained\n")
-	res = lt80.Union(&evalCtx, gt1015)
-	test(t, &evalCtx, res, "unconstrained\n")
+	res = gt1015.Union(evalCtx, lt80)
+	test(res, "unconstrained\n")
+	res = lt80.Union(evalCtx, gt1015)
+	test(res, "unconstrained\n")
 
 	// Union two sets with multiple and differing numbers of constraints.
 	// ((@1, @2) >= (10, 15) AND @2 < 80 AND @1 > 20) OR (@1 = 10 AND @2 = 80)
-	multi3 := gt1015.Intersect(&evalCtx, lt80)
-	multi3 = multi3.Intersect(&evalCtx, gt20)
+	multi3 := gt1015.Intersect(evalCtx, lt80)
+	multi3 = multi3.Intersect(evalCtx, gt20)
 
 	eq80 := NewForColumn(2, &data.spEq80)
-	multi2 := eq10.Intersect(&evalCtx, eq80)
+	multi2 := eq10.Intersect(evalCtx, eq80)
 
-	res = multi3.Union(&evalCtx, multi2)
-	test(t, &evalCtx, res, ""+
+	res = multi3.Union(evalCtx, multi2)
+	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]\n"+
 		"/2: [ - /80]\n")
-	res = multi2.Union(&evalCtx, multi3)
-	test(t, &evalCtx, res, ""+
+	res = multi2.Union(evalCtx, multi3)
+	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]\n"+
 		"/2: [ - /80]\n")
 
 	// Do same as previous, but in different order so that discarded constraint
 	// is at end of list rather than beginning.
 	// (@1 > 20 AND @2 < 80 AND (@1, @2) >= (10, 15)) OR (@1 = 10 AND @2 = 80)
-	multi3 = gt20.Intersect(&evalCtx, lt80)
-	multi3 = multi3.Intersect(&evalCtx, gt1015)
+	multi3 = gt20.Intersect(evalCtx, lt80)
+	multi3 = multi3.Intersect(evalCtx, gt1015)
 
-	res = multi3.Union(&evalCtx, multi2)
-	test(t, &evalCtx, res, ""+
+	res = multi3.Union(evalCtx, multi2)
+	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]\n"+
 		"/2: [ - /80]\n")
-	res = multi2.Union(&evalCtx, multi3)
-	test(t, &evalCtx, res, ""+
+	res = multi2.Union(evalCtx, multi3)
+	test(res, ""+
 		"/1: [/10 - /10] (/20 - ]\n"+
 		"/2: [ - /80]\n")
 
 	// Union with Unconstrained (always unconstrained).
-	res = gt20.Union(&evalCtx, Unconstrained)
-	test(t, &evalCtx, res, "unconstrained\n")
-	res = Unconstrained.Union(&evalCtx, gt20)
-	test(t, &evalCtx, res, "unconstrained\n")
+	res = gt20.Union(evalCtx, Unconstrained)
+	test(res, "unconstrained\n")
+	res = Unconstrained.Union(evalCtx, gt20)
+	test(res, "unconstrained\n")
 
 	// Union with Contradiction (identity op).
-	res = eq10.Union(&evalCtx, Contradiction)
-	test(t, &evalCtx, res, "/1: [/10 - /10]\n")
-	res = Contradiction.Union(&evalCtx, eq10)
-	test(t, &evalCtx, res, "/1: [/10 - /10]\n")
+	res = eq10.Union(evalCtx, Contradiction)
+	test(res, "/1: [/10 - /10]\n")
+	res = Contradiction.Union(evalCtx, eq10)
+	test(res, "/1: [/10 - /10]\n")
 }
 
 type spanTestData struct {
@@ -229,7 +229,7 @@ type spanTestData struct {
 	spGe1015 Span // [/10/15 - ]
 }
 
-func newSpanTestData(evalCtx *tree.EvalContext) *spanTestData {
+func newSpanTestData(keyCtx KeyContext) *spanTestData {
 	data := &spanTestData{}
 
 	key10 := MakeKey(tree.NewDInt(10))
@@ -239,23 +239,23 @@ func newSpanTestData(evalCtx *tree.EvalContext) *spanTestData {
 	key80 := MakeKey(tree.NewDInt(80))
 
 	// [/10 - /10]
-	data.spEq10.Set(evalCtx, key10, IncludeBoundary, key10, IncludeBoundary)
+	data.spEq10.Set(keyCtx, key10, IncludeBoundary, key10, IncludeBoundary)
 
 	// (/20 - ]
-	data.spGt20.Set(evalCtx, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	data.spGt20.Set(keyCtx, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
 
 	// [ - /40]
-	data.spLe40.Set(evalCtx, EmptyKey, IncludeBoundary, key40, IncludeBoundary)
+	data.spLe40.Set(keyCtx, EmptyKey, IncludeBoundary, key40, IncludeBoundary)
 
 	// [ - /80)
-	data.spLt80.Set(evalCtx, EmptyKey, IncludeBoundary, key80, ExcludeBoundary)
+	data.spLt80.Set(keyCtx, EmptyKey, IncludeBoundary, key80, ExcludeBoundary)
 
 	// [/80 - /80]
-	data.spEq80.Set(evalCtx, key80, IncludeBoundary, key80, IncludeBoundary)
+	data.spEq80.Set(keyCtx, key80, IncludeBoundary, key80, IncludeBoundary)
 
 	// [/10/15 - ]
 	key1015 := key10.Concat(key15)
-	data.spGe1015.Set(evalCtx, key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
+	data.spGe1015.Set(keyCtx, key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	return data
 }
