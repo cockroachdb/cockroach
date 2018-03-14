@@ -10,7 +10,16 @@ import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
-import { getFilters, localityToString, NodeFilterList } from "src/views/reports/components/nodeFilterList";
+import { FixLong } from "src/util/fixLong";
+import {
+  getFilters,
+  localityToString,
+  NodeFilterList,
+  NodeFilterListProps,
+} from "src/views/reports/components/nodeFilterList";
+import Loading from "src/views/shared/components/loading";
+
+import spinner from "assets/spinner.gif";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
@@ -156,12 +165,12 @@ function createHeaderCell(staleIDs: Set<number>, id: Identity, key: string) {
   </td>;
 }
 
-const loading = (
-  <div className="section">
-    <h1>Network Diagnostics</h1>
-    <h2>Loading cluster status...</h2>
-  </div>
-);
+function contentAvailable(nodesSummary: NodesSummary) {
+  return !_.isUndefined(nodesSummary) &&
+    !_.isEmpty(nodesSummary.nodeStatuses) &&
+    !_.isEmpty(nodesSummary.nodeStatusByID) &&
+    !_.isEmpty(nodesSummary.nodeIDs);
+}
 
 /**
  * Renders the Network Diagnostics Report page.
@@ -216,7 +225,7 @@ class Network extends React.Component<NetworkProps, {}> {
           X
         </td>;
       }
-      const latency = NanoToMilli(a[nodeIDb].latency.toNumber());
+      const latency = NanoToMilli(FixLong(a[nodeIDb].latency).toNumber());
       const className = classNames({
         "network-table__cell": true,
         "network-table__cell--stddev-minus-2": latency < stddevMinus2,
@@ -319,13 +328,10 @@ class Network extends React.Component<NetworkProps, {}> {
     ];
   }
 
-  render() {
-    const { nodesSummary } = this.props;
-    if (_.isEmpty(nodesSummary.nodeIDs) || _.isEmpty(nodesSummary.livenessStatusByNodeID)) {
-      return loading;
+  renderContent(nodesSummary: NodesSummary, filters: NodeFilterListProps) {
+    if (!contentAvailable(nodesSummary)) {
+      return null;
     }
-
-    const filters = getFilters(this.props.location);
 
     // List of node identities.
     const identityByID: Map<number, Identity> = new Map();
@@ -375,7 +381,7 @@ class Network extends React.Component<NetworkProps, {}> {
       _.chain(healthyIDs)
         .without(nodeIDa)
         .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].activity[nodeIDb])
-        .map(activity => NanoToMilli(activity.latency.toNumber()))
+        .map(activity => NanoToMilli(FixLong(activity.latency).toNumber()))
         .filter(ms => _.isFinite(ms) && ms > 0)
         .value()
     ));
@@ -399,17 +405,34 @@ class Network extends React.Component<NetworkProps, {}> {
     let content: JSX.Element[] = [];
     if (_.isEmpty(healthyIDs)) {
       content = [<h2>No healthy nodes match the filters</h2>];
+    } else if (latencies.length < 1) {
+      content = [<h2>Cannot show latency chart without two healthy nodes.</h2>];
     } else {
       content = this.renderLatencyTable(latencies, staleIDs, nodesSummary, displayIdentities);
     }
-
     return (
-      <div className="section">
-        <h1>Network Diagnostics</h1>
-        <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
+      <div>
         {content}
         {staleTable(staleIdentities)}
         {noConnectionTable(noConnections)}
+      </div>
+    );
+  }
+
+  render() {
+    const { nodesSummary } = this.props;
+    const filters = getFilters(this.props.location);
+    return (
+      <div className="section">
+        <h1>Network Diagnostics</h1>
+        <Loading
+          loading={!contentAvailable(nodesSummary)}
+          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+          image={spinner}
+        >
+          <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
+          {this.renderContent(nodesSummary, filters)}
+        </Loading>
       </div>
     );
   }

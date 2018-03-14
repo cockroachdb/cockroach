@@ -18,5 +18,9 @@ export default function Loading(props: LoadingProps) {
   if (props.loading) {
     return <div className={props.className} style={image} />;
   }
-  return props.children as JSX.Element;
+  return (
+    <div>
+      {props.children}
+    </div>
+  );
 }
