@@ -113,7 +113,8 @@ func (p *joinPredicate) tryAddEqualityFilter(
 	}
 
 	if !lhs.ResolvedType().Equivalent(rhs.ResolvedType()) {
-		// We can't have equality columns of different types (#22519).
+		// Issue #22519: we can't have two equality columns of mismatched types
+		// because the hash-joiner assumes the encodings are the same.
 		return false
 	}
 
