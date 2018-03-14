@@ -1360,7 +1360,7 @@ FROM pg_proc p
 JOIN pg_type t ON t.typinput = p.oid
 WHERE t.typname = '_int4'
 ----
-2590763490  array_in  array_in
+639449980  array_in  array_in
 
 ## #16285
 ## int2vectors should be 0-indexed
@@ -1368,6 +1368,11 @@ query I
 SELECT COUNT(*) FROM pg_catalog.pg_index WHERE indkey[0] IS NULL;
 ----
 0
+
+## Ensure no two builtins have the same oid.
+query I
+SELECT c FROM (SELECT oid, COUNT(*) as c FROM pg_catalog.pg_proc GROUP BY oid) WHERE c > 1
+----
 
 ## TODO(masha): #16769
 #statement ok
