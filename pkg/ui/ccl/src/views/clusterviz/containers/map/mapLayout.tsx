@@ -6,8 +6,10 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
+import _ from "lodash";
 import * as d3 from "d3";
 import React from "react";
+import { createSelector } from "reselect";
 
 import { LocalityTree } from "src/redux/localities";
 import { LocationTree } from "src/redux/locations";
@@ -29,14 +31,34 @@ interface MapLayoutProps {
   viewportSize: [number, number];
 }
 
+interface LocalityLocation {
+  locality: LocalityTree;
+  location: any;
+}
+
 interface MapLayoutState {
   zoomTransform: ZoomTransformer;
+  prevLocalityLocations: LocalityLocation[];
 }
 
 export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   gEl: any;
   zoom: d3.behavior.Zoom<any>;
   maxLatitude = 80;
+
+  localityLocations = createSelector(
+    (props: MapLayoutProps) => props.localityTree,
+    (props: MapLayoutProps) => props.locationTree,
+    (localityTree, locationTree) => {
+      return _.map(getChildLocalities(localityTree), locality => {
+        const location = findOrCalculateLocation(locationTree, locality);
+        return {
+          locality,
+          location,
+        };
+      });
+    },
+  );
 
   constructor(props: MapLayoutProps) {
     super(props);
@@ -59,7 +81,10 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     // Set initial zoom state.
     const zoomTransform = new ZoomTransformer(bounds, props.viewportSize);
     this.updateZoomState(zoomTransform);
-    this.state = { zoomTransform };
+    this.state = {
+      zoomTransform,
+      prevLocalityLocations: [],
+    };
   }
 
   updateZoomState(zt: ZoomTransformer) {
@@ -81,19 +106,52 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     this.setState({ zoomTransform });
   }
 
+  // rezoomToLocalities is called to properly re-zoom the map to display all
+  // localities.
+  rezoomToLocalities() {
+    const { prevLocalityLocations } = this.state;
+    const localityLocations = this.localityLocations(this.props);
+
+    // Deep comparison to previous locality set. If anything has changed, this
+    // indicates that the user has navigated to a different level of the
+    // locality tree OR that new data has been added to the currently visible
+    // locality.
+    if (_.isEqual(localityLocations, prevLocalityLocations)) {
+      return;
+    }
+
+    const projection = d3.geo.mercator();
+    const boxes = localityLocations.map(localityLocation => {
+      const { location } = localityLocation;
+      const center = projection([location.longitude, location.latitude]);
+
+      // Create a 100 unit box centered on each locality. This is an arbitrary
+      // size in order to reserve enough space to display each locality.
+      return new Box(center[0] - 50, center[1] - 50, 100, 100);
+    });
+    const zoomTransform = this.state.zoomTransform.zoomedToBox(Box.boundingBox(...boxes));
+    this.updateZoomState(zoomTransform);
+    this.setState({
+      zoomTransform,
+      prevLocalityLocations: localityLocations,
+    });
+  }
+
   componentDidMount() {
     d3.select(this.gEl).call(this.zoom);
+    this.rezoomToLocalities();
   }
 
   componentWillReceiveProps(props: MapLayoutProps) {
     const zoomTransform = this.state.zoomTransform.withViewportSize(props.viewportSize);
     this.updateZoomState(zoomTransform);
     this.setState({ zoomTransform });
+    this.rezoomToLocalities();
   }
 
   renderChildLocalities(projection: d3.geo.Projection) {
-    return getChildLocalities(this.props.localityTree).map((locality) => {
-      const location = findOrCalculateLocation(this.props.locationTree, locality);
+    return this.localityLocations(this.props).map((localityLocation) => {
+      const { locality, location } = localityLocation;
       const center = projection([location.longitude, location.latitude]);
 
       return (
