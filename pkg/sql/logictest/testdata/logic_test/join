@@ -2345,3 +2345,34 @@ NULL  44    51
 NULL  NULL  52
 NULL  42    53
 NULL  45    45
+
+# Regression test for #23609: make sure that the type of the merged column
+# is int (not unknown).
+query TT colnames
+SELECT "Type", "Columns" FROM [EXPLAIN (TYPES)
+  SELECT column1, column1+1
+  FROM
+    (SELECT * FROM
+      (VALUES (NULL, NULL)) AS t
+        NATURAL FULL OUTER JOIN
+      (VALUES (1, 1)) AS u)]
+WHERE "Type" != ''
+----
+Type    Columns
+render  (column1 int, "column1 + 1" int)
+render  (column1 int, column2[omitted] int)
+render  (column1 int, column2[omitted] int, column1[hidden,omitted] unknown, column2[hidden,omitted] unknown, column1[hidden,omitted] int, column2[hidden,omitted] int)
+join    (column1 unknown, column2[omitted] unknown, column1 int, column2[omitted] int)
+values  (column1 unknown, column2 unknown)
+values  (column1 int, column2 int)
+
+query II rowsort
+SELECT column1, column1+1
+FROM
+  (SELECT * FROM
+    (VALUES (NULL, NULL)) AS t
+      NATURAL FULL OUTER JOIN
+    (VALUES (1, 1)) AS u)
+----
+1     2
+NULL  NULL
