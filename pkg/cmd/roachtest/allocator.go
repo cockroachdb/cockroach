@@ -31,14 +31,15 @@ func init() {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
 		ctx := context.Background()
-		c := newCluster(ctx, t, end, "--vmodule", "allocator=5,allocator_scorer=5,replicate_queue=5")
+		c := newCluster(ctx, t, end)
 		defer c.Destroy(ctx)
 
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 
 		// Start the first `start` nodes and restore the fixture
-		c.Start(ctx, c.Range(1, start))
+		c.Start(ctx, c.Range(1, start),
+			startArgs("--args", "--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5"))
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
