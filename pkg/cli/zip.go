@@ -188,6 +188,17 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
+			if heap, err := status.Profile(ctx, &serverpb.ProfileRequest{
+				NodeId: id,
+				Type:   serverpb.ProfileRequest_HEAP,
+			}); err != nil {
+				if err := z.createError(prefix+"/heap", err); err != nil {
+					return err
+				}
+			} else if err := z.createRaw(prefix+"/heap", heap.Data); err != nil {
+				return err
+			}
+
 			if logs, err := status.LogFilesList(
 				ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
 				if err := z.createError(prefix+"/logs", err); err != nil {
