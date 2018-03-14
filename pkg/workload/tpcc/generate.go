@@ -18,6 +18,8 @@ package tpcc
 import (
 	"math/rand"
 	"strconv"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // These constants are all set by the spec - they're not knobs. Don't change
@@ -188,12 +190,13 @@ func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
 	rng := w.rngPool.Get().(*rand.Rand)
 	defer w.rngPool.Put(rng)
 
+	rowID := uuid.MakeV4().String()
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numCustomersPerWarehouse)
 
 	return []interface{}{
-		cID, dID, wID, dID, wID, w.nowString, 10.00, randAString(rng, 12, 24),
+		rowID, cID, dID, wID, dID, wID, w.nowString, 10.00, randAString(rng, 12, 24),
 	}
 }
 

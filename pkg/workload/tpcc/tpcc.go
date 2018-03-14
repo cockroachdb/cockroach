@@ -67,7 +67,7 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
-	Version: `1.0.0`,
+	Version: `2.0.0`,
 	New: func() workload.Generator {
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
