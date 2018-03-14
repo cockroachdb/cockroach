@@ -37,6 +37,9 @@ import (
 )
 
 var (
+	// crashReportEnv controls the version reported in crash reports
+	crashReportEnv = "development"
+
 	// DiagnosticsReportingEnabled wraps "diagnostics.reporting.enabled".
 	//
 	// "diagnostics.reporting.enabled" enables reporting of metrics related to a
@@ -206,7 +209,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 
 var crashReportURL = func() string {
 	var defaultURL string
-	if build.IsRelease() {
+	if build.SeemsOfficial() {
 		defaultURL = "https://ignored:ignored@errors.cockroachdb.com/sentry"
 	}
 	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)
@@ -223,7 +226,7 @@ func SetupCrashReporter(ctx context.Context, cmd string) {
 	}
 	info := build.GetInfo()
 	raven.SetRelease(info.Tag)
-	raven.SetEnvironment(info.Type)
+	raven.SetEnvironment(crashReportEnv)
 	raven.SetTagsContext(map[string]string{
 		"cmd":          cmd,
 		"platform":     info.Platform,

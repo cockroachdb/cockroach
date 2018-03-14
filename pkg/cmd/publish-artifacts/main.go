@@ -219,6 +219,9 @@ func main() {
 				args = append(args, fmt.Sprintf("%s=%s", "SUFFIX", extraArgs.suffix))
 				args = append(args, fmt.Sprintf("%s=%s", "TAGS", extraArgs.tags))
 				args = append(args, fmt.Sprintf("%s=%s", "BUILDCHANNEL", "official-binary"))
+				if *isRelease {
+					args = append(args, fmt.Sprintf("%s=%s", "BUILD_TAGGED_RELEASE", "true"))
+				}
 				cmd := exec.Command("make", args...)
 				cmd.Dir = pkg.Dir
 				cmd.Stdout = os.Stdout
@@ -226,6 +229,7 @@ func main() {
 				log.Printf("%s %s", cmd.Env, cmd.Args)
 				if err := cmd.Run(); err != nil {
 					log.Fatalf("%s: %s", cmd.Args, err)
+
 				}
 			}
 

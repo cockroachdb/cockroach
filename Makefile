@@ -145,8 +145,6 @@ override LDFLAGS += $(MSAN_LDFLAGS)
 export CFLAGS
 export CXXFLAGS
 export LDFLAGS
-else ifeq ($(TYPE),portable)
-override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
 else ifeq ($(TYPE),release-linux-gnu)
 # We use a custom toolchain to target old Linux and glibc versions. However,
 # this toolchain's libstdc++ version is quite recent and must be statically
@@ -155,9 +153,9 @@ XHOST_TRIPLE := x86_64-unknown-linux-gnu
 override LINKFLAGS += -s -w -extldflags "-static-libgcc -static-libstdc++"
 override GOFLAGS += -installsuffix release-gnu
 override SUFFIX := $(SUFFIX)-linux-2.6.32-gnu-amd64
-BUILD_TYPE := release-gnu
+BUILD_TYPE := release
 else ifeq ($(TYPE),release-linux-musl)
-BUILD_TYPE := release-musl
+BUILD_TYPE := release
 XHOST_TRIPLE := x86_64-unknown-linux-musl
 override LINKFLAGS += -s -w -extldflags "-static"
 override GOFLAGS += -installsuffix release-musl
@@ -418,9 +416,6 @@ CMAKE_FLAGS += -DCMAKE_TARGET_MESSAGES=OFF
 override USE_STDMALLOC := $(findstring stdmalloc,$(TAGS))
 STDMALLOC_SUFFIX := $(if $(USE_STDMALLOC),_stdmalloc)
 
-# TODO(benesch): Give TYPE clearer semantics to avoid this spaghetti.
-PORTABLE := $(or $(findstring portable,$(TYPE)),$(findstring release,$(TYPE)))
-
 ENABLE_ROCKSDB_ASSERTIONS := $(findstring race,$(TAGS))
 
 ifdef XHOST_TRIPLE
@@ -592,7 +587,7 @@ $(ROCKSDB_DIR)/Makefile: $(C_DEPS_DIR)/rocksdb-rebuild | $(SUBMODULES_TARGET) li
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/rocksdb-rebuild. See above for rationale.
 	cd $(ROCKSDB_DIR) && cmake $(XCMAKE_FLAGS) $(ROCKSDB_SRC_DIR) \
-	  $(if $(PORTABLE),-DPORTABLE=ON) \
+	  $(if $(findstring release,$(BUILD_TYPE)),-DPORTABLE=ON) \
 	  -DSNAPPY_LIBRARIES=$(SNAPPY_DIR)/libsnappy.a -DSNAPPY_INCLUDE_DIR="$(SNAPPY_SRC_DIR);$(SNAPPY_DIR)" -DWITH_SNAPPY=ON \
 	  $(if $(USE_STDMALLOC),,-DJEMALLOC_LIBRARIES=$(JEMALLOC_DIR)/lib/libjemalloc.a -DJEMALLOC_INCLUDE_DIR=$(JEMALLOC_DIR)/include -DWITH_JEMALLOC=ON) \
 	  -DCMAKE_CXX_FLAGS="$(if $(findstring x86_64,$(TARGET_TRIPLE)),-msse3) $(if $(ENABLE_ROCKSDB_ASSERTIONS),,-DNDEBUG)"
@@ -716,7 +711,9 @@ $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lint
 	-X "github.com/cockroachdb/cockroach/pkg/build.tag=$(shell cat .buildinfo/tag)" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.utcTime=$(shell date -u '+%Y/%m/%d %H:%M:%S')" \
 	-X "github.com/cockroachdb/cockroach/pkg/build.rev=$(shell cat .buildinfo/rev)" \
-	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)")
+	-X "github.com/cockroachdb/cockroach/pkg/build.cgoTargetTriple=$(TARGET_TRIPLE)" \
+	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)") \
+	$(if $(BUILD_TAGGED_RELEASE),-X "github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv=$(shell cat .buildinfo/tag)")
 
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
