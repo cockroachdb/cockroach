@@ -290,6 +290,9 @@ func (n *upsertNode) startExec(params runParams) error {
 	return nil
 }
 
+// spooled implements the planNodeSpooled interface.
+func (n *upsertNode) spooled() {}
+
 func (n *upsertNode) FastPathResults() (int, bool) {
 	if n.run.rowsUpserted != nil {
 		return 0, false
