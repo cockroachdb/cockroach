@@ -145,7 +145,7 @@ func (ee *execEngine) ConstructScan(
 	// Create a scanNode.
 	scan := ee.planner.Scan()
 	if err := scan.initTable(
-		context.TODO(), ee.planner, desc, nil /* hints */, publicColumns, nil, /* wantedColumns */
+		context.TODO(), ee.planner, desc, nil /* hints */, publicColumnsCfg,
 	); err != nil {
 		return nil, err
 	}
