@@ -1235,7 +1235,7 @@ func (e *Executor) execSingleStatement(
 		panic("execStmt called outside of a txn")
 	}
 
-	queryID := e.generateQueryID()
+	queryID := e.generateID()
 
 	queryMeta := &queryMeta{
 		start: session.phaseTimes[sessionEndParse],
@@ -2334,9 +2334,9 @@ func (e *Executor) updateStmtCounts(stmt Statement) {
 	}
 }
 
-// generateQueryID generates a unique ID for a query based on the node's
-// ID and its current HLC timestamp.
-func (e *Executor) generateQueryID() uint128.Uint128 {
+// generateID generates a unique ID based on the node's ID and its current HLC
+// timestamp, which can be used as an ID for a query or a session.
+func (e *Executor) generateID() uint128.Uint128 {
 	timestamp := e.cfg.Clock.Now()
 
 	loInt := (uint64)(e.cfg.NodeID.Get())

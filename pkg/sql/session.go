@@ -271,6 +271,8 @@ type Session struct {
 	// noCopy is placed here to guarantee that Session objects are not
 	// copied.
 	noCopy util.NoCopy
+
+	sessionID uint128.Uint128
 }
 
 // sessionDefaults mirrors fields in Session, for restoring default
@@ -292,24 +294,24 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	store map[registrySession]struct{}
+	store map[uint128.Uint128]registrySession
 }
 
 // MakeSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
 func MakeSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{store: make(map[registrySession]struct{})}
+	return &SessionRegistry{store: make(map[uint128.Uint128]registrySession)}
 }
 
-func (r *SessionRegistry) register(s registrySession) {
+func (r *SessionRegistry) register(id uint128.Uint128, s registrySession) {
 	r.Lock()
-	r.store[s] = struct{}{}
+	r.store[id] = s
 	r.Unlock()
 }
 
-func (r *SessionRegistry) deregister(s registrySession) {
+func (r *SessionRegistry) deregister(id uint128.Uint128) {
 	r.Lock()
-	delete(r.store, s)
+	delete(r.store, id)
 	r.Unlock()
 }
 
@@ -331,7 +333,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	r.Lock()
 	defer r.Unlock()
 
-	for session := range r.store {
+	for _, session := range r.store {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -352,7 +354,7 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 
 	response := make([]serverpb.Session, 0, len(r.store))
 
-	for s := range r.store {
+	for _, s := range r.store {
 		response = append(response, s.serialize())
 	}
 
@@ -429,7 +431,8 @@ func NewSession(
 	}
 	s.context, s.cancel = contextutil.WithCancel(ctx)
 
-	e.cfg.SessionRegistry.register(s)
+	s.sessionID = e.generateID()
+	e.cfg.SessionRegistry.register(s.sessionID, s)
 
 	return s
 }
@@ -500,7 +503,7 @@ func (s *Session) Finish(e *Executor) {
 		}
 	}
 	// Clear this session from the sessions registry.
-	e.cfg.SessionRegistry.deregister(s)
+	e.cfg.SessionRegistry.deregister(s.sessionID)
 
 	// This will stop the heartbeating of the of the txn record.
 	// TODO(andrei): This shouldn't have any effect, since, if there was a
@@ -867,6 +870,7 @@ func (s *Session) serialize() serverpb.Session {
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
+		ID:              s.sessionID.String(),
 	}
 }
 

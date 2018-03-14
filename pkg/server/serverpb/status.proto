@@ -396,6 +396,8 @@ message Session {
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"];
   // SQL string of the last query executed on this session.
   string last_active_query = 8;
+  // ID of the session (uint128 represented as a hexadecimal string).
+  string id = 9 [(gogoproto.customname) = "ID"];
 }
 
 // An error wrapper object for ListSessionsResponse.

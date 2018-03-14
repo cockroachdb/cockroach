@@ -717,6 +717,8 @@ type connExecutor struct {
 	// curStmt is the statement that's currently being prepared or executed, if
 	// any. This is printed by high-level panic recovery.
 	curStmt tree.Statement
+
+	sessionID uint128.Uint128
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -865,8 +867,9 @@ func (ex *connExecutor) Ctx() context.Context {
 // Returned errors have not been communicated to the client: it's up to the
 // caller to do that if it wants.
 func (ex *connExecutor) run(ctx context.Context) error {
-	ex.server.cfg.SessionRegistry.register(ex)
-	defer ex.server.cfg.SessionRegistry.deregister(ex)
+	ex.sessionID = ex.generateID()
+	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
+	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
 	ex.ctxHolder.connCtx = ctx
 	var draining bool
@@ -1298,9 +1301,10 @@ func stmtHasNoData(stmt tree.Statement) bool {
 	return stmt == nil || stmt.StatementType() != tree.Rows
 }
 
-// generateQueryID generates a unique ID for a query based on the node's
-// ID and its current HLC timestamp.
-func (ex *connExecutor) generateQueryID() uint128.Uint128 {
+// generateID generates a unique ID based on the node's ID and its current HLC
+// timestamp. These IDs are either scoped at the query level or at the session
+// level.
+func (ex *connExecutor) generateID() uint128.Uint128 {
 	timestamp := ex.server.cfg.Clock.Now()
 
 	loInt := (uint64)(ex.server.cfg.NodeID.Get())
@@ -1794,6 +1798,7 @@ func (ex *connExecutor) serialize() serverpb.Session {
 		ActiveQueries:   activeQueries,
 		KvTxnID:         kvTxnID,
 		LastActiveQuery: lastActiveQuery,
+		ID:              ex.sessionID.String(),
 	}
 }
 

@@ -69,7 +69,7 @@ func (ex *connExecutor) execStmt(
 		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
 	}
 
-	queryID := ex.generateQueryID()
+	queryID := ex.generateID()
 	stmt.queryID = queryID
 
 	// Dispatch the statement for execution based on the current state.
