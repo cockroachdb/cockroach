@@ -16,16 +16,23 @@
 package main
 
 import (
+	"context"
 	"io/ioutil"
 	"testing"
 )
 
 func TestRegistryRun(t *testing.T) {
 	r := &registry{m: make(map[string]*test), out: ioutil.Discard}
-	r.Add("pass", func(t *test) {
+	r.Add(testSpec{
+		Name: "pass",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+		},
 	})
-	r.Add("fail", func(t *test) {
-		t.Fatal("failed")
+	r.Add(testSpec{
+		Name: "fail",
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
 	})
 
 	testCases := []struct {

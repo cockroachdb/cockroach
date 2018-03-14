@@ -89,11 +89,11 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 			failTests = append(failTests, t)
 		}
 		sort.Slice(failTests, func(i, j int) bool {
-			return failTests[i].name < failTests[j].name
+			return failTests[i].Name() < failTests[j].Name()
 		})
 		var failures bytes.Buffer
 		for _, t := range failTests {
-			fmt.Fprintf(&failures, "%s\n", t.name)
+			fmt.Fprintf(&failures, "%s\n", t.Name())
 		}
 
 		params.Attachments = append(params.Attachments,
