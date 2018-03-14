@@ -2198,6 +2198,7 @@ func (h oidHasher) BuiltinOid(name string, builtin *tree.Builtin) *tree.DOid {
 	h.writeTypeTag(functionTypeTag)
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
+	h.writeStr(builtin.FixedReturnType().String())
 	return h.getOid()
 }
 
