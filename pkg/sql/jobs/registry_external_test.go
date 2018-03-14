@@ -78,7 +78,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	db := s.DB()
 	ex := &sql.InternalExecutor{ExecCfg: s.InternalExecutor().(*sql.InternalExecutor).ExecCfg}
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	nodeLiveness := jobs.NewFakeNodeLiveness(clock, 4)
+	nodeLiveness := jobs.NewFakeNodeLiveness(4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
 		const cancelInterval = time.Duration(math.MaxInt64)
 		const adoptInterval = time.Nanosecond

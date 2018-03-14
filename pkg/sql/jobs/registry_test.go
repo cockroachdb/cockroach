@@ -46,7 +46,7 @@ func TestRegistryCancelation(t *testing.T) {
 	registry := MakeRegistry(log.AmbientContext{}, clock, db, ex, FakeNodeID, cluster.NoSettings, FakePHS)
 
 	const nodeCount = 1
-	nodeLiveness := NewFakeNodeLiveness(clock, nodeCount)
+	nodeLiveness := NewFakeNodeLiveness(nodeCount)
 
 	const cancelInterval = time.Nanosecond
 	const adoptInterval = time.Duration(math.MaxInt64)

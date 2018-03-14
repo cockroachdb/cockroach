@@ -36,9 +36,9 @@ import (
 
 var nodeLivenessLogLimiter = log.Every(5 * time.Second)
 
-// nodeLiveness is the subset of storage.NodeLiveness's interface needed
+// NodeLiveness is the subset of storage.NodeLiveness's interface needed
 // by Registry.
-type nodeLiveness interface {
+type NodeLiveness interface {
 	Self() (*storage.Liveness, error)
 	GetLivenesses() []storage.Liveness
 }
@@ -179,7 +179,7 @@ func (r *Registry) LoadJobWithTxn(ctx context.Context, jobID int64, txn *client.
 
 // DefaultCancelInterval is a reasonable interval at which to poll this node
 // for liveness failures and cancel running jobs.
-const DefaultCancelInterval = base.DefaultHeartbeatInterval
+var DefaultCancelInterval = base.DefaultHeartbeatInterval
 
 // DefaultAdoptInterval is a reasonable interval at which to poll system.jobs
 // for jobs with expired leases.
@@ -193,7 +193,7 @@ var DefaultAdoptInterval = 30 * time.Second
 func (r *Registry) Start(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	nl nodeLiveness,
+	nl NodeLiveness,
 	cancelInterval, adoptInterval time.Duration,
 ) error {
 	// Calling maybeCancelJobs once at the start ensures we have an up-to-date
@@ -226,7 +226,7 @@ func (r *Registry) Start(
 	return nil
 }
 
-func (r *Registry) maybeCancelJobs(ctx context.Context, nl nodeLiveness) {
+func (r *Registry) maybeCancelJobs(ctx context.Context, nl NodeLiveness) {
 	liveness, err := nl.Self()
 	if err != nil {
 		if nodeLivenessLogLimiter.ShouldLog() {
@@ -365,6 +365,13 @@ func (r *Registry) resume(
 		phs, cleanup := r.planFn("resume-job", job.Record.Username)
 		defer cleanup()
 		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
+		if resumeErr != nil && ctx.Err() != nil {
+			r.unregister(*job.id)
+			// The context was canceled. Tell the user, but don't attempt to mark the
+			// job as failed because it can be resumed by another node.
+			errCh <- errors.Errorf("job %d: node liveness error: restarting in the background", *job.id)
+			return
+		}
 		terminal := true
 		var status Status
 		defer r.unregister(*job.id)
@@ -411,7 +418,7 @@ func AddResumeHook(fn ResumeHookFn) {
 	resumeHooks = append(resumeHooks, fn)
 }
 
-func (r *Registry) maybeAdoptJob(ctx context.Context, nl nodeLiveness) error {
+func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 	var rows []tree.Datums
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
