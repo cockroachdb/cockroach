@@ -99,8 +99,8 @@ define VALID_VARS
   PROTOBUF_DIR
   PROTOBUF_PATH
   PROTOBUF_SRC_DIR
+  PROTOBUF_TARGETS
   PROTOC_DIR
-  PROTOC_PLUGIN
   PROTO_MAPPINGS
   RACETIMEOUT
   ROCKSDB_DIR
@@ -147,6 +147,8 @@ define VALID_VARS
   bindir
   cyan
   go-version-check
+  langgen-package
+  optgen-package
   prefix
   space
   term-reset
