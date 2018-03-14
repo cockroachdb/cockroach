@@ -72,7 +72,7 @@ func updateRangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor) error
 //     - meta1(desc.EndKey)
 //  3. If desc.EndKey is normal user key:
 //     - meta2(desc.EndKey)
-//     3a. If desc.StartKey is KeyMin or meta2:
+//     3a. If desc.StartKey is not normal user key:
 //         - meta1(KeyMax)
 func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action metaAction) error {
 	// 1. handle illegal case of start or end key being meta1.
@@ -91,13 +91,12 @@ func rangeAddressing(b *client.Batch, desc *roachpb.RangeDescriptor, action meta
 	// relevant meta2 entry pointing to the end of this range.
 	action(b, keys.RangeMetaKey(desc.EndKey).AsRawKey(), desc)
 
-	if !bytes.HasPrefix(desc.EndKey, keys.Meta2Prefix) {
-		// 3a. the range starts with KeyMin or a meta2 addressing record,
-		// update the meta1 entry for KeyMax.
-		if bytes.Equal(desc.StartKey, roachpb.RKeyMin) ||
-			bytes.HasPrefix(desc.StartKey, keys.Meta2Prefix) {
-			action(b, keys.Meta1KeyMax, desc)
-		}
+	if bytes.Compare(desc.StartKey, keys.MetaMax) < 0 &&
+		bytes.Compare(desc.EndKey, keys.MetaMax) >= 0 {
+		// 3a. the range spans meta2 and user keys, update the meta1
+		// entry for KeyMax. We do this to prevent the 3 levels of
+		// descriptor indirection described in #18998.
+		action(b, keys.Meta1KeyMax, desc)
 	}
 	return nil
 }
