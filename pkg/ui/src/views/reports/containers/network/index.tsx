@@ -10,7 +10,16 @@ import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import { LivenessStatus, NodesSummary, nodesSummarySelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { LongToMoment, NanoToMilli } from "src/util/convert";
-import { getFilters, localityToString, NodeFilterList } from "src/views/reports/components/nodeFilterList";
+import { FixLong } from "src/util/fixLong";
+import {
+  getFilters,
+  localityToString,
+  NodeFilterList,
+  NodeFilterListProps,
+} from "src/views/reports/components/nodeFilterList";
+import Loading from "src/views/shared/components/loading";
+
+import spinner from "assets/spinner.gif";
 
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
@@ -156,12 +165,12 @@ function createHeaderCell(staleIDs: Set<number>, id: Identity, key: string) {
   </td>;
 }
 
-const loading = (
-  <div className="section">
-    <h1>Network Diagnostics</h1>
-    <h2>Loading cluster status...</h2>
-  </div>
-);
+function contentAvailable(nodesSummary: NodesSummary) {
+  return !_.isUndefined(nodesSummary) &&
+    !_.isEmpty(nodesSummary.nodeStatuses) &&
+    !_.isEmpty(nodesSummary.nodeStatusByID) &&
+    !_.isEmpty(nodesSummary.nodeIDs);
+}
 
 /**
  * Renders the Network Diagnostics Report page.
@@ -189,13 +198,17 @@ class Network extends React.Component<NetworkProps, {}> {
     nodesSummary: NodesSummary,
     displayIdentities: Identity[],
   ) {
-    // TODO(bram): turn these values into memoized selectors.
     const mean = d3Mean(latencies);
-    const stddev = d3Deviation(latencies);
-    const stddevPlus1 = mean + stddev;
-    const stddevPlus2 = stddevPlus1 + stddev;
-    const stddevMinus1 = _.max([mean - stddev, 0]);
-    const stddevMinus2 = _.max([stddevMinus1 - stddev, 0]);
+    let stddev = d3Deviation(latencies);
+    if (_.isUndefined(stddev)) {
+      stddev = 0;
+    }
+    // If there is no stddev, we should not display a legend. So there is no
+    // need to set these values.
+    const stddevPlus1 = stddev > 0 ? mean + stddev : 0;
+    const stddevPlus2 = stddev > 0 ? stddevPlus1 + stddev : 0;
+    const stddevMinus1 = stddev > 0 ? _.max([mean - stddev, 0]) : 0;
+    const stddevMinus2 = stddev > 0 ? _.max([stddevMinus1 - stddev, 0]) : 0;
 
     // getLatencyCell creates and decorates a cell based on it's latency.
     function getLatencyCell(nodeIDa: number, nodeIDb: number) {
@@ -216,14 +229,20 @@ class Network extends React.Component<NetworkProps, {}> {
           X
         </td>;
       }
-      const latency = NanoToMilli(a[nodeIDb].latency.toNumber());
+      const nano = FixLong(a[nodeIDb].latency);
+      if (nano.eq(0)) {
+        return <td key={key} className="network-table__cell network-table__cell--stddev-even">
+          ?
+        </td>;
+      }
+      const latency = NanoToMilli(nano.toNumber());
       const className = classNames({
         "network-table__cell": true,
-        "network-table__cell--stddev-minus-2": latency < stddevMinus2,
-        "network-table__cell--stddev-minus-1": latency < stddevMinus1 && latency >= stddevMinus2,
-        "network-table__cell--stddev-even": latency >= stddevMinus1 && latency <= stddevPlus1,
-        "network-table__cell--stddev-plus-1": latency > stddevPlus1 && latency <= stddevPlus2,
-        "network-table__cell--stddev-plus-2": latency > stddevPlus2,
+        "network-table__cell--stddev-minus-2": stddev > 0 && latency < stddevMinus2,
+        "network-table__cell--stddev-minus-1": stddev > 0 && latency < stddevMinus1 && latency >= stddevMinus2,
+        "network-table__cell--stddev-even": stddev > 0 && latency >= stddevMinus1 && latency <= stddevPlus1,
+        "network-table__cell--stddev-plus-1": stddev > 0 && latency > stddevPlus1 && latency <= stddevPlus2,
+        "network-table__cell--stddev-plus-2": stddev > 0 && latency > stddevPlus2,
       });
 
       const title = `n${nodeIDa} -> n${nodeIDb}\n${latency.toString()}ms`;
@@ -267,6 +286,10 @@ class Network extends React.Component<NetworkProps, {}> {
         </table>
       </div>
     );
+
+    if (stddev === 0) {
+      return latencyTable;
+    }
 
     // legend is just a quick table showing the standard deviation values.
     const legend = (
@@ -319,13 +342,10 @@ class Network extends React.Component<NetworkProps, {}> {
     ];
   }
 
-  render() {
-    const { nodesSummary } = this.props;
-    if (_.isEmpty(nodesSummary.nodeIDs) || _.isEmpty(nodesSummary.livenessStatusByNodeID)) {
-      return loading;
+  renderContent(nodesSummary: NodesSummary, filters: NodeFilterListProps) {
+    if (!contentAvailable(nodesSummary)) {
+      return null;
     }
-
-    const filters = getFilters(this.props.location);
 
     // List of node identities.
     const identityByID: Map<number, Identity> = new Map();
@@ -341,6 +361,7 @@ class Network extends React.Component<NetworkProps, {}> {
     // Calculate the mean and sampled standard deviation.
     let healthyIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.LIVE)
+      .filter(nodeID => !_.isNil(nodesSummary.nodeStatusByID[nodeID].activity))
       .map(nodeID => Number.parseInt(nodeID, 0));
     let staleIDsContext = _.chain(nodesSummary.nodeIDs)
       .filter(nodeID => nodesSummary.livenessStatusByNodeID[nodeID] === LivenessStatus.UNAVAILABLE)
@@ -370,12 +391,12 @@ class Network extends React.Component<NetworkProps, {}> {
       .sortBy(identity => identity.nodeID)
       .sortBy(identity => identity.locality)
       .value();
-
     const latencies = _.flatMap(healthyIDs, nodeIDa => (
       _.chain(healthyIDs)
         .without(nodeIDa)
         .map(nodeIDb => nodesSummary.nodeStatusByID[nodeIDa].activity[nodeIDb])
-        .map(activity => NanoToMilli(activity.latency.toNumber()))
+        .filter(activity => !_.isNil(activity) && !_.isNil(activity.latency))
+        .map(activity => NanoToMilli(FixLong(activity.latency).toNumber()))
         .filter(ms => _.isFinite(ms) && ms > 0)
         .value()
     ));
@@ -396,20 +417,35 @@ class Network extends React.Component<NetworkProps, {}> {
         .value()
     ));
 
-    let content: JSX.Element[] = [];
+    let content: JSX.Element | JSX.Element[];
     if (_.isEmpty(healthyIDs)) {
-      content = [<h2>No healthy nodes match the filters</h2>];
+      content = <h2>No healthy nodes match the filters</h2>;
+    } else if (latencies.length < 1) {
+      content = <h2>Cannot show latency chart without two healthy nodes.</h2>;
     } else {
       content = this.renderLatencyTable(latencies, staleIDs, nodesSummary, displayIdentities);
     }
+    return [
+      content,
+      staleTable(staleIdentities),
+      noConnectionTable(noConnections),
+    ];
+  }
 
+  render() {
+    const { nodesSummary } = this.props;
+    const filters = getFilters(this.props.location);
     return (
       <div className="section">
         <h1>Network Diagnostics</h1>
-        <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
-        {content}
-        {staleTable(staleIdentities)}
-        {noConnectionTable(noConnections)}
+        <Loading
+          loading={!contentAvailable(nodesSummary)}
+          className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
+          image={spinner}
+        >
+          <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
+          {this.renderContent(nodesSummary, filters)}
+        </Loading>
       </div>
     );
   }
