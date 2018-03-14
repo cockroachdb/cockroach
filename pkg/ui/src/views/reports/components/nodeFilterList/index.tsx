@@ -4,7 +4,7 @@ import React from "react";
 
 import * as protos from "src/js/protos";
 
-interface NodeFilterListProps {
+export interface NodeFilterListProps {
   nodeIDs?: Set<number>;
   localityRegex?: RegExp;
 }
