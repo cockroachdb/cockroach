@@ -458,3 +458,27 @@ SELECT * from d where b @> 'null' ORDER BY a;
 ----
 11  null
 27  [true, false, null, 1.23, "a"]
+
+## Multi-path contains queries
+
+query IT
+SELECT * from d where b @> '{"a": "b", "c": "d"}'
+----
+7  {"a": "b", "c": "d"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b"}'
+----
+7  {"a": "b", "c": "d"}
+
+query IT
+SELECT * from d where b @> '{"c": "d", "a": "b", "f": "g"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "b", "c": "e"}'
+----
+
+query IT
+SELECT * from d where b @> '{"a": "e", "c": "d"}'
+----
