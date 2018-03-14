@@ -8,3 +8,65 @@ SELECT 1 FROM [INSERT INTO a VALUES (1, 2)]
 
 query error statement source "DELETE FROM a" does not return any columns
 SELECT 1 FROM [DELETE FROM a]
+
+query II
+SELECT @1, a+b FROM [INSERT INTO a VALUES (1,2) RETURNING b,a]
+----
+2 3
+
+# Check that LIMIT does not apply to mutation statements
+query II
+  WITH a AS (INSERT INTO a VALUES (2,3), (3,4) RETURNING a,b)
+SELECT * FROM a LIMIT 0
+----
+
+query II
+SELECT * FROM [INSERT INTO a VALUES (4,5), (5,6) RETURNING a,b] LIMIT 0
+----
+
+query II
+  WITH a AS (UPSERT INTO a VALUES (2,3), (6,7) RETURNING a,b)
+SELECT * FROM a LIMIT 0
+----
+
+query II
+SELECT * FROM [UPSERT INTO a VALUES (4,5), (7,8) RETURNING a,b] LIMIT 0
+----
+
+
+query II
+  WITH a AS (UPDATE a SET a = -a WHERE b % 2 = 1 RETURNING a,b)
+SELECT * FROM a LIMIT 0
+----
+
+query II
+SELECT * FROM [UPDATE a SET a = a*100 WHERE b < 3 RETURNING a,b] LIMIT 0
+----
+
+query II
+SELECT * FROM a ORDER BY b
+----
+100  2
+-2   3
+3    4
+-4   5
+5    6
+-6   7
+7    8
+
+query II
+  WITH a AS (DELETE FROM a WHERE b IN (4,5) RETURNING a,b)
+SELECT * FROM a LIMIT 0
+----
+
+query II
+SELECT * FROM [DELETE FROM a WHERE b IN (6,7) RETURNING a,b] LIMIT 0
+----
+
+
+query II
+SELECT * FROM a ORDER BY b
+----
+100  2
+-2   3
+7    8

@@ -48,6 +48,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *limitNode:
 		setNeededColumns(n.plan, needed)
 
+	case *spoolNode:
+		setNeededColumns(n.source, needed)
+
 	case *indexJoinNode:
 		// Currently all the needed result columns are provided by the
 		// table sub-source; from the index sub-source we only need the PK

@@ -449,6 +449,9 @@ func (v *planVisitor) visit(plan planNode) {
 	case *ordinalityNode:
 		v.visit(n.source)
 
+	case *spoolNode:
+		v.visit(n.source)
+
 	case *showTraceNode:
 		v.visit(n.plan)
 
@@ -564,6 +567,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&showFingerprintsNode{}):     "showFingerprints",
 	reflect.TypeOf(&sortNode{}):                 "sort",
 	reflect.TypeOf(&splitNode{}):                "split",
+	reflect.TypeOf(&spoolNode{}):                "spool",
 	reflect.TypeOf(&unionNode{}):                "union",
 	reflect.TypeOf(&updateNode{}):               "update",
 	reflect.TypeOf(&upsertNode{}):               "upsert",
