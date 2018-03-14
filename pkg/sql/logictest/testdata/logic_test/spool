@@ -8,12 +8,13 @@ query TTT
 EXPLAIN WITH a AS (INSERT INTO t VALUES (2) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
-limit                  ·     ·
- └── spool             ·     ·
-      └── insert       ·     ·
-           │           into  t(x)
-           └── values  ·     ·
-·                      size  1 column, 1 row
+limit                  ·      ·
+ └── spool             ·      ·
+      │                limit  1
+      └── insert       ·      ·
+           │           into   t(x)
+           └── values  ·      ·
+·                      size   1 column, 1 row
 
 query TTT
 EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
@@ -21,6 +22,7 @@ EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
 ----
 limit                ·      ·
  └── spool           ·      ·
+      │              limit  1
       └── delete     ·      ·
            │         from   t
            └── scan  ·      ·
@@ -34,6 +36,7 @@ EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
 ----
 limit                     ·      ·
  └── spool                ·      ·
+      │                   limit  1
       └── update          ·      ·
            │              table  t
            │              set    x
@@ -57,18 +60,20 @@ limit             ·     ·
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x] LIMIT 1
 ----
-limit                  ·     ·
- └── spool             ·     ·
-      └── insert       ·     ·
-           │           into  t(x)
-           └── values  ·     ·
-·                      size  1 column, 1 row
+limit                  ·      ·
+ └── spool             ·      ·
+      │                limit  1
+      └── insert       ·      ·
+           │           into   t(x)
+           └── values  ·      ·
+·                      size   1 column, 1 row
 
 query TTT
 EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
 ----
 limit                ·      ·
  └── spool           ·      ·
+      │              limit  1
       └── delete     ·      ·
            │         from   t
            └── scan  ·      ·
@@ -80,6 +85,7 @@ EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 ----
 limit                     ·      ·
  └── spool                ·      ·
+      │                   limit  1
       └── update          ·      ·
            │              table  t
            │              set    x
@@ -130,15 +136,16 @@ EXPLAIN WITH a AS (INSERT INTO t VALUES(2) RETURNING x),
              b AS (INSERT INTO t SELECT x+1 FROM a RETURNING x)
         SELECT * FROM b LIMIT 1
 ----
-limit                            ·     ·
- └── spool                       ·     ·
-      └── insert                 ·     ·
-           │                     into  t(x)
-           └── render            ·     ·
-                └── insert       ·     ·
-                     │           into  t(x)
-                     └── values  ·     ·
-·                                size  1 column, 1 row
+limit                            ·      ·
+ └── spool                       ·      ·
+      │                          limit  1
+      └── insert                 ·      ·
+           │                     into   t(x)
+           └── render            ·      ·
+                └── insert       ·      ·
+                     │           into   t(x)
+                     └── values  ·      ·
+·                                size   1 column, 1 row
 
 # Check that no spool is inserted if a top-level render is elided.
 query TTT

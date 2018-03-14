@@ -132,6 +132,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.applyLimit(n.source, numRows, soft)
 
 	case *spoolNode:
+		if !soft {
+			n.hardLimit = numRows
+		}
 		p.setUnlimited(n.source)
 
 	case *delayedNode:
