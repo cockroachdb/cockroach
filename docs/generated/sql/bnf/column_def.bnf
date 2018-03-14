@@ -1,2 +1,2 @@
 column_def ::=
-	column_name typename  ( | ( col_qualification ( col_qualification )* ) )
+	column_name typename  ( ( col_qualification ) )*
