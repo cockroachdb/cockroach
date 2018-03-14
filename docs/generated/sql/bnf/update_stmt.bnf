@@ -1,0 +1,2 @@
+update_stmt ::=
+	opt_with_clause 'UPDATE' ( table_name | table_name table_alias_name | table_name 'AS' table_alias_name ) 'SET' ( ( ( ( column_name '=' a_expr ) | ( '(' column_name_list ')' '=' ( select_with_parens | '(' ( ( a_expr ) ( ( ',' a_expr ) )* ) ')' ) ) ) ) ( ( ',' ( ( column_name '=' a_expr ) | ( '(' column_name_list ')' '=' ( select_with_parens | '(' ( ( a_expr ) ( ( ',' a_expr ) )* ) ')' ) ) ) ) )* ) ( 'WHERE' a_expr |  ) ( ( 'ORDER' 'BY' sortby_list ) |  )  ( 'RETURNING' target_list | 'RETURNING' 'NOTHING' |  )
