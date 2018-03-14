@@ -2705,10 +2705,12 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 		return d, nil
 	}
 	d = UnwrapDatum(ctx, d)
-	return performCast(ctx, d, expr.Type)
+	return PerformCast(ctx, d, expr.Type)
 }
 
-func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, error) {
+// PerformCast performs a cast from the provided Datum to the specified
+// CastTargetType.
+func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, error) {
 	switch typ := t.(type) {
 	case *coltypes.TBool:
 		switch v := d.(type) {
@@ -2918,8 +2920,6 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return NewDCollatedString(s, c.Locale, &ctx.collationEnv), nil
 		case *coltypes.TName:
 			return NewDName(s), nil
-		default:
-			panic(fmt.Sprintf("missing case for cast to string: %T", c))
 		}
 
 	case *coltypes.TBytes:
@@ -3055,7 +3055,7 @@ func performCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			paramType := coltypes.CastTargetToDatumType(typ.ParamType)
 			dcast := NewDArray(paramType)
 			for _, e := range v.Array {
-				ecast, err := performCast(ctx, e, typ.ParamType)
+				ecast, err := PerformCast(ctx, e, typ.ParamType)
 				if err != nil {
 					return nil, err
 				}
@@ -3221,7 +3221,7 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	d, err := expr.Expr.(TypedExpr).Eval(ctx)
 	if err != nil {
-		return DNull, err
+		return nil, err
 	}
 	unwrapped := UnwrapDatum(ctx, d)
 	if unwrapped == DNull {
