@@ -87,6 +87,16 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     };
   }
 
+  animateZoomState(zt: ZoomTransformer, init = false) {
+    d3.select(this.gEl)
+      .transition()
+      .duration(init ? 0 : 750)
+      .call(this.zoom
+        .scale(zt.scale())
+        .translate(zt.translate())
+        .event);
+  }
+
   updateZoomState(zt: ZoomTransformer) {
     const minScale = zt.minScale();
 
@@ -112,11 +122,11 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     const { prevLocalityLocations } = this.state;
     const localityLocations = this.localityLocations(this.props);
 
-    // Deep comparison to previous locality set. If anything has changed, this
-    // indicates that the user has navigated to a different level of the
+    // Deep comparison to previous location set. If any localities have changed,
+    // this indicates that the user has navigated to a different level of the
     // locality tree OR that new data has been added to the currently visible
     // locality.
-    if (_.isEqual(localityLocations, prevLocalityLocations)) {
+    if (_.isEqual(localityLocations.map(ll => ll.location), prevLocalityLocations.map(ll => ll.location))) {
       return;
     }
 
@@ -130,11 +140,11 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
       return new Box(center[0] - 50, center[1] - 50, 100, 100);
     });
     const zoomTransform = this.state.zoomTransform.zoomedToBox(Box.boundingBox(...boxes));
-    this.updateZoomState(zoomTransform);
     this.setState({
       zoomTransform,
       prevLocalityLocations: localityLocations,
     });
+    this.animateZoomState(zoomTransform, _.isEmpty(prevLocalityLocations));
   }
 
   componentDidMount() {
