@@ -2056,6 +2056,7 @@ writing ` + os.DevNull + `
   debug/nodes/1/status
   debug/nodes/1/gossip
   debug/nodes/1/stacks
+  debug/nodes/1/heap
   debug/nodes/1/ranges/1
   debug/nodes/1/ranges/2
   debug/nodes/1/ranges/3
