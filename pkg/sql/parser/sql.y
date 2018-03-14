@@ -2833,6 +2833,7 @@ show_trace_stmt:
   }
 | SHOW EXPERIMENTAL_REPLICA TRACE FOR explainable_stmt
   {
+    /* SKIP DOC */
     $$.val = &tree.ShowTrace{Statement: $5.stmt(), TraceType: tree.ShowTraceReplica}
   }
 
