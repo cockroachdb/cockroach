@@ -47,6 +47,7 @@ type scanNode struct {
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
+	colCfg scanColumnsConfig
 	// The table columns, possibly including ones currently in schema changes.
 	cols []sqlbase.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
@@ -96,8 +97,6 @@ type scanNode struct {
 
 	disableBatchLimits bool
 
-	scanVisibility scanVisibility
-
 	run scanRun
 
 	// This struct must be allocated on the heap and its location stay
@@ -109,7 +108,7 @@ type scanNode struct {
 }
 
 // scanVisibility represents which table columns should be included in a scan.
-type scanVisibility int
+type scanVisibility int8
 
 const (
 	publicColumns scanVisibility = 0
@@ -118,6 +117,27 @@ const (
 	// a row by correctly constructing ColumnFamilies and Indexes.
 	publicAndNonPublicColumns scanVisibility = 1
 )
+
+// scanColumnsConfig controls the "schema" of a scan node. The zero value is the
+// default: all "public" columns.
+// Note that not all columns in the schema are read and decoded; that is further
+// controlled by scanNode.valNeededForCol.
+type scanColumnsConfig struct {
+	// If set, only these columns are part of the scan node schema, in this order
+	// (with the caveat that the flags below can add more columns).
+	wantedColumns []tree.ColumnID
+
+	// When set, the columns that are not in the wantedColumns list are added to
+	// the list of columns as hidden columns. Only useful in conjunction with
+	// wantedColumns.
+	addUnwantedAsHidden bool
+
+	// If visibility is set to publicAndNonPublicColumns, mutation columns are
+	// added to the list of columns.
+	visibility scanVisibility
+}
+
+var publicColumnsCfg = scanColumnsConfig{}
 
 func (p *planner) Scan() *scanNode {
 	n := scanNodePool.Get().(*scanNode)
@@ -252,14 +272,12 @@ func (n *scanNode) limitHint() int64 {
 }
 
 // Initializes a scanNode with a table descriptor.
-// wantedColumns is optional.
 func (n *scanNode) initTable(
 	ctx context.Context,
 	p *planner,
 	desc *sqlbase.TableDescriptor,
 	indexHints *tree.IndexHints,
-	scanVisibility scanVisibility,
-	wantedColumns []tree.ColumnID,
+	colCfg scanColumnsConfig,
 ) error {
 	n.desc = desc
 
@@ -276,7 +294,7 @@ func (n *scanNode) initTable(
 	}
 
 	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
-	return n.initDescDefaults(p.curPlan.deps, scanVisibility, wantedColumns)
+	return n.initDescDefaults(p.curPlan.deps, colCfg)
 }
 
 func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
@@ -315,104 +333,46 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 	return nil
 }
 
-// Either pick all columns or just those selected.
-func filterColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []tree.ColumnID, src []sqlbase.ColumnDescriptor,
-) ([]sqlbase.ColumnDescriptor, error) {
-	if wantedColumns == nil {
-		dst = append(dst, src...)
+// initCols initializes n.cols and n.numBackfillColumns according to n.desc and n.colCfg.
+func (n *scanNode) initCols() error {
+	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+	if n.colCfg.wantedColumns == nil {
+		n.cols = append(n.cols, n.desc.Columns...)
 	} else {
-		for _, wc := range wantedColumns {
+		for _, wc := range n.colCfg.wantedColumns {
 			found := false
-			for _, c := range src {
+			for _, c := range n.desc.Columns {
 				if c.ID == sqlbase.ColumnID(wc) {
-					dst = append(dst, c)
+					n.cols = append(n.cols, c)
 					found = true
 					break
 				}
 			}
 			if !found {
-				return nil, errors.Errorf("column [%d] does not exist", wc)
+				return errors.Errorf("column [%d] does not exist", wc)
 			}
 		}
-		dst = appendUnselectedColumns(dst, wantedColumns, src)
-	}
-	return dst, nil
-}
 
-// appendUnselectedColumns adds into dst all the column descriptors
-// from src that are not already listed in wantedColumns. The added
-// columns, if any, are marked "hidden".
-func appendUnselectedColumns(
-	dst []sqlbase.ColumnDescriptor, wantedColumns []tree.ColumnID, src []sqlbase.ColumnDescriptor,
-) []sqlbase.ColumnDescriptor {
-	for _, c := range src {
-		found := false
-		for _, wc := range wantedColumns {
-			if sqlbase.ColumnID(wc) == c.ID {
-				found = true
-				break
+		if n.colCfg.addUnwantedAsHidden {
+			for _, c := range n.desc.Columns {
+				found := false
+				for _, wc := range n.colCfg.wantedColumns {
+					if sqlbase.ColumnID(wc) == c.ID {
+						found = true
+						break
+					}
+				}
+				if !found {
+					col := c
+					col.Hidden = true
+					n.cols = append(n.cols, col)
+				}
 			}
 		}
-		if !found {
-			col := c
-			col.Hidden = true
-			dst = append(dst, col)
-		}
-	}
-	return dst
-}
-
-// Initializes the column structures.
-// wantedColumns is optional.
-// An error may be returned only if wantedColumns is set.
-func (n *scanNode) initDescDefaults(
-	planDeps planDependencies, scanVisibility scanVisibility, wantedColumns []tree.ColumnID,
-) error {
-	n.scanVisibility = scanVisibility
-	n.index = &n.desc.PrimaryIndex
-	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.Columns)+len(n.desc.Mutations))
-	var err error
-	n.cols, err = filterColumns(n.cols, wantedColumns, n.desc.Columns)
-	if err != nil {
-		return err
 	}
 
-	// Register the dependency to the planner, if requested.
-	if planDeps != nil {
-		indexID := sqlbase.IndexID(0)
-		if n.specifiedIndex != nil {
-			indexID = n.specifiedIndex.ID
-		}
-		var usedColumns []sqlbase.ColumnID
-		if wantedColumns == nil {
-			usedColumns = make([]sqlbase.ColumnID, len(n.desc.Columns))
-			for i := range n.desc.Columns {
-				usedColumns[i] = n.desc.Columns[i].ID
-			}
-		} else {
-			usedColumns = make([]sqlbase.ColumnID, len(wantedColumns))
-			for i, c := range wantedColumns {
-				usedColumns[i] = sqlbase.ColumnID(c)
-			}
-		}
-		deps := planDeps[n.desc.ID]
-		deps.desc = n.desc
-		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{
-			IndexID:   indexID,
-			ColumnIDs: usedColumns,
-		})
-		planDeps[n.desc.ID] = deps
-	}
-
-	// Set up the rest of the scanNode.
-	if n.numBackfillColumns != 0 {
-		panic(fmt.Sprintf("%d backfill columns, already initialized", n.numBackfillColumns))
-	}
-	switch scanVisibility {
-	case publicColumns:
-		// Mutations are invisible.
-	case publicAndNonPublicColumns:
+	n.numBackfillColumns = 0
+	if n.colCfg.visibility == publicAndNonPublicColumns {
 		for _, mutation := range n.desc.Mutations {
 			if c := mutation.GetColumn(); c != nil {
 				col := *c
@@ -424,7 +384,38 @@ func (n *scanNode) initDescDefaults(
 			}
 		}
 	}
+	return nil
+}
 
+// Initializes the column structures.
+func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumnsConfig) error {
+	n.colCfg = colCfg
+	n.index = &n.desc.PrimaryIndex
+
+	if err := n.initCols(); err != nil {
+		return err
+	}
+
+	// Register the dependency to the planner, if requested.
+	if planDeps != nil {
+		indexID := sqlbase.IndexID(0)
+		if n.specifiedIndex != nil {
+			indexID = n.specifiedIndex.ID
+		}
+		usedColumns := make([]sqlbase.ColumnID, len(n.cols))
+		for i := range n.cols {
+			usedColumns[i] = n.cols[i].ID
+		}
+		deps := planDeps[n.desc.ID]
+		deps.desc = n.desc
+		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{
+			IndexID:   indexID,
+			ColumnIDs: usedColumns,
+		})
+		planDeps[n.desc.ID] = deps
+	}
+
+	// Set up the rest of the scanNode.
 	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
 	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {

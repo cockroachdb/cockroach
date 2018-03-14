@@ -253,7 +253,10 @@ func (p *planner) selectIndex(
 		// Note: makeIndexJoin destroys s and returns a new index scan
 		// node. The filter in that node may be different from the
 		// original table filter.
-		plan, s = p.makeIndexJoin(s, c.exactPrefix)
+		plan, s, err = p.makeIndexJoin(s, c.exactPrefix)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if log.V(3) {
