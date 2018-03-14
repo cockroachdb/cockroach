@@ -71,17 +71,17 @@ type Set struct {
 
 // NewForColumn creates a new constraint set containing a single constraint.
 // The constraint has a single column and a single span.
-func NewForColumn(col opt.ColumnIndex, sp *Span) *Set {
+func NewForColumn(col opt.OrderingColumn, sp *Span) *Set {
 	cs := &Set{length: 1}
-	cs.firstConstraint.init(col, sp)
+	cs.firstConstraint.InitSingleColumn(col, sp)
 	return cs
 }
 
 // NewForColumns creates a new constraint set containing a single constraint.
 // The constraint has one or more columns and a single span.
-func NewForColumns(cols []opt.ColumnIndex, sp *Span) *Set {
+func NewForColumns(cols []opt.OrderingColumn, sp *Span) *Set {
 	cs := &Set{length: 1}
-	cs.firstConstraint.initComposite(cols, sp)
+	cs.firstConstraint.Init(cols, sp)
 	return cs
 }
 
@@ -294,10 +294,10 @@ func (s *Set) String() string {
 // with column position determining significance in the sort key (most
 // significant first).
 func compareConstraintsByCols(left, right *Constraint) int {
-	leftCount := left.ColumnCount()
-	rightCount := right.ColumnCount()
+	leftCount := left.Columns.Count()
+	rightCount := right.Columns.Count()
 	for i := 0; i < leftCount && i < rightCount; i++ {
-		diff := int(left.Column(i) - right.Column(i))
+		diff := int(left.Columns.Get(i) - right.Columns.Get(i))
 		if diff != 0 {
 			return diff
 		}

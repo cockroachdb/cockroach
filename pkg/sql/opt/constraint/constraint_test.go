@@ -197,6 +197,8 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	key60 := MakeKey(tree.NewDInt(60))
 	key70 := MakeKey(tree.NewDInt(70))
 
+	keyCtx := testKeyContext()
+
 	cherry := MakeCompositeKey(tree.NewDString("cherry"), tree.DBoolTrue)
 	mango := MakeCompositeKey(tree.NewDString("mango"), tree.DBoolFalse)
 	raspberry := MakeCompositeKey(tree.NewDString("raspberry"), tree.DBoolFalse)
@@ -205,44 +207,44 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	var span Span
 
 	// [ - /10)
-	span.Set(evalCtx, EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
-	data.cLt10.init(1, &span)
+	span.Set(keyCtx, EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
+	data.cLt10.InitSingleColumn(1, &span)
 
 	// (/20 - ]
-	span.Set(evalCtx, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
-	data.cGt20.init(1, &span)
+	span.Set(keyCtx, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	data.cGt20.InitSingleColumn(1, &span)
 
 	// [/1 - /10]
-	span.Set(evalCtx, key1, IncludeBoundary, key10, IncludeBoundary)
-	data.c1to10.init(1, &span)
+	span.Set(keyCtx, key1, IncludeBoundary, key10, IncludeBoundary)
+	data.c1to10.InitSingleColumn(1, &span)
 
 	// (/5 - /25)
-	span.Set(evalCtx, key5, ExcludeBoundary, key25, ExcludeBoundary)
-	data.c5to25.init(1, &span)
+	span.Set(keyCtx, key5, ExcludeBoundary, key25, ExcludeBoundary)
+	data.c5to25.InitSingleColumn(1, &span)
 
 	// [/20 - /30)
-	span.Set(evalCtx, key20, IncludeBoundary, key30, ExcludeBoundary)
-	data.c20to30.init(1, &span)
+	span.Set(keyCtx, key20, IncludeBoundary, key30, ExcludeBoundary)
+	data.c20to30.InitSingleColumn(1, &span)
 
 	// [/30 - /40]
-	span.Set(evalCtx, key30, IncludeBoundary, key40, IncludeBoundary)
-	data.c30to40.init(1, &span)
+	span.Set(keyCtx, key30, IncludeBoundary, key40, IncludeBoundary)
+	data.c30to40.InitSingleColumn(1, &span)
 
 	// [/40 - /50]
-	span.Set(evalCtx, key40, IncludeBoundary, key50, IncludeBoundary)
-	data.c40to50.init(1, &span)
+	span.Set(keyCtx, key40, IncludeBoundary, key50, IncludeBoundary)
+	data.c40to50.InitSingleColumn(1, &span)
 
 	// (/60 - /70)
-	span.Set(evalCtx, key60, ExcludeBoundary, key70, ExcludeBoundary)
-	data.c60to70.init(1, &span)
+	span.Set(keyCtx, key60, ExcludeBoundary, key70, ExcludeBoundary)
+	data.c60to70.InitSingleColumn(1, &span)
 
 	// [/'cherry'/true - /'raspberry'/false)
-	span.Set(evalCtx, cherry, IncludeBoundary, raspberry, ExcludeBoundary)
-	data.cherryRaspberry.initComposite([]opt.ColumnIndex{1, 2}, &span)
+	span.Set(keyCtx, cherry, IncludeBoundary, raspberry, ExcludeBoundary)
+	data.cherryRaspberry.Init([]opt.OrderingColumn{1, 2}, &span)
 
 	// [/'mango'/false - /'strawberry']
-	span.Set(evalCtx, mango, IncludeBoundary, strawberry, IncludeBoundary)
-	data.mangoStrawberry.initComposite([]opt.ColumnIndex{1, 2}, &span)
+	span.Set(keyCtx, mango, IncludeBoundary, strawberry, IncludeBoundary)
+	data.mangoStrawberry.Init([]opt.OrderingColumn{1, 2}, &span)
 
 	return data
 }

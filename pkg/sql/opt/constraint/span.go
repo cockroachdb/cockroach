@@ -16,8 +16,6 @@ package constraint
 
 import (
 	"bytes"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // SpanBoundary specifies whether a span endpoint is inclusive or exclusive of
@@ -73,11 +71,7 @@ func (sp *Span) IsUnconstrained() bool {
 //  2. Unconstrained span (should never be used in a constraint)
 //  3. Exclusive empty key boundary (use inclusive instead)
 func (sp *Span) Set(
-	evalCtx *tree.EvalContext,
-	start Key,
-	startBoundary SpanBoundary,
-	end Key,
-	endBoundary SpanBoundary,
+	keyCtx KeyContext, start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary,
 ) {
 	if start.IsEmpty() {
 		if end.IsEmpty() {
@@ -102,7 +96,7 @@ func (sp *Span) Set(
 	sp.endBoundary = endBoundary
 
 	// Ensure that start boundary is less than end boundary.
-	if sp.start.Compare(evalCtx, sp.end, sp.startExt(), sp.endExt()) >= 0 {
+	if keyCtx.Compare(sp.start, sp.startExt(), sp.end, sp.endExt()) >= 0 {
 		panic("span cannot be empty")
 	}
 }
@@ -132,15 +126,15 @@ func (sp *Span) Set(
 //   (/1   - /2/1)  =  /1/High   - /2/1/Low
 //   (/1   - /2/1]  =  /1/High   - /2/1/High
 //   (/1   -     ]  =  /1/High   - /High
-func (sp *Span) Compare(evalCtx *tree.EvalContext, other *Span) int {
+func (sp *Span) Compare(keyCtx KeyContext, other *Span) int {
 	// Span with lowest start boundary is less than the other.
-	if cmp := sp.CompareStarts(evalCtx, other); cmp != 0 {
+	if cmp := sp.CompareStarts(keyCtx, other); cmp != 0 {
 		return cmp
 	}
 
 	// Start boundary is same, so span with lowest end boundary is less than
 	// the other.
-	if cmp := sp.CompareEnds(evalCtx, other); cmp != 0 {
+	if cmp := sp.CompareEnds(keyCtx, other); cmp != 0 {
 		return cmp
 	}
 
@@ -152,44 +146,44 @@ func (sp *Span) Compare(evalCtx *tree.EvalContext, other *Span) int {
 // boundaries of the two spans. The result will be 0 if the spans have the same
 // start boundary, -1 if this span has a smaller start boundary than the given
 // span, or 1 if this span has a bigger start boundary than the given span.
-func (sp *Span) CompareStarts(evalCtx *tree.EvalContext, other *Span) int {
-	return sp.start.Compare(evalCtx, other.start, sp.startExt(), other.startExt())
+func (sp *Span) CompareStarts(keyCtx KeyContext, other *Span) int {
+	return keyCtx.Compare(sp.start, sp.startExt(), other.start, other.startExt())
 }
 
 // CompareEnds returns an integer indicating the ordering of the end boundaries
 // of the two spans. The result will be 0 if the spans have the same end
 // boundary, -1 if this span has a smaller end boundary than the given span, or
 // 1 if this span has a bigger end boundary than the given span.
-func (sp *Span) CompareEnds(evalCtx *tree.EvalContext, other *Span) int {
-	return sp.end.Compare(evalCtx, other.end, sp.endExt(), other.endExt())
+func (sp *Span) CompareEnds(keyCtx KeyContext, other *Span) int {
+	return keyCtx.Compare(sp.end, sp.endExt(), other.end, other.endExt())
 }
 
 // StartsAfter returns true if this span is greater than the given span and
 // does not overlap it. In other words, this span's start boundary is greater
 // or equal to the given span's end boundary.
-func (sp *Span) StartsAfter(evalCtx *tree.EvalContext, other *Span) bool {
-	return sp.start.Compare(evalCtx, other.end, sp.startExt(), other.endExt()) >= 0
+func (sp *Span) StartsAfter(keyCtx KeyContext, other *Span) bool {
+	return keyCtx.Compare(sp.start, sp.startExt(), other.end, other.endExt()) >= 0
 }
 
 // TryIntersectWith finds the overlap between this span and the given span.
 // This span is updated to only cover the range that is common to both spans.
 // If there is no overlap, then this span will not be updated, and
 // TryIntersectWith will return false.
-func (sp *Span) TryIntersectWith(evalCtx *tree.EvalContext, other *Span) bool {
-	cmpStarts := sp.CompareStarts(evalCtx, other)
+func (sp *Span) TryIntersectWith(keyCtx KeyContext, other *Span) bool {
+	cmpStarts := sp.CompareStarts(keyCtx, other)
 	if cmpStarts > 0 {
 		// If this span's start boundary is >= the other span's end boundary,
 		// then intersection is empty.
-		if sp.start.Compare(evalCtx, other.end, sp.startExt(), other.endExt()) >= 0 {
+		if keyCtx.Compare(sp.start, sp.startExt(), other.end, other.endExt()) >= 0 {
 			return false
 		}
 	}
 
-	cmpEnds := sp.CompareEnds(evalCtx, other)
+	cmpEnds := sp.CompareEnds(keyCtx, other)
 	if cmpEnds < 0 {
 		// If this span's end boundary is <= the other span's start boundary,
 		// then intersection is empty.
-		if sp.end.Compare(evalCtx, other.start, sp.endExt(), other.startExt()) <= 0 {
+		if keyCtx.Compare(sp.end, sp.endExt(), other.start, other.startExt()) <= 0 {
 			return false
 		}
 	}
@@ -216,19 +210,19 @@ func (sp *Span) TryIntersectWith(evalCtx *tree.EvalContext, other *Span) bool {
 // returns true. If the resulting span does not constrain the range [ - ], then
 // its IsUnconstrained method returns true, and it cannot be used as part of a
 // constraint.
-func (sp *Span) TryUnionWith(evalCtx *tree.EvalContext, other *Span) bool {
+func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
 	// Determine the minimum start boundary.
-	cmpStartKeys := sp.CompareStarts(evalCtx, other)
+	cmpStartKeys := sp.CompareStarts(keyCtx, other)
 
 	var cmp int
 	if cmpStartKeys < 0 {
 		// This span is less, so see if there's any "space" after it and before
 		// the start of the other span.
-		cmp = sp.end.Compare(evalCtx, other.start, sp.endExt(), other.startExt())
+		cmp = keyCtx.Compare(sp.end, sp.endExt(), other.start, other.startExt())
 	} else if cmpStartKeys > 0 {
 		// This span is greater, so see if there's any "space" before it and
 		// after the end of the other span.
-		cmp = other.end.Compare(evalCtx, sp.start, other.endExt(), sp.startExt())
+		cmp = keyCtx.Compare(other.end, other.endExt(), sp.start, sp.startExt())
 	}
 	if cmp < 0 {
 		// There's "space" between spans, so union of these spans can't be
@@ -237,7 +231,7 @@ func (sp *Span) TryUnionWith(evalCtx *tree.EvalContext, other *Span) bool {
 	}
 
 	// Determine the maximum end boundary.
-	cmpEndKeys := sp.CompareEnds(evalCtx, other)
+	cmpEndKeys := sp.CompareEnds(keyCtx, other)
 
 	// Create the merged span.
 	if cmpStartKeys > 0 {

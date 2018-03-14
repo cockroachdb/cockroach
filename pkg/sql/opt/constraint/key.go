@@ -81,62 +81,6 @@ func (k Key) Value(nth int) tree.Datum {
 	return k.otherVals[nth-1]
 }
 
-// Compare returns an integer indicating the ordering of the two keys. The
-// result will be 0 if the keys are equal, -1 if this key is less than the
-// given key, or 1 if this key is greater.
-//
-// Comparisons between keys where one key is a prefix of the other have special
-// handling which can be controlled via the key extension parameters. Key
-// extensions specify whether each key is conceptually suffixed with negative
-// or positive infinity for purposes of comparison. For example, if k is /1/2,
-// then:
-//   k (kExt = ExtendLow) : /1/2/Low
-//   k (kExt = ExtendHigh): /1/2/High
-//
-// These extensions have no effect if one key is not a prefix of the other,
-// since the comparison would already have concluded in previous values. But
-// if comparison proceeds all the way to the end of one of the keys, then the
-// extension determines which key is greater. This enables correct comparison
-// of start and end keys in spans which may be either inclusive or exclusive.
-// Here is the mapping:
-//   [/1/2 - ...] (inclusive start key): ExtendLow : /1/2/Low
-//   (/1/2 - ...] (exclusive start key): ExtendHigh: /1/2/High
-//   [... - /1/2] (inclusive end key)  : ExtendHigh: /1/2/High
-//   [... - /1/2) (exclusive end key)  : ExtendLow : /1/2/Low
-func (k Key) Compare(evalCtx *tree.EvalContext, l Key, kext, lext KeyExtension) int {
-	klen := k.Length()
-	llen := l.Length()
-	for i := 0; i < klen && i < llen; i++ {
-		if cmp := k.Value(i).Compare(evalCtx, l.Value(i)); cmp != 0 {
-			return cmp
-		}
-	}
-
-	if klen < llen {
-		// k matches a prefix of l:
-		//   k = /1
-		//   l = /1/2
-		// Which of these is "smaller" depends on whether k is extended with
-		// -inf or with +inf:
-		//   k (ExtendLow)  = /1/Low  < /1/2  ->  k is smaller (-1)
-		//   k (ExtendHigh) = /1/High > /1/2  ->  k is bigger  (1)
-		return kext.ToCmp()
-	} else if klen > llen {
-		// Inverse case of above.
-		return -lext.ToCmp()
-	}
-
-	// Equal keys:
-	//   k (ExtendLow)  vs. l (ExtendLow)   ->  equal   (0)
-	//   k (ExtendLow)  vs. l (ExtendHigh)  ->  smaller (-1)
-	//   k (ExtendHigh) vs. l (ExtendLow)   ->  bigger  (1)
-	//   k (ExtendHigh) vs. l (ExtendHigh)  ->  equal   (0)
-	if kext == lext {
-		return 0
-	}
-	return kext.ToCmp()
-}
-
 // Concat creates a new composite key by extending this key's values with the
 // values of the given key. The new key's length is len(k) + len(l).
 func (k Key) Concat(l Key) Key {
@@ -168,4 +112,74 @@ func (k Key) String() string {
 		fmt.Fprintf(&buf, "/%s", k.Value(i))
 	}
 	return buf.String()
+}
+
+// KeyContext contains the necessary metadata for comparing Keys.
+type KeyContext struct {
+	Columns *Columns
+	EvalCtx *tree.EvalContext
+}
+
+// MakeKeyContext initializes a KeyContext.
+func MakeKeyContext(cols *Columns, evalCtx *tree.EvalContext) KeyContext {
+	return KeyContext{Columns: cols, EvalCtx: evalCtx}
+}
+
+// Compare returns an integer indicating the ordering of the two keys. The
+// result will be 0 if the keys are equal, -1 if this key is less than the
+// given key, or 1 if this key is greater.
+//
+// Comparisons between keys where one key is a prefix of the other have special
+// handling which can be controlled via the key extension parameters. Key
+// extensions specify whether each key is conceptually suffixed with negative
+// or positive infinity for purposes of comparison. For example, if k is /1/2,
+// then:
+//   k (kExt = ExtendLow) : /1/2/Low
+//   k (kExt = ExtendHigh): /1/2/High
+//
+// These extensions have no effect if one key is not a prefix of the other,
+// since the comparison would already have concluded in previous values. But
+// if comparison proceeds all the way to the end of one of the keys, then the
+// extension determines which key is greater. This enables correct comparison
+// of start and end keys in spans which may be either inclusive or exclusive.
+// Here is the mapping:
+//   [/1/2 - ...] (inclusive start key): ExtendLow : /1/2/Low
+//   (/1/2 - ...] (exclusive start key): ExtendHigh: /1/2/High
+//   [... - /1/2] (inclusive end key)  : ExtendHigh: /1/2/High
+//   [... - /1/2) (exclusive end key)  : ExtendLow : /1/2/Low
+func (c KeyContext) Compare(k Key, kext KeyExtension, l Key, lext KeyExtension) int {
+	klen := k.Length()
+	llen := l.Length()
+	for i := 0; i < klen && i < llen; i++ {
+		if cmp := k.Value(i).Compare(c.EvalCtx, l.Value(i)); cmp != 0 {
+			if c.Columns.Get(i).Descending() {
+				cmp = -cmp
+			}
+			return cmp
+		}
+	}
+
+	if klen < llen {
+		// k matches a prefix of l:
+		//   k = /1
+		//   l = /1/2
+		// Which of these is "smaller" depends on whether k is extended with
+		// -inf or with +inf:
+		//   k (ExtendLow)  = /1/Low  < /1/2  ->  k is smaller (-1)
+		//   k (ExtendHigh) = /1/High > /1/2  ->  k is bigger  (1)
+		return kext.ToCmp()
+	} else if klen > llen {
+		// Inverse case of above.
+		return -lext.ToCmp()
+	}
+
+	// Equal keys:
+	//   k (ExtendLow)  vs. l (ExtendLow)   ->  equal   (0)
+	//   k (ExtendLow)  vs. l (ExtendHigh)  ->  smaller (-1)
+	//   k (ExtendHigh) vs. l (ExtendLow)   ->  bigger  (1)
+	//   k (ExtendHigh) vs. l (ExtendHigh)  ->  equal   (0)
+	if kext == lext {
+		return 0
+	}
+	return kext.ToCmp()
 }
