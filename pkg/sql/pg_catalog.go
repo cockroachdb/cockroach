@@ -21,7 +21,6 @@ import (
 	"hash"
 	"hash/fnv"
 	"reflect"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -1098,6 +1097,15 @@ CREATE TABLE pg_catalog.pg_namespace (
 	},
 }
 
+var (
+	infixKind   = tree.NewDString("b")
+	prefixKind  = tree.NewDString("l")
+	postfixKind = tree.NewDString("r")
+
+	// Avoid unused warning for constants.
+	_ = postfixKind
+)
+
 // See: https://www.postgresql.org/docs/10/static/catalog-pg-operator.html.
 var pgCatalogOperatorTable = virtualSchemaTable{
 	schema: `
@@ -1119,7 +1127,72 @@ CREATE TABLE pg_catalog.pg_operator (
   oprjoin OID
 );
 `,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	populate: func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		h := makeOidHasher()
+		nspOid := h.NamespaceOid(db, pgCatalogName)
+		addOp := func(opName string, kind tree.Datum, params tree.TypeList, returnTyper tree.ReturnTyper) error {
+			var leftType, rightType *tree.DOid
+			switch params.Length() {
+			case 1:
+				leftType = oidZero
+				rightType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+			case 2:
+				leftType = tree.NewDOid(tree.DInt(params.Types()[0].Oid()))
+				rightType = tree.NewDOid(tree.DInt(params.Types()[1].Oid()))
+			default:
+				panic(fmt.Sprintf("Unexpected operator %s with %d params",
+					opName, params.Length()))
+			}
+			returnType := tree.NewDOid(tree.DInt(returnTyper(nil).Oid()))
+			err := addRow(
+				h.OperatorOid(opName, leftType, rightType, returnType), // oid
+
+				tree.NewDString(opName), // oprname
+				nspOid,                  // oprnamespace
+				tree.DNull,              // oprowner
+				kind,                    // oprkind
+				tree.DBoolFalse,         // oprcanmerge
+				tree.DBoolFalse,         // oprcanhash
+				leftType,                // oprleft
+				rightType,               // oprright
+				returnType,              // oprresult
+				tree.DNull,              // oprcom
+				tree.DNull,              // oprnegate
+				tree.DNull,              // oprcode
+				tree.DNull,              // oprrest
+				tree.DNull,              // oprjoin
+			)
+			return err
+		}
+		for cmpOp, overloads := range tree.CmpOps {
+			for _, overload := range overloads {
+				params, returnType := tree.GetParamsAndReturnType(overload)
+				if err := addOp(cmpOp.String(), infixKind, params, returnType); err != nil {
+					return err
+				}
+				if inverse, ok := cmpOp.Inverse(); ok {
+					if err := addOp(inverse.String(), infixKind, params, returnType); err != nil {
+						return err
+					}
+				}
+			}
+		}
+		for binOp, overloads := range tree.BinOps {
+			for _, overload := range overloads {
+				params, returnType := tree.GetParamsAndReturnType(overload)
+				if err := addOp(binOp.String(), infixKind, params, returnType); err != nil {
+					return err
+				}
+			}
+		}
+		for unaryOp, overloads := range tree.UnaryOps {
+			for _, overload := range overloads {
+				params, returnType := tree.GetParamsAndReturnType(overload)
+				if err := addOp(unaryOp.String(), prefixKind, params, returnType); err != nil {
+					return err
+				}
+			}
+		}
 		return nil
 	},
 }
@@ -1166,8 +1239,8 @@ CREATE TABLE pg_catalog.pg_proc (
 	pronargs INT,
 	pronargdefaults INT,
 	prorettype OID,
-	proargtypes STRING,
-	proallargtypes STRING[],
+	proargtypes OIDVECTOR,
+	proallargtypes OID[],
 	proargmodes STRING[],
 	proargnames STRING[],
 	proargdefaults STRING,
@@ -1222,12 +1295,12 @@ CREATE TABLE pg_catalog.pg_proc (
 					}
 
 					argTypes := builtin.Types
-					dArgTypes := make([]string, len(argTypes.Types()))
-					for i, argType := range argTypes.Types() {
-						dArgType := argType.Oid()
-						dArgTypes[i] = strconv.Itoa(int(dArgType))
+					dArgTypes := tree.NewDArray(types.Oid)
+					for _, argType := range argTypes.Types() {
+						if err := dArgTypes.Append(tree.NewDOid(tree.DInt(argType.Oid()))); err != nil {
+							return err
+						}
 					}
-					dArgTypeString := strings.Join(dArgTypes, ", ")
 
 					var argmodes tree.Datum
 					var variadicType tree.Datum
@@ -1278,16 +1351,16 @@ CREATE TABLE pg_catalog.pg_proc (
 						tree.NewDInt(tree.DInt(builtin.Types.Length())), // pronargs
 						tree.NewDInt(tree.DInt(0)),                      // pronargdefaults
 						retType,                                         // prorettype
-						tree.NewDString(dArgTypeString), // proargtypes
-						tree.DNull,                      // proallargtypes
-						argmodes,                        // proargmodes
-						tree.DNull,                      // proargnames
-						tree.DNull,                      // proargdefaults
-						tree.DNull,                      // protrftypes
-						dSrc,                            // prosrc
-						tree.DNull,                      // probin
-						tree.DNull,                      // proconfig
-						tree.DNull,                      // proacl
+						tree.NewDOidVectorFromDArray(dArgTypes), // proargtypes
+						tree.DNull,                              // proallargtypes
+						argmodes,                                // proargmodes
+						tree.DNull,                              // proargnames
+						tree.DNull,                              // proargdefaults
+						tree.DNull,                              // protrftypes
+						dSrc,                                    // prosrc
+						tree.DNull,                              // probin
+						tree.DNull,                              // proconfig
+						tree.DNull,                              // proacl
 					)
 					if err != nil {
 						return err
@@ -1669,7 +1742,8 @@ CREATE TABLE pg_catalog.pg_type (
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
 				if cat == typCategoryArray {
-					if typ == types.IntVector {
+					switch typ {
+					case types.IntVector:
 						// IntVector needs a special case because its a special snowflake
 						// type. It's just like an Int2Array, but it has its own OID. We
 						// can't just wrap our Int2Array type in an OID wrapper, though,
@@ -1677,7 +1751,10 @@ CREATE TABLE pg_catalog.pg_type (
 						// input-only type that translates immediately to int8array. This
 						// would go away if we decided to export Int2Array as a real type.
 						typElem = tree.NewDOid(tree.DInt(oid.T_int2))
-					} else {
+					case types.OidVector:
+						// Same story as above for OidVector.
+						typElem = tree.NewDOid(tree.DInt(oid.T_oid))
+					default:
 						builtinPrefix = "array_"
 						typElem = tree.NewDOid(tree.DInt(types.UnwrapType(typ).(types.TArray).Typ.Oid()))
 					}
@@ -1930,6 +2007,16 @@ func (h oidHasher) writeUInt32(i uint32) {
 	}
 }
 
+func (h oidHasher) writeUInt64(i uint64) {
+	if err := binary.Write(h.h, binary.BigEndian, i); err != nil {
+		panic(err)
+	}
+}
+
+func (h oidHasher) writeOID(oid *tree.DOid) {
+	h.writeUInt64(uint64(oid.DInt))
+}
+
 type oidTypeTag uint8
 
 const (
@@ -1946,6 +2033,7 @@ const (
 	functionTypeTag
 	userTypeTag
 	collationTypeTag
+	operatorTypeTag
 )
 
 func (h oidHasher) writeTypeTag(tag oidTypeTag) {
@@ -2108,5 +2196,14 @@ func (h oidHasher) UserOid(username string) *tree.DOid {
 func (h oidHasher) CollationOid(collation string) *tree.DOid {
 	h.writeTypeTag(collationTypeTag)
 	h.writeStr(collation)
+	return h.getOid()
+}
+
+func (h oidHasher) OperatorOid(name string, leftType, rightType, returnType *tree.DOid) *tree.DOid {
+	h.writeTypeTag(operatorTypeTag)
+	h.writeStr(name)
+	h.writeOID(leftType)
+	h.writeOID(rightType)
+	h.writeOID(returnType)
 	return h.getOid()
 }

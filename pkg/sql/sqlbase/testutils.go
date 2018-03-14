@@ -159,6 +159,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 		return tree.DNull
 	case ColumnType_INT2VECTOR:
 		return tree.DNull
+	case ColumnType_OIDVECTOR:
+		return tree.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))
 	}

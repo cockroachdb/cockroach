@@ -1923,6 +1923,22 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 	},
 }
 
+// This map contains the inverses for operators in the CmpOps map that have
+// inverses.
+var cmpOpsInverse map[ComparisonOperator]ComparisonOperator
+
+func init() {
+	cmpOpsInverse = make(map[ComparisonOperator]ComparisonOperator)
+	for cmpOpIdx := range comparisonOpName {
+		cmpOp := ComparisonOperator(cmpOpIdx)
+		newOp, _, _, _, _ := foldComparisonExpr(cmpOp, DNull, DNull)
+		if newOp != cmpOp {
+			cmpOpsInverse[newOp] = cmpOp
+			cmpOpsInverse[cmpOp] = newOp
+		}
+	}
+}
+
 func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	switch op {
 	case EQ, IsNotDistinctFrom:
@@ -3187,9 +3203,12 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	// Index into the DArray, using 1-indexing.
 	arr := MustBeDArray(d)
 
-	// INT2VECTOR uses 0-indexing.
-	if w, ok := d.(*DOidWrapper); ok && w.Oid == oid.T_int2vector {
-		subscriptIdx++
+	// VECTOR types use 0-indexing.
+	if w, ok := d.(*DOidWrapper); ok {
+		switch w.Oid {
+		case oid.T_oidvector, oid.T_int2vector:
+			subscriptIdx++
+		}
 	}
 	if subscriptIdx < 1 || subscriptIdx > arr.Len() {
 		return DNull, nil

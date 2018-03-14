@@ -725,6 +725,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 24    regproc       3572887043    NULL      8       true      b
 25    text          3572887043    NULL      -1      false     b
 26    oid           3572887043    NULL      8       true      b
+30    oidvector     3572887043    NULL      -1      false     b
 700   float4        3572887043    NULL      8       true      b
 701   float8        3572887043    NULL      8       true      b
 869   inet          3572887043    NULL      24      true      b
@@ -757,6 +758,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 2205  regclass      3572887043    NULL      8       true      b
 2206  regtype       3572887043    NULL      8       true      b
 2249  record        3572887043    NULL      0       true      b
+2277  anyarray      3572887043    NULL      -1      false     b
 2283  anyelement    3572887043    NULL      -1      false     b
 2950  uuid          3572887043    NULL      16      true      b
 2951  _uuid         3572887043    NULL      -1      false     b
@@ -779,6 +781,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 24    regproc       N            false           true          ,         0         0        0
 25    text          S            false           true          ,         0         0        1009
 26    oid           N            false           true          ,         0         0        1028
+30    oidvector     A            false           true          ,         0         26       0
 700   float4        N            false           true          ,         0         0        1021
 701   float8        N            false           true          ,         0         0        1022
 869   inet          I            false           true          ,         0         0        1041
@@ -811,7 +814,8 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 2205  regclass      N            false           true          ,         0         0        0
 2206  regtype       N            false           true          ,         0         0        0
 2249  record        P            false           true          ,         0         0        0
-2283  anyelement    P            false           true          ,         0         0        0
+2277  anyarray      A            false           true          ,         0         2283     0
+2283  anyelement    P            false           true          ,         0         0        2277
 2950  uuid          U            false           true          ,         0         0        2951
 2951  _uuid         A            false           true          ,         0         2950     0
 3802  jsonb         U            false           true          ,         0         0        0
@@ -833,6 +837,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 24    regproc       regprocin       regprocout       regprocrecv       regprocsend       0         0          0
 25    text          textin          textout          textrecv          textsend          0         0          0
 26    oid           oidin           oidout           oidrecv           oidsend           0         0          0
+30    oidvector     oidvectorin     oidvectorout     oidvectorrecv     oidvectorsend     0         0          0
 700   float4        float4in        float4out        float4recv        float4send        0         0          0
 701   float8        float8in        float8out        float8recv        float8send        0         0          0
 869   inet          inetin          inetout          inetrecv          inetsend          0         0          0
@@ -865,6 +870,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 2205  regclass      regclassin      regclassout      regclassrecv      regclasssend      0         0          0
 2206  regtype       regtypein       regtypeout       regtyperecv       regtypesend       0         0          0
 2249  record        record_in       record_out       record_recv       record_send       0         0          0
+2277  anyarray      array_in        array_out        array_recv        array_send        0         0          0
 2283  anyelement    anyelement_in   anyelement_out   anyelement_recv   anyelement_send   0         0          0
 2950  uuid          uuid_in         uuid_out         uuid_recv         uuid_send         0         0          0
 2951  _uuid         array_in        array_out        array_recv        array_send        0         0          0
@@ -887,6 +893,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 24    regproc       NULL      NULL        false       0            -1
 25    text          NULL      NULL        false       0            -1
 26    oid           NULL      NULL        false       0            -1
+30    oidvector     NULL      NULL        false       0            -1
 700   float4        NULL      NULL        false       0            -1
 701   float8        NULL      NULL        false       0            -1
 869   inet          NULL      NULL        false       0            -1
@@ -919,6 +926,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 2205  regclass      NULL      NULL        false       0            -1
 2206  regtype       NULL      NULL        false       0            -1
 2249  record        NULL      NULL        false       0            -1
+2277  anyarray      NULL      NULL        false       0            -1
 2283  anyelement    NULL      NULL        false       0            -1
 2950  uuid          NULL      NULL        false       0            -1
 2951  _uuid         NULL      NULL        false       0            -1
@@ -941,6 +949,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 24    regproc       0         0             NULL           NULL        NULL
 25    text          0         1661428263    NULL           NULL        NULL
 26    oid           0         0             NULL           NULL        NULL
+30    oidvector     0         0             NULL           NULL        NULL
 700   float4        0         0             NULL           NULL        NULL
 701   float8        0         0             NULL           NULL        NULL
 869   inet          0         0             NULL           NULL        NULL
@@ -973,6 +982,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 2205  regclass      0         0             NULL           NULL        NULL
 2206  regtype       0         0             NULL           NULL        NULL
 2249  record        0         0             NULL           NULL        NULL
+2277  anyarray      0         1661428263    NULL           NULL        NULL
 2283  anyelement    0         0             NULL           NULL        NULL
 2950  uuid          0         0             NULL           NULL        NULL
 2951  _uuid         0         0             NULL           NULL        NULL
@@ -1020,10 +1030,10 @@ FROM pg_catalog.pg_proc
 WHERE proname='substring'
 ----
 proname    pronargs  pronargdefaults  prorettype  proargtypes  proallargtypes  proargmodes  proargdefaults
-substring  2         0                25          25, 20       NULL            NULL         NULL
-substring  3         0                25          25, 20, 20   NULL            NULL         NULL
-substring  2         0                25          25, 25       NULL            NULL         NULL
-substring  3         0                25          25, 25, 25   NULL            NULL         NULL
+substring  2         0                25          25 20        NULL            NULL         NULL
+substring  3         0                25          25 20 20     NULL            NULL         NULL
+substring  2         0                25          25 25        NULL            NULL         NULL
+substring  3         0                25          25 25 25     NULL            NULL         NULL
 
 query TTTTTT colnames
 SELECT proname, protrftypes, prosrc, probin, proconfig, proacl
@@ -1049,8 +1059,8 @@ SELECT proname, provariadic, pronargs, prorettype, proargtypes, proargmodes
 FROM pg_catalog.pg_proc
 WHERE proname='json_extract_path'
 ----
-proname              provariadic  pronargs  prorettype  proargtypes  proargmodes
-json_extract_path    25           2         3802        3802, 25     {"i","v"}
+proname            provariadic  pronargs  prorettype  proargtypes  proargmodes
+json_extract_path  25           2         3802        3802 25      {"i","v"}
 
 ## pg_catalog.pg_range
 query IIIIII colnames
@@ -1250,6 +1260,14 @@ SET database = constraint_db
 query OOIIIIIB
 SELECT * FROM pg_catalog.pg_sequence
 ----
+
+## pg_catalog.pg_operator
+
+query OTOOTBBOOOOOOOO colnames
+SELECT * FROM pg_catalog.pg_operator where oprname='+' and oprleft='float8'::regtype
+----
+oid         oprname  oprnamespace  oprowner  oprkind  oprcanmerge  oprcanhash  oprleft  oprright  oprresult  oprcom  oprnegate  oprcode  oprrest  oprjoin
+3695865198  +        3572887043    NULL      b        false        false       701      701       701        NULL    NULL       NULL     NULL     NULL
 
 # Verify proper functionality of system information functions.
 

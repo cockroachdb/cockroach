@@ -364,6 +364,13 @@ func (i ComparisonOperator) String() string {
 	return comparisonOpName[i]
 }
 
+// Inverse returns the inverse of this comparison operator if it exists. The
+// second return value is true if it exists, and false otherwise.
+func (i ComparisonOperator) Inverse() (ComparisonOperator, bool) {
+	inverse, ok := cmpOpsInverse[i]
+	return inverse, ok
+}
+
 // hasSubOperator returns if the ComparisonOperator is used with a sub-operator.
 func (i ComparisonOperator) hasSubOperator() bool {
 	switch i {
