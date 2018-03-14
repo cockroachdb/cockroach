@@ -292,7 +292,12 @@ func (p *planner) makeJoin(
 				return planDataSource{}, err
 			}
 		}
-		r.addRenderColumn(expr, symbolicExprStr(expr), left.info.SourceColumns[leftCol])
+		// Issue #23609: the type of the left side might be NULL; so use the type of
+		// the IFNULL expression instead of the type of the left source column.
+		r.addRenderColumn(expr, symbolicExprStr(expr), sqlbase.ResultColumn{
+			Name: left.info.SourceColumns[leftCol].Name,
+			Typ:  expr.ResolvedType(),
+		})
 	}
 	for i, c := range left.info.SourceColumns {
 		if remapped[i] != -1 {
