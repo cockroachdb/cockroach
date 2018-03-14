@@ -2198,6 +2198,11 @@ func (h oidHasher) BuiltinOid(name string, builtin *tree.Builtin) *tree.DOid {
 	h.writeTypeTag(functionTypeTag)
 	h.writeStr(name)
 	h.writeStr(builtin.Types.String())
+	if builtin.PreferredOverload {
+		// No two builtins can have the same oid, so we have to do something special
+		// for overloads with identical input and output types.
+		h.writeStr("preferred")
+	}
 	return h.getOid()
 }
 
