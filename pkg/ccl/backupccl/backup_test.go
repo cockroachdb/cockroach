@@ -1028,6 +1028,101 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	})
 }
 
+// TestImportLiveness tests that a node liveness increment during IMPORT
+// correctly resumes.
+//
+// Its actual purpose is to address the second bug listed in #22924 about
+// the addsstable arguments not in request range. The theory was that the
+// restart in that issue was caused by node liveness and that the work
+// already performed (the splits and addsstables) somehow caused the second
+// error. However this does not appear to be the case, as running many stress
+// iterations with differing constants (rows, sstsize, kv.import.batch_size)
+// was not able to fail in the way listed by the second bug.
+func TestImportLiveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	jobs.DefaultCancelInterval = 100 * time.Millisecond
+
+	const nodes = 1
+	nl := jobs.NewFakeNodeLiveness(nodes)
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			RegistryLiveness: nl,
+		},
+	}
+
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
+			for _, res := range br.Responses {
+				if res.Export != nil || res.Import != nil || res.AddSstable != nil {
+					<-allowResponse
+				}
+			}
+			return nil
+		},
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Prevent hung HTTP connections in leaktest.
+	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.timeout = '3s'`)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '300B'`)
+	sqlDB.Exec(t, `CREATE DATABASE liveness`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const rows = 100
+		if r.Method == "GET" {
+			for i := 0; i < rows; i++ {
+				fmt.Fprintln(w, i)
+			}
+		}
+	}))
+	defer srv.Close()
+
+	const query = `IMPORT TABLE liveness.t (i INT PRIMARY KEY) CSV DATA ($1) WITH sstsize = '50B'`
+
+	// Start an IMPORT and wait until it's done one addsstable.
+	allowResponse = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := sqlDB.DB.Exec(query, srv.URL)
+		errCh <- err
+	}()
+	select {
+	case allowResponse <- struct{}{}:
+	case err := <-errCh:
+		t.Fatal(err)
+	}
+	// Fetch the new job ID since we know it's running now.
+	var jobID int64
+	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+
+	// addsstable is done, now tick liveness and wait for it to cancel the import.
+	nl.FakeIncrementEpoch(1)
+	// Wait for the registry cancel loop to run and cancel the job.
+	<-nl.SelfCalledCh
+	<-nl.SelfCalledCh
+	close(allowResponse)
+	err := <-errCh
+	if !testutils.IsError(err, "job .*: node liveness error") {
+		t.Fatalf("unexpected: %v", err)
+	}
+	// The registry should now adopt the job and resume it.
+	if err := waitForJob(sqlDB.DB, jobID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRestoreFailCleanup tests that a failed RESTORE is cleaned up.
 func TestRestoreFailCleanup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
