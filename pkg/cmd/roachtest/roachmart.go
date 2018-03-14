@@ -21,11 +21,7 @@ import (
 )
 
 func init() {
-	runRoachmart := func(t *test, partition bool) {
-		ctx := context.Background()
-		c := newCluster(ctx, t, 9, "--geo")
-		defer c.Destroy(ctx)
-
+	runRoachmart := func(ctx context.Context, t *test, c *cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		c.Start(ctx)
@@ -77,9 +73,12 @@ func init() {
 
 	for _, v := range []bool{true, false} {
 		v := v
-		tests.Add(fmt.Sprintf("roachmart/partition=%v", v),
-			func(t *test) {
-				runRoachmart(t, v)
-			})
+		tests.Add(testSpec{
+			Name:  fmt.Sprintf("roachmart/partition=%v", v),
+			Nodes: nodes(9, geo()),
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runRoachmart(ctx, t, c, v)
+			},
+		})
 	}
 }
