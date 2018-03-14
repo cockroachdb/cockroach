@@ -16,14 +16,18 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
 	// Register the net/trace endpoint with http.DefaultServeMux.
 
+	"golang.org/x/net/context"
 	"golang.org/x/net/trace"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
@@ -91,26 +95,62 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 	handler.ServeHTTP(w, r)
 }
 
-// traceAuthRequest is the original trace.AuthRequest, populated in init().
-var traceAuthRequest func(*http.Request) (bool, bool)
-
 // authRequest restricts access to /debug/*.
 func authRequest(r *http.Request) (allow, sensitive bool) {
-	allow, sensitive = traceAuthRequest(r)
-	switch DebugRemoteMode(strings.ToLower(debugRemote.Get(settings.TODO()))) {
-	case DebugRemoteAny:
-		allow = true
-	case DebugRemoteLocal:
-		break
-	default:
-		allow = false
-	}
+	allow = authRequestImpl(r.RemoteAddr, settings.TODO())
+	sensitive = allow
 	return allow, sensitive
 }
 
-func init() {
-	traceAuthRequest = trace.AuthRequest
+// authRequestImpl restricts access according to the debugRemote setting.
+func authRequestImpl(remoteAddr string, st *settings.Values) bool {
+	switch DebugRemoteMode(strings.ToLower(debugRemote.Get(st))) {
+	case DebugRemoteAny:
+		return true
+	case DebugRemoteLocal:
+		return isLocalhost(remoteAddr)
+	default:
+		return false
+	}
+}
 
+// isLocalhost returns true if the remoteAddr represents a client talking to
+// us via localhost.
+func isLocalhost(remoteAddr string) bool {
+	// RemoteAddr is commonly in the form "IP" or "IP:port".
+	// If it is in the form "IP:port", split off the port.
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	switch host {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
+// GatewayRemoteAllowed returns whether a request that has been passed through
+// the grpc gateway should be allowed accessed to privileged debugging
+// information. Because this function assumes the presence of a context field
+// populated by the grpc gateway, it's not applicable for other uses.
+func GatewayRemoteAllowed(ctx context.Context, st *cluster.Settings) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		// This should only happen for direct grpc connections, which are allowed.
+		return true
+	}
+	peerAddr, ok := md["x-forwarded-for"]
+	if !ok || len(peerAddr) == 0 {
+		// This should only happen for direct grpc connections, which are allowed.
+		return true
+	}
+
+	return authRequestImpl(peerAddr[0], &st.SV)
+}
+
+func init() {
 	// Tweak the authentication logic for the tracing endpoint. By default it's
 	// open for localhost only, but we want it to behave according to our
 	// settings.
