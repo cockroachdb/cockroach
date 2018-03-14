@@ -18,13 +18,12 @@ export default function Loading(props: LoadingProps) {
   if (props.loading) {
     return <div className={props.className} style={image} />;
   }
-  // The wrapper <div> in the return clause is required so that this component
-  // can take a list of elements instead of only a single one.
-  // This is fixed in react 16, see:
-  // https://reactjs.org/blog/2017/11/28/react-v16.2.0-fragment-support.html
-  return (
-    <div>
-      {props.children}
-    </div>
-  );
+
+  // This throws an error if more than one child is passed.
+  // Unfortunately the error seems to get eaten by some try/catch
+  // above this, but leaving it here to at least signal intent.
+  // Also unfortunately it's unclear how to enforce this invariant
+  // with the type system, since the `children` argument matches
+  // both one node and multiple nodes.
+  return React.Children.only(props.children);
 }
