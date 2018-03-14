@@ -27,6 +27,7 @@ import (
 	stdLog "log"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -34,6 +35,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -588,6 +590,18 @@ func init() {
 	logging.fatalCh = make(chan struct{})
 
 	go flushDaemon()
+	go signalFlusher()
+}
+
+// signalFlusher flushes the log(s) every time SIGHUP is received.
+func signalFlusher() {
+	flushCh := make(chan os.Signal, 1)
+	signal.Notify(flushCh, syscall.SIGHUP)
+
+	for sig := range flushCh {
+		Infof(context.Background(), "%s received, flushing logs", sig)
+		Flush()
+	}
 }
 
 // LoggingToStderr returns true if log messages of the given severity

@@ -41,16 +41,13 @@ eexpect root@
 system "grep -q 'helloworld.*:READ}.*SELECT.*ERROR' $logfile"
 end_test
 
-# force rotate the logs: the test below must not see the
-# log entries that were already generated above.
-force_stop_server $argv
-start_server $argv
+# Flush and truncate the logs. The test below must not see the log entries that
+# were already generated above.
+flush_server_logs
+system "truncate -s0 $logfile"
 
-send "\r"
-eexpect "opening new connection"
-eexpect root@
-send "\r"
-eexpect "t>"
+# Check the log indeed is empty
+system "if grep -q helloworld $logfile; then false; fi"
 
 start_test "Check that audit removal is logged too"
 send "ALTER TABLE helloworld EXPERIMENTAL_AUDIT SET OFF;\r"
