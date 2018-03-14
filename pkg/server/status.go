@@ -27,6 +27,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"sync"
@@ -694,7 +695,7 @@ func (s *statusServer) Logs(
 // TODO(tschottdorf): significant overlap with /debug/pprof/goroutine, except
 // that this one allows querying by NodeID.
 //
-// Stacks handles returns goroutine stack traces.
+// Stacks returns goroutine stack traces.
 func (s *statusServer) Stacks(
 	ctx context.Context, req *serverpb.StacksRequest,
 ) (*serverpb.JSONResponse, error) {
@@ -723,6 +724,41 @@ func (s *statusServer) Stacks(
 			continue
 		}
 		return &serverpb.JSONResponse{Data: buf[:length]}, nil
+	}
+}
+
+// TODO(tschottdorf): significant overlap with /debug/pprof/heap, except that
+// this one allows querying by NodeID.
+//
+// Profile returns a heap profile.
+func (s *statusServer) Profile(
+	ctx context.Context, req *serverpb.ProfileRequest,
+) (*serverpb.JSONResponse, error) {
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.Profile(ctx, req)
+	}
+
+	switch req.Type {
+	case serverpb.ProfileRequest_HEAP:
+		p := pprof.Lookup("heap")
+		if p == nil {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, "unable to find profile: heap")
+		}
+		var buf bytes.Buffer
+		p.WriteTo(&buf, 0)
+		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
+
+	default:
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown profile: %s", req.Type)
 	}
 }
 
