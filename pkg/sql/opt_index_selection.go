@@ -146,9 +146,12 @@ func (p *planner) selectIndex(
 
 	if s.noIndexJoin {
 		// Eliminate non-covering indexes. We do this after the check above for
-		// constant false filter.
+		// constant false filter. We're also removing inverted indexes that don't
+		// generate spans.
 		for i := 0; i < len(candidates); {
-			if !candidates[i].covering {
+			spans, ok := candidates[i].ic.Spans()
+			if !candidates[i].covering ||
+				(candidates[i].index.Type == sqlbase.IndexDescriptor_INVERTED && (!ok || len(spans) == 0)) {
 				candidates[i] = candidates[len(candidates)-1]
 				candidates = candidates[:len(candidates)-1]
 			} else {
@@ -233,7 +236,7 @@ func (p *planner) selectIndex(
 	s.reverse = c.reverse
 
 	var plan planNode
-	if c.covering && c.index.Type != sqlbase.IndexDescriptor_INVERTED {
+	if c.covering {
 		s.initOrdering(c.exactPrefix, p.EvalContext())
 		plan = s
 	} else {
@@ -340,6 +343,9 @@ func (v *indexInfo) analyzeOrdering(
 // the index. This allows a scan of only the index to be performed without requiring subsequent
 // lookup of the full row.
 func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
+	if v.index.Type == sqlbase.IndexDescriptor_INVERTED {
+		return false
+	}
 	if v.index == &v.desc.PrimaryIndex {
 		// The primary key index always covers all of the columns.
 		return true
