@@ -160,7 +160,8 @@ func (p *planner) getDataSource(
 			return p.getVirtualDataSource(ctx, tn)
 		}
 
-		return p.getPlanForDesc(ctx, desc, tn, hints, scanVisibility, nil /*wantedColumns*/)
+		colCfg := scanColumnsConfig{visibility: scanVisibility}
+		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
 
 	case *tree.FuncExpr:
 		return p.getGeneratorPlan(ctx, t)
@@ -272,7 +273,12 @@ func (p *planner) getTableScanByRef(
 	// error messages (we want `foo` not `"".foo`).
 	tn := tree.MakeUnqualifiedTableName(tree.Name(desc.Name))
 
-	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, scanVisibility, tref.Columns)
+	colCfg := scanColumnsConfig{
+		wantedColumns:       tref.Columns,
+		addUnwantedAsHidden: true,
+		visibility:          scanVisibility,
+	}
+	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, colCfg)
 	if err != nil {
 		return src, err
 	}
@@ -337,25 +343,26 @@ func (p *planner) getPlanForDesc(
 	desc *sqlbase.TableDescriptor,
 	tn *tree.TableName,
 	hints *tree.IndexHints,
-	scanVisibility scanVisibility,
-	wantedColumns []tree.ColumnID,
+	colCfg scanColumnsConfig,
 ) (planDataSource, error) {
 	if desc.IsView() {
-		if wantedColumns != nil {
+		if colCfg.wantedColumns != nil {
 			return planDataSource{},
 				errors.Errorf("cannot specify an explicit column list when accessing a view by reference")
 		}
 		return p.getViewPlan(ctx, tn, desc)
-	} else if desc.IsSequence() {
+	}
+	if desc.IsSequence() {
 		return p.getSequenceSource(ctx, *tn, desc)
-	} else if !desc.IsTable() {
+	}
+	if !desc.IsTable() {
 		return planDataSource{}, errors.Errorf(
 			"unexpected table descriptor of type %s for %q", desc.TypeName(), tree.ErrString(tn))
 	}
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(ctx, p, desc, hints, scanVisibility, wantedColumns); err != nil {
+	if err := scan.initTable(ctx, p, desc, hints, colCfg); err != nil {
 		return planDataSource{}, err
 	}
 

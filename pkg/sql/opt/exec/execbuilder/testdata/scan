@@ -38,15 +38,12 @@ scan a
 exec-explain
 SELECT s, x FROM t.a
 ----
-render          0  render  ·         ·          (s, x)     ·
- │              0  ·       render 0  s          ·          ·
- │              0  ·       render 1  x          ·          ·
- └── render     1  render  ·         ·          (x, s)     ·
-      │         1  ·       render 0  x          ·          ·
-      │         1  ·       render 1  s          ·          ·
-      └── scan  2  scan    ·         ·          (x, y, s)  ·
-·               2  ·       table     a@primary  ·          ·
-·               2  ·       spans     ALL        ·          ·
+render     0  render  ·         ·          (s, x)  ·
+ │         0  ·       render 0  s          ·       ·
+ │         0  ·       render 1  x          ·       ·
+ └── scan  1  scan    ·         ·          (x, s)  ·
+·          1  ·       table     a@primary  ·       ·
+·          1  ·       spans     ALL        ·       ·
 
 exec
 SELECT s, x FROM t.a
@@ -79,12 +76,9 @@ cherry    3
 exec-explain
 SELECT s, x FROM t.b
 ----
-render          0  render  ·         ·          (s, x)                    ·
- │              0  ·       render 0  s          ·                         ·
- │              0  ·       render 1  x          ·                         ·
- └── render     1  render  ·         ·          (x, s)                    ·
-      │         1  ·       render 0  x          ·                         ·
-      │         1  ·       render 1  s          ·                         ·
-      └── scan  2  scan    ·         ·          (x, y, s, rowid[hidden])  ·
-·               2  ·       table     b@primary  ·                         ·
-·               2  ·       spans     ALL        ·                         ·
+render     0  render  ·         ·          (s, x)  ·
+ │         0  ·       render 0  s          ·       ·
+ │         0  ·       render 1  x          ·       ·
+ └── scan  1  scan    ·         ·          (x, s)  ·
+·          1  ·       table     b@primary  ·       ·
+·          1  ·       spans     ALL        ·       ·

@@ -223,32 +223,24 @@ v:int
 exec-explain
 SELECT v FROM t.uniontest UNION SELECT k FROM t.uniontest
 ----
-union           0  union   ·         ·                  (v)                    ·
- ├── render     1  render  ·         ·                  (k)                    ·
- │    │         1  ·       render 0  k                  ·                      ·
- │    └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
- │              2  ·       table     uniontest@primary  ·                      ·
- │              2  ·       spans     ALL                ·                      ·
- └── render     1  render  ·         ·                  (v)                    ·
-      │         1  ·       render 0  v                  ·                      ·
-      └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
-·               2  ·       table     uniontest@primary  ·                      ·
-·               2  ·       spans     ALL                ·                      ·
+union      0  union  ·      ·                  (v)  ·
+ ├── scan  1  scan   ·      ·                  (k)  ·
+ │         1  ·      table  uniontest@primary  ·    ·
+ │         1  ·      spans  ALL                ·    ·
+ └── scan  1  scan   ·      ·                  (v)  ·
+·          1  ·      table  uniontest@primary  ·    ·
+·          1  ·      spans  ALL                ·    ·
 
 exec-explain
 SELECT v FROM t.uniontest UNION ALL SELECT k FROM t.uniontest
 ----
-append          0  append  ·         ·                  (v)                    ·
- ├── render     1  render  ·         ·                  (k)                    ·
- │    │         1  ·       render 0  k                  ·                      ·
- │    └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
- │              2  ·       table     uniontest@primary  ·                      ·
- │              2  ·       spans     ALL                ·                      ·
- └── render     1  render  ·         ·                  (v)                    ·
-      │         1  ·       render 0  v                  ·                      ·
-      └── scan  2  scan    ·         ·                  (k, v, rowid[hidden])  ·
-·               2  ·       table     uniontest@primary  ·                      ·
-·               2  ·       spans     ALL                ·                      ·
+append     0  append  ·      ·                  (v)  ·
+ ├── scan  1  scan    ·      ·                  (k)  ·
+ │         1  ·       table  uniontest@primary  ·    ·
+ │         1  ·       spans  ALL                ·    ·
+ └── scan  1  scan    ·      ·                  (v)  ·
+·          1  ·       table  uniontest@primary  ·    ·
+·          1  ·       spans  ALL                ·    ·
 
 exec
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
