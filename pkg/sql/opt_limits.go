@@ -132,7 +132,10 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.applyLimit(n.source, numRows, soft)
 
 	case *spoolNode:
-		p.setUnlimited(n.source)
+		if !soft {
+			n.hardLimit = numRows
+		}
+		p.applyLimit(n.source, numRows, soft)
 
 	case *delayedNode:
 		if n.plan != nil {
@@ -140,12 +143,24 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		}
 
 	case *deleteNode:
+		// A limit does not propagate into a mutation. When there is a
+		// surrounding query, the mutation must run to completion even if
+		// the surrounding query only uses parts of its results.
 		p.setUnlimited(n.run.rows)
 	case *updateNode:
+		// A limit does not propagate into a mutation. When there is a
+		// surrounding query, the mutation must run to completion even if
+		// the surrounding query only uses parts of its results.
 		p.setUnlimited(n.run.rows)
 	case *insertNode:
+		// A limit does not propagate into a mutation. When there is a
+		// surrounding query, the mutation must run to completion even if
+		// the surrounding query only uses parts of its results.
 		p.setUnlimited(n.run.rows)
 	case *upsertNode:
+		// A limit does not propagate into a mutation. When there is a
+		// surrounding query, the mutation must run to completion even if
+		// the surrounding query only uses parts of its results.
 		p.setUnlimited(n.run.rows)
 	case *createTableNode:
 		if n.sourcePlan != nil {

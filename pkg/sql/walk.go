@@ -486,6 +486,9 @@ func (v *planVisitor) visit(plan planNode) {
 		v.visit(n.source)
 
 	case *spoolNode:
+		if n.hardLimit > 0 && v.observer.attr != nil {
+			v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
+		}
 		v.visit(n.source)
 
 	case *showTraceNode:
