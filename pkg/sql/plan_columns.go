@@ -122,6 +122,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.table, mut)
 	case *limitNode:
 		return getPlanColumns(n.plan, mut)
+	case *spoolNode:
+		return getPlanColumns(n.source, mut)
 	}
 
 	// Every other node has no columns in their results.

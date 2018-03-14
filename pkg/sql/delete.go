@@ -196,6 +196,9 @@ func (d *deleteNode) Values() tree.Datums {
 	return d.run.resultRow
 }
 
+// requireSpool implements the planNodeRequireSpool interface.
+func (d *deleteNode) requireSpool() {}
+
 func (d *deleteNode) Close(ctx context.Context) {
 	d.run.rows.Close(ctx)
 	d.tw.close(ctx)
