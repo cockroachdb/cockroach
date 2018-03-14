@@ -38,7 +38,7 @@ interface OwnProps {
   enterpriseEnabled: boolean;
 }
 
-function mapStateToProps(state: AdminUIState) {
+function mapStateToProps<T>(state: AdminUIState, _ownProps: T) {
   return {
     enterpriseEnabled: selectEnterpriseEnabled(state),
   };
@@ -53,7 +53,7 @@ export default function swapByLicense<TProps>(
   OSSComponent: Component<TProps>,
   CCLComponent: Component<TProps>,
   // tslint:enable:variable-name
-) {
+): ComponentClass<TProps> {
   const ossName = getComponentName(OSSComponent);
   const cclName = getComponentName(CCLComponent);
 
