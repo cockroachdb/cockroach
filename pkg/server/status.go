@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	grpcstatus "google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -47,8 +48,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -92,6 +95,7 @@ type metricMarshaler interface {
 type statusServer struct {
 	log.AmbientContext
 
+	st              *cluster.Settings
 	cfg             *base.Config
 	admin           *adminServer
 	db              *client.DB
@@ -107,6 +111,7 @@ type statusServer struct {
 // newStatusServer allocates and returns a statusServer.
 func newStatusServer(
 	ambient log.AmbientContext,
+	st *cluster.Settings,
 	cfg *base.Config,
 	adminServer *adminServer,
 	db *client.DB,
@@ -121,6 +126,7 @@ func newStatusServer(
 	ambient.AddLogTag("status", nil)
 	server := &statusServer{
 		AmbientContext:  ambient,
+		st:              st,
 		cfg:             cfg,
 		admin:           adminServer,
 		db:              db,
@@ -182,6 +188,14 @@ func (s *statusServer) dialNode(
 func (s *statusServer) Gossip(
 	ctx context.Context, req *serverpb.GossipRequest,
 ) (*gossip.InfoStatus, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -196,6 +210,9 @@ func (s *statusServer) Gossip(
 	if err != nil {
 		return nil, err
 	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
 	return status.Gossip(ctx, req)
 }
 
@@ -203,6 +220,16 @@ func (s *statusServer) Gossip(
 func (s *statusServer) Allocator(
 	ctx context.Context, req *serverpb.AllocatorRequest,
 ) (*serverpb.AllocatorResponse, error) {
+	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
+	// logging range start/end keys in the simulated allocator runs.
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -304,6 +331,16 @@ func recordedSpansToAllocatorEvents(
 func (s *statusServer) AllocatorRange(
 	ctx context.Context, req *serverpb.AllocatorRangeRequest,
 ) (*serverpb.AllocatorRangeResponse, error) {
+	// TODO(a-robinson): It'd be nice to allow this endpoint and just avoid
+	// logging range start/end keys in the simulated allocator runs.
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeCtx, cancel := context.WithTimeout(ctx, base.NetworkTimeout)
 	defer cancel()
@@ -567,6 +604,14 @@ func (s *statusServer) LogFilesList(
 func (s *statusServer) LogFile(
 	ctx context.Context, req *serverpb.LogFileRequest,
 ) (*serverpb.LogEntriesResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -637,6 +682,14 @@ func parseInt64WithDefault(s string, defaultValue int64) (int64, error) {
 func (s *statusServer) Logs(
 	ctx context.Context, req *serverpb.LogsRequest,
 ) (*serverpb.LogEntriesResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -911,6 +964,12 @@ func (s *statusServer) handleVars(w http.ResponseWriter, r *http.Request) {
 func (s *statusServer) Ranges(
 	ctx context.Context, req *serverpb.RangesRequest,
 ) (*serverpb.RangesResponse, error) {
+	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.st)
+	const omittedKeyStr = "omitted (due to the 'server.remote_debugging.mode' setting)"
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, local, err := s.parseNodeID(req.NodeId)
 	if err != nil {
@@ -965,13 +1024,23 @@ func (s *statusServer) Ranges(
 		raftStatus := rep.RaftStatus()
 		raftState := convertRaftStatus(raftStatus)
 		leaseHistory := rep.GetLeaseHistory()
+		var span serverpb.PrettySpan
+		if includeRawKeys {
+			span.StartKey = desc.StartKey.String()
+			span.EndKey = desc.EndKey.String()
+		} else {
+			span.StartKey = omittedKeyStr
+			span.EndKey = omittedKeyStr
+		}
+		state := rep.State()
+		if !includeRawKeys {
+			state.ReplicaState.Desc.StartKey = nil
+			state.ReplicaState.Desc.EndKey = nil
+		}
 		return serverpb.RangeInfo{
-			Span: serverpb.PrettySpan{
-				StartKey: desc.StartKey.String(),
-				EndKey:   desc.EndKey.String(),
-			},
+			Span:          span,
 			RaftState:     raftState,
-			State:         rep.State(),
+			State:         state,
 			SourceNodeID:  nodeID,
 			SourceStoreID: storeID,
 			LeaseHistory:  leaseHistory,
@@ -1058,6 +1127,12 @@ func (s *statusServer) Ranges(
 func (s *statusServer) Range(
 	ctx context.Context, req *serverpb.RangeRequest,
 ) (*serverpb.RangeResponse, error) {
+	// Needed in order for the requests to the `Ranges` endpoint from this
+	// function to work.
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	response := &serverpb.RangeResponse{
 		RangeID:           roachpb.RangeID(req.RangeId),
@@ -1152,6 +1227,14 @@ func (s *statusServer) CommandQueue(
 func (s *statusServer) ListLocalSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	registry := s.sessionRegistry
 
 	sessions := registry.SerializeAll()
@@ -1173,6 +1256,14 @@ func (s *statusServer) ListLocalSessions(
 func (s *statusServer) ListSessions(
 	ctx context.Context, req *serverpb.ListSessionsRequest,
 ) (*serverpb.ListSessionsResponse, error) {
+	if !debug.GatewayRemoteAllowed(ctx, s.st) {
+		return nil, grpcstatus.Error(
+			codes.PermissionDenied, "not allowed (due to the 'server.remote_debugging.mode' setting)")
+	}
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	ctx = s.AnnotateCtx(ctx)
 	nodes, err := s.Nodes(ctx, nil)
 	if err != nil {

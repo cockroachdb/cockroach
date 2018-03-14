@@ -29,6 +29,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/apd"
@@ -38,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -773,6 +775,11 @@ func redactSettingsChange(info string) string {
 func (s *adminServer) RangeLog(
 	ctx context.Context, req *serverpb.RangeLogRequest,
 ) (*serverpb.RangeLogResponse, error) {
+	includeRawKeys := debug.GatewayRemoteAllowed(ctx, s.server.ClusterSettings())
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		ctx = metadata.NewOutgoingContext(ctx, md)
+	}
+
 	args := sql.SessionArgs{User: s.getUser(req)}
 	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
 	defer session.Finish(s.server.sqlExecutor)
@@ -855,9 +862,17 @@ func (s *adminServer) RangeLog(
 				return nil, errors.Wrap(err, fmt.Sprintf("info didn't parse correctly: %s", info))
 			}
 			if event.Info.NewDesc != nil {
+				if !includeRawKeys {
+					event.Info.NewDesc.StartKey = nil
+					event.Info.NewDesc.EndKey = nil
+				}
 				prettyInfo.NewDesc = event.Info.NewDesc.String()
 			}
 			if event.Info.UpdatedDesc != nil {
+				if !includeRawKeys {
+					event.Info.UpdatedDesc.StartKey = nil
+					event.Info.UpdatedDesc.EndKey = nil
+				}
 				prettyInfo.UpdatedDesc = event.Info.UpdatedDesc.String()
 			}
 			if event.Info.AddedReplica != nil {

@@ -15,6 +15,7 @@
 package debug
 
 import (
+	"context"
 	"expvar"
 	"fmt"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	// Register the net/trace endpoint with http.DefaultServeMux.
 
 	"golang.org/x/net/trace"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -136,9 +138,14 @@ func (ds *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // authRequest restricts access to /debug/*.
 func (ds *Server) authRequest(r *http.Request) bool {
+	return authRequest(r, ds.st)
+}
+
+// authRequest restricts access according to the debugRemote setting.
+func authRequest(r *http.Request, st *cluster.Settings) bool {
 	allow, _ := origTraceAuthRequest(r)
 
-	switch RemoteMode(strings.ToLower(debugRemote.Get(&ds.st.SV))) {
+	switch RemoteMode(strings.ToLower(debugRemote.Get(&st.SV))) {
 	case RemoteAny:
 		allow = true
 	case RemoteLocal:
@@ -148,6 +155,29 @@ func (ds *Server) authRequest(r *http.Request) bool {
 		allow = false
 	}
 	return allow
+}
+
+// GatewayRemoteAllowed returns whether a request that has been passed through
+// the grpc gateway should be allowed accessed to privileged debugging
+// information. Because this function assumes the presence of a context field
+// populated by the grpc gateway, it's not applicable for other uses.
+func GatewayRemoteAllowed(ctx context.Context, st *cluster.Settings) bool {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		// This should only happen for direct grpc connections, which are allowed.
+		return true
+	}
+	peerAddr, ok := md["x-forwarded-for"]
+	if !ok || len(peerAddr) == 0 {
+		// This should only happen for direct grpc connections, which are allowed.
+		return true
+	}
+
+	// origTraceAuthRequest expects an http.Request, so just wrap the peer
+	// address in an otherwise empty one.
+	var r http.Request
+	r.RemoteAddr = peerAddr[0]
+	return authRequest(&r, st)
 }
 
 func handleLanding(w http.ResponseWriter, r *http.Request) {
