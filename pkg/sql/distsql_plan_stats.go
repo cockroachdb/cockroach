@@ -36,7 +36,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 ) (physicalPlan, error) {
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}
-	err := scan.initDescDefaults(nil /* planDependencies */, publicColumns, nil /* wantedColumns */)
+	err := scan.initDescDefaults(nil /* planDependencies */, publicColumnsCfg)
 	if err != nil {
 		return physicalPlan{}, err
 	}

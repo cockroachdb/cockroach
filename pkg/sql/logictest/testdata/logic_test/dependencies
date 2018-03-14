@@ -127,7 +127,7 @@ CREATE SEQUENCE blog_posts_id_seq
 statement ok
 CREATE TABLE blog_posts (id INT PRIMARY KEY DEFAULT nextval('blog_posts_id_seq'), title text)
 
-query ITIIITITT colnames rowsort
+query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'blog_posts'
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
@@ -138,3 +138,36 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blo
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [0]
+
+# Verify that we report a dependency on a column that is being mutated.
+  #CREATE VIEW v AS WITH a AS (UPDATE kv SET v = 444 RETURNING k) SELECT k FROM a;
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+BEGIN;
+  ALTER TABLE kv ADD COLUMN z INT DEFAULT 123;
+  CREATE VIEW v AS SELECT k FROM [UPDATE kv SET v = 444 WHERE k > 0 RETURNING k];
+COMMIT
+
+# The view should contain column z.
+query TITTTTT colnames
+EXPLAIN (VERBOSE) SELECT * FROM v
+----
+Tree            Level  Type    Field        Description       Columns           Ordering
+update          0      update  ·            ·                 (k)               ·
+ │              0      ·       table        kv                ·                 ·
+ │              0      ·       set          v                 ·                 ·
+ │              0      ·       returning 0  test.public.kv.k  ·                 ·
+ └── render     1      render  ·            ·                 (k, v, z, "444")  "444"=CONST; k!=NULL; key(k)
+      │         1      ·       render 0     test.public.kv.k  ·                 ·
+      │         1      ·       render 1     test.public.kv.v  ·                 ·
+      │         1      ·       render 2     test.public.kv.z  ·                 ·
+      │         1      ·       render 3     444               ·                 ·
+      └── scan  2      scan    ·            ·                 (k, v, z)         k!=NULL; key(k)
+·               2      ·       table        kv@primary        ·                 ·
+·               2      ·       spans        /1-               ·                 ·
+
+query ITIITITT colnames
+SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
+----
+descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
+65             kv               NULL      66               view               0                      NULL               Columns: [1 2 3]
