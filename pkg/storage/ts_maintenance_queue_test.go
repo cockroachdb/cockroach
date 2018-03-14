@@ -237,7 +237,10 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	// periods; this simplifies verification.
 	seriesName := "test.metric"
 	sourceName := "source1"
-	now := tsrv.Clock().PhysicalNow()
+	// "now" is five minutes in the past to avoid any sort of shenanigans with the
+	// various adjustments we make in the very-recent-past to create consistent
+	// graphs.
+	now := tsrv.Clock().PhysicalNow() - int64(5*time.Minute)
 	nearPast := now - (tsdb.PruneThreshold(ts.Resolution10s) * 2)
 	farPast := now - (tsdb.PruneThreshold(ts.Resolution10s) * 4)
 	sampleDuration := ts.Resolution10s.SampleDuration()
