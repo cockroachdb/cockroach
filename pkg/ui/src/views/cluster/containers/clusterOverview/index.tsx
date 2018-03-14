@@ -11,6 +11,7 @@ import { Bytes as formatBytes } from "src/util/format";
 import createChartComponent from "src/views/shared/util/d3-react";
 import capacityChart from "./capacity";
 import spinner from "assets/spinner.gif";
+import { refreshNodes, refreshLiveness } from "src/redux/apiReducers";
 import "./cluster.styl";
 
 // tslint:disable-next-line:variable-name
@@ -141,9 +142,24 @@ interface ClusterSummaryProps {
   nodeLiveness: NodeLivenessProps;
   replicationStatus: ReplicationStatusProps;
   loading: boolean;
+  refreshLiveness: typeof refreshLiveness;
+  refreshNodes: typeof refreshNodes;
 }
 
 class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
+  componentWillMount() {
+    this.refresh();
+  }
+
+  componentWillReceiveProps() {
+    this.refresh();
+  }
+
+  refresh() {
+    this.props.refreshLiveness();
+    this.props.refreshNodes();
+  }
+
   render() {
     const children = [];
 
@@ -161,7 +177,7 @@ class ClusterSummary extends React.Component<ClusterSummaryProps, {}> {
   }
 }
 
-function mapStateToClusterSummaryProps (state: AdminUIState) {
+function mapStateToClusterSummaryProps(state: AdminUIState) {
   return {
     capacityUsage: mapStateToCapacityUsageProps(state),
     nodeLiveness: mapStateToNodeLivenessProps(state),
@@ -170,8 +186,13 @@ function mapStateToClusterSummaryProps (state: AdminUIState) {
   };
 }
 
+const actions = {
+  refreshLiveness: refreshLiveness,
+  refreshNodes: refreshNodes,
+};
+
 // tslint:disable-next-line:variable-name
-const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps)(ClusterSummary);
+const ClusterSummaryConnected = connect(mapStateToClusterSummaryProps, actions)(ClusterSummary);
 
 /**
  * Renders the main content of the cluster visualization page.
