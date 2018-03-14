@@ -86,6 +86,7 @@
 		LogFilesListResponse
 		LogFileRequest
 		StacksRequest
+		ProfileRequest
 		MetricsRequest
 		RaftRangeNode
 		RaftRangeError
