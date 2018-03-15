@@ -64,7 +64,8 @@ var trackedStoppers struct {
 	stoppers []*Stopper
 }
 
-func handleDebug(w http.ResponseWriter, r *http.Request) {
+// HandleDebug responds with the list of stopper tasks actively running.
+func HandleDebug(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	trackedStoppers.Lock()
 	defer trackedStoppers.Unlock()
@@ -73,10 +74,6 @@ func handleDebug(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "%p: %d tasks\n%s", s, s.mu.numTasks, s.runningTasksLocked())
 		s.mu.Unlock()
 	}
-}
-
-func init() {
-	http.Handle("/debug/stopper", http.HandlerFunc(handleDebug))
 }
 
 // Closer is an interface for objects to attach to the stopper to
