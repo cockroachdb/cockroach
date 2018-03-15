@@ -59,3 +59,30 @@ interrupt
 eexpect eof
 
 stop_server $argv
+
+start_test "Check that audit logging works even with a custom directory"
+# Start a server with a custom log
+system "$argv start --insecure --pid-file=pid_fifo --background -s=path=logs/db --sql-audit-dir=logs/db/audit-new >>logs/expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
+
+set logfile logs/db/audit-new/cockroach-sql-audit.log
+
+# Start a client and make a simple audit test.
+spawn $argv sql
+eexpect root@
+send "create database d; create table d.t(x INT);\r"
+eexpect CREATE
+eexpect root@
+send "alter table d.t EXPERIMENTAL_AUDIT SET READ WRITE;\r"
+eexpect "ALTER TABLE"
+eexpect root@
+send "select helloworld from d.t;\r"
+eexpect "not found"
+eexpect root@
+interrupt
+eexpect eof
+
+# Check the file was created and populated properly.
+system "grep -q helloworld $logfile"
+
+stop_server $argv
+end_test
