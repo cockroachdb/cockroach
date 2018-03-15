@@ -449,8 +449,12 @@ func (c *cluster) Destroy(ctx context.Context) {
 		return
 	}
 
+	// Don't hang forever if we can't fetch the logs.
+	execCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+
 	c.status("retrieving logs")
-	_ = execCmd(ctx, c.l, "roachprod", "get", c.name, "logs",
+	_ = execCmd(execCtx, c.l, "roachprod", "get", c.name, "logs",
 		filepath.Join(artifacts, c.t.Name(), "logs"))
 
 	// Only destroy the cluster if it exists in the cluster registry. The cluster
