@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -146,13 +145,8 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		doesBackfill: true,
 	},
 	{
-		// Introduced in v2.0.
-		// TODO(benesch): bake this migration into v2.1.
-		//
-		// This is separated from the previous migration as we don't want to re-run
-		// addRoles if this part fails.
-		name:   "grant superuser privileges on all objects to the admin role",
-		workFn: grantAdminPrivileges,
+		// Introduced in v2.0, replaced by "ensure admin role privileges in all descriptors"
+		name: "grant superuser privileges on all objects to the admin role",
 	},
 	{
 		// Introduced in v2.0.
@@ -184,6 +178,13 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// Introduced in v2.0.
 		name:   "initialize cluster.secret",
 		workFn: initializeClusterSecret,
+	},
+	{
+		// Introduced in v2.0.
+		// TODO(benesch): bake this migration into v2.1, but create a new migration
+		// with the same function to catch any tables written in a mixed-version setting.
+		name:   "ensure admin role privileges in all descriptors",
+		workFn: ensureMaxPrivileges,
 	},
 }
 
@@ -791,66 +792,6 @@ func addRoles(ctx context.Context, r runner) error {
 	return err
 }
 
-func grantAdminPrivileges(ctx context.Context, r runner) error {
-	// System tables can only be modified by a privileged internal user.
-	session := r.newRootSession(ctx)
-	defer session.Finish(r.sqlExecutor)
-
-	// Give the admin role permissions on all databases and tables.
-	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		descriptors, descErr := sql.GetAllDescriptors(ctx, txn)
-		if descErr != nil {
-			return descErr
-		}
-
-		for _, desc := range descriptors {
-			// Lookup desired privileges:
-			var desiredPrivs privilege.List
-
-			descID := desc.GetID()
-			if sqlbase.IsReservedID(descID) {
-				// System databases and tables have custom maximum allowed privileges.
-				systemPrivs, ok := sqlbase.SystemAllowedPrivileges[descID]
-				if !ok || len(systemPrivs) == 0 {
-					return fmt.Errorf("no allowed privileges found for system object with ID=%d", descID)
-				}
-				desiredPrivs = systemPrivs[0]
-			} else {
-				// Non-system object: fall back on default superuser privileges.
-				desiredPrivs = sqlbase.DefaultSuperuserPrivileges
-			}
-
-			// Grant privileges to the admin role.
-			desc.GetPrivileges().Grant(sqlbase.AdminRole, desiredPrivs)
-
-			// Validate descriptors.
-			switch d := desc.(type) {
-			case *sqlbase.DatabaseDescriptor:
-				if err := d.Validate(); err != nil {
-					return err
-				}
-			case *sqlbase.TableDescriptor:
-				_ = d.MaybeUpgradeFormatVersion()
-				if err := d.Validate(ctx, txn); err != nil {
-					return err
-				}
-			}
-		}
-
-		// Now update the descriptors transactionally.
-		b := txn.NewBatch()
-		for _, descriptor := range descriptors {
-			descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
-			b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
-		}
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
-		}
-		return txn.Run(ctx, b)
-	})
-	return err
-}
-
 func addRootToAdminRole(ctx context.Context, r runner) error {
 	// System tables can only be modified by a privileged internal user.
 	session := r.newRootSession(ctx)
@@ -885,20 +826,38 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 //
 // TODO(benesch): Remove this migration in v2.1.
 func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) error {
-	return upgradeTableDescsWithFn(ctx, r, func(desc *sqlbase.TableDescriptor) (bool, error) {
-		return desc.MaybeUpgradeFormatVersion(), nil
-	})
+	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
+		return desc.MaybeFillInDescriptor(), nil
+	}
+	return upgradeDescsWithFn(ctx, r, tableDescFn, nil)
 }
 
-var upgradeTableDescBatchSize int64 = 50
+// ensureMaxPrivileges ensures that all descriptors have privileges
+// for the admin role, and that root and user privileges do not exceed
+// the allowed privileges.
+//
+// TODO(mberhault): Remove this migration in v2.1.
+func ensureMaxPrivileges(ctx context.Context, r runner) error {
+	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
+		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
+	}
+	databaseDescFn := func(desc *sqlbase.DatabaseDescriptor) (bool, error) {
+		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
+	}
+	return upgradeDescsWithFn(ctx, r, tableDescFn, databaseDescFn)
+}
 
-// upgradeTableDescsWithFn runs the provided upgrade function on each table
-// descriptor, persisting any upgrades if the function indicates that the
+var upgradeDescBatchSize int64 = 50
+
+// upgradeTableDescsWithFn runs the provided upgrade functions on each table
+// and database descriptor, persisting any upgrades if the function indicates that the
 // descriptor was changed.
-func upgradeTableDescsWithFn(
+// Upgrade functions may be nil to perform nothing for the corresponding descriptor type.
+func upgradeDescsWithFn(
 	ctx context.Context,
 	r runner,
-	upgradeFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
+	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
+	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
 ) error {
 	session := r.newRootSession(ctx)
 	defer session.Finish(r.sqlExecutor)
@@ -913,7 +872,7 @@ func upgradeTableDescsWithFn(
 		// descriptors using InterleavedFormatVersion. We need only upgrade the
 		// ancient table descriptors written by versions before beta-20161013.
 		if err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			kvs, err := txn.Scan(ctx, startKey, endKey, upgradeTableDescBatchSize)
+			kvs, err := txn.Scan(ctx, startKey, endKey, upgradeDescBatchSize)
 			if err != nil {
 				return err
 			}
@@ -929,27 +888,49 @@ func upgradeTableDescsWithFn(
 				if err := kv.ValueProto(&sqlDesc); err != nil {
 					return err
 				}
-				if table := sqlDesc.GetTable(); table != nil {
-					if upgraded, err := upgradeFn(table); err != nil {
-						return err
-					} else if upgraded {
-						// Though SetUpVersion typically bails out if the table is being
-						// dropped, it's safe to ignore the DROP state here and
-						// unconditionally set UpVersion. For proof, see
-						// TestDropTableWhileUpgradingFormat.
-						//
-						// In fact, it's of the utmost importance that this migration
-						// upgrades every last old-format table descriptor, including those
-						// that are dropping. Otherwise, the user could upgrade to a version
-						// without support for reading the old format before the drop
-						// completes, leaving a broken table descriptor and the table's
-						// remaining data around forever. This isn't just a theoretical
-						// concern: consider that dropping a large table can take several
-						// days, while upgrading to a new version can take as little as a
-						// few minutes.
-						table.UpVersion = true
-						b.Put(kv.Key, sqlbase.WrapDescriptor(table))
+				switch t := sqlDesc.Union.(type) {
+				case *sqlbase.Descriptor_Table:
+					if table := sqlDesc.GetTable(); table != nil && upgradeTableDescFn != nil {
+						if upgraded, err := upgradeTableDescFn(table); err != nil {
+							return err
+						} else if upgraded {
+							// Though SetUpVersion typically bails out if the table is being
+							// dropped, it's safe to ignore the DROP state here and
+							// unconditionally set UpVersion. For proof, see
+							// TestDropTableWhileUpgradingFormat.
+							//
+							// In fact, it's of the utmost importance that this migration
+							// upgrades every last old-format table descriptor, including those
+							// that are dropping. Otherwise, the user could upgrade to a version
+							// without support for reading the old format before the drop
+							// completes, leaving a broken table descriptor and the table's
+							// remaining data around forever. This isn't just a theoretical
+							// concern: consider that dropping a large table can take several
+							// days, while upgrading to a new version can take as little as a
+							// few minutes.
+							table.UpVersion = true
+							if err := table.Validate(ctx, txn); err != nil {
+								return err
+							}
+
+							b.Put(kv.Key, sqlbase.WrapDescriptor(table))
+						}
 					}
+				case *sqlbase.Descriptor_Database:
+					if database := sqlDesc.GetDatabase(); database != nil && upgradeDatabaseDescFn != nil {
+						if upgraded, err := upgradeDatabaseDescFn(database); err != nil {
+							return err
+						} else if upgraded {
+							if err := database.Validate(); err != nil {
+								return err
+							}
+
+							b.Put(kv.Key, sqlbase.WrapDescriptor(database))
+						}
+					}
+
+				default:
+					return errors.Errorf("Descriptor.Union has unexpected type %T", t)
 				}
 			}
 			if err := txn.SetSystemConfigTrigger(); err != nil {

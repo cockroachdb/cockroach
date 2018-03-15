@@ -196,58 +196,32 @@ func pk(name string) IndexDescriptor {
 	}
 }
 
-// SystemAllowedPrivileges describes the allowable privilege lists for each
-// system object. The root user must have the privileges of exactly one of those
-// privilege lists. No user may have more privileges than the root user.
-//
-// Some system objects were created with different privileges in previous
-// versions of the system. These privileges are no longer "desired" but must
-// still be "allowed," or this version and the previous version with different
-// privileges will be unable to coexist in the same cluster because one version
-// will think it has invalid table descriptors.
-//
-// The currently-desired privileges (i.e., the privileges with which the object
-// will be created in fresh clusters) must be listed first in the mapped value,
-// followed by previously-desirable but still allowable privileges in any order.
-//
-// If we supported backwards-incompatible migrations, pruning allowed privileges
-// would require a two-step migration process. First, a new version that allows
-// both must be deployed to all nodes, after which a a migration to upgrade from
-// the old privileges to the new privileges can be run. Only then can a version
-// that removes the old allowed versions be deployed. TODO(benesch): Once we
-// support backwards-incompatible migrations, prune old allowed privileges.
-var SystemAllowedPrivileges = map[ID]privilege.Lists{
-	keys.SystemDatabaseID:  {privilege.ReadData},
-	keys.NamespaceTableID:  {privilege.ReadData},
-	keys.DescriptorTableID: {privilege.ReadData},
-	keys.UsersTableID:      {privilege.ReadWriteData},
-	keys.ZonesTableID:      {privilege.ReadWriteData},
+// SystemAllowedPrivileges describes the allowable privilege list for each
+// system object. Super users (root and admin) must have exactly the specified privileges,
+// other users must not exceed the specified privileges.
+var SystemAllowedPrivileges = map[ID]privilege.List{
+	keys.SystemDatabaseID:  privilege.ReadData,
+	keys.NamespaceTableID:  privilege.ReadData,
+	keys.DescriptorTableID: privilege.ReadData,
+	keys.UsersTableID:      privilege.ReadWriteData,
+	keys.ZonesTableID:      privilege.ReadWriteData,
 	// We eventually want to migrate the table to appear read-only to force the
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
 	// read-only privs to make that migration possible later.
-	keys.SettingsTableID:   {privilege.ReadWriteData, privilege.ReadData},
-	keys.LeaseTableID:      {privilege.ReadWriteData, {privilege.ALL}},
-	keys.EventLogTableID:   {privilege.ReadWriteData, {privilege.ALL}},
-	keys.RangeEventTableID: {privilege.ReadWriteData, {privilege.ALL}},
-	keys.UITableID:         {privilege.ReadWriteData, {privilege.ALL}},
+	keys.SettingsTableID:   privilege.ReadWriteData,
+	keys.LeaseTableID:      privilege.ReadWriteData,
+	keys.EventLogTableID:   privilege.ReadWriteData,
+	keys.RangeEventTableID: privilege.ReadWriteData,
+	keys.UITableID:         privilege.ReadWriteData,
 	// IMPORTANT: CREATE|DROP|ALL privileges should always be denied or database
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID:            {privilege.ReadWriteData},
-	keys.WebSessionsTableID:     {privilege.ReadWriteData},
-	keys.TableStatisticsTableID: {privilege.ReadWriteData},
-	keys.LocationsTableID:       {privilege.ReadWriteData},
-	keys.RoleMembersTableID:     {privilege.ReadWriteData},
-}
-
-// SystemDesiredPrivileges returns the desired privilege list (i.e., the
-// privilege list with which the object should be created with in a fresh
-// cluster) for a given system object ID. This function panics if id does not
-// exist in the SystemAllowedPrivileges map and should only be used in contexts
-// where id is guaranteed to exist.
-func SystemDesiredPrivileges(id ID) privilege.List {
-	return SystemAllowedPrivileges[id][0]
+	keys.JobsTableID:            privilege.ReadWriteData,
+	keys.WebSessionsTableID:     privilege.ReadWriteData,
+	keys.TableStatisticsTableID: privilege.ReadWriteData,
+	keys.LocationsTableID:       privilege.ReadWriteData,
+	keys.RoleMembersTableID:     privilege.ReadWriteData,
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
@@ -273,7 +247,7 @@ var (
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.SystemDatabaseID)),
+		Privileges: NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 
 	// NamespaceTable is the descriptor for the namespace table.
@@ -302,7 +276,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.NamespaceTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -311,7 +285,7 @@ var (
 	DescriptorTable = TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.DescriptorTableID)),
+		Privileges: NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
 		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
@@ -348,7 +322,7 @@ var (
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.UsersTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -378,7 +352,7 @@ var (
 		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.ZonesTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -406,7 +380,7 @@ var (
 		NextFamilyID:   1,
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.SettingsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -444,7 +418,7 @@ var (
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.LeaseTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -483,7 +457,7 @@ var (
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.EventLogTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -524,7 +498,7 @@ var (
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.RangeEventTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -549,7 +523,7 @@ var (
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.UITableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -591,7 +565,7 @@ var (
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.JobsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -653,7 +627,7 @@ var (
 			},
 		},
 		NextIndexID:    4,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.WebSessionsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
@@ -704,7 +678,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.TableStatisticsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -746,7 +720,7 @@ var (
 			ColumnIDs:        []ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomRootPrivilegeDescriptor(SystemDesiredPrivileges(keys.LocationsTableID)),
+		Privileges:     NewCustomRootPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
@@ -809,7 +783,7 @@ var (
 			},
 		},
 		NextIndexID:    4,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemDesiredPrivileges(keys.RoleMembersTableID)),
+		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleMembersTableID]),
 		FormatVersion:  InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
