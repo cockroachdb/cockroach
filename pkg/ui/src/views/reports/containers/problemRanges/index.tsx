@@ -157,7 +157,7 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           extract={(problem) => problem.no_raft_leader_range_ids}
         />
         <ProblemRangeList
-          name="No Lease"
+          name="Invalid Lease"
           problems={problems}
           extract={(problem) => problem.no_lease_range_ids}
         />
