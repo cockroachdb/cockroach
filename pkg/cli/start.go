@@ -885,6 +885,15 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 			" and --log-dir not specified, you may want to specify --log-dir to disambiguate.")
 	}
 
+	if auditLogDir := serverCfg.SQLAuditLogDirName.String(); auditLogDir != "" && auditLogDir != outputDirectory {
+		// Make sure the path for the audit log exists, if it's a different path than
+		// the main log.
+		if err := os.MkdirAll(auditLogDir, 0755); err != nil {
+			return nil, err
+		}
+		log.Eventf(ctx, "created SQL audit log directory %s", auditLogDir)
+	}
+
 	if startCtx.serverInsecure {
 		// Use a non-annotated context here since the annotation just looks funny,
 		// particularly to new users (made worse by it always printing as [n?]).
