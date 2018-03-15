@@ -52,7 +52,7 @@ import Range from "src/views/reports/containers/range";
 import CommandQueue from "src/views/reports/containers/commandQueue";
 import Debug from "src/views/reports/containers/debug";
 import ReduxDebug from "src/views/reports/containers/redux";
-import CustomGraph from "src/views/reports/containers/customgraph";
+import CustomChart from "src/views/reports/containers/customChart";
 import NotFound from "src/views/app/components/NotFound";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -129,7 +129,7 @@ ReactDOM.render(
         <Route path="debug">
           <IndexRoute component={Debug} />
           <Route path="redux" component={ReduxDebug} />
-          <Route path="graph" component={CustomGraph} />
+          <Route path="chart" component={CustomChart} />
         </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />

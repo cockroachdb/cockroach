@@ -15,7 +15,7 @@ import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery
 import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconfig";
 
 import { CustomMetricState, CustomMetricRow } from "./customMetric";
-import "./customgraph.styl";
+import "./customChart.styl";
 
 const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Count,
@@ -23,7 +23,7 @@ const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Duration,
 ].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
-export interface CustomGraphProps {
+export interface CustomChartProps {
   refreshNodes: typeof refreshNodes;
   nodesQueryValid: boolean;
   nodesSummary: NodesSummary;
@@ -34,7 +34,7 @@ interface UrlState {
   units: string;
 }
 
-class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
+class CustomChart extends React.Component<CustomChartProps & WithRouterProps> {
   // Selector which computes dropdown options based on the nodes available on
   // the cluster.
   private nodeOptions = createSelector(
@@ -79,7 +79,7 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
   );
 
   static title() {
-    return "Custom Graph";
+    return "Custom Chart";
   }
 
   refresh(props = this.props) {
@@ -92,7 +92,7 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
     this.refresh();
   }
 
-  componentWillReceiveProps(props: CustomGraphProps & WithRouterProps) {
+  componentWillReceiveProps(props: CustomChartProps & WithRouterProps) {
     this.refresh(props);
   }
 
@@ -144,21 +144,21 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
     });
   }
 
-  // Render a graph of the currently selected metrics.
-  renderGraph() {
+  // Render a chart of the currently selected metrics.
+  renderChart() {
     const metrics = this.currentMetrics();
     const units = this.currentAxisUnits();
     if (_.isEmpty(metrics)) {
       return (
         <section className="section">
-          <h3>Click "Add Metric" to add a metric to the custom graph.</h3>
+          <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
         </section>
       );
     }
 
     return (
       <section className="section">
-        <MetricsDataProvider id="debug-custom-graph">
+        <MetricsDataProvider id="debug-custom-chart">
           <LineGraph>
             <Axis units={units}>
               {
@@ -247,7 +247,7 @@ class CustomGraph extends React.Component<CustomGraphProps & WithRouterProps> {
             />
           </PageConfigItem>
         </PageConfig>
-        { this.renderGraph() }
+        { this.renderChart() }
         { this.renderMetricsTable() }
       </div>
     );
@@ -265,4 +265,4 @@ const mapDispatchToProps = {
   refreshNodes,
 };
 
-export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomGraph));
+export default connect(mapStateToProps, mapDispatchToProps)(withRouter(CustomChart));
