@@ -435,7 +435,6 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
-	f.status = FlowRunning
 
 	f.Ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 
@@ -456,6 +455,9 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
+
+	f.status = FlowRunning
+
 	if log.V(1) {
 		log.Infof(f.Ctx, "registered flow %s", f.id.Short())
 	}
