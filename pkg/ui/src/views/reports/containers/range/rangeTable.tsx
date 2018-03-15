@@ -175,7 +175,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   ): RangeTableCellContent {
     let results: string[] = [];
     if (problems.no_lease) {
-      results = _.concat(results, "No Lease");
+      results = _.concat(results, "Invalid Lease");
     }
     if (problems.leader_not_lease_holder) {
       results = _.concat(results, "Leader is Not Lease holder");
