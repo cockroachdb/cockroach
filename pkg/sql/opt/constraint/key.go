@@ -103,11 +103,11 @@ func (k Key) Value(nth int) tree.Datum {
 //   (/1/2 - ...] (exclusive start key): ExtendHigh: /1/2/High
 //   [... - /1/2] (inclusive end key)  : ExtendHigh: /1/2/High
 //   [... - /1/2) (exclusive end key)  : ExtendLow : /1/2/Low
-func (k Key) Compare(evalCtx *tree.EvalContext, l Key, kext, lext KeyExtension) int {
+func (k Key) Compare(keyCtx KeyContext, l Key, kext, lext KeyExtension) int {
 	klen := k.Length()
 	llen := l.Length()
 	for i := 0; i < klen && i < llen; i++ {
-		if cmp := k.Value(i).Compare(evalCtx, l.Value(i)); cmp != 0 {
+		if cmp := keyCtx.Compare(i, k.Value(i), l.Value(i)); cmp != 0 {
 			return cmp
 		}
 	}
@@ -168,4 +168,26 @@ func (k Key) String() string {
 		fmt.Fprintf(&buf, "/%s", k.Value(i))
 	}
 	return buf.String()
+}
+
+// KeyContext contains the necessary metadata for comparing Keys.
+type KeyContext struct {
+	Columns *Columns
+	EvalCtx *tree.EvalContext
+}
+
+// MakeKeyContext initializes a KeyContext.
+func MakeKeyContext(cols *Columns, evalCtx *tree.EvalContext) KeyContext {
+	return KeyContext{Columns: cols, EvalCtx: evalCtx}
+}
+
+// Compare two values for a given column.
+// Returns 0 if the values are equal, -1 if a is less than b, or 1 if b is less
+// than a.
+func (c KeyContext) Compare(colIdx int, a, b tree.Datum) int {
+	cmp := a.Compare(c.EvalCtx, b)
+	if c.Columns.Get(colIdx).Descending() {
+		cmp = -cmp
+	}
+	return cmp
 }
