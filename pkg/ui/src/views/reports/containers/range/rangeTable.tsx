@@ -56,7 +56,7 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "lastIndex", display: "Last Index", compareToLeader: true },
   { variable: "logSize", display: "Log Size", compareToLeader: false },
   { variable: "leaseHolderQPS", display: "Lease Holder QPS", compareToLeader: false },
-  { variable: "keysWrittenPS", display: "Keys Written Per Second", compareToLeader: false },
+  { variable: "keysWrittenPS", display: "Average Keys Written Per Second", compareToLeader: false },
   { variable: "approxProposalQuota", display: "Approx Proposal Quota", compareToLeader: false },
   { variable: "pendingCommands", display: "Pending Commands", compareToLeader: false },
   { variable: "droppedCommands", display: "Dropped Commands", compareToLeader: false },
