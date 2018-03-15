@@ -86,14 +86,16 @@ func TestRegistryCancelation(t *testing.T) {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
 
-	// Jobs that are in-progress when the liveness epoch is incremented should be
-	// canceled.
+	// Jobs that are in-progress when the liveness epoch is incremented
+	// should not be canceled.
 	register(2)
 	nodeLiveness.FakeIncrementEpoch(nodeID)
 	wait()
-	if e, a := 2, cancelCount; e != a {
+	if e, a := 1, cancelCount; e != a {
 		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
 	}
+	unregister(2)
+	wait()
 
 	// Jobs started in the new epoch that complete while the new epoch is live
 	// should be canceled once.
