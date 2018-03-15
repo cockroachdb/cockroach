@@ -25,12 +25,14 @@ import (
 
 	"golang.org/x/net/trace"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
 
 var origTraceAuthRequest = trace.AuthRequest
@@ -106,6 +108,9 @@ func NewServer(st *cluster.Settings) *Server {
 	mux.Handle("/debug/metrics", exp.ExpHandler(metrics.DefaultRegistry))
 	// Also register /debug/vars (even though /debug/metrics is better).
 	mux.Handle("/debug/vars", expvar.Handler())
+
+	// Register the stopper endpoint, which lists all active tasks.
+	mux.HandleFunc("/debug/stopper", stop.HandleDebug)
 
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
 	// verbosity.
