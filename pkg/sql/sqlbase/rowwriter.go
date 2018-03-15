@@ -390,11 +390,11 @@ func (ri *RowInserter) EncodeIndexesForRow(
 // RowUpdater abstracts the key/value operations for updating table rows.
 type RowUpdater struct {
 	Helper                rowHelper
+	DeleteHelper          *rowHelper
 	FetchCols             []ColumnDescriptor
 	FetchColIDtoRowIndex  map[ColumnID]int
 	UpdateCols            []ColumnDescriptor
 	updateColIDtoRowIndex map[ColumnID]int
-	deleteOnlyIndex       map[int]struct{}
 	primaryKeyColChange   bool
 
 	// rd and ri are used when the update this RowUpdater is created for modifies
@@ -518,21 +518,19 @@ func makeRowUpdaterWithoutCascader(
 		tableCols = append(tableCols, tableDesc.Columns...)
 	}
 
-	var deleteOnlyIndex map[int]struct{}
+	var deleteOnlyIndexes []IndexDescriptor
 	for _, m := range tableDesc.Mutations {
 		if index := m.GetIndex(); index != nil {
 			if needsUpdate(*index) {
-				indexes = append(indexes, *index)
-
 				switch m.State {
 				case DescriptorMutation_DELETE_ONLY:
-					if deleteOnlyIndex == nil {
+					if deleteOnlyIndexes == nil {
 						// Allocate at most once.
-						deleteOnlyIndex = make(map[int]struct{}, len(tableDesc.Mutations))
+						deleteOnlyIndexes = make([]IndexDescriptor, 0, len(tableDesc.Mutations))
 					}
-					deleteOnlyIndex[len(indexes)-1] = struct{}{}
-
-				case DescriptorMutation_DELETE_AND_WRITE_ONLY:
+					deleteOnlyIndexes = append(deleteOnlyIndexes, *index)
+				default:
+					indexes = append(indexes, *index)
 				}
 			}
 		} else if col := m.GetColumn(); col != nil {
@@ -540,11 +538,17 @@ func makeRowUpdaterWithoutCascader(
 		}
 	}
 
+	var deleteOnlyHelper *rowHelper
+	if len(deleteOnlyIndexes) > 0 {
+		rh := newRowHelper(tableDesc, deleteOnlyIndexes)
+		deleteOnlyHelper = &rh
+	}
+
 	ru := RowUpdater{
 		Helper:                newRowHelper(tableDesc, indexes),
+		DeleteHelper:          deleteOnlyHelper,
 		UpdateCols:            updateCols,
 		updateColIDtoRowIndex: updateColIDtoRowIndex,
-		deleteOnlyIndex:       deleteOnlyIndex,
 		primaryKeyColChange:   primaryKeyColChange,
 		marshaled:             make([]roachpb.Value, len(updateCols)),
 		newValues:             make([]tree.Datum, len(tableCols)),
@@ -607,6 +611,11 @@ func makeRowUpdaterWithoutCascader(
 				return RowUpdater{}, err
 			}
 		}
+		for _, index := range deleteOnlyIndexes {
+			if err := index.RunOverAllColumns(maybeAddCol); err != nil {
+				return RowUpdater{}, err
+			}
+		}
 	}
 
 	var err error
@@ -648,7 +657,13 @@ func (ru *RowUpdater) UpdateRow(
 	if err != nil {
 		return nil, err
 	}
-
+	var deleteOldSecondaryIndexEntries []IndexEntry
+	if ru.DeleteHelper != nil {
+		_, deleteOldSecondaryIndexEntries, err = ru.DeleteHelper.encodeIndexes(ru.FetchColIDtoRowIndex, oldValues)
+		if err != nil {
+			return nil, err
+		}
+	}
 	// The secondary index entries returned by rowHelper.encodeIndexes are only
 	// valid until the next call to encodeIndexes. We need to copy them so that
 	// we can compare against the new secondary index entries.
@@ -687,7 +702,6 @@ func (ru *RowUpdater) UpdateRow(
 			return nil, err
 		}
 	}
-
 	if rowPrimaryKeyChanged {
 		if err := ru.rd.DeleteRow(ctx, batch, oldValues, SkipFKs, traceKV); err != nil {
 			return nil, err
@@ -842,13 +856,19 @@ func (ru *RowUpdater) UpdateRow(
 		} else {
 			continue
 		}
-		// Do not update Indexes in the DELETE_ONLY state.
-		if _, ok := ru.deleteOnlyIndex[i]; !ok {
-			if traceKV {
-				log.VEventf(ctx, 2, "CPut %s -> %v", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newSecondaryIndexEntry.Key), newSecondaryIndexEntry.Value.PrettyPrint())
-			}
-			batch.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
+		if traceKV {
+			log.VEventf(ctx, 2, "CPut %s -> %v", keys.PrettyPrint(ru.Helper.secIndexValDirs[i], newSecondaryIndexEntry.Key), newSecondaryIndexEntry.Value.PrettyPrint())
 		}
+		batch.CPut(newSecondaryIndexEntry.Key, &newSecondaryIndexEntry.Value, expValue)
+	}
+
+	// We're deleting indexes in a delete only state.
+	for i, deletedSecondaryIndexEntry := range deleteOldSecondaryIndexEntries {
+		ru.Fks.addCheckForIndex(ru.DeleteHelper.Indexes[i].ID)
+		if traceKV {
+			log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(ru.DeleteHelper.secIndexValDirs[i], deletedSecondaryIndexEntry.Key))
+		}
+		batch.Del(deletedSecondaryIndexEntry.Key)
 	}
 
 	if ru.cascader != nil {
@@ -885,7 +905,7 @@ func (ru *RowUpdater) IsColumnOnlyUpdate() bool {
 	// be improved. Specifically, RowUpdater currently has two responsibilities
 	// (computing which indexes need to be updated and mapping sql rows to k/v
 	// operations) and these should be split.
-	return !ru.primaryKeyColChange && len(ru.deleteOnlyIndex) == 0 && len(ru.Helper.Indexes) == 0
+	return !ru.primaryKeyColChange && ru.DeleteHelper == nil && len(ru.Helper.Indexes) == 0
 }
 
 // RowDeleter abstracts the key/value operations for deleting table rows.
