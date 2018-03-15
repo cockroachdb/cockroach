@@ -44,7 +44,7 @@ import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import JobsPage from "src/views/jobs";
 import Certificates from "src/views/reports/containers/certificates";
 import CommandQueue from "src/views/reports/containers/commandQueue";
-import CustomGraph from "src/views/reports/containers/customgraph";
+import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Localities from "src/views/reports/containers/localities";
@@ -126,7 +126,7 @@ ReactDOM.render(
         <Route path="debug">
           <IndexRoute component={Debug} />
           <Route path="redux" component={ReduxDebug} />
-          <Route path="graph" component={CustomGraph} />
+          <Route path="chart" component={CustomChart} />
         </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
