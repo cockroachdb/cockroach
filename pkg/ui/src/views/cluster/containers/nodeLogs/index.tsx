@@ -1,6 +1,6 @@
 import _ from "lodash";
 import React from "react";
-import { RouterState, Link } from "react-router";
+import { RouterState } from "react-router";
 import { connect } from "react-redux";
 
 import * as protos from "src/js/protos";
@@ -73,9 +73,6 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
     }
     return (
       <div>
-        <section className="section parent-link">
-          <Link to="/nodes">&lt; Back to Node List</Link>
-        </section>
         <div className="section section--heading">
           <h2>Logs Node { this.props.params[nodeIDAttr] } / { nodeAddress }</h2>
         </div>

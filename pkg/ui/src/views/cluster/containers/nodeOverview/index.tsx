@@ -61,9 +61,6 @@ class NodeOverview extends React.Component<NodeOverviewProps, {}> {
 
     return (
       <div>
-        <section className="section parent-link">
-          <Link to="/nodes">&lt; Back to Node List</Link>
-        </section>
         <div className="section section--heading">
           <h2>{`Node ${node.desc.node_id} / ${node.desc.address.address_field}`}</h2>
         </div>
