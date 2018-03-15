@@ -200,6 +200,7 @@ export default function Debug() {
             url="/_admin/v1/rangelog/1?limit=100"
             note="/_admin/v1/rangelog/[range_id]?limit=100"
           />
+          <DebugTableLink name="Settings" url="/_admin/v1/settings" />
         </DebugTableRow>
         <DebugTableRow title="Allocator">
           <DebugTableLink
