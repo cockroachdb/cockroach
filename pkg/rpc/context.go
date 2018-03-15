@@ -541,6 +541,17 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // ConnHealth returns whether the most recent heartbeat succeeded or not.
 // This should not be used as a definite status of a node's health and just used
 // to prioritize healthy nodes over unhealthy ones.
+//
+// NB: as of #22658, this does not work as you think. We kick
+// connections out of the connection pool as soon as they run into an
+// error, at which point their ConnHealth will reset to
+// ErrNotConnected. ConnHealth does no more return a sane notion of
+// "recent connection health". When it returns nil all seems well, but
+// if it doesn't then this may mean that the node is simply refusing
+// connections (and is thus unconnected most of the time), or that the
+// node hasn't been connected to but is perfectly healthy.
+//
+// See #23829.
 func (ctx *Context) ConnHealth(target string) error {
 	if ctx.GetLocalInternalServerForAddr(target) != nil {
 		// The local server is always considered healthy.

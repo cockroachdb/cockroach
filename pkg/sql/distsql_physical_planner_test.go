@@ -1068,3 +1068,93 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		t.Errorf("expected partitions:\n  %v\ngot:\n  %v", expectedPartitions, resMap)
 	}
 }
+
+func TestCheckNodeHealth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	const nodeID = roachpb.NodeID(5)
+
+	mockGossip := gossip.NewTest(nodeID, nil /* rpcContext */, nil, /* grpcServer */
+		stopper, metric.NewRegistry())
+
+	desc := &roachpb.NodeDescriptor{
+		NodeID:  nodeID,
+		Address: util.UnresolvedAddr{NetworkField: "tcp", AddressField: "testaddr"},
+	}
+	if err := mockGossip.SetNodeDescriptor(desc); err != nil {
+		t.Fatal(err)
+	}
+	if err := mockGossip.AddInfoProto(
+		gossip.MakeDistSQLNodeVersionKey(nodeID),
+		&distsqlrun.DistSQLVersionGossipInfo{
+			MinAcceptedVersion: distsqlrun.MinAcceptedVersion,
+			Version:            distsqlrun.Version,
+		},
+		0, // ttl - no expiration
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	errLive := func(roachpb.NodeID) (bool, error) {
+		return false, errors.New("injected liveness error")
+	}
+	notLive := func(roachpb.NodeID) (bool, error) {
+		return false, nil
+	}
+	live := func(roachpb.NodeID) (bool, error) {
+		return true, nil
+	}
+
+	connHealthy := func(string) error {
+		return nil
+	}
+	connUnhealthy := func(string) error {
+		return errors.New("injected conn health error")
+	}
+	_ = connUnhealthy
+
+	livenessTests := []struct {
+		isLive func(roachpb.NodeID) (bool, error)
+		exp    string
+	}{
+		{live, ""},
+		{errLive, "not using n5 due to liveness: injected liveness error"},
+		{notLive, "not using n5 due to liveness: node is not live"},
+	}
+
+	for _, test := range livenessTests {
+		t.Run("liveness", func(t *testing.T) {
+			if err := checkNodeHealth(
+				context.Background(), nodeID, desc.Address.AddressField,
+				DistSQLPlannerTestingKnobs{}, /* knobs */
+				mockGossip, connHealthy, test.isLive,
+			); !testutils.IsError(err, test.exp) {
+				t.Fatalf("expected %v, got %v", test.exp, err)
+			}
+		})
+	}
+
+	connHealthTests := []struct {
+		connHealth func(string) error
+		exp        string
+	}{
+		{connHealthy, ""},
+		{connUnhealthy, "injected conn health error"},
+	}
+
+	for _, test := range connHealthTests {
+		t.Run("connHealth", func(t *testing.T) {
+			if err := checkNodeHealth(
+				context.Background(), nodeID, desc.Address.AddressField,
+				DistSQLPlannerTestingKnobs{}, /* knobs */
+				mockGossip, test.connHealth, live,
+			); !testutils.IsError(err, test.exp) {
+				t.Fatalf("expected %v, got %v", test.exp, err)
+			}
+		})
+	}
+
+}
