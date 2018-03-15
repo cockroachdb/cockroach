@@ -1,1 +1,19 @@
-insert_stmt ::=
+upsert_stmt ::=
+	opt_with_clause 'UPSERT' 'INTO' table_name select_stmt 'RETURNING' target_list
+	| opt_with_clause 'UPSERT' 'INTO' table_name select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'UPSERT' 'INTO' table_name select_stmt 
+	| opt_with_clause 'UPSERT' 'INTO' table_name '(' insert_column_list ')' select_stmt 'RETURNING' target_list
+	| opt_with_clause 'UPSERT' 'INTO' table_name '(' insert_column_list ')' select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'UPSERT' 'INTO' table_name '(' insert_column_list ')' select_stmt 
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'DEFAULT' 'VALUES' 'RETURNING' target_list
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'DEFAULT' 'VALUES' 'RETURNING' 'NOTHING'
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'DEFAULT' 'VALUES' 
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name select_stmt 'RETURNING' target_list
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name select_stmt 
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name '(' insert_column_list ')' select_stmt 'RETURNING' target_list
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name '(' insert_column_list ')' select_stmt 'RETURNING' 'NOTHING'
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name '(' insert_column_list ')' select_stmt 
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name 'DEFAULT' 'VALUES' 'RETURNING' target_list
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name 'DEFAULT' 'VALUES' 'RETURNING' 'NOTHING'
+	| opt_with_clause 'UPSERT' 'INTO' table_name 'AS' table_alias_name 'DEFAULT' 'VALUES' 
