@@ -19,7 +19,7 @@ statement error pq: column b is of type INT and thus is not indexable with an in
 CREATE INVERTED INDEX foo_inv ON t(b)
 
 statement error pq: column b is of type INT and thus is not indexable with an inverted index
-CREATE INDEX foo_inv2 ON t(b) USING GIN
+CREATE INDEX foo_inv2 ON t USING GIN (b)
 
 statement error pq: syntax error at or near "inverted"
 CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
@@ -65,18 +65,18 @@ statement ok
 CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
 
 statement error pq: inverted indexes don't support interleaved tables
-CREATE INDEX c on t1 (id2)
+CREATE INDEX c on t1 USING GIN (id2)
    STORING (id1,id3)
-   INTERLEAVE in PARENT t1 (id2) USING GIN;
+   INTERLEAVE in PARENT t1 (id2);
 
 statement error pq: inverted indexes don't support stored columns
-CREATE INDEX c on t1 (id2) STORING (id1,id3) USING GIN;
+CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
 
 statement error pq: syntax error at or near "storing"
 CREATE INVERTED INDEX c on t1 (id2) STORING (id1,id3);
 
 statement error pq: inverted indexes can't be unique
-CREATE UNIQUE INDEX foo_inv2 ON t(b) USING GIN
+CREATE UNIQUE INDEX foo_inv2 ON t USING GIN (b)
 
 statement ok
 CREATE TABLE d (
