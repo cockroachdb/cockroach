@@ -47,3 +47,7 @@
     - The AlgebraicSetOp processor was removed, as it is not used. It was never
       used in plans, but its absence does change the ProcessorCoreUnion message,
       so a version bump is required.
+- Version: 11 (MinAcceptedVersion: 6)
+    - The txn field in the SetupFlowRequest is made nullable. Backfiller flows
+      no longer pass in a txn (it was passed by the gateway, but unused by the
+      remote processors before).
