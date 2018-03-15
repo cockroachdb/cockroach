@@ -543,7 +543,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
-			pgURL, err := serverCfg.PGURL(url.User(cliCtx.sqlConnUser))
+			pgURL, err := serverCfg.PGURL(url.User(security.RootUser))
 			if err != nil {
 				return err
 			}
