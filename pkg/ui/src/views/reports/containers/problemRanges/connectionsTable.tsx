@@ -4,6 +4,7 @@ import React from "react";
 import { Link } from "react-router";
 
 import * as protos from "src/js/protos";
+import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface ConnectionTableColumn {
   title: string;
@@ -14,7 +15,7 @@ interface ConnectionTableColumn {
 }
 
 interface ConnectionsTableProps {
-  problemRanges: protos.cockroach.server.serverpb.ProblemRangesResponse;
+  problemRanges: CachedDataReducerState<protos.cockroach.server.serverpb.ProblemRangesResponse>;
 }
 
 const connectionTableColumns: ConnectionTableColumn[] = [
@@ -52,16 +53,21 @@ const connectionTableColumns: ConnectionTableColumn[] = [
 
 export default function ConnectionsTable(props: ConnectionsTableProps) {
   const { problemRanges } = props;
-  if (_.isNil(problemRanges)) {
+  // lastError is already handled by ProblemRanges component.
+  if (_.isNil(problemRanges) ||
+    problemRanges.inFlight ||
+    _.isNil(problemRanges.data) ||
+    !_.isNil(problemRanges.lastError)) {
     return null;
   }
-  const ids = _.chain(_.keys(problemRanges.problems_by_node_id))
+  const { data } = problemRanges;
+  const ids = _.chain(_.keys(data.problems_by_node_id))
     .map(id => parseInt(id, 10))
     .sortBy(id => id)
     .value();
   return (
     <div>
-      <h2>Connections (via Node {problemRanges.node_id})</h2>
+      <h2>Connections (via Node {data.node_id})</h2>
       <table className="connections-table">
         <tbody>
           <tr className="connections-table__row connections-table__row--header">
@@ -75,7 +81,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
           </tr>
           {
             _.map(ids, id => {
-              const rowProblems = problemRanges.problems_by_node_id[id];
+              const rowProblems = data.problems_by_node_id[id];
               const rowClassName = classNames({
                 "connections-table__row": true,
                 "connections-table__row--warning": !_.isEmpty(rowProblems.error_message),
