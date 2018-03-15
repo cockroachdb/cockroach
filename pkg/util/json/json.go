@@ -146,6 +146,10 @@ type JSON interface {
 	// Len returns the number of outermost elements in the JSON document if it is an object or an array.
 	// Otherwise, Len returns 0.
 	Len() int
+
+	// HasContainerLeaf returns whether this document contains in it somewhere
+	// either the empty array or the empty object.
+	HasContainerLeaf() (bool, error)
 }
 
 type jsonTrue struct{}
@@ -1522,3 +1526,41 @@ func (j jsonTrue) doRemovePath([]string) (JSON, bool, error)   { return j, false
 func (j jsonFalse) doRemovePath([]string) (JSON, bool, error)  { return j, false, nil }
 func (j jsonString) doRemovePath([]string) (JSON, bool, error) { return j, false, nil }
 func (j jsonNumber) doRemovePath([]string) (JSON, bool, error) { return j, false, nil }
+
+func (j jsonObject) HasContainerLeaf() (bool, error) {
+	if j.Len() == 0 {
+		return true, nil
+	}
+	for _, c := range j {
+		next, err := c.v.HasContainerLeaf()
+		if err != nil {
+			return false, err
+		}
+		if next {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (j jsonArray) HasContainerLeaf() (bool, error) {
+	if j.Len() == 0 {
+		return true, nil
+	}
+	for _, c := range j {
+		next, err := c.HasContainerLeaf()
+		if err != nil {
+			return false, err
+		}
+		if next {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (j jsonNull) HasContainerLeaf() (bool, error)   { return false, nil }
+func (j jsonTrue) HasContainerLeaf() (bool, error)   { return false, nil }
+func (j jsonFalse) HasContainerLeaf() (bool, error)  { return false, nil }
+func (j jsonString) HasContainerLeaf() (bool, error) { return false, nil }
+func (j jsonNumber) HasContainerLeaf() (bool, error) { return false, nil }

@@ -419,11 +419,14 @@ SELECT * from d where b @> '{"a": [{}]}' ORDER BY a;
 query IT
 SELECT * from d where b @> '[{}]' ORDER BY a;
 ----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+20  [{"a": "a"}, {"a": "a"}]
 26  [[], {}]
 
 query IT
 SELECT * from d where b @> '[[]]' ORDER BY a;
 ----
+21  [[[["a"]]], [[["a"]]]]
 26  [[], {}]
 
 statement ok
@@ -480,6 +483,15 @@ SELECT * from d where b @> 'null' ORDER BY a;
 ----
 11  null
 27  [true, false, null, 1.23, "a"]
+
+query IT
+SELECT * from d where b @> '{"a": {}}' ORDER BY a;
+----
+3  {"a": {"b": "c"}}
+4  {"a": {"b": [1]}}
+5  {"a": {"b": [1, [2]]}}
+8  {"a": {"b": true}}
+9  {"a": {"b": false}}
 
 statement ok
 CREATE TABLE users (
