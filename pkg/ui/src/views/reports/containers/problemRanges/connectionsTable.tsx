@@ -28,7 +28,7 @@ const connectionTableColumns: ConnectionTableColumn[] = [
   },
   { title: "Unavailable", extract: (problem) => problem.unavailable_range_ids.length },
   { title: "No Raft Leader", extract: (problem) => problem.no_raft_leader_range_ids.length },
-  { title: "No Lease", extract: (problem) => problem.no_lease_range_ids.length },
+  { title: "Invalid Lease", extract: (problem) => problem.no_lease_range_ids.length },
   {
     title: "Raft Leader but not Lease Holder",
     extract: (problem) => problem.raft_leader_not_lease_holder_range_ids.length,
