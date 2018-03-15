@@ -25,20 +25,23 @@ export default class NodeList extends React.Component<RouterState & { router: In
 
     // TODO(vilterp): dedup with ClusterVisualization
     return (
-      <div style={{
-        width: "100%",
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        background: "white",
-        paddingBottom: 24,
-      }}>
+      <div
+        style={{
+          width: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: "white",
+          paddingBottom: 24,
+        }}
+        className="clusterviz"
+      >
         <div style={{
           flex: "none",
           backgroundColor: "white",
           boxShadow: "0 0 4px 0 rgba(0, 0, 0, 0.2)",
           zIndex: 5,
-          padding: "16px 24px",
+          padding: "4px 12px",
         }}>
           <div style={{ float: "left" }}>
             <Dropdown
