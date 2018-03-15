@@ -74,7 +74,7 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 10
+const Version DistSQLVersion = 11
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
@@ -304,9 +304,12 @@ func (ds *ServerImpl) setupFlow(
 	monitor.Start(ctx, &ds.memMonitor, mon.BoundAccount{})
 	acc := monitor.MakeBoundAccount()
 
-	// The flow will run in a Txn that specifies child=true because we
-	// do not want each distributed Txn to heartbeat the transaction.
-	txn := client.NewTxnWithProto(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, req.Txn)
+	var txn *client.Txn
+	if req.Txn != nil {
+		// The flow will run in a Txn that specifies child=true because we
+		// do not want each distributed Txn to heartbeat the transaction.
+		txn = client.NewTxnWithProto(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *req.Txn)
+	}
 
 	location, err := timeutil.TimeZoneStringToLocation(req.EvalContext.Location)
 	if err != nil {
