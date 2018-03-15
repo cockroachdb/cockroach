@@ -401,6 +401,9 @@ func (u *updateNode) Values() tree.Datums {
 	return u.run.resultRow
 }
 
+// requireSpool implements the planNodeRequireSpool interface.
+func (u *updateNode) requireSpool() {}
+
 func (u *updateNode) Close(ctx context.Context) {
 	u.run.rows.Close(ctx)
 	u.tw.close(ctx)
