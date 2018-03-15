@@ -32,10 +32,8 @@ import (
 )
 
 const (
-	// RaftLogQueueTimerDuration is the duration between truncations. This needs
-	// to be relatively short so that truncations can keep up with raft log entry
-	// creation.
-	RaftLogQueueTimerDuration = 50 * time.Millisecond
+	// raftLogQueueTimerDuration is the duration between truncations.
+	raftLogQueueTimerDuration = 0 // zero duration to process truncations greedily
 	// RaftLogQueueStaleThreshold is the minimum threshold for stale raft log
 	// entries. A stale entry is one which all replicas of the range have
 	// progressed past and thus is no longer needed and can be truncated.
@@ -273,7 +271,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.Syste
 
 // timer returns interval between processing successive queued truncations.
 func (*raftLogQueue) timer(_ time.Duration) time.Duration {
-	return RaftLogQueueTimerDuration
+	return raftLogQueueTimerDuration
 }
 
 // purgatoryChan returns nil.
