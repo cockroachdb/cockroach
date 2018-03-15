@@ -86,7 +86,7 @@ func init() {
 			type querier interface {
 				QueryRow(query string, args ...interface{}) *gosql.Row
 			}
-			runCopy := func(qu querier) {
+			runCopy := func(qu querier) error {
 				for lastID := -1; lastID+1 < rows; {
 					if lastID > 0 {
 						t.Progress(float64(lastID+1) / float64(rows))
@@ -104,19 +104,20 @@ func init() {
 						LIMIT 1`,
 						lastID, rowsPerInsert)
 					if err := qu.QueryRow(q).Scan(&lastID); err != nil {
-						t.Fatalf("failed to copy rows: %v", err)
+						return err
 					}
 				}
+				return nil
 			}
+
+			var err error
 			if inTxn {
-				if err := crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
-					runCopy(tx)
-					return nil
-				}); err != nil {
-					t.Fatal(err)
-				}
+				err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error { return runCopy(tx) })
 			} else {
-				runCopy(db)
+				err = runCopy(db)
+			}
+			if err != nil {
+				t.Fatalf("failed to copy rows: %s", err)
 			}
 
 			rc := rangeCount()
