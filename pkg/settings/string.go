@@ -57,6 +57,12 @@ func (s *StringSetting) Validate(v string) error {
 	return nil
 }
 
+// Override changes the setting without validation.
+// For testing usage only.
+func (s *StringSetting) Override(sv *Values, v string) {
+	sv.setGeneric(s.slotIdx, v)
+}
+
 func (s *StringSetting) set(sv *Values, v string) error {
 	if err := s.Validate(v); err != nil {
 		return err
