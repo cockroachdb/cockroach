@@ -299,6 +299,9 @@ func (n *insertNode) startExec(params runParams) error {
 	return n.run.tw.init(params.p.txn, params.EvalContext())
 }
 
+// requireSpool implements the planNodeRequireSpool interface.
+func (n *insertNode) requireSpool() {}
+
 func (n *insertNode) Close(ctx context.Context) {
 	n.tw.close(ctx)
 	if n.run.rows != nil {
