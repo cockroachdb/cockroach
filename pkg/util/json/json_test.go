@@ -1463,6 +1463,7 @@ func TestJSONContains(t *testing.T) {
 			{`{"a": [3], "c": {}}`, true},
 			{`{"a": [4], "c": {}}`, false},
 			{`{"a": [3], "c": {"foo": "gup"}}`, false},
+			{`{"a": 3}`, false},
 		},
 		`[{"a": 1}, {"b": 2, "c": 3}, [1], true, false, null, "hello"]`: {
 			{`[]`, true},
@@ -1483,6 +1484,13 @@ func TestJSONContains(t *testing.T) {
 			{`["hello", "hello", []]`, true},
 			{`["hello", {"a": 1}, "hello", []]`, true},
 			{`["hello", {"a": 1, "b": 2}, "hello", []]`, false},
+			{`"hello"`, true},
+			{`true`, true},
+			{`false`, true},
+			{`null`, true},
+			{`[1]`, false},
+			{`[[1]]`, true},
+			{`1`, false},
 		},
 		`[{"Ck@P":{"7RZ2\"mZBH":null,"|__v":[1.685483]},"EM%&":{"I{TH":[],"}p@]7sIKC\\$":[]},"f}?#z~":{"#e9>m\"v75'&+":false,"F;,+&r9":{}}},[{}],false,0.498401]`: {
 			{`[false,{}]`, true},
@@ -1506,7 +1514,7 @@ func TestJSONContains(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				checkResult := left.(containsTester).slowContains(other)
+				checkResult := slowContains(left, other)
 				if result != checkResult {
 					t.Fatal("mismatch between actual contains and slowContains")
 				}
@@ -1540,7 +1548,7 @@ func TestPositiveRandomJSONContains(t *testing.T) {
 		if !c {
 			t.Fatal(fmt.Sprintf("%s should contain %s", j, subdoc))
 		}
-		if !j.(containsTester).slowContains(subdoc) {
+		if !slowContains(j, subdoc) {
 			t.Fatal(fmt.Sprintf("%s should slowContains %s", j, subdoc))
 		}
 	}
@@ -1564,9 +1572,8 @@ func TestNegativeRandomJSONContains(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		slowResult := j1.(containsTester).slowContains(j2)
+		slowResult := slowContains(j1, j2)
 		if realResult != slowResult {
-			fmt.Println("realResult=", realResult)
 			t.Fatal("mismatch for document " + j1.String() + " @> " + j2.String())
 		}
 	}
