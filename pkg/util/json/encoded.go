@@ -702,6 +702,14 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	return decoded.encodeInvertedIndexKeys(b)
 }
 
+func (j *jsonEncoded) allPaths() ([]JSON, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return nil, err
+	}
+	return decoded.allPaths()
+}
+
 // preprocessForContains implements the JSON interface.
 func (j *jsonEncoded) preprocessForContains() (containsable, error) {
 	if dec := j.alreadyDecoded(); dec != nil {

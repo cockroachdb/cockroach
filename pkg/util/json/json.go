@@ -71,9 +71,14 @@ type JSON interface {
 	// Size returns the size of the JSON document in bytes.
 	Size() uintptr
 
-	// EncodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
+	// encodeInvertedIndexKeys takes in a key prefix and returns a slice of inverted index keys,
 	// one per path through the receiver.
 	encodeInvertedIndexKeys(b []byte) ([][]byte, error)
+
+	// allPaths returns a slice of new JSON documents, each a path to a leaf
+	// through the receiver. Note that leaves include the empty object and array
+	// in addition to scalars.
+	allPaths() ([]JSON, error)
 
 	// FetchValKey implements the `->` operator for strings, returning nil if the
 	// key is not found.
@@ -738,6 +743,67 @@ func (j jsonObject) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 		}
 	}
 	return outKeys, nil
+}
+
+// AllPaths returns a slice of new JSON documents, each a path to a leaf
+// through the input. Note that leaves include the empty object and array
+// in addition to scalars.
+func AllPaths(j JSON) ([]JSON, error) {
+	return j.allPaths()
+}
+
+func (j jsonNull) allPaths() ([]JSON, error) {
+	return []JSON{j}, nil
+}
+
+func (j jsonTrue) allPaths() ([]JSON, error) {
+	return []JSON{j}, nil
+}
+
+func (j jsonFalse) allPaths() ([]JSON, error) {
+	return []JSON{j}, nil
+}
+
+func (j jsonString) allPaths() ([]JSON, error) {
+	return []JSON{j}, nil
+}
+
+func (j jsonNumber) allPaths() ([]JSON, error) {
+	return []JSON{j}, nil
+}
+
+func (j jsonArray) allPaths() ([]JSON, error) {
+	if len(j) == 0 {
+		return []JSON{j}, nil
+	}
+	ret := make([]JSON, 0, len(j))
+	for i := range j {
+		paths, err := j[i].allPaths()
+		if err != nil {
+			return nil, err
+		}
+		for _, path := range paths {
+			ret = append(ret, jsonArray{path})
+		}
+	}
+	return ret, nil
+}
+
+func (j jsonObject) allPaths() ([]JSON, error) {
+	if len(j) == 0 {
+		return []JSON{j}, nil
+	}
+	ret := make([]JSON, 0, len(j))
+	for i := range j {
+		paths, err := j[i].v.allPaths()
+		if err != nil {
+			return nil, err
+		}
+		for _, path := range paths {
+			ret = append(ret, jsonObject{jsonKeyValuePair{k: j[i].k, v: path}})
+		}
+	}
+	return ret, nil
 }
 
 // FromDecimal returns a JSON value given a apd.Decimal.
