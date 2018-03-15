@@ -472,6 +472,30 @@ SELECT '[1, 2, 3]'::JSONB @> '[1, 2]'::JSONB
 ----
 true
 
+query B
+SELECT '{"a": [1, 2, 3]}'::JSONB->'a' @> '2'::JSONB
+----
+true
+
+statement ok
+CREATE TABLE x (j JSONB)
+
+statement ok
+INSERT INTO x VALUES ('{"a": [1,2,3]}')
+
+query B
+SELECT true FROM x WHERE j->'a' @> '2'::JSONB
+----
+true
+
+statement ok
+CREATE INVERTED INDEX ON x (j)
+
+query B
+SELECT true FROM x WHERE j->'a' @> '2'::JSONB
+----
+true
+
 query T
 SELECT '{"foo": {"bar": 1}}'::JSONB #- ARRAY['foo', 'bar']
 ----
