@@ -188,6 +188,7 @@ export default function Debug() {
           <DebugTableLink name="All Sessions" url="/_status/sessions" />
         </DebugTableRow>
         <DebugTableRow title="Cluster Wide">
+          <DebugTableLink name="Cluster Settings" url="/_admin/v1/settings" />
           <DebugTableLink name="Raft" url="/_status/raft" />
           <DebugTableLink
             name="Range"
