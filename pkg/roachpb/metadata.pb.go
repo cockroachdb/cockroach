@@ -127,7 +127,7 @@ type StoreCapacity struct {
 	LeaseCount   int32 `protobuf:"varint,4,opt,name=lease_count,json=leaseCount" json:"lease_count"`
 	// writes_per_second tracks the average number of keys written per second
 	// by ranges in the store. The stat is tracked over the time period defined
-	// in storage/replica_stats.go, which as of June 2017 is 25 minutes.
+	// in storage/replica_stats.go, which as of July 2017 is 30 minutes.
 	// TODO(a-robinson): We can currently only include writes, not reads served
 	// by leaseholders. Should we record those too? This may be enabled by #7611.
 	WritesPerSecond float64 `protobuf:"fixed64,5,opt,name=writes_per_second,json=writesPerSecond" json:"writes_per_second"`
