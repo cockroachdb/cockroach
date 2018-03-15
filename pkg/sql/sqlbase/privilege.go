@@ -181,24 +181,53 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 	}
 }
 
-// MaybeAddAdminPrivileges adds privileges for the 'admin' role if needed.
-// These are exactly the same as the 'root' privileges.
+// MaybeFixPrivileges fixes the privilege descriptor if needed, including:
+// * adding default privileges for the "admin" role
+// * fixing default privileges for the "root" user
+// * fixing maximum privileges for users.
 // Returns true if the privilege descriptor was modified.
-func (p *PrivilegeDescriptor) MaybeAddAdminPrivileges(id ID) bool {
-	superPrivileges := privilege.ALL.Mask()
+func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
+	allowedPrivilegesBits := privilege.ALL.Mask()
 	if IsReservedID(id) {
 		// System databases and tables have custom maximum allowed privileges.
-		superPrivileges = SystemDesiredPrivileges(id).ToBitField()
+		allowedPrivilegesBits = SystemDesiredPrivileges(id).ToBitField()
 	}
 
-	userPriv := p.findOrCreateUser(AdminRole)
-	if userPriv.Privileges != superPrivileges {
-		// New user or different privileges: overwrite.
-		userPriv.Privileges = superPrivileges
-		return true
+	var modified bool
+
+	fixSuperUser := func(user string) {
+		privs := p.findOrCreateUser(user)
+		if privs.Privileges != allowedPrivilegesBits {
+			privs.Privileges = allowedPrivilegesBits
+			modified = true
+		}
 	}
 
-	return false
+	// Check "root" user and "admin" role.
+	fixSuperUser(security.RootUser)
+	fixSuperUser(AdminRole)
+
+	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
+		// ALL privileges allowed, we can skip regular users.
+		return modified
+	}
+
+	for i := range p.Users {
+		// Users is a slice of values, we need pointers to make them mutable.
+		u := &p.Users[i]
+		if u.User == security.RootUser || u.User == AdminRole {
+			// we've already checked super users.
+			continue
+		}
+
+		if (u.Privileges &^ allowedPrivilegesBits) != 0 {
+			// User has disallowed privileges: bitwise AND with allowed privileges.
+			u.Privileges &= allowedPrivilegesBits
+			modified = true
+		}
+	}
+
+	return modified
 }
 
 // Validate is called when writing a database or table descriptor.
@@ -206,7 +235,7 @@ func (p *PrivilegeDescriptor) MaybeAddAdminPrivileges(id ID) bool {
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
 func (p PrivilegeDescriptor) Validate(id ID) error {
-	allowedPrivileges := privilege.Lists{{privilege.ALL}}
+	allowedPrivileges := privilege.List{privilege.ALL}
 	if IsReservedID(id) {
 		var ok bool
 		allowedPrivileges, ok = SystemAllowedPrivileges[id]
@@ -225,6 +254,12 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 		return err
 	}
 
+	allowedPrivilegesBits := allowedPrivileges.ToBitField()
+	if isPrivilegeSet(allowedPrivilegesBits, privilege.ALL) {
+		// ALL privileges allowed, we can skip regular users.
+		return nil
+	}
+
 	// For all non-super users, privileges must not exceed the allowed privileges.
 	for _, u := range p.Users {
 		if u.User == security.RootUser || u.User == AdminRole {
@@ -232,29 +267,9 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 			continue
 		}
 
-		// userError will be non-nil at the end of the allowedPrivileges loop if the user's
-		// privilege is not allowed by any item in the list.
-		var userError error
-		for _, allowedPriv := range allowedPrivileges {
-			allowedBits := allowedPriv.ToBitField()
-			if isPrivilegeSet(allowedBits, privilege.ALL) {
-				// ALL privileges allowed: we can stop.
-				userError = nil
-				break
-			}
-
-			if remaining := u.Privileges &^ allowedBits; remaining != 0 {
-				userError = fmt.Errorf("user %s must not have %s privileges on system object with ID=%d",
-					u.User, privilege.ListFromBitField(remaining), id)
-			} else {
-				// Privileges allowed: reset error and break out.
-				userError = nil
-				break
-			}
-		}
-
-		if userError != nil {
-			return userError
+		if remaining := u.Privileges &^ allowedPrivilegesBits; remaining != 0 {
+			return fmt.Errorf("user %s must not have %s privileges on system object with ID=%d",
+				u.User, privilege.ListFromBitField(remaining), id)
 		}
 	}
 
@@ -262,15 +277,15 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 }
 
 func (p PrivilegeDescriptor) validateRequiredSuperuser(
-	id ID, allowedPrivileges privilege.Lists, user string,
+	id ID, allowedPrivileges privilege.List, user string,
 ) error {
 	superPriv, ok := p.findUser(user)
 	if !ok {
 		return fmt.Errorf("user %s does not have privileges", user)
 	}
 
-	// The super users must match one of the allowed privilege sets exactly.
-	if !allowedPrivileges.Contains(superPriv.Privileges) {
+	// The super users must match the allowed privilege set exactly.
+	if superPriv.Privileges != allowedPrivileges.ToBitField() {
 		return fmt.Errorf("user %s must have exactly %s privileges on system object with ID=%d",
 			user, allowedPrivileges, id)
 	}

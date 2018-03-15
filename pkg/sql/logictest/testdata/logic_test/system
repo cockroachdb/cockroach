@@ -376,77 +376,76 @@ statement ok
 GRANT SELECT ON system.descriptor TO testuser
 
 # Superusers must have exactly the allowed privileges.
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT ALL ON DATABASE system TO root
 
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT DELETE, INSERT ON DATABASE system TO root
 
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT ALL ON system.namespace TO root
 
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT DELETE, INSERT ON system.descriptor TO root
 
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT ALL ON system.descriptor TO root
 
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON DATABASE system FROM root
 
-statement error user root must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON system.namespace FROM root
 
 statement error user root does not have privileges
 REVOKE ALL ON system.namespace FROM root
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT ALL ON DATABASE system TO admin
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT DELETE, INSERT ON DATABASE system TO admin
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT ALL ON system.namespace TO admin
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT DELETE, INSERT ON system.descriptor TO admin
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 GRANT ALL ON system.descriptor TO admin
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON DATABASE system FROM admin
 
-statement error user admin must have exactly {GRANT, SELECT} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT privileges on system object with ID=.*
 REVOKE GRANT ON system.namespace FROM admin
 
 statement error user admin does not have privileges
 REVOKE ALL ON system.namespace FROM admin
 
-# Some tables (we test system.lease here) allow multiple privilege sets for
-# backwards compatibility.
-# Superusers must have exactly one of the described privilege sets.
-statement ok
+# Some tables (we test system.lease here) used to allow multiple privilege sets for
+# backwards compatibility, and superusers were allowed very wide privileges.
+# We make sure this is no longer the case.
+statement error user testuser must not have ALL privileges on system object with ID=.*
 GRANT ALL ON system.lease TO testuser
 
-statement error user root must have exactly {GRANT, SELECT, INSERT, DELETE, UPDATE} or {ALL} privileges on system object with ID=.*
+statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
 GRANT CREATE on system.lease to root
 
-statement error user admin must have exactly {GRANT, SELECT, INSERT, DELETE, UPDATE} or {ALL} privileges on system object with ID=.*
+statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
 GRANT CREATE on system.lease to admin
 
-statement ok
+statement error user testuser must not have CREATE privileges on system object with ID=.*
 GRANT CREATE on system.lease to testuser
 
-statement ok
+statement error user root must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
 GRANT ALL ON system.lease TO root
 
-
-statement ok
+statement error user admin must have exactly GRANT, SELECT, INSERT, DELETE, UPDATE privileges on system object with ID=.*
 GRANT ALL ON system.lease TO admin
 
-statement ok
+statement error user testuser must not have ALL privileges on system object with ID=.*
 GRANT ALL ON system.lease TO testuser
 
 # NB: the "order by" is necessary or this test is flaky under DistSQL.

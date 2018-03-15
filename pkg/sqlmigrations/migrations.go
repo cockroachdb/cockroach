@@ -184,7 +184,7 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		// TODO(benesch): bake this migration into v2.1, but create a new migration
 		// with the same function to catch any tables written in a mixed-version setting.
 		name:   "ensure admin role privileges in all descriptors",
-		workFn: ensureAdminRolePrivileges,
+		workFn: ensureMaxPrivileges,
 	},
 }
 
@@ -832,16 +832,17 @@ func upgradeTableDescsToInterleavedFormatVersion(ctx context.Context, r runner) 
 	return upgradeDescsWithFn(ctx, r, tableDescFn, nil)
 }
 
-// ensureAdminRolePrivileges ensures that all descriptors have privileges
-// for the admin role.
+// ensureMaxPrivileges ensures that all descriptors have privileges
+// for the admin role, and that root and user privileges do not exceed
+// the allowed privileges.
 //
 // TODO(mberhault): Remove this migration in v2.1.
-func ensureAdminRolePrivileges(ctx context.Context, r runner) error {
+func ensureMaxPrivileges(ctx context.Context, r runner) error {
 	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
-		return desc.Privileges.MaybeAddAdminPrivileges(desc.ID), nil
+		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
 	}
 	databaseDescFn := func(desc *sqlbase.DatabaseDescriptor) (bool, error) {
-		return desc.Privileges.MaybeAddAdminPrivileges(desc.ID), nil
+		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
 	}
 	return upgradeDescsWithFn(ctx, r, tableDescFn, databaseDescFn)
 }

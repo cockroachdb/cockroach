@@ -478,7 +478,7 @@ func generatedFamilyName(familyID FamilyID, columnNames []string) string {
 // Returns true if any changes were made.
 func (desc *TableDescriptor) MaybeFillInDescriptor() bool {
 	changedVersion := desc.maybeUpgradeFormatVersion()
-	changedPrivileges := desc.Privileges.MaybeAddAdminPrivileges(desc.ID)
+	changedPrivileges := desc.Privileges.MaybeFixPrivileges(desc.ID)
 	return changedVersion || changedPrivileges
 }
 

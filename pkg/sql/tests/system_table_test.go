@@ -44,7 +44,7 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.Lists{{privilege.ALL}}
+	sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 	desc, err := sql.CreateTestTableDescriptor(
 		context.TODO(),
 		keys.SystemDatabaseID,

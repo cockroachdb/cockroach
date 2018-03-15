@@ -202,7 +202,7 @@ func getDescriptorByID(
 			return errors.Errorf("%q is not a database", desc.String())
 		}
 
-		database.Privileges.MaybeAddAdminPrivileges(id)
+		database.Privileges.MaybeFixPrivileges(id)
 
 		if err := database.Validate(); err != nil {
 			return err

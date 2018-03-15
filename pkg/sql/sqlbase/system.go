@@ -196,49 +196,32 @@ func pk(name string) IndexDescriptor {
 	}
 }
 
-// SystemAllowedPrivileges describes the allowable privilege lists for each
-// system object. The root user must have the privileges of exactly one of those
-// privilege lists. No user may have more privileges than the root user.
-//
-// Some system objects were created with different privileges in previous
-// versions of the system. These privileges are no longer "desired" but must
-// still be "allowed," or this version and the previous version with different
-// privileges will be unable to coexist in the same cluster because one version
-// will think it has invalid table descriptors.
-//
-// The currently-desired privileges (i.e., the privileges with which the object
-// will be created in fresh clusters) must be listed first in the mapped value,
-// followed by previously-desirable but still allowable privileges in any order.
-//
-// If we supported backwards-incompatible migrations, pruning allowed privileges
-// would require a two-step migration process. First, a new version that allows
-// both must be deployed to all nodes, after which a a migration to upgrade from
-// the old privileges to the new privileges can be run. Only then can a version
-// that removes the old allowed versions be deployed. TODO(benesch): Once we
-// support backwards-incompatible migrations, prune old allowed privileges.
-var SystemAllowedPrivileges = map[ID]privilege.Lists{
-	keys.SystemDatabaseID:  {privilege.ReadData},
-	keys.NamespaceTableID:  {privilege.ReadData},
-	keys.DescriptorTableID: {privilege.ReadData},
-	keys.UsersTableID:      {privilege.ReadWriteData},
-	keys.ZonesTableID:      {privilege.ReadWriteData},
+// SystemAllowedPrivileges describes the allowable privilege list for each
+// system object. Super users (root and admin) must have exactly the specified privileges,
+// other users must not exceed the specified privileges.
+var SystemAllowedPrivileges = map[ID]privilege.List{
+	keys.SystemDatabaseID:  privilege.ReadData,
+	keys.NamespaceTableID:  privilege.ReadData,
+	keys.DescriptorTableID: privilege.ReadData,
+	keys.UsersTableID:      privilege.ReadWriteData,
+	keys.ZonesTableID:      privilege.ReadWriteData,
 	// We eventually want to migrate the table to appear read-only to force the
 	// the use of a validating, logging accessor, so we'll go ahead and tolerate
 	// read-only privs to make that migration possible later.
-	keys.SettingsTableID:   {privilege.ReadWriteData, privilege.ReadData},
-	keys.LeaseTableID:      {privilege.ReadWriteData, {privilege.ALL}},
-	keys.EventLogTableID:   {privilege.ReadWriteData, {privilege.ALL}},
-	keys.RangeEventTableID: {privilege.ReadWriteData, {privilege.ALL}},
-	keys.UITableID:         {privilege.ReadWriteData, {privilege.ALL}},
+	keys.SettingsTableID:   privilege.ReadWriteData,
+	keys.LeaseTableID:      privilege.ReadWriteData,
+	keys.EventLogTableID:   privilege.ReadWriteData,
+	keys.RangeEventTableID: privilege.ReadWriteData,
+	keys.UITableID:         privilege.ReadWriteData,
 	// IMPORTANT: CREATE|DROP|ALL privileges should always be denied or database
 	// users will be able to modify system tables' schemas at will. CREATE and
 	// DROP privileges are allowed on the above system tables for backwards
 	// compatibility reasons only!
-	keys.JobsTableID:            {privilege.ReadWriteData},
-	keys.WebSessionsTableID:     {privilege.ReadWriteData},
-	keys.TableStatisticsTableID: {privilege.ReadWriteData},
-	keys.LocationsTableID:       {privilege.ReadWriteData},
-	keys.RoleMembersTableID:     {privilege.ReadWriteData},
+	keys.JobsTableID:            privilege.ReadWriteData,
+	keys.WebSessionsTableID:     privilege.ReadWriteData,
+	keys.TableStatisticsTableID: privilege.ReadWriteData,
+	keys.LocationsTableID:       privilege.ReadWriteData,
+	keys.RoleMembersTableID:     privilege.ReadWriteData,
 }
 
 // SystemDesiredPrivileges returns the desired privilege list (i.e., the
@@ -247,7 +230,7 @@ var SystemAllowedPrivileges = map[ID]privilege.Lists{
 // exist in the SystemAllowedPrivileges map and should only be used in contexts
 // where id is guaranteed to exist.
 func SystemDesiredPrivileges(id ID) privilege.List {
-	return SystemAllowedPrivileges[id][0]
+	return SystemAllowedPrivileges[id]
 }
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
