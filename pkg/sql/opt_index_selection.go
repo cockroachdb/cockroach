@@ -560,12 +560,6 @@ func encodeLogicalKey(
 				)
 				return nil, err
 			}
-			if len(keys) < 1 {
-				err := pgerror.NewError(
-					pgerror.CodeInternalError, "can't look up empty JSON",
-				)
-				return nil, err
-			}
 			key = keys[0]
 		} else {
 			key, err = sqlbase.EncodeTableKey(key, val, dir)

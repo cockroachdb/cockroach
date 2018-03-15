@@ -150,6 +150,9 @@ INSERT INTO d VALUES (29,  NULL)
 statement ok
 INSERT INTO d VALUES (30,  '{"a": {"b": "c", "d": "e"}, "f": "g"}')
 
+statement ok
+INSERT INTO d VALUES (31,  '{"a": []}')
+
 query TITTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @>'{"a": "b"}'
 ----
@@ -326,6 +329,7 @@ SELECT * from d where b @> '{}' ORDER BY a;
 9   {"a": {"b": false}}
 17  {}
 30  {"a": {"b": "c", "d": "e"}, "f": "g"}
+31  {"a": []}
 
 query IT
 SELECT * from d where b @> '[]' ORDER BY a;
@@ -420,14 +424,24 @@ SELECT * from d where b @> '{"a": [{}]}' ORDER BY a;
 ----
 25  {"a": [{}]}
 
+
+query IT
+SELECT * from d where b @> '{"a": []}' ORDER BY a;
+----
+25  {"a": [{}]}
+31  {"a": []}
+
 query IT
 SELECT * from d where b @> '[{}]' ORDER BY a;
 ----
+16  [{"a": {"b": [1, [2]]}}, "d"]
+20  [{"a": "a"}, {"a": "a"}]
 26  [[], {}]
 
 query IT
 SELECT * from d where b @> '[[]]' ORDER BY a;
 ----
+21  [[[["a"]]], [[["a"]]]]
 26  [[], {}]
 
 statement ok
@@ -561,6 +575,36 @@ index-join  0  index-join  ·       ·                                          
  └── scan   1  scan        ·       ·                                                        (a, b)           ·
 ·           1  ·           table   d@primary                                                ·                ·
 ·           1  ·           filter  b @> '["d"]'                                             ·                ·
+
+query IT
+SELECT * from d where b @> '{"a": {}}' ORDER BY a;
+----
+3  {"a": {"b": "c"}}
+4  {"a": {"b": [1]}}
+5  {"a": {"b": [1, [2]]}}
+8  {"a": {"b": true}}
+9  {"a": {"b": false}}
+30 {"a": {"b": "c", "d": "e"}, "f": "g"}
+
+query IT
+SELECT * from d where b @> '{"a": []}' ORDER BY a;
+----
+25  {"a": [{}]}
+31  {"a": []}
+
+query TTT
+EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
+----
+scan  ·      ·
+·     table  d@primary
+·     spans  ALL
+
+query TTT
+EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
+----
+scan  ·      ·
+·     table  d@primary
+·     spans  ALL
 
 statement ok
 CREATE TABLE users (
