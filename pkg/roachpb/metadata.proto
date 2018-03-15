@@ -129,7 +129,7 @@ message StoreCapacity {
   optional int32 lease_count = 4 [(gogoproto.nullable) = false];
   // writes_per_second tracks the average number of keys written per second
   // by ranges in the store. The stat is tracked over the time period defined
-  // in storage/replica_stats.go, which as of June 2017 is 25 minutes.
+  // in storage/replica_stats.go, which as of July 2017 is 30 minutes.
   // TODO(a-robinson): We can currently only include writes, not reads served
   // by leaseholders. Should we record those too? This may be enabled by #7611.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
