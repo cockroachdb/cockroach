@@ -98,6 +98,9 @@ func (dsp *DistSQLPlanner) initRunners() {
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
 //
+// txn is the transaction in which the plan will run. If nil, the different
+// processors are expected to manage their own internal transactions.
+//
 // All errors encoutered are reported to the distSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encoutered
 // while using that resultWriter), the error is also stored in
@@ -111,6 +114,11 @@ func (dsp *DistSQLPlanner) Run(
 	evalCtx *extendedEvalContext,
 ) {
 	ctx := planCtx.ctx
+
+	var txnProto *roachpb.Transaction
+	if txn != nil {
+		txnProto = txn.Proto()
+	}
 
 	if err := planCtx.sanityCheckAddresses(); err != nil {
 		recv.SetError(err)
@@ -158,7 +166,7 @@ func (dsp *DistSQLPlanner) Run(
 		}
 		req := &distsqlrun.SetupFlowRequest{
 			Version:     distsqlrun.Version,
-			Txn:         *txn.Proto(),
+			Txn:         txnProto,
 			Flow:        flowSpec,
 			EvalContext: evalCtxProto,
 		}
@@ -198,7 +206,7 @@ func (dsp *DistSQLPlanner) Run(
 	// Set up the flow on this node.
 	localReq := distsqlrun.SetupFlowRequest{
 		Version:     distsqlrun.Version,
-		Txn:         *txn.Proto(),
+		Txn:         txnProto,
 		Flow:        flows[thisNodeID],
 		EvalContext: evalCtxProto,
 	}
