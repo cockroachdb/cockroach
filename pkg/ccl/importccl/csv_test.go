@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1206,12 +1207,19 @@ func TestImportLiveness(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Fetch the new job ID since we know it's running now.
+	// Fetch the new job ID and lease since we know it's running now.
 	var jobID int64
-	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	originalLease := &jobs.Payload{}
+	{
+		var expectedLeaseBytes []byte
+		sqlDB.QueryRow(
+			t, `SELECT id, payload FROM system.jobs ORDER BY created DESC LIMIT 1`,
+		).Scan(&jobID, &expectedLeaseBytes)
+		originalLease.Unmarshal(expectedLeaseBytes)
+	}
 
-	// addsstable is done, now tick liveness and wait for it to cancel the import.
-	nl.FakeIncrementEpoch(1)
+	// addsstable is done, make the node non-live and wait for cancellation
+	nl.FakeSetExpiration(1, hlc.MinTimestamp)
 	// Wait for the registry cancel loop to run and cancel the job.
 	<-nl.SelfCalledCh
 	<-nl.SelfCalledCh
@@ -1220,8 +1228,23 @@ func TestImportLiveness(t *testing.T) {
 	if !testutils.IsError(err, "job .*: node liveness error") {
 		t.Fatalf("unexpected: %v", err)
 	}
+	// Make the node live again
+	nl.FakeSetExpiration(1, hlc.MaxTimestamp)
 	// The registry should now adopt the job and resume it.
 	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
 		t.Fatal(err)
+	}
+	// Verify that the job lease is placed on the original node
+	rescheduledLease := &jobs.Payload{}
+	{
+		var actualLeaseBytes []byte
+		sqlDB.QueryRow(
+			t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&actualLeaseBytes)
+		rescheduledLease.Unmarshal(actualLeaseBytes)
+	}
+	if originalLease.Lease.NodeID != rescheduledLease.Lease.NodeID {
+		t.Fatalf("job rescheduled on unexpected node: %d vs %d",
+			originalLease.Lease.NodeID, rescheduledLease.Lease.NodeID)
 	}
 }
