@@ -437,6 +437,14 @@ func SendCrashReport(
 	tags := map[string]string{
 		"uptime": uptimeTag(timeutil.Now()),
 	}
+
+	for _, f := range tagFns {
+		v := f.value(ctx)
+		if v != "" {
+			tags[f.key] = maybeTruncate(v)
+		}
+	}
+
 	eventID, ch := raven.DefaultClient.Capture(packet, tags)
 	select {
 	case <-ch:
@@ -460,5 +468,27 @@ func ReportOrPanic(
 		panic(fmt.Sprintf(format, reportables...))
 	}
 	Warningf(ctx, format, reportables...)
-	SendCrashReport(ctx, sv, 0 /* depth */, format, reportables)
+	SendCrashReport(ctx, sv, 1 /* depth */, format, reportables)
+}
+
+const maxTagLen = 500
+
+func maybeTruncate(tagValue string) string {
+	if len(tagValue) > maxTagLen {
+		return tagValue[:maxTagLen] + " [...]"
+	}
+	return tagValue
+}
+
+type tagFn struct {
+	key   string
+	value func(context.Context) string
+}
+
+var tagFns []tagFn
+
+// RegisterTagFn adds a function for tagging crash reports based on the context.
+// This is intended to be called by other packages at init time.
+func RegisterTagFn(key string, value func(context.Context) string) {
+	tagFns = append(tagFns, tagFn{key, value})
 }
