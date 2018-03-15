@@ -1,0 +1,171 @@
+# LogicTest: default
+
+statement ok
+CREATE TABLE t(x INT PRIMARY KEY); INSERT INTO t VALUES(1);
+
+# Check that if a mutation uses further processing, a spool is added.
+query TTT
+EXPLAIN WITH a AS (INSERT INTO t VALUES (2) RETURNING x)
+        SELECT * FROM a LIMIT 1
+----
+limit                  ·      ·
+ └── spool             ·      ·
+      │                limit  1
+      └── insert       ·      ·
+           │           into   t(x)
+           └── values  ·      ·
+·                      size   1 column, 1 row
+
+query TTT
+EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
+        SELECT * FROM a LIMIT 1
+----
+limit                ·      ·
+ └── spool           ·      ·
+      │              limit  1
+      └── delete     ·      ·
+           │         from   t
+           └── scan  ·      ·
+·                    table  t@primary
+·                    spans  ALL
+
+
+query TTT
+EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
+        SELECT * FROM a LIMIT 1
+----
+limit                     ·      ·
+ └── spool                ·      ·
+      │                   limit  1
+      └── update          ·      ·
+           │              table  t
+           │              set    x
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  t@primary
+·                         spans  ALL
+
+# Upsert is special, it doesn't need a spool.
+query TTT
+EXPLAIN WITH a AS (UPSERT INTO t VALUES (2) RETURNING x)
+        SELECT * FROM a LIMIT 1
+----
+limit             ·     ·
+ └── upsert       ·     ·
+      │           into  t(x)
+      └── values  ·     ·
+·                 size  1 column, 1 row
+
+# Ditto all mutations, with the statement source syntax.
+query TTT
+EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x] LIMIT 1
+----
+limit                  ·      ·
+ └── spool             ·      ·
+      │                limit  1
+      └── insert       ·      ·
+           │           into   t(x)
+           └── values  ·      ·
+·                      size   1 column, 1 row
+
+query TTT
+EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
+----
+limit                ·      ·
+ └── spool           ·      ·
+      │              limit  1
+      └── delete     ·      ·
+           │         from   t
+           └── scan  ·      ·
+·                    table  t@primary
+·                    spans  ALL
+
+query TTT
+EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
+----
+limit                     ·      ·
+ └── spool                ·      ·
+      │                   limit  1
+      └── update          ·      ·
+           │              table  t
+           │              set    x
+           └── render     ·      ·
+                └── scan  ·      ·
+·                         table  t@primary
+·                         spans  ALL
+
+query TTT
+EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2) RETURNING x] LIMIT 1
+----
+limit             ·     ·
+ └── upsert       ·     ·
+      │           into  t(x)
+      └── values  ·     ·
+·                 size  1 column, 1 row
+
+# Check that a spool is also inserted for other processings than LIMIT.
+query TTT
+EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x] ORDER BY x
+----
+sort                   ·      ·
+ │                     order  +x
+ └── spool             ·      ·
+      └── insert       ·      ·
+           │           into   t(x)
+           └── values  ·      ·
+·                      size   1 column, 1 row
+
+query TTT
+EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x], t
+----
+join                   ·      ·
+ │                     type   cross
+ ├── spool             ·      ·
+ │    └── insert       ·      ·
+ │         │           into   t(x)
+ │         └── values  ·      ·
+ │                     size   1 column, 1 row
+ └── scan              ·      ·
+·                      table  t@primary
+·                      spans  ALL
+
+# Check that if a spool is already added at some level, then it is not added
+# again at levels below.
+query TTT
+EXPLAIN WITH a AS (INSERT INTO t VALUES(2) RETURNING x),
+             b AS (INSERT INTO t SELECT x+1 FROM a RETURNING x)
+        SELECT * FROM b LIMIT 1
+----
+limit                            ·      ·
+ └── spool                       ·      ·
+      │                          limit  1
+      └── insert                 ·      ·
+           │                     into   t(x)
+           └── render            ·      ·
+                └── insert       ·      ·
+                     │           into   t(x)
+                     └── values  ·      ·
+·                                size   1 column, 1 row
+
+# Check that no spool is inserted if a top-level render is elided.
+query TTT
+EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x]
+----
+insert       ·     ·
+ │           into  t(x)
+ └── values  ·     ·
+·            size  1 column, 1 row
+
+# Check that no spool is used for a top-level INSERT, but
+# sub-INSERTs still get a spool.
+query TTT
+EXPLAIN INSERT INTO t SELECT x+1 FROM [INSERT INTO t VALUES(2) RETURNING x]
+----
+insert                      ·     ·
+ │                          into  t(x)
+ └── render                 ·     ·
+      └── spool             ·     ·
+           └── insert       ·     ·
+                │           into  t(x)
+                └── values  ·     ·
+·                           size  1 column, 1 row

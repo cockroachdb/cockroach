@@ -449,6 +449,12 @@ func (v *planVisitor) visit(plan planNode) {
 	case *ordinalityNode:
 		v.visit(n.source)
 
+	case *spoolNode:
+		if n.hardLimit > 0 && v.observer.attr != nil {
+			v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
+		}
+		v.visit(n.source)
+
 	case *showTraceNode:
 		v.visit(n.plan)
 
@@ -564,6 +570,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&showFingerprintsNode{}):     "showFingerprints",
 	reflect.TypeOf(&sortNode{}):                 "sort",
 	reflect.TypeOf(&splitNode{}):                "split",
+	reflect.TypeOf(&spoolNode{}):                "spool",
 	reflect.TypeOf(&unionNode{}):                "union",
 	reflect.TypeOf(&updateNode{}):               "update",
 	reflect.TypeOf(&upsertNode{}):               "upsert",
