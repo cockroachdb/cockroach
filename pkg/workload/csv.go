@@ -75,6 +75,8 @@ func datumToCSVString(datum interface{}) string {
 	switch t := datum.(type) {
 	case int:
 		return strconv.Itoa(t)
+	case int64:
+		return fmt.Sprint(t)
 	case float64:
 		return strconv.FormatFloat(t, 'f', -1, 64)
 	case string:
