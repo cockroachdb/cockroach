@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1210,8 +1211,8 @@ func TestImportLiveness(t *testing.T) {
 	var jobID int64
 	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
 
-	// addsstable is done, now tick liveness and wait for it to cancel the import.
-	nl.FakeIncrementEpoch(1)
+	// addsstable is done, make the node non-live and wait for cancellation
+	nl.FakeSetExpiration(1, hlc.MinTimestamp)
 	// Wait for the registry cancel loop to run and cancel the job.
 	<-nl.SelfCalledCh
 	<-nl.SelfCalledCh
@@ -1220,6 +1221,8 @@ func TestImportLiveness(t *testing.T) {
 	if !testutils.IsError(err, "job .*: node liveness error") {
 		t.Fatalf("unexpected: %v", err)
 	}
+	// Make the node live again
+	nl.FakeSetExpiration(1, hlc.MaxTimestamp)
 	// The registry should now adopt the job and resume it.
 	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
 		t.Fatal(err)
