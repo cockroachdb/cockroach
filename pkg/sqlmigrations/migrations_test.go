@@ -455,6 +455,18 @@ func TestCreateSystemTable(t *testing.T) {
 
 	table := sqlbase.NamespaceTable
 	table.ID = keys.MaxReservedDescID
+
+	prevPrivileges, ok := sqlbase.SystemAllowedPrivileges[table.ID]
+	defer func() {
+		if ok {
+			// Restore value of privileges.
+			sqlbase.SystemAllowedPrivileges[table.ID] = prevPrivileges
+		} else {
+			delete(sqlbase.SystemAllowedPrivileges, table.ID)
+		}
+	}()
+	sqlbase.SystemAllowedPrivileges[table.ID] = sqlbase.SystemAllowedPrivileges[keys.NamespaceTableID]
+
 	table.Name = "dummy"
 	nameKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
 	descKey := sqlbase.MakeDescMetadataKey(table.ID)
@@ -719,9 +731,9 @@ func TestUpgradeTableDescsToInterleavedFormatVersionMigration(t *testing.T) {
 		},
 	})
 
-	defer func(prev int64) { upgradeTableDescBatchSize = prev }(upgradeTableDescBatchSize)
-	upgradeTableDescBatchSize = 5
-	n := int(upgradeTableDescBatchSize) * 3
+	defer func(prev int64) { upgradeDescBatchSize = prev }(upgradeDescBatchSize)
+	upgradeDescBatchSize = 5
+	n := int(upgradeDescBatchSize) * 3
 
 	// Create n tables.
 	mt.sqlDB.Exec(t, `CREATE DATABASE db`)
