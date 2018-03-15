@@ -16,13 +16,20 @@ import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
-
+import spinner from "assets/spinner.gif";
+import Loading from "src/views/shared/components/loading";
+import { connect } from "react-redux";
+import { AdminUIState } from "src/redux/state";
 import "./tweaks.styl";
 
-  // tslint:disable-next-line:variable-name
+// tslint:disable-next-line:variable-name
 const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
 
-export default class ClusterVisualization extends React.Component<RouterState & { router: InjectedRouter }> {
+interface ClusterVisualizationProps {
+  licenseDataExists: boolean;
+}
+
+class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
     this.props.router.push(`/overview/${opt.value}`);
   }
@@ -64,8 +71,22 @@ export default class ClusterVisualization extends React.Component<RouterState & 
           <div style={{ float: "right" }}><TimeScaleDropdown /></div>
           <div style={{ textAlign: "center", paddingTop: 4 }}><Breadcrumbs tiers={tiers} /></div>
         </div>
-        <NodeCanvasContent tiers={tiers} />
+        <Loading
+          loading={!this.props.licenseDataExists}
+          className="loading-image loading-image__spinner-left"
+          image={spinner}
+        >
+          <NodeCanvasContent tiers={tiers} />
+        </Loading>
       </div>
     );
   }
 }
+
+function mapStateToProps(state: AdminUIState) {
+  return {
+    licenseDataExists: !!state.cachedData.cluster.data,
+  };
+}
+
+export default connect(mapStateToProps)(ClusterVisualization);
