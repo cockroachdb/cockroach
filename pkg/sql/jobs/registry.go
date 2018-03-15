@@ -216,7 +216,7 @@ func (r *Registry) Start(
 			select {
 			case <-time.After(adoptInterval):
 				if err := r.maybeAdoptJob(ctx, nl); err != nil {
-					log.Errorf(ctx, "error while adopting jobs: %+v", err)
+					log.Errorf(ctx, "error while adopting jobs: %s", err)
 				}
 			case <-stopper.ShouldStop():
 				return
