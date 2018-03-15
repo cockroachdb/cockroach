@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -37,54 +38,68 @@ func TestKey(t *testing.T) {
 }
 
 func TestKeyCompare(t *testing.T) {
-	test := func(
-		t *testing.T, evalCtx *tree.EvalContext, k, l Key, kExt, lExt KeyExtension, expected int,
-	) {
+	keyCtx := testKeyContext()
+
+	test := func(k, l Key, kExt, lExt KeyExtension, expected int) {
 		t.Helper()
-		if actual := k.Compare(evalCtx, l, kExt, lExt); actual != expected {
+		if actual := k.Compare(keyCtx, l, kExt, lExt); actual != expected {
 			t.Errorf("k: %s, l %s, expected: %d, actual: %d", k, l, expected, actual)
+		} else if actual := l.Compare(keyCtx, k, lExt, kExt); actual != -expected {
+			t.Errorf("l: %s, k %s, expected: %d, actual: %d", l, k, -expected, actual)
 		}
 	}
-
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
 
 	key0 := MakeKey(tree.NewDInt(0))
 	key1 := MakeKey(tree.NewDInt(1))
 	key01 := MakeCompositeKey(tree.NewDInt(0), tree.NewDInt(1))
 	keyNull := MakeKey(tree.DNull)
 
-	test(t, &evalCtx, EmptyKey, keyNull, ExtendLow, ExtendLow, -1)
-	test(t, &evalCtx, EmptyKey, keyNull, ExtendLow, ExtendHigh, -1)
-	test(t, &evalCtx, EmptyKey, keyNull, ExtendHigh, ExtendLow, 1)
-	test(t, &evalCtx, EmptyKey, keyNull, ExtendHigh, ExtendHigh, 1)
+	test(EmptyKey, keyNull, ExtendLow, ExtendLow, -1)
+	test(EmptyKey, keyNull, ExtendLow, ExtendHigh, -1)
+	test(EmptyKey, keyNull, ExtendHigh, ExtendLow, 1)
+	test(EmptyKey, keyNull, ExtendHigh, ExtendHigh, 1)
 
-	test(t, &evalCtx, key0, key0, ExtendLow, ExtendLow, 0)
-	test(t, &evalCtx, key0, key0, ExtendLow, ExtendHigh, -1)
-	test(t, &evalCtx, key0, key0, ExtendHigh, ExtendLow, 1)
-	test(t, &evalCtx, key0, key0, ExtendHigh, ExtendHigh, 0)
+	test(key0, key0, ExtendLow, ExtendLow, 0)
+	test(key0, key0, ExtendLow, ExtendHigh, -1)
+	test(key0, key0, ExtendHigh, ExtendLow, 1)
+	test(key0, key0, ExtendHigh, ExtendHigh, 0)
 
-	test(t, &evalCtx, key0, key1, ExtendLow, ExtendLow, -1)
-	test(t, &evalCtx, key0, key1, ExtendLow, ExtendHigh, -1)
-	test(t, &evalCtx, key0, key1, ExtendHigh, ExtendLow, -1)
-	test(t, &evalCtx, key0, key1, ExtendHigh, ExtendHigh, -1)
+	test(key0, key1, ExtendLow, ExtendLow, -1)
+	test(key0, key1, ExtendLow, ExtendHigh, -1)
+	test(key0, key1, ExtendHigh, ExtendLow, -1)
+	test(key0, key1, ExtendHigh, ExtendHigh, -1)
 
-	test(t, &evalCtx, key1, key0, ExtendLow, ExtendLow, 1)
-	test(t, &evalCtx, key1, key0, ExtendLow, ExtendHigh, 1)
-	test(t, &evalCtx, key1, key0, ExtendHigh, ExtendLow, 1)
-	test(t, &evalCtx, key1, key0, ExtendHigh, ExtendHigh, 1)
+	test(key01, key0, ExtendLow, ExtendLow, 1)
+	test(key01, key0, ExtendLow, ExtendHigh, -1)
+	test(key01, key0, ExtendHigh, ExtendLow, 1)
+	test(key01, key0, ExtendHigh, ExtendHigh, -1)
 
-	test(t, &evalCtx, key01, key0, ExtendLow, ExtendLow, 1)
-	test(t, &evalCtx, key01, key0, ExtendLow, ExtendHigh, -1)
-	test(t, &evalCtx, key01, key0, ExtendHigh, ExtendLow, 1)
-	test(t, &evalCtx, key01, key0, ExtendHigh, ExtendHigh, -1)
+	test(keyNull, key0, ExtendHigh, ExtendLow, -1)
 
-	test(t, &evalCtx, key0, key01, ExtendLow, ExtendLow, -1)
-	test(t, &evalCtx, key0, key01, ExtendLow, ExtendHigh, -1)
-	test(t, &evalCtx, key0, key01, ExtendHigh, ExtendLow, 1)
-	test(t, &evalCtx, key0, key01, ExtendHigh, ExtendHigh, 1)
+	// Invert the direction of the first columns.
+	keyCtx.Columns.firstCol = -keyCtx.Columns.firstCol
 
-	test(t, &evalCtx, keyNull, key0, ExtendHigh, ExtendLow, -1)
+	test(EmptyKey, keyNull, ExtendLow, ExtendLow, -1)
+	test(EmptyKey, keyNull, ExtendLow, ExtendHigh, -1)
+	test(EmptyKey, keyNull, ExtendHigh, ExtendLow, 1)
+	test(EmptyKey, keyNull, ExtendHigh, ExtendHigh, 1)
+
+	test(key0, key0, ExtendLow, ExtendLow, 0)
+	test(key0, key0, ExtendLow, ExtendHigh, -1)
+	test(key0, key0, ExtendHigh, ExtendLow, 1)
+	test(key0, key0, ExtendHigh, ExtendHigh, 0)
+
+	test(key0, key1, ExtendLow, ExtendLow, 1)
+	test(key0, key1, ExtendLow, ExtendHigh, 1)
+	test(key0, key1, ExtendHigh, ExtendLow, 1)
+	test(key0, key1, ExtendHigh, ExtendHigh, 1)
+
+	test(key01, key0, ExtendLow, ExtendLow, 1)
+	test(key01, key0, ExtendLow, ExtendHigh, -1)
+	test(key01, key0, ExtendHigh, ExtendLow, 1)
+	test(key01, key0, ExtendHigh, ExtendHigh, -1)
+
+	test(keyNull, key0, ExtendHigh, ExtendLow, 1)
 }
 
 func TestKeyConcat(t *testing.T) {
@@ -124,4 +139,14 @@ func testKey(t *testing.T, k Key, expected string) {
 	if k.String() != expected {
 		t.Errorf("expected: %s, actual: %s", expected, k.String())
 	}
+}
+
+func testKeyContext() KeyContext {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+
+	var columns Columns
+	columns.Init([]opt.OrderingColumn{1, 2})
+
+	return MakeKeyContext(&columns, &evalCtx)
 }

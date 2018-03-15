@@ -40,11 +40,7 @@ import (
 //  - a constraint on @1 = 1 AND @2 >= 1: a single span /@1/@2: [/1/1 - /1]
 //  - a constraint on @1 < 5 OR @1 > 10: multiple spans /@1: [ - /5) (10 - ]
 type Constraint struct {
-	// firstCol holds the first column index and otherCols hold any indexes
-	// beyond the first. These are separated in order to optimize for the common
-	// case of a single-column constraint.
-	firstCol  opt.ColumnIndex
-	otherCols []opt.ColumnIndex
+	Columns Columns
 
 	// firstSpan holds the first span and otherSpans hold any spans beyond the
 	// first. These are separated in order to optimize for the common case of a
@@ -54,40 +50,26 @@ type Constraint struct {
 }
 
 // init is for package use only. External callers should call NewConstraintSet.
-func (c *Constraint) init(col opt.ColumnIndex, sp *Span) {
+func (c *Constraint) init(col opt.OrderingColumn, sp *Span) {
 	if sp.IsUnconstrained() {
 		// Don't allow unconstrained span in a constraint. Instead just discard
 		// the constraint, as its absence already means it's unconstrained.
 		panic("unconstrained span cannot be part of a constraint")
 	}
-	c.firstCol = col
+	c.Columns.InitSingle(col)
 	c.firstSpan = *sp
 }
 
 // initComposite is for package use only. External callers should call
 // NewForColumn or NewForColumns.
-func (c *Constraint) initComposite(cols []opt.ColumnIndex, sp *Span) {
-	c.init(cols[0], sp)
-	if len(cols) > 1 {
-		c.otherCols = cols[1:]
+func (c *Constraint) initComposite(cols []opt.OrderingColumn, sp *Span) {
+	if sp.IsUnconstrained() {
+		// Don't allow unconstrained span in a constraint. Instead just discard
+		// the constraint, as its absence already means it's unconstrained.
+		panic("unconstrained span cannot be part of a constraint")
 	}
-}
-
-// ColumnCount returns the number of constrained columns (always at least one).
-func (c *Constraint) ColumnCount() int {
-	// There's always at least one column.
-	return 1 + len(c.otherCols)
-}
-
-// Column returns the index of the nth constrained column. Together with the
-// ColumnCount method, Column allows iteration over the list of constrained
-// columns (since there is no method to return a slice of columns).
-func (c *Constraint) Column(nth int) opt.ColumnIndex {
-	// There's always at least one column.
-	if nth == 0 {
-		return c.firstCol
-	}
-	return c.otherCols[nth-1]
+	c.Columns.Init(cols)
+	c.firstSpan = *sp
 }
 
 // SpanCount returns the total number of spans in the constraint (always at
@@ -125,11 +107,12 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 	leftIndex := 0
 	right := other
 	rightIndex := 0
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
 
 	for leftIndex < left.SpanCount() || rightIndex < right.SpanCount() {
 		if rightIndex < right.SpanCount() {
 			if leftIndex >= left.SpanCount() ||
-				left.Span(leftIndex).Compare(evalCtx, right.Span(rightIndex)) > 0 {
+				left.Span(leftIndex).Compare(keyCtx, right.Span(rightIndex)) > 0 {
 				// Swap the two sets, so that going forward the current left
 				// span starts before the current right span.
 				left, right = right, left
@@ -162,13 +145,13 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 			// Constraint.
 			var ok bool
 			if leftIndex < left.SpanCount() {
-				if mergeSpan.TryUnionWith(evalCtx, left.Span(leftIndex)) {
+				if mergeSpan.TryUnionWith(keyCtx, left.Span(leftIndex)) {
 					leftIndex++
 					ok = true
 				}
 			}
 			if rightIndex < right.SpanCount() {
-				if mergeSpan.TryUnionWith(evalCtx, right.Span(rightIndex)) {
+				if mergeSpan.TryUnionWith(keyCtx, right.Span(rightIndex)) {
 					rightIndex++
 					ok = true
 				}
@@ -228,15 +211,16 @@ func (c *Constraint) tryIntersectWith(evalCtx *tree.EvalContext, other *Constrai
 	empty := true
 	index := 0
 	otherIndex := 0
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
 
 	for index < c.SpanCount() && otherIndex < other.SpanCount() {
-		if c.Span(index).StartsAfter(evalCtx, other.Span(otherIndex)) {
+		if c.Span(index).StartsAfter(keyCtx, other.Span(otherIndex)) {
 			otherIndex++
 			continue
 		}
 
 		mergeSpan := *c.Span(index)
-		if !mergeSpan.TryIntersectWith(evalCtx, other.Span(otherIndex)) {
+		if !mergeSpan.TryIntersectWith(keyCtx, other.Span(otherIndex)) {
 			index++
 			continue
 		}
@@ -256,7 +240,7 @@ func (c *Constraint) tryIntersectWith(evalCtx *tree.EvalContext, other *Constrai
 
 		// Skip past whichever span ends first, or skip past both if they have
 		// the same endpoint.
-		cmp := c.Span(index).CompareEnds(evalCtx, other.Span(otherIndex))
+		cmp := c.Span(index).CompareEnds(keyCtx, other.Span(otherIndex))
 		if cmp <= 0 {
 			index++
 		}
@@ -278,9 +262,9 @@ func (c *Constraint) tryIntersectWith(evalCtx *tree.EvalContext, other *Constrai
 func (c *Constraint) String() string {
 	var buf bytes.Buffer
 
-	for i := 0; i < c.ColumnCount(); i++ {
+	for i := 0; i < c.Columns.Count(); i++ {
 		buf.WriteRune('/')
-		buf.WriteString(fmt.Sprintf("%d", c.Column(i)))
+		buf.WriteString(fmt.Sprintf("%d", c.Columns.Get(i)))
 	}
 
 	buf.WriteString(": ")
