@@ -39,7 +39,7 @@ func init() {
 					path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
 						`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
 						`stores=%d/%d.tgz`, nodes, node-1)
-					c.Run(ctx, node, `gsutil cat `+path+` | tar xvzf - -C /mnt/data1/cockroach/`)
+					c.Run(ctx, node, `gsutil cat `+path+` | tar xzf - -C /mnt/data1/cockroach/`)
 				}()
 			}
 			wg.Wait()
