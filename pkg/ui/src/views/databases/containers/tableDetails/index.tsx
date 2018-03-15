@@ -77,6 +77,10 @@ class TableMain extends React.Component<TableMainProps, {}> {
     hljs.highlightBlock(this.createStmtNode);
   }
 
+  componentDidUpdate() {
+    hljs.highlightBlock(this.createStmtNode);
+  }
+
   render() {
     const { tableInfo, grantsSortSetting } = this.props;
 
