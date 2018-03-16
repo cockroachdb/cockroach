@@ -125,6 +125,8 @@ message ProcessorCoreUnion {
   optional SamplerSpec Sampler = 15;
   optional SampleAggregatorSpec SampleAggregator = 16;
   optional InterleavedReaderJoinerSpec interleavedReaderJoiner = 17;
+  optional MetadataTestSenderSpec metadataTestSender = 18;
+  optional MetadataTestReceiverSpec metadataTestReceiver = 19;
 
   reserved 6, 12;
 }
@@ -133,6 +135,15 @@ message ProcessorCoreUnion {
 // need post-processing or when only a synchronizer is required (e.g. at the
 // final endpoint).
 message NoopCoreSpec {
+}
+
+message MetadataTestSenderSpec {
+  optional string id = 1 [(gogoproto.nullable) = false,
+                         (gogoproto.customname) = "ID"];
+}
+
+message MetadataTestReceiverSpec {
+  repeated string sender_ids = 1 [(gogoproto.customname) = "SenderIDs"];
 }
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
