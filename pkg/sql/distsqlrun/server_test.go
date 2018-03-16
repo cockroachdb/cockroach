@@ -62,7 +62,7 @@ func TestServer(t *testing.T) {
 
 	txn := client.NewTxn(kvDB, s.NodeID(), client.RootTxn)
 
-	req := &SetupFlowRequest{Version: Version, Txn: *txn.Proto()}
+	req := &SetupFlowRequest{Version: Version, Txn: txn.Proto()}
 	req.Flow = FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &ts},
