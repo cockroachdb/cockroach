@@ -192,6 +192,11 @@ func (c OrderingColumn) Index() ColumnIndex {
 	return ColumnIndex(c)
 }
 
+// Ascending returns true if the ordering on this column is ascending.
+func (c OrderingColumn) Ascending() bool {
+	return c > 0
+}
+
 // Descending returns true if the ordering on this column is descending.
 func (c OrderingColumn) Descending() bool {
 	return c < 0
