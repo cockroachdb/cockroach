@@ -17,6 +17,8 @@
 package constraint
 
 import (
+	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -38,7 +40,7 @@ func TestKey(t *testing.T) {
 }
 
 func TestKeyCompare(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	test := func(k, l Key, kExt, lExt KeyExtension, expected int) {
 		t.Helper()
@@ -76,8 +78,8 @@ func TestKeyCompare(t *testing.T) {
 
 	test(keyNull, key0, ExtendHigh, ExtendLow, -1)
 
-	// Invert the direction of the first columns.
-	keyCtx.Columns.firstCol = -keyCtx.Columns.firstCol
+	// Invert the direction of the first column.
+	keyCtx = testKeyContext(-1, 2)
 
 	test(EmptyKey, keyNull, ExtendLow, ExtendLow, -1)
 	test(EmptyKey, keyNull, ExtendLow, ExtendHigh, -1)
@@ -134,6 +136,95 @@ func TestKeyConcat(t *testing.T) {
 	testKey(t, k, "/1/2/3/'bar'/true")
 }
 
+func TestKeyNextPrev(t *testing.T) {
+	kcAscAsc := testKeyContext(1, 2)
+	kcDesc := testKeyContext(-1)
+	kcAscDesc := testKeyContext(1, -2)
+
+	testCases := []struct {
+		key     Key
+		keyCtx  KeyContext
+		expNext string
+		expPrev string
+	}{
+		{ // 0
+			key:     MakeKey(tree.NewDInt(1)),
+			keyCtx:  kcAscAsc,
+			expNext: "/2",
+			expPrev: "/0",
+		},
+		{ // 1
+			key:     MakeKey(tree.NewDInt(math.MaxInt64)),
+			keyCtx:  kcAscAsc,
+			expNext: "FAIL",
+			expPrev: "/9223372036854775806",
+		},
+		{ // 2
+			key:     MakeKey(tree.NewDInt(math.MinInt64)),
+			keyCtx:  kcAscAsc,
+			expNext: "/-9223372036854775807",
+			expPrev: "FAIL",
+		},
+		{ // 3
+			key:     MakeCompositeKey(tree.NewDInt(1), tree.NewDInt(2)),
+			keyCtx:  kcAscAsc,
+			expNext: "/1/3",
+			expPrev: "/1/1",
+		},
+		{ // 4
+			key:     MakeCompositeKey(tree.NewDInt(1), tree.DBoolFalse),
+			keyCtx:  kcAscAsc,
+			expNext: "/1/true",
+			expPrev: "FAIL",
+		},
+		{ // 5
+			key:     MakeCompositeKey(tree.NewDInt(1), tree.DBoolTrue),
+			keyCtx:  kcAscAsc,
+			expNext: "FAIL",
+			expPrev: "/1/false",
+		},
+		{ // 6
+			key:     MakeCompositeKey(tree.NewDInt(1), tree.NewDString("foo")),
+			keyCtx:  kcAscAsc,
+			expNext: "/1/e'foo\\x00'",
+			expPrev: "FAIL",
+		},
+		{ // 7
+			key:     MakeCompositeKey(tree.NewDInt(1)),
+			keyCtx:  kcDesc,
+			expNext: "/0",
+			expPrev: "/2",
+		},
+		{ // 8
+			key:     MakeCompositeKey(tree.NewDInt(1), tree.NewDInt(2)),
+			keyCtx:  kcAscDesc,
+			expNext: "/1/1",
+			expPrev: "/1/3",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			toStr := func(k Key, ok bool) string {
+				if !ok {
+					return "FAIL"
+				}
+				return k.String()
+			}
+
+			key, ok := tc.key.Next(tc.keyCtx)
+			if res := toStr(key, ok); res != tc.expNext {
+				t.Errorf("Next(%s) = %s, expected %s", tc.key, res, tc.expNext)
+			}
+			key, ok = tc.key.Prev(tc.keyCtx)
+			if res := toStr(key, ok); res != tc.expPrev {
+				t.Errorf("Prev(%s) = %s, expected %s", tc.key, res, tc.expPrev)
+			}
+		})
+	}
+
+}
+
 func testKey(t *testing.T, k Key, expected string) {
 	t.Helper()
 	if k.String() != expected {
@@ -141,12 +232,12 @@ func testKey(t *testing.T, k Key, expected string) {
 	}
 }
 
-func testKeyContext() KeyContext {
+func testKeyContext(cols ...opt.OrderingColumn) KeyContext {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
 	var columns Columns
-	columns.Init([]opt.OrderingColumn{1, 2})
+	columns.Init(cols)
 
 	return MakeKeyContext(&columns, &evalCtx)
 }
