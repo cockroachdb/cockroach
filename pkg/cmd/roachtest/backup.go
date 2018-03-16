@@ -50,7 +50,7 @@ func init() {
 			m.Go(func(ctx context.Context) error {
 				c.status(`running 2tb backup`)
 				c.Run(ctx, 1, `./cockroach sql --insecure -e "
-				BACKUP workload.bank TO 'gs://cockroachdb-backup-testing/`+c.name+`'"`)
+				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+c.name+`'"`)
 				return nil
 			})
 			m.Wait()
