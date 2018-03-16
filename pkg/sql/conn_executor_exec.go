@@ -384,22 +384,19 @@ func (ex *connExecutor) execStmtInOpenState(
 func (ex *connExecutor) commitSQLTransaction(
 	ctx context.Context, stmt tree.Statement,
 ) (fsm.Event, fsm.EventPayload) {
-	commitType := commit
+	isRelease := false
 	if _, ok := stmt.(*tree.ReleaseSavepoint); ok {
-		commitType = release
+		isRelease = true
 	}
 
 	if err := ex.state.mu.txn.Commit(ctx); err != nil {
 		return ex.makeErrEvent(err, stmt)
 	}
 
-	switch commitType {
-	case commit:
+	if !isRelease {
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
-	case release:
-		return eventTxnReleased{}, nil
 	}
-	panic("unreached")
+	return eventTxnReleased{}, nil
 }
 
 // rollbackSQLTransaction executes a ROLLBACK statement: the KV transaction is
