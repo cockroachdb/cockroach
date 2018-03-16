@@ -1,51 +1,34 @@
 import React from "react";
+import { connect, Dispatch } from "react-redux";
 import _ from "lodash";
 
 import { numNodesWithoutLocality } from "src/util/localities";
+import {
+  instructionsBoxExpandedSetting,
+  instructionsBoxExpandedSelector,
+} from "src/redux/alerts";
+import { INSTRUCTIONS_BOX_EXPANDED_KEY, saveUIData } from "src/redux/uiData";
+import { AdminUIState } from "src/redux/state";
+import { nodeStatusesSelector } from "src/redux/nodes";
 import { NodeStatus$Properties } from "src/util/proto";
-import { LocalityTier, LocalityTree } from "oss/src/redux/localities";
+import { LocalityTier, LocalityTree } from "src/redux/localities";
 import nodeMapScreenshot from "assets/nodeMapSteps/3-seeMap.png";
 import "./instructionsBox.styl";
 
 interface InstructionsBoxProps {
   allNodes: NodeStatus$Properties[];
-}
-
-interface InstructionBoxState {
   expanded: boolean;
+  setExpanded: (expanded: boolean) => void;
 }
 
 const DOCS_LINK = "http://cockroach-docs-review.s3-website-us-east-1.amazonaws.com/50893285dcb2e74c603d34103597b83f715a4c31/dev/admin-ui-node-map.html#configure-and-navigate-the-node-map";
-
-const LOCAL_STORAGE_KEY = "clusterviz-instruction-box-expanded";
 
 interface Step {
   num: number;
   text: React.ReactNode;
 }
 
-export default class InstructionsBox extends React.Component<InstructionsBoxProps, InstructionBoxState> {
-  constructor() {
-    super();
-    const valFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY);
-    let expanded = true;
-    if (valFromStorage === "false") {
-      expanded = false;
-    }
-    this.state = {
-      expanded,
-    };
-  }
-
-  handleToggle = () => {
-    const expanded = !this.state.expanded;
-    const val = `${expanded}`;
-    localStorage.setItem(LOCAL_STORAGE_KEY, val);
-    this.setState({
-      expanded,
-    });
-  }
-
+class InstructionsBox extends React.Component<InstructionsBoxProps> {
   renderExpanded() {
     const nextTodo = getNextTodo(this.props.allNodes);
 
@@ -65,7 +48,7 @@ export default class InstructionsBox extends React.Component<InstructionsBoxProp
           </div>
           <span
             className="instructions-box-top-bar__x_out"
-            onClick={this.handleToggle.bind(this)}
+            onClick={() => this.props.setExpanded(false)}
           >
             ✕
           </span>
@@ -87,7 +70,7 @@ export default class InstructionsBox extends React.Component<InstructionsBoxProp
     return (
       <div
         className="instructions-box instructions-box--collapsed"
-        onClick={this.handleToggle.bind(this)}
+        onClick={() => this.props.setExpanded(true)}
       >
         ?
       </div>
@@ -95,13 +78,34 @@ export default class InstructionsBox extends React.Component<InstructionsBoxProp
   }
 
   render() {
-    if (this.state.expanded) {
+    if (this.props.expanded) {
       return this.renderExpanded();
     } else {
       return this.renderCollapsed();
     }
   }
 }
+
+function mapStateToProps(state: AdminUIState) {
+  return {
+    expanded: instructionsBoxExpandedSelector(state),
+    allNodes: nodeStatusesSelector(state),
+  };
+}
+
+function mapDispatchToProps(dispatch: Dispatch<AdminUIState>) {
+  return {
+    setExpanded: (expanded: boolean) => {
+      dispatch(instructionsBoxExpandedSetting.set(expanded));
+      dispatch(saveUIData({
+        key: INSTRUCTIONS_BOX_EXPANDED_KEY,
+        value: expanded,
+      }));
+    },
+  };
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(InstructionsBox);
 
 // Helper functions.
 

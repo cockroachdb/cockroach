@@ -11,7 +11,8 @@ import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
-  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataState,
+  VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_EXPANDED_KEY,
+  saveUIData, loadUIData, isInFlight, UIDataState, UIDataStatus,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
@@ -41,6 +42,42 @@ export interface Alert extends AlertInfo {
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
+
+// Clusterviz Instruction Box collapsed
+
+export const instructionsBoxExpandedSetting = new LocalSetting(
+  INSTRUCTIONS_BOX_EXPANDED_KEY, localSettingsSelector, true,
+);
+
+const instructionBoxExpandedPersistentLoadedSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_EXPANDED_KEY)
+      && uiData[INSTRUCTIONS_BOX_EXPANDED_KEY].status === UIDataStatus.VALID
+  ),
+);
+
+const instructionsBoxExpandedPersistentSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && uiData[INSTRUCTIONS_BOX_EXPANDED_KEY]
+      && uiData[INSTRUCTIONS_BOX_EXPANDED_KEY].data
+  ),
+);
+
+export const instructionsBoxExpandedSelector = createSelector(
+  instructionBoxExpandedPersistentLoadedSelector,
+  instructionsBoxExpandedPersistentSelector,
+  instructionsBoxExpandedSetting.selector,
+  (persistentLoaded, persistentExpanded, localSettingExpanded): boolean => {
+    if (persistentLoaded) {
+      return persistentExpanded;
+    }
+    return localSettingExpanded;
+  },
+);
 
 ////////////////////////////////////////
 // Version mismatch.
@@ -262,7 +299,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
       lastUIData = uiData;
-      const keysToMaybeLoad = [VERSION_DISMISSED_KEY];
+      const keysToMaybeLoad = [VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_EXPANDED_KEY];
       const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });
