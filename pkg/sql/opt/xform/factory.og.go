@@ -126,10 +126,9 @@ func (_f *factory) ConstructSelect(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.LeftJoinOp || _norm.op == opt.LeftJoinApplyOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
+			on := _norm.childGroup(_f.mem, 2)
 			_filters := _f.mem.lookupNormExpr(filter).asFilters()
 			if _filters != nil {
 				list := _filters.conditions()
@@ -150,10 +149,9 @@ func (_f *factory) ConstructSelect(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp || _norm.op == opt.RightJoinOp || _norm.op == opt.RightJoinApplyOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
+			on := _norm.childGroup(_f.mem, 2)
 			_filters := _f.mem.lookupNormExpr(filter).asFilters()
 			if _filters != nil {
 				list := _filters.conditions()
@@ -174,10 +172,9 @@ func (_f *factory) ConstructSelect(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.op == opt.InnerJoinOp || _norm.op == opt.InnerJoinApplyOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
+			on := _norm.childGroup(_f.mem, 2)
 			_f.reportOptimization(MergeSelectInnerJoin)
 			_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(right), opt.DynamicID(_f.concatFilters(on, filter))})
 			_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
@@ -322,10 +319,9 @@ func (_f *factory) ConstructProject(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.isJoin() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
+			on := _norm.childGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(left, _f.neededCols3(projections, right, on)) {
 				_f.reportOptimization(FilterUnusedJoinLeftCols)
 				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(_f.filterUnusedColumns(left, _f.neededCols3(projections, right, on))), opt.DynamicID(right), opt.DynamicID(on)}), projections)
@@ -339,10 +335,9 @@ func (_f *factory) ConstructProject(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.isJoin() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
-			on := _e.ChildGroup(2)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
+			on := _norm.childGroup(_f.mem, 2)
 			if _f.hasUnusedColumns(right, _f.neededCols2(projections, on)) {
 				_f.reportOptimization(FilterUnusedJoinRightCols)
 				_group = _f.ConstructProject(_f.DynamicConstruct(_f.mem.lookupNormExpr(input).op, opt.DynamicOperands{opt.DynamicID(left), opt.DynamicID(_f.filterUnusedColumns(right, _f.neededCols2(projections, on))), opt.DynamicID(on)}), projections)
@@ -1739,9 +1734,8 @@ func (_f *factory) ConstructNot(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.isComparison() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
 			_contains := _f.mem.lookupNormExpr(input).asContains()
 			if _contains == nil {
 				_f.reportOptimization(NegateComparison)

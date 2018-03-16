@@ -574,9 +574,8 @@ func (_f *factory) ConstructSelect(
 		_match := false
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.isJoin() || _norm.op == opt.UnionOp {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			r := _e.ChildGroup(0)
-			s := _e.ChildGroup(1)
+			r := _norm.childGroup(_f.mem, 0)
+			s := _norm.childGroup(_f.mem, 1)
 			_match = true
 		}
 
@@ -586,9 +585,8 @@ func (_f *factory) ConstructSelect(
 				item := _item
 				_norm2 := _f.mem.lookupNormExpr(_item)
 				if _norm2.isJoin() {
-					_e2 := makeExprView(_f.mem, _item, opt.NormPhysPropsID)
-					t := _e2.ChildGroup(0)
-					u := _e2.ChildGroup(1)
+					t := _norm2.childGroup(_f.mem, 0)
+					u := _norm2.childGroup(_f.mem, 1)
 					_f.reportOptimization(Test)
 					_group = _f.DynamicConstruct(_f.mem.lookupNormExpr(item).op, opt.DynamicOperands{opt.DynamicID(_f.ConstructSelect(t, u)), opt.DynamicID(_f.custom(item, opt.SelectOp))})
 					_f.mem.addAltFingerprint(_selectExpr.fingerprint(), _group)
@@ -1120,18 +1118,16 @@ func (_f *factory) ConstructNe(
 	{
 		_norm := _f.mem.lookupNormExpr(left)
 		if _norm.op == opt.EqOp || _norm.op == opt.NeOp {
-			_e := makeExprView(_f.mem, left, opt.NormPhysPropsID)
-			_norm2 := _f.mem.lookupNormExpr(_e.ChildGroup(0))
+			_norm2 := _f.mem.lookupNormExpr(_norm.childGroup(_f.mem, 0))
 			if _norm2.op == opt.EqOp || _norm2.op == opt.NeOp {
-				_norm3 := _f.mem.lookupNormExpr(_e.ChildGroup(1))
+				_norm3 := _f.mem.lookupNormExpr(_norm.childGroup(_f.mem, 1))
 				if !(_norm3.op == opt.EqOp || _norm3.op == opt.NeOp) {
 					_match := false
 					_norm4 := _f.mem.lookupNormExpr(right)
 					if _norm4.op == opt.EqOp || _norm4.op == opt.NeOp {
-						_e2 := makeExprView(_f.mem, right, opt.NormPhysPropsID)
-						_norm5 := _f.mem.lookupNormExpr(_e2.ChildGroup(0))
+						_norm5 := _f.mem.lookupNormExpr(_norm4.childGroup(_f.mem, 0))
 						if _norm5.op == opt.EqOp || _norm5.op == opt.NeOp {
-							_norm6 := _f.mem.lookupNormExpr(_e2.ChildGroup(1))
+							_norm6 := _f.mem.lookupNormExpr(_norm4.childGroup(_f.mem, 1))
 							if !(_norm6.op == opt.EqOp || _norm6.op == opt.NeOp) {
 								_match = true
 							}
@@ -1437,9 +1433,8 @@ func (_f *factory) ConstructNot(
 	{
 		_norm := _f.mem.lookupNormExpr(input)
 		if _norm.isComparison() {
-			_e := makeExprView(_f.mem, input, opt.NormPhysPropsID)
-			left := _e.ChildGroup(0)
-			right := _e.ChildGroup(1)
+			left := _norm.childGroup(_f.mem, 0)
+			right := _norm.childGroup(_f.mem, 1)
 			_contains := _f.mem.lookupNormExpr(input).asContains()
 			if _contains == nil {
 				if _f.someOtherCondition(input) {
