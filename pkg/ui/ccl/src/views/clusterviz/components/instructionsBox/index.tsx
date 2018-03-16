@@ -1,53 +1,33 @@
 import React from "react";
-import _ from "lodash";
+import { connect, Dispatch } from "react-redux";
 
 import { numNodesWithoutLocality } from "src/util/localities";
-import { NodeStatus$Properties } from "src/util/proto";
-import { LocalityTier, LocalityTree } from "oss/src/redux/localities";
+import {
+  instructionsBoxExpandedSelector, setInstructionBoxExpanded,
+} from "src/redux/alerts";
+import { AdminUIState } from "src/redux/state";
+import { nodeStatusesSelector } from "src/redux/nodes";
+import { LocalityTier } from "src/redux/localities";
 import nodeMapScreenshot from "assets/nodeMapSteps/3-seeMap.png";
 import "./instructionsBox.styl";
 
 interface InstructionsBoxProps {
-  allNodes: NodeStatus$Properties[];
-}
-
-interface InstructionBoxState {
+  numNodesWithoutLocality: number;
   expanded: boolean;
+  expand: () => void;
+  collapse: () => void;
 }
 
 const DOCS_LINK = "http://cockroach-docs-review.s3-website-us-east-1.amazonaws.com/50893285dcb2e74c603d34103597b83f715a4c31/dev/admin-ui-node-map.html#configure-and-navigate-the-node-map";
-
-const LOCAL_STORAGE_KEY = "clusterviz-instruction-box-expanded";
 
 interface Step {
   num: number;
   text: React.ReactNode;
 }
 
-export default class InstructionsBox extends React.Component<InstructionsBoxProps, InstructionBoxState> {
-  constructor() {
-    super();
-    const valFromStorage = localStorage.getItem(LOCAL_STORAGE_KEY);
-    let expanded = true;
-    if (valFromStorage === "false") {
-      expanded = false;
-    }
-    this.state = {
-      expanded,
-    };
-  }
-
-  handleToggle = () => {
-    const expanded = !this.state.expanded;
-    const val = `${expanded}`;
-    localStorage.setItem(LOCAL_STORAGE_KEY, val);
-    this.setState({
-      expanded,
-    });
-  }
-
+class InstructionsBox extends React.Component<InstructionsBoxProps> {
   renderExpanded() {
-    const nextTodo = getNextTodo(this.props.allNodes);
+    const nextTodo = getNextTodo(this.props.numNodesWithoutLocality);
 
     return (
       <div className="instructions-box instructions-box--expanded">
@@ -64,8 +44,8 @@ export default class InstructionsBox extends React.Component<InstructionsBoxProp
             </a>
           </div>
           <span
-            className="instructions-box-top-bar__x_out"
-            onClick={this.handleToggle.bind(this)}
+            className="instructions-box-top-bar__x-out"
+            onClick={this.props.collapse}
           >
             ✕
           </span>
@@ -87,7 +67,7 @@ export default class InstructionsBox extends React.Component<InstructionsBoxProp
     return (
       <div
         className="instructions-box instructions-box--collapsed"
-        onClick={this.handleToggle.bind(this)}
+        onClick={this.props.expand}
       >
         ?
       </div>
@@ -95,13 +75,29 @@ export default class InstructionsBox extends React.Component<InstructionsBoxProp
   }
 
   render() {
-    if (this.state.expanded) {
+    if (this.props.expanded) {
       return this.renderExpanded();
     } else {
       return this.renderCollapsed();
     }
   }
 }
+
+function mapStateToProps(state: AdminUIState) {
+  return {
+    expanded: instructionsBoxExpandedSelector(state),
+    numNodesWithoutLocality: numNodesWithoutLocality(nodeStatusesSelector(state)),
+  };
+}
+
+function mapDispatchToProps(dispatch: Dispatch<AdminUIState>) {
+  return {
+    expand: () => dispatch(setInstructionBoxExpanded(true)),
+    collapse: () => dispatch(setInstructionBoxExpanded(false)),
+  };
+}
+
+export default connect(mapStateToProps, mapDispatchToProps)(InstructionsBox);
 
 // Helper functions.
 
@@ -112,26 +108,15 @@ interface Step {
 
 /**
  * showInstructionBox decides whether to show the instructionBox.
- * Exported for testing.
- *
- * It returns true if, with more configuration, the user could see
- * a map here. This is false if the map is already being shown.
- * It's also false if we're down a level and looking at all nodes.
  */
 export function showInstructionsBox(
-  showMap: boolean, tiers: LocalityTier[], localityTree: LocalityTree,
+  showMap: boolean, tiers: LocalityTier[],
 ): boolean {
-  if (showMap) {
-    return false;
-  }
-  const downALevel = tiers.length > 0;
-  const justNodes = _.size(localityTree.localities) === 0;
-  return !(downALevel && justNodes);
+  const atTopLevel = tiers.length === 0;
+  return atTopLevel && !showMap;
 }
 
-export function getNextTodo(allNodes: NodeStatus$Properties[]): Step {
-  const nodesWithoutLocality = numNodesWithoutLocality(allNodes);
-
+export function getNextTodo(nodesWithoutLocality: number): Step {
   if (nodesWithoutLocality > 0) {
     return {
       num: 1,

@@ -7,11 +7,13 @@ import _ from "lodash";
 import moment from "moment";
 import { createSelector } from "reselect";
 import { Store } from "redux";
+import { Dispatch } from "react-redux";
 import { ThunkAction } from "redux-thunk";
 
 import { LocalSetting } from "./localsettings";
 import {
-  saveUIData, VERSION_DISMISSED_KEY, loadUIData, isInFlight, UIDataState,
+  VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_EXPANDED_KEY,
+  saveUIData, loadUIData, isInFlight, UIDataState, UIDataStatus,
 } from "./uiData";
 import { refreshCluster, refreshNodes, refreshVersion, refreshHealth } from "./apiReducers";
 import { nodeStatusesSelector, livenessByNodeIDSelector } from "./nodes";
@@ -41,6 +43,53 @@ export interface Alert extends AlertInfo {
 }
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
+
+// Clusterviz Instruction Box expanded
+
+export const instructionsBoxExpandedSetting = new LocalSetting(
+  INSTRUCTIONS_BOX_EXPANDED_KEY, localSettingsSelector, true,
+);
+
+const instructionsBoxExpandedPersistentLoadedSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_EXPANDED_KEY)
+      && uiData[INSTRUCTIONS_BOX_EXPANDED_KEY].status === UIDataStatus.VALID
+  ),
+);
+
+const instructionsBoxExpandedPersistentSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => (
+    uiData
+      && _.has(uiData, INSTRUCTIONS_BOX_EXPANDED_KEY)
+      && uiData[INSTRUCTIONS_BOX_EXPANDED_KEY].status === UIDataStatus.VALID
+      && uiData[INSTRUCTIONS_BOX_EXPANDED_KEY].data
+  ),
+);
+
+export const instructionsBoxExpandedSelector = createSelector(
+  instructionsBoxExpandedPersistentLoadedSelector,
+  instructionsBoxExpandedPersistentSelector,
+  instructionsBoxExpandedSetting.selector,
+  (persistentLoaded, persistentExpanded, localSettingExpanded): boolean => {
+    if (persistentLoaded) {
+      return persistentExpanded;
+    }
+    return localSettingExpanded;
+  },
+);
+
+export function setInstructionBoxExpanded(expanded: boolean) {
+  return (dispatch: Dispatch<AdminUIState>) => {
+    dispatch(instructionsBoxExpandedSetting.set(expanded));
+    dispatch(saveUIData({
+      key: INSTRUCTIONS_BOX_EXPANDED_KEY,
+      value: expanded,
+    }));
+  };
+}
 
 ////////////////////////////////////////
 // Version mismatch.
@@ -262,7 +311,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
       lastUIData = uiData;
-      const keysToMaybeLoad = [VERSION_DISMISSED_KEY];
+      const keysToMaybeLoad = [VERSION_DISMISSED_KEY, INSTRUCTIONS_BOX_EXPANDED_KEY];
       const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });
