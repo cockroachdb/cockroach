@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -442,43 +441,15 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
-	// Get the number of ranges in the table. We get the key span for the table
-	// data. Then, we count the number of ranges that make up that key span.
-	{
-		var tableSpan roachpb.Span
-		if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			tableSpan, err = s.executor.GetTableSpan(
-				ctx, s.getUser(req), txn, req.Database, req.Table,
-			)
-			return err
-		}); err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan := roachpb.RSpan{}
-		var err error
-		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		rangeCount, err := s.server.distSender.CountRanges(ctx, tableRSpan)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
-		resp.RangeCount = rangeCount
-	}
-
+	var tableID sqlbase.ID
 	// Query the descriptor ID and zone configuration for this table.
 	{
 		path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database, req.Table})
 		if err != nil {
 			return nil, s.serverError(err)
 		}
-		resp.DescriptorID = int64(path[2])
+		tableID = path[2]
+		resp.DescriptorID = int64(tableID)
 
 		id, zone, zoneExists, err := s.queryZonePath(ctx, session, path)
 		if err != nil {
@@ -500,7 +471,39 @@ func (s *adminServer) TableDetails(
 		}
 	}
 
+	// Get the number of ranges in the table. We get the key span for the table
+	// data. Then, we count the number of ranges that make up that key span.
+	{
+		tableSpan := generateTableSpan(tableID)
+		tableRSpan := roachpb.RSpan{}
+		var err error
+		tableRSpan.Key, err = keys.Addr(tableSpan.Key)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		tableRSpan.EndKey, err = keys.Addr(tableSpan.EndKey)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		rangeCount, err := s.server.distSender.CountRanges(ctx, tableRSpan)
+		if err != nil {
+			return nil, s.serverError(err)
+		}
+		resp.RangeCount = rangeCount
+	}
+
 	return &resp, nil
+}
+
+// generateTableSpan generates a table's key span.
+//
+// NOTE: this doesn't make for interleaved (children) table. As of 03/2018,
+// callers around here use it anyway.
+func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
+	tablePrefix := keys.MakeTablePrefix(uint32(tableID))
+	tableStartKey := roachpb.Key(tablePrefix)
+	tableEndKey := tableStartKey.PrefixEnd()
+	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}
 }
 
 // TableStats is an endpoint that returns disk usage and replication statistics
@@ -508,15 +511,17 @@ func (s *adminServer) TableDetails(
 func (s *adminServer) TableStats(
 	ctx context.Context, req *serverpb.TableStatsRequest,
 ) (*serverpb.TableStatsResponse, error) {
+	args := sql.SessionArgs{User: s.getUser(req)}
+	ctx, session := s.NewContextAndSessionForRPC(ctx, args)
+	defer session.Finish(s.server.sqlExecutor)
+
 	// Get table span.
-	var tableSpan roachpb.Span
-	if err := s.server.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		tableSpan, err = s.executor.GetTableSpan(ctx, s.getUser(req), txn, req.Database, req.Table)
-		return err
-	}); err != nil {
+	path, err := s.queryDescriptorIDPath(ctx, session, []string{req.Database, req.Table})
+	if err != nil {
 		return nil, s.serverError(err)
 	}
+	tableID := path[2]
+	tableSpan := generateTableSpan(tableID)
 
 	return s.tableStatsForSpan(ctx, tableSpan)
 }
