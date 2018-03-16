@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // execStmt executes one statement by dispatching according to the current
@@ -328,6 +329,24 @@ func (ex *connExecutor) execStmtInOpenState(
 			p.asOfSystemTime = true
 			p.avoidCachedDescriptors = true
 			ex.state.mu.txn.SetFixedTimestamp(ctx, *ts)
+		}
+	} else {
+		// If we're in an explicit txn, we allow AOST but only if it matches with
+		// the transaction's timestamp. This is useful for running AOST statements
+		// using the InternalExecutor inside an external transaction; one might want
+		// to do that to force p.avoidCachedDescriptors to be set below.
+		ts, err := isAsOf(stmt.AST, p.EvalContext(), ex.server.cfg.Clock.Now())
+		if err != nil {
+			return makeErrEvent(err)
+		}
+		if ts != nil {
+			if *ts != ex.state.mu.txn.OrigTimestamp() {
+				return makeErrEvent(errors.Errorf("inconsistent \"as of system time\" timestamp. Expected: %s. "+
+					"Generally \"as of system time\" cannot be used inside a transaction.",
+					ex.state.mu.txn.OrigTimestamp()))
+			}
+			p.asOfSystemTime = true
+			p.avoidCachedDescriptors = true
 		}
 	}
 

@@ -152,14 +152,27 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	  XOR_AGG(FNV64(%s))::string AS fingerprint
 	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
 	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
+	// If were'in in an AOST context, propagate it to the inner statement so that
+	// the inner statement gets planned with planner.avoidCachedDescriptors set,
+	// like the outter one.
+	if params.p.asOfSystemTime {
+		ts := params.p.txn.OrigTimestamp()
+		tsStr := fmt.Sprintf("%d.%d", ts.WallTime, ts.Logical)
+		sql = sql + " AS OF SYSTEM TIME " + tsStr
+	}
 
-	fingerprintCols, err := params.p.queryRow(params.ctx, sql)
+	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRow(
+		params.ctx, "hash-fingerprint",
+		params.p.txn,
+		sql,
+	)
 	if err != nil {
 		return false, err
 	}
 
 	if len(fingerprintCols) != 1 {
-		return false, errors.Errorf("unexpected number of columns returned: 1 vs %d",
+		return false, errors.Errorf(
+			"programming error: unexpected number of columns returned: 1 vs %d",
 			len(fingerprintCols))
 	}
 	fingerprint := fingerprintCols[0]
