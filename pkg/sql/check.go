@@ -125,7 +125,9 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	values, _ /* cols */, err := p.queryRows(ctx, query)
+	values, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx, "validate-fk", p.txn, query,
+	)
 	if err != nil {
 		return err
 	}
