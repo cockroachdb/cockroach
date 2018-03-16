@@ -56,9 +56,9 @@ var _ RowSource = &SortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
-func newDistinct(
+func NewDistinct(
 	flowCtx *FlowCtx, spec *DistinctSpec, input RowSource, post *PostProcessSpec, output RowReceiver,
-) (Processor, error) {
+) (RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
 		return nil, errors.New("programming error: 0 distinct columns specified for distinct processor")
 	}

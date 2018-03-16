@@ -490,9 +490,9 @@ func SendCrashReport(
 func ReportOrPanic(
 	ctx context.Context, sv *settings.Values, format string, reportables []interface{},
 ) {
-	if !build.IsRelease() || PanicOnAssertions.Get(sv) {
-		panic(fmt.Sprintf(format, reportables...))
-	}
+	//if !build.IsRelease() || PanicOnAssertions.Get(sv) {
+	//	panic(fmt.Sprintf(format, reportables...))
+	//}
 	Warningf(ctx, format, reportables...)
 	SendCrashReport(ctx, sv, 1 /* depth */, format, reportables)
 }

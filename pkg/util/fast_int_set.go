@@ -188,6 +188,20 @@ func (s FastIntSet) Ordered() []int {
 	return result
 }
 
+func (s FastIntSet) OrderedUint32() []uint32 {
+	if s.Empty() {
+		return nil
+	}
+	if s.large != nil {
+		panic("dont do this")
+	}
+	result := make([]uint32, 0, s.Len())
+	s.ForEach(func(i int) {
+		result = append(result, uint32(i))
+	})
+	return result
+}
+
 // Copy returns a copy of s which can be modified independently.
 func (s FastIntSet) Copy() FastIntSet {
 	var c FastIntSet
