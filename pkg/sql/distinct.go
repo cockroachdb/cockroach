@@ -15,14 +15,14 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/pkg/errors"
 )
 
 // distinctNode de-duplicates rows returned by a wrapped planNode.
@@ -41,7 +41,7 @@ type distinctNode struct {
 	// the DISTINCT ON (<exprs>) clause.
 	distinctOnColIdxs util.FastIntSet
 
-	run distinctRun
+	run *rowSourceToPlanNode
 }
 
 // distinct constructs a distinctNode.
@@ -187,132 +187,57 @@ func (p *planner) distinct(
 	return plan, d, nil
 }
 
-// distinctRun contains the run-time state of distinctNode during local execution.
-type distinctRun struct {
-	// Encoding of the columnsInOrder columns for the previous row.
-	prefixSeen   []byte
-	prefixMemAcc mon.BoundAccount
-
-	// Encoding of the non-columnInOrder columns for rows sharing the same
-	// prefixSeen value.
-	suffixSeen   map[string]struct{}
-	suffixMemAcc mon.BoundAccount
-}
-
 func (n *distinctNode) startExec(params runParams) error {
-	n.run.prefixMemAcc = params.EvalContext().Mon.MakeBoundAccount()
-	n.run.suffixMemAcc = params.EvalContext().Mon.MakeBoundAccount()
-	n.run.suffixSeen = make(map[string]struct{})
+	flowCtx := &distsqlrun.FlowCtx{
+		EvalCtx: *params.EvalContext(),
+	}
+
+	cols := make([]int, len(planColumns(n.plan)))
+	for i := range cols {
+		cols[i] = i
+	}
+
+	spec := createDistinctSpec(n, cols)
+
+	input, err := makePlanNodeToRowSource(n.plan, params)
+	if err != nil {
+		return err
+	}
+	if len(spec.DistinctColumns) == 0 {
+		return errors.New("cannot initialize a distinctNode with 0 columns")
+	}
+
+	post := &distsqlrun.PostProcessSpec{} // post is not used as we only use the processor for the core distinct logic.
+	var output distsqlrun.RowReceiver     // output is never used as distinct is only run as a RowSource.
+
+	proc, err := distsqlrun.NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, output)
+	if err != nil {
+		return err
+	}
+
+	n.run = makeRowSourceToPlanNode(proc)
+
+	n.run.source.Start(params.ctx)
+
 	return nil
 }
 
 func (n *distinctNode) Next(params runParams) (bool, error) {
-	ctx := params.ctx
-
-	for {
-		if err := params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		next, err := n.plan.Next(params)
-		if !next {
-			return false, err
-		}
-
-		// Detect duplicates
-		prefix, suffix, err := n.encodeDistinctOnVals(n.plan.Values())
-		if err != nil {
-			return false, err
-		}
-
-		if !bytes.Equal(prefix, n.run.prefixSeen) {
-			// The prefix of the row which is ordered differs from the last row;
-			// reset our seen set.
-			if len(n.run.suffixSeen) > 0 {
-				n.run.suffixMemAcc.Clear(ctx)
-				n.run.suffixSeen = make(map[string]struct{})
-			}
-			if err := n.run.prefixMemAcc.Resize(
-				ctx, int64(len(n.run.prefixSeen)), int64(len(prefix))); err != nil {
-				return false, err
-			}
-			n.run.prefixSeen = prefix
-			if suffix != nil {
-				if err := n.addSuffixSeen(ctx, &n.run.suffixMemAcc, string(suffix)); err != nil {
-					return false, err
-				}
-			}
-			return true, nil
-		}
-
-		// The prefix of the row is the same as the last row; check
-		// to see if the suffix which is not ordered has been seen.
-		if suffix != nil {
-			sKey := string(suffix)
-			if _, ok := n.run.suffixSeen[sKey]; !ok {
-				if err := n.addSuffixSeen(ctx, &n.run.suffixMemAcc, sKey); err != nil {
-					return false, err
-				}
-				return true, nil
-			}
-		}
-	}
+	return n.run.Next(params)
 }
 
 func (n *distinctNode) Values() tree.Datums {
-	// We return only the required columns set during planning.
-	// These columns are always at the beginning of the child row since
-	// we _append_ additional DISTINCT ON columns.
-	// See planner.distinct.
-	return n.plan.Values()
+	return n.run.Values()
 }
 
 func (n *distinctNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
-	n.run.prefixSeen = nil
-	n.run.prefixMemAcc.Close(ctx)
-	n.run.suffixSeen = nil
-	n.run.suffixMemAcc.Close(ctx)
-}
-
-func (n *distinctNode) addSuffixSeen(
-	ctx context.Context, acc *mon.BoundAccount, sKey string,
-) error {
-	sz := int64(len(sKey))
-	if err := acc.Grow(ctx, sz); err != nil {
-		return err
+	if n.run != nil {
+		n.run.Close(ctx)
+	} else {
+		// If we haven't gotten around to initializing n.run yet, then we still
+		// need to propagate the close message to our inputs - do so directly.
+		n.plan.Close(ctx)
 	}
-	n.run.suffixSeen[sKey] = struct{}{}
-	return nil
-}
-
-// TODO(irfansharif): This can be refactored away to use
-// sqlbase.EncodeDatums([]byte, tree.Datums)
-func (n *distinctNode) encodeDistinctOnVals(values tree.Datums) ([]byte, []byte, error) {
-	var prefix, suffix []byte
-	var err error
-	for i, val := range values {
-		// Only encode DISTINCT ON expressions/columns (if applicable).
-		if !n.distinctOnColIdxs.Empty() && !n.distinctOnColIdxs.Contains(i) {
-			continue
-		}
-
-		if n.columnsInOrder != nil && n.columnsInOrder[i] {
-			if prefix == nil {
-				prefix = make([]byte, 0, 100)
-			}
-			prefix, err = sqlbase.EncodeDatum(prefix, val)
-		} else {
-			if suffix == nil {
-				suffix = make([]byte, 0, 100)
-			}
-			suffix, err = sqlbase.EncodeDatum(suffix, val)
-		}
-		if err != nil {
-			break
-		}
-	}
-	return prefix, suffix, err
 }
 
 // projectChildPropsToOnExprs takes the physical props (e.g. ordering info,
