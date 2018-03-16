@@ -385,25 +385,7 @@ func (p *planner) QueryRow(
 
 func (p *planner) queryRow(
 	ctx context.Context, sql string, args ...interface{},
-) (tree.Datums, error) {
-	rows, _ /* cols */, err := p.queryRows(ctx, sql, args...)
-	if err != nil {
-		return nil, err
-	}
-	switch len(rows) {
-	case 0:
-		return nil, nil
-	case 1:
-		return rows[0], nil
-	default:
-		return nil, &tree.MultipleResultsError{SQL: sql}
-	}
-}
-
-// queryRows executes a SQL query string where multiple result rows are returned.
-func (p *planner) queryRows(
-	ctx context.Context, sql string, args ...interface{},
-) (rows []tree.Datums, cols sqlbase.ResultColumns, err error) {
+) (retRow tree.Datums, retErr error) {
 	// makeInternalPlan() clobbers p.curplan and the placeholder info
 	// map, so we have to save/restore them here.
 	defer func(psave planTop, pisave tree.PlaceholderInfo) {
@@ -414,11 +396,16 @@ func (p *planner) queryRows(
 	startTime := timeutil.Now()
 	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
 		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
-		return nil, nil, err
+		return nil, err
 	}
-	cols = planColumns(p.curPlan.plan)
 	defer p.curPlan.close(ctx)
-	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", len(rows), err, startTime) }()
+	defer func() {
+		rows := 1
+		if retRow == nil {
+			rows = 0
+		}
+		p.maybeLogStatementInternal(ctx, "internal-exec", rows, retErr, startTime)
+	}()
 
 	params := runParams{
 		ctx:             ctx,
@@ -426,8 +413,9 @@ func (p *planner) queryRows(
 		p:               p,
 	}
 	if err := p.curPlan.start(params); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	var rows []tree.Datums
 	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
 		if values != nil {
 			valCopy := append(tree.Datums(nil), values...)
@@ -435,9 +423,17 @@ func (p *planner) queryRows(
 		}
 		return nil
 	}); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return rows, cols, nil
+
+	switch len(rows) {
+	case 0:
+		return nil, nil
+	case 1:
+		return rows[0], nil
+	default:
+		return nil, &tree.MultipleResultsError{SQL: sql}
+	}
 }
 
 func (p *planner) lookupFKTable(
