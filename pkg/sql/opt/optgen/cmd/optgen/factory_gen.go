@@ -363,9 +363,8 @@ func (g *factoryGen) genConstantMatch(
 }
 
 // genDynamicMatch is called when the MatchExpr is matching a tag name, or
-// is matching multiple names. It matches expression children using ExprView,
-// which can dynamically get children by index without knowing the specific
-// type of operator.
+// is matching multiple names. It matches expression children by dynamically
+// getting children by index, without knowing the specific type of operator.
 func (g *factoryGen) genDynamicMatch(
 	match *lang.MatchExpr, names lang.NamesExpr, contextName string, noMatch bool,
 ) {
@@ -400,15 +399,12 @@ func (g *factoryGen) genDynamicMatch(
 	g.w.nest("if %s {\n", buf.String())
 
 	if len(match.Args) > 0 {
-		// Construct an Expr to use for matching children.
-		exprName := g.uniquifier.makeUnique("_e")
-		g.w.writeIndent("%s := makeExprView(_f.mem, %s, opt.NormPhysPropsID)\n", exprName, contextName)
-
 		// Match expression children in the same order as arguments to the match
 		// operator. If there are fewer arguments than there are children, then
 		// only the first N children need to be matched.
 		for index, matchArg := range match.Args {
-			g.genMatch(matchArg, fmt.Sprintf("%s.ChildGroup(%d)", exprName, index), false /* noMatch */)
+			childGroup := fmt.Sprintf("%s.childGroup(_f.mem, %d)", normName, index)
+			g.genMatch(matchArg, childGroup, false /* noMatch */)
 		}
 	}
 }

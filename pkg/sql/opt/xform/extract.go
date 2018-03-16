@@ -27,12 +27,7 @@ import (
 // ExtractConstDatum returns the Datum that represents the value of an operator
 // having the ConstValue tag.
 func ExtractConstDatum(ev ExprView) tree.Datum {
-	return extractConstDatum(ev.mem, ev.loc)
-}
-
-func extractConstDatum(mem *memo, loc memoLoc) tree.Datum {
-	expr := mem.lookupExpr(loc)
-	switch expr.op {
+	switch ev.Operator() {
 	case opt.NullOp:
 		return tree.DNull
 	case opt.TrueOp:
@@ -40,10 +35,8 @@ func extractConstDatum(mem *memo, loc memoLoc) tree.Datum {
 	case opt.FalseOp:
 		return tree.DBoolFalse
 	}
-
-	constant := expr.asConst()
-	if constant == nil {
-		panic(fmt.Sprintf("non-const op %s", expr.op))
+	if !ev.IsConstValue() {
+		panic(fmt.Sprintf("non-const expression: %+v", ev))
 	}
-	return mem.lookupPrivate(constant.value()).(tree.Datum)
+	return ev.Private().(tree.Datum)
 }

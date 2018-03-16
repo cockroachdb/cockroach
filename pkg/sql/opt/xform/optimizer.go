@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -58,6 +59,11 @@ const (
 type Optimizer struct {
 	f   *factory
 	mem *memo
+
+	// stateMap allocates temporary storage that's used to speed up optimization.
+	// This state could be discarded once optimization is complete.
+	stateMap map[optStateKey]int
+	state    []optState
 }
 
 // NewOptimizer constructs an instance of the optimizer. The maxSteps parameter
@@ -67,7 +73,7 @@ type Optimizer struct {
 // are applied).
 func NewOptimizer(evalCtx *tree.EvalContext, maxSteps OptimizeSteps) *Optimizer {
 	f := newFactory(evalCtx, maxSteps)
-	return &Optimizer{f: f, mem: f.mem}
+	return &Optimizer{f: f, mem: f.mem, stateMap: make(map[optStateKey]int)}
 }
 
 // Factory returns a factory interface that the caller uses to construct an
@@ -88,13 +94,9 @@ func (o *Optimizer) LastRuleName() RuleName {
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
 func (o *Optimizer) Optimize(root opt.GroupID, requiredProps *opt.PhysicalProps) ExprView {
-	mgrp := o.mem.lookupGroup(root)
 	required := o.mem.internPhysicalProps(requiredProps)
-	best := o.optimizeGroup(mgrp, required)
-	if best.op == opt.UnknownOp {
-		panic("optimization step returned invalid result")
-	}
-	return makeExprView(o.mem, root, required)
+	state := o.optimizeGroup(root, required)
+	return makeExprView(o.mem, state.best)
 }
 
 // optimizeGroup enumerates expression trees rooted in the given memo group and
@@ -240,31 +242,32 @@ func (o *Optimizer) Optimize(root opt.GroupID, requiredProps *opt.PhysicalProps)
 //              ├── variable: a.x [type=int]
 //              └── const: 1 [type=int]
 //
-func (o *Optimizer) optimizeGroup(mgrp *memoGroup, required opt.PhysicalPropsID) *bestExpr {
+func (o *Optimizer) optimizeGroup(group opt.GroupID, required opt.PhysicalPropsID) *optState {
 	// If this group is already fully optimized, then return the already
 	// prepared best expression (won't ever get better than this).
-	best := mgrp.ensureBestExpr(required)
-	if best.fullyOptimized {
-		return best
+	state := o.ensureOptState(group, required)
+	if state.fullyOptimized {
+		return state
 	}
 
 	groupFullyOptimized := true
 
-	for i := range mgrp.exprs {
-		eid := exprID(i)
+	mgrp := o.mem.lookupGroup(group)
+	for i := 0; i < mgrp.exprCount(); i++ {
+		eid := exprID{group: group, expr: exprOrdinal(i)}
 
 		// If this expression has already been fully optimized for the given
 		// required properties, then skip it, since it won't get better.
-		if best.isExprFullyOptimized(eid) {
+		if state.isExprFullyOptimized(eid) {
 			continue
 		}
 
 		// Optimize the expression with respect to the required properties.
-		best = o.optimizeExpr(mgrp, eid, required)
+		state = o.optimizeExpr(eid, required)
 
 		// If any of the expressions have not yet been fully optimized, then
 		// the group is not yet fully optimized.
-		if !best.isExprFullyOptimized(eid) {
+		if !state.isExprFullyOptimized(eid) {
 			groupFullyOptimized = false
 		}
 	}
@@ -273,31 +276,19 @@ func (o *Optimizer) optimizeGroup(mgrp *memoGroup, required opt.PhysicalPropsID)
 		// If exploration and costing of this group for the given required
 		// properties is complete, then skip it in all future optimization
 		// passes.
-		best.fullyOptimized = true
+		state.fullyOptimized = true
 	}
 
-	return best
+	return state
 }
 
 // optimizeExpr determines whether the given expression can provide the
 // required properties. If so, it recursively optimizes the expression's child
 // groups and computes the cost of the expression. In addition, optimizeExpr
 // calls enforceProps to check whether enforcers can provide the required
-// properties at a lower cost. The best expression is saved in the bestExpr map
-// in the memo group and returned.
-func (o *Optimizer) optimizeExpr(
-	mgrp *memoGroup, eid exprID, required opt.PhysicalPropsID,
-) (best *bestExpr) {
-	// Create an ExprView for convenient access to the expression. Don't
-	// use makeExprView to do this, because the bestExpr map isn't yet fully
-	// populated (that's what the optimizer is trying to do!).
-	ev := ExprView{
-		mem:      o.mem,
-		loc:      memoLoc{group: mgrp.id, expr: eid},
-		op:       mgrp.lookupExpr(eid).op,
-		required: required,
-	}
-
+// properties at a lower cost. The lowest cost expression is saved to the memo
+// group.
+func (o *Optimizer) optimizeExpr(eid exprID, required opt.PhysicalPropsID) *optState {
 	fullyOptimized := true
 
 	// If the expression cannot provide the required properties, then don't
@@ -305,29 +296,34 @@ func (o *Optimizer) optimizeExpr(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if o.mem.physPropsFactory.canProvide(ev, required) {
-		for child := 0; child < ev.ChildCount(); child++ {
-			childGroup := o.mem.lookupGroup(ev.ChildGroup(child))
+	physPropsFactory := &physicalPropsFactory{mem: o.mem}
+	if physPropsFactory.canProvide(eid, required) {
+		e := o.mem.lookupExpr(eid)
+		candidateBest := makeBestExpr(e.op, eid, required)
+		for child := 0; child < e.childCount(); child++ {
+			childGroup := e.childGroup(o.mem, child)
 
 			// Given required parent properties, get the properties required from
 			// the nth child.
-			childRequired := o.mem.physPropsFactory.constructChildProps(ev, child)
+			childRequired := physPropsFactory.constructChildProps(eid, required, child)
 
 			// Recursively optimize the child group with respect to that set of
 			// properties.
-			bestChild := o.optimizeGroup(childGroup, childRequired)
+			childState := o.optimizeGroup(childGroup, childRequired)
+
+			// Remember best child in BestExpr in case this becomes the lowest
+			// cost expression.
+			candidateBest.addChild(childState.best)
 
 			// If any child expression is not fully optimized, then the parent
 			// expression is also not fully optimized.
-			if !bestChild.isFullyOptimized() {
+			if !childState.fullyOptimized {
 				fullyOptimized = false
 			}
 		}
 
 		// Check whether this is the new lowest cost expression.
-		// TODO(andyk): Actually run the costing function in the future.
-		best = mgrp.lookupBestExpr(ev.required)
-		best.ratchetCost(ev)
+		o.ratchetCost(eid.group, &candidateBest)
 	}
 
 	// Compute the cost for enforcers to provide the required properties. This
@@ -335,16 +331,15 @@ func (o *Optimizer) optimizeExpr(
 	// example, it might be better to sort the results of a hash join than to
 	// use the results of a merge join that are already sorted, but at the cost
 	// of requiring one of the merge join children to be sorted.
-	fullyOptimized = o.enforceProps(ev) && fullyOptimized
+	fullyOptimized = o.enforceProps(eid, required) && fullyOptimized
 
 	// Get the lowest cost expression after considering enforcers, and mark it
 	// as fully optimized if all the combinations have been considered.
-	best = mgrp.lookupBestExpr(required)
+	state := o.lookupOptState(eid.group, required)
 	if fullyOptimized {
-		best.markExprAsFullyOptimized(eid)
+		state.markExprAsFullyOptimized(eid)
 	}
-
-	return best
+	return state
 }
 
 // enforceProps costs an expression where one of the physical properties has
@@ -362,8 +357,8 @@ func (o *Optimizer) optimizeExpr(
 // its way back here, at which point another physical property will be stripped
 // off, and so on. Afterwards, the group will have computed a bestExpr for each
 // sublist of physical properties, from all down to none.
-func (o *Optimizer) enforceProps(ev ExprView) (fullyOptimized bool) {
-	props := ev.Physical()
+func (o *Optimizer) enforceProps(eid exprID, required opt.PhysicalPropsID) (fullyOptimized bool) {
+	props := o.mem.lookupPhysicalProps(required)
 	innerProps := *props
 
 	// Ignore the Presentation property, since any relational or enforcer
@@ -388,26 +383,104 @@ func (o *Optimizer) enforceProps(ev ExprView) (fullyOptimized bool) {
 
 	// Recursively optimize the same group, but now with respect to the "inner"
 	// properties (which are a sublist of the required properties).
-	mgrp := o.mem.lookupGroup(ev.loc.group)
 	innerRequired := o.mem.internPhysicalProps(&innerProps)
-	innerBest := o.optimizeGroup(mgrp, innerRequired)
-	fullyOptimized = innerBest.isFullyOptimized()
+	innerState := o.optimizeGroup(eid.group, innerRequired)
+	fullyOptimized = innerState.fullyOptimized
 
 	// Check whether this is the new lowest cost expression with the enforcer
-	// added. Note that the enforcer is not in the group's exprs slice, so its
-	// memoLoc.expr field is 0.
-	// TODO(andyk): Actually run the costing function in the future.
-	enforcer := ExprView{
-		mem:      o.mem,
-		loc:      memoLoc{group: ev.loc.group},
-		op:       enforcerOp,
-		required: ev.required,
-	}
-
-	best := mgrp.lookupBestExpr(ev.required)
-	best.ratchetCost(enforcer)
+	// added.
+	candidateBest := makeBestExpr(enforcerOp, eid, required)
+	candidateBest.addChild(innerState.best)
+	o.ratchetCost(eid.group, &candidateBest)
 
 	// Enforcer expression is fully optimized if its input expression is fully
 	// optimized.
 	return fullyOptimized
+}
+
+// ratchetCost computes the cost of the candidate expression, and then checks
+// whether it's lower than the cost of the existing best expression in the
+// group. If so, then the candidate becomes the new lowest cost expression.
+// TODO(andyk): Actually run the costing function in the future.
+func (o *Optimizer) ratchetCost(group opt.GroupID, candidate *bestExpr) {
+	best := o.lookupOptState(group, candidate.required).best
+	o.mem.ratchetBestExpr(best, candidate)
+}
+
+// lookupOptState looks up the state associated with the given group and
+// properties. If no state exists yet, then lookupOptState returns nil.
+// NOTE: The returned optState reference is only valid until the next call to
+//       ensureOptState, since it may cause a resize of the optState slice.
+func (o *Optimizer) lookupOptState(group opt.GroupID, required opt.PhysicalPropsID) *optState {
+	index, ok := o.stateMap[optStateKey{group: group, required: required}]
+	if !ok {
+		return nil
+	}
+	return &o.state[index]
+}
+
+// ensureOptState looks up the state associated with the given group and
+// properties. If none is associated yet, then ensureOptState allocates new
+// state and returns it.
+func (o *Optimizer) ensureOptState(group opt.GroupID, required opt.PhysicalPropsID) *optState {
+	key := optStateKey{group: group, required: required}
+	index, ok := o.stateMap[key]
+	if !ok {
+		mgrp := o.mem.lookupGroup(group)
+		best := mgrp.ensureBestExpr(required)
+		index = len(o.state)
+		o.state = append(o.state, optState{best: best})
+		o.stateMap[key] = index
+	}
+	return &o.state[index]
+}
+
+// optStateKey associates optState with a group that is being optimized with
+// respect to a set of physical properties.
+type optStateKey struct {
+	group    opt.GroupID
+	required opt.PhysicalPropsID
+}
+
+// optState is temporary storage that's associated with each group that's
+// optimized (or same group with different sets of physical properties). The
+// optimizer stores various flags and other state here that allows it to do
+// quicker lookups and short-circuit already traversed parts of the expression
+// tree.
+type optState struct {
+	// best identifies the lowest cost expression in the memo group for a given
+	// set of physical properties.
+	best bestExprID
+
+	// fullyOptimized is set to true once the lowest cost expression has been
+	// found for a memo group, with respect to the required properties. A lower
+	// cost expression will never be found, no matter how many additional
+	// optimization passes are made.
+	fullyOptimized bool
+
+	// fullyOptimizedExprs contains the set of expression ids (exprIDs) that
+	// have been fully optimized for the required properties. These never need
+	// to be recosted, no matter how many additional optimization passes are
+	// made.
+	fullyOptimizedExprs util.FastIntSet
+}
+
+// isExprFullyOptimized returns true if the given expression has been fully
+// optimized for the required properties. The expression never needs to be
+// recosted, no matter how many additional optimization passes are made.
+func (os *optState) isExprFullyOptimized(eid exprID) bool {
+	return os.fullyOptimizedExprs.Contains(int(eid.expr))
+}
+
+// markExprAsFullyOptimized marks the given expression as fully optimized for
+// the required properties. The expression never needs to be recosted, no
+// matter how many additional optimization passes are made.
+func (os *optState) markExprAsFullyOptimized(eid exprID) {
+	if os.fullyOptimized {
+		panic("best expression is already fully optimized")
+	}
+	if os.isExprFullyOptimized(eid) {
+		panic("memo expression is already fully optimized for required physical properties")
+	}
+	os.fullyOptimizedExprs.Add(int(eid.expr))
 }
