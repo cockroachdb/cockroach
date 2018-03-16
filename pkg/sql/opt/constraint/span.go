@@ -220,7 +220,7 @@ func (sp *Span) TryIntersectWith(keyCtx KeyContext, other *Span) bool {
 // Otherwise, this span is updated to the merged span range and TryUnionWith
 // returns true. If the resulting span does not constrain the range [ - ], then
 // its IsUnconstrained method returns true, and it cannot be used as part of a
-// constraint.
+// constraint in a constraint set.
 func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
 	if sp.immutable {
 		panic("mutation disallowed")

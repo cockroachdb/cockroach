@@ -18,7 +18,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -26,14 +25,9 @@ func TestConstraintUnion(t *testing.T) {
 	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
 		t.Helper()
 		clone := *left
-		ok := clone.tryUnionWith(evalCtx, right)
+		clone.UnionWith(evalCtx, right)
 
-		var actual string
-		if ok {
-			actual = clone.String()
-		}
-
-		if actual != expected {
+		if actual := clone.String(); actual != expected {
 			format := "left: %s, right: %s, expected: %v, actual: %v"
 			t.Errorf(format, left.String(), right.String(), expected, actual)
 		}
@@ -61,33 +55,32 @@ func TestConstraintUnion(t *testing.T) {
 	// Merge multiple spans down to single span.
 	var left, right Constraint
 	left = data.c1to10
-	_ = left.tryUnionWith(&evalCtx, &data.c20to30)
-	_ = left.tryUnionWith(&evalCtx, &data.c40to50)
+	left.UnionWith(&evalCtx, &data.c20to30)
+	left.UnionWith(&evalCtx, &data.c40to50)
 
 	right = data.c5to25
-	_ = right.tryUnionWith(&evalCtx, &data.c30to40)
+	right.UnionWith(&evalCtx, &data.c30to40)
 
 	test(t, &evalCtx, &left, &right, "/1: [/1 - /50]")
 	test(t, &evalCtx, &right, &left, "/1: [/1 - /50]")
 
 	// Multiple disjoint spans on each side.
 	left = data.c1to10
-	_ = left.tryUnionWith(&evalCtx, &data.c20to30)
+	left.UnionWith(&evalCtx, &data.c20to30)
 
 	right = data.c40to50
-	_ = right.tryUnionWith(&evalCtx, &data.c60to70)
+	right.UnionWith(&evalCtx, &data.c60to70)
 
 	test(t, &evalCtx, &left, &right, "/1: [/1 - /10] [/20 - /30) [/40 - /50] (/60 - /70)")
 	test(t, &evalCtx, &right, &left, "/1: [/1 - /10] [/20 - /30) [/40 - /50] (/60 - /70)")
 
-	// Multiple spans that yield the unconstrained span (should return ok=false
-	// and not modify either span).
+	// Multiple spans that yield the unconstrained span.
 	left = data.cLt10
 	right = data.c5to25
-	_ = right.tryUnionWith(&evalCtx, &data.cGt20)
+	right.UnionWith(&evalCtx, &data.cGt20)
 
-	test(t, &evalCtx, &left, &right, "")
-	test(t, &evalCtx, &right, &left, "")
+	test(t, &evalCtx, &left, &right, "/1: unconstrained")
+	test(t, &evalCtx, &right, &left, "/1: unconstrained")
 
 	if left.String() != "/1: [ - /10)" {
 		t.Errorf("tryUnionWith failed, but still modified one of the spans: %v", left.String())
@@ -106,14 +99,8 @@ func TestConstraintIntersect(t *testing.T) {
 	test := func(t *testing.T, evalCtx *tree.EvalContext, left, right *Constraint, expected string) {
 		t.Helper()
 		clone := *left
-		ok := clone.tryIntersectWith(evalCtx, right)
-
-		var actual string
-		if ok {
-			actual = clone.String()
-		}
-
-		if actual != expected {
+		clone.IntersectWith(evalCtx, right)
+		if actual := clone.String(); actual != expected {
 			format := "left: %s, right: %s, expected: %v, actual: %v"
 			t.Errorf(format, left.String(), right.String(), expected, actual)
 		}
@@ -131,31 +118,30 @@ func TestConstraintIntersect(t *testing.T) {
 	test(t, &evalCtx, &data.c5to25, &data.c1to10, "/1: (/5 - /10]")
 
 	// Disjoint spans in each constraint.
-	test(t, &evalCtx, &data.c1to10, &data.c40to50, "")
-	test(t, &evalCtx, &data.c40to50, &data.c1to10, "")
+	test(t, &evalCtx, &data.c1to10, &data.c40to50, "/1: contradiction")
+	test(t, &evalCtx, &data.c40to50, &data.c1to10, "/1: contradiction")
 
 	// Intersect multiple spans.
 	var left, right Constraint
 	left = data.c1to10
-	_ = left.tryUnionWith(&evalCtx, &data.c20to30)
-	_ = left.tryUnionWith(&evalCtx, &data.c40to50)
+	left.UnionWith(&evalCtx, &data.c20to30)
+	left.UnionWith(&evalCtx, &data.c40to50)
 
 	right = data.c5to25
-	_ = right.tryUnionWith(&evalCtx, &data.c30to40)
+	right.UnionWith(&evalCtx, &data.c30to40)
 
 	test(t, &evalCtx, &right, &left, "/1: (/5 - /10] [/20 - /25) [/40 - /40]")
 	test(t, &evalCtx, &left, &right, "/1: (/5 - /10] [/20 - /25) [/40 - /40]")
 
-	// Intersect multiple disjoint spans (should return ok=false and not
-	// modify either span).
+	// Intersect multiple disjoint spans.
 	left = data.c1to10
-	_ = left.tryUnionWith(&evalCtx, &data.c20to30)
+	left.UnionWith(&evalCtx, &data.c20to30)
 
 	right = data.c40to50
-	_ = right.tryUnionWith(&evalCtx, &data.c60to70)
+	right.UnionWith(&evalCtx, &data.c60to70)
 
-	test(t, &evalCtx, &left, &right, "")
-	test(t, &evalCtx, &right, &left, "")
+	test(t, &evalCtx, &left, &right, "/1: contradiction")
+	test(t, &evalCtx, &right, &left, "/1: contradiction")
 
 	if left.String() != "/1: [/1 - /10] [/20 - /30)" {
 		t.Errorf("tryIntersectWith failed, but still modified one of the spans: %v", left.String())
@@ -197,7 +183,8 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	key60 := MakeKey(tree.NewDInt(60))
 	key70 := MakeKey(tree.NewDInt(70))
 
-	keyCtx := testKeyContext(1, 2)
+	kc12 := testKeyContext(1, 2)
+	kc1 := testKeyContext(1)
 
 	cherry := MakeCompositeKey(tree.NewDString("cherry"), tree.DBoolTrue)
 	mango := MakeCompositeKey(tree.NewDString("mango"), tree.DBoolFalse)
@@ -207,44 +194,44 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	var span Span
 
 	// [ - /10)
-	span.Set(keyCtx, EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
-	data.cLt10.init(1, &span)
+	span.Set(kc1, EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
+	data.cLt10.Init(kc1, SingleSpan(&span))
 
 	// (/20 - ]
-	span.Set(keyCtx, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
-	data.cGt20.init(1, &span)
+	span.Set(kc1, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	data.cGt20.Init(kc1, SingleSpan(&span))
 
 	// [/1 - /10]
-	span.Set(keyCtx, key1, IncludeBoundary, key10, IncludeBoundary)
-	data.c1to10.init(1, &span)
+	span.Set(kc1, key1, IncludeBoundary, key10, IncludeBoundary)
+	data.c1to10.Init(kc1, SingleSpan(&span))
 
 	// (/5 - /25)
-	span.Set(keyCtx, key5, ExcludeBoundary, key25, ExcludeBoundary)
-	data.c5to25.init(1, &span)
+	span.Set(kc1, key5, ExcludeBoundary, key25, ExcludeBoundary)
+	data.c5to25.Init(kc1, SingleSpan(&span))
 
 	// [/20 - /30)
-	span.Set(keyCtx, key20, IncludeBoundary, key30, ExcludeBoundary)
-	data.c20to30.init(1, &span)
+	span.Set(kc1, key20, IncludeBoundary, key30, ExcludeBoundary)
+	data.c20to30.Init(kc1, SingleSpan(&span))
 
 	// [/30 - /40]
-	span.Set(keyCtx, key30, IncludeBoundary, key40, IncludeBoundary)
-	data.c30to40.init(1, &span)
+	span.Set(kc1, key30, IncludeBoundary, key40, IncludeBoundary)
+	data.c30to40.Init(kc1, SingleSpan(&span))
 
 	// [/40 - /50]
-	span.Set(keyCtx, key40, IncludeBoundary, key50, IncludeBoundary)
-	data.c40to50.init(1, &span)
+	span.Set(kc1, key40, IncludeBoundary, key50, IncludeBoundary)
+	data.c40to50.Init(kc1, SingleSpan(&span))
 
 	// (/60 - /70)
-	span.Set(keyCtx, key60, ExcludeBoundary, key70, ExcludeBoundary)
-	data.c60to70.init(1, &span)
+	span.Set(kc1, key60, ExcludeBoundary, key70, ExcludeBoundary)
+	data.c60to70.Init(kc1, SingleSpan(&span))
 
 	// [/'cherry'/true - /'raspberry'/false)
-	span.Set(keyCtx, cherry, IncludeBoundary, raspberry, ExcludeBoundary)
-	data.cherryRaspberry.initComposite([]opt.OrderingColumn{1, 2}, &span)
+	span.Set(kc12, cherry, IncludeBoundary, raspberry, ExcludeBoundary)
+	data.cherryRaspberry.Init(kc12, SingleSpan(&span))
 
 	// [/'mango'/false - /'strawberry']
-	span.Set(keyCtx, mango, IncludeBoundary, strawberry, IncludeBoundary)
-	data.mangoStrawberry.initComposite([]opt.OrderingColumn{1, 2}, &span)
+	span.Set(kc12, mango, IncludeBoundary, strawberry, IncludeBoundary)
+	data.mangoStrawberry.Init(kc12, SingleSpan(&span))
 
 	return data
 }
