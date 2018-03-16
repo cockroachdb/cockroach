@@ -197,7 +197,7 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	key60 := MakeKey(tree.NewDInt(60))
 	key70 := MakeKey(tree.NewDInt(70))
 
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	cherry := MakeCompositeKey(tree.NewDString("cherry"), tree.DBoolTrue)
 	mango := MakeCompositeKey(tree.NewDString("mango"), tree.DBoolFalse)

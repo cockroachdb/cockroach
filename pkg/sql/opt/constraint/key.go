@@ -157,6 +157,69 @@ func (k Key) Concat(l Key) Key {
 	return Key{firstVal: k.firstVal, otherVals: vals}
 }
 
+// Next returns the next key; this only works for discrete types like integers.
+// It is guaranteed that there are no  possible keys in the span
+//   ( key, Next(keu) ).
+//
+// Examples:
+//   Next(/1/2) = /1/3
+//   Next(/1/false) = /1/true
+//   Next(/1/true) returns !ok
+//   Next(/'foo') = /'foo\x00'
+//
+// If a column is descending, the values on that column go backwards:
+//   Next(/2) = /1
+//
+// The key cannot be empty.
+func (k Key) Next(keyCtx KeyContext) (_ Key, ok bool) {
+	// TODO(radu): here we could do a better job: if we know the last value is the
+	// maximum possible value, we could shorten the key; for example
+	//   Next(/1/true) -> /2
+	// This is a bit tricky to implement because of NULL values (e.g. on a
+	// descending nullable column, "false" is not the minimum value, NULL is).
+	col := k.Length() - 1
+	nextVal, ok := keyCtx.Next(col, k.Value(col))
+	if !ok {
+		return Key{}, false
+	}
+	if col == 0 {
+		return Key{firstVal: nextVal}, true
+	}
+	// Keep the key up to col, and replace the value for col with nextVal.
+	vals := make([]tree.Datum, col)
+	copy(vals[:col-1], k.otherVals)
+	vals[col-1] = nextVal
+	return Key{firstVal: k.firstVal, otherVals: vals}, true
+}
+
+// Prev returns the next key; this only works for discrete types like integers.
+//
+// Examples:
+//   Prev(/1/2) = /1/1
+//   Prev(/1/true) = /1/false
+//   Prev(/1/false) returns !ok.
+//   Prev(/'foo') returns !ok.
+//
+// If a column is descending, the values on that column go backwards:
+//   Prev(/1) = /2
+//
+// If this is the minimum possible key, returns EmptyKey.
+func (k Key) Prev(keyCtx KeyContext) (_ Key, ok bool) {
+	col := k.Length() - 1
+	prevVal, ok := keyCtx.Prev(col, k.Value(col))
+	if !ok {
+		return Key{}, false
+	}
+	if col == 0 {
+		return Key{firstVal: prevVal}, true
+	}
+	// Keep the key up to col, and replace the value for col with prevVal.
+	vals := make([]tree.Datum, col)
+	copy(vals[:col-1], k.otherVals)
+	vals[col-1] = prevVal
+	return Key{firstVal: k.firstVal, otherVals: vals}, true
+}
+
 // String formats a key like this:
 //  EmptyKey         : empty string
 //  Key with 1 value : /2
@@ -190,4 +253,34 @@ func (c KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 		cmp = -cmp
 	}
 	return cmp
+}
+
+// Next returns the next value on a given column (for discrete types like
+// integers). See Datum.Next/Prev.
+func (c KeyContext) Next(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
+	if c.Columns.Get(colIdx).Ascending() {
+		if val.IsMax(c.EvalCtx) {
+			return nil, false
+		}
+		return val.Next(c.EvalCtx)
+	}
+	if val.IsMin(c.EvalCtx) {
+		return nil, false
+	}
+	return val.Prev(c.EvalCtx)
+}
+
+// Prev returns the previous value on a given column (for discrete types like
+// integers). See Datum.Next/Prev.
+func (c KeyContext) Prev(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
+	if c.Columns.Get(colIdx).Ascending() {
+		if val.IsMin(c.EvalCtx) {
+			return nil, false
+		}
+		return val.Prev(c.EvalCtx)
+	}
+	if val.IsMax(c.EvalCtx) {
+		return nil, false
+	}
+	return val.Next(c.EvalCtx)
 }

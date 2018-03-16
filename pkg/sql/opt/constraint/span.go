@@ -245,6 +245,34 @@ func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
 	return true
 }
 
+// PreferInclusive tries to convert exclusive keys to inclusive keys. This is
+// only possible if the relevant type supports Next/Prev.
+//
+// We prefer inclusive constraints because we can extend inclusive constraints
+// with more constraints on columns that follow.
+//
+// Examples:
+//  - for an integer column (/1 - /5)  =>  [/2 - /4].
+//  - for a descending integer column (/5 - /1) => (/4 - /2).
+//  - for a string column, we don't have Prev so
+//      (/foo - /qux)  =>  [/foo\x00 - /qux).
+//  - for a decimal column, we don't have either Next or Prev so we can't
+//    change anything.
+func (sp *Span) PreferInclusive(keyCtx KeyContext) {
+	if sp.startBoundary == ExcludeBoundary {
+		if key, ok := sp.start.Next(keyCtx); ok {
+			sp.start = key
+			sp.startBoundary = IncludeBoundary
+		}
+	}
+	if sp.endBoundary == ExcludeBoundary {
+		if key, ok := sp.end.Prev(keyCtx); ok {
+			sp.end = key
+			sp.endBoundary = IncludeBoundary
+		}
+	}
+}
+
 func (sp *Span) startExt() KeyExtension {
 	// Trivial cast of start boundary value:
 	//   IncludeBoundary (false) = ExtendLow (false)
