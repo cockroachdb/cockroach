@@ -29,6 +29,7 @@ var EmptyKey = Key{}
 // significant to least significant for purposes of sorting. The datum values
 // correspond to a set of columns; it is the responsibility of the calling code
 // to keep track of them.
+// Key is immutable; it cannot be changed once created.
 type Key struct {
 	// firstVal stores the first value in the key. Subsequent values are stored
 	// in otherVals. Inlining the first value avoids an extra allocation in the
