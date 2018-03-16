@@ -58,6 +58,7 @@ func (c *Constraint) init(col opt.OrderingColumn, sp *Span) {
 	}
 	c.Columns.InitSingle(col)
 	c.firstSpan = *sp
+	c.firstSpan.makeImmutable()
 }
 
 // initComposite is for package use only. External callers should call
@@ -70,6 +71,7 @@ func (c *Constraint) initComposite(cols []opt.OrderingColumn, sp *Span) {
 	}
 	c.Columns.Init(cols)
 	c.firstSpan = *sp
+	c.firstSpan.makeImmutable()
 }
 
 // SpanCount returns the total number of spans in the constraint (always at
@@ -81,6 +83,7 @@ func (c *Constraint) SpanCount() int {
 // Span returns the nth span. Together with the SpanCount method, Span allows
 // iteration over the list of spans (since there is no method to return a slice
 // of spans).
+// Mutating the returned span is not permitted.
 func (c *Constraint) Span(nth int) *Span {
 	// There's always at least one span.
 	if nth == 0 {
@@ -133,7 +136,7 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 		//   merge with [/30 - /40]: [/1 - /40]
 		//   merge with [/40 - /50]: [/1 - /50]
 		//
-		mergeSpan := *left.Span(leftIndex)
+		mergeSpan := left.Span(leftIndex).Copy()
 		leftIndex++
 		for {
 			// Note that Span.TryUnionWith returns false for a different reason
@@ -192,7 +195,11 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 
 	// We've got a valid constraint.
 	c.firstSpan = firstSpan
+	c.firstSpan.makeImmutable()
 	c.otherSpans = otherSpans
+	for i := range c.otherSpans {
+		c.otherSpans[i].makeImmutable()
+	}
 	return true
 }
 
@@ -219,7 +226,7 @@ func (c *Constraint) tryIntersectWith(evalCtx *tree.EvalContext, other *Constrai
 			continue
 		}
 
-		mergeSpan := *c.Span(index)
+		mergeSpan := c.Span(index).Copy()
 		if !mergeSpan.TryIntersectWith(keyCtx, other.Span(otherIndex)) {
 			index++
 			continue
@@ -255,7 +262,11 @@ func (c *Constraint) tryIntersectWith(evalCtx *tree.EvalContext, other *Constrai
 	}
 
 	c.firstSpan = firstSpan
+	c.firstSpan.makeImmutable()
 	c.otherSpans = otherSpans
+	for i := range c.otherSpans {
+		c.otherSpans[i].makeImmutable()
+	}
 	return true
 }
 
