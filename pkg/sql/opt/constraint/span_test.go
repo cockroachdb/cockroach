@@ -18,6 +18,7 @@ package constraint
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,7 +54,7 @@ func TestSpanSet(t *testing.T) {
 		},
 	}
 
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
@@ -126,7 +127,7 @@ func TestSpanSet(t *testing.T) {
 }
 
 func TestSpanUnconstrained(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	// Test unconstrained span.
 	unconstrained := Span{}
@@ -151,7 +152,7 @@ func TestSpanUnconstrained(t *testing.T) {
 }
 
 func TestSpanCompare(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	testComp := func(t *testing.T, left, right Span, expected int) {
 		t.Helper()
@@ -226,7 +227,7 @@ func TestSpanCompare(t *testing.T) {
 		testComp(t, spans[i+1], spans[i+1], 0)
 	}
 
-	keyCtx.Columns.firstCol = -keyCtx.Columns.firstCol
+	keyCtx = testKeyContext(-1, 2)
 
 	// [ - /1)
 	spans[0].Set(keyCtx, EmptyKey, IncludeBoundary, one, ExcludeBoundary)
@@ -288,7 +289,7 @@ func TestSpanCompare(t *testing.T) {
 }
 
 func TestSpanCompareStarts(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	test := func(left, right Span, expected int) {
 		t.Helper()
@@ -317,7 +318,7 @@ func TestSpanCompareStarts(t *testing.T) {
 }
 
 func TestSpanCompareEnds(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	test := func(left, right Span, expected int) {
 		t.Helper()
@@ -346,7 +347,7 @@ func TestSpanCompareEnds(t *testing.T) {
 }
 
 func TestSpanStartsAfter(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	test := func(left, right Span, expected bool) {
 		t.Helper()
@@ -387,7 +388,7 @@ func TestSpanStartsAfter(t *testing.T) {
 }
 
 func TestSpanIntersect(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 	testInt := func(left, right Span, expected string) {
 		t.Helper()
 		sp := left
@@ -482,7 +483,7 @@ func TestSpanIntersect(t *testing.T) {
 }
 
 func TestSpanUnion(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 
 	testUnion := func(left, right Span, expected string) {
 		t.Helper()
@@ -565,4 +566,63 @@ func TestSpanUnion(t *testing.T) {
 	// Unconstrained (uninitialized) span.
 	testUnion(banana, Span{}, "[ - ]")
 	testUnion(Span{}, banana, "[ - ]")
+}
+
+func TestSpanPreferInclusive(t *testing.T) {
+	keyCtx := testKeyContext(1, 2)
+
+	testCases := []struct {
+		start         Key
+		startBoundary SpanBoundary
+		end           Key
+		endBoundary   SpanBoundary
+		expected      string
+	}{
+		{ // 0
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(5)), IncludeBoundary,
+			"[/1 - /5]",
+		},
+		{ // 1
+			MakeKey(tree.NewDInt(1)), IncludeBoundary,
+			MakeKey(tree.NewDInt(5)), ExcludeBoundary,
+			"[/1 - /4]",
+		},
+		{ // 2
+			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
+			MakeKey(tree.NewDInt(5)), IncludeBoundary,
+			"[/2 - /5]",
+		},
+		{ // 3
+			MakeKey(tree.NewDInt(1)), ExcludeBoundary,
+			MakeKey(tree.NewDInt(5)), ExcludeBoundary,
+			"[/2 - /4]",
+		},
+		{ // 4
+			MakeCompositeKey(tree.NewDInt(1), tree.NewDInt(math.MaxInt64)), ExcludeBoundary,
+			MakeCompositeKey(tree.NewDInt(2), tree.NewDInt(math.MinInt64)), ExcludeBoundary,
+			"(/1/9223372036854775807 - /2/-9223372036854775808)",
+		},
+		{ // 5
+			MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(5)), ExcludeBoundary,
+			MakeCompositeKey(tree.NewDString("mango"), tree.NewDInt(1)), ExcludeBoundary,
+			"[/'cherry'/6 - /'mango'/0]",
+		},
+		{ // 6
+			MakeCompositeKey(tree.NewDInt(1), tree.NewDString("cherry")), ExcludeBoundary,
+			MakeCompositeKey(tree.NewDInt(2), tree.NewDString("mango")), ExcludeBoundary,
+			"[/1/e'cherry\\x00' - /2/'mango')",
+		},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			var sp Span
+			sp.Set(keyCtx, tc.start, tc.startBoundary, tc.end, tc.endBoundary)
+			sp.PreferInclusive(keyCtx)
+			if sp.String() != tc.expected {
+				t.Errorf("expected: %s, actual: %s", tc.expected, sp.String())
+			}
+		})
+	}
 }

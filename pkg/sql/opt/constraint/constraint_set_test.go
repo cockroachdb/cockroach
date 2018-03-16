@@ -22,7 +22,7 @@ import (
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 	evalCtx := keyCtx.EvalCtx
 
 	test := func(cs *Set, expected string) {
@@ -127,7 +127,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 }
 
 func TestConstraintSetUnion(t *testing.T) {
-	keyCtx := testKeyContext()
+	keyCtx := testKeyContext(1, 2)
 	evalCtx := keyCtx.EvalCtx
 	data := newSpanTestData(keyCtx)
 
