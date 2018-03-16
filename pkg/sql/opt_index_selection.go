@@ -163,14 +163,33 @@ func (p *planner) selectIndex(
 		}
 	}
 
+	// Remove any inverted indexes that don't generate any spans, a full-scan of
+	// an inverted index is always invalid.
+	for i := 0; i < len(candidates); {
+		spans, ok := candidates[i].ic.Spans()
+		if candidates[i].index.Type == sqlbase.IndexDescriptor_INVERTED && (!ok || len(spans) == 0) {
+			candidates[i] = candidates[len(candidates)-1]
+			candidates = candidates[:len(candidates)-1]
+		} else {
+			i++
+		}
+	}
+
+	if len(candidates) == 0 {
+		// The primary index is never inverted. So the only way this can happen is
+		// if we had a specified index.
+		if s.specifiedIndex == nil {
+			panic("no non-inverted indexes")
+		}
+		return nil, fmt.Errorf("index \"%s\" is inverted and cannot be used for this query",
+			s.specifiedIndex.Name)
+	}
+
 	if s.noIndexJoin {
 		// Eliminate non-covering indexes. We do this after the check above for
-		// constant false filter. We're also removing inverted indexes that don't
-		// generate spans.
+		// constant false filter.
 		for i := 0; i < len(candidates); {
-			spans, ok := candidates[i].ic.Spans()
-			if !candidates[i].covering ||
-				(candidates[i].index.Type == sqlbase.IndexDescriptor_INVERTED && (!ok || len(spans) == 0)) {
+			if !candidates[i].covering {
 				candidates[i] = candidates[len(candidates)-1]
 				candidates = candidates[:len(candidates)-1]
 			} else {
