@@ -184,9 +184,6 @@ var requiredTypeNames = [...]string{
 func (p *planner) LookupSchema(
 	ctx context.Context, dbName, scName string,
 ) (found bool, scMeta tree.SchemaMeta, err error) {
-	// defer func() {
-	// log.VEventf(ctx, 2, "planner.LookupSchema(%s, %s) -> %v %v %v", dbName, scName, found, scMeta, err)
-	// }()
 	sc := p.LogicalSchemaAccessor()
 	dbDesc, err := sc.GetDatabaseDesc(dbName, p.CommonLookupFlags(ctx, false /*required*/))
 	if err != nil || dbDesc == nil {
@@ -199,9 +196,6 @@ func (p *planner) LookupSchema(
 func (p *planner) LookupObject(
 	ctx context.Context, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
-	// defer func() {
-	// log.VEventf(ctx, 2, "planner.LookupObject(%s, %s, %s) -> %v %v %v", dbName, scName, tbName, found, objMeta, err)
-	// }()
 	sc := p.LogicalSchemaAccessor()
 	// TODO(knz): elide this allocation of TableName.
 	tn := tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(tbName))
@@ -504,9 +498,6 @@ var _ SchemaResolver = &fkSelfResolver{}
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, dbName, scName, tbName string,
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
-	//	defer func() {
-	//		log.VEventf(ctx, 2, "fkSelfResolver.LookupObject(%s, %s, %s) -> %v %v %v", dbName, scName, tbName, found, objMeta, err)
-	//	}()
 	if dbName == r.newTableName.Catalog() &&
 		scName == r.newTableName.Schema() &&
 		tbName == r.newTableName.Table() {
