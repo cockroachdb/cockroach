@@ -1266,15 +1266,12 @@ func forEachColumnInIndex(
 }
 
 func forEachRole(
-	ctx context.Context, origPlanner *planner, fn func(username string, isRole bool) error,
+	ctx context.Context, p *planner, fn func(username string, isRole bool) error,
 ) error {
 	query := `SELECT username, "isRole" FROM system.users`
-	p, cleanup := newInternalPlanner(
-		"for-each-role", origPlanner.txn, security.RootUser,
-		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
+	rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx, "read-roles", p.txn, query,
 	)
-	defer cleanup()
-	rows, _ /* cols */, err := p.queryRows(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -1294,15 +1291,12 @@ func forEachRole(
 }
 
 func forEachRoleMembership(
-	ctx context.Context, origPlanner *planner, fn func(role, member string, isAdmin bool) error,
+	ctx context.Context, p *planner, fn func(role, member string, isAdmin bool) error,
 ) error {
 	query := `SELECT "role", "member", "isAdmin" FROM system.role_members`
-	p, cleanup := newInternalPlanner(
-		"for-each-role-member", origPlanner.txn, security.RootUser,
-		origPlanner.extendedEvalCtx.MemMetrics, origPlanner.ExecCfg(),
+	rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx, "read-members", p.txn, query,
 	)
-	defer cleanup()
-	rows, _ /* cols */, err := p.queryRows(ctx, query)
 	if err != nil {
 		return err
 	}
