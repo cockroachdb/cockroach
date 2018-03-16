@@ -320,7 +320,15 @@ type nodeCPUOption int
 func (o nodeCPUOption) apply(spec *nodeSpec) {
 	spec.CPUs = int(o)
 	if !local && clusterName != "local" {
-		spec.MachineType = fmt.Sprintf("--gce-machine-type=n1-highcpu-%d", spec.CPUs)
+		// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
+		// machines have a decent amount of RAM. We could use customer machine
+		// configurations, but the rules for the amount of RAM per CPU need to be
+		// determined (you can't request any arbitrary amount of RAM).
+		if spec.CPUs < 16 {
+			spec.MachineType = fmt.Sprintf("--gce-machine-type=n1-standard-%d", spec.CPUs)
+		} else {
+			spec.MachineType = fmt.Sprintf("--gce-machine-type=n1-highcpu-%d", spec.CPUs)
+		}
 	}
 }
 
