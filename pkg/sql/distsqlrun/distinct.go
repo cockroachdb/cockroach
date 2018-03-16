@@ -25,6 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Distinct is the physical processor implementation of the DISTINCT relational operator.
 type Distinct struct {
 	processorBase
 
@@ -57,14 +58,15 @@ var _ RowSource = &SortedDistinct{}
 
 const sortedDistinctProcName = "sorted distinct"
 
-func newDistinct(
+// NewDistinct instantiates a new Distinct processor.
+func NewDistinct(
 	flowCtx *FlowCtx,
 	processorID int32,
 	spec *DistinctSpec,
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
-) (Processor, error) {
+) (RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
 		return nil, errors.New("programming error: 0 distinct columns specified for distinct processor")
 	}

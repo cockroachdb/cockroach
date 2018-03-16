@@ -1718,7 +1718,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 }
 
 // getTypesForPlanResult returns the types of the elements in the result streams
-// of a plan that corresponds to a given planNode. If planToSreamColMap is nil,
+// of a plan that corresponds to a given planNode. If planToStreamColMap is nil,
 // a 1-1 mapping is assumed.
 func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]sqlbase.ColumnType, error) {
 	nodeColumns := planColumns(node)
@@ -2220,6 +2220,36 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 	}, nil
 }
 
+func createDistinctSpec(n *distinctNode, cols []int) *distsqlrun.DistinctSpec {
+	var orderedColumns []uint32
+	for i, o := range n.columnsInOrder {
+		if o {
+			orderedColumns = append(orderedColumns, uint32(cols[i]))
+		}
+	}
+
+	var distinctColumns []uint32
+	if !n.distinctOnColIdxs.Empty() {
+		for planCol, streamCol := range cols {
+			if streamCol != -1 && n.distinctOnColIdxs.Contains(planCol) {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+	} else {
+		// If no distinct columns were specified, run distinct on the entire row.
+		for planCol := range planColumns(n) {
+			if streamCol := cols[planCol]; streamCol != -1 {
+				distinctColumns = append(distinctColumns, uint32(streamCol))
+			}
+		}
+	}
+
+	return &distsqlrun.DistinctSpec{
+		OrderedColumns:  orderedColumns,
+		DistinctColumns: distinctColumns,
+	}
+}
+
 func (dsp *DistSQLPlanner) createPlanForDistinct(
 	planCtx *planningCtx, n *distinctNode,
 ) (physicalPlan, error) {
@@ -2228,34 +2258,9 @@ func (dsp *DistSQLPlanner) createPlanForDistinct(
 		return physicalPlan{}, err
 	}
 	currentResultRouters := plan.ResultRouters
-	var orderedColumns []uint32
-	for i, o := range n.columnsInOrder {
-		if o {
-			orderedColumns = append(orderedColumns, uint32(plan.planToStreamColMap[i]))
-		}
-	}
-
-	var distinctColumns []uint32
-	if !n.distinctOnColIdxs.Empty() {
-		for planCol, streamCol := range plan.planToStreamColMap {
-			if streamCol != -1 && n.distinctOnColIdxs.Contains(planCol) {
-				distinctColumns = append(distinctColumns, uint32(streamCol))
-			}
-		}
-	} else {
-		// If no distinct columns were specified, run distinct on the entire row.
-		for planCol := range planColumns(n) {
-			if streamCol := plan.planToStreamColMap[planCol]; streamCol != -1 {
-				distinctColumns = append(distinctColumns, uint32(streamCol))
-			}
-		}
-	}
 
 	distinctSpec := distsqlrun.ProcessorCoreUnion{
-		Distinct: &distsqlrun.DistinctSpec{
-			OrderedColumns:  orderedColumns,
-			DistinctColumns: distinctColumns,
-		},
+		Distinct: createDistinctSpec(n, plan.planToStreamColMap),
 	}
 
 	if len(currentResultRouters) == 1 {
