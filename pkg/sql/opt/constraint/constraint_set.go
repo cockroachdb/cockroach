@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -69,20 +68,15 @@ type Set struct {
 	contradiction bool
 }
 
-// NewForColumn creates a new constraint set containing a single constraint.
-// The constraint has a single column and a single span.
-func NewForColumn(col opt.OrderingColumn, sp *Span) *Set {
-	cs := &Set{length: 1}
-	cs.firstConstraint.init(col, sp)
-	return cs
-}
-
-// NewForColumns creates a new constraint set containing a single constraint.
-// The constraint has one or more columns and a single span.
-func NewForColumns(cols []opt.OrderingColumn, sp *Span) *Set {
-	cs := &Set{length: 1}
-	cs.firstConstraint.initComposite(cols, sp)
-	return cs
+// SingleConstraint creates a Set from a single Constraint.
+func SingleConstraint(c Constraint) *Set {
+	if c.IsContradiction() {
+		return Contradiction
+	}
+	if c.IsUnconstrained() {
+		return Unconstrained
+	}
+	return &Set{length: 1, firstConstraint: c}
 }
 
 // Length returns the number of constraints in the set.
@@ -151,8 +145,8 @@ func (s *Set) Intersect(evalCtx *tree.EvalContext, other *Set) *Set {
 			// Constraints have same columns, so they're compatible and need to
 			// be merged.
 			*merge = *s.Constraint(index)
-			if !merge.tryIntersectWith(evalCtx, other.Constraint(otherIndex)) {
-				// Constraints contradict one another.
+			merge.IntersectWith(evalCtx, other.Constraint(otherIndex))
+			if merge.IsContradiction() {
 				return Contradiction
 			}
 
@@ -228,9 +222,10 @@ func (s *Set) Union(evalCtx *tree.EvalContext, other *Set) *Set {
 		merge := mergeSet.allocConstraint(length - index + otherLength - otherIndex)
 
 		*merge = *s.Constraint(index)
-		if !merge.tryUnionWith(evalCtx, other.Constraint(otherIndex)) {
-			// Together, constraints allow any possible value (unconstrained
-			// case), and so there's nothing to add to the set.
+		merge.UnionWith(evalCtx, other.Constraint(otherIndex))
+		if merge.IsUnconstrained() {
+			// Together, constraints allow any possible value, and so there's nothing
+			// to add to the set.
 			mergeSet.undoAllocConstraint()
 		}
 
