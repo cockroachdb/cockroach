@@ -61,6 +61,14 @@ func ifLocal(trueVal, falseVal string) string {
 	return falseVal
 }
 
+func filepathAbs(path string) (string, error) {
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return "", errors.Wrap(err, "")
+	}
+	return path, nil
+}
+
 func findBinary(binary, defValue string) (string, error) {
 	if binary == "" {
 		binary = defValue
@@ -68,7 +76,7 @@ func findBinary(binary, defValue string) (string, error) {
 
 	// Check to see if binary exists and is a regular file and executable.
 	if fi, err := os.Stat(binary); err == nil && fi.Mode().IsRegular() && (fi.Mode()&0111) != 0 {
-		return filepath.Abs(binary)
+		return filepathAbs(binary)
 	}
 
 	// Find the binary to run and translate it to an absolute path. First, look
@@ -76,13 +84,13 @@ func findBinary(binary, defValue string) (string, error) {
 	path, err := exec.LookPath(binary)
 	if err != nil {
 		if strings.HasPrefix(binary, "/") {
-			return "", err
+			return "", errors.Wrap(err, "")
 		}
 		// We're unable to find the binary in PATH and "binary" is a relative path:
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
-			return "", err
+			return "", errors.Wrap(err, "")
 		}
 
 		var binSuffix string
@@ -92,30 +100,36 @@ func findBinary(binary, defValue string) (string, error) {
 		dirs := []string{
 			"/src/github.com/cockroachdb/cockroach/",
 			"/src/github.com/cockroachdb/cockroach/bin" + binSuffix,
+			filepath.Join(os.ExpandEnv("PWD"), "bin"+binSuffix),
 		}
 		for _, dir := range dirs {
 			path = filepath.Join(gopath, dir, binary)
 			var err2 error
 			path, err2 = exec.LookPath(path)
 			if err2 == nil {
-				return filepath.Abs(path)
+				return filepathAbs(path)
 			}
 		}
-		return "", err
+		return "", errors.Wrap(err, "")
 	}
-	return filepath.Abs(path)
+	return filepathAbs(path)
 }
 
 func initBinaries() {
+	cockroachDefault := "cockroach"
+	if !local && clusterName != "local" {
+		cockroachDefault = "cockroach-linux-2.6.32-gnu-amd64"
+	}
 	var err error
-	cockroach, err = findBinary(cockroach, "cockroach")
+	cockroach, err = findBinary(cockroach, cockroachDefault)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
+
 	workload, err = findBinary(workload, "workload")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
 		os.Exit(1)
 	}
 }
