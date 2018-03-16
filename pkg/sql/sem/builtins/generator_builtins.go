@@ -90,8 +90,9 @@ var Generators = map[string][]tree.Builtin{
 				if len(args) == 0 {
 					return tree.UnknownReturnType
 				}
+				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
 				return types.TTable{
-					Cols:   types.TTuple{args[0].ResolvedType().(types.TArray).Typ},
+					Cols:   types.TTuple{t},
 					Labels: arrayValueGeneratorLabels,
 				}
 			},
