@@ -32,21 +32,23 @@ type Spans struct {
 	immutable  bool
 }
 
-// MakeSpans allocates enough space to support the given amount of spans without
-// reallocation.
-func MakeSpans(capacity int) Spans {
-	if capacity <= 1 {
-		return Spans{}
+// Alloc allocates enough space to support the given amount of spans without
+// reallocation. Does nothing if the structure already contains spans.
+func (s *Spans) Alloc(capacity int) {
+	// We don't preallocate if the capacity is only 2: pre-allocating the slice to
+	// size 1 is no better than allocating it on the first Append, but it's worse
+	// if we end up not needing it.
+	if capacity > 2 && s.numSpans == 0 {
+		s.otherSpans = make([]Span, 0, capacity-1)
 	}
-	return Spans{otherSpans: make([]Span, 0, capacity-1)}
 }
 
-// SingleSpan creates Spans containing a single span.
-func SingleSpan(sp *Span) Spans {
-	return Spans{
-		firstSpan: *sp,
-		numSpans:  1,
-	}
+// InitSingleSpan initializes the structure with a single span.
+func (s *Spans) InitSingleSpan(sp *Span) {
+	s.firstSpan = *sp
+	s.otherSpans = nil
+	s.numSpans = 1
+	s.immutable = false
 }
 
 // Count returns the number of spans.

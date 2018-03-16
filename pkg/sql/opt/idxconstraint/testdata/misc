@@ -32,6 +32,12 @@ index-constraints vars=(decimal) index=(@1)
 ----
 (/1.5 - /2)
 
+index-constraints vars=(decimal, decimal) index=(@1 not null, @2 not null)
+@1 <= 1.5 AND @2 < 2.5
+----
+[ - /1.5/2.5)
+Remaining filter: @2 < 2.5
+
 # Tests with a type that supports Next/Prev but we have a maximal/minimal value.
 index-constraints vars=(bool) index=(@1)
 @1 > true

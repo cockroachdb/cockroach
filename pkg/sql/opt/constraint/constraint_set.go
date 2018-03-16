@@ -68,7 +68,7 @@ type Set struct {
 	contradiction bool
 }
 
-// SingleConstraint creates a Set from a single Constraint.
+// SingleConstraint creates a Set with a single Constraint.
 func SingleConstraint(c *Constraint) *Set {
 	if c.IsContradiction() {
 		return Contradiction
@@ -77,6 +77,17 @@ func SingleConstraint(c *Constraint) *Set {
 		return Unconstrained
 	}
 	return &Set{length: 1, firstConstraint: *c}
+}
+
+// SingleSpanConstraint creates a Set with a single constraint which
+// has one span.
+func SingleSpanConstraint(keyCtx *KeyContext, span *Span) *Set {
+	if span.IsUnconstrained() {
+		return Unconstrained
+	}
+	s := &Set{length: 1}
+	s.firstConstraint.InitSingleSpan(keyCtx, span)
+	return s
 }
 
 // Length returns the number of constraints in the set.

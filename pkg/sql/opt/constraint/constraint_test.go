@@ -158,118 +158,54 @@ func TestConstraintIntersect(t *testing.T) {
 	test(t, &evalCtx, &data.mangoStrawberry, &data.cherryRaspberry, expected)
 }
 
-func TestConstraintSubsetOf(t *testing.T) {
+func TestConstraintContainsSpan(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
-	data := newConstraintTestData(&evalCtx)
 
-	test := func(left, right Constraint, expected bool) {
-		t.Helper()
-		if actual := left.SubsetOf(&evalCtx, &right); actual != expected {
-			format := "left: %s, right: %s, expected: %t, actual: %t"
-			t.Errorf(format, left.String(), right.String(), expected, actual)
-		}
+	// Each test case has a bunch of spans that are expected to be contained, and
+	// a bunch of spans that are expected not to be contained.
+	testData := []struct {
+		constraint        string
+		containedSpans    string
+		notContainedSpans string
+	}{
+		{
+			constraint:        "/1: [/1 - /3]",
+			containedSpans:    "[/1 - /1] (/1 - /2) (/1 - /3) [/2 - /3] [/1 - /3]",
+			notContainedSpans: "[/0 - /1] (/0 - /1] (/0 - /2] (/0 - /3) [/1 - /4) [/2 - /5]",
+		},
+		{
+			constraint: "/1/2: [ - /2] [/4 - /4] [/5/3 - /7) [/9 - /9/20]",
+			containedSpans: "[ - /1] [ - /2) [ - /2] [/1 - /2] [/2 - /2] [/4 - /4] " +
+				"[/5/3 - /5/3/1] [/6 - /6] [/5/5 - /7) [/9/10 - /9/15] [/9/19 - /9/20]",
+			notContainedSpans: "[ - /3] [/1 - /3] [/3 - /4] [/3 - /6] [/5/3 - /7] [/6 - /8] " +
+				"[/9/20 - /9/21] [/8 - /9]",
+		},
+		{
+			constraint:        "/1/-2: [/1/5 - /1/2] [/3/5 - /5/2] [/7 - ]",
+			containedSpans:    "[/1/5 - /1/2] [/1/4 - /1/3] [/1/4 - /1/2] [/4 - /5) [/4/6 - /5/3] [/7/1 - ]",
+			notContainedSpans: "[/1/5 - /1/1] [/1/3 - /1/1] [/3/6 - /3/5] [/4 - /5] [/4 - /5/1] [/6/10 - ]",
+		},
 	}
 
-	var left, right Constraint
-	left = data.c1to10
-	test(left, left, true)
+	for i, tc := range testData {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			c := parseConstraint(&evalCtx, tc.constraint)
 
-	test(left, data.cLt10, false)
-	test(data.cLt10, left, false)
-
-	right = data.c1to10
-	right.UnionWith(&evalCtx, &data.c5to25)
-	test(left, right, true)
-	test(right, left, false)
-
-	left.UnionWith(&evalCtx, &data.c30to40)
-	test(left, right, false)
-	test(right, left, false)
-
-	right.UnionWith(&evalCtx, &data.c30to40)
-	test(left, right, true)
-	test(right, left, false)
-
-	right.UnionWith(&evalCtx, &data.c20to30)
-	test(left, right, true)
-	test(right, left, false)
-
-	right.UnionWith(&evalCtx, &data.c40to50)
-	test(left, right, true)
-	test(right, left, false)
-
-	right = data.c1to10
-	right.UnionWith(&evalCtx, &data.c20to30)
-	right.UnionWith(&evalCtx, &data.c30to40)
-	right.UnionWith(&evalCtx, &data.c60to70)
-
-	test(data.c1to10, right, true)
-	test(data.c20to30, right, true)
-	test(data.c30to40, right, true)
-	test(data.c40to50, right, false)
-	test(data.c60to70, right, true)
-
-	// Generate a contradiction and verify it is a subset of anything else.
-	right = data.c1to10
-	right.IntersectWith(&evalCtx, &data.c20to30)
-	test(data.c1to10, right, false)
-	test(right, data.c1to10, true)
-	test(right, right, true)
-}
-
-func TestCutFirstColumn(t *testing.T) {
-	kc := testKeyContext(1, 2, 3)
-	evalCtx := kc.EvalCtx
-
-	gen := func(
-		leftVals []int, leftBoundary SpanBoundary, rightVals []int, rightBoundary SpanBoundary,
-	) *Constraint {
-		leftDatums := make([]tree.Datum, len(leftVals))
-		for i, v := range leftVals {
-			leftDatums[i] = tree.NewDInt(tree.DInt(v))
-		}
-		rightDatums := make([]tree.Datum, len(rightVals))
-		for i, v := range rightVals {
-			rightDatums[i] = tree.NewDInt(tree.DInt(v))
-		}
-		var sp Span
-		sp.Set(
-			kc,
-			MakeCompositeKey(leftDatums...), leftBoundary,
-			MakeCompositeKey(rightDatums...), rightBoundary,
-		)
-		var c Constraint
-		c.Init(kc, SingleSpan(&sp))
-		return &c
+			spans := parseSpans(tc.containedSpans)
+			for i := 0; i < spans.Count(); i++ {
+				if sp := spans.Get(i); !c.ContainsSpan(&evalCtx, sp) {
+					t.Errorf("%s should contain span %s", c, sp)
+				}
+			}
+			spans = parseSpans(tc.notContainedSpans)
+			for i := 0; i < spans.Count(); i++ {
+				if sp := spans.Get(i); c.ContainsSpan(&evalCtx, sp) {
+					t.Errorf("%s should not contain span %s", c, sp)
+				}
+			}
+		})
 	}
-
-	test := func(c *Constraint, level int, expected string) {
-		t.Helper()
-		cCopy := *c
-		for i := 0; i < level; i++ {
-			cCopy.CutFirstColumn(evalCtx)
-		}
-		if actual := cCopy.String(); actual != expected {
-			t.Errorf("expected: %v, actual: %v", expected, actual)
-		}
-	}
-
-	c := gen([]int{1, 2, 3}, IncludeBoundary, []int{1, 2, 4}, IncludeBoundary)
-	test(c, 1, "/2/3: [/2/3 - /2/4]")
-	test(c, 2, "/3: [/3 - /4]")
-
-	c.UnionWith(evalCtx, gen([]int{1, 1, 5}, IncludeBoundary, []int{1, 1, 6}, IncludeBoundary))
-	test(c, 1, "/2/3: [/1/5 - /1/6] [/2/3 - /2/4]")
-	test(c, 2, "/3: [/3 - /4] [/5 - /6]")
-
-	c.UnionWith(evalCtx, gen([]int{1, 2, 8}, IncludeBoundary, []int{1, 4, 9}, IncludeBoundary))
-	test(c, 1, "/2/3: [/1/5 - /1/6] [/2/3 - /2/4] [/2/8 - /4/9]")
-	test(c, 2, "/3: unconstrained")
-
-	c.UnionWith(evalCtx, gen([]int{2, 1}, IncludeBoundary, []int{4, 2}, IncludeBoundary))
-	test(c, 1, "/2/3: unconstrained")
-	test(c, 2, "/3: unconstrained")
 }
 
 func TestConstraintCombine(t *testing.T) {
@@ -368,9 +304,9 @@ func TestConsolidateSpans(t *testing.T) {
 	kc := testKeyContext(1, 2, -3)
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			spans := parseSpans(kc, tc.s)
+			spans := parseSpans(tc.s)
 			var c Constraint
-			c.Init(kc, spans)
+			c.Init(kc, &spans)
 			c.ConsolidateSpans(kc.EvalCtx)
 			if res := c.Spans.String(); res != tc.e {
 				t.Errorf("expected  %s  got  %s", tc.e, res)
@@ -424,9 +360,9 @@ func TestExactPrefix(t *testing.T) {
 	kc := testKeyContext(1, 2, 3)
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			spans := parseSpans(kc, tc.s)
+			spans := parseSpans(tc.s)
 			var c Constraint
-			c.Init(kc, spans)
+			c.Init(kc, &spans)
 			if res := c.ExactPrefix(kc.EvalCtx); res != tc.e {
 				t.Errorf("expected  %d  got  %d", tc.e, res)
 			}
@@ -472,44 +408,44 @@ func newConstraintTestData(evalCtx *tree.EvalContext) *constraintTestData {
 	var span Span
 
 	// [ - /10)
-	span.Set(kc1, EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
-	data.cLt10.Init(kc1, SingleSpan(&span))
+	span.Init(EmptyKey, IncludeBoundary, key10, ExcludeBoundary)
+	data.cLt10.InitSingleSpan(kc1, &span)
 
 	// (/20 - ]
-	span.Set(kc1, key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
-	data.cGt20.Init(kc1, SingleSpan(&span))
+	span.Init(key20, ExcludeBoundary, EmptyKey, IncludeBoundary)
+	data.cGt20.InitSingleSpan(kc1, &span)
 
 	// [/1 - /10]
-	span.Set(kc1, key1, IncludeBoundary, key10, IncludeBoundary)
-	data.c1to10.Init(kc1, SingleSpan(&span))
+	span.Init(key1, IncludeBoundary, key10, IncludeBoundary)
+	data.c1to10.InitSingleSpan(kc1, &span)
 
 	// (/5 - /25)
-	span.Set(kc1, key5, ExcludeBoundary, key25, ExcludeBoundary)
-	data.c5to25.Init(kc1, SingleSpan(&span))
+	span.Init(key5, ExcludeBoundary, key25, ExcludeBoundary)
+	data.c5to25.InitSingleSpan(kc1, &span)
 
 	// [/20 - /30)
-	span.Set(kc1, key20, IncludeBoundary, key30, ExcludeBoundary)
-	data.c20to30.Init(kc1, SingleSpan(&span))
+	span.Init(key20, IncludeBoundary, key30, ExcludeBoundary)
+	data.c20to30.InitSingleSpan(kc1, &span)
 
 	// [/30 - /40]
-	span.Set(kc1, key30, IncludeBoundary, key40, IncludeBoundary)
-	data.c30to40.Init(kc1, SingleSpan(&span))
+	span.Init(key30, IncludeBoundary, key40, IncludeBoundary)
+	data.c30to40.InitSingleSpan(kc1, &span)
 
 	// [/40 - /50]
-	span.Set(kc1, key40, IncludeBoundary, key50, IncludeBoundary)
-	data.c40to50.Init(kc1, SingleSpan(&span))
+	span.Init(key40, IncludeBoundary, key50, IncludeBoundary)
+	data.c40to50.InitSingleSpan(kc1, &span)
 
 	// (/60 - /70)
-	span.Set(kc1, key60, ExcludeBoundary, key70, ExcludeBoundary)
-	data.c60to70.Init(kc1, SingleSpan(&span))
+	span.Init(key60, ExcludeBoundary, key70, ExcludeBoundary)
+	data.c60to70.InitSingleSpan(kc1, &span)
 
 	// [/'cherry'/true - /'raspberry'/false)
-	span.Set(kc12, cherry, IncludeBoundary, raspberry, ExcludeBoundary)
-	data.cherryRaspberry.Init(kc12, SingleSpan(&span))
+	span.Init(cherry, IncludeBoundary, raspberry, ExcludeBoundary)
+	data.cherryRaspberry.InitSingleSpan(kc12, &span)
 
 	// [/'mango'/false - /'strawberry']
-	span.Set(kc12, mango, IncludeBoundary, strawberry, IncludeBoundary)
-	data.mangoStrawberry.Init(kc12, SingleSpan(&span))
+	span.Init(mango, IncludeBoundary, strawberry, IncludeBoundary)
+	data.mangoStrawberry.InitSingleSpan(kc12, &span)
 
 	return data
 }
