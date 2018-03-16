@@ -54,7 +54,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 
 	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
+	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n)
 	if err != nil {
 		return err
 	}
