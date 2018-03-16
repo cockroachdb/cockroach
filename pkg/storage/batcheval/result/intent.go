@@ -41,15 +41,16 @@ func FromIntents(intents []roachpb.Intent, args roachpb.Request) Result {
 type EndTxnIntents struct {
 	Txn    roachpb.Transaction
 	Always bool
+	Poison bool
 }
 
 // FromEndTxn creates a Result communicating that a transaction was
 // completed and its intents should be resolved.
-func FromEndTxn(txn *roachpb.Transaction, alwaysReturn bool) Result {
+func FromEndTxn(txn *roachpb.Transaction, alwaysReturn, poison bool) Result {
 	var pd Result
 	if len(txn.Intents) == 0 {
 		return pd
 	}
-	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: *txn, Always: alwaysReturn}}
+	pd.Local.EndTxns = &[]EndTxnIntents{{Txn: *txn, Always: alwaysReturn, Poison: poison}}
 	return pd
 }

@@ -384,7 +384,7 @@ func (ir *intentResolver) cleanupTxnIntentsAsync(
 			}
 			defer release()
 			intents := roachpb.AsIntents(et.Txn.Intents, &et.Txn)
-			if err := ir.cleanupFinishedTxnIntents(ctx, &et.Txn, intents, now); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(ctx, &et.Txn, intents, now, et.Poison); err != nil {
 				log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
 			}
 		}); err != nil {
@@ -475,7 +475,7 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 				}
 			}
 
-			if err := ir.cleanupFinishedTxnIntents(ctx, txn, intents, now); err != nil {
+			if err := ir.cleanupFinishedTxnIntents(ctx, txn, intents, now, false /* poison */); err != nil {
 				log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
 			} else {
 				ir.store.metrics.GCResolveSuccess.Inc(int64(len(intents)))
@@ -488,11 +488,15 @@ func (ir *intentResolver) cleanupTxnIntentsOnGCAsync(
 // single transaction and when all intents have been successfully
 // resolved, the transaction record is GC'ed.
 func (ir *intentResolver) cleanupFinishedTxnIntents(
-	ctx context.Context, txn *roachpb.Transaction, intents []roachpb.Intent, now hlc.Timestamp,
+	ctx context.Context,
+	txn *roachpb.Transaction,
+	intents []roachpb.Intent,
+	now hlc.Timestamp,
+	poison bool,
 ) error {
 	// Resolve intents.
 	min, _ := txn.InclusiveTimeBounds()
-	opts := ResolveOptions{Wait: true, Poison: false, MinTimestamp: min}
+	opts := ResolveOptions{Wait: true, Poison: poison, MinTimestamp: min}
 	if err := ir.resolveIntents(ctx, intents, opts); err != nil {
 		return errors.Wrapf(err, "failed to resolve intents")
 	}

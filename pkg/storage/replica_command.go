@@ -289,8 +289,10 @@ func evalEndTransaction(
 			// Do not return TransactionAbortedError since the client anyway
 			// wanted to abort the transaction.
 			desc := cArgs.EvalCtx.Desc()
-			externalIntents := resolveLocalIntents(ctx, desc,
-				batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
+			externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx)
+			if err != nil {
+				return result.Result{}, err
+			}
 			if err := updateTxnWithExternalIntents(
 				ctx, batch, ms, *args, reply.Txn, externalIntents,
 			); err != nil {
@@ -298,7 +300,7 @@ func evalEndTransaction(
 			}
 			// Use alwaysReturn==true because the transaction is definitely
 			// aborted, no matter what happens to this command.
-			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), nil
+			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), nil
 		}
 		// If the transaction was previously aborted by a concurrent writer's
 		// push, any intents written are still open. It's only now that we know
@@ -309,7 +311,7 @@ func evalEndTransaction(
 		// to abort, but the transaction is definitely aborted and its intents
 		// can go.
 		reply.Txn.Intents = args.IntentSpans
-		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */), roachpb.NewTransactionAbortedError()
+		return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison), roachpb.NewTransactionAbortedError()
 
 	case roachpb.PENDING:
 		if h.Txn.Epoch < reply.Txn.Epoch {
@@ -369,8 +371,10 @@ func evalEndTransaction(
 	}
 
 	desc := cArgs.EvalCtx.Desc()
-	externalIntents := resolveLocalIntents(ctx, desc,
-		batch, ms, *args, reply.Txn, cArgs.EvalCtx.EvalKnobs())
+	externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx)
+	if err != nil {
+		return result.Result{}, err
+	}
 	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
 		return result.Result{}, err
 	}
@@ -404,7 +408,7 @@ func evalEndTransaction(
 	// We specify alwaysReturn==false because if the commit fails below Raft, we
 	// don't want the intents to be up for resolution. That should happen only
 	// if the commit actually happens; otherwise, we risk losing writes.
-	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */)
+	intentsResult := result.FromEndTxn(reply.Txn, false /* alwaysReturn */, args.Poison)
 	intentsResult.Local.UpdatedTxns = &[]*roachpb.Transaction{reply.Txn}
 	if err := pd.MergeAndDestroy(intentsResult); err != nil {
 		return result.Result{}, err
@@ -479,8 +483,8 @@ func resolveLocalIntents(
 	ms *enginepb.MVCCStats,
 	args roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
-	knobs batcheval.TestingKnobs,
-) []roachpb.Span {
+	evalCtx batcheval.EvalContext,
+) ([]roachpb.Span, error) {
 	var preMergeDesc *roachpb.RangeDescriptor
 	if mergeTrigger := args.InternalCommitTrigger.GetMergeTrigger(); mergeTrigger != nil {
 		// If this is a merge, then use the post-merge descriptor to determine
@@ -533,8 +537,8 @@ func resolveLocalIntents(
 				if err != nil {
 					return err
 				}
-				if knobs.NumKeysEvaluatedForRangeIntentResolution != nil {
-					atomic.AddInt64(knobs.NumKeysEvaluatedForRangeIntentResolution, num)
+				if evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution != nil {
+					atomic.AddInt64(evalCtx.EvalKnobs().NumKeysEvaluatedForRangeIntentResolution, num)
 				}
 				resolveAllowance -= num
 				if resumeSpan != nil {
@@ -553,7 +557,14 @@ func resolveLocalIntents(
 			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err))
 		}
 	}
-	return externalIntents
+	// If the poison arg is set, make sure to set the abort span entry.
+	if args.Poison && txn.Status == roachpb.ABORTED {
+		if err := batcheval.SetAbortSpan(ctx, evalCtx, batch, ms, txn.TxnMeta, true /* poison */); err != nil {
+			return nil, err
+		}
+	}
+
+	return externalIntents, nil
 }
 
 // updateTxnWithExternalIntents persists the transaction record with
