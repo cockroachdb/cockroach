@@ -16,7 +16,6 @@ package bench
 
 import (
 	"bytes"
-	"context"
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
@@ -31,8 +30,6 @@ import (
 
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -725,7 +722,7 @@ func runBenchmarkOrderBy(b *testing.B, db *gosql.DB, count int, limit int, disti
 	if distinct {
 		dist = `DISTINCT `
 	}
-	query := fmt.Sprintf(`SELECT %sv FROM bench.sort`, dist)
+	query := fmt.Sprintf(`SELECT %sv, w, k FROM bench.sort`, dist)
 	if limit != 0 {
 		query = fmt.Sprintf(`%s ORDER BY v DESC, w ASC, k DESC LIMIT %d`, query, limit)
 	}
@@ -1034,35 +1031,34 @@ func BenchmarkWideTableIgnoreColumns(b *testing.B) {
 // BenchmarkPlanning runs some queries on an empty table. The purpose is to
 // benchmark (and get memory allocation statistics) the planning process.
 func BenchmarkPlanning(b *testing.B) {
-	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
-	defer s.Stopper().Stop(context.TODO())
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		sr := sqlutils.MakeSQLRunner(db)
+		sr.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
 
-	sr := sqlutils.MakeSQLRunner(db)
-	sr.Exec(b, `CREATE DATABASE bench`)
-	sr.Exec(b, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX(b), UNIQUE INDEX(c))`)
-
-	queries := []string{
-		`SELECT * FROM abc`,
-		`SELECT * FROM abc WHERE a > 5 ORDER BY a`,
-		`SELECT * FROM abc WHERE b = 5`,
-		`SELECT * FROM abc WHERE b = 5 ORDER BY a`,
-		`SELECT * FROM abc WHERE c = 5`,
-		`SELECT * FROM abc JOIN abc AS abc2 ON abc.a = abc2.a`,
-	}
-	for _, q := range queries {
-		b.Run(q, func(b *testing.B) {
-			for i := 0; i < b.N; i++ {
-				sr.Exec(b, q)
-			}
-		})
-	}
+		queries := []string{
+			`SELECT * FROM abc`,
+			`SELECT * FROM abc WHERE a > 5 ORDER BY a`,
+			`SELECT * FROM abc WHERE b = 5`,
+			`SELECT * FROM abc WHERE b = 5 ORDER BY a`,
+			`SELECT * FROM abc WHERE c = 5`,
+			`SELECT * FROM abc JOIN abc AS abc2 ON abc.a = abc2.a`,
+		}
+		for _, q := range queries {
+			b.Run(q, func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					sr.Exec(b, q)
+				}
+			})
+		}
+	})
 }
 
 // BenchmarkIndexJoin measure an index-join with 1000 rows.
 func BenchmarkIndexJoin(b *testing.B) {
-	// The table will have an extra column not contained in the index to force a
-	// join with the PK.
-	create := `
+	ForEachDB(b, func(b *testing.B, db *gosql.DB) {
+		// The table will have an extra column not contained in the index to force a
+		// join with the PK.
+		create := `
 		 CREATE TABLE tidx (
 				 k INT NOT NULL,
 				 v INT NULL,
@@ -1072,27 +1068,23 @@ func BenchmarkIndexJoin(b *testing.B) {
 				 FAMILY "primary" (k, v, extra)
 		 )
 		`
-	// We'll insert 1000 rows with random values below 1000 in the index. We'll
-	// then query the index with a query that retrieves all the data (but the
-	// optimizer doesn't know that).
-	insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
-	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{UseDatabase: "bench"})
-	defer s.Stopper().Stop(context.TODO())
+		// We'll insert 1000 rows with random values below 1000 in the index. We'll
+		// then query the index with a query that retrieves all the data (but the
+		// optimizer doesn't know that).
+		insert := "insert into tidx(k,v) select generate_series(1,1000), (random()*1000)::int"
 
-	if _, err := db.Exec(`CREATE DATABASE bench`); err != nil {
-		b.Fatal(err)
-	}
-	if _, err := db.Exec(create); err != nil {
-		b.Fatal(err)
-	}
-	if _, err := db.Exec(insert); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		if _, err := db.Exec("select * from tidx where v < 1000"); err != nil {
+		if _, err := db.Exec(create); err != nil {
 			b.Fatal(err)
 		}
-	}
+		if _, err := db.Exec(insert); err != nil {
+			b.Fatal(err)
+		}
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			if _, err := db.Exec("select * from bench.tidx where v < 1000"); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
 }
