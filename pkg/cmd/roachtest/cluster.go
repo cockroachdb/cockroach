@@ -623,8 +623,8 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
 }
 
-// Conn returns a SQL connection to the specified node.
-func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
+// PGUrl returns the Postgres endpoint for the specified node.
+func (c *cluster) PGUrl(ctx context.Context, node int) string {
 	cmd := exec.CommandContext(
 		ctx, `roachprod`, `pgurl`, `--external`, c.makeNodes(c.Node(node)),
 	)
@@ -633,7 +633,12 @@ func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
 		fmt.Println(strings.Join(cmd.Args, ` `))
 		c.t.Fatal(err)
 	}
-	url := strings.Trim(string(output), "' \n")
+	return strings.Trim(string(output), "' \n")
+}
+
+// Conn returns a SQL connection to the specified node.
+func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
+	url := c.PGUrl(ctx, node)
 	db, err := gosql.Open("postgres", url)
 	if err != nil {
 		c.t.Fatal(err)
