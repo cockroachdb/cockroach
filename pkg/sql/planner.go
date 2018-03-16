@@ -327,31 +327,7 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 	return p.extendedEvalCtx.DistSQLPlanner
 }
 
-// makeInternalPlan initializes a plan from a SQL statement string.
-// This clobbers p.curPlan.
-// p.curPlan.Close() must be called after use.
-// This function changes the planner's placeholder map. It is the caller's
-// responsibility to save and restore the old map if desired.
-// This function is not suitable for use in the planNode constructors directly:
-// the returned planNode has already been optimized.
-// Consider also (*planner).delegateQuery(...).
-func (p *planner) makeInternalPlan(ctx context.Context, sql string, args ...interface{}) error {
-	if log.V(2) {
-		log.Infof(ctx, "internal query: %s", sql)
-		if len(args) > 0 {
-			log.Infof(ctx, "placeholders: %q", args)
-		}
-	}
-	stmt, err := parser.ParseOne(sql)
-	if err != nil {
-		return err
-	}
-	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
-	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
-	return p.makePlan(ctx, Statement{AST: stmt})
-}
-
-// ParseType implements the parser.EvalPlanner interface.
+// ParseType implements the tree.EvalPlanner interface.
 // We define this here to break the dependency from eval.go to the parser.
 func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
 	return parser.ParseType(sql)
@@ -370,24 +346,59 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 	return err
 }
 
-// QueryRow implements the parser.EvalPlanner interface.
+// QueryRow implements the tree.EvalPlanner interface.
+//
+// TODO(andrei): make this use the InternalExecutor. Figure out a way to pass
+// the SessionData to it. Even better if this method doesn't exist, and users
+// get access to the InternalExecutor (perhaps through sqlutil.InternalExecutor)
+// in some other way than through a planner.
 func (p *planner) QueryRow(
 	ctx context.Context, sql string, args ...interface{},
-) (tree.Datums, error) {
+) (retRow tree.Datums, retErr error) {
 	origP := p
 	p, cleanup := newInternalPlanner("query rows", p.Txn(), p.User(), p.ExtendedEvalContext().MemMetrics, p.ExecCfg())
 	defer cleanup()
 	*p.SessionData() = *origP.SessionData()
-	return p.queryRow(ctx, sql, args...)
-}
 
-func (p *planner) queryRow(
-	ctx context.Context, sql string, args ...interface{},
-) (tree.Datums, error) {
-	rows, _ /* cols */, err := p.queryRows(ctx, sql, args...)
+	stmt, err := parser.ParseOne(sql)
 	if err != nil {
 		return nil, err
 	}
+	golangFillQueryArguments(&p.semaCtx.Placeholders, args)
+	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
+	startTime := timeutil.Now()
+	if err := p.makePlan(ctx, Statement{AST: stmt}); err != nil {
+		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
+		return nil, err
+	}
+	defer p.curPlan.close(ctx)
+	defer func() {
+		rows := 1
+		if retRow == nil {
+			rows = 0
+		}
+		p.maybeLogStatementInternal(ctx, "internal-exec", rows, retErr, startTime)
+	}()
+
+	params := runParams{
+		ctx:             ctx,
+		extendedEvalCtx: &p.extendedEvalCtx,
+		p:               p,
+	}
+	if err := p.curPlan.start(params); err != nil {
+		return nil, err
+	}
+	var rows []tree.Datums
+	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
+		if values != nil {
+			valCopy := append(tree.Datums(nil), values...)
+			rows = append(rows, valCopy)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
 	switch len(rows) {
 	case 0:
 		return nil, nil
@@ -396,46 +407,6 @@ func (p *planner) queryRow(
 	default:
 		return nil, &tree.MultipleResultsError{SQL: sql}
 	}
-}
-
-// queryRows executes a SQL query string where multiple result rows are returned.
-func (p *planner) queryRows(
-	ctx context.Context, sql string, args ...interface{},
-) (rows []tree.Datums, cols sqlbase.ResultColumns, err error) {
-	// makeInternalPlan() clobbers p.curplan and the placeholder info
-	// map, so we have to save/restore them here.
-	defer func(psave planTop, pisave tree.PlaceholderInfo) {
-		p.semaCtx.Placeholders = pisave
-		p.curPlan = psave
-	}(p.curPlan, p.semaCtx.Placeholders)
-
-	startTime := timeutil.Now()
-	if err := p.makeInternalPlan(ctx, sql, args...); err != nil {
-		p.maybeLogStatementInternal(ctx, "internal-prepare", 0, err, startTime)
-		return nil, nil, err
-	}
-	cols = planColumns(p.curPlan.plan)
-	defer p.curPlan.close(ctx)
-	defer func() { p.maybeLogStatementInternal(ctx, "internal-exec", len(rows), err, startTime) }()
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: &p.extendedEvalCtx,
-		p:               p,
-	}
-	if err := p.curPlan.start(params); err != nil {
-		return nil, nil, err
-	}
-	if err := forEachRow(params, p.curPlan.plan, func(values tree.Datums) error {
-		if values != nil {
-			valCopy := append(tree.Datums(nil), values...)
-			rows = append(rows, valCopy)
-		}
-		return nil
-	}); err != nil {
-		return nil, nil, err
-	}
-	return rows, cols, nil
 }
 
 func (p *planner) lookupFKTable(
