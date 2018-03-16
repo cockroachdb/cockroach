@@ -72,6 +72,8 @@ type FlowCtx struct {
 	rpcCtx *rpc.Context
 	// The transaction in which kv operations performed by processors in the flow
 	// must be performed. Processors in the Flow will use this txn concurrently.
+	// This field is generally not nil, except for flows that don't run in a
+	// higher-level txn (like backfills).
 	txn *client.Txn
 	// clientDB is a handle to the cluster. Used for performing requests outside
 	// of the transaction in which the flow's query is running.
@@ -433,7 +435,6 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	log.VEventf(
 		ctx, 1, "starting (%d processors, %d startables)", len(f.processors), len(f.startables),
 	)
-	f.status = FlowRunning
 
 	f.Ctx, f.ctxCancel = contextutil.WithCancel(ctx)
 
@@ -454,6 +455,9 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 		}
 		return err
 	}
+
+	f.status = FlowRunning
+
 	if log.V(1) {
 		log.Infof(f.Ctx, "registered flow %s", f.id.Short())
 	}
