@@ -24,7 +24,6 @@ import (
 )
 
 func TestSpans(t *testing.T) {
-	keyCtx := testKeyContext(1)
 	var s Spans
 	check := func(exp string) {
 		if actual := s.String(); actual != exp {
@@ -34,7 +33,7 @@ func TestSpans(t *testing.T) {
 	add := func(x int) {
 		k := MakeKey(tree.NewDInt(tree.DInt(x)))
 		var span Span
-		span.Set(keyCtx, k, IncludeBoundary, k, IncludeBoundary)
+		span.Init(k, IncludeBoundary, k, IncludeBoundary)
 		s.Append(&span)
 	}
 	check("")
@@ -85,7 +84,7 @@ func TestSpansSortAndMerge(t *testing.T) {
 			}
 			var sp Span
 			if x != 0 || y != 0 {
-				sp.Set(keyCtx, xk, xb, yk, yb)
+				sp.Init(xk, xb, yk, yb)
 			}
 			spans.Append(&sp)
 		}
@@ -93,10 +92,10 @@ func TestSpansSortAndMerge(t *testing.T) {
 
 		// Calculate via constraints.
 		var c Constraint
-		c.Init(keyCtx, SingleSpan(spans.Get(0)))
+		c.InitSingleSpan(keyCtx, spans.Get(0))
 		for i := 1; i < spans.Count(); i++ {
 			var d Constraint
-			d.Init(keyCtx, SingleSpan(spans.Get(i)))
+			d.InitSingleSpan(keyCtx, spans.Get(i))
 			c.UnionWith(evalCtx, &d)
 		}
 		expected := c.Spans.String()
