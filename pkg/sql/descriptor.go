@@ -189,12 +189,8 @@ func getDescriptorByID(
 		if table == nil {
 			return errors.Errorf("%q is not a table", desc.String())
 		}
-		table.MaybeUpgradeFormatVersion()
-		// TODO(dan): Write the upgraded TableDescriptor back to kv. This will break
-		// the ability to use a previous version of cockroach with the on-disk data,
-		// but it's worth it to avoid having to do the upgrade every time the
-		// descriptor is fetched. Our current test for this enforces compatibility
-		// backward and forward, so that'll have to be extended before this is done.
+		table.MaybeFillInDescriptor()
+
 		if err := table.Validate(ctx, txn); err != nil {
 			return err
 		}
@@ -204,6 +200,9 @@ func getDescriptorByID(
 		if database == nil {
 			return errors.Errorf("%q is not a database", desc.String())
 		}
+
+		database.Privileges.MaybeFixPrivileges(id)
+
 		if err := database.Validate(); err != nil {
 			return err
 		}
