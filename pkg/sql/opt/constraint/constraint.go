@@ -15,10 +15,8 @@
 package constraint
 
 import (
-	"bytes"
-	"fmt"
+	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -42,80 +40,58 @@ import (
 type Constraint struct {
 	Columns Columns
 
-	// firstSpan holds the first span and otherSpans hold any spans beyond the
-	// first. These are separated in order to optimize for the common case of a
-	// single-span constraint. The spans are always maintained in sorted order.
-	firstSpan  Span
-	otherSpans []Span
+	// Spans contains the spans in this constraint. The spans are always ordered
+	// and non-overlapping.
+	Spans Spans
 }
 
-// init is for package use only. External callers should call NewConstraintSet.
-func (c *Constraint) init(col opt.OrderingColumn, sp *Span) {
-	if sp.IsUnconstrained() {
-		// Don't allow unconstrained span in a constraint. Instead just discard
-		// the constraint, as its absence already means it's unconstrained.
-		panic("unconstrained span cannot be part of a constraint")
+// Init initializes the constraint to the columns in the key context and with
+// the given spans.
+func (c *Constraint) Init(keyCtx KeyContext, spans Spans) {
+	for i := 1; i < spans.Count(); i++ {
+		if !spans.Get(i).StartsAfter(keyCtx, spans.Get(i-1)) {
+			panic("spans must be ordered and non-overlapping")
+		}
 	}
-	c.Columns.InitSingle(col)
-	c.firstSpan = *sp
-	c.firstSpan.makeImmutable()
+	c.Columns = *keyCtx.Columns
+	c.Spans = spans
+	c.Spans.makeImmutable()
 }
 
-// initComposite is for package use only. External callers should call
-// NewForColumn or NewForColumns.
-func (c *Constraint) initComposite(cols []opt.OrderingColumn, sp *Span) {
-	if sp.IsUnconstrained() {
-		// Don't allow unconstrained span in a constraint. Instead just discard
-		// the constraint, as its absence already means it's unconstrained.
-		panic("unconstrained span cannot be part of a constraint")
-	}
-	c.Columns.Init(cols)
-	c.firstSpan = *sp
-	c.firstSpan.makeImmutable()
+// IsContradiction returns true if there are no spans in the constraint.
+func (c *Constraint) IsContradiction() bool {
+	return c.Spans.Count() == 0
 }
 
-// SpanCount returns the total number of spans in the constraint (always at
-// least one).
-func (c *Constraint) SpanCount() int {
-	return 1 + len(c.otherSpans)
+// IsUnconstrained returns true if the constraint contains an unconstrained
+// span.
+func (c *Constraint) IsUnconstrained() bool {
+	return c.Spans.Count() == 1 && c.Spans.Get(0).IsUnconstrained()
 }
 
-// Span returns the nth span. Together with the SpanCount method, Span allows
-// iteration over the list of spans (since there is no method to return a slice
-// of spans).
-// Mutating the returned span is not permitted.
-func (c *Constraint) Span(nth int) *Span {
-	// There's always at least one span.
-	if nth == 0 {
-		return &c.firstSpan
-	}
-	return &c.otherSpans[nth-1]
-}
-
-// tryUnionWith merges the spans of the given constraint into this constraint.
-// The columns of both constraints must be the same. Constrained columns in the
+// UnionWith merges the spans of the given constraint into this constraint.  The
+// columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
-// constraints. If the merge results in an unconstrained span, then
-// tryUnionWith returns false. An unconstrained span should never be part of a
-// constraint, as then the constraint would not constrain anything, and should
-// not be added to the constraint set.
-func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) bool {
+// constraints.
+func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if c.IsUnconstrained() || other.IsContradiction() {
+		return
+	}
+
 	// Use variation on merge sort, because both sets of spans are ordered and
 	// non-overlapping.
-	var firstSpan Span
-	var otherSpans []Span
 
-	foundSpan := false
-	left := c
+	left := &c.Spans
 	leftIndex := 0
-	right := other
+	right := &other.Spans
 	rightIndex := 0
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	result := MakeSpans(left.Count() + right.Count())
 
-	for leftIndex < left.SpanCount() || rightIndex < right.SpanCount() {
-		if rightIndex < right.SpanCount() {
-			if leftIndex >= left.SpanCount() ||
-				left.Span(leftIndex).Compare(keyCtx, right.Span(rightIndex)) > 0 {
+	for leftIndex < left.Count() || rightIndex < right.Count() {
+		if rightIndex < right.Count() {
+			if leftIndex >= left.Count() ||
+				left.Get(leftIndex).Compare(keyCtx, right.Get(rightIndex)) > 0 {
 				// Swap the two sets, so that going forward the current left
 				// span starts before the current right span.
 				left, right = right, left
@@ -136,7 +112,7 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 		//   merge with [/30 - /40]: [/1 - /40]
 		//   merge with [/40 - /50]: [/1 - /50]
 		//
-		mergeSpan := left.Span(leftIndex).Copy()
+		mergeSpan := left.Get(leftIndex).Copy()
 		leftIndex++
 		for {
 			// Note that Span.TryUnionWith returns false for a different reason
@@ -147,23 +123,17 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 			// range), and therefore the union cannot be represented as a valid
 			// Constraint.
 			var ok bool
-			if leftIndex < left.SpanCount() {
-				if mergeSpan.TryUnionWith(keyCtx, left.Span(leftIndex)) {
+			if leftIndex < left.Count() {
+				if mergeSpan.TryUnionWith(keyCtx, left.Get(leftIndex)) {
 					leftIndex++
 					ok = true
 				}
 			}
-			if rightIndex < right.SpanCount() {
-				if mergeSpan.TryUnionWith(keyCtx, right.Span(rightIndex)) {
+			if rightIndex < right.Count() {
+				if mergeSpan.TryUnionWith(keyCtx, right.Get(rightIndex)) {
 					rightIndex++
 					ok = true
 				}
-			}
-
-			// If union has resulted in an unconstrained Span, then return false,
-			// as that is not valid in a Constraint.
-			if mergeSpan.IsUnconstrained() {
-				return false
 			}
 
 			// If neither union succeeded, then it means either:
@@ -174,112 +144,72 @@ func (c *Constraint) tryUnionWith(evalCtx *tree.EvalContext, other *Constraint) 
 				break
 			}
 		}
-		mergeSpan.makeImmutable()
-
-		if otherSpans == nil {
-			if !foundSpan {
-				firstSpan = mergeSpan
-				foundSpan = true
-			} else {
-				maxRemaining := left.SpanCount() - leftIndex + right.SpanCount() - rightIndex
-				otherSpans = make([]Span, 1, 1+maxRemaining)
-				otherSpans[0] = mergeSpan
-			}
-		} else {
-			otherSpans = append(otherSpans, mergeSpan)
-		}
+		result.Append(&mergeSpan)
 	}
 
-	if firstSpan.IsUnconstrained() {
-		panic("unconstrained span should have been handled in the merge loop above")
-	}
-
-	// We've got a valid constraint.
-	c.firstSpan = firstSpan
-	c.otherSpans = otherSpans
-	return true
+	c.Spans = result
+	c.Spans.makeImmutable()
 }
 
-// tryIntersectWith intersects the spans of this constraint with those in the
+// IntersectWith intersects the spans of this constraint with those in the
 // given constraint and updates this constraint with any overlapping spans. The
 // columns of both constraints must be the same. If there are no overlapping
 // spans, then the intersection is empty, and tryIntersectWith returns false.
 // If a constraint set has even one empty constraint, then the entire set
 // should be marked as empty and all constraints removed.
-func (c *Constraint) tryIntersectWith(evalCtx *tree.EvalContext, other *Constraint) bool {
+func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if c.IsContradiction() || other.IsUnconstrained() {
+		return
+	}
+
 	// Use variation on merge sort, because both sets of spans are ordered and
 	// non-overlapping.
-	var firstSpan Span
-	var otherSpans []Span
 
-	empty := true
-	index := 0
-	otherIndex := 0
+	left := &c.Spans
+	leftIndex := 0
+	right := &other.Spans
+	rightIndex := 0
 	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	result := MakeSpans(left.Count())
 
-	for index < c.SpanCount() && otherIndex < other.SpanCount() {
-		if c.Span(index).StartsAfter(keyCtx, other.Span(otherIndex)) {
-			otherIndex++
+	for leftIndex < left.Count() && rightIndex < right.Count() {
+		if left.Get(leftIndex).StartsAfter(keyCtx, right.Get(rightIndex)) {
+			rightIndex++
 			continue
 		}
 
-		mergeSpan := c.Span(index).Copy()
-		if !mergeSpan.TryIntersectWith(keyCtx, other.Span(otherIndex)) {
-			index++
+		mergeSpan := left.Get(leftIndex).Copy()
+		if !mergeSpan.TryIntersectWith(keyCtx, right.Get(rightIndex)) {
+			leftIndex++
 			continue
 		}
-		mergeSpan.makeImmutable()
-
-		if otherSpans == nil {
-			if empty {
-				firstSpan = mergeSpan
-				empty = false
-			} else {
-				maxRemaining := c.SpanCount() - index
-				otherSpans = make([]Span, 1, maxRemaining)
-				otherSpans[0] = mergeSpan
-			}
-		} else {
-			otherSpans = append(otherSpans, mergeSpan)
-		}
+		result.Append(&mergeSpan)
 
 		// Skip past whichever span ends first, or skip past both if they have
 		// the same endpoint.
-		cmp := c.Span(index).CompareEnds(keyCtx, other.Span(otherIndex))
+		cmp := left.Get(leftIndex).CompareEnds(keyCtx, right.Get(rightIndex))
 		if cmp <= 0 {
-			index++
+			leftIndex++
 		}
 		if cmp >= 0 {
-			otherIndex++
+			rightIndex++
 		}
 	}
 
-	// If empty was never set to false, then the intersection must be empty.
-	if empty {
-		return false
-	}
-
-	c.firstSpan = firstSpan
-	c.otherSpans = otherSpans
-	return true
+	c.Spans = result
+	c.Spans.makeImmutable()
 }
 
 func (c *Constraint) String() string {
-	var buf bytes.Buffer
-
-	for i := 0; i < c.Columns.Count(); i++ {
-		buf.WriteRune('/')
-		buf.WriteString(fmt.Sprintf("%d", c.Columns.Get(i)))
+	var b strings.Builder
+	b.WriteString(c.Columns.String())
+	b.WriteString(": ")
+	if c.IsUnconstrained() {
+		b.WriteString("unconstrained")
+	} else if c.IsContradiction() {
+		b.WriteString("contradiction")
+	} else {
+		b.WriteString(c.Spans.String())
 	}
-
-	buf.WriteString(": ")
-
-	for i := 0; i < c.SpanCount(); i++ {
-		if i > 0 {
-			buf.WriteRune(' ')
-		}
-		buf.WriteString(c.Span(i).String())
-	}
-
-	return buf.String()
+	return b.String()
 }
