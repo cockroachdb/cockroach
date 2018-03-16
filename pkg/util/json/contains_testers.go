@@ -29,6 +29,27 @@ type containsTester interface {
 	subdocument(isRoot bool, rng *rand.Rand) JSON
 }
 
+func slowContains(a, b JSON) bool {
+	// This is a unique case of contains (and is described as such in the
+	// Postgres docs) - an array contains a scalar which is an element of it.
+	// This contradicts the general rule of contains that the contained object
+	// must have the same "shape" as the containing object.
+	if a.Type() == ArrayJSONType {
+		ary := a.MaybeDecode().(jsonArray)
+		if b.isScalar() {
+			for _, j := range ary {
+				cmp, _ := j.Compare(b)
+				if cmp == 0 {
+					return true
+				}
+			}
+			return false
+		}
+	}
+
+	return a.(containsTester).slowContains(b)
+}
+
 func (j jsonNull) slowContains(other JSON) bool {
 	c, _ := j.Compare(other)
 	return c == 0
@@ -51,15 +72,6 @@ func (j jsonString) slowContains(other JSON) bool {
 }
 
 func (j jsonArray) slowContains(other JSON) bool {
-	if other.isScalar() {
-		for i := 0; i < len(j); i++ {
-			c, _ := j[i].Compare(other)
-			if c == 0 {
-				return true
-			}
-		}
-	}
-
 	other = other.MaybeDecode()
 	if ary, ok := other.(jsonArray); ok {
 		for i := 0; i < len(ary); i++ {
