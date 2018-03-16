@@ -2708,6 +2708,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		lease = status.Lease
 	}
 
+	log.Infof(ctx, "executing write batch: %s", ba)
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
@@ -2773,7 +2774,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				if err := r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync*/); err != nil {
+				if err := r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync */); err != nil {
 					log.Warning(ctx, err)
 				}
 			}

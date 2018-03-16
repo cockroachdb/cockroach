@@ -1010,6 +1010,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 		tc.AnnotateCtx(context.Background()), "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
 			// Use the wrapped sender since the normal Sender does not allow
 			// clients to specify intents.
+			log.Infof(ctx, "sending end transaction request to abort")
 			resp, pErr := client.SendWrappedWith(
 				ctx, tc.wrapped, roachpb.Header{Txn: &txn}, &roachpb.EndTransactionRequest{
 					Span: roachpb.Span{
@@ -1017,6 +1018,10 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 					},
 					Commit:      false,
 					IntentSpans: intentSpans,
+					// Resolved intents should maintain an abort span entry to
+					// prevent concurrent requests from failing to notice the
+					// transaction was aborted.
+					Poison: true,
 				},
 			)
 			tc.mu.Lock()
