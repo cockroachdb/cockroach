@@ -155,6 +155,12 @@ type RowSource interface {
 	ConsumerClosed()
 }
 
+// RowSourcedProcessor is the union of RowSource and Processor.
+type RowSourcedProcessor interface {
+	RowSource
+	Run(_ context.Context, wg *sync.WaitGroup)
+}
+
 // Run reads records from the source and outputs them to the receiver, properly
 // draining the source of metadata and closing both the source and receiver.
 //
