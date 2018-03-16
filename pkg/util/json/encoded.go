@@ -702,6 +702,15 @@ func (j *jsonEncoded) encodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	return decoded.encodeInvertedIndexKeys(b)
 }
 
+// HasContainerLeaf implements the JSON interface.
+func (j *jsonEncoded) HasContainerLeaf() (bool, error) {
+	decoded, err := j.decode()
+	if err != nil {
+		return false, err
+	}
+	return decoded.HasContainerLeaf()
+}
+
 // preprocessForContains implements the JSON interface.
 func (j *jsonEncoded) preprocessForContains() (containsable, error) {
 	if dec := j.alreadyDecoded(); dec != nil {

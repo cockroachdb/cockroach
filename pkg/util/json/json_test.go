@@ -1630,6 +1630,46 @@ func TestPretty(t *testing.T) {
 	}
 }
 
+func TestHasContainerLeaf(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected bool
+	}{
+		{`true`, false},
+		{`false`, false},
+		{`1`, false},
+		{`[]`, true},
+		{`{}`, true},
+		{`{"a": 1}`, false},
+		{`{"a": {"b": 3}, "x": "y", "c": []}`, true},
+		{`{"a": {"b": 3}, "c": [], "x": "y"}`, true},
+		{`{"a": {}}`, true},
+		{`{"a": []}`, true},
+		{`[]`, true},
+		{`[[]]`, true},
+		{`[1, 2, 3, []]`, true},
+		{`[1, 2, [], 3]`, true},
+		{`[[], 1, 2, 3]`, true},
+		{`[1, 2, 3]`, false},
+		{`[[1, 2, 3]]`, false},
+		{`[[1, 2], 3]`, false},
+		{`[1, 2, 3, [4]]`, false},
+	}
+
+	for _, tc := range cases {
+		j := jsonTestShorthand(tc.input)
+		runDecodedAndEncoded(t, tc.input, j, func(t *testing.T, j JSON) {
+			result, err := j.HasContainerLeaf()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result != tc.expected {
+				t.Fatalf("expected:\n%v\ngot:\n%v\n", tc.expected, result)
+			}
+		})
+	}
+}
+
 func BenchmarkBuildJSONObject(b *testing.B) {
 	for _, objectSize := range []int{1, 10, 100, 1000, 10000, 100000} {
 		keys := make([]string, objectSize)
