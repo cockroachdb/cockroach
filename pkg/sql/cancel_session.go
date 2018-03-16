@@ -16,9 +16,13 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/pkg/errors"
 )
 
 type cancelSessionNode struct {
@@ -45,6 +49,37 @@ func (p *planner) CancelSession(ctx context.Context, n *tree.CancelSession) (pla
 }
 
 func (n *cancelSessionNode) startExec(params runParams) error {
+	statusServer := params.extendedEvalCtx.StatusServer
+
+	sessionIDDatum, err := n.sessionID.Eval(params.EvalContext())
+	if err != nil {
+		return err
+	}
+
+	sessionIDString := tree.AsStringWithFlags(sessionIDDatum, tree.FmtBareStrings)
+	sessionID, err := uint128.FromString(sessionIDString)
+	if err != nil {
+		return errors.Wrapf(err, "invalid session ID '%s'", sessionIDString)
+	}
+
+	// Get the lowest 32 bits of the session ID.
+	nodeID := 0xFFFFFFFF & sessionID.Lo
+
+	request := &serverpb.CancelSessionRequest{
+		NodeId:    fmt.Sprintf("%d", nodeID),
+		SessionID: sessionIDString,
+		Username:  params.SessionData().User,
+	}
+
+	response, err := statusServer.CancelSession(params.ctx, request)
+	if err != nil {
+		return err
+	}
+
+	if !response.Canceled {
+		return fmt.Errorf("could not cancel session %s: %s", sessionID, response.Error)
+	}
+
 	return nil
 }
 

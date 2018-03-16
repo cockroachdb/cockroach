@@ -17,6 +17,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	gosqldriver "database/sql/driver"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -272,6 +273,59 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	}
 	if !isClientsideQueryCanceledErr(err) {
 		t.Fatalf("expected error with specific error code, got: %s", err)
+	}
+}
+
+func TestCancelSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	numNodes := 2
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	// Since we're testing session cancellation, use single connections instead of
+	// connection pools.
+	var err error
+	conn1, err := tc.ServerConn(0).Conn(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn2, err := tc.ServerConn(1).Conn(context.TODO())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for node 2 to know about both sessions.
+	for {
+		rows, err := conn2.QueryContext(context.TODO(), "SHOW CLUSTER SESSIONS")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		numRows := 0
+		for rows.Next() {
+			numRows++
+		}
+
+		if numRows == numNodes {
+			break
+		}
+	}
+
+	// Cancel the session on node 1.
+	if _, err = conn2.ExecContext(
+		context.TODO(),
+		"CANCEL SESSION (SELECT session_id FROM [SHOW CLUSTER SESSIONS] WHERE node_id = 1)",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the connection is closed.
+	if _, err = conn1.ExecContext(context.TODO(), "SELECT 1"); err != gosqldriver.ErrBadConn {
+		t.Fatal("session not canceled")
 	}
 }
 

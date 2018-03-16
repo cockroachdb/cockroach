@@ -318,6 +318,7 @@ func (r *SessionRegistry) deregister(id uint128.Uint128) {
 type registrySession interface {
 	user() string
 	cancelQuery(queryID uint128.Uint128) bool
+	cancelSession()
 	// serialize serializes a Session into a serverpb.Session
 	// that can be served over RPC.
 	serialize() serverpb.Session
@@ -345,6 +346,31 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	}
 
 	return false, fmt.Errorf("query ID %s not found", queryID)
+}
+
+// CancelSession looks up the specified session in the session registry and cancels it.
+func (r *SessionRegistry) CancelSession(sessionIDStr string, username string) (bool, error) {
+	sessionID, err := uint128.FromString(sessionIDStr)
+	if err != nil {
+		return false, fmt.Errorf("session ID %s malformed: %s", sessionID, err)
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	for id, session := range r.store {
+		if !(username == security.RootUser || username == session.user()) {
+			// Skip this session.
+			continue
+		}
+
+		if id == sessionID {
+			session.cancelSession()
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("session ID %s not found", sessionID)
 }
 
 // SerializeAll returns a slice of all sessions in the registry, converted to serverpb.Sessions.
@@ -1460,6 +1486,11 @@ func (s *Session) cancelQuery(queryID uint128.Uint128) bool {
 		return true
 	}
 	return false
+}
+
+// cancelSession is part of the registrySession interface.
+func (s *Session) cancelSession() {
+	s.cancel()
 }
 
 // user is part of the registrySession interface.
