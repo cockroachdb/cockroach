@@ -340,7 +340,10 @@ func (t *test) run(out io.Writer, done func(failed bool)) {
 			t.end = timeutil.Now()
 
 			if err := recover(); err != nil {
-				t.Fatal(err)
+				t.mu.Lock()
+				t.mu.failed = true
+				t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(err))...)
+				t.mu.Unlock()
 			}
 
 			t.mu.Lock()
