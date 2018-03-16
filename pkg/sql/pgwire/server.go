@@ -447,3 +447,38 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	return serveConn(ctx, conn, sArgs, &s.metrics, reserved, s.SQLServer,
 		s.IsDraining, s.execCfg, s.stopper, s.cfg.Insecure)
 }
+
+func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
+	args := sql.SessionArgs{}
+	buf := pgwirebase.ReadBuffer{Msg: data}
+	for {
+		key, err := buf.GetString()
+		if err != nil {
+			return sql.SessionArgs{}, errors.Errorf("error reading option key: %s", err)
+		}
+		if len(key) == 0 {
+			break
+		}
+		value, err := buf.GetString()
+		if err != nil {
+			return sql.SessionArgs{}, errors.Errorf("error reading option value: %s", err)
+		}
+		switch key {
+		case "database":
+			args.Database = value
+		case "user":
+			args.User = value
+		case "application_name":
+			args.ApplicationName = value
+		default:
+			if log.V(1) {
+				log.Warningf(ctx, "unrecognized configuration parameter %q", key)
+			}
+		}
+	}
+	return args, nil
+}
+
+func newAdminShutdownErr(err error) error {
+	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
+}
