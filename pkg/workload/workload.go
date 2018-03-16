@@ -301,7 +301,8 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	}
 	splitCh := make(chan pair, concurrency)
 	splitCh <- pair{0, len(splitPoints)}
-	doneCh := make(chan error)
+	doneCh := make(chan struct{})
+	errCh := make(chan error)
 
 	log.Infof(ctx, `starting %d splits`, len(splitPoints))
 	var wg sync.WaitGroup
@@ -312,9 +313,11 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 		go func() {
 			defer wg.Done()
 			for {
-				p, ok := <-splitCh
-				if !ok {
-					break
+				var p pair
+				select {
+				case p = <-splitCh:
+				case <-doneCh:
+					return
 				}
 				m := (p.lo + p.hi) / 2
 				split := strings.Join(StringTuple(splitPoints[m]), `,`)
@@ -322,7 +325,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 				buf.Reset()
 				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
 				if _, err := db.Exec(buf.String()); err != nil {
-					doneCh <- errors.Wrap(err, buf.String())
+					errCh <- errors.Wrap(err, buf.String())
 					return
 				}
 
@@ -336,7 +339,7 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 					log.Warningf(ctx, `%s: %s`, buf.String(), err)
 				}
 
-				doneCh <- nil
+				errCh <- nil
 				go func() {
 					if p.lo < m {
 						splitCh <- pair{p.lo, m}
@@ -350,11 +353,11 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	}
 
 	defer func() {
-		close(splitCh)
+		close(doneCh)
 		wg.Wait()
 	}()
 	for finished := 1; finished <= len(splitPoints); finished++ {
-		if err := <-doneCh; err != nil {
+		if err := <-errCh; err != nil {
 			return err
 		}
 		if finished%1000 == 0 {
