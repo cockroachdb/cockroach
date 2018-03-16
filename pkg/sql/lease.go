@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -398,21 +397,14 @@ func (s LeaseStore) Publish(
 func (s LeaseStore) countLeases(
 	ctx context.Context, descID sqlbase.ID, version sqlbase.DescriptorVersion, expiration time.Time,
 ) (int, error) {
-	var count int
-	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p, cleanup := newInternalPlanner(
-			"leases-count", txn, security.RootUser, s.memMetrics, s.execCfg)
-		defer cleanup()
-		const countLeases = `SELECT COUNT(version) FROM system.lease ` +
-			`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
-		values, err := p.QueryRow(ctx, countLeases, descID, int(version), expiration)
-		if err != nil {
-			return err
-		}
-		count = int(tree.MustBeDInt(values[0]))
-		return nil
-	})
-	return count, err
+	const countLeases = `SELECT COUNT(version) FROM system.lease ` +
+		`WHERE "descID" = $1 AND version = $2 AND expiration > $3`
+	values, err := s.execCfg.InternalExecutor.QueryRow(ctx, nil /* txn */, countLeases, descID, int(version), expiration)
+	if err != nil {
+		return 0, err
+	}
+	count := int(tree.MustBeDInt(values[0]))
+	return count, nil
 }
 
 // Get the table descriptor valid for the expiration time from the store.

@@ -35,36 +35,23 @@ func GetUserHashedPassword(
 		return true, nil, nil
 	}
 
-	var hashedPassword []byte
-	var exists bool
-	err := execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		p, cleanup := newInternalPlanner(
-			"get-pwd", txn, security.RootUser, metrics, execCfg)
-		defer cleanup()
-		const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
-			`WHERE username=$1 AND "isRole" = false`
-		values, err := p.QueryRow(ctx, getHashedPassword, normalizedUsername)
-		if err != nil {
-			return errors.Errorf("error looking up user %s", normalizedUsername)
-		}
-		if len(values) == 0 {
-			return nil
-		}
-		exists = true
-		hashedPassword = []byte(*(values[0].(*tree.DBytes)))
-		return nil
-	})
-
-	return exists, hashedPassword, err
+	const getHashedPassword = `SELECT "hashedPassword" FROM system.users ` +
+		`WHERE username=$1 AND "isRole" = false`
+	values, err := execCfg.InternalExecutor.QueryRow(ctx, nil /* txn */, getHashedPassword, normalizedUsername)
+	if err != nil {
+		return false, nil, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+	}
+	if values == nil {
+		return false, nil, nil
+	}
+	hashedPassword := []byte(*(values[0].(*tree.DBytes)))
+	return true, hashedPassword, nil
 }
 
 // The map value is true if the map key is a role, false if it is a user.
 func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error) {
 	query := `SELECT username,"isRole"  FROM system.users`
-	newPlanner, cleanup := newInternalPlanner(
-		"get-all-users-and-roles", p.txn, security.RootUser, p.extendedEvalCtx.MemMetrics, p.ExecCfg())
-	defer cleanup()
-	rows, _ /* cols */, err := newPlanner.queryRows(ctx, query)
+	rows, _ /* cols */, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(ctx, p.txn, query)
 	if err != nil {
 		return nil, err
 	}
