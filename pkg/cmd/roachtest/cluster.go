@@ -527,6 +527,24 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
+// GitClone clones a git repo from src into dest and checks out
+// origin's version of the given branch. The src, dest, and branch
+// arguments must not contain shell special characters.
+func (c *cluster) GitClone(ctx context.Context, src, dest, branch string, node nodeListOption) {
+	c.Run(ctx, node, "bash", "-e", "-c", fmt.Sprintf(`'
+if ! test -d %s; then
+  git clone -b %s --depth 1 %s %s
+else
+  cd %s
+  git fetch origin
+  git checkout origin/%s
+fi
+'`, dest,
+		branch, src, dest,
+		dest,
+		branch))
+}
+
 // startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
 func startArgs(extraArgs ...string) option {
 	return roachprodArgOption(extraArgs)
