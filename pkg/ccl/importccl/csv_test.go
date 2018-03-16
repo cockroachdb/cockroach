@@ -21,6 +21,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1135,8 +1137,9 @@ func TestImportControlJob(t *testing.T) {
 	})
 }
 
-// TestImportLiveness tests that a node liveness increment during IMPORT
-// correctly resumes.
+// TestImportLivenessWithRestart tests that a node liveness transition
+// during IMPORT correctly resumes after the node executing the job
+// becomes non-live (from the perspective of the jobs registry).
 //
 // Its actual purpose is to address the second bug listed in #22924 about
 // the addsstable arguments not in request range. The theory was that the
@@ -1145,7 +1148,7 @@ func TestImportControlJob(t *testing.T) {
 // error. However this does not appear to be the case, as running many stress
 // iterations with differing constants (rows, sstsize, kv.import.batch_size)
 // was not able to fail in the way listed by the second bug.
-func TestImportLiveness(t *testing.T) {
+func TestImportLivenessWithRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	defer func(oldInterval time.Duration) {
@@ -1206,12 +1209,21 @@ func TestImportLiveness(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// Fetch the new job ID since we know it's running now.
+	// Fetch the new job ID and lease since we know it's running now.
 	var jobID int64
-	sqlDB.QueryRow(t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`).Scan(&jobID)
+	originalLease := &jobs.Payload{}
+	{
+		var expectedLeaseBytes []byte
+		sqlDB.QueryRow(
+			t, `SELECT id, payload FROM system.jobs ORDER BY created DESC LIMIT 1`,
+		).Scan(&jobID, &expectedLeaseBytes)
+		if err := protoutil.Unmarshal(expectedLeaseBytes, originalLease); err != nil {
+			t.Fatal(err)
+		}
+	}
 
-	// addsstable is done, now tick liveness and wait for it to cancel the import.
-	nl.FakeIncrementEpoch(1)
+	// addsstable is done, make the node non-live and wait for cancellation
+	nl.FakeSetExpiration(1, hlc.MinTimestamp)
 	// Wait for the registry cancel loop to run and cancel the job.
 	<-nl.SelfCalledCh
 	<-nl.SelfCalledCh
@@ -1220,7 +1232,123 @@ func TestImportLiveness(t *testing.T) {
 	if !testutils.IsError(err, "job .*: node liveness error") {
 		t.Fatalf("unexpected: %v", err)
 	}
+	// Make the node live again
+	nl.FakeSetExpiration(1, hlc.MaxTimestamp)
 	// The registry should now adopt the job and resume it.
+	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
+		t.Fatal(err)
+	}
+	// Verify that the job lease was updated
+	rescheduledLease := &jobs.Payload{}
+	{
+		var actualLeaseBytes []byte
+		sqlDB.QueryRow(
+			t, `SELECT payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&actualLeaseBytes)
+		if err := protoutil.Unmarshal(actualLeaseBytes, rescheduledLease); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if rescheduledLease.ModifiedMicros <= originalLease.ModifiedMicros {
+		t.Fatalf("expecting rescheduled job to have a later modification time: %d vs %d",
+			rescheduledLease.StartedMicros, originalLease.StartedMicros)
+	}
+}
+
+// TestImportLivenessWithLeniency tests that a temporary node liveness
+// transition during IMPORT doesn't cancel the job, but allows the
+// owning node to continue processing.
+func TestImportLivenessWithLeniency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+	jobs.DefaultCancelInterval = 100 * time.Millisecond
+
+	const nodes = 1
+	nl := jobs.NewFakeNodeLiveness(nodes)
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			RegistryLiveness: nl,
+		},
+	}
+
+	var allowResponse chan struct{}
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+	}
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+
+	// Prevent hung HTTP connections in leaktest.
+	sqlDB.Exec(t, `SET CLUSTER SETTING cloudstorage.timeout = '3s'`)
+	// We want to know exactly how much leniency is configured.
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.registry.leniency = '1m'`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.import.batch_size = '300B'`)
+	sqlDB.Exec(t, `CREATE DATABASE liveness`)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const rows = 5000
+		if r.Method == "GET" {
+			for i := 0; i < rows; i++ {
+				fmt.Fprintln(w, i)
+			}
+		}
+	}))
+	defer srv.Close()
+
+	const query = `IMPORT TABLE liveness.t (i INT PRIMARY KEY) CSV DATA ($1) WITH sstsize = '500B'`
+
+	// Start an IMPORT and wait until it's done one addsstable.
+	allowResponse = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := sqlDB.DB.Exec(query, srv.URL)
+		errCh <- err
+	}()
+	// Allow many, but not all, addsstables to complete.
+	for i := 0; i < 50; i++ {
+		select {
+		case allowResponse <- struct{}{}:
+		case err := <-errCh:
+			t.Fatal(err)
+		}
+	}
+	// Fetch the new job ID and lease since we know it's running now.
+	var jobID int64
+	originalLease := &jobs.Payload{}
+	{
+		var expectedLeaseBytes []byte
+		sqlDB.QueryRow(
+			t, `SELECT id, payload FROM system.jobs ORDER BY created DESC LIMIT 1`,
+		).Scan(&jobID, &expectedLeaseBytes)
+		if err := protoutil.Unmarshal(expectedLeaseBytes, originalLease); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// addsstable is done, make the node slightly tardy.
+	nl.FakeSetExpiration(1, hlc.Timestamp{
+		WallTime: hlc.UnixNano() - (15 * time.Second).Nanoseconds(),
+	})
+
+	// Wait for the registry cancel loop to run and cancel the job.
+	<-nl.SelfCalledCh
+	<-nl.SelfCalledCh
+	close(allowResponse)
+
+	// Verify that the client didn't see anything amiss.
+	if err := <-errCh; err != nil {
+		t.Fatalf("import job should have completed: %s", err)
+	}
+
+	// The job should have completed normally.
 	if err := jobutils.WaitForJob(sqlDB.DB, jobID); err != nil {
 		t.Fatal(err)
 	}

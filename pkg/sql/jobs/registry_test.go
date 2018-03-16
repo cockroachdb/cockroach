@@ -42,7 +42,9 @@ func TestRegistryCancelation(t *testing.T) {
 
 	var db *client.DB
 	var ex sqlutil.InternalExecutor
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	// Insulate this test from wall time.
+	mClock := hlc.NewManualClock(hlc.UnixNano())
+	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(log.AmbientContext{}, clock, db, ex, FakeNodeID, cluster.NoSettings, FakePHS)
 
 	const nodeCount = 1
@@ -67,58 +69,113 @@ func TestRegistryCancelation(t *testing.T) {
 	}
 
 	cancelCount := 0
-
-	register := func(id int64) {
-		registry.register(id, func() { cancelCount++ })
-	}
-	unregister := func(id int64) {
-		registry.unregister(id)
-	}
-
+	didRegister := false
+	jobID := int64(1)
 	const nodeID = roachpb.NodeID(1)
 
-	// Jobs that complete while the node is live should be canceled once.
-	register(1)
-	wait()
-	unregister(1)
-	wait()
-	if e, a := 1, cancelCount; e != a {
-		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
+	register := func() {
+		didRegister = true
+		jobID++
+		registry.register(jobID, func() { cancelCount++ })
+	}
+	unregister := func() {
+		registry.unregister(jobID)
+		didRegister = false
+	}
+	expectCancel := func(expect bool) {
+		t.Helper()
+
+		var e int
+		if expect {
+			e = 1
+		}
+		if a := cancelCount; e != a {
+			t.Errorf("expected cancelCount of %d, but got %d", e, a)
+		}
+	}
+	check := func(fn func()) {
+		fn()
+		if didRegister {
+			unregister()
+		}
+		cancelCount = 0
+	}
+	// inWindow slews the expiration time of the node's expiration.
+	inWindow := func(in bool) {
+		nanos := -defaultLeniencySetting.Nanoseconds()
+		if in {
+			nanos = nanos / 2
+		} else {
+			nanos = nanos * 2
+		}
+		nodeLiveness.FakeSetExpiration(nodeID, clock.Now().Add(nanos, 0))
 	}
 
-	// Jobs that are in-progress when the liveness epoch is incremented should be
-	// canceled.
-	register(2)
-	nodeLiveness.FakeIncrementEpoch(nodeID)
-	wait()
-	if e, a := 2, cancelCount; e != a {
-		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
-	}
+	// Jobs that complete while the node is live should be canceled once.
+	check(func() {
+		register()
+		wait()
+		expectCancel(false)
+		unregister()
+		wait()
+		expectCancel(true)
+	})
+
+	// Jobs that are in-progress when the liveness epoch is incremented
+	// should not be canceled.
+	check(func() {
+		register()
+		nodeLiveness.FakeIncrementEpoch(nodeID)
+		wait()
+		expectCancel(false)
+		unregister()
+		wait()
+		expectCancel(true)
+	})
 
 	// Jobs started in the new epoch that complete while the new epoch is live
 	// should be canceled once.
-	register(3)
-	wait()
-	unregister(3)
-	wait()
-	if e, a := 3, cancelCount; e != a {
-		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
-	}
+	check(func() {
+		register()
+		wait()
+		expectCancel(false)
+		unregister()
+		wait()
+		expectCancel(true)
+	})
 
-	// Jobs that are in-progress when the liveness lease expires should be
-	// canceled.
-	register(4)
-	nodeLiveness.FakeSetExpiration(nodeID, hlc.MinTimestamp)
-	wait()
-	if e, a := 4, cancelCount; e != a {
-		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
-	}
+	// Jobs **alive** within the leniency period should not be canceled.
+	check(func() {
+		register()
+		inWindow(true)
+		wait()
+		expectCancel(false)
+		unregister()
+		wait()
+		expectCancel(true)
+	})
 
-	// Jobs that are started while the liveness lease is expired should be
-	// canceled.
-	register(5)
-	wait()
-	if e, a := 5, cancelCount; e != a {
-		t.Fatalf("expected cancelCount of %d, but got %d", e, a)
-	}
+	// Jobs **started** within the leniency period should not be canceled.
+	check(func() {
+		inWindow(true)
+		register()
+		wait()
+		expectCancel(false)
+	})
+
+	// Jobs **alive** outside of the leniency period should be canceled.
+	check(func() {
+		register()
+		inWindow(false)
+		wait()
+		expectCancel(true)
+	})
+
+	// Jobs **started** outside of the leniency period should be canceled.
+	check(func() {
+		inWindow(false)
+		register()
+		wait()
+		expectCancel(true)
+	})
 }
