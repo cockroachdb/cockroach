@@ -186,12 +186,12 @@ memo
  │    ├── "" [cost=0.0]
  │    │    └── best: (project 12 10)
  │    └── "p:y:2,column5:5 o:+1,-2" [cost=0.0]
- │         └── best: (project 12 10)
+ │         └── best: (project 12="o:+1,-2" 10)
  ├── 12: (select 11 5)
  │    ├── "" [cost=0.0]
  │    │    └── best: (select 11 5)
  │    └── "o:+1,-2" [cost=0.0]
- │         └── best: (select 11 5)
+ │         └── best: (select 11="o:+1,-2" 5)
  ├── 11: (scan a)
  │    ├── "" [cost=0.0]
  │    │    └── best: (scan a)
@@ -240,12 +240,12 @@ memo
  │    ├── "" [cost=0.0]
  │    │    └── best: (project 11 9)
  │    └── "p:y:2,z:3 o:+2" [cost=0.0]
- │         └── best: (project 11 9)
+ │         └── best: (project 11="o:+2" 9)
  ├── 11: (select 10 5)
  │    ├── "" [cost=0.0]
  │    │    └── best: (select 10 5)
  │    └── "o:+2" [cost=0.0]
- │         └── best: (select 10 5)
+ │         └── best: (select 10="o:+2" 5)
  ├── 10: (scan a)
  │    ├── "" [cost=0.0]
  │    │    └── best: (scan a)

@@ -202,8 +202,8 @@ func (s listSorter) compare(i, j int) int {
 			return -1
 		}
 
-		leftD := extractConstDatum(s.f.mem, makeNormLoc(s.list[i]))
-		rightD := extractConstDatum(s.f.mem, makeNormLoc(s.list[j]))
+		leftD := ExtractConstDatum(makeNormExprView(s.f.mem, s.list[i]))
+		rightD := ExtractConstDatum(makeNormExprView(s.f.mem, s.list[j]))
 		return leftD.Compare(s.f.evalCtx, rightD)
 	} else if isRightConst {
 		// Non-constant always sorts after constant.

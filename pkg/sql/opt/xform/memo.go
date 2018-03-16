@@ -17,6 +17,7 @@ package xform
 import (
 	"bytes"
 	"fmt"
+
 	"sort"
 	"strings"
 
@@ -25,17 +26,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// memoLoc describes the location of an expression in the memo, which is a
-// tuple of the expression's memo group and its index within that group.
-type memoLoc struct {
+// exprID uniquely identifies an expression stored in the memo by pairing the
+// ID of its group with the ordinal position of the expression within that
+// group.
+type exprID struct {
 	group opt.GroupID
-	expr  exprID
+	expr  exprOrdinal
 }
 
-// makeNormLoc creates a memoLoc that refers to the normalized expression in
-// the given group.
-func makeNormLoc(group opt.GroupID) memoLoc {
-	return memoLoc{group: group, expr: normExprID}
+// MakeNormExprID creates an ExprID that refers to the normalized expression in
+// the given group (always the first expression in the group).
+func MakeNormExprID(group opt.GroupID) exprID {
+	return exprID{group: group, expr: normExprOrdinal}
+}
+
+// bestExprID uniquely identifies a bestExpr stored in the memo by pairing the
+// ID of its group with the ordinal position of the bestExpr within that group.
+type bestExprID struct {
+	group   opt.GroupID
+	ordinal bestOrdinal
 }
 
 // memo is a data structure for efficiently storing a forest of query plans.
@@ -127,11 +136,6 @@ type memo struct {
 	// based on the logical properties of its children.
 	logPropsFactory logicalPropsFactory
 
-	// physPropsFactory is used to derive required physical properties for the
-	// children of an expression, based on the required physical properties for
-	// the parent.
-	physPropsFactory physicalPropsFactory
-
 	// Intern the set of unique physical properties used by expressions in the
 	// memo, since there are so many duplicates.
 	physPropsMap map[string]opt.PhysicalPropsID
@@ -154,16 +158,13 @@ func newMemo() *memo {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
-	// for lists are all reserved. In addition, deliberately leave the physical
-	// properties for opt.NormPhysPropsID (index 1) uninitialized, since
-	// physical should never actually be accessed when traversing the normalized
-	// tree.
+	// for lists are all reserved.
 	m := &memo{
 		metadata:     opt.NewMetadata(),
 		exprMap:      make(map[fingerprint]opt.GroupID),
 		groups:       make([]memoGroup, 1),
 		physPropsMap: make(map[string]opt.PhysicalPropsID),
-		physProps:    make([]opt.PhysicalProps, 2, 3),
+		physProps:    make([]opt.PhysicalProps, 1, 2),
 		privatesMap:  make(map[interface{}]opt.PrivateID),
 		privates:     make([]interface{}, 1),
 	}
@@ -180,11 +181,7 @@ func newMemo() *memo {
 // newGroup creates a new group and adds it to the memo.
 func (m *memo) newGroup(norm memoExpr) *memoGroup {
 	id := opt.GroupID(len(m.groups))
-	exprs := []memoExpr{norm}
-	m.groups = append(m.groups, memoGroup{
-		id:    id,
-		exprs: exprs,
-	})
+	m.groups = append(m.groups, makeMemoGroup(id, norm))
 	return &m.groups[len(m.groups)-1]
 }
 
@@ -212,7 +209,7 @@ func (m *memo) memoizeNormExpr(norm memoExpr) opt.GroupID {
 	}
 
 	mgrp := m.newGroup(norm)
-	ev := makeExprView(m, mgrp.id, opt.NormPhysPropsID)
+	ev := makeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsFactory.constructProps(ev)
 
 	m.exprMap[norm.fingerprint()] = mgrp.id
@@ -231,8 +228,8 @@ func (m *memo) lookupGroupByFingerprint(f fingerprint) opt.GroupID {
 }
 
 // lookupExpr returns the expression referenced by the given location.
-func (m *memo) lookupExpr(loc memoLoc) *memoExpr {
-	return m.groups[loc.group].lookupExpr(loc.expr)
+func (m *memo) lookupExpr(eid exprID) *memoExpr {
+	return m.groups[eid.group].expr(eid.expr)
 }
 
 // lookupNormExpr returns the normalized expression for the given group. Each
@@ -240,7 +237,18 @@ func (m *memo) lookupExpr(loc memoLoc) *memoExpr {
 // the group, and which results from running normalization rules on the
 // expression until the final normal state has been reached.
 func (m *memo) lookupNormExpr(group opt.GroupID) *memoExpr {
-	return m.groups[group].lookupExpr(normExprID)
+	return m.groups[group].expr(normExprOrdinal)
+}
+
+// lookupBestExpr returns the best expression with the given id.
+func (m *memo) lookupBestExpr(best bestExprID) *bestExpr {
+	return m.groups[best.group].bestExpr(best.ordinal)
+}
+
+// ratchetBestExpr overwrites the existing best expression with the given id if
+// the candidate expression has a lower cost.
+func (m *memo) ratchetBestExpr(best bestExprID, candidate *bestExpr) {
+	m.lookupGroup(best.group).ratchetBestExpr(best, candidate)
 }
 
 // internList adds the given list of group IDs to memo storage and returns an
@@ -317,71 +325,85 @@ func (m *memo) String() string {
 		mgrp := &m.groups[i]
 
 		buf.Reset()
-		for i := range mgrp.exprs {
+		for i := 0; i < mgrp.exprCount(); i++ {
 			if i != 0 {
 				buf.WriteByte(' ')
 			}
-
-			// Wrap the memo expr in ExprView to make it easy to get children.
-			eid := exprID(i)
-			ev := ExprView{
-				mem:      m,
-				loc:      memoLoc{group: mgrp.id, expr: eid},
-				op:       mgrp.exprs[eid].op,
-				required: opt.MinPhysPropsID,
-			}
-
-			m.formatExpr(ev, &buf, false /* includeRequired */)
+			m.formatExpr(mgrp.expr(exprOrdinal(i)), &buf)
 		}
 
 		child := root.Childf("%d: %s", i, buf.String())
-		m.formatBestExprs(mgrp, child)
+		m.formatBestExprSet(mgrp, child)
 	}
 
 	return tp.String()
 }
 
+func (m *memo) formatExpr(e *memoExpr, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "(%s", e.op)
+	for i := 0; i < e.childCount(); i++ {
+		fmt.Fprintf(buf, " %d", e.childGroup(m, i))
+	}
+	m.formatPrivate(e.private(m), buf)
+	buf.WriteString(")")
+}
+
 type bestExprSort struct {
 	required    opt.PhysicalPropsID
 	fingerprint string
-	bestExpr    *bestExpr
+	best        *bestExpr
 }
 
-func (m *memo) formatBestExprs(mgrp *memoGroup, tp treeprinter.Node) {
+func (m *memo) formatBestExprSet(mgrp *memoGroup, tp treeprinter.Node) {
 	// Sort the bestExprs by required properties.
-	beSort := make([]bestExprSort, 0, len(mgrp.bestExprs))
-	mgrp.forEachBestExpr(func(required opt.PhysicalPropsID, best *bestExpr) {
+	cnt := mgrp.bestExprCount()
+	beSort := make([]bestExprSort, 0, cnt)
+	for i := 0; i < cnt; i++ {
+		best := mgrp.bestExpr(bestOrdinal(i))
 		beSort = append(beSort, bestExprSort{
-			required:    required,
-			fingerprint: m.lookupPhysicalProps(required).Fingerprint(),
-			bestExpr:    best,
+			required:    best.required,
+			fingerprint: m.lookupPhysicalProps(best.required).Fingerprint(),
+			best:        best,
 		})
-	})
+	}
 
 	sort.Slice(beSort, func(i, j int) bool {
 		return strings.Compare(beSort[i].fingerprint, beSort[j].fingerprint) < 0
 	})
 
 	var buf bytes.Buffer
-	for _, be := range beSort {
+	for _, sort := range beSort {
 		buf.Reset()
 
 		// Don't show best expressions for scalar groups because they're not too
 		// interesting.
-		ev := makeExprView(m, mgrp.id, be.required)
-		if !ev.IsScalar() {
-			child := tp.Childf("\"%s\" [cost=0.0]", be.fingerprint)
-
-			m.formatExpr(ev, &buf, true /* includeRequired */)
+		if !isScalarLookup[sort.best.op] {
+			child := tp.Childf("\"%s\" [cost=0.0]", sort.fingerprint)
+			m.formatBestExpr(sort.best, &buf)
 			child.Childf("best: %s", buf.String())
 		}
 	}
 }
 
-func (m *memo) formatExpr(ev ExprView, buf *bytes.Buffer, includeRequired bool) {
-	fmt.Fprintf(buf, "(%s", ev.Operator())
+func (m *memo) formatBestExpr(be *bestExpr, buf *bytes.Buffer) {
+	fmt.Fprintf(buf, "(%s", be.op)
 
-	private := ev.Private()
+	for i := 0; i < be.childCount(); i++ {
+		bestChild := be.child(i)
+		fmt.Fprintf(buf, " %d", bestChild.group)
+
+		// Print properties required of the child if they are interesting.
+		required := m.lookupBestExpr(bestChild).required
+		if required != opt.MinPhysPropsID {
+			fmt.Fprintf(buf, "=\"%s\"", m.lookupPhysicalProps(required).Fingerprint())
+		}
+	}
+
+	m.formatPrivate(be.private(m), buf)
+	buf.WriteString(")")
+}
+
+func (m *memo) formatPrivate(private interface{}, buf *bytes.Buffer) {
 	if private != nil {
 		switch t := private.(type) {
 		case nil:
@@ -395,21 +417,4 @@ func (m *memo) formatExpr(ev ExprView, buf *bytes.Buffer, includeRequired bool) 
 			fmt.Fprintf(buf, " %s", private)
 		}
 	}
-
-	if ev.ChildCount() > 0 {
-		for i := 0; i < ev.ChildCount(); i++ {
-			child := ev.ChildGroup(i)
-			fmt.Fprintf(buf, " %d", child)
-
-			if !includeRequired {
-				// Print properties required of the child if they are interesting.
-				required := m.physPropsFactory.constructChildProps(ev, i)
-				if required != opt.MinPhysPropsID {
-					fmt.Fprintf(buf, "=\"%s\"", m.lookupPhysicalProps(required).Fingerprint())
-				}
-			}
-		}
-	}
-
-	buf.WriteString(")")
 }
