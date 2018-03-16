@@ -15,7 +15,6 @@
 package sql
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -1389,6 +1388,10 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 
 const panicLogOutputCutoffChars = 500
 
+func anonymizeStmtAndConstants(stmt tree.Statement) string {
+	return tree.AsStringWithFlags(stmt, tree.FmtAnonymize|tree.FmtHideConstants)
+}
+
 // AnonymizeStatementsForReporting transforms an action, SQL statements, and a value
 // (usually a recovered panic) into an error that will be useful when passed to
 // our error reporting as it exposes a scrubbed version of the statements.
@@ -1397,24 +1400,8 @@ func AnonymizeStatementsForReporting(action, sqlStmts string, r interface{}) err
 	{
 		stmts, err := parser.Parse(sqlStmts)
 		if err == nil {
-			var f struct {
-				buf              bytes.Buffer
-				anonCtx, hideCtx tree.FmtCtx
-			}
-			f.anonCtx = tree.MakeFmtCtx(&f.buf, tree.FmtAnonymize)
-			f.hideCtx = tree.MakeFmtCtx(&f.buf, tree.FmtHideConstants)
-			for _, stmt := range NewStatementList(stmts) {
-				f.anonCtx.FormatNode(stmt.AST)
-				stmt.AST, err = parser.ParseOne(f.buf.String())
-				f.buf.Reset()
-				if err != nil {
-					f.buf.WriteString("[unknown]")
-				} else {
-					f.hideCtx.FormatNode(stmt.AST)
-				}
-
-				anonymized = append(anonymized, f.buf.String())
-				f.buf.Reset()
+			for _, stmt := range stmts {
+				anonymized = append(anonymized, anonymizeStmtAndConstants(stmt))
 			}
 		}
 	}
