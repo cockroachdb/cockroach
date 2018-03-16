@@ -22,15 +22,13 @@ import { generateLocalityRoute, getLocalityLabel } from "src/util/localities";
 import arrowUpIcon from "!!raw-loader!assets/arrowUp.svg";
 import { trustIcon } from "src/util/trust";
 import { cockroach } from "src/js/protos";
-import { NodeStatus$Properties } from "src/util/proto";
-import { InstructionsBox } from "src/views/clusterviz/components/instructionsBox";
+import InstructionsBox from "src/views/clusterviz/components/instructionsBox";
 
 type Liveness = cockroach.storage.Liveness;
 
 const BACK_BUTTON_OFFSET = 26;
 
 interface NodeCanvasProps {
-  allNodes: NodeStatus$Properties[];
   localityTree: LocalityTree;
   locationTree: LocationTree;
   livenessStatuses: { [id: string]: LivenessStatus };
@@ -164,9 +162,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
         { this.renderBackButton() }
         { showInstructionsBox(showMap, this.props.tiers, this.props.localityTree)
             ? null
-            : <InstructionsBox
-                allNodes={this.props.allNodes}
-              />
+            : <InstructionsBox />
         }
       </div>
     );

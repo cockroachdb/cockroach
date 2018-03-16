@@ -42,6 +42,20 @@ export interface Alert extends AlertInfo {
 
 const localSettingsSelector = (state: AdminUIState) => state.localSettings;
 
+// Clusterviz Instruction Box collapsed
+
+export const INSTRUCTION_BOX_EXPANDED_KEY = "clusterviz_instruction_box_expanded";
+
+export const instructionBoxExpandedPersistentSelector = createSelector(
+  (state: AdminUIState) => state.uiData,
+  (uiData): boolean => {
+    return !!(uiData
+      && uiData[INSTRUCTION_BOX_EXPANDED_KEY]
+      && uiData[INSTRUCTION_BOX_EXPANDED_KEY].data
+    );
+  },
+);
+
 ////////////////////////////////////////
 // Version mismatch.
 ////////////////////////////////////////
@@ -262,7 +276,7 @@ export function alertDataSync(store: Store<AdminUIState>) {
     const uiData = state.uiData;
     if (uiData !== lastUIData) {
       lastUIData = uiData;
-      const keysToMaybeLoad = [VERSION_DISMISSED_KEY];
+      const keysToMaybeLoad = [VERSION_DISMISSED_KEY, INSTRUCTION_BOX_EXPANDED_KEY];
       const keysToLoad = _.filter(keysToMaybeLoad, (key) => {
         return !(_.has(uiData, key) || isInFlight(state, key));
       });
