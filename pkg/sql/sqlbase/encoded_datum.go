@@ -145,6 +145,15 @@ func DatumToEncDatum(ctyp ColumnType, d tree.Datum) EncDatum {
 	return EncDatum{Datum: d}
 }
 
+// DatumsToEncDatumRow initializes an EncDatumRow with the given Datums and ColumnTypes.
+func DatumsToEncDatumRow(values tree.Datums, types []ColumnType) EncDatumRow {
+	encDatumRow := make(EncDatumRow, len(values))
+	for i, datum := range values {
+		encDatumRow[i] = DatumToEncDatum(types[i], datum)
+	}
+	return encDatumRow
+}
+
 // UnsetDatum ensures subsequent IsUnset() calls return false.
 func (ed *EncDatum) UnsetDatum() {
 	ed.encoded = nil
