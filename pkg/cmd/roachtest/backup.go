@@ -38,8 +38,8 @@ func init() {
 					c.Run(ctx, node, `mkdir -p /mnt/data1/cockroach`)
 					path := fmt.Sprintf(`gs://cockroach-fixtures/workload/bank/`+
 						`version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1/`+
-						`stores=%d/%d.tgz`, nodes, node-1)
-					c.Run(ctx, node, `gsutil cat `+path+` | tar xzf - -C /mnt/data1/cockroach/`)
+						`stores=%d/%d/*`, nodes, node)
+					c.Run(ctx, node, `gsutil -m cp -r `+path+` /mnt/data1/cockroach`)
 				}()
 			}
 			wg.Wait()
