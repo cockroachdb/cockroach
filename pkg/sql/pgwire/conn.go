@@ -730,10 +730,7 @@ func (c *conn) BeginCopyIn(ctx context.Context, columns []sqlbase.ResultColumn) 
 	for range columns {
 		c.msgBuilder.putInt16(int16(pgwirebase.FormatText))
 	}
-	if err := c.msgBuilder.finishMsg(c.conn); err != nil {
-		return sql.NewWireFailureError(err)
-	}
-	return nil
+	return c.msgBuilder.finishMsg(c.conn)
 }
 
 // SendCommandComplete is part of the pgwirebase.Conn interface.

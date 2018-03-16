@@ -188,11 +188,6 @@ func (txn *Txn) IsCommitted() bool {
 	return txn.status() == roachpb.COMMITTED
 }
 
-// IsAborted returns true if the transaction has the aborted status.
-func (txn *Txn) IsAborted() bool {
-	return txn.status() == roachpb.ABORTED
-}
-
 // SetUserPriority sets the transaction's user priority. Transactions default to
 // normal user priority. The user priority must be set before any operations are
 // performed on the transaction.
