@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package execbuilder
+package execbuilder_test
 
 // This file is home to the execbuild tests, which are similar to the logic
 // tests.
@@ -85,9 +85,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -114,7 +112,6 @@ func TestBuild(t *testing.T) {
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
-			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -164,49 +161,29 @@ func TestBuild(t *testing.T) {
 					return ""
 
 				case "opt", "exec", "exec-explain":
-					// Parse the SQL.
-					stmt, err := parser.ParseOne(d.Input)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-
 					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
 
-					// Build and optimize the opt expression tree.
-					o := xform.NewOptimizer(&evalCtx, xform.OptimizeAll)
-					builder := optbuilder.New(
-						ctx, &semaCtx, &evalCtx, eng.Catalog(), o.Factory(), stmt,
-					)
-					builder.AllowUnsupportedExpr = allowUnsupportedExpr
-					root, props, err := builder.Build()
-					if err != nil {
-						d.Fatalf(t, "BuildOpt: %v", err)
-					}
-					ev := o.Optimize(root, props)
+					executor := testutils.NewExecutor(eng.Catalog(), d.Input)
+					executor.AllowUnsupportedExpr = allowUnsupportedExpr
 
 					if d.Cmd == "opt" {
+						ev, err := executor.Optimize()
+						if err != nil {
+							d.Fatalf(t, "%v", err)
+						}
 						return ev.String()
 					}
 
-					// Build the execution node tree.
-					node, err := New(eng.Factory(), ev).Build()
-					if err != nil {
-						d.Fatalf(t, "BuildExec: %v", err)
-					}
-
 					var columns sqlbase.ResultColumns
-
-					// Execute the node tree.
 					var results []tree.Datums
 					if d.Cmd == "exec-explain" {
-						results, err = eng.Explain(node)
+						results, err = executor.Explain(eng)
 					} else {
-						columns = eng.Columns(node)
-						results, err = eng.Execute(node)
+						columns, results, err = executor.Exec(eng)
 					}
 					if err != nil {
-						d.Fatalf(t, "Exec: %v", err)
+						d.Fatalf(t, "%v", err)
 					}
 
 					if rowSort {

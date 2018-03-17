@@ -12,87 +12,60 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package xform_test
 
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 func TestLogicalProps(t *testing.T) {
-	runDataDrivenTest(t, "testdata/logprops/*")
-}
+	md := opt.NewMetadata()
+	i := md.AddColumn("i", types.Int)
+	d := md.AddColumn("d", types.Decimal)
+	s := md.AddColumn("s", types.String)
 
-// Test joins that cannot yet be tested using SQL syntax + optimizer.
-func TestLogicalJoinProps(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	f := newFactory(&evalCtx, 0)
+	outCols := opt.ColSet{}
+	outCols.Add(int(i))
 
-	cat := createLogPropsCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
-	b := f.Metadata().AddTable(cat.Table("b"))
+	outerCols := opt.ColSet{}
+	outerCols.Add(int(d))
+	outerCols.Add(int(s))
 
-	joinFunc := func(op opt.Operator, expected string) {
-		t.Helper()
-
-		// (Join (Scan a) (Scan b) (True))
-		leftGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), a)))
-		rightGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), b)))
-		onGroup := f.ConstructTrue()
-		operands := opt.DynamicOperands{
-			opt.DynamicID(leftGroup),
-			opt.DynamicID(rightGroup),
-			opt.DynamicID(onGroup),
-		}
-		joinGroup := f.DynamicConstruct(op, operands)
-
-		testLogicalProps(t, f, joinGroup, expected)
-	}
-
-	joinFunc(opt.InnerJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
-	joinFunc(opt.LeftJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int)\n")
-	joinFunc(opt.RightJoinApplyOp, "columns: a.x:1(int) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
-	joinFunc(opt.FullJoinApplyOp, "columns: a.x:1(int) a.y:2(int) b.x:3(int) b.z:4(int)\n")
-	joinFunc(opt.SemiJoinOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.SemiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.AntiJoinOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.AntiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-}
-
-func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *opt.ScanOpDef {
-	def := opt.ScanOpDef{Table: tblIndex}
-	for i := 0; i < md.Table(tblIndex).ColumnCount(); i++ {
-		def.Cols.Add(int(md.TableColumn(tblIndex, i)))
-	}
-	return &def
-}
-
-func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected string) {
-	t.Helper()
-
-	logical := f.mem.lookupGroup(group).logical
-	if logical.Relational == nil {
-		panic("only relational properties are supported")
-	}
+	colList := opt.ColList{s, i}
 
 	tp := treeprinter.New()
-	logical.formatOutputCols(f.Metadata(), tp)
-	actual := tp.String()
+	nd := tp.Child("props")
 
-	if actual != expected {
-		t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)
+	relational := &xform.LogicalProps{
+		Relational: &xform.RelationalProps{
+			OutputCols:  outCols,
+			OuterCols:   outerCols,
+			NotNullCols: outCols,
+		},
 	}
-}
 
-func createLogPropsCatalog(t *testing.T) *testutils.TestCatalog {
-	cat := testutils.NewTestCatalog()
-	testutils.ExecuteTestDDL(t, "CREATE TABLE a (x INT PRIMARY KEY, y INT)", cat)
-	testutils.ExecuteTestDDL(t, "CREATE TABLE b (x INT PRIMARY KEY, z INT NOT NULL)", cat)
-	return cat
+	scalar := &xform.LogicalProps{
+		Scalar: &xform.ScalarProps{OuterCols: outerCols},
+	}
+
+	relational.FormatColSet("output:", relational.Relational.OutputCols, md, nd)
+	relational.FormatColSet("outer relational:", relational.OuterCols(), md, nd)
+	relational.FormatColList("list:", colList, md, nd)
+	relational.FormatColSet("outer scalar:", scalar.OuterCols(), md, nd)
+
+	expected := "props\n" +
+		" ├── output: i:1(int!null)\n" +
+		" ├── outer relational: d:2(decimal) s:3(string)\n" +
+		" ├── list: s:3(string) i:1(int!null)\n" +
+		" └── outer scalar: d:2(decimal) s:3(string)\n"
+
+	actual := tp.String()
+	if actual != expected {
+		t.Fatalf("expected:\n%s\nactual:\n%s\n", expected, actual)
+	}
 }

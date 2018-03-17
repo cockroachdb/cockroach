@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
 
-// factoryGen generates implementation code for the opt.Factory interface. See
-// the ifactoryGen comment for more details.
+// factoryGen generates implementation code for the factory that supports
+// building normalized expression trees.
 type factoryGen struct {
 	compiled   *lang.CompiledExpr
 	w          *matchWriter
@@ -53,7 +53,7 @@ func (g *factoryGen) genConstructFuncs() {
 		format := "// Construct%s constructs an expression for the %s operator.\n"
 		g.w.writeIndent(format, define.Name, define.Name)
 		generateDefineComments(g.w.writer, define, string(define.Name))
-		g.w.writeIndent("func (_f *factory) Construct%s(\n", define.Name)
+		g.w.writeIndent("func (_f *Factory) Construct%s(\n", define.Name)
 
 		for _, field := range define.Fields {
 			fieldName := unTitle(string(field.Name))
@@ -77,7 +77,7 @@ func (g *factoryGen) genConstructFuncs() {
 		g.w.writeIndent("return _group\n")
 		g.w.unnest("}\n\n")
 
-		g.w.nest("if !_f.allowOptimizations() {\n")
+		g.w.nest("if !_f.o.allowOptimizations() {\n")
 		g.w.writeIndent("return _f.mem.memoizeNormExpr(memoExpr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
@@ -115,7 +115,7 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 		g.genMatch(matchArg, fieldName, false /* noMatch */)
 	}
 
-	g.w.writeIndent("_f.reportOptimization(%s)\n", rule.Name)
+	g.w.writeIndent("_f.o.reportOptimization(%s)\n", rule.Name)
 	g.w.writeIndent("_group = ")
 	g.genNestedExpr(rule.Replace)
 	g.w.newline()
@@ -522,7 +522,7 @@ func (g *factoryGen) genConstructList(list *lang.ConstructListExpr) {
 func (g *factoryGen) genDynamicConstructLookup() {
 	defines := filterEnforcerDefines(g.compiled.Defines)
 
-	funcType := "func(f *factory, operands opt.DynamicOperands) opt.GroupID"
+	funcType := "func(f *Factory, operands opt.DynamicOperands) opt.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
 
 	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc\n\n")
@@ -559,7 +559,7 @@ func (g *factoryGen) genDynamicConstructLookup() {
 	g.w.unnest("}\n\n")
 
 	args := "op opt.Operator, operands opt.DynamicOperands"
-	g.w.nest("func (f *factory) DynamicConstruct(%s) opt.GroupID {\n", args)
+	g.w.nest("func (f *Factory) DynamicConstruct(%s) opt.GroupID {\n", args)
 	g.w.writeIndent("return dynConstructLookup[op](f, operands)\n")
 	g.w.unnest("}\n")
 }

@@ -57,36 +57,60 @@ const (
 // expression must provide. The optimizer will return an ExprView over the
 // output expression tree with the lowest cost.
 type Optimizer struct {
-	f   *factory
-	mem *memo
+	evalCtx *tree.EvalContext
+	mem     *memo
+	f       *Factory
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
 	// This state could be discarded once optimization is complete.
 	stateMap map[optStateKey]int
 	state    []optState
+
+	// lastRule stores the name of the last rule that was triggered, for
+	// debugging purposes.
+	lastRuleName RuleName
+
+	// MaxSteps can limit the number of normalization and exploration
+	// transformations that will be applied by the optimizer. If MaxSteps is
+	// set to OptimizeNone, then the unaltered input expression tree becomes
+	// the output expression tree (because no transforms are applied). By
+	// default, MaxSteps is set to OptimizeAll, which means the optimizer will
+	// exhaustively search for the best estimated plan.
+	MaxSteps OptimizeSteps
 }
 
-// NewOptimizer constructs an instance of the optimizer. The maxSteps parameter
-// limits the number of normalization and exploration transformations that will
-// be applied by the optimizer. If maxSteps is zero, then the unaltered input
-// expression tree becomes the output expression tree (because no transforms
-// are applied).
-func NewOptimizer(evalCtx *tree.EvalContext, maxSteps OptimizeSteps) *Optimizer {
-	f := newFactory(evalCtx, maxSteps)
-	return &Optimizer{f: f, mem: f.mem, stateMap: make(map[optStateKey]int)}
+// NewOptimizer constructs an instance of the optimizer.
+func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
+	o := &Optimizer{
+		evalCtx:  evalCtx,
+		mem:      newMemo(),
+		stateMap: make(map[optStateKey]int),
+
+		// By default, search exhaustively for best plan.
+		MaxSteps: OptimizeAll,
+	}
+	o.f = newFactory(o)
+	return o
 }
 
 // Factory returns a factory interface that the caller uses to construct an
 // input expression tree. The root of the resulting tree can be passed to the
 // Optimize method in order to find the lowest cost plan.
-func (o *Optimizer) Factory() opt.Factory {
+func (o *Optimizer) Factory() *Factory {
 	return o.f
 }
 
 // LastRuleName returns the last rule that was triggered by the optimizer. This
 // is useful for single-stepping through optimizer rule applications.
 func (o *Optimizer) LastRuleName() RuleName {
-	return o.f.lastRuleName
+	return o.lastRuleName
+}
+
+// Memo returns the memo structure that the optimizer is using to optimize.
+// TODO(andyk): Until the memo is exported, return Stringer, since it's only
+//              used to print the memo for now.
+func (o *Optimizer) Memo() fmt.Stringer {
+	return o.mem
 }
 
 // Optimize returns the expression which satisfies the required physical
@@ -405,6 +429,23 @@ func (o *Optimizer) enforceProps(eid exprID, required opt.PhysicalPropsID) (full
 func (o *Optimizer) ratchetCost(group opt.GroupID, candidate *bestExpr) {
 	best := o.lookupOptState(group, candidate.required).best
 	o.mem.ratchetBestExpr(best, candidate)
+}
+
+// allowOptimizations returns true if optimizations are currently enabled. Each
+// individual optimization decrements the maxSteps counter. Once it reaches
+// zero (or if it was zero to begin with), no further optimizations will be
+// performed.
+func (o *Optimizer) allowOptimizations() bool {
+	return o.MaxSteps > 0
+}
+
+// reportOptimization is called when an optimization has been performed on the
+// tree. It decrements the maxSteps counter. Once that reaches zero, no further
+// optimizations will be performed. It also stores the name of the rule that
+// was triggered, which is useful for debugging.
+func (o *Optimizer) reportOptimization(name RuleName) {
+	o.lastRuleName = name
+	o.MaxSteps--
 }
 
 // lookupOptState looks up the state associated with the given group and

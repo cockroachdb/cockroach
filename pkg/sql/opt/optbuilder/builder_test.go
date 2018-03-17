@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package optbuilder
+package optbuilder_test
 
 // This file is home to TestBuilder, which is similar to the logic tests, except it
 // is used for optimizer builder-specific testcases.
@@ -60,9 +60,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -88,9 +88,6 @@ func TestBuilder(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(filepath.Base(path), func(t *testing.T) {
-			ctx := context.Background()
-			semaCtx := tree.MakeSemaContext(false /* privileged */)
-			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			catalog := testutils.NewTestCatalog()
 
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
@@ -119,22 +116,13 @@ func TestBuilder(t *testing.T) {
 
 				switch d.Cmd {
 				case "build":
-					stmt, err := parser.ParseOne(d.Input)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-
-					// Disable normalization rules: we want the tests to check the result
-					// of the build process.
-					o := xform.NewOptimizer(&evalCtx, xform.OptimizeNone)
-					b := New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt)
-					b.AllowUnsupportedExpr = allowUnsupportedExpr
-					root, props, err := b.Build()
+					executor := testutils.NewExecutor(catalog, d.Input)
+					executor.AllowUnsupportedExpr = allowUnsupportedExpr
+					ev, err := executor.OptBuild()
 					if err != nil {
 						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}
-					exprView := o.Optimize(root, props)
-					return exprView.String()
+					return ev.String()
 
 				case "build-scalar":
 					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
@@ -142,14 +130,21 @@ func TestBuilder(t *testing.T) {
 						d.Fatalf(t, "%v", err)
 					}
 
+					ctx := context.Background()
+					semaCtx := tree.MakeSemaContext(false /* privileged */)
+					evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
 					varNames := make([]string, len(varTypes))
 					for i := range varNames {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
 					// Disable normalization rules: we want the tests to check the result
 					// of the build process.
-					o := xform.NewOptimizer(&evalCtx, xform.OptimizeNone)
-					b := NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
+					o := xform.NewOptimizer(&evalCtx)
+					o.MaxSteps = xform.OptimizeNone
+					b := optbuilder.NewScalar(
+						ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes,
+					)
 					b.AllowUnsupportedExpr = allowUnsupportedExpr
 					group, err := b.Build(typedExpr)
 					if err != nil {
