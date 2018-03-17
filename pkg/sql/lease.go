@@ -610,7 +610,8 @@ func (t *tableState) acquire(
 	// expire. Looping is necessary because lease acquisition is done without
 	// holding the tableState lock, so anything can happen in between lease
 	// acquisition and us getting control again.
-	for s := t.mu.active.findNewest(); s == nil || s.hasExpired(timestamp); s = t.mu.active.findNewest() {
+	s := t.mu.active.findNewest()
+	for ; s == nil || s.hasExpired(timestamp); s = t.mu.active.findNewest() {
 		var resultChan <-chan singleflight.Result
 		resultChan, _ = t.mu.group.DoChan(acquireGroupKey, func() (interface{}, error) {
 			return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
@@ -623,6 +624,14 @@ func (t *tableState) acquire(
 		t.mu.Lock()
 		if result.Err != nil {
 			return nil, result.Err
+		}
+	}
+
+	// If the latest lease is nearly expired, ensure a renewal is queued.
+	durationUntilExpiry := time.Duration(s.expiration.WallTime - timestamp.WallTime)
+	if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
+		if err := t.maybeQueueLeaseRenewal(ctx, m, s); err != nil {
+			return nil, err
 		}
 	}
 
@@ -985,6 +994,25 @@ func (t *tableState) purgeOldVersions(
 	return err
 }
 
+// maybeQueueLeaseRenewal queues a lease renewal if there is not already a lease
+// renewal in progress.
+func (t *tableState) maybeQueueLeaseRenewal(
+	ctx context.Context, m *LeaseManager, tableVersion *tableVersionState,
+) error {
+	if !atomic.CompareAndSwapInt32(&t.renewalInProgress, 0, 1) {
+		return nil
+	}
+
+	// Start the renewal. When it finishes, it will reset t.renewalInProgress.
+	return t.stopper.RunAsyncTask(context.Background(),
+		"lease renewal", func(ctx context.Context) {
+			var cleanup func()
+			ctx, cleanup = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
+			defer cleanup()
+			t.startLeaseRenewal(ctx, m, tableVersion)
+		})
+}
+
 // startLeaseRenewal starts a singleflight.Group to acquire a lease.
 // This function blocks until lease acquisition completes.
 // t.renewalInProgress must be set to 1 before calling.
@@ -1250,27 +1278,15 @@ func (m *LeaseManager) AcquireByName(
 	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
-
-			// Atomically check and begin a renewal if one has not already
-			// been set.
-
+			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(tableVersion.expiration.WallTime - timestamp.WallTime)
 			if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
-				if t := m.findTableState(tableVersion.ID, false /* create */); t != nil &&
-					atomic.CompareAndSwapInt32(&t.renewalInProgress, 0, 1) {
-					// Start the renewal. When it finishes, it will reset t.renewalInProgress.
-					if err := t.stopper.RunAsyncTask(context.Background(),
-						"lease renewal", func(ctx context.Context) {
-							var cleanup func()
-							ctx, cleanup = tracing.EnsureContext(ctx, m.ambientCtx.Tracer, "lease renewal")
-							defer cleanup()
-							t.startLeaseRenewal(ctx, m, tableVersion)
-						}); err != nil {
-						return &tableVersion.TableDescriptor, tableVersion.expiration, err
+				if t := m.findTableState(tableVersion.ID, false /* create */); t != nil {
+					if err := t.maybeQueueLeaseRenewal(ctx, m, tableVersion); err != nil {
+						return nil, hlc.Timestamp{}, err
 					}
 				}
 			}
-
 			return &tableVersion.TableDescriptor, tableVersion.expiration, nil
 		}
 		if err := m.Release(&tableVersion.TableDescriptor); err != nil {
