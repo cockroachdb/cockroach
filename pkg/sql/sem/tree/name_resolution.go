@@ -257,7 +257,6 @@ func (t *TableName) ResolveExisting(
 ) (bool, NameResolutionResult, error) {
 	if t.ExplicitSchema {
 		if t.ExplicitCatalog {
-			// log.VEventf(ctx, 2, "full name already resolved: %q", t)
 			// Already 3 parts: nothing to search. Delegate to the resolver.
 			return r.LookupObject(ctx, t.Catalog(), t.Schema(), t.Table())
 		}
@@ -273,7 +272,6 @@ func (t *TableName) ResolveExisting(
 			if err == nil {
 				t.CatalogName = Name(curDb)
 			}
-			// log.VEventf(ctx, 2, "two part lookup: %+v // %v", t, err)
 			return found, objMeta, err
 		}
 		// No luck so far. Compatibility with CockroachDB v1.1: try D.public.T instead.
@@ -283,7 +281,6 @@ func (t *TableName) ResolveExisting(
 				t.SchemaName = PublicSchemaName
 				t.ExplicitCatalog = true
 			}
-			// log.VEventf(ctx, 2, "two part lookup compat: %+v // %v", t, err)
 			return found, objMeta, err
 		}
 		// Welp, really haven't found anything.
@@ -298,7 +295,6 @@ func (t *TableName) ResolveExisting(
 				t.CatalogName = Name(curDb)
 				t.SchemaName = Name(next)
 			}
-			// log.VEventf(ctx, 2, "one part lookup: %+v // %v", t, err)
 			return found, objMeta, err
 		}
 	}
@@ -312,7 +308,6 @@ func (t *TableName) ResolveTarget(
 ) (found bool, scMeta SchemaMeta, err error) {
 	if t.ExplicitSchema {
 		if t.ExplicitCatalog {
-			// log.VEventf(ctx, 2, "full target already resolved: %q", t)
 			// Already 3 parts: nothing to do.
 			return r.LookupSchema(ctx, t.Catalog(), t.Schema())
 		}
@@ -322,7 +317,6 @@ func (t *TableName) ResolveTarget(
 			if err == nil {
 				t.CatalogName = Name(curDb)
 			}
-			// log.VEventf(ctx, 2, "two part target lookup: %+v // %v", t, err)
 			return found, scMeta, err
 		}
 		// No luck so far. Compatibility with CockroachDB v1.1: use D.public.T instead.
@@ -332,7 +326,6 @@ func (t *TableName) ResolveTarget(
 				t.SchemaName = PublicSchemaName
 				t.ExplicitCatalog = true
 			}
-			// log.VEventf(ctx, 2, "two part target lookup compat: %+v // %v", t, err)
 			return found, scMeta, err
 		}
 		// Welp, really haven't found anything.
@@ -347,7 +340,6 @@ func (t *TableName) ResolveTarget(
 				t.CatalogName = Name(curDb)
 				t.SchemaName = Name(firstSchema)
 			}
-			// log.VEventf(ctx, 2, "one part target lookup: %+v // %v", t, err)
 		}
 	}
 	return found, scMeta, err
