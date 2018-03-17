@@ -50,18 +50,20 @@ func declareKeysDeprecatedRangeLookup(
 	// Both forward and reverse RangeLookupRequests scan forward initially. We are
 	// unable to bound this initial scan any further than from the lookup key to
 	// the end of the current descriptor.
-	scanBounds, err := rangeLookupScanBounds(&desc, key, false /* reverse */)
-	if err != nil {
-		// Errors will be caught during evaluation.
-		return
+	if !lookupReq.Reverse || key.Less(roachpb.RKey(keys.Meta2KeyMax)) {
+		scanBounds, err := rangeLookupScanBounds(&desc, key, false /* reverse */)
+		if err != nil {
+			// Errors will be caught during evaluation.
+			return
+		}
+		spans.Add(spanset.SpanReadOnly, roachpb.Span{
+			Key:    scanBounds.Key.AsRawKey(),
+			EndKey: scanBounds.EndKey.AsRawKey(),
+		})
 	}
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{
-		Key:    scanBounds.Key.AsRawKey(),
-		EndKey: scanBounds.EndKey.AsRawKey(),
-	})
 
+	// A reverse RangeLookupRequest also scans backwards.
 	if lookupReq.Reverse {
-		// A reverse RangeLookupRequest also scans backwards.
 		revScanBounds, err := rangeLookupScanBounds(&desc, key, true /* reverse */)
 		if err != nil {
 			// Errors will be caught during evaluation.

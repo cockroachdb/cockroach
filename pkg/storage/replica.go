@@ -2544,6 +2544,9 @@ func (r *Replica) executeReadOnlyBatch(
 	var result result.Result
 	rec := NewReplicaEvalContext(r, spans)
 	readOnly := r.store.Engine().NewReadOnly()
+	if util.RaceEnabled {
+		readOnly = spanset.NewReadWriter(readOnly, spans)
+	}
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
@@ -5272,7 +5275,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch.Close()
 		}
 		batch = r.store.Engine().NewBatch()
-		if util.RaceEnabled && spans != nil {
+		if util.RaceEnabled {
 			batch = spanset.NewBatch(batch, spans)
 		}
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba)
