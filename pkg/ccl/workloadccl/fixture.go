@@ -403,11 +403,18 @@ func RestoreFixture(ctx context.Context, sqlDB *gosql.DB, fixture Fixture, datab
 		g.Go(func() error {
 			// The IMPORT ... CSV DATA command generates a backup with the table in
 			// database `csv`.
+			start := timeutil.Now()
 			importStmt := fmt.Sprintf(`RESTORE csv.%s FROM $1 WITH into_db=$2`, table.TableName)
-			if _, err := sqlDB.Exec(importStmt, table.BackupURI, database); err != nil {
+			var rows, index, bytes int64
+			var discard interface{}
+			if err := sqlDB.QueryRow(importStmt, table.BackupURI, database).Scan(
+				&discard, &discard, &discard, &rows, &index, &discard, &bytes,
+			); err != nil {
 				return err
 			}
-			log.Infof(gCtx, `loaded %s`, table.TableName)
+			log.Infof(gCtx, `loaded %s (%s, %d rows, %d index entries, %v)`,
+				table.TableName, timeutil.Since(start).Round(time.Second), rows, index, humanizeutil.IBytes(bytes),
+			)
 			return nil
 		})
 	}
