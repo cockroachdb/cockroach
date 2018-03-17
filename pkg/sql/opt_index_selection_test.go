@@ -93,7 +93,7 @@ func makeSpans(
 		desc:  desc,
 		index: index,
 	}
-	o := xform.NewOptimizer(nil /* Catalog */, xform.OptimizeAll)
+	o := xform.NewOptimizer(nil /* Catalog */)
 	colNames := make([]string, len(desc.Columns))
 	colTypes := make([]types.T, len(desc.Columns))
 	for i := range desc.Columns {

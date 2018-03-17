@@ -34,14 +34,14 @@ type logicalPropsFactory struct{}
 // NOTE: The parent expression is passed as an ExprView for convenient access
 //       to children, but certain properties on it are not yet defined (like
 //       its logical properties!).
-func (f logicalPropsFactory) constructProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructProps(ev ExprView) opt.LogicalProps {
 	if ev.IsRelational() {
 		return f.constructRelationalProps(ev)
 	}
 	return f.constructScalarProps(ev)
 }
 
-func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps {
+func (f logicalPropsFactory) constructRelationalProps(ev ExprView) opt.LogicalProps {
 	switch ev.Operator() {
 	case opt.ScanOp:
 		return f.constructScanProps(ev)
@@ -74,8 +74,8 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 }
 
-func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructScanProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	md := ev.Metadata()
 	def := ev.Private().(*opt.ScanOpDef)
@@ -97,8 +97,8 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructSelectProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	inputProps := ev.lookupChildGroup(0).logical
 
@@ -111,8 +111,8 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructProjectProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	inputProps := ev.lookupChildGroup(0).logical
 
@@ -126,8 +126,8 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructJoinProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	leftProps := ev.lookupChildGroup(0).logical
 	rightProps := ev.lookupChildGroup(1).logical
@@ -164,8 +164,8 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructGroupByProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	// Output columns are the union of grouping columns with columns from the
 	// aggregate projection list.
@@ -181,8 +181,8 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructSetProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	leftProps := ev.lookupChildGroup(0).logical
 	rightProps := ev.lookupChildGroup(1).logical
@@ -209,8 +209,8 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	return props
 }
 
-func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Relational: &RelationalProps{}}
+func (f logicalPropsFactory) constructValuesProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Relational: &opt.RelationalProps{}}
 
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = opt.ColListToSet(*ev.Private().(*opt.ColList))
@@ -221,14 +221,14 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 // given child group.
 func (f logicalPropsFactory) passThroughRelationalProps(
 	ev ExprView, inputChildIdx int,
-) LogicalProps {
+) opt.LogicalProps {
 	inputProps := ev.lookupChildGroup(inputChildIdx).logical
 	relPropsCopy := *inputProps.Relational
-	return LogicalProps{Relational: &relPropsCopy}
+	return opt.LogicalProps{Relational: &relPropsCopy}
 }
 
-func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
+func (f logicalPropsFactory) constructScalarProps(ev ExprView) opt.LogicalProps {
+	props := opt.LogicalProps{Scalar: &opt.ScalarProps{Type: inferType(ev)}}
 
 	switch ev.Operator() {
 	case opt.VariableOp:
@@ -252,7 +252,7 @@ func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
 // filterNullCols will ensure that the set of null columns is a subset of the
 // output columns. It respects immutability by making a copy of the null
 // columns if they need to be updated.
-func filterNullCols(props *RelationalProps) {
+func filterNullCols(props *opt.RelationalProps) {
 	if !props.NotNullCols.SubsetOf(props.OutputCols) {
 		props.NotNullCols = props.NotNullCols.Intersection(props.OutputCols)
 	}

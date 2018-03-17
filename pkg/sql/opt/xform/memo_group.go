@@ -55,7 +55,7 @@ type memoGroup struct {
 
 	// logical is the set of logical properties that all memo expressions in
 	// the group share.
-	logical LogicalProps
+	logical opt.LogicalProps
 
 	// normExpr holds the first expression in the group, which is always the
 	// group's normalized expression. otherExprs holds any expressions beyond

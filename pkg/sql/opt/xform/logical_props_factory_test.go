@@ -12,14 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package xform_test
 
 import (
 	"testing"
 
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -30,9 +33,10 @@ func TestLogicalProps(t *testing.T) {
 
 // Test joins that cannot yet be tested using SQL syntax + optimizer.
 func TestLogicalJoinProps(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	f := newFactory(&evalCtx, 0)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	o := xform.NewOptimizer(&evalCtx)
+	o.MaxSteps = xform.OptimizeNone
+	f := o.Factory()
 
 	cat := createLogPropsCatalog(t)
 	a := f.Metadata().AddTable(cat.Table("a"))
@@ -52,17 +56,18 @@ func TestLogicalJoinProps(t *testing.T) {
 		}
 		joinGroup := f.DynamicConstruct(op, operands)
 
-		testLogicalProps(t, f, joinGroup, expected)
+		ev := o.Optimize(joinGroup, &opt.PhysicalProps{})
+		testLogicalProps(t, f.Metadata(), ev, expected)
 	}
 
-	joinFunc(opt.InnerJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
-	joinFunc(opt.LeftJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int)\n")
-	joinFunc(opt.RightJoinApplyOp, "columns: a.x:1(int) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
-	joinFunc(opt.FullJoinApplyOp, "columns: a.x:1(int) a.y:2(int) b.x:3(int) b.z:4(int)\n")
-	joinFunc(opt.SemiJoinOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.SemiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.AntiJoinOp, "columns: a.x:1(int!null) a.y:2(int)\n")
-	joinFunc(opt.AntiJoinApplyOp, "columns: a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.InnerJoinApplyOp, "a.x:1(int!null) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
+	joinFunc(opt.LeftJoinApplyOp, "a.x:1(int!null) a.y:2(int) b.x:3(int) b.z:4(int)\n")
+	joinFunc(opt.RightJoinApplyOp, "a.x:1(int) a.y:2(int) b.x:3(int!null) b.z:4(int!null)\n")
+	joinFunc(opt.FullJoinApplyOp, "a.x:1(int) a.y:2(int) b.x:3(int) b.z:4(int)\n")
+	joinFunc(opt.SemiJoinOp, "a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.SemiJoinApplyOp, "a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.AntiJoinOp, "a.x:1(int!null) a.y:2(int)\n")
+	joinFunc(opt.AntiJoinApplyOp, "a.x:1(int!null) a.y:2(int)\n")
 }
 
 func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *opt.ScanOpDef {
@@ -73,17 +78,17 @@ func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *opt.ScanOpDe
 	return &def
 }
 
-func testLogicalProps(t *testing.T, f *factory, group opt.GroupID, expected string) {
+func testLogicalProps(t *testing.T, md *opt.Metadata, ev xform.ExprView, expected string) {
 	t.Helper()
 
-	logical := f.mem.lookupGroup(group).logical
+	logical := ev.Logical()
 	if logical.Relational == nil {
 		panic("only relational properties are supported")
 	}
 
 	tp := treeprinter.New()
-	logical.formatOutputCols(f.Metadata(), tp)
-	actual := tp.String()
+	logical.FormatColSet("", logical.Relational.OutputCols, md, tp)
+	actual := strings.Trim(tp.String(), " ")
 
 	if actual != expected {
 		t.Fatalf("\nexpected: %s\nactual  : %s", expected, actual)

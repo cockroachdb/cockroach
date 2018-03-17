@@ -38,70 +38,41 @@ import (
 // invoked by normalization patterns. While most patterns are specified in the
 // optgen DSL, the factory always calls the `onConstruct` method as its last
 // step, in order to allow any custom manual code to execute.
-type factory struct {
+type Factory struct {
+	o       *Optimizer
 	mem     *memo
 	evalCtx *tree.EvalContext
-
-	// maxSteps sets the maximum number of optimization patterns that the
-	// factory will apply. Once this maximum is reached, the factory will
-	// construct the requested operator without applying any rewrites to it.
-	// This method is useful for debugging, in order to see intermediate
-	// optimization steps.
-	maxSteps OptimizeSteps
-
-	// lastRule stores the name of the last rule that was triggered, for
-	// debugging purposes.
-	lastRuleName RuleName
 }
 
-var _ opt.Factory = &factory{}
-
-// NewFactory returns a new Factory structure with a new, blank memo
+// newFactory returns a new Factory structure with a new, blank memo
 // structure inside.
-func newFactory(evalCtx *tree.EvalContext, maxSteps OptimizeSteps) *factory {
-	return &factory{mem: newMemo(), evalCtx: evalCtx, maxSteps: maxSteps}
+func newFactory(o *Optimizer) *Factory {
+	return &Factory{o: o, mem: o.mem, evalCtx: o.evalCtx}
 }
 
 // Metadata returns the query-specific metadata, which includes information
 // about the columns and tables used in this particular query.
-func (f *factory) Metadata() *opt.Metadata {
+func (f *Factory) Metadata() *opt.Metadata {
 	return f.mem.metadata
 }
 
 // InternList adds the given list of group IDs to memo storage and returns an
 // ID that can be used for later lookup. If the same list was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (f *factory) InternList(items []opt.GroupID) opt.ListID {
+func (f *Factory) InternList(items []opt.GroupID) opt.ListID {
 	return f.mem.internList(items)
 }
 
 // InternPrivate adds the given private value to the memo and returns an ID
 // that can be used for later lookup. If the same value was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (f *factory) InternPrivate(private interface{}) opt.PrivateID {
+func (f *Factory) InternPrivate(private interface{}) opt.PrivateID {
 	return f.mem.internPrivate(private)
-}
-
-// allowOptimizations returns true if optimizations are currently enabled. Each
-// individual optimization decrements the maxSteps counter. Once it reaches
-// zero (or if it was zero to begin with), no further optimizations will be
-// performed.
-func (f *factory) allowOptimizations() bool {
-	return f.maxSteps > 0
-}
-
-// reportOptimization is called when an optimization has been performed on the
-// tree. It decrements the maxSteps counter. Once that reaches zero, no further
-// optimizations will be performed. It also stores the name of the rule that
-// was triggered, which is useful for debugging.
-func (f *factory) reportOptimization(name RuleName) {
-	f.lastRuleName = name
-	f.maxSteps--
 }
 
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
-func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
+func (f *Factory) onConstruct(group opt.GroupID) opt.GroupID {
 	return group
 }
 
@@ -112,7 +83,7 @@ func (f *factory) onConstruct(group opt.GroupID) opt.GroupID {
 //
 // ----------------------------------------------------------------------
 
-func (f *factory) extractColList(private opt.PrivateID) opt.ColList {
+func (f *Factory) extractColList(private opt.PrivateID) opt.ColList {
 	return *f.mem.lookupPrivate(private).(*opt.ColList)
 }
 
@@ -126,7 +97,7 @@ func (f *factory) extractColList(private opt.PrivateID) opt.ColList {
 
 // listOnlyHasNulls if every item in the given list is a Null op. If the list
 // is empty, listOnlyHasNulls returns false.
-func (f *factory) listOnlyHasNulls(list opt.ListID) bool {
+func (f *Factory) listOnlyHasNulls(list opt.ListID) bool {
 	if list.Length == 0 {
 		return false
 	}
@@ -142,7 +113,7 @@ func (f *factory) listOnlyHasNulls(list opt.ListID) bool {
 // isSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
-func (f *factory) isSortedUniqueList(list opt.ListID) bool {
+func (f *Factory) isSortedUniqueList(list opt.ListID) bool {
 	ls := listSorter{f: f, list: f.mem.lookupList(list)}
 	for i := 0; i < int(list.Length-1); i++ {
 		if !ls.less(i, i+1) {
@@ -155,7 +126,7 @@ func (f *factory) isSortedUniqueList(list opt.ListID) bool {
 // constructSortedUniqueList sorts the given list and removes duplicates, and
 // returns the resulting list. See the comment for listSorter.compare for
 // comparison rule details.
-func (f *factory) constructSortedUniqueList(list opt.ListID) opt.ListID {
+func (f *Factory) constructSortedUniqueList(list opt.ListID) opt.ListID {
 	// Make a copy of the list, since it needs to stay immutable.
 	newList := make([]opt.GroupID, list.Length)
 	copy(newList, f.mem.lookupList(list))
@@ -178,7 +149,7 @@ func (f *factory) constructSortedUniqueList(list opt.ListID) opt.ListID {
 // listSorter is a helper struct that implements the sort.Slice "less"
 // comparison function.
 type listSorter struct {
-	f    *factory
+	f    *Factory
 	list []opt.GroupID
 }
 
@@ -229,20 +200,20 @@ func (s listSorter) compare(i, j int) int {
 
 // hasType returns true if the given expression has a static type that's
 // equivalent to the requested type.
-func (f *factory) hasType(group opt.GroupID, typ opt.PrivateID) bool {
+func (f *Factory) hasType(group opt.GroupID, typ opt.PrivateID) bool {
 	groupType := f.mem.lookupGroup(group).logical.Scalar.Type
 	requestedType := f.mem.lookupPrivate(typ).(types.T)
 	return groupType.Equivalent(requestedType)
 }
 
-func (f *factory) boolType() opt.PrivateID {
+func (f *Factory) boolType() opt.PrivateID {
 	return f.InternPrivate(types.Bool)
 }
 
 // canConstructBinary returns true if (op left right) has a valid binary op
 // overload and is therefore legal to construct. For example, while
 // (Minus <date> <int>) is valid, (Minus <int> <date>) is not.
-func (f *factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) bool {
+func (f *Factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) bool {
 	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
 	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
 	_, ok := findBinaryOverload(opt.MinusOp, rightType, leftType)
@@ -258,12 +229,12 @@ func (f *factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) b
 // ----------------------------------------------------------------------
 
 // lookupLogical returns the given group's logical properties.
-func (f *factory) lookupLogical(group opt.GroupID) *LogicalProps {
+func (f *Factory) lookupLogical(group opt.GroupID) *opt.LogicalProps {
 	return &f.mem.lookupGroup(group).logical
 }
 
 // lookupRelational returns the given group's logical relational properties.
-func (f *factory) lookupRelational(group opt.GroupID) *RelationalProps {
+func (f *Factory) lookupRelational(group opt.GroupID) *opt.RelationalProps {
 	return f.mem.lookupGroup(group).logical.Relational
 }
 
@@ -271,7 +242,7 @@ func (f *factory) lookupRelational(group opt.GroupID) *RelationalProps {
 // by the given operator. In addition to extracting columns from any relational
 // operator, outputCols can also extract columns from the Projections and
 // Aggregations scalar operators, which are used with Project and GroupBy.
-func (f *factory) outputCols(group opt.GroupID) opt.ColSet {
+func (f *Factory) outputCols(group opt.GroupID) opt.ColSet {
 	// Handle columns projected by relational operators.
 	logical := f.lookupLogical(group)
 	if logical.Relational != nil {
@@ -295,21 +266,21 @@ func (f *factory) outputCols(group opt.GroupID) opt.ColSet {
 
 // outerCols returns the set of outer columns associated with the given group,
 // whether it be a relational or scalar operator.
-func (f *factory) outerCols(group opt.GroupID) opt.ColSet {
+func (f *Factory) outerCols(group opt.GroupID) opt.ColSet {
 	return f.lookupLogical(group).OuterCols()
 }
 
 // onlyConstants returns true if the scalar expression is a "constant
 // expression tree", meaning that it will always evaluate to the same result.
 // See the CommuteConst pattern comment for more details.
-func (f *factory) onlyConstants(group opt.GroupID) bool {
+func (f *Factory) onlyConstants(group opt.GroupID) bool {
 	// TODO(andyk): Consider impact of "impure" functions with side effects.
 	return f.mem.lookupGroup(group).logical.Scalar.OuterCols.Empty()
 }
 
 // hasSameCols returns true if the two groups have an identical set of output
 // columns.
-func (f *factory) hasSameCols(left, right opt.GroupID) bool {
+func (f *Factory) hasSameCols(left, right opt.GroupID) bool {
 	return f.outputCols(left).Equals(f.outputCols(right))
 }
 
@@ -322,17 +293,17 @@ func (f *factory) hasSameCols(left, right opt.GroupID) bool {
 
 // neededCols returns the set of columns needed by the given group. It is an
 // alias for outerCols that's used for clarity with the UnusedCols patterns.
-func (f *factory) neededCols(group opt.GroupID) opt.ColSet {
+func (f *Factory) neededCols(group opt.GroupID) opt.ColSet {
 	return f.outerCols(group)
 }
 
 // neededCols2 unions the set of columns needed by either of the given groups.
-func (f *factory) neededCols2(left, right opt.GroupID) opt.ColSet {
+func (f *Factory) neededCols2(left, right opt.GroupID) opt.ColSet {
 	return f.outerCols(left).Union(f.outerCols(right))
 }
 
 // neededCols3 unions the set of columns needed by any of the given groups.
-func (f *factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
+func (f *Factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
 	cols := f.outerCols(group1)
 	cols.UnionWith(f.outerCols(group2))
 	cols.UnionWith(f.outerCols(group3))
@@ -342,14 +313,14 @@ func (f *factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
 // neededColsGroupBy unions the columns needed by either of a GroupBy's
 // operands - either aggregations or groupingCols. This case doesn't fit any
 // of the neededCols methods because groupingCols is a private, not a group.
-func (f *factory) neededColsGroupBy(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
+func (f *Factory) neededColsGroupBy(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
 	colSet := *f.mem.lookupPrivate(groupingCols).(*opt.ColSet)
 	return f.outerCols(aggs).Union(colSet)
 }
 
 // neededColsLimit unions the columns needed by Projections with the columns in
 // the Ordering of a Limit/Offset operator.
-func (f *factory) neededColsLimit(projections opt.GroupID, ordering opt.PrivateID) opt.ColSet {
+func (f *Factory) neededColsLimit(projections opt.GroupID, ordering opt.PrivateID) opt.ColSet {
 	colSet := f.outerCols(projections).Copy()
 	for _, col := range *f.mem.lookupPrivate(ordering).(*opt.Ordering) {
 		colSet.Add(int(col.Index()))
@@ -359,7 +330,7 @@ func (f *factory) neededColsLimit(projections opt.GroupID, ordering opt.PrivateI
 
 // hasUnusedColumns returns true if the target group has additional columns
 // that are not part of the neededCols set.
-func (f *factory) hasUnusedColumns(target opt.GroupID, neededCols opt.ColSet) bool {
+func (f *Factory) hasUnusedColumns(target opt.GroupID, neededCols opt.ColSet) bool {
 	return !f.outputCols(target).Difference(neededCols).Empty()
 }
 
@@ -368,7 +339,7 @@ func (f *factory) hasUnusedColumns(target opt.GroupID, neededCols opt.ColSet) bo
 // column filtering (like Scan, Values, Projections, etc.), then create a new
 // instance of that operator that does the filtering. Otherwise, construct a
 // Project operator that wraps the operator and does the filtering.
-func (f *factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+func (f *Factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet) opt.GroupID {
 	targetExpr := f.mem.lookupNormExpr(target)
 	switch targetExpr.op {
 	case opt.ScanOp:
@@ -434,7 +405,7 @@ func (f *factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet)
 
 // filterUnusedScanColumns constructs a new Scan operator based on the given
 // existing Scan operator, but projecting only the needed columns.
-func (f *factory) filterUnusedScanColumns(scan opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+func (f *Factory) filterUnusedScanColumns(scan opt.GroupID, neededCols opt.ColSet) opt.GroupID {
 	colSet := f.outputCols(scan).Intersection(neededCols)
 	scanExpr := f.mem.lookupNormExpr(scan).asScan()
 	existing := f.mem.lookupPrivate(scanExpr.def()).(*opt.ScanOpDef)
@@ -445,7 +416,7 @@ func (f *factory) filterUnusedScanColumns(scan opt.GroupID, neededCols opt.ColSe
 // filterUnusedValuesColumns constructs a new Values operator based on the
 // given existing Values operator. The new operator will have the same set of
 // rows, but containing only the needed columns. Other columns are discarded.
-func (f *factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+func (f *Factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.ColSet) opt.GroupID {
 	valuesExpr := f.mem.lookupNormExpr(values).asValues()
 	existingCols := f.extractColList(valuesExpr.cols())
 	newCols := make(opt.ColList, 0, neededCols.Len())
@@ -493,7 +464,7 @@ func (f *factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.C
 
 // emptyGroupingCols returns true if the given grouping columns for a GroupBy
 // operator are empty.
-func (f *factory) emptyGroupingCols(cols opt.PrivateID) bool {
+func (f *Factory) emptyGroupingCols(cols opt.PrivateID) bool {
 	return f.mem.lookupPrivate(cols).(*opt.ColSet).Empty()
 }
 
@@ -508,7 +479,7 @@ func (f *factory) emptyGroupingCols(cols opt.PrivateID) bool {
 // The (Eq) expression is correlated with the (Scan a) expression because it
 // references one of its columns. But the (Eq) expression is not correlated
 // with the (Scan b) expression.
-func (f *factory) isCorrelated(src, dst opt.GroupID) bool {
+func (f *Factory) isCorrelated(src, dst opt.GroupID) bool {
 	return f.outerCols(src).Intersects(f.outputCols(dst))
 }
 
@@ -527,7 +498,7 @@ func (f *factory) isCorrelated(src, dst opt.GroupID) bool {
 // Calling extractCorrelatedConditions with the filter conditions list and
 // (Scan b) as the destination would extract the (Eq) expression, since it
 // references columns from b.
-func (f *factory) extractCorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
+func (f *Factory) extractCorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
 	extracted := make([]opt.GroupID, 0, list.Length)
 	for _, item := range f.mem.lookupList(list) {
 		if f.isCorrelated(item, dst) {
@@ -540,7 +511,7 @@ func (f *factory) extractCorrelatedConditions(list opt.ListID, dst opt.GroupID) 
 // extractUncorrelatedConditions is the inverse of extractCorrelatedConditions.
 // Instead of extracting correlated expressions, it extracts list expressions
 // that are *not* correlated with the destination.
-func (f *factory) extractUncorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
+func (f *Factory) extractUncorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
 	extracted := make([]opt.GroupID, 0, list.Length)
 	for _, item := range f.mem.lookupList(list) {
 		if !f.isCorrelated(item, dst) {
@@ -554,7 +525,7 @@ func (f *factory) extractUncorrelatedConditions(list opt.ListID, dst opt.GroupID
 // both the left and right boolean filter expressions. If the left or right
 // expression is itself a Filters operator, then it is "flattened" by merging
 // its conditions into the new Filters operator.
-func (f *factory) concatFilters(left, right opt.GroupID) opt.GroupID {
+func (f *Factory) concatFilters(left, right opt.GroupID) opt.GroupID {
 	leftExpr := f.mem.lookupNormExpr(left)
 	rightExpr := f.mem.lookupNormExpr(right)
 
@@ -605,7 +576,7 @@ func (f *factory) concatFilters(left, right opt.GroupID) opt.GroupID {
 // level of flattening is necessary, since this pattern would have already
 // matched any And operator children. If, after simplification, no operands
 // remain, then simplifyAnd returns True.
-func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
+func (f *Factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 	list := make([]opt.GroupID, 0, conditions.Length+1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
@@ -639,7 +610,7 @@ func (f *factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 // level of flattening is necessary, since this pattern would have already
 // matched any Or operator children. If, after simplification, no operands
 // remain, then simplifyOr returns False.
-func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
+func (f *Factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 	list := make([]opt.GroupID, 0, conditions.Length+1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
@@ -672,7 +643,7 @@ func (f *factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 // expression is False. This works because the Filters expression only appears
 // as a Select or Join filter condition, both of which treat a Null filter
 // conjunct exactly as if it were False.
-func (f *factory) simplifyFilters(conditions opt.ListID) opt.GroupID {
+func (f *Factory) simplifyFilters(conditions opt.ListID) opt.GroupID {
 	list := make([]opt.GroupID, 0, conditions.Length+1)
 	for _, item := range f.mem.lookupList(conditions) {
 		itemExpr := f.mem.lookupNormExpr(item)
@@ -705,7 +676,7 @@ func (f *factory) simplifyFilters(conditions opt.ListID) opt.GroupID {
 }
 
 // negateConditions negates the given conditions and puts them in a new list.
-func (f *factory) negateConditions(conditions opt.ListID) opt.ListID {
+func (f *Factory) negateConditions(conditions opt.ListID) opt.ListID {
 	list := f.mem.lookupList(conditions)
 	negCond := make([]opt.GroupID, len(list))
 	for i := range list {
@@ -718,7 +689,7 @@ func (f *factory) negateConditions(conditions opt.ListID) opt.ListID {
 //   a.x = 5
 // to:
 //   a.x <> 5
-func (f *factory) negateComparison(cmp opt.Operator, left, right opt.GroupID) opt.GroupID {
+func (f *Factory) negateComparison(cmp opt.Operator, left, right opt.GroupID) opt.GroupID {
 	switch cmp {
 	case opt.EqOp:
 		return f.ConstructNe(left, right)
@@ -770,7 +741,7 @@ func (f *factory) negateComparison(cmp opt.Operator, left, right opt.GroupID) op
 //   5 < x
 // to:
 //   x > 5
-func (f *factory) commuteInequality(op opt.Operator, left, right opt.GroupID) opt.GroupID {
+func (f *Factory) commuteInequality(op opt.Operator, left, right opt.GroupID) opt.GroupID {
 	switch op {
 	case opt.GeOp:
 		return f.ConstructLe(right, left)
@@ -796,7 +767,7 @@ func (f *factory) commuteInequality(op opt.Operator, left, right opt.GroupID) op
 //   (a, b, c) = (x, y, z)
 // into this:
 //   (a = x) AND (b = y) AND (c = z)
-func (f *factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
+func (f *Factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
 	if left.Length != right.Length {
 		panic("tuple length mismatch")
 	}
@@ -819,7 +790,7 @@ func (f *factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
 
 // simplifyCoalesce discards any leading null operands, and then if the next
 // operand is a constant, replaces with that constant.
-func (f *factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
+func (f *Factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
 	argList := f.mem.lookupList(args)
 	for i := 0; i < int(args.Length-1); i++ {
 		// If item is not a constant value, then its value may turn out to be
@@ -842,7 +813,7 @@ func (f *factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
 // allowNullArgs returns true if the binary operator with the given inputs
 // allows one of those inputs to be null. If not, then the binary operator will
 // simply be replaced by null.
-func (f *factory) allowNullArgs(op opt.Operator, left, right opt.GroupID) bool {
+func (f *Factory) allowNullArgs(op opt.Operator, left, right opt.GroupID) bool {
 	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
 	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
 	overload, ok := findBinaryOverload(op, leftType, rightType)
@@ -854,14 +825,14 @@ func (f *factory) allowNullArgs(op opt.Operator, left, right opt.GroupID) bool {
 
 // foldNullUnary replaces the unary operator with a typed null value having the
 // same type as the unary operator would have.
-func (f *factory) foldNullUnary(op opt.Operator, input opt.GroupID) opt.GroupID {
+func (f *Factory) foldNullUnary(op opt.Operator, input opt.GroupID) opt.GroupID {
 	typ := f.mem.lookupGroup(input).logical.Scalar.Type
 	return f.ConstructNull(f.InternPrivate(inferUnaryType(op, typ)))
 }
 
 // foldNullBinary replaces the binary operator with a typed null value having
 // the same type as the binary operator would have.
-func (f *factory) foldNullBinary(op opt.Operator, left, right opt.GroupID) opt.GroupID {
+func (f *Factory) foldNullBinary(op opt.Operator, left, right opt.GroupID) opt.GroupID {
 	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
 	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
 	return f.ConstructNull(f.InternPrivate(inferBinaryType(op, leftType, rightType)))
@@ -876,7 +847,7 @@ func (f *factory) foldNullBinary(op opt.Operator, left, right opt.GroupID) opt.G
 
 // isZero returns true if the input expression is a numeric constant with a
 // value of zero.
-func (f *factory) isZero(input opt.GroupID) bool {
+func (f *Factory) isZero(input opt.GroupID) bool {
 	d := f.mem.lookupPrivate(f.mem.lookupNormExpr(input).asConst().value()).(tree.Datum)
 	switch t := d.(type) {
 	case *tree.DDecimal:
@@ -891,7 +862,7 @@ func (f *factory) isZero(input opt.GroupID) bool {
 
 // isOne returns true if the input expression is a numeric constant with a
 // value of one.
-func (f *factory) isOne(input opt.GroupID) bool {
+func (f *Factory) isOne(input opt.GroupID) bool {
 	d := f.mem.lookupPrivate(f.mem.lookupNormExpr(input).asConst().value()).(tree.Datum)
 	switch t := d.(type) {
 	case *tree.DDecimal:

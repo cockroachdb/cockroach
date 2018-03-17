@@ -12,13 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package opt
 
 import (
 	"bytes"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -47,12 +46,12 @@ type RelationalProps struct {
 	// OutputCols is the set of columns that can be projected by the
 	// expression. Ordering, naming, and duplication of columns is not
 	// representable by this property; those are physical properties.
-	OutputCols opt.ColSet
+	OutputCols ColSet
 
 	// NotNullCols is the subset of output columns which cannot be NULL.
 	// The NULL-ability of columns flows from the inputs and can also be
 	// derived from filters that are NULL-intolerant.
-	NotNullCols opt.ColSet
+	NotNullCols ColSet
 
 	// OuterCols is the set of columns that are referenced by variables within
 	// this relational sub-expression, but are not bound within the scope of
@@ -69,7 +68,7 @@ type RelationalProps struct {
 	// so its outer column set is empty.
 	//
 	// TODO(andyk): populate this when we have subquery support
-	OuterCols opt.ColSet
+	OuterCols ColSet
 }
 
 // ScalarProps are the subset of logical properties that are computed for
@@ -92,51 +91,57 @@ type ScalarProps struct {
 	// an expression's location in the query. For example, while the b.x and
 	// b.y columns are not outer columns on the EXISTS expression, they *are*
 	// outer columns on the inner WHERE condition.
-	OuterCols opt.ColSet
+	OuterCols ColSet
 }
 
 // OuterCols is a helper method that returns either the relational or scalar
 // OuterCols field, depending on the operator's type.
-func (p *LogicalProps) OuterCols() opt.ColSet {
+func (p *LogicalProps) OuterCols() ColSet {
 	if p.Scalar != nil {
 		return p.Scalar.OuterCols
 	}
 	return p.Relational.OuterCols
 }
 
-func (p *LogicalProps) formatOutputCols(md *opt.Metadata, tp treeprinter.Node) {
-	p.formatColSet("columns:", p.Relational.OutputCols, md, tp)
-}
-
-func (p *LogicalProps) formatColSet(
-	heading string, colSet opt.ColSet, md *opt.Metadata, tp treeprinter.Node,
+// FormatColSet outputs the specified set of columns using FormatCol to format
+// the output.
+func (p *LogicalProps) FormatColSet(
+	heading string, colSet ColSet, md *Metadata, tp treeprinter.Node,
 ) {
 	if !colSet.Empty() {
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		colSet.ForEach(func(i int) {
-			p.formatCol("", opt.ColumnIndex(i), md, &buf)
+			p.FormatCol("", ColumnIndex(i), md, &buf)
 		})
 		tp.Child(buf.String())
 	}
 }
 
-func (p *LogicalProps) formatColList(
-	heading string, colList opt.ColList, md *opt.Metadata, tp treeprinter.Node,
+// FormatColList outputs the specified list of columns using FormatCol to
+// format the output.
+func (p *LogicalProps) FormatColList(
+	heading string, colList ColList, md *Metadata, tp treeprinter.Node,
 ) {
 	if len(colList) > 0 {
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		for _, col := range colList {
-			p.formatCol("", col, md, &buf)
+			p.FormatCol("", col, md, &buf)
 		}
 		tp.Child(buf.String())
 	}
 }
 
-func (p *LogicalProps) formatCol(
-	label string, index opt.ColumnIndex, md *opt.Metadata, buf *bytes.Buffer,
-) {
+// FormatCol outputs the specified column using the following format:
+//   label:index(type)
+//
+// If the column is not nullable, then this is the format:
+//   label:index(type!null)
+//
+// If a label is given, then it is used. Otherwise, a "best effort" label is
+// used from query metadata.
+func (p *LogicalProps) FormatCol(label string, index ColumnIndex, md *Metadata, buf *bytes.Buffer) {
 	if label == "" {
 		label = md.ColumnLabel(index)
 	}
