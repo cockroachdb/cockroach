@@ -1371,6 +1371,15 @@ query I
 SELECT c FROM (SELECT oid, COUNT(*) as c FROM pg_catalog.pg_proc GROUP BY oid) WHERE c > 1
 ----
 
+## Ensure that unnest works with oid wrapper arrays
+
+query O
+SELECT unnest((SELECT proargtypes FROM pg_proc WHERE proname='split_part'));
+----
+25
+25
+20
+
 ## TODO(masha): #16769
 #statement ok
 #CREATE TABLE types(a int8, b int2);
