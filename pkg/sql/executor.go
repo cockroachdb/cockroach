@@ -865,10 +865,12 @@ func (e *Executor) execParsed(
 			txnState.finishSQLTxn(session)
 		}
 
-		// If the txn is not in an "open" state any more, exec the schema changes.
-		// They'll short-circuit themselves if the mutation that queued them has
-		// been rolled back from the table descriptor.
-		if !txnState.TxnIsOpen() {
+		// If we're no longer in a transaction, exec the schema changes.
+		// They'll short-circuit themselves if the mutation that queued
+		// them has been rolled back from the table descriptor. (It's
+		// important that this condition match the one used to call
+		// finishSQLTxn above:
+		if txnState.State() == NoTxn {
 			blockOpt := blockForDBCacheUpdate
 			if err != nil {
 				blockOpt = dontBlockForDBCacheUpdate
