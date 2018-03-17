@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -188,11 +189,11 @@ type indexConstraintCtx struct {
 
 	evalCtx *tree.EvalContext
 
-	factory opt.Factory
+	factory *xform.Factory
 }
 
 func makeIndexConstraintCtx(
-	colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext, factory opt.Factory,
+	colInfos []IndexColumnInfo, isInverted bool, evalCtx *tree.EvalContext, factory *xform.Factory,
 ) indexConstraintCtx {
 	if isInverted && len(colInfos) > 1 {
 		panic(fmt.Sprintf("inverted index on multiple columns"))

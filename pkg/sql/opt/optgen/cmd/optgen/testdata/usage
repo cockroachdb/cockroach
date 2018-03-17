@@ -18,7 +18,6 @@ The commands are:
 	compile    generate the optgen compiled format
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
-	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
 
@@ -50,7 +49,6 @@ The commands are:
 	compile    generate the optgen compiled format
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
-	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
 
@@ -83,7 +81,6 @@ The commands are:
 	compile    generate the optgen compiled format
 	exprs      generate expression definitions and functions
 	factory    generate expression tree creation and normalization functions
-	ifactory   generate interface for factory construct methods
 	ops        generate operator definitions and functions
 	rulenames  generate enumeration of rule names
 

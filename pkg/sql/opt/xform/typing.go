@@ -72,6 +72,13 @@ func inferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 	return o.returnType
 }
 
+// BinaryOverloadExists returns true if the given binary operator exists with the
+// given arguments.
+func BinaryOverloadExists(op opt.Operator, leftType, rightType types.T) bool {
+	_, ok := findBinaryOverload(op, leftType, rightType)
+	return ok
+}
+
 type typingFunc func(ev ExprView) types.T
 
 // typingFuncMap is a lookup table from scalar operator type to a function

@@ -15,6 +15,7 @@
 package testutils
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -80,4 +81,16 @@ func ExecuteTestDDL(tb testing.TB, sql string, catalog *TestCatalog) string {
 		tb.Fatalf("expected CREATE TABLE statement but found: %v", stmt)
 		return ""
 	}
+}
+
+// GetTestFiles returns the set of test files that matches the Glob pattern.
+func GetTestFiles(tb testing.TB, testdataGlob string) []string {
+	paths, err := filepath.Glob(testdataGlob)
+	if err != nil {
+		tb.Fatal(err)
+	}
+	if len(paths) == 0 {
+		tb.Fatalf("no testfiles found matching: %s", testdataGlob)
+	}
+	return paths
 }

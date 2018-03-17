@@ -104,37 +104,45 @@ func (p *LogicalProps) OuterCols() opt.ColSet {
 	return p.Relational.OuterCols
 }
 
-func (p *LogicalProps) formatOutputCols(md *opt.Metadata, tp treeprinter.Node) {
-	p.formatColSet("columns:", p.Relational.OutputCols, md, tp)
-}
-
-func (p *LogicalProps) formatColSet(
+// FormatColSet outputs the specified set of columns using FormatCol to format
+// the output.
+func (p *LogicalProps) FormatColSet(
 	heading string, colSet opt.ColSet, md *opt.Metadata, tp treeprinter.Node,
 ) {
 	if !colSet.Empty() {
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		colSet.ForEach(func(i int) {
-			p.formatCol("", opt.ColumnIndex(i), md, &buf)
+			p.FormatCol("", opt.ColumnIndex(i), md, &buf)
 		})
 		tp.Child(buf.String())
 	}
 }
 
-func (p *LogicalProps) formatColList(
+// FormatColList outputs the specified list of columns using FormatCol to
+// format the output.
+func (p *LogicalProps) FormatColList(
 	heading string, colList opt.ColList, md *opt.Metadata, tp treeprinter.Node,
 ) {
 	if len(colList) > 0 {
 		var buf bytes.Buffer
 		buf.WriteString(heading)
 		for _, col := range colList {
-			p.formatCol("", col, md, &buf)
+			p.FormatCol("", col, md, &buf)
 		}
 		tp.Child(buf.String())
 	}
 }
 
-func (p *LogicalProps) formatCol(
+// FormatCol outputs the specified column using the following format:
+//   label:index(type)
+//
+// If the column is not nullable, then this is the format:
+//   label:index(type!null)
+//
+// If a label is given, then it is used. Otherwise, a "best effort" label is
+// used from query metadata.
+func (p *LogicalProps) FormatCol(
 	label string, index opt.ColumnIndex, md *opt.Metadata, buf *bytes.Buffer,
 ) {
 	if label == "" {
