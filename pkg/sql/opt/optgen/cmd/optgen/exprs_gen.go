@@ -59,7 +59,7 @@ func (g *exprsGen) genLayoutTable() {
 	fmt.Fprintf(g.w, "var opLayoutTable = [...]opLayout{\n")
 	fmt.Fprintf(g.w, "  opt.UnknownOp: 0xFF, // will cause a crash if used\n")
 	for _, define := range g.compiled.Defines {
-		var count, listVal, privVal, enfVal int
+		var count, listVal, privVal int
 
 		count = len(define.Fields)
 		if privateField(define) != nil {
@@ -75,12 +75,9 @@ func (g *exprsGen) genLayoutTable() {
 			}
 			count--
 		}
-		if define.Tags.Contains("Enforcer") {
-			enfVal = 1
-		}
 		fmt.Fprintf(
-			g.w, "  opt.%sOp: makeOpLayout(%d /*base*/, %d /*list*/, %d /*priv*/, %d /*enforcer*/),\n",
-			define.Name, count, listVal, privVal, enfVal,
+			g.w, "  opt.%sOp: makeOpLayout(%d /*base*/, %d /*list*/, %d /*priv*/),\n",
+			define.Name, count, listVal, privVal,
 		)
 	}
 	fmt.Fprintf(g.w, "}\n\n")
