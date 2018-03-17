@@ -1,0 +1,54 @@
+# LogicTest: default parallel-stmts distsql
+
+# This test reproduces https://github.com/cockroachdb/cockroach/issues/23979
+
+# Schema changes that experienced retriable errors in RELEASE
+# SAVEPOINT would previously deadlock.
+
+statement ok
+BEGIN
+
+statement ok
+SAVEPOINT cockroach_restart
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
+
+# It doesn't matter that we're creating the table and index in the
+# same transaction, but it does matter that the index creation is not
+# the first thing in the transaction (since it would trigger a
+# server-side retry if it were).
+statement ok
+CREATE INDEX y_idx ON t (y);
+
+# Trigger a retriable error by running a scan as another user (high
+# priority ensures that we don't block in this test).
+user testuser
+
+statement ok
+BEGIN TRANSACTION PRIORITY HIGH
+
+statement ok
+SHOW TABLES
+
+user root
+
+# In the original bug, we'd deadlock inside RELEASE SAVEPOINT
+query error TransactionRetryError
+RELEASE SAVEPOINT cockroach_restart
+
+# After restarting, everything's back to normal.
+statement ok
+SAVEPOINT cockroach_restart
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
+
+statement ok
+CREATE INDEX y_idx ON t (y);
+
+statement ok
+RELEASE SAVEPOINT cockroach_restart
+
+statement ok
+COMMIT
