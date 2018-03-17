@@ -19,7 +19,7 @@ import (
 
 var opLayoutTable = [...]opLayout{
 	opt.UnknownOp:  0xFF, // will cause a crash if used
-	opt.FuncCallOp: makeOpLayout(1 /*base*/, 2 /*list*/, 4 /*priv*/, 0 /*enforcer*/),
+	opt.FuncCallOp: makeOpLayout(1 /*base*/, 2 /*list*/, 4 /*priv*/),
 }
 
 type funcCallExpr memoExpr
@@ -73,7 +73,7 @@ import (
 
 var opLayoutTable = [...]opLayout{
 	opt.UnknownOp: 0xFF, // will cause a crash if used
-	opt.SortOp:    makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/, 1 /*enforcer*/),
+	opt.SortOp:    makeOpLayout(1 /*base*/, 0 /*list*/, 0 /*priv*/),
 }
 
 var isEnforcerLookup = [...]bool{

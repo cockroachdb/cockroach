@@ -25,25 +25,12 @@ import (
 type PhysicalPropsID uint32
 
 const (
-	// NormPhysPropsID is a special id used to create and traverse a normalized
-	// expression tree before it's been fully explored and costed. Before then,
-	// its physical properties are still undefined, and they cannot not be
-	// used. But the id itself can still be used with ExprView to traverse the
-	// normalized logical expression tree (with no enforcers or physical
-	// properties present).
-	//
-	// While NormPhysPropsID and MinPhysPropsID refer to the same default
-	// normalized expression at the beginning of optimization, the
-	// MinPhysPropsID expression tree quickly diverges as the optimizer finds
-	// alternate expressions with lower cost.
-	NormPhysPropsID PhysicalPropsID = 1
-
 	// MinPhysPropsID is the id of the well-known set of physical properties
 	// that requires nothing of an operator. Therefore, every operator is
 	// guaranteed to provide this set of properties. This is typically the most
 	// commonly used set of physical properties in the memo, since most
 	// operators do not require any physical properties from their children.
-	MinPhysPropsID PhysicalPropsID = 2
+	MinPhysPropsID PhysicalPropsID = 1
 )
 
 // PhysicalProps are interesting characteristics of an expression that impact
