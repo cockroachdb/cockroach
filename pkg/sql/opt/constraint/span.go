@@ -55,6 +55,11 @@ type Span struct {
 
 	// endBoundary indicates whether the span contains the the end key value.
 	endBoundary SpanBoundary
+
+	// immutable if set causes panics if the span is modified in-place. Set for
+	// Spans that are part of Constraint, which after initialization assumes the
+	// spans never change.
+	immutable bool
 }
 
 // IsUnconstrained is true if the span does not constrain the key range. Both
@@ -73,6 +78,9 @@ func (sp *Span) IsUnconstrained() bool {
 func (sp *Span) Set(
 	keyCtx KeyContext, start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary,
 ) {
+	if sp.immutable {
+		panic("mutation disallowed")
+	}
 	if start.IsEmpty() {
 		if end.IsEmpty() {
 			// Constraint should be discarded rather than using unconstrained
@@ -170,6 +178,9 @@ func (sp *Span) StartsAfter(keyCtx KeyContext, other *Span) bool {
 // If there is no overlap, then this span will not be updated, and
 // TryIntersectWith will return false.
 func (sp *Span) TryIntersectWith(keyCtx KeyContext, other *Span) bool {
+	if sp.immutable {
+		panic("mutation disallowed")
+	}
 	cmpStarts := sp.CompareStarts(keyCtx, other)
 	if cmpStarts > 0 {
 		// If this span's start boundary is >= the other span's end boundary,
@@ -211,6 +222,9 @@ func (sp *Span) TryIntersectWith(keyCtx KeyContext, other *Span) bool {
 // its IsUnconstrained method returns true, and it cannot be used as part of a
 // constraint.
 func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
+	if sp.immutable {
+		panic("mutation disallowed")
+	}
 	// Determine the minimum start boundary.
 	cmpStartKeys := sp.CompareStarts(keyCtx, other)
 
@@ -259,6 +273,9 @@ func (sp *Span) TryUnionWith(keyCtx KeyContext, other *Span) bool {
 //  - for a decimal column, we don't have either Next or Prev so we can't
 //    change anything.
 func (sp *Span) PreferInclusive(keyCtx KeyContext) {
+	if sp.immutable {
+		panic("mutation disallowed")
+	}
 	if sp.startBoundary == ExcludeBoundary {
 		if key, ok := sp.start.Next(keyCtx); ok {
 			sp.start = key
@@ -271,6 +288,19 @@ func (sp *Span) PreferInclusive(keyCtx KeyContext) {
 			sp.endBoundary = IncludeBoundary
 		}
 	}
+}
+
+// Copy returns a copy of the span which can be independently modified.
+func (sp *Span) Copy() Span {
+	spCopy := *sp
+	spCopy.immutable = false
+	return spCopy
+}
+
+// makeImmutable causes any future calls to methods that mutate the span in
+// place to panic.
+func (sp *Span) makeImmutable() {
+	sp.immutable = true
 }
 
 func (sp *Span) startExt() KeyExtension {
