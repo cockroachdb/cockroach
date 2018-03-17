@@ -455,6 +455,10 @@ func TestRangeLookupUseReverse(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		if legacy {
+			t.Skip("#18579")
+		}
+
 		for _, test := range testCases {
 			t.Run(fmt.Sprintf("key=%s", test.key), func(t *testing.T) {
 				lookup := client.RangeLookup

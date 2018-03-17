@@ -6234,6 +6234,10 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 func TestReplicaDanglingMetaIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		if legacy {
+			t.Skip("#18579")
+		}
+
 		testutils.RunTrueAndFalse(t, "readUncommitted", func(t *testing.T, readUncommitted bool) {
 			if readUncommitted && legacy {
 				// Unsupported.
@@ -6327,6 +6331,10 @@ func TestReplicaLookupUseReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		if legacy {
+			t.Skip("#18579")
+		}
+
 		testutils.RunTrueAndFalse(t, "readUncommitted", func(t *testing.T, readUncommitted bool) {
 			if readUncommitted && legacy {
 				// Unsupported.
@@ -6477,6 +6485,10 @@ func TestRangeLookup(t *testing.T) {
 	}
 
 	testutils.RunTrueAndFalse(t, "legacy", func(t *testing.T, legacy bool) {
+		if legacy {
+			t.Skip("#18579")
+		}
+
 		rangeLookup := client.RangeLookup
 		if legacy {
 			rangeLookup = client.LegacyRangeLookup

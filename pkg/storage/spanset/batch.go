@@ -307,6 +307,12 @@ func makeSpanSetReadWriter(rw engine.ReadWriter, spans *SpanSet) spanSetReadWrit
 	}
 }
 
+// NewReadWriter returns an engine.ReadWriter that asserts access of the
+// underlying ReadWriter against the given SpanSet.
+func NewReadWriter(rw engine.ReadWriter, spans *SpanSet) engine.ReadWriter {
+	return makeSpanSetReadWriter(rw, spans)
+}
+
 type spanSetBatch struct {
 	spanSetReadWriter
 	b     engine.Batch
