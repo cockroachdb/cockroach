@@ -156,11 +156,11 @@ func TestBuild(t *testing.T) {
 					eng := s.Executor().(exec.TestEngineFactory).NewTestEngine("test")
 					defer eng.Close()
 
-					executor := testutils.NewExecutor(eng.Catalog(), d.Input)
-					executor.AllowUnsupportedExpr = allowUnsupportedExpr
+					tester := testutils.NewOptTester(eng.Catalog(), d.Input)
+					tester.AllowUnsupportedExpr = allowUnsupportedExpr
 
 					if d.Cmd == "opt" {
-						ev, err := executor.Optimize()
+						ev, err := tester.Optimize()
 						if err != nil {
 							d.Fatalf(t, "%v", err)
 						}
@@ -170,9 +170,9 @@ func TestBuild(t *testing.T) {
 					var columns sqlbase.ResultColumns
 					var results []tree.Datums
 					if d.Cmd == "exec-explain" {
-						results, err = executor.Explain(eng)
+						results, err = tester.Explain(eng)
 					} else {
-						columns, results, err = executor.Exec(eng)
+						columns, results, err = tester.Exec(eng)
 					}
 					if err != nil {
 						d.Fatalf(t, "%v", err)

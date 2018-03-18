@@ -58,9 +58,9 @@ type OptTester struct {
 	AllowUnsupportedExpr bool
 }
 
-// NewExecutor constructs a new instance of the OptTester for the given SQL
+// NewOptTester constructs a new instance of the OptTester for the given SQL
 // statement. Metadata used by the SQL query is accessed via the catalog.
-func NewExecutor(catalog opt.Catalog, sql string) *OptTester {
+func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 	return &OptTester{
 		catalog: catalog,
 		sql:     sql,
