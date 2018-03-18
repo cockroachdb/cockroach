@@ -12,13 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package xform_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -29,7 +30,8 @@ func TestTyping(t *testing.T) {
 
 func TestTypingJson(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	o := NewOptimizer(&evalCtx, OptimizeNone)
+	o := xform.NewOptimizer(&evalCtx)
+	o.MaxSteps = xform.OptimizeNone
 	f := o.Factory()
 
 	// (Const <json>)
@@ -61,6 +63,23 @@ func TestTypingJson(t *testing.T) {
 	fetchTextPathGroup := f.ConstructFetchTextPath(jsonGroup, arrGroup)
 	ev = o.Optimize(fetchTextPathGroup, &opt.PhysicalProps{})
 	testTyping(t, ev, types.String)
+}
+
+func TestBinaryOverloadExists(t *testing.T) {
+	test := func(expected, actual bool) {
+		if expected != actual {
+			t.Errorf("expected %v, got %v", expected, actual)
+		}
+	}
+
+	arrType := types.TArray{Typ: types.Int}
+
+	test(true, xform.BinaryOverloadExists(opt.MinusOp, types.Date, types.Int))
+	test(true, xform.BinaryOverloadExists(opt.MinusOp, types.Date, types.Unknown))
+	test(true, xform.BinaryOverloadExists(opt.MinusOp, types.Unknown, types.Int))
+	test(false, xform.BinaryOverloadExists(opt.MinusOp, types.Int, types.Date))
+	test(true, xform.BinaryOverloadExists(opt.ConcatOp, arrType, types.Int))
+	test(true, xform.BinaryOverloadExists(opt.ConcatOp, types.Unknown, arrType))
 }
 
 // TestTypingUnaryAssumptions ensures that unary overloads conform to certain
@@ -140,7 +159,7 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 	}
 }
 
-func testTyping(t *testing.T, ev ExprView, expected types.T) {
+func testTyping(t *testing.T, ev xform.ExprView, expected types.T) {
 	t.Helper()
 
 	actual := ev.Logical().Scalar.Type

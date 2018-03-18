@@ -18,39 +18,40 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-type unaryFactoryFunc func(f opt.Factory, input opt.GroupID) opt.GroupID
-type binaryFactoryFunc func(f opt.Factory, left, right opt.GroupID) opt.GroupID
+type unaryFactoryFunc func(f *xform.Factory, input opt.GroupID) opt.GroupID
+type binaryFactoryFunc func(f *xform.Factory, left, right opt.GroupID) opt.GroupID
 
 // Map from tree.ComparisonOperator to Factory constructor function.
 var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
-	tree.EQ:                (opt.Factory).ConstructEq,
-	tree.LT:                (opt.Factory).ConstructLt,
-	tree.GT:                (opt.Factory).ConstructGt,
-	tree.LE:                (opt.Factory).ConstructLe,
-	tree.GE:                (opt.Factory).ConstructGe,
-	tree.NE:                (opt.Factory).ConstructNe,
-	tree.In:                (opt.Factory).ConstructIn,
-	tree.NotIn:             (opt.Factory).ConstructNotIn,
-	tree.Like:              (opt.Factory).ConstructLike,
-	tree.NotLike:           (opt.Factory).ConstructNotLike,
-	tree.ILike:             (opt.Factory).ConstructILike,
-	tree.NotILike:          (opt.Factory).ConstructNotILike,
-	tree.SimilarTo:         (opt.Factory).ConstructSimilarTo,
-	tree.NotSimilarTo:      (opt.Factory).ConstructNotSimilarTo,
-	tree.RegMatch:          (opt.Factory).ConstructRegMatch,
-	tree.NotRegMatch:       (opt.Factory).ConstructNotRegMatch,
-	tree.RegIMatch:         (opt.Factory).ConstructRegIMatch,
-	tree.NotRegIMatch:      (opt.Factory).ConstructNotRegIMatch,
-	tree.IsDistinctFrom:    (opt.Factory).ConstructIsNot,
-	tree.IsNotDistinctFrom: (opt.Factory).ConstructIs,
-	tree.Contains:          (opt.Factory).ConstructContains,
-	tree.ContainedBy: func(f opt.Factory, left, right opt.GroupID) opt.GroupID {
+	tree.EQ:                (*xform.Factory).ConstructEq,
+	tree.LT:                (*xform.Factory).ConstructLt,
+	tree.GT:                (*xform.Factory).ConstructGt,
+	tree.LE:                (*xform.Factory).ConstructLe,
+	tree.GE:                (*xform.Factory).ConstructGe,
+	tree.NE:                (*xform.Factory).ConstructNe,
+	tree.In:                (*xform.Factory).ConstructIn,
+	tree.NotIn:             (*xform.Factory).ConstructNotIn,
+	tree.Like:              (*xform.Factory).ConstructLike,
+	tree.NotLike:           (*xform.Factory).ConstructNotLike,
+	tree.ILike:             (*xform.Factory).ConstructILike,
+	tree.NotILike:          (*xform.Factory).ConstructNotILike,
+	tree.SimilarTo:         (*xform.Factory).ConstructSimilarTo,
+	tree.NotSimilarTo:      (*xform.Factory).ConstructNotSimilarTo,
+	tree.RegMatch:          (*xform.Factory).ConstructRegMatch,
+	tree.NotRegMatch:       (*xform.Factory).ConstructNotRegMatch,
+	tree.RegIMatch:         (*xform.Factory).ConstructRegIMatch,
+	tree.NotRegIMatch:      (*xform.Factory).ConstructNotRegIMatch,
+	tree.IsDistinctFrom:    (*xform.Factory).ConstructIsNot,
+	tree.IsNotDistinctFrom: (*xform.Factory).ConstructIs,
+	tree.Contains:          (*xform.Factory).ConstructContains,
+	tree.ContainedBy: func(f *xform.Factory, left, right opt.GroupID) opt.GroupID {
 		// This is just syntatic sugar that reverses the operands.
 		return f.ConstructContains(right, left)
 	},
@@ -58,25 +59,25 @@ var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
 
 // Map from tree.BinaryOperator to Factory constructor function.
 var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
-	tree.Bitand:   (opt.Factory).ConstructBitand,
-	tree.Bitor:    (opt.Factory).ConstructBitor,
-	tree.Bitxor:   (opt.Factory).ConstructBitxor,
-	tree.Plus:     (opt.Factory).ConstructPlus,
-	tree.Minus:    (opt.Factory).ConstructMinus,
-	tree.Mult:     (opt.Factory).ConstructMult,
-	tree.Div:      (opt.Factory).ConstructDiv,
-	tree.FloorDiv: (opt.Factory).ConstructFloorDiv,
-	tree.Mod:      (opt.Factory).ConstructMod,
-	tree.Pow:      (opt.Factory).ConstructPow,
-	tree.Concat:   (opt.Factory).ConstructConcat,
-	tree.LShift:   (opt.Factory).ConstructLShift,
-	tree.RShift:   (opt.Factory).ConstructRShift,
+	tree.Bitand:   (*xform.Factory).ConstructBitand,
+	tree.Bitor:    (*xform.Factory).ConstructBitor,
+	tree.Bitxor:   (*xform.Factory).ConstructBitxor,
+	tree.Plus:     (*xform.Factory).ConstructPlus,
+	tree.Minus:    (*xform.Factory).ConstructMinus,
+	tree.Mult:     (*xform.Factory).ConstructMult,
+	tree.Div:      (*xform.Factory).ConstructDiv,
+	tree.FloorDiv: (*xform.Factory).ConstructFloorDiv,
+	tree.Mod:      (*xform.Factory).ConstructMod,
+	tree.Pow:      (*xform.Factory).ConstructPow,
+	tree.Concat:   (*xform.Factory).ConstructConcat,
+	tree.LShift:   (*xform.Factory).ConstructLShift,
+	tree.RShift:   (*xform.Factory).ConstructRShift,
 }
 
 // Map from tree.UnaryOperator to Factory constructor function.
 var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
-	tree.UnaryMinus:      (opt.Factory).ConstructUnaryMinus,
-	tree.UnaryComplement: (opt.Factory).ConstructUnaryComplement,
+	tree.UnaryMinus:      (*xform.Factory).ConstructUnaryMinus,
+	tree.UnaryComplement: (*xform.Factory).ConstructUnaryComplement,
 }
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -373,7 +374,7 @@ func NewScalar(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-	factory opt.Factory,
+	factory *xform.Factory,
 	columnNames []string,
 	columnTypes []types.T,
 ) *ScalarBuilder {

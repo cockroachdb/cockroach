@@ -12,13 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package xform_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -34,21 +35,21 @@ func TestRules(t *testing.T) {
 // Test the FoldNullInEmpty rule. Can't create empty tuple on right side of
 // IN/NOT IN in SQL, so do it here.
 func TestRuleFoldNullInEmpty(t *testing.T) {
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := tree.MakeTestingEvalContext(st)
-	f := newFactory(&evalCtx, OptimizeAll)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	o := xform.NewOptimizer(&evalCtx)
+	f := o.Factory()
 
 	null := f.ConstructNull(f.InternPrivate(types.Unknown))
 	empty := f.ConstructTuple(opt.EmptyList)
 	in := f.ConstructIn(null, empty)
-
-	if f.mem.lookupNormExpr(in).op != opt.FalseOp {
+	ev := o.Optimize(in, &opt.PhysicalProps{})
+	if ev.Operator() != opt.FalseOp {
 		t.Errorf("expected NULL IN () to fold to False")
 	}
 
 	notIn := f.ConstructNotIn(null, empty)
-
-	if f.mem.lookupNormExpr(notIn).op != opt.TrueOp {
+	ev = o.Optimize(notIn, &opt.PhysicalProps{})
+	if ev.Operator() != opt.TrueOp {
 		t.Errorf("expected NULL NOT IN () to fold to True")
 	}
 }
@@ -59,9 +60,7 @@ func TestRuleBinaryAssumption(t *testing.T) {
 	fn := func(op opt.Operator) {
 		for _, overload := range tree.BinOps[opt.BinaryOpReverseMap[op]] {
 			binOp := overload.(tree.BinOp)
-
-			_, ok := findBinaryOverload(op, binOp.RightType, binOp.LeftType)
-			if !ok {
+			if !xform.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
 				t.Errorf("could not find inverse for overload: %+v", op)
 			}
 		}

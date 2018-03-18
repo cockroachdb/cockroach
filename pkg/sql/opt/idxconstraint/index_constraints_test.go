@@ -152,11 +152,10 @@ func TestIndexConstraints(t *testing.T) {
 					for i := range varNames {
 						varNames[i] = fmt.Sprintf("@%d", i+1)
 					}
-					steps := xform.OptimizeAll
+					o := xform.NewOptimizer(&evalCtx)
 					if !normalize {
-						steps = xform.OptimizeNone
+						o.MaxSteps = xform.OptimizeNone
 					}
-					o := xform.NewOptimizer(&evalCtx, steps)
 					b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory(), varNames, varTypes)
 					b.AllowUnsupportedExpr = true
 					group, err := b.Build(typedExpr)
@@ -247,7 +246,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			o := xform.NewOptimizer(nil /* catalog */, xform.OptimizeAll)
+			o := xform.NewOptimizer(nil /* catalog */)
 			semaCtx := tree.MakeSemaContext(false /* privileged */)
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 			varNames := make([]string, len(varTypes))

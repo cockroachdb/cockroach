@@ -1094,7 +1094,7 @@ func (ic *Instance) Init(
 	colInfos []IndexColumnInfo,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
-	factory opt.Factory,
+	factory *xform.Factory,
 ) {
 	*ic = Instance{
 		filter:             filter,
