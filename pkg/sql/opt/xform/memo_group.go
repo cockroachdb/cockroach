@@ -15,9 +15,8 @@
 package xform
 
 import (
-	"math"
-
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
