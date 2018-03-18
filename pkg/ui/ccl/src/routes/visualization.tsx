@@ -16,7 +16,7 @@ export const CLUSTERVIZ_ROOT = "/overview/map";
 export default function(): JSX.Element {
   return (
     <Route path="overview" component={ ClusterOverview } >
-      <IndexRedirect to="map" />
+      <IndexRedirect to="list" />
       <Route path="list" component={ NodeList } />
       <Route path="map(/**)" component={ ClusterViz } />
     </Route>
