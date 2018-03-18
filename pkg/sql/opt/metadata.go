@@ -18,44 +18,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
-
-// ColumnIndex uniquely identifies the usage of a column within the scope of a
-// query. ColumnIndex 0 is reserved to mean "unknown column". See the comment
-// for Metadata for more details.
-type ColumnIndex int32
 
 // TableIndex uniquely identifies the usage of a table within the scope of a
 // query. The indexes of its columns start at the table index and proceed
 // sequentially from there. See the comment for Metadata for more details.
 type TableIndex int32
-
-// ColSet efficiently stores an unordered set of column indexes.
-type ColSet = util.FastIntSet
-
-// ColList is a list of column indexes.
-//
-// TODO(radu): perhaps implement a FastIntList with the same "small"
-// representation as FastIntMap but with a slice for large cases.
-type ColList = []ColumnIndex
-
-// ColMap provides a 1:1 mapping from one column index to another. It is used
-// by operators that need to match columns from its inputs.
-type ColMap = util.FastIntMap
-
-// mdCol stores information about one of the columns stored in the metadata,
-// including its label and type.
-type mdCol struct {
-	// label is the best-effort name of this column. Since the same column can
-	// have multiple labels (using aliasing), one of those is chosen to be used
-	// for pretty-printing and debugging. This might be different than what is
-	// stored in the physical properties and is presented to end users.
-	label string
-
-	// typ is the scalar SQL type of this column.
-	typ types.T
-}
 
 // Metadata indexes the columns, tables, and other metadata used within the
 // scope of a particular query. Because it is specific to one query, the
@@ -93,6 +61,19 @@ type Metadata struct {
 	// table index is the index of the first column in the table. The remaining
 	// columns form a contiguous group following that index.
 	tables map[TableIndex]Table
+}
+
+// mdCol stores information about one of the columns stored in the metadata,
+// including its label and type.
+type mdCol struct {
+	// label is the best-effort name of this column. Since the same column can
+	// have multiple labels (using aliasing), one of those is chosen to be used
+	// for pretty-printing and debugging. This might be different than what is
+	// stored in the physical properties and is presented to end users.
+	label string
+
+	// typ is the scalar SQL type of this column.
+	typ types.T
 }
 
 // NewMetadata constructs a new instance of metadata for the optimizer.
@@ -166,13 +147,4 @@ func (md *Metadata) Table(index TableIndex) Table {
 // position in the table.
 func (md *Metadata) TableColumn(tblIndex TableIndex, ord int) ColumnIndex {
 	return ColumnIndex(int(tblIndex) + ord)
-}
-
-// ColListToSet converts a column index list to a column index set.
-func ColListToSet(colList ColList) ColSet {
-	var r ColSet
-	for _, col := range colList {
-		r.Add(int(col))
-	}
-	return r
 }

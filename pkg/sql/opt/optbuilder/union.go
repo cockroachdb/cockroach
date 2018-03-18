@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -27,7 +28,7 @@ import (
 // return values.
 func (b *Builder) buildUnion(
 	clause *tree.UnionClause, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	left, leftScope := b.buildSelect(clause.Left, inScope)
 	right, rightScope := b.buildSelect(clause.Right, inScope)
 	outScope = leftScope
@@ -95,7 +96,7 @@ func (b *Builder) buildUnion(
 	} else {
 		newCols = leftCols
 	}
-	setOpColMap := opt.SetOpColMap{Left: leftCols, Right: rightCols, Out: newCols}
+	setOpColMap := memo.SetOpColMap{Left: leftCols, Right: rightCols, Out: newCols}
 	private := b.factory.InternPrivate(&setOpColMap)
 
 	if clause.All {

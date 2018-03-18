@@ -19,11 +19,21 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
+
+func TestDynamicListID(t *testing.T) {
+	listID := memo.ListID{Offset: 1, Length: 2}
+	dynID := xform.MakeDynamicListID(listID)
+	roundtripID := dynID.ListID()
+	if listID != roundtripID {
+		t.Errorf("invalid ListID/DynamicID conversions")
+	}
+}
 
 // TestSimplifyFilters tests factory.simplifyFilters. It's hard to fully test
 // using SQL, as And operator rules simplify the expression before the Filters
@@ -42,35 +52,35 @@ func TestSimplifyFilters(t *testing.T) {
 	eq := f.ConstructEq(variable, constant)
 
 	// Filters expression evaluates to False if any operand is False.
-	conditions := []opt.GroupID{eq, f.ConstructFalse(), eq}
+	conditions := []memo.GroupID{eq, f.ConstructFalse(), eq}
 	result := f.ConstructFilters(f.InternList(conditions))
-	ev := o.Optimize(result, &opt.PhysicalProps{})
+	ev := o.Optimize(result, &memo.PhysicalProps{})
 	if ev.Operator() != opt.FalseOp {
 		t.Fatalf("result should have been False")
 	}
 
 	// Filters expression evaluates to False if any operand is Null.
-	conditions = []opt.GroupID{f.ConstructNull(f.InternPrivate(types.Unknown)), eq, eq}
+	conditions = []memo.GroupID{f.ConstructNull(f.InternPrivate(types.Unknown)), eq, eq}
 	result = f.ConstructFilters(f.InternList(conditions))
-	ev = o.Optimize(result, &opt.PhysicalProps{})
+	ev = o.Optimize(result, &memo.PhysicalProps{})
 	if ev.Operator() != opt.FalseOp {
 		t.Fatalf("result should have been False")
 	}
 
 	// Filters operator skips True operands.
-	conditions = []opt.GroupID{eq, f.ConstructTrue(), eq, f.ConstructTrue()}
+	conditions = []memo.GroupID{eq, f.ConstructTrue(), eq, f.ConstructTrue()}
 	result = f.ConstructFilters(f.InternList(conditions))
-	ev = o.Optimize(result, &opt.PhysicalProps{})
+	ev = o.Optimize(result, &memo.PhysicalProps{})
 	if ev.Operator() != opt.FiltersOp || ev.ChildCount() != 2 {
 		t.Fatalf("filters result should have filtered True operators")
 	}
 
 	// Filters operator flattens nested And operands.
-	conditions = []opt.GroupID{eq, eq}
+	conditions = []memo.GroupID{eq, eq}
 	and := f.ConstructAnd(f.InternList(conditions))
-	conditions = []opt.GroupID{and, eq, and}
+	conditions = []memo.GroupID{and, eq, and}
 	result = f.ConstructFilters(f.InternList(conditions))
-	ev = o.Optimize(result, &opt.PhysicalProps{})
+	ev = o.Optimize(result, &memo.PhysicalProps{})
 	if ev.Operator() != opt.FiltersOp || ev.ChildCount() != 5 {
 		t.Fatalf("result should have flattened And operators")
 	}

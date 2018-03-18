@@ -12,11 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt
+package memo
 
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // PhysicalPropsID identifies a set of physical properties that has been
@@ -113,7 +115,7 @@ func (p *PhysicalProps) Equals(rhs *PhysicalProps) bool {
 // duplicate and discard columns. If Presentation is not defined, then no
 // particular column presentation is required or provided. For example:
 //   a.y:2 a.x:1 a.y:2 column1:3
-type Presentation []LabeledColumn
+type Presentation []opt.LabeledColumn
 
 // Defined is true if a particular column presentation is required or provided.
 func (p Presentation) Defined() bool {
@@ -151,47 +153,9 @@ func (p Presentation) format(buf *bytes.Buffer) {
 	}
 }
 
-// LabeledColumn specifies the label and index of a column.
-type LabeledColumn struct {
-	Label string
-	Index ColumnIndex
-}
-
-// OrderingColumn is the ColumnIndex for a column that is part of an ordering,
-// except that it can be negated to indicate a descending ordering on that
-// column.
-type OrderingColumn int32
-
-// MakeOrderingColumn initializes an ordering column with a ColumnIndex and a
-// flag indicating whether the direction is descending.
-func MakeOrderingColumn(index ColumnIndex, descending bool) OrderingColumn {
-	if descending {
-		return OrderingColumn(-index)
-	}
-	return OrderingColumn(index)
-}
-
-// Index returns the ColumnIndex for this OrderingColumn.
-func (c OrderingColumn) Index() ColumnIndex {
-	if c < 0 {
-		return ColumnIndex(-c)
-	}
-	return ColumnIndex(c)
-}
-
-// Ascending returns true if the ordering on this column is ascending.
-func (c OrderingColumn) Ascending() bool {
-	return c > 0
-}
-
-// Descending returns true if the ordering on this column is descending.
-func (c OrderingColumn) Descending() bool {
-	return c < 0
-}
-
 // Ordering defines the order of rows provided or required by an operator. A
 // negative value indicates descending order on the column index "-(value)".
-type Ordering []OrderingColumn
+type Ordering []opt.OrderingColumn
 
 // Defined is true if a particular row ordering is required or provided.
 func (o Ordering) Defined() bool {

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package memo
 
 import (
 	"fmt"
@@ -22,24 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// overload encapsulates information about a binary operator overload, to be
-// used for type inference and null folding. The tree.BinOp struct does not
-// work well for this use case, because it is quite large, and was not defined
-// in a way allowing it to be passed by reference (without extra allocation).
-type overload struct {
-	// returnType of the overload. This depends on the argument types.
-	returnType types.T
-
-	// allowNullArgs is true if the operator allows null arguments, and cannot
-	// therefore be folded away to null.
-	allowNullArgs bool
-}
-
-// inferType derives the type of the given scalar expression. Depending upon
+// InferType derives the type of the given scalar expression. Depending upon
 // the operator, the type may be fixed, or it may be dependent upon the
-// operands. inferType is called during initial construction of the expression,
+// operands. InferType is called during initial construction of the expression,
 // so its logical properties are not yet available.
-func inferType(ev ExprView) types.T {
+func InferType(ev ExprView) types.T {
 	fn := typingFuncMap[ev.Operator()]
 	if fn == nil {
 		panic(fmt.Sprintf("type inference for %v is not yet implemented", ev.Operator()))
@@ -47,9 +34,9 @@ func inferType(ev ExprView) types.T {
 	return fn(ev)
 }
 
-// inferUnaryType infers the return type of a unary operator, given the type of
+// InferUnaryType infers the return type of a unary operator, given the type of
 // its input.
-func inferUnaryType(op opt.Operator, inputType types.T) types.T {
+func InferUnaryType(op opt.Operator, inputType types.T) types.T {
 	unaryOp := opt.UnaryOpReverseMap[op]
 
 	// Find the unary op that matches the type of the expression's child.
@@ -62,9 +49,9 @@ func inferUnaryType(op opt.Operator, inputType types.T) types.T {
 	panic(fmt.Sprintf("could not find type for unary expression %s", op))
 }
 
-// inferBinaryType infers the return type of a binary operator, given the type
+// InferBinaryType infers the return type of a binary operator, given the type
 // of its inputs.
-func inferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
+func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 	o, ok := findBinaryOverload(op, leftType, rightType)
 	if !ok {
 		panic(fmt.Sprintf("could not find type for binary expression %s", op))
@@ -77,6 +64,16 @@ func inferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 func BinaryOverloadExists(op opt.Operator, leftType, rightType types.T) bool {
 	_, ok := findBinaryOverload(op, leftType, rightType)
 	return ok
+}
+
+// BinaryAllowsNullArgs returns true if the given binary operator allows null
+// arguments, and cannot therefore be folded away to null.
+func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
+	o, ok := findBinaryOverload(op, leftType, rightType)
+	if !ok {
+		panic(fmt.Sprintf("could not find overload for binary expression %s", op))
+	}
+	return o.allowNullArgs
 }
 
 type typingFunc func(ev ExprView) types.T
@@ -156,7 +153,7 @@ func typeAsTypedExpr(ev ExprView) types.T {
 // typeAsUnary returns the type of a unary expression by hooking into the sql
 // semantics code that searches for unary operator overloads.
 func typeAsUnary(ev ExprView) types.T {
-	return inferUnaryType(ev.Operator(), ev.Child(0).Logical().Scalar.Type)
+	return InferUnaryType(ev.Operator(), ev.Child(0).Logical().Scalar.Type)
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
@@ -164,13 +161,13 @@ func typeAsUnary(ev ExprView) types.T {
 func typeAsBinary(ev ExprView) types.T {
 	leftType := ev.Child(0).Logical().Scalar.Type
 	rightType := ev.Child(1).Logical().Scalar.Type
-	return inferBinaryType(ev.Operator(), leftType, rightType)
+	return InferBinaryType(ev.Operator(), leftType, rightType)
 }
 
 // typeFunction returns the type of a function expression by extracting it from
 // the function's private field, which is an instance of opt.FuncOpDef.
 func typeFunction(ev ExprView) types.T {
-	return ev.Private().(opt.FuncOpDef).Type
+	return ev.Private().(FuncOpDef).Type
 }
 
 // typeAsAny returns types.Any for an operator that never has its type used.
@@ -224,6 +221,19 @@ func typeWhen(ev ExprView) types.T {
 // which is an instance of types.T.
 func typeAsPrivate(ev ExprView) types.T {
 	return ev.Private().(types.T)
+}
+
+// overload encapsulates information about a binary operator overload, to be
+// used for type inference and null folding. The tree.BinOp struct does not
+// work well for this use case, because it is quite large, and was not defined
+// in a way allowing it to be passed by reference (without extra allocation).
+type overload struct {
+	// returnType of the overload. This depends on the argument types.
+	returnType types.T
+
+	// allowNullArgs is true if the operator allows null arguments, and cannot
+	// therefore be folded away to null.
+	allowNullArgs bool
 }
 
 // findBinaryOverload finds the correct type signature overload for the

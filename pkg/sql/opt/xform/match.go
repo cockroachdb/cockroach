@@ -19,11 +19,12 @@ package xform
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
 // MatchesTupleOfConstants returns true if the expression is a TupleOp with
 // ConstValue children.
-func MatchesTupleOfConstants(ev ExprView) bool {
+func MatchesTupleOfConstants(ev memo.ExprView) bool {
 	if ev.Operator() != opt.TupleOp {
 		return false
 	}

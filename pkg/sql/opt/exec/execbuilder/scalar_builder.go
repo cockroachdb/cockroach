@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -30,7 +31,7 @@ type buildScalarCtx struct {
 	ivarMap opt.ColMap
 }
 
-type buildFunc func(b *Builder, ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr
+type buildFunc func(b *Builder, ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr
 
 var scalarBuildFuncMap [opt.NumOperators]buildFunc
 
@@ -70,22 +71,22 @@ func init() {
 
 // buildScalar converts a scalar expression to a TypedExpr. Variables are mapped
 // according to ctx.
-func (b *Builder) buildScalar(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildScalar(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	if fn := scalarBuildFuncMap[ev.Operator()]; fn != nil {
 		return fn(b, ctx, ev)
 	}
 	panic(fmt.Sprintf("unsupported op %s", ev.Operator()))
 }
 
-func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildTypedExpr(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	return ev.Private().(tree.TypedExpr)
 }
 
-func (b *Builder) buildNull(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildNull(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	return tree.DNull
 }
 
-func (b *Builder) buildVariable(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildVariable(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	colIndex := ev.Private().(opt.ColumnIndex)
 	idx, ok := ctx.ivarMap.Get(int(colIndex))
 	if !ok {
@@ -94,11 +95,11 @@ func (b *Builder) buildVariable(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 	return ctx.ivh.IndexedVarWithType(idx, ev.Metadata().ColumnType(colIndex))
 }
 
-func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildTuple(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	if xform.MatchesTupleOfConstants(ev) {
 		datums := make(tree.Datums, ev.ChildCount())
 		for i := range datums {
-			datums[i] = xform.ExtractConstDatum(ev.Child(i))
+			datums[i] = memo.ExtractConstDatum(ev.Child(i))
 		}
 		return tree.NewDTuple(datums...)
 	}
@@ -110,7 +111,7 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedE
 	return tree.NewTypedTuple(typedExprs)
 }
 
-func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	switch ev.Operator() {
 	case opt.AndOp, opt.OrOp, opt.FiltersOp:
 		expr := b.buildScalar(ctx, ev.Child(0))
@@ -138,7 +139,7 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, ev xform.ExprView) tree.Type
 	}
 }
 
-func (b *Builder) buildComparison(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildComparison(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	return tree.NewTypedComparisonExpr(
 		opt.ComparisonOpReverseMap[ev.Operator()],
 		b.buildScalar(ctx, ev.Child(0)),
@@ -146,7 +147,7 @@ func (b *Builder) buildComparison(ctx *buildScalarCtx, ev xform.ExprView) tree.T
 	)
 }
 
-func (b *Builder) buildUnary(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildUnary(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	return tree.NewTypedUnaryExpr(
 		opt.UnaryOpReverseMap[ev.Operator()],
 		b.buildScalar(ctx, ev.Child(0)),
@@ -154,7 +155,7 @@ func (b *Builder) buildUnary(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedE
 	)
 }
 
-func (b *Builder) buildBinary(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildBinary(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	return tree.NewTypedBinaryExpr(
 		opt.BinaryOpReverseMap[ev.Operator()],
 		b.buildScalar(ctx, ev.Child(0)),
@@ -163,12 +164,12 @@ func (b *Builder) buildBinary(ctx *buildScalarCtx, ev xform.ExprView) tree.Typed
 	)
 }
 
-func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildFunction(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
 	for i := range exprs {
 		exprs[i] = b.buildScalar(ctx, ev.Child(i))
 	}
-	funcDef := ev.Private().(opt.FuncOpDef)
+	funcDef := ev.Private().(memo.FuncOpDef)
 	funcRef := tree.WrapFunction(funcDef.Name)
 	return tree.NewTypedFuncExpr(
 		funcRef,
@@ -181,7 +182,7 @@ func (b *Builder) buildFunction(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 	)
 }
 
-func (b *Builder) buildCase(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildCase(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	input := b.buildScalar(ctx, ev.Child(0))
 
 	// A searched CASE statement is represented by the optimizer with input=True.
@@ -212,7 +213,7 @@ func (b *Builder) buildCase(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedEx
 	return expr
 }
 
-func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildCast(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	expr, err := tree.NewTypedCastExpr(
 		b.buildScalar(ctx, ev.Child(0)),
 		ev.Logical().Scalar.Type,
@@ -223,7 +224,7 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedEx
 	return expr
 }
 
-func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	exprs := make(tree.TypedExprs, ev.ChildCount())
 	for i := range exprs {
 		exprs[i] = b.buildScalar(ctx, ev.Child(i))
@@ -231,6 +232,6 @@ func (b *Builder) buildCoalesce(ctx *buildScalarCtx, ev xform.ExprView) tree.Typ
 	return tree.NewTypedCoalesceExpr(exprs, ev.Logical().Scalar.Type)
 }
 
-func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev xform.ExprView) tree.TypedExpr {
+func (b *Builder) buildUnsupportedExpr(ctx *buildScalarCtx, ev memo.ExprView) tree.TypedExpr {
 	return ev.Private().(tree.TypedExpr)
 }

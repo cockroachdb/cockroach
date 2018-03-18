@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -57,9 +58,9 @@ type OptTester struct {
 	AllowUnsupportedExpr bool
 }
 
-// NewExecutor constructs a new instance of the OptTester for the given SQL
+// NewOptTester constructs a new instance of the OptTester for the given SQL
 // statement. Metadata used by the SQL query is accessed via the catalog.
-func NewExecutor(catalog opt.Catalog, sql string) *OptTester {
+func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 	return &OptTester{
 		catalog: catalog,
 		sql:     sql,
@@ -72,14 +73,14 @@ func NewExecutor(catalog opt.Catalog, sql string) *OptTester {
 // OptBuild constructs an opt expression tree for the SQL query, with no
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
-func (e *OptTester) OptBuild() (xform.ExprView, error) {
+func (e *OptTester) OptBuild() (memo.ExprView, error) {
 	return e.optimizeExpr(xform.OptimizeNone)
 }
 
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
-func (e *OptTester) Optimize() (xform.ExprView, error) {
+func (e *OptTester) Optimize() (memo.ExprView, error) {
 	return e.optimizeExpr(xform.OptimizeAll)
 }
 
@@ -182,7 +183,7 @@ func (e *OptTester) Exec(eng exec.TestEngine) (sqlbase.ResultColumns, []tree.Dat
 
 func (e *OptTester) buildExpr(
 	factory *xform.Factory,
-) (root opt.GroupID, required *opt.PhysicalProps, _ error) {
+) (root memo.GroupID, required *memo.PhysicalProps, _ error) {
 	stmt, err := parser.ParseOne(e.sql)
 	if err != nil {
 		return 0, nil, err
@@ -193,12 +194,12 @@ func (e *OptTester) buildExpr(
 	return b.Build()
 }
 
-func (e *OptTester) optimizeExpr(maxSteps xform.OptimizeSteps) (xform.ExprView, error) {
+func (e *OptTester) optimizeExpr(maxSteps xform.OptimizeSteps) (memo.ExprView, error) {
 	o := xform.NewOptimizer(&e.evalCtx)
 	o.MaxSteps = maxSteps
 	root, required, err := e.buildExpr(o.Factory())
 	if err != nil {
-		return xform.ExprView{}, err
+		return memo.ExprView{}, err
 	}
 	return o.Optimize(root, required), nil
 }

@@ -12,19 +12,31 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package opt_test
+package memo
 
 import (
-	"testing"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func TestDynamicListID(t *testing.T) {
-	listID := opt.ListID{Offset: 1, Length: 2}
-	dynID := opt.MakeDynamicListID(listID)
-	roundtripID := dynID.ListID()
-	if listID != roundtripID {
-		t.Errorf("invalid ListID/DynamicID conversions")
+// This file contains various helper functions that extract an op-specific
+// field from an expression.
+
+// ExtractConstDatum returns the Datum that represents the value of an operator
+// having the ConstValue tag.
+func ExtractConstDatum(ev ExprView) tree.Datum {
+	switch ev.Operator() {
+	case opt.NullOp:
+		return tree.DNull
+	case opt.TrueOp:
+		return tree.DBoolTrue
+	case opt.FalseOp:
+		return tree.DBoolFalse
 	}
+	if !ev.IsConstValue() {
+		panic(fmt.Sprintf("non-const expression: %+v", ev))
+	}
+	return ev.Private().(tree.Datum)
 }

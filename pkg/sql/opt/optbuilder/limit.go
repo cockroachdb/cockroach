@@ -15,7 +15,7 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -27,8 +27,8 @@ import (
 //   SELECT k FROM kv LIMIT k
 // are not valid.
 func (b *Builder) buildLimit(
-	limit *tree.Limit, parentScope *scope, in opt.GroupID, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+	limit *tree.Limit, parentScope *scope, in memo.GroupID, inScope *scope,
+) (out memo.GroupID, outScope *scope) {
 	out, outScope = in, inScope
 
 	ordering := inScope.ordering

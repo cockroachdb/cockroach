@@ -32,7 +32,7 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
 	g.w = w
 
-	fmt.Fprintf(g.w, "package xform\n\n")
+	fmt.Fprintf(g.w, "package memo\n\n")
 
 	fmt.Fprintf(g.w, "import (\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
@@ -104,8 +104,8 @@ func (g *exprsGen) genTagLookup() {
 	}
 }
 
-// genIsTag generates IsXXX tag methods on ExprView and memoExpr for every
-// unique tag.
+// genIsTag generates IsXXX tag methods on ExprView and Expr for every unique
+// tag.
 func (g *exprsGen) genIsTag() {
 	for _, tag := range g.compiled.DefineTags {
 		fmt.Fprintf(g.w, "func (ev ExprView) Is%s() bool {\n", tag)
@@ -114,8 +114,8 @@ func (g *exprsGen) genIsTag() {
 	}
 
 	for _, tag := range g.compiled.DefineTags {
-		fmt.Fprintf(g.w, "func (me *memoExpr) is%s() bool {\n", tag)
-		fmt.Fprintf(g.w, "  return is%sLookup[me.op]\n", tag)
+		fmt.Fprintf(g.w, "func (e *Expr) Is%s() bool {\n", tag)
+		fmt.Fprintf(g.w, "  return is%sLookup[e.op]\n", tag)
 		fmt.Fprintf(g.w, "}\n\n")
 	}
 }
@@ -124,21 +124,21 @@ func (g *exprsGen) genIsTag() {
 // constructor function.
 func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 	opType := fmt.Sprintf("%sOp", define.Name)
-	exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
+	exprType := fmt.Sprintf("%sExpr", define.Name)
 
 	// Generate comment for the expression type.
 	generateDefineComments(g.w, define, exprType)
 
 	// Generate the expression type.
-	fmt.Fprintf(g.w, "type %s memoExpr\n\n", exprType)
+	fmt.Fprintf(g.w, "type %s Expr\n\n", exprType)
 
 	// Generate a strongly-typed constructor function for the type.
-	fmt.Fprintf(g.w, "func make%sExpr(", define.Name)
+	fmt.Fprintf(g.w, "func Make%s(", exprType)
 	for i, field := range define.Fields {
 		if i != 0 {
 			fmt.Fprint(g.w, ", ")
 		}
-		fmt.Fprintf(g.w, "%s opt.%s", unTitle(string(field.Name)), mapType(string(field.Type)))
+		fmt.Fprintf(g.w, "%s %s", unTitle(string(field.Name)), mapType(string(field.Type)))
 	}
 	fmt.Fprintf(g.w, ") %s {\n", exprType)
 	fmt.Fprintf(g.w, "  return %s{op: opt.%s, state: exprState{", exprType, opType)
@@ -164,32 +164,31 @@ func (g *exprsGen) genExprType(define *lang.DefineExpr) {
 // genExprFuncs generates the expression's accessor functions, one for each
 // field in the type.
 func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
-	exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
+	exprType := fmt.Sprintf("%sExpr", define.Name)
 
 	// Generate the strongly-typed accessor methods.
 	stateIndex := 0
 	for _, field := range define.Fields {
-		fieldName := unTitle(string(field.Name))
 		fieldType := mapType(string(field.Type))
 
-		fmt.Fprintf(g.w, "func (e *%s) %s() opt.%s {\n", exprType, fieldName, fieldType)
+		fmt.Fprintf(g.w, "func (e *%s) %s() %s {\n", exprType, field.Name, fieldType)
 		if isListType(string(field.Type)) {
-			format := "  return opt.ListID{Offset: e.state[%d], Length: e.state[%d]}\n"
+			format := "  return ListID{Offset: e.state[%d], Length: e.state[%d]}\n"
 			fmt.Fprintf(g.w, format, stateIndex, stateIndex+1)
 			stateIndex += 2
 		} else if isPrivateType(string(field.Type)) {
-			fmt.Fprintf(g.w, "  return opt.PrivateID(e.state[%d])\n", stateIndex)
+			fmt.Fprintf(g.w, "  return PrivateID(e.state[%d])\n", stateIndex)
 			stateIndex++
 		} else {
-			fmt.Fprintf(g.w, "  return opt.GroupID(e.state[%d])\n", stateIndex)
+			fmt.Fprintf(g.w, "  return GroupID(e.state[%d])\n", stateIndex)
 			stateIndex++
 		}
 		fmt.Fprintf(g.w, "}\n\n")
 	}
 
 	// Generate the fingerprint method.
-	fmt.Fprintf(g.w, "func (e *%s) fingerprint() fingerprint {\n", exprType)
-	fmt.Fprintf(g.w, "  return fingerprint(*e)\n")
+	fmt.Fprintf(g.w, "func (e *%s) Fingerprint() Fingerprint {\n", exprType)
+	fmt.Fprintf(g.w, "  return Fingerprint(*e)\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
 
@@ -197,15 +196,15 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 // each more specialized expression type.
 func (g *exprsGen) genMemoFuncs(define *lang.DefineExpr) {
 	opType := fmt.Sprintf("%sOp", define.Name)
-	exprType := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
+	exprType := fmt.Sprintf("%sExpr", define.Name)
 
-	// Generate a conversion method from memoExpr to the more specialized
+	// Generate a conversion method from Expr to the more specialized
 	// expression type.
-	fmt.Fprintf(g.w, "func (m *memoExpr) as%s() *%s {\n", define.Name, exprType)
-	fmt.Fprintf(g.w, "  if m.op != opt.%s {\n", opType)
+	fmt.Fprintf(g.w, "func (e *Expr) As%s() *%s {\n", define.Name, exprType)
+	fmt.Fprintf(g.w, "  if e.op != opt.%s {\n", opType)
 	fmt.Fprintf(g.w, "    return nil\n")
 	fmt.Fprintf(g.w, "  }\n")
 
-	fmt.Fprintf(g.w, "  return (*%s)(m)\n", exprType)
+	fmt.Fprintf(g.w, "  return (*%s)(e)\n", exprType)
 	fmt.Fprintf(g.w, "}\n\n")
 }

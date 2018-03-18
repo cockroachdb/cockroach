@@ -12,12 +12,11 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package memo
 
 import (
 	"bytes"
 	"fmt"
-
 	"sort"
 	"strings"
 
@@ -26,22 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-// exprID uniquely identifies an expression stored in the memo by pairing the
-// ID of its group with the ordinal position of the expression within that
-// group.
-type exprID struct {
-	group opt.GroupID
-	expr  exprOrdinal
-}
-
-// bestExprID uniquely identifies a bestExpr stored in the memo by pairing the
-// ID of its group with the ordinal position of the bestExpr within that group.
-type bestExprID struct {
-	group   opt.GroupID
-	ordinal bestOrdinal
-}
-
-// memo is a data structure for efficiently storing a forest of query plans.
+// Memo is a data structure for efficiently storing a forest of query plans.
 // Conceptually, the memo is composed of a numbered set of equivalency classes
 // called groups where each group contains a set of logically equivalent
 // expressions. The different expressions in a single group are called memo
@@ -110,21 +94,21 @@ type bestExprID struct {
 //   1: [scan a]
 //
 // TODO(andyk): See the comments in explorer.go for more details.
-type memo struct {
+type Memo struct {
 	// metadata provides information about the columns and tables used in this
 	// particular query.
 	metadata *opt.Metadata
 
-	// exprMap maps from expression fingerprint (memoExpr.fingerprint()) to
+	// exprMap maps from expression fingerprint (Expr.fingerprint()) to
 	// that expression's group. Multiple different fingerprints can map to the
 	// same group, but only one of them is the fingerprint of the group's
 	// normalized expression.
-	exprMap map[fingerprint]opt.GroupID
+	exprMap map[Fingerprint]GroupID
 
 	// groups is the set of all groups in the memo, indexed by group ID. Note
 	// the group ID 0 is invalid in order to allow zero initialization of an
 	// expression to indicate that it did not originate from the memo.
-	groups []memoGroup
+	groups []group
 
 	// logPropsFactory is used to derive logical properties for an expression,
 	// based on the logical properties of its children.
@@ -132,10 +116,10 @@ type memo struct {
 
 	// Intern the set of unique physical properties used by expressions in the
 	// memo, since there are so many duplicates.
-	physPropsMap map[string]opt.PhysicalPropsID
-	physProps    []opt.PhysicalProps
+	physPropsMap map[string]PhysicalPropsID
+	physProps    []PhysicalProps
 
-	// Some memoExprs have a variable number of children. The memoExpr stores
+	// Some memoExprs have a variable number of children. The Expr stores
 	// the list as a ListID struct, which is a slice of an array maintained by
 	// listStorage. Note that ListID 0 is invalid in order to indicate an
 	// unknown list.
@@ -144,46 +128,60 @@ type memo struct {
 	// Intern the set of unique privates used by expressions in the memo, since
 	// there are so many duplicates. Note that PrivateID 0 is invalid in order
 	// to indicate an unknown private.
-	privatesMap map[interface{}]opt.PrivateID
+	privatesMap map[interface{}]PrivateID
 	privates    []interface{}
 }
 
-func newMemo() *memo {
+// New constructs a new empty memo instance.
+func New() *Memo {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
-	m := &memo{
+	m := &Memo{
 		metadata:     opt.NewMetadata(),
-		exprMap:      make(map[fingerprint]opt.GroupID),
-		groups:       make([]memoGroup, 1),
-		physPropsMap: make(map[string]opt.PhysicalPropsID),
-		physProps:    make([]opt.PhysicalProps, 1, 2),
-		privatesMap:  make(map[interface{}]opt.PrivateID),
+		exprMap:      make(map[Fingerprint]GroupID),
+		groups:       make([]group, 1),
+		physPropsMap: make(map[string]PhysicalPropsID),
+		physProps:    make([]PhysicalProps, 1, 2),
+		privatesMap:  make(map[interface{}]PrivateID),
 		privates:     make([]interface{}, 1),
 	}
 
 	// Intern physical properties that require nothing of operator.
-	physProps := opt.PhysicalProps{}
+	physProps := PhysicalProps{}
 	m.physProps = append(m.physProps, physProps)
-	m.physPropsMap[physProps.Fingerprint()] = opt.MinPhysPropsID
+	m.physPropsMap[physProps.Fingerprint()] = MinPhysPropsID
 
 	m.listStorage.init()
 	return m
 }
 
-// newGroup creates a new group and adds it to the memo.
-func (m *memo) newGroup(norm memoExpr) *memoGroup {
-	id := opt.GroupID(len(m.groups))
-	m.groups = append(m.groups, makeMemoGroup(id, norm))
-	return &m.groups[len(m.groups)-1]
+// Metadata returns the metadata instance associated with the memo.
+func (m *Memo) Metadata() *opt.Metadata {
+	return m.metadata
 }
 
-// addAltFingerprint adds an additional fingerprint that references an existing
+// --------------------------------------------------------------------
+// Group methods.
+// --------------------------------------------------------------------
+
+// GroupProperties returns the logical properties of the given group.
+func (m *Memo) GroupProperties(group GroupID) *LogicalProps {
+	return &m.groups[group].logical
+}
+
+// GroupByFingerprint returns the group of the expression that has the
+// given fingerprint.
+func (m *Memo) GroupByFingerprint(f Fingerprint) GroupID {
+	return m.exprMap[f]
+}
+
+// AddAltFingerprint adds an additional fingerprint that references an existing
 // group. The new fingerprint corresponds to a denormalized expression that is
 // an alternate form of the group's normalized expression. Adding it to the
 // fingerprint map avoids re-adding the same expression in the future.
-func (m *memo) addAltFingerprint(alt fingerprint, group opt.GroupID) {
+func (m *Memo) AddAltFingerprint(alt Fingerprint, group GroupID) {
 	existing, ok := m.exprMap[alt]
 	if ok {
 		if existing != group {
@@ -194,97 +192,124 @@ func (m *memo) addAltFingerprint(alt fingerprint, group opt.GroupID) {
 	}
 }
 
-// memoizeNormExpr enters a normalized expression into the memo. This requires
+// newGroup creates a new group and adds it to the memo.
+func (m *Memo) newGroup(norm Expr) *group {
+	id := GroupID(len(m.groups))
+	m.groups = append(m.groups, makeMemoGroup(id, norm))
+	return &m.groups[len(m.groups)-1]
+}
+
+// group returns the memo group for the given ID.
+func (m *Memo) group(group GroupID) *group {
+	return &m.groups[group]
+}
+
+// --------------------------------------------------------------------
+// Expression methods.
+// --------------------------------------------------------------------
+
+// ExprCount returns the number of expressions in the given memo group. There
+// is always at least one expression in the group (the normalized expression).
+func (m *Memo) ExprCount(group GroupID) int {
+	return m.groups[group].exprCount()
+}
+
+// Expr returns the memo expression for the given ID.
+func (m *Memo) Expr(eid ExprID) *Expr {
+	return m.groups[eid.Group].expr(eid.Expr)
+}
+
+// NormExpr returns the normalized expression for the given group. Each group
+// has one canonical expression that is always the first expression in the
+// group, and which results from running normalization rules on the expression
+// until the final normal state has been reached.
+func (m *Memo) NormExpr(group GroupID) *Expr {
+	return m.groups[group].expr(normExprOrdinal)
+}
+
+// MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression.
-func (m *memo) memoizeNormExpr(norm memoExpr) opt.GroupID {
-	if m.exprMap[norm.fingerprint()] != 0 {
+func (m *Memo) MemoizeNormExpr(norm Expr) GroupID {
+	if m.exprMap[norm.Fingerprint()] != 0 {
 		panic("normalized expression has been entered into the memo more than once")
 	}
 
 	mgrp := m.newGroup(norm)
-	ev := makeNormExprView(m, mgrp.id)
+	ev := MakeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsFactory.constructProps(ev)
 
-	m.exprMap[norm.fingerprint()] = mgrp.id
+	m.exprMap[norm.Fingerprint()] = mgrp.id
 	return mgrp.id
 }
 
-// lookupGroup returns the memo group for the given ID.
-func (m *memo) lookupGroup(group opt.GroupID) *memoGroup {
-	return &m.groups[group]
+// --------------------------------------------------------------------
+// Best expression methods.
+// --------------------------------------------------------------------
+
+// EnsureBestExpr finds the expression in the given group that can provide the
+// required properties for the lowest cost and returns its id. If no best
+// expression exists yet, then EnsureBestExpr creates a new empty BestExpr and
+// returns its id.
+func (m *Memo) EnsureBestExpr(group GroupID, required PhysicalPropsID) BestExprID {
+	return m.group(group).ensureBestExpr(required)
 }
 
-// lookupGroupByFingerprint returns the group of the expression that has the
-// given fingerprint.
-func (m *memo) lookupGroupByFingerprint(f fingerprint) opt.GroupID {
-	return m.exprMap[f]
+// RatchetBestExpr overwrites the existing best expression with the given id if
+// the candidate expression has a lower cost.
+func (m *Memo) RatchetBestExpr(best BestExprID, candidate *BestExpr) {
+	m.group(best.group).ratchetBestExpr(best, candidate)
 }
 
-// lookupExpr returns the expression referenced by the given location.
-func (m *memo) lookupExpr(eid exprID) *memoExpr {
-	return m.groups[eid.group].expr(eid.expr)
-}
-
-// lookupNormExpr returns the normalized expression for the given group. Each
-// group has one canonical expression that is always the first expression in
-// the group, and which results from running normalization rules on the
-// expression until the final normal state has been reached.
-func (m *memo) lookupNormExpr(group opt.GroupID) *memoExpr {
-	return m.groups[group].expr(normExprOrdinal)
-}
-
-// lookupBestExpr returns the best expression with the given id.
-func (m *memo) lookupBestExpr(best bestExprID) *bestExpr {
+// bestExpr returns the best expression with the given id.
+func (m *Memo) bestExpr(best BestExprID) *BestExpr {
 	return m.groups[best.group].bestExpr(best.ordinal)
 }
 
-// ratchetBestExpr overwrites the existing best expression with the given id if
-// the candidate expression has a lower cost.
-func (m *memo) ratchetBestExpr(best bestExprID, candidate *bestExpr) {
-	m.lookupGroup(best.group).ratchetBestExpr(best, candidate)
-}
+// --------------------------------------------------------------------
+// Interning methods.
+// --------------------------------------------------------------------
 
-// internList adds the given list of group IDs to memo storage and returns an
+// InternList adds the given list of group IDs to memo storage and returns an
 // ID that can be used for later lookup. If the same list was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (m *memo) internList(items []opt.GroupID) opt.ListID {
+func (m *Memo) InternList(items []GroupID) ListID {
 	return m.listStorage.intern(items)
 }
 
-// lookupList returns a list of group IDs that was earlier stored in the memo
-// by a call to internList.
-func (m *memo) lookupList(id opt.ListID) []opt.GroupID {
+// LookupList returns a list of group IDs that was earlier stored in the memo
+// by a call to InternList.
+func (m *Memo) LookupList(id ListID) []GroupID {
 	return m.listStorage.lookup(id)
 }
 
-// internPhysicalProps adds the given props to the memo if that set hasn't yet
+// InternPhysicalProps adds the given props to the memo if that set hasn't yet
 // been added, and returns an ID which can later be used to look up the props.
 // If the same list was added previously, then this method is a no-op and
 // returns the same ID as did the previous call.
-func (m *memo) internPhysicalProps(props *opt.PhysicalProps) opt.PhysicalPropsID {
+func (m *Memo) InternPhysicalProps(props *PhysicalProps) PhysicalPropsID {
 	fingerprint := props.Fingerprint()
 	id, ok := m.physPropsMap[fingerprint]
 	if !ok {
-		id = opt.PhysicalPropsID(len(m.physProps))
+		id = PhysicalPropsID(len(m.physProps))
 		m.physProps = append(m.physProps, *props)
 		m.physPropsMap[fingerprint] = id
 	}
 	return id
 }
 
-// lookupPhysicalProps returns the set of physical props that was earlier
-// interned in the memo by a call to internPhysicalProps.
-func (m *memo) lookupPhysicalProps(id opt.PhysicalPropsID) *opt.PhysicalProps {
+// LookupPhysicalProps returns the set of physical props that was earlier
+// interned in the memo by a call to InternPhysicalProps.
+func (m *Memo) LookupPhysicalProps(id PhysicalPropsID) *PhysicalProps {
 	return &m.physProps[id]
 }
 
-// internPrivate adds the given private value to the memo and returns an ID
+// InternPrivate adds the given private value to the memo and returns an ID
 // that can be used for later lookup. If the same value was added previously,
 // this method is a no-op and returns the ID of the previous value.
 // NOTE: Because the internment uses the private value as a map key, only data
 //       types which can be map types can be used here.
-func (m *memo) internPrivate(private interface{}) opt.PrivateID {
+func (m *Memo) InternPrivate(private interface{}) PrivateID {
 	// Intern the value of certain Datum types rather than a pointer to their
 	// value in order to support fast value comparison by private id. This is
 	// only possible for Datum types that can be used as map types.
@@ -297,20 +322,24 @@ func (m *memo) internPrivate(private interface{}) opt.PrivateID {
 
 	id, ok := m.privatesMap[key]
 	if !ok {
-		id = opt.PrivateID(len(m.privates))
+		id = PrivateID(len(m.privates))
 		m.privates = append(m.privates, private)
 		m.privatesMap[key] = id
 	}
 	return id
 }
 
-// lookupPrivate returns a private value that was earlier interned in the memo
-// by a call to internPrivate.
-func (m *memo) lookupPrivate(id opt.PrivateID) interface{} {
+// LookupPrivate returns a private value that was earlier interned in the memo
+// by a call to InternPrivate.
+func (m *Memo) LookupPrivate(id PrivateID) interface{} {
 	return m.privates[id]
 }
 
-func (m *memo) String() string {
+// --------------------------------------------------------------------
+// String representation.
+// --------------------------------------------------------------------
+
+func (m *Memo) String() string {
 	tp := treeprinter.New()
 	root := tp.Child("memo")
 
@@ -323,7 +352,7 @@ func (m *memo) String() string {
 			if ord != 0 {
 				buf.WriteByte(' ')
 			}
-			m.formatExpr(mgrp.expr(exprOrdinal(ord)), &buf)
+			m.formatExpr(mgrp.expr(ExprOrdinal(ord)), &buf)
 		}
 
 		child := root.Childf("%d: %s", i, buf.String())
@@ -333,22 +362,22 @@ func (m *memo) String() string {
 	return tp.String()
 }
 
-func (m *memo) formatExpr(e *memoExpr, buf *bytes.Buffer) {
+func (m *Memo) formatExpr(e *Expr, buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "(%s", e.op)
-	for i := 0; i < e.childCount(); i++ {
-		fmt.Fprintf(buf, " %d", e.childGroup(m, i))
+	for i := 0; i < e.ChildCount(); i++ {
+		fmt.Fprintf(buf, " %d", e.ChildGroup(m, i))
 	}
-	m.formatPrivate(e.private(m), buf)
+	m.formatPrivate(e.Private(m), buf)
 	buf.WriteString(")")
 }
 
 type bestExprSort struct {
-	required    opt.PhysicalPropsID
+	required    PhysicalPropsID
 	fingerprint string
-	best        *bestExpr
+	best        *BestExpr
 }
 
-func (m *memo) formatBestExprSet(mgrp *memoGroup, tp treeprinter.Node) {
+func (m *Memo) formatBestExprSet(mgrp *group, tp treeprinter.Node) {
 	// Sort the bestExprs by required properties.
 	cnt := mgrp.bestExprCount()
 	beSort := make([]bestExprSort, 0, cnt)
@@ -356,7 +385,7 @@ func (m *memo) formatBestExprSet(mgrp *memoGroup, tp treeprinter.Node) {
 		best := mgrp.bestExpr(bestOrdinal(i))
 		beSort = append(beSort, bestExprSort{
 			required:    best.required,
-			fingerprint: m.lookupPhysicalProps(best.required).Fingerprint(),
+			fingerprint: m.LookupPhysicalProps(best.required).Fingerprint(),
 			best:        best,
 		})
 	}
@@ -379,29 +408,29 @@ func (m *memo) formatBestExprSet(mgrp *memoGroup, tp treeprinter.Node) {
 	}
 }
 
-func (m *memo) formatBestExpr(be *bestExpr, buf *bytes.Buffer) {
+func (m *Memo) formatBestExpr(be *BestExpr, buf *bytes.Buffer) {
 	fmt.Fprintf(buf, "(%s", be.op)
 
-	for i := 0; i < be.childCount(); i++ {
-		bestChild := be.child(i)
+	for i := 0; i < be.ChildCount(); i++ {
+		bestChild := be.Child(i)
 		fmt.Fprintf(buf, " %d", bestChild.group)
 
 		// Print properties required of the child if they are interesting.
-		required := m.lookupBestExpr(bestChild).required
-		if required != opt.MinPhysPropsID {
-			fmt.Fprintf(buf, "=\"%s\"", m.lookupPhysicalProps(required).Fingerprint())
+		required := m.bestExpr(bestChild).required
+		if required != MinPhysPropsID {
+			fmt.Fprintf(buf, "=\"%s\"", m.LookupPhysicalProps(required).Fingerprint())
 		}
 	}
 
-	m.formatPrivate(be.private(m), buf)
+	m.formatPrivate(be.Private(m), buf)
 	buf.WriteString(")")
 }
 
-func (m *memo) formatPrivate(private interface{}, buf *bytes.Buffer) {
+func (m *Memo) formatPrivate(private interface{}, buf *bytes.Buffer) {
 	if private != nil {
 		switch t := private.(type) {
 		case nil:
-		case *opt.ScanOpDef:
+		case *ScanOpDef:
 			fmt.Fprintf(buf, " %s", m.metadata.Table(t.Table).TabName())
 		case opt.ColumnIndex:
 			fmt.Fprintf(buf, " %s", m.metadata.ColumnLabel(t))
