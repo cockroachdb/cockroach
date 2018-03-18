@@ -101,15 +101,7 @@ var (
 func TestBuild(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	paths, err := filepath.Glob(*testDataGlob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
-	}
-
-	for _, path := range paths {
+	for _, path := range testutils.GetTestFiles(t, *testDataGlob) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			ctx := context.Background()
 			evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())

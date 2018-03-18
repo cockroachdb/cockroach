@@ -15,8 +15,7 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -32,8 +31,8 @@ import (
 // (scope.groupby.aggs)
 func (b *Builder) buildProjectionList(
 	selects tree.SelectExprs, inScope *scope, outScope *scope,
-) (projections []opt.GroupID) {
-	projections = make([]opt.GroupID, 0, len(selects))
+) (projections []memo.GroupID) {
+	projections = make([]memo.GroupID, 0, len(selects))
 	for _, e := range selects {
 		subset := b.buildProjection(e.Expr, string(e.As), inScope, outScope)
 		projections = append(projections, subset...)
@@ -60,13 +59,13 @@ func (b *Builder) buildProjectionList(
 // buildProjectionList).
 func (b *Builder) buildProjection(
 	projection tree.Expr, label string, inScope, outScope *scope,
-) (projections []opt.GroupID) {
+) (projections []memo.GroupID) {
 	exprs := b.expandStarAndResolveType(projection, inScope)
 	if len(exprs) > 1 && label != "" {
 		panic(errorf("\"%s\" cannot be aliased", projection))
 	}
 
-	projections = make([]opt.GroupID, 0, len(exprs))
+	projections = make([]memo.GroupID, 0, len(exprs))
 	for _, e := range exprs {
 		projections = append(projections, b.buildScalarProjection(e, label, inScope, outScope))
 	}
@@ -91,7 +90,7 @@ func (b *Builder) buildProjection(
 // buildProjectionList).
 func (b *Builder) buildScalarProjection(
 	texpr tree.TypedExpr, label string, inScope, outScope *scope,
-) opt.GroupID {
+) memo.GroupID {
 	// NB: The case statements are sorted lexicographically.
 	switch t := texpr.(type) {
 	case *columnProps:
@@ -131,7 +130,7 @@ func (b *Builder) buildScalarProjection(
 // buildProjectionList).
 func (b *Builder) buildVariableProjection(
 	col *columnProps, label string, inScope, outScope *scope,
-) opt.GroupID {
+) memo.GroupID {
 	if inScope.inGroupingContext() && !inScope.groupby.inAgg && !inScope.groupby.aggInScope.hasColumn(col.index) {
 		panic(groupingError(col.String()))
 	}
@@ -170,8 +169,8 @@ func (b *Builder) buildVariableProjection(
 // the newly bound variables are appended to a growing list to be returned by
 // buildProjectionList).
 func (b *Builder) buildDefaultScalarProjection(
-	texpr tree.TypedExpr, group opt.GroupID, label string, inScope, outScope *scope,
-) opt.GroupID {
+	texpr tree.TypedExpr, group memo.GroupID, label string, inScope, outScope *scope,
+) memo.GroupID {
 	if inScope.inGroupingContext() && !inScope.groupby.inAgg {
 		if len(inScope.groupby.varsUsed) > 0 {
 			if _, ok := inScope.groupby.groupStrs[symbolicExprStr(texpr)]; !ok {

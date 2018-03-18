@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -80,7 +80,7 @@ func (ep *execPlan) getColumnOrdinal(col opt.ColumnIndex) exec.ColumnOrdinal {
 	return exec.ColumnOrdinal(ord)
 }
 
-func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	var ep execPlan
 	var err error
 	switch ev.Operator() {
@@ -139,7 +139,7 @@ func (b *Builder) buildRelational(ev xform.ExprView) (execPlan, error) {
 	return ep, err
 }
 
-func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildValues(ev memo.ExprView) (execPlan, error) {
 	md := ev.Metadata()
 	cols := *ev.Private().(*opt.ColList)
 	numCols := len(cols)
@@ -177,8 +177,8 @@ func (b *Builder) buildValues(ev xform.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
-func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
-	def := ev.Private().(*opt.ScanOpDef)
+func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
+	def := ev.Private().(*memo.ScanOpDef)
 	md := ev.Metadata()
 	tbl := md.Table(def.Table)
 
@@ -202,7 +202,7 @@ func (b *Builder) buildScan(ev xform.ExprView) (execPlan, error) {
 	return res, nil
 }
 
-func (b *Builder) buildSelect(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildSelect(ev memo.ExprView) (execPlan, error) {
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -220,7 +220,7 @@ func (b *Builder) buildSelect(ev xform.ExprView) (execPlan, error) {
 	}, nil
 }
 
-func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -245,7 +245,7 @@ func (b *Builder) buildProject(ev xform.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
-func (b *Builder) buildJoin(ev xform.ExprView, joinType sqlbase.JoinType) (execPlan, error) {
+func (b *Builder) buildJoin(ev memo.ExprView, joinType sqlbase.JoinType) (execPlan, error) {
 	left, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -277,7 +277,7 @@ func (b *Builder) buildJoin(ev xform.ExprView, joinType sqlbase.JoinType) (execP
 	return ep, nil
 }
 
-func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildGroupBy(ev memo.ExprView) (execPlan, error) {
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -297,7 +297,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 	aggInfos := make([]exec.AggInfo, numAgg)
 	for i := 0; i < numAgg; i++ {
 		fn := aggregations.Child(i)
-		funcDef := fn.Private().(opt.FuncOpDef)
+		funcDef := fn.Private().(memo.FuncOpDef)
 
 		argIdx := make([]exec.ColumnOrdinal, fn.ChildCount())
 		for j := range argIdx {
@@ -325,7 +325,7 @@ func (b *Builder) buildGroupBy(ev xform.ExprView) (execPlan, error) {
 	return ep, nil
 }
 
-func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildSetOp(ev memo.ExprView) (execPlan, error) {
 	left, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -335,7 +335,7 @@ func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	colMap := *ev.Private().(*opt.SetOpColMap)
+	colMap := *ev.Private().(*memo.SetOpColMap)
 
 	// We need to make sure that the two sides render the columns in the same
 	// order; otherwise we add projections.
@@ -396,7 +396,7 @@ func (b *Builder) buildSetOp(ev xform.ExprView) (execPlan, error) {
 }
 
 // buildLimitOffset builds a plan for a LimitOp or OffsetOp
-func (b *Builder) buildLimitOffset(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildLimitOffset(ev memo.ExprView) (execPlan, error) {
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -423,7 +423,7 @@ func (b *Builder) buildLimitOffset(ev xform.ExprView) (execPlan, error) {
 	return execPlan{root: node, outputCols: input.outputCols}, nil
 }
 
-func (b *Builder) buildSort(ev xform.ExprView) (execPlan, error) {
+func (b *Builder) buildSort(ev memo.ExprView) (execPlan, error) {
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
 		return execPlan{}, err
@@ -485,7 +485,7 @@ func (b *Builder) ensureColumns(input execPlan, colList opt.ColList) (exec.Node,
 // applyPresentation adds a projection to a plan to satisfy a required
 // Presentation property.
 func (b *Builder) applyPresentation(
-	input execPlan, md *opt.Metadata, p opt.Presentation,
+	input execPlan, md *opt.Metadata, p memo.Presentation,
 ) (execPlan, error) {
 	colList := make(opt.ColList, len(p))
 	colNames := make([]string, len(p))

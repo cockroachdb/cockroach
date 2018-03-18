@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -128,8 +129,8 @@ func (b *Builder) synthesizeColumn(
 // constructList invokes the factory to create one of the operators that contain
 // a list of groups: ProjectionsOp and AggregationsOp.
 func (b *Builder) constructList(
-	op opt.Operator, items []opt.GroupID, cols []columnProps,
-) opt.GroupID {
+	op opt.Operator, items []memo.GroupID, cols []columnProps,
+) memo.GroupID {
 	colList := make(opt.ColList, len(cols))
 	for i := range cols {
 		colList[i] = cols[i].index
@@ -295,8 +296,8 @@ func findColByIndex(cols []columnProps, colIndex opt.ColumnIndex) *columnProps {
 	return nil
 }
 
-func makePresentation(cols []columnProps) opt.Presentation {
-	presentation := make(opt.Presentation, len(cols))
+func makePresentation(cols []columnProps) memo.Presentation {
+	presentation := make(memo.Presentation, len(cols))
 	for i := range cols {
 		col := &cols[i]
 		presentation[i] = opt.LabeledColumn{Label: string(col.name), Index: col.index}

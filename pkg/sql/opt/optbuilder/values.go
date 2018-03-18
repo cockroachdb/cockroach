@@ -17,7 +17,7 @@ package optbuilder
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -29,7 +29,7 @@ import (
 // return values.
 func (b *Builder) buildValuesClause(
 	values *tree.ValuesClause, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	var numCols int
 	if len(values.Tuples) > 0 {
 		numCols = len(values.Tuples[0].Exprs)
@@ -39,11 +39,11 @@ func (b *Builder) buildValuesClause(
 	for i := range colTypes {
 		colTypes[i] = types.Unknown
 	}
-	rows := make([]opt.GroupID, 0, len(values.Tuples))
+	rows := make([]memo.GroupID, 0, len(values.Tuples))
 
 	// elems is used to store tuple values, and can be allocated once and reused
 	// repeatedly, since InternList will copy values to memo storage.
-	elems := make([]opt.GroupID, numCols)
+	elems := make([]memo.GroupID, numCols)
 
 	for _, tuple := range values.Tuples {
 		if numCols != len(tuple.Exprs) {

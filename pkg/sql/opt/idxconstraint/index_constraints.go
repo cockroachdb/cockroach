@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -103,13 +104,13 @@ func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
 // operand. The <tight> return value indicates if the spans are exactly
 // equivalent to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForSingleColumn(
-	offset int, op opt.Operator, val xform.ExprView,
+	offset int, op opt.Operator, val memo.ExprView,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	if op == opt.InOp && xform.MatchesTupleOfConstants(val) {
 		// We assume that the values of the tuple are already ordered and distinct.
 		spans := make(LogicalSpans, 0, val.ChildCount())
 		for i, n := 0, val.ChildCount(); i < n; i++ {
-			datum := xform.ExtractConstDatum(val.Child(i))
+			datum := memo.ExtractConstDatum(val.Child(i))
 			if !c.verifyType(offset, datum.ResolvedType()) {
 				return nil, false, false
 			}
@@ -133,7 +134,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 	if !val.IsConstValue() {
 		return nil, false, false
 	}
-	return c.makeSpansForSingleColumnDatum(offset, op, xform.ExtractConstDatum(val))
+	return c.makeSpansForSingleColumnDatum(offset, op, memo.ExtractConstDatum(val))
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a
@@ -238,7 +239,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleInequality(
-	offset int, ev xform.ExprView,
+	offset int, ev memo.ExprView,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := ev.Child(0), ev.Child(1)
 
@@ -291,7 +292,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 
 	datums := make(tree.Datums, prefixLen)
 	for i := range datums {
-		datums[i] = xform.ExtractConstDatum(rhs.Child(i))
+		datums[i] = memo.ExtractConstDatum(rhs.Child(i))
 	}
 
 	// less is true if the op is < or <= and false if the op is > or >=.
@@ -418,7 +419,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 // The <tight> return value indicates if the spans are exactly equivalent
 // to the expression (and not weaker).
 func (c *indexConstraintCtx) makeSpansForTupleIn(
-	offset int, ev xform.ExprView,
+	offset int, ev memo.ExprView,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	lhs, rhs := ev.Child(0), ev.Child(1)
 
@@ -456,7 +457,7 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 			if !val.IsConstValue() {
 				return nil, false, false
 			}
-			datum := xform.ExtractConstDatum(val)
+			datum := memo.ExtractConstDatum(val)
 			if !c.verifyType(offset+i, datum.ResolvedType()) {
 				return nil, false, false
 			}
@@ -500,11 +501,11 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 // The <tight> return value indicates if the spans are exactly equivalent to the
 // expression (and not weaker). See simplifyFilter for more information.
 func (c *indexConstraintCtx) makeSpansForExpr(
-	offset int, ev xform.ExprView,
+	offset int, ev memo.ExprView,
 ) (_ LogicalSpans, ok bool, tight bool) {
 
 	if ev.IsConstValue() {
-		datum := xform.ExtractConstDatum(ev)
+		datum := memo.ExtractConstDatum(ev)
 		if datum == tree.DBoolFalse || datum == tree.DNull {
 			// Condition is never true, return no spans.
 			return LogicalSpans{}, true, true
@@ -594,7 +595,7 @@ type indexConstraintConjunctionCtx struct {
 	*indexConstraintCtx
 
 	// andExprs is a set of conjuncts that make up the filter.
-	andExprs []xform.ExprView
+	andExprs []memo.ExprView
 
 	// Memoization data structure for calcOffset.
 	results []calcOffsetResult
@@ -611,11 +612,11 @@ type calcOffsetResult struct {
 
 // makeSpansForAndcalculates spans for an AndOp.
 func (c *indexConstraintCtx) makeSpansForAnd(
-	offset int, ev xform.ExprView,
+	offset int, ev memo.ExprView,
 ) (_ LogicalSpans, ok bool) {
 	conjCtx := indexConstraintConjunctionCtx{
 		indexConstraintCtx: c,
-		andExprs:           make([]xform.ExprView, ev.ChildCount()),
+		andExprs:           make([]memo.ExprView, ev.ChildCount()),
 		results:            make([]calcOffsetResult, len(c.colInfos)),
 	}
 	for i := range conjCtx.andExprs {
@@ -818,7 +819,7 @@ func (c indexConstraintConjunctionCtx) calcOffset(offset int) (_ LogicalSpans, o
 
 // makeSpansForOr calculates spans for an OrOp.
 func (c *indexConstraintCtx) makeSpansForOr(
-	offset int, ev xform.ExprView,
+	offset int, ev memo.ExprView,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	var spans LogicalSpans
 
@@ -847,7 +848,7 @@ func (c *indexConstraintCtx) makeSpansForOr(
 // makeInvertedIndexSpansForExpr is analogous to makeSpansForExpr, but it is
 // used for inverted indexes.
 func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
-	ev xform.ExprView,
+	ev memo.ExprView,
 ) (_ LogicalSpans, ok bool, tight bool) {
 	switch ev.Operator() {
 	case opt.ContainsOp:
@@ -857,7 +858,7 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			return nil, false, false
 		}
 
-		rightDatum := xform.ExtractConstDatum(rhs)
+		rightDatum := memo.ExtractConstDatum(rhs)
 		rd := rightDatum.(*tree.DJSON).JSON
 
 		switch rd.Type() {
@@ -872,7 +873,7 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 			if hasContainerLeaf {
 				return nil, false, false
 			}
-			return LogicalSpans{c.makeEqSpan(xform.ExtractConstDatum(rhs))}, true, true
+			return LogicalSpans{c.makeEqSpan(memo.ExtractConstDatum(rhs))}, true, true
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
 			// both matching scalars and arrays that contain that value. In order to do this we generate
@@ -1009,11 +1010,11 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(spans LogicalSpans) int {
 //    `@1 <= 1 OR @1 >= 4` has spans `[ - /1], [/1 - ]` but in separation neither
 //    sub-expression is always true inside these spans.
 func (c *indexConstraintCtx) simplifyFilter(
-	ev xform.ExprView, spans LogicalSpans, maxSimplifyPrefix int,
-) opt.GroupID {
+	ev memo.ExprView, spans LogicalSpans, maxSimplifyPrefix int,
+) memo.GroupID {
 	// Special handling for AND and OR.
 	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp {
-		newChildren := make([]opt.GroupID, ev.ChildCount())
+		newChildren := make([]memo.GroupID, ev.ChildCount())
 		for i := range newChildren {
 			newChildren[i] = c.simplifyFilter(ev.Child(i), spans, maxSimplifyPrefix)
 		}
@@ -1080,7 +1081,7 @@ func (c *indexConstraintCtx) simplifyFilter(
 type Instance struct {
 	indexConstraintCtx
 
-	filter xform.ExprView
+	filter memo.ExprView
 
 	spansPopulated    bool
 	spansTight        bool
@@ -1090,7 +1091,7 @@ type Instance struct {
 
 // Init processes the filter and calculates the spans.
 func (ic *Instance) Init(
-	filter xform.ExprView,
+	filter memo.ExprView,
 	colInfos []IndexColumnInfo,
 	isInverted bool,
 	evalCtx *tree.EvalContext,
@@ -1136,7 +1137,7 @@ func (ic *Instance) Spans() (_ LogicalSpans, ok bool) {
 
 // RemainingFilter calculates a simplified filter that needs to be applied
 // within the returned Spans.
-func (ic *Instance) RemainingFilter() opt.GroupID {
+func (ic *Instance) RemainingFilter() memo.GroupID {
 	if !ic.spansPopulated {
 		return ic.filter.Group()
 	}
@@ -1149,6 +1150,6 @@ func (ic *Instance) RemainingFilter() opt.GroupID {
 
 // isIndexColumn returns true if ev is an indexed var that corresponds
 // to index column <offset>.
-func (c *indexConstraintCtx) isIndexColumn(ev xform.ExprView, index int) bool {
+func (c *indexConstraintCtx) isIndexColumn(ev memo.ExprView, index int) bool {
 	return ev.Operator() == opt.VariableOp && ev.Private().(opt.ColumnIndex) == c.colInfos[index].VarIdx
 }

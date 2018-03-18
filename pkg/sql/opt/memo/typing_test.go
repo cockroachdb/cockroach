@@ -12,13 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package memo
+package memo_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -46,22 +47,22 @@ func TestTypingJson(t *testing.T) {
 
 	// (FetchVal (Const <json>) (Const <int>))
 	fetchValGroup := f.ConstructFetchVal(jsonGroup, intGroup)
-	ev := o.Optimize(fetchValGroup, &opt.PhysicalProps{})
+	ev := o.Optimize(fetchValGroup, &memo.PhysicalProps{})
 	testTyping(t, ev, types.JSON)
 
 	// (FetchValPath (Const <json>) (Const <string-array>))
 	fetchValPathGroup := f.ConstructFetchValPath(jsonGroup, arrGroup)
-	ev = o.Optimize(fetchValPathGroup, &opt.PhysicalProps{})
+	ev = o.Optimize(fetchValPathGroup, &memo.PhysicalProps{})
 	testTyping(t, ev, types.JSON)
 
 	// (FetchText (Const <json>) (Const <int>))
 	fetchTextGroup := f.ConstructFetchText(jsonGroup, intGroup)
-	ev = o.Optimize(fetchTextGroup, &opt.PhysicalProps{})
+	ev = o.Optimize(fetchTextGroup, &memo.PhysicalProps{})
 	testTyping(t, ev, types.String)
 
 	// (FetchTextPath (Const <json>) (Const <string-array>))
 	fetchTextPathGroup := f.ConstructFetchTextPath(jsonGroup, arrGroup)
-	ev = o.Optimize(fetchTextPathGroup, &opt.PhysicalProps{})
+	ev = o.Optimize(fetchTextPathGroup, &memo.PhysicalProps{})
 	testTyping(t, ev, types.String)
 }
 
@@ -74,12 +75,27 @@ func TestBinaryOverloadExists(t *testing.T) {
 
 	arrType := types.TArray{Typ: types.Int}
 
-	test(true, xform.BinaryOverloadExists(opt.MinusOp, types.Date, types.Int))
-	test(true, xform.BinaryOverloadExists(opt.MinusOp, types.Date, types.Unknown))
-	test(true, xform.BinaryOverloadExists(opt.MinusOp, types.Unknown, types.Int))
-	test(false, xform.BinaryOverloadExists(opt.MinusOp, types.Int, types.Date))
-	test(true, xform.BinaryOverloadExists(opt.ConcatOp, arrType, types.Int))
-	test(true, xform.BinaryOverloadExists(opt.ConcatOp, types.Unknown, arrType))
+	test(true, memo.BinaryOverloadExists(opt.MinusOp, types.Date, types.Int))
+	test(true, memo.BinaryOverloadExists(opt.MinusOp, types.Date, types.Unknown))
+	test(true, memo.BinaryOverloadExists(opt.MinusOp, types.Unknown, types.Int))
+	test(false, memo.BinaryOverloadExists(opt.MinusOp, types.Int, types.Date))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, arrType, types.Int))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, arrType))
+}
+
+func TestBinaryAllowsNullArgs(t *testing.T) {
+	test := func(expected, actual bool) {
+		if expected != actual {
+			t.Errorf("expected %v, got %v", expected, actual)
+		}
+	}
+
+	arrType := types.TArray{Typ: types.Int}
+
+	test(false, memo.BinaryAllowsNullArgs(opt.PlusOp, types.Int, types.Int))
+	test(false, memo.BinaryAllowsNullArgs(opt.PlusOp, types.Int, types.Unknown))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, arrType, types.Int))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, arrType))
 }
 
 // TestTypingUnaryAssumptions ensures that unary overloads conform to certain
@@ -159,7 +175,7 @@ func TestTypingBinaryAssumptions(t *testing.T) {
 	}
 }
 
-func testTyping(t *testing.T, ev xform.ExprView, expected types.T) {
+func testTyping(t *testing.T, ev memo.ExprView, expected types.T) {
 	t.Helper()
 
 	actual := ev.Logical().Scalar.Type
