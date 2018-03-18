@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
-// PhysProps files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalProps/ordering"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalProps/presentation"
+// TestPhysicalPropsFactory files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
-func TestPhysicalProps(t *testing.T) {
+func TestPhysicalPropsFactory(t *testing.T) {
 	runDataDrivenTest(t, "testdata/physprops/*")
 }
 
