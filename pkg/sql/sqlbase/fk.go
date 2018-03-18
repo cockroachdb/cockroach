@@ -568,8 +568,10 @@ func makeFKUpdateHelper(
 	return ret, err
 }
 
-func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID) {
-	fks.indexIDsToCheck[indexID] = struct{}{}
+func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID, descriptorType IndexDescriptor_Type) {
+	if descriptorType == IndexDescriptor_FORWARD {
+		fks.indexIDsToCheck[indexID] = struct{}{}
+	}
 }
 
 func (fks fkUpdateHelper) runIndexChecks(
