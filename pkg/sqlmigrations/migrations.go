@@ -909,7 +909,7 @@ func upgradeDescsWithFn(
 							// days, while upgrading to a new version can take as little as a
 							// few minutes.
 							table.UpVersion = true
-							if err := table.Validate(ctx, txn); err != nil {
+							if err := table.Validate(ctx, txn, nil); err != nil {
 								return err
 							}
 

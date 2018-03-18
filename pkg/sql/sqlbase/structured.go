@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -597,7 +598,7 @@ func (desc *TableDescriptor) AllocateIDs() error {
 	if desc.ID == 0 {
 		desc.ID = keys.MaxReservedDescID + 1
 	}
-	err := desc.ValidateTable()
+	err := desc.ValidateTable(nil)
 	desc.ID = savedID
 	return err
 }
@@ -870,8 +871,10 @@ func (desc *TableDescriptor) allocateColumnFamilyIDs(columnNames map[string]Colu
 
 // Validate validates that the table descriptor is well formed. Checks include
 // both single table and cross table invariants.
-func (desc *TableDescriptor) Validate(ctx context.Context, txn *client.Txn) error {
-	err := desc.ValidateTable()
+func (desc *TableDescriptor) Validate(
+	ctx context.Context, txn *client.Txn, st *cluster.Settings,
+) error {
+	err := desc.ValidateTable(st)
 	if err != nil {
 		return err
 	}
@@ -1023,7 +1026,8 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 // names and index names are unique and verifying that column IDs and index IDs
 // are consistent. Use Validate to validate that cross-table references are
 // correct.
-func (desc *TableDescriptor) ValidateTable() error {
+// If version is supplied, the descriptor is checked for version incompatibilities.
+func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if err := validateName(desc.Name, "table"); err != nil {
 		return err
 	}
@@ -1037,6 +1041,12 @@ func (desc *TableDescriptor) ValidateTable() error {
 	}
 
 	if desc.IsSequence() {
+		if st != nil && st.Version.HasBeenInitialized() {
+			if err := st.Version.CheckVersion(cluster.Version2_0, "sequences"); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	}
 
@@ -1099,6 +1109,19 @@ func (desc *TableDescriptor) ValidateTable() error {
 		if column.ID >= desc.NextColumnID {
 			return fmt.Errorf("column %q invalid ID (%d) >= next column ID (%d)",
 				column.Name, column.ID, desc.NextColumnID)
+		}
+	}
+
+	if st != nil && st.Version.HasBeenInitialized() {
+		if !st.Version.IsMinSupported(cluster.Version2_0) {
+			for _, def := range desc.Columns {
+				if def.Type.SemanticType == ColumnType_JSON {
+					return errors.New("cluster version does not support JSONB (>= 2.0 required)")
+				}
+				if def.ComputeExpr != nil {
+					return errors.New("cluster version does not support computed columns (>= 2.0 required)")
+				}
+			}
 		}
 	}
 

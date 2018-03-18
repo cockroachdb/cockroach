@@ -192,7 +192,7 @@ func getDescriptorByID(
 		}
 		table.MaybeFillInDescriptor()
 
-		if err := table.Validate(ctx, txn); err != nil {
+		if err := table.Validate(ctx, txn, nil /* clusterVersion */); err != nil {
 			return err
 		}
 		*t = *table
