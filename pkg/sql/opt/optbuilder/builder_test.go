@@ -109,9 +109,9 @@ func TestBuilder(t *testing.T) {
 
 				switch d.Cmd {
 				case "build":
-					executor := testutils.NewExecutor(catalog, d.Input)
-					executor.AllowUnsupportedExpr = allowUnsupportedExpr
-					ev, err := executor.OptBuild()
+					tester := testutils.NewOptTester(catalog, d.Input)
+					tester.AllowUnsupportedExpr = allowUnsupportedExpr
+					ev, err := tester.OptBuild()
 					if err != nil {
 						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}

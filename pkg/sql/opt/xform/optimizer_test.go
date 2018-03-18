@@ -68,34 +68,34 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 		catalog := testutils.NewTestCatalog()
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-				executor := testutils.NewExecutor(catalog, d.Input)
+				tester := testutils.NewOptTester(catalog, d.Input)
 				switch d.Cmd {
 				case "exec-ddl":
 					return testutils.ExecuteTestDDL(t, d.Input, catalog)
 
 				case "build":
-					ev, err := executor.OptBuild()
+					ev, err := tester.OptBuild()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 					return ev.String()
 
 				case "opt":
-					ev, err := executor.Optimize()
+					ev, err := tester.Optimize()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 					return ev.String()
 
 				case "optsteps":
-					result, err := executor.OptSteps()
+					result, err := tester.OptSteps()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 					return result
 
 				case "memo":
-					result, err := executor.Memo()
+					result, err := tester.Memo()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
