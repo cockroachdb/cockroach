@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -148,7 +149,7 @@ func (p *planner) selectIndex(
 		if err != nil {
 			return nil, err
 		}
-		filterExpr := optimizer.Optimize(filterGroup, &opt.PhysicalProps{})
+		filterExpr := optimizer.Optimize(filterGroup, &memo.PhysicalProps{})
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
 				optimizer, filterExpr, p.EvalContext(),
@@ -252,7 +253,7 @@ func (p *planner) selectIndex(
 	s.origFilter = s.filter
 	if s.filter != nil {
 		remGroup := c.ic.RemainingFilter()
-		remEv := optimizer.Optimize(remGroup, &opt.PhysicalProps{})
+		remEv := optimizer.Optimize(remGroup, &memo.PhysicalProps{})
 		if remEv.Operator() == opt.TrueOp {
 			s.filter = nil
 		} else {
@@ -416,7 +417,7 @@ func (v indexInfoByCost) Sort() {
 // constraints. Initializes v.ic, as well as v.exactPrefix and v.cost (with a
 // baseline cost for the index).
 func (v *indexInfo) makeIndexConstraints(
-	optimizer *xform.Optimizer, filter xform.ExprView, evalCtx *tree.EvalContext,
+	optimizer *xform.Optimizer, filter memo.ExprView, evalCtx *tree.EvalContext,
 ) error {
 	numIndexCols := len(v.index.ColumnIDs)
 

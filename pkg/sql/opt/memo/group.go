@@ -21,18 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
-// exprOrdinal is the ordinal position of an expression within its memo group.
-// Each group stores one or more logically equivalent expressions. The 0th
-// expression is always the normalized expression for the group.
-type exprOrdinal uint16
+// GroupID identifies a memo group. Groups have numbers greater than 0; a
+// GroupID of 0 indicates an invalid group.
+type GroupID uint32
 
-const (
-	// normExprOrdinal is the ordinal position of the normalized expression in
-	// its group.
-	normExprOrdinal exprOrdinal = 0
-)
-
-// bestOrdinal is the ordinal position of a bestExpr within its memo group.
+// bestOrdinal is the ordinal position of a BestExpr within its memo group.
 // Once optimized, each group manages one or more bestExprs that track the
 // lowest cost expression for a particular set of required physical properties.
 type bestOrdinal uint16
@@ -44,13 +37,13 @@ const (
 	normBestOrdinal bestOrdinal = math.MaxUint16
 )
 
-// memoGroup stores a set of logically equivalent expressions. See the comments
-// on memoExpr for the definition of logical equivalency. In addition, for each
+// group stores a set of logically equivalent expressions. See the comments
+// on Expr for the definition of logical equivalency. In addition, for each
 // required set of physical properties, the group stores the expression that
 // provides those properties at the lowest known cost in the bestExprs fields.
-type memoGroup struct {
+type group struct {
 	// id is the index of this group within the memo.
-	id opt.GroupID
+	id GroupID
 
 	// logical is the set of logical properties that all memo expressions in
 	// the group share.
@@ -60,8 +53,8 @@ type memoGroup struct {
 	// group's normalized expression. otherExprs holds any expressions beyond
 	// the first. These are separated in order to optimize for the common case
 	// of a group with only one expression (often true for scalar expressions).
-	normExpr   memoExpr
-	otherExprs []memoExpr
+	normExpr   Expr
+	otherExprs []Expr
 
 	// firstBestExpr remembers the lowest cost expression in the group that
 	// provides a particular set of physical properties. If the group has been
@@ -69,19 +62,19 @@ type memoGroup struct {
 	// otherBestExprs remembers the lowest cost expressions for the others.
 	// These fields are separated in order to optimize for the common case of a
 	// group that has been optimized for only one set of properties.
-	firstBestExpr  bestExpr
-	otherBestExprs []bestExpr
+	firstBestExpr  BestExpr
+	otherBestExprs []BestExpr
 }
 
 // makeMemoGroup constructs a new memo group with the given id and its
 // normalized expression.
-func makeMemoGroup(id opt.GroupID, norm memoExpr) memoGroup {
-	return memoGroup{id: id, normExpr: norm}
+func makeMemoGroup(id GroupID, norm Expr) group {
+	return group{id: id, normExpr: norm}
 }
 
 // exprCount returns the number of logically-equivalent expressions in the
 // group.
-func (g *memoGroup) exprCount() int {
+func (g *group) exprCount() int {
 	// Group always contains at least the normalized expression, plus whatever
 	// other expressions have been added.
 	return 1 + len(g.otherExprs)
@@ -93,9 +86,9 @@ func (g *memoGroup) exprCount() int {
 //     e := g.expr(i)
 //   }
 //
-// NOTE: The returned memoExpr reference is only valid until the next call to
+// NOTE: The returned Expr reference is only valid until the next call to
 //       addExpr, which may cause a resize of the exprs slice.
-func (g *memoGroup) expr(nth exprOrdinal) *memoExpr {
+func (g *group) expr(nth ExprOrdinal) *Expr {
 	if nth == normExprOrdinal {
 		return &g.normExpr
 	}
@@ -103,36 +96,36 @@ func (g *memoGroup) expr(nth exprOrdinal) *memoExpr {
 }
 
 // bestExprCount returns the number of bestExprs in the group.
-func (g *memoGroup) bestExprCount() int {
+func (g *group) bestExprCount() int {
 	if !g.firstBestExpr.initialized() {
 		return 0
 	}
 	return 1 + len(g.otherBestExprs)
 }
 
-// bestExpr returns the nth bestExpr in the group. This method is used in
+// BestExpr returns the nth BestExpr in the group. This method is used in
 // concert with bestExprCount to iterate over the expressions in the group:
 //   for i := 0; i < g.bestExprCount(); i++ {
-//     e := g.bestExpr(i)
+//     e := g.BestExpr(i)
 //   }
 //
-// NOTE: The returned bestExpr reference is only valid until the next call to
+// NOTE: The returned BestExpr reference is only valid until the next call to
 //       ensureBestExpr, which may cause a resize of the bestExprs slice.
-func (g *memoGroup) bestExpr(nth bestOrdinal) *bestExpr {
+func (g *group) bestExpr(nth bestOrdinal) *BestExpr {
 	if nth == 0 {
 		return &g.firstBestExpr
 	}
 	return &g.otherBestExprs[nth-1]
 }
 
-// ensureBestExpr returns the id of the bestExpr that has the lowest cost for
-// the given required properties. If no bestExpr exists yet, then
-// ensureBestExpr creates a new empty bestExpr and returns its id.
-func (g *memoGroup) ensureBestExpr(required opt.PhysicalPropsID) bestExprID {
+// ensureBestExpr returns the id of the BestExpr that has the lowest cost for
+// the given required properties. If no BestExpr exists yet, then
+// ensureBestExpr creates a new empty BestExpr and returns its id.
+func (g *group) ensureBestExpr(required PhysicalPropsID) BestExprID {
 	// Handle case where firstBestExpr is not yet in use.
 	if !g.firstBestExpr.initialized() {
 		g.firstBestExpr.required = required
-		return bestExprID{group: g.id, ordinal: 0}
+		return BestExprID{group: g.id, ordinal: 0}
 	}
 
 	// Fall back to otherBestExprs.
@@ -140,7 +133,7 @@ func (g *memoGroup) ensureBestExpr(required opt.PhysicalPropsID) bestExprID {
 		be := &g.otherBestExprs[i]
 		if be.required == required {
 			// Bias the ordinal to skip firstBestExpr.
-			return bestExprID{group: g.id, ordinal: bestOrdinal(i + 1)}
+			return BestExprID{group: g.id, ordinal: bestOrdinal(i + 1)}
 		}
 	}
 
@@ -150,15 +143,15 @@ func (g *memoGroup) ensureBestExpr(required opt.PhysicalPropsID) bestExprID {
 		panic(fmt.Sprintf("exceeded max number of expressions in group: %+v", g))
 	}
 
-	g.otherBestExprs = append(g.otherBestExprs, bestExpr{required: required})
-	return bestExprID{group: g.id, ordinal: bestOrdinal(ordinal)}
+	g.otherBestExprs = append(g.otherBestExprs, BestExpr{required: required})
+	return BestExprID{group: g.id, ordinal: bestOrdinal(ordinal)}
 }
 
-// ratchetBestExpr overwrites the existing best expression with the given id if
+// RatchetBestExpr overwrites the existing best expression with the given id if
 // the candidate expression has a lower cost.
 // TODO(andyk): Currently, there is no costing function, so just assume that
 //              the first expression is the lowest cost.
-func (g *memoGroup) ratchetBestExpr(best bestExprID, candidate *bestExpr) {
+func (g *group) ratchetBestExpr(best BestExprID, candidate *BestExpr) {
 	be := g.bestExpr(best.ordinal)
 	if be.op == opt.UnknownOp {
 		*be = *candidate

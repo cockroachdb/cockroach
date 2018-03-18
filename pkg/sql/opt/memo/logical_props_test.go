@@ -12,13 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package memo
+package memo_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -41,16 +41,16 @@ func TestLogicalProps(t *testing.T) {
 	tp := treeprinter.New()
 	nd := tp.Child("props")
 
-	relational := &xform.LogicalProps{
-		Relational: &xform.RelationalProps{
+	relational := &memo.LogicalProps{
+		Relational: &memo.RelationalProps{
 			OutputCols:  outCols,
 			OuterCols:   outerCols,
 			NotNullCols: outCols,
 		},
 	}
 
-	scalar := &xform.LogicalProps{
-		Scalar: &xform.ScalarProps{OuterCols: outerCols},
+	scalar := &memo.LogicalProps{
+		Scalar: &memo.ScalarProps{OuterCols: outerCols},
 	}
 
 	relational.FormatColSet("output:", relational.Relational.OutputCols, md, nd)

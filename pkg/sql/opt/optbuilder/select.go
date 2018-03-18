@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -32,7 +33,7 @@ import (
 // return values.
 func (b *Builder) buildTable(
 	texpr tree.TableExpr, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
@@ -108,9 +109,9 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 // return values.
 func (b *Builder) buildScan(
 	tbl opt.Table, tn *tree.TableName, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	tblIndex := b.factory.Metadata().AddTable(tbl)
-	scanOpDef := opt.ScanOpDef{Table: tblIndex}
+	scanOpDef := memo.ScanOpDef{Table: tblIndex}
 
 	outScope = inScope.push()
 	for i := 0; i < tbl.ColumnCount(); i++ {
@@ -141,7 +142,7 @@ func (b *Builder) buildScan(
 // return values.
 func (b *Builder) buildSelect(
 	stmt *tree.Select, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
@@ -176,7 +177,7 @@ func (b *Builder) buildSelect(
 	if outScope.ordering == nil && orderBy != nil {
 		projectionsScope := outScope.push()
 		projectionsScope.cols = make([]columnProps, 0, len(outScope.cols))
-		projections := make([]opt.GroupID, 0, len(outScope.cols))
+		projections := make([]memo.GroupID, 0, len(outScope.cols))
 		for i := range outScope.cols {
 			p := b.buildScalarProjection(&outScope.cols[i], "", outScope, projectionsScope)
 			projections = append(projections, p)
@@ -202,14 +203,14 @@ func (b *Builder) buildSelect(
 // return values.
 func (b *Builder) buildSelectClause(
 	stmt *tree.Select, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	sel := stmt.Select.(*tree.SelectClause)
 
 	var fromScope *scope
 	out, fromScope = b.buildFrom(sel.From, sel.Where, inScope)
 	outScope = fromScope
 
-	var projections []opt.GroupID
+	var projections []memo.GroupID
 	var projectionsScope *scope
 	if b.needsAggregation(sel) {
 		out, outScope, projections, projectionsScope = b.buildAggregation(sel, out, fromScope)
@@ -247,8 +248,8 @@ func (b *Builder) buildSelectClause(
 // return values.
 func (b *Builder) buildFrom(
 	from *tree.From, where *tree.Where, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
-	var left, right opt.GroupID
+) (out memo.GroupID, outScope *scope) {
+	var left, right memo.GroupID
 
 	for _, table := range from.Tables {
 		var rightScope *scope
@@ -268,7 +269,7 @@ func (b *Builder) buildFrom(
 	if left == 0 {
 		// TODO(peter): This should be a table with 1 row and 0 columns to match
 		// current cockroach behavior.
-		rows := []opt.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
+		rows := []memo.GroupID{b.factory.ConstructTuple(b.factory.InternList(nil))}
 		out = b.factory.ConstructValues(
 			b.factory.InternList(rows),
 			b.factory.InternPrivate(&opt.ColList{}),

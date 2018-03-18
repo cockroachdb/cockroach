@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -95,7 +96,7 @@ func New(
 // (e.g., row and column ordering) that are required of the root memo group.
 // If any subroutines panic with a builderError as part of the build process,
 // the panic is caught here and returned as an error.
-func (b *Builder) Build() (root opt.GroupID, required *opt.PhysicalProps, err error) {
+func (b *Builder) Build() (root memo.GroupID, required *memo.PhysicalProps, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding
@@ -132,11 +133,11 @@ func errorf(format string, a ...interface{}) builderError {
 
 // buildPhysicalProps construct a set of required physical properties from the
 // given scope.
-func (b *Builder) buildPhysicalProps(scope *scope) *opt.PhysicalProps {
+func (b *Builder) buildPhysicalProps(scope *scope) *memo.PhysicalProps {
 	if scope.presentation == nil {
 		scope.presentation = makePresentation(scope.cols)
 	}
-	return &opt.PhysicalProps{Presentation: scope.presentation, Ordering: scope.ordering}
+	return &memo.PhysicalProps{Presentation: scope.presentation, Ordering: scope.ordering}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -156,7 +157,7 @@ func (b *Builder) buildPhysicalProps(scope *scope) *opt.PhysicalProps {
 //           "parent" scope that is still visible.
 func (b *Builder) buildStmt(
 	stmt tree.Statement, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
 	case *tree.ParenSelect:

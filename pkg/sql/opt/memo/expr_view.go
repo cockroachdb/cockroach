@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
-//go:generate optgen -out expr.og.go exprs ../ops/*.opt
-
 // ExprView provides a view of a single tree in the memo's forest of query plan
 // trees (see comment in memo.go for more details about the memo forest). For
 // a root memo group and a set of required physical properties, there is one
@@ -62,10 +60,10 @@ import (
 // Don't reorder fields without checking the impact on the size of ExprView.
 type ExprView struct {
 	// mem references the memo which holds the expression forest.
-	mem *memo
+	mem *Memo
 
 	// group is the identifier of the memo group to which the expression belongs.
-	group opt.GroupID
+	group GroupID
 
 	// op is the type of the expression.
 	op opt.Operator
@@ -76,27 +74,27 @@ type ExprView struct {
 	best bestOrdinal
 }
 
-// makeExprView creates a new ExprView instance that references the given
+// MakeExprView creates a new ExprView instance that references the given
 // expression, which is the lowest cost expression in its group for a
 // particular set of physical properties. Note that the group must have already
 // been optimized with respect to that set of properties. Children of this
 // expression will in turn be the lowest cost expressions in their respective
 // groups, and so on.
-func makeExprView(mem *memo, best bestExprID) ExprView {
-	mgrp := mem.lookupGroup(best.group)
+func MakeExprView(mem *Memo, best BestExprID) ExprView {
+	mgrp := mem.group(best.group)
 	be := mgrp.bestExpr(best.ordinal)
 	return ExprView{mem: mem, group: best.group, op: be.op, best: best.ordinal}
 }
 
-// makeNormExprView constructs an ExprView that traverses the normalized
+// MakeNormExprView constructs an ExprView that traverses the normalized
 // logical expression tree, rather than the lowest cost physical tree. The
 // normalized expression tree will contain no enforcer expressions and physical
 // properties are not available. This view is useful when testing or debugging,
 // and to traverse the tree before it's been fully explored and costed (and
 // bestExprs have been populated). See the struct comment in factory.go for
 // more details about the normalized expression tree.
-func makeNormExprView(mem *memo, group opt.GroupID) ExprView {
-	op := mem.lookupNormExpr(group).op
+func MakeNormExprView(mem *Memo, group GroupID) ExprView {
+	op := mem.NormExpr(group).op
 	return ExprView{mem: mem, group: group, op: op, best: normBestOrdinal}
 }
 
@@ -107,22 +105,22 @@ func (ev ExprView) Operator() opt.Operator {
 
 // Logical returns the set of logical properties that this expression provides.
 func (ev ExprView) Logical() *LogicalProps {
-	return &ev.mem.lookupGroup(ev.group).logical
+	return &ev.mem.group(ev.group).logical
 }
 
 // Physical returns the physical properties required of this expression, such
 // as the ordering of result rows. Note that Physical does not return the
 // properties *provided* by this expression, but those *required* of it by its
 // parent expression, or by the ExprView creator.
-func (ev ExprView) Physical() *opt.PhysicalProps {
+func (ev ExprView) Physical() *PhysicalProps {
 	if ev.best == normBestOrdinal {
 		panic("physical properties are not available when traversing the normalized tree")
 	}
-	return ev.mem.lookupPhysicalProps(ev.lookupBestExpr().required)
+	return ev.mem.LookupPhysicalProps(ev.lookupBestExpr().required)
 }
 
 // Group returns the memo group containing this expression.
-func (ev ExprView) Group() opt.GroupID {
+func (ev ExprView) Group() GroupID {
 	return ev.group
 }
 
@@ -134,36 +132,36 @@ func (ev ExprView) Child(nth int) ExprView {
 		// of the normalized expression tree, regardless of whether it's the
 		// lowest cost.
 		group := ev.ChildGroup(nth)
-		return makeNormExprView(ev.mem, group)
+		return MakeNormExprView(ev.mem, group)
 	}
-	return makeExprView(ev.mem, ev.lookupBestExpr().child(nth))
+	return MakeExprView(ev.mem, ev.lookupBestExpr().Child(nth))
 }
 
 // ChildCount returns the number of expressions that are inputs to this
 // parent expression.
 func (ev ExprView) ChildCount() int {
 	if ev.best == normBestOrdinal {
-		return ev.mem.lookupNormExpr(ev.group).childCount()
+		return ev.mem.NormExpr(ev.group).ChildCount()
 	}
-	return ev.lookupBestExpr().childCount()
+	return ev.lookupBestExpr().ChildCount()
 }
 
 // ChildGroup returns the memo group containing the nth child of this parent
 // expression.
-func (ev ExprView) ChildGroup(nth int) opt.GroupID {
+func (ev ExprView) ChildGroup(nth int) GroupID {
 	if ev.best == normBestOrdinal {
-		return ev.mem.lookupNormExpr(ev.group).childGroup(ev.mem, nth)
+		return ev.mem.NormExpr(ev.group).ChildGroup(ev.mem, nth)
 	}
-	return ev.lookupBestExpr().child(nth).group
+	return ev.lookupBestExpr().Child(nth).group
 }
 
 // Private returns any private data associated with this expression, or nil if
 // there is none.
 func (ev ExprView) Private() interface{} {
 	if ev.best == normBestOrdinal {
-		return ev.mem.lookupNormExpr(ev.group).private(ev.mem)
+		return ev.mem.NormExpr(ev.group).Private(ev.mem)
 	}
-	return ev.mem.lookupExpr(ev.lookupBestExpr().eid).private(ev.mem)
+	return ev.mem.Expr(ev.lookupBestExpr().eid).Private(ev.mem)
 }
 
 // Metadata returns the metadata that's specific to this expression tree. Some
@@ -181,12 +179,12 @@ func (ev ExprView) String() string {
 	return tp.String()
 }
 
-func (ev ExprView) lookupChildGroup(nth int) *memoGroup {
-	return ev.mem.lookupGroup(ev.ChildGroup(nth))
+func (ev ExprView) lookupChildGroup(nth int) *group {
+	return ev.mem.group(ev.ChildGroup(nth))
 }
 
-func (ev ExprView) lookupBestExpr() *bestExpr {
-	return ev.mem.lookupGroup(ev.group).bestExpr(ev.best)
+func (ev ExprView) lookupBestExpr() *BestExpr {
+	return ev.mem.group(ev.group).bestExpr(ev.best)
 }
 
 func (ev ExprView) format(tp treeprinter.Node) {
@@ -272,7 +270,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 
 	switch ev.Operator() {
 	case opt.ScanOp:
-		tblIndex := ev.Private().(*opt.ScanOpDef).Table
+		tblIndex := ev.Private().(*ScanOpDef).Table
 		fmt.Fprintf(&buf, " %s", ev.Metadata().Table(tblIndex).TabName())
 	}
 
@@ -301,7 +299,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 
 		case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 			opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
-			colMap := ev.Private().(*opt.SetOpColMap)
+			colMap := ev.Private().(*SetOpColMap)
 			logProps.FormatColList("columns:", colMap.Out, ev.Metadata(), tp)
 
 		default:
@@ -322,7 +320,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	// input columns that correspond to the output columns.
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
-		colMap := ev.Private().(*opt.SetOpColMap)
+		colMap := ev.Private().(*SetOpColMap)
 		logProps.FormatColList("left columns:", colMap.Left, ev.Metadata(), tp)
 		logProps.FormatColList("right columns:", colMap.Right, ev.Metadata(), tp)
 	}
@@ -336,7 +334,7 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 	}
 }
 
-func (ev ExprView) formatPresentation(presentation opt.Presentation, tp treeprinter.Node) {
+func (ev ExprView) formatPresentation(presentation Presentation, tp treeprinter.Node) {
 	logProps := ev.Logical()
 
 	var buf bytes.Buffer

@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package memo
+package memo_test
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -53,7 +54,7 @@ func BenchmarkExprView(b *testing.B) {
 			}
 			exprView := o.Optimize(root, props)
 
-			stack := make([]xform.ExprView, 16)
+			stack := make([]memo.ExprView, 16)
 			for i := 0; i < b.N; i++ {
 				// Do a depth-first traversal of the ExprView tree. Don't use recursion
 				// to minimize overhead from the benchmark code.

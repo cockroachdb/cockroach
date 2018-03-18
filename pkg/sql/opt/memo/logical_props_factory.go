@@ -78,7 +78,7 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
 	md := ev.Metadata()
-	def := ev.Private().(*opt.ScanOpDef)
+	def := ev.Private().(*ScanOpDef)
 	tbl := md.Table(def.Table)
 
 	// Scan output columns are stored in the definition.
@@ -186,7 +186,7 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 
 	leftProps := ev.lookupChildGroup(0).logical
 	rightProps := ev.lookupChildGroup(1).logical
-	colMap := *ev.Private().(*opt.SetOpColMap)
+	colMap := *ev.Private().(*SetOpColMap)
 	if len(colMap.Out) != len(colMap.Left) || len(colMap.Out) != len(colMap.Right) {
 		panic(fmt.Errorf("lists in SetOpColMap are not all the same length. new:%d, left:%d, right:%d",
 			len(colMap.Out), len(colMap.Left), len(colMap.Right)))
@@ -228,7 +228,7 @@ func (f logicalPropsFactory) passThroughRelationalProps(
 }
 
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
-	props := LogicalProps{Scalar: &ScalarProps{Type: inferType(ev)}}
+	props := LogicalProps{Scalar: &ScalarProps{Type: InferType(ev)}}
 
 	switch ev.Operator() {
 	case opt.VariableOp:

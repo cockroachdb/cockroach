@@ -1,0 +1,154 @@
+exec-ddl
+CREATE TABLE a (x INT PRIMARY KEY, y INT)
+----
+TABLE a
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+exec-ddl
+CREATE TABLE b (x STRING PRIMARY KEY, z DECIMAL NOT NULL)
+----
+TABLE b
+ ├── x string not null
+ ├── z decimal not null
+ └── INDEX primary
+      └── x string not null
+
+build
+SELECT y, b.x, y+1
+FROM a, b
+WHERE a.y=1 AND a.x::string=b.x
+ORDER BY y
+LIMIT 10
+----
+limit
+ ├── columns: y:2(int) x:3(string!null) column5:5(int)
+ ├── ordering: +2
+ ├── project
+ │    ├── columns: a.y:2(int) b.x:3(string!null) column5:5(int)
+ │    ├── ordering: +2
+ │    ├── select
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
+ │    │    ├── ordering: +2
+ │    │    ├── sort
+ │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
+ │    │    │    ├── ordering: +2
+ │    │    │    └── inner-join
+ │    │    │         ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null) b.z:4(decimal!null)
+ │    │    │         ├── scan a
+ │    │    │         │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    │         ├── scan b
+ │    │    │         │    └── columns: b.x:3(string!null) b.z:4(decimal!null)
+ │    │    │         └── true [type=bool]
+ │    │    └── and [type=bool, outer=(1-3)]
+ │    │         ├── eq [type=bool, outer=(2)]
+ │    │         │    ├── variable: a.y [type=int, outer=(2)]
+ │    │         │    └── const: 1 [type=int]
+ │    │         └── eq [type=bool, outer=(1,3)]
+ │    │              ├── cast: string [type=string, outer=(1)]
+ │    │              │    └── variable: a.x [type=int, outer=(1)]
+ │    │              └── variable: b.x [type=string, outer=(3)]
+ │    └── projections [outer=(2,3)]
+ │         ├── variable: a.y [type=int, outer=(2)]
+ │         ├── variable: b.x [type=string, outer=(3)]
+ │         └── plus [type=int, outer=(2)]
+ │              ├── variable: a.y [type=int, outer=(2)]
+ │              └── const: 1 [type=int]
+ └── const: 10 [type=int]
+
+opt
+SELECT y, b.x, y+1
+FROM a, b
+WHERE a.y=1 AND a.x::string=b.x
+ORDER BY y
+LIMIT 10
+----
+limit
+ ├── columns: y:2(int) x:3(string!null) column5:5(int)
+ ├── ordering: +2
+ ├── project
+ │    ├── columns: a.y:2(int) b.x:3(string!null) column5:5(int)
+ │    ├── ordering: +2
+ │    ├── sort
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null)
+ │    │    ├── ordering: +2
+ │    │    └── inner-join
+ │    │         ├── columns: a.x:1(int!null) a.y:2(int) b.x:3(string!null)
+ │    │         ├── select
+ │    │         │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │         │    ├── scan a
+ │    │         │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │         │    └── filters [type=bool, outer=(2)]
+ │    │         │         └── eq [type=bool, outer=(2)]
+ │    │         │              ├── variable: a.y [type=int, outer=(2)]
+ │    │         │              └── const: 1 [type=int]
+ │    │         ├── scan b
+ │    │         │    └── columns: b.x:3(string!null)
+ │    │         └── filters [type=bool, outer=(1,3)]
+ │    │              └── eq [type=bool, outer=(1,3)]
+ │    │                   ├── variable: b.x [type=string, outer=(3)]
+ │    │                   └── cast: string [type=string, outer=(1)]
+ │    │                        └── variable: a.x [type=int, outer=(1)]
+ │    └── projections [outer=(2,3)]
+ │         ├── variable: a.y [type=int, outer=(2)]
+ │         ├── variable: b.x [type=string, outer=(3)]
+ │         └── plus [type=int, outer=(2)]
+ │              ├── variable: a.y [type=int, outer=(2)]
+ │              └── const: 1 [type=int]
+ └── const: 10 [type=int]
+
+memo
+SELECT y, b.x, y+1
+FROM a, b
+WHERE a.y=1 AND a.x::string=b.x
+ORDER BY y
+LIMIT 10
+----
+[26: "p:y:2,x:3,column5:5 o:+2"]
+memo
+ ├── 26: (limit 24 25 +2)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (limit 24="o:+2" 25 +2)
+ │    └── "p:y:2,x:3,column5:5 o:+2" [cost=0.0]
+ │         └── best: (limit 24="o:+2" 25 +2)
+ ├── 25: (const 10)
+ ├── 24: (project 23 21)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (project 23 21)
+ │    └── "o:+2" [cost=0.0]
+ │         └── best: (project 23="o:+2" 21)
+ ├── 23: (inner-join 15 22 17)
+ │    ├── "" [cost=0.0]
+ │    │    └── best: (inner-join 15 22 17)
+ │    └── "o:+2" [cost=0.0]
+ │         └── best: (sort 23)
+ ├── 22: (scan b)
+ │    └── "" [cost=0.0]
+ │         └── best: (scan b)
+ ├── 21: (projections 5 10 20)
+ ├── 20: (plus 5 19)
+ ├── 19: (const 1)
+ ├── 18: (inner-join 15 2 17)
+ ├── 17: (filters 11)
+ ├── 16: (inner-join 15 2 3)
+ ├── 15: (select 1 14)
+ │    └── "" [cost=0.0]
+ │         └── best: (select 1 14)
+ ├── 14: (filters 7)
+ ├── 13: (filters 7 11)
+ ├── 12: (and 7 11)
+ ├── 11: (eq 10 9)
+ ├── 10: (variable b.x)
+ ├── 9: (cast 8 string)
+ ├── 8: (variable a.x)
+ ├── 7: (eq 5 6)
+ ├── 6: (const 1)
+ ├── 5: (variable a.y)
+ ├── 4: (inner-join 1 2 3)
+ ├── 3: (true)
+ ├── 2: (scan b)
+ └── 1: (scan a)
+      └── "" [cost=0.0]
+           └── best: (scan a)

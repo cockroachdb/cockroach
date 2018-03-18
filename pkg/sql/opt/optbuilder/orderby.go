@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -38,15 +39,19 @@ import (
 // properties later become part of the required physical properties returned
 // by Build.
 func (b *Builder) buildOrderBy(
-	orderBy tree.OrderBy, in opt.GroupID, projections []opt.GroupID, inScope, projectionsScope *scope,
-) (out opt.GroupID, outScope *scope) {
+	orderBy tree.OrderBy,
+	in memo.GroupID,
+	projections []memo.GroupID,
+	inScope,
+	projectionsScope *scope,
+) (out memo.GroupID, outScope *scope) {
 	if orderBy == nil {
 		return in, nil
 	}
 
 	orderByScope := inScope.push()
-	orderByScope.ordering = make(opt.Ordering, 0, len(orderBy))
-	orderByProjections := make([]opt.GroupID, 0, len(orderBy))
+	orderByScope.ordering = make(memo.Ordering, 0, len(orderBy))
+	orderByProjections := make([]memo.GroupID, 0, len(orderBy))
 
 	// TODO(rytaft): rewrite ORDER BY if it uses ORDER BY INDEX tbl@idx or
 	// ORDER BY PRIMARY KEY syntax.
@@ -70,8 +75,8 @@ func (b *Builder) buildOrderBy(
 // The projections are appended to the projections slice (and the resulting
 // slice is returned). Corresponding columns are added to the orderByScope.
 func (b *Builder) buildOrdering(
-	order *tree.Order, projections []opt.GroupID, inScope, projectionsScope, orderByScope *scope,
-) []opt.GroupID {
+	order *tree.Order, projections []memo.GroupID, inScope, projectionsScope, orderByScope *scope,
+) []memo.GroupID {
 	// Unwrap parenthesized expressions like "((a))" to "a".
 	expr := tree.StripParens(order.Expr)
 
@@ -157,15 +162,15 @@ func (b *Builder) buildOrdering(
 // buildOrderByProject simply returns the input -- it does not construct
 // a "pass through" projection.
 func (b *Builder) buildOrderByProject(
-	in opt.GroupID,
-	projections, orderByProjections []opt.GroupID,
+	in memo.GroupID,
+	projections, orderByProjections []memo.GroupID,
 	inScope, projectionsScope, orderByScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	outScope = inScope.push()
 
 	outScope.cols = make([]columnProps, 0, len(projectionsScope.cols)+len(orderByScope.cols))
 	outScope.appendColumns(projectionsScope)
-	combined := make([]opt.GroupID, 0, len(projectionsScope.cols)+len(orderByScope.cols))
+	combined := make([]memo.GroupID, 0, len(projectionsScope.cols)+len(orderByScope.cols))
 	combined = append(combined, projections...)
 
 	for i := range orderByScope.cols {

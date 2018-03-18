@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -40,15 +41,15 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 	f := o.Factory()
 
 	null := f.ConstructNull(f.InternPrivate(types.Unknown))
-	empty := f.ConstructTuple(opt.EmptyList)
+	empty := f.ConstructTuple(memo.EmptyList)
 	in := f.ConstructIn(null, empty)
-	ev := o.Optimize(in, &opt.PhysicalProps{})
+	ev := o.Optimize(in, &memo.PhysicalProps{})
 	if ev.Operator() != opt.FalseOp {
 		t.Errorf("expected NULL IN () to fold to False")
 	}
 
 	notIn := f.ConstructNotIn(null, empty)
-	ev = o.Optimize(notIn, &opt.PhysicalProps{})
+	ev = o.Optimize(notIn, &memo.PhysicalProps{})
 	if ev.Operator() != opt.TrueOp {
 		t.Errorf("expected NULL NOT IN () to fold to True")
 	}
@@ -60,7 +61,7 @@ func TestRuleBinaryAssumption(t *testing.T) {
 	fn := func(op opt.Operator) {
 		for _, overload := range tree.BinOps[opt.BinaryOpReverseMap[op]] {
 			binOp := overload.(tree.BinOp)
-			if !xform.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
+			if !memo.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
 				t.Errorf("could not find inverse for overload: %+v", op)
 			}
 		}

@@ -59,7 +59,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -78,15 +78,7 @@ var (
 func TestBuilder(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	paths, err := filepath.Glob(*testDataGlob)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(paths) == 0 {
-		t.Fatalf("no testfiles found matching: %s", *testDataGlob)
-	}
-
-	for _, path := range paths {
+	for _, path := range testutils.GetTestFiles(t, *testDataGlob) {
 		t.Run(filepath.Base(path), func(t *testing.T) {
 			catalog := testutils.NewTestCatalog()
 
@@ -94,6 +86,7 @@ func TestBuilder(t *testing.T) {
 				var varTypes []types.T
 				var iVarHelper tree.IndexedVarHelper
 				var allowUnsupportedExpr bool
+				var err error
 
 				for _, arg := range d.CmdArgs {
 					key, vals := arg.Key, arg.Vals
@@ -150,7 +143,7 @@ func TestBuilder(t *testing.T) {
 					if err != nil {
 						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}
-					exprView := o.Optimize(group, &opt.PhysicalProps{})
+					exprView := o.Optimize(group, &memo.PhysicalProps{})
 					return exprView.String()
 
 				case "exec-ddl":
