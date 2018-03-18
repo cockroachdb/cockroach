@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,6 +67,17 @@ var minWALSyncInterval = settings.RegisterDurationSetting(
 	"minimum duration between syncs of the RocksDB WAL",
 	0*time.Millisecond,
 )
+
+var rocksdbConcurrency = envutil.EnvOrDefaultInt(
+	"COCKROACH_ROCKSDB_CONCURRENCY", func() int {
+		// Use up to min(numCPU, 4) threads for background RocksDB compactions per
+		// store.
+		const max = 4
+		if n := runtime.NumCPU(); n <= max {
+			return n
+		}
+		return max
+	}())
 
 // Set to true to perform expensive iterator debug leak checking. In normal
 // operation, we perform inexpensive iterator leak checking but those checks do
@@ -594,7 +606,7 @@ func (r *RocksDB) open() error {
 		C.DBOptions{
 			cache:             r.cache.cache,
 			logging_enabled:   C.bool(log.V(3)),
-			num_cpu:           C.int(runtime.NumCPU()),
+			num_cpu:           C.int(rocksdbConcurrency),
 			max_open_files:    C.int(maxOpenFiles),
 			use_switching_env: C.bool(newVersion == versionCurrent),
 			must_exist:        C.bool(r.cfg.MustExist),

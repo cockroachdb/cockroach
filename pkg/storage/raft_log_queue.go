@@ -44,6 +44,9 @@ const (
 	// when Raft log truncation usually occurs when using the number of entries
 	// as the sole criteria.
 	RaftLogQueueStaleSize = 64 << 10
+	// Allow a limited number of Raft log truncations to be processed
+	// concurrently.
+	raftLogQueueConcurrency = 4
 )
 
 // raftLogMaxSize limits the maximum size of the Raft log.
@@ -65,6 +68,7 @@ func newRaftLogQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *raftLo
 		"raftlog", rlq, store, gossip,
 		queueConfig{
 			maxSize:              defaultQueueMaxSize,
+			maxConcurrency:       raftLogQueueConcurrency,
 			needsLease:           false,
 			needsSystemConfig:    false,
 			acceptsUnsplitRanges: true,
