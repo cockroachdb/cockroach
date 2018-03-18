@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform_test
+package memo_test
 
 import (
 	"path/filepath"
@@ -22,12 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
-// TestPhysicalPropsFactory files can be run separately like this:
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
-//   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
-//   ...
-func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/*")
+func TestMemo(t *testing.T) {
+	runDataDrivenTest(t, "testdata/memo")
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
@@ -52,11 +48,6 @@ func TestPhysicalPropsFactory(t *testing.T) {
 //
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the lowest cost tree.
-//
-//  - optsteps
-//
-//    Outputs the lowest cost tree for each step in optimization using the
-//    standard unified diff format. Used for debugging the optimizer.
 //
 //  - memo
 //
@@ -86,13 +77,6 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 						d.Fatalf(t, "%v", err)
 					}
 					return ev.String()
-
-				case "optsteps":
-					result, err := tester.OptSteps()
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-					return result
 
 				case "memo":
 					result, err := tester.Memo()

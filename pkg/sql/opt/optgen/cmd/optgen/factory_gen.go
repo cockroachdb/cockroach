@@ -38,6 +38,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.w.nest("import (\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
+	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
 	g.w.unnest(")\n\n")
 
 	g.genConstructFuncs()
@@ -57,12 +58,12 @@ func (g *factoryGen) genConstructFuncs() {
 
 		for _, field := range define.Fields {
 			fieldName := unTitle(string(field.Name))
-			g.w.writeIndent("  %s opt.%s,\n", fieldName, mapType(string(field.Type)))
+			g.w.writeIndent("  %s memo.%s,\n", fieldName, mapType(string(field.Type)))
 		}
 
-		g.w.nest(") opt.GroupID {\n")
+		g.w.nest(") memo.GroupID {\n")
 
-		g.w.writeIndent("%s := make%sExpr(", varName, define.Name)
+		g.w.writeIndent("%s := memo.Make%sExpr(", varName, define.Name)
 
 		for i, field := range define.Fields {
 			if i != 0 {
@@ -72,13 +73,13 @@ func (g *factoryGen) genConstructFuncs() {
 		}
 
 		g.w.write(")\n")
-		g.w.writeIndent("_group := _f.mem.lookupGroupByFingerprint(%s.fingerprint())\n", varName)
+		g.w.writeIndent("_group := _f.mem.GroupByFingerprint(%s.Fingerprint())\n", varName)
 		g.w.nest("if _group != 0 {\n")
 		g.w.writeIndent("return _group\n")
 		g.w.unnest("}\n\n")
 
 		g.w.nest("if !_f.o.allowOptimizations() {\n")
-		g.w.writeIndent("return _f.mem.memoizeNormExpr(memoExpr(%s))\n", varName)
+		g.w.writeIndent("return _f.mem.MemoizeNormExpr(memo.Expr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 
 		found := false
@@ -94,7 +95,7 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.newline()
 		}
 
-		g.w.writeIndent("return _f.onConstruct(_f.mem.memoizeNormExpr(memoExpr(%s)))\n", varName)
+		g.w.writeIndent("return _f.onConstruct(_f.mem.MemoizeNormExpr(memo.Expr(%s)))\n", varName)
 		g.w.unnest("}\n\n")
 	}
 }
@@ -119,7 +120,7 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 	g.w.writeIndent("_group = ")
 	g.genNestedExpr(rule.Replace)
 	g.w.newline()
-	g.w.writeIndent("_f.mem.addAltFingerprint(%s.fingerprint(), _group)\n", varName)
+	g.w.writeIndent("_f.mem.AddAltFingerprint(%s.Fingerprint(), _group)\n", varName)
 	g.w.writeIndent("return _group\n")
 
 	g.w.unnestToMarker(marker, "}\n")
@@ -138,10 +139,10 @@ func (g *factoryGen) genRule(rule *lang.RuleExpr) {
 // expression that is bound to the expression that is currently being matched
 // against. For example:
 //
-//   for i, _listArg := range _f.mem.lookupList(projections) {
-//     _innerJoinExpr := _f.mem.lookupNormExpr(_listArg).asInnerJoin()
+//   for i, _listArg := range _f.mem.LookupList(projections) {
+//     _innerJoinExpr := _f.mem.NormExpr(_listArg).AsInnerJoin()
 //     if _innerJoinExpr != nil {
-//       _selectExpr := _f.mem.lookupNormExpr(_innerJoinExpr.left()).asSelect()
+//       _selectExpr := _f.mem.NormExpr(_innerJoinExpr.left()).AsSelect()
 //       ...
 //     }
 //   }
@@ -194,9 +195,9 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 
 	case *lang.StringExpr:
 		if noMatch {
-			g.w.nest("if %s != m.mem.internPrivate(%s) {\n", contextName, t)
+			g.w.nest("if %s != m.mem.InternPrivate(%s) {\n", contextName, t)
 		} else {
-			g.w.nest("if %s == m.mem.internPrivate(%s) {\n", contextName, t)
+			g.w.nest("if %s == m.mem.InternPrivate(%s) {\n", contextName, t)
 		}
 
 	case *lang.MatchAnyExpr:
@@ -208,7 +209,7 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 		if noMatch {
 			panic("noMatch is not yet supported by the list match any op")
 		}
-		g.w.nest("for _, _item := range _f.mem.lookupList(%s) {\n", contextName)
+		g.w.nest("for _, _item := range _f.mem.LookupList(%s) {\n", contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
 
 	case *lang.MatchListFirstExpr:
@@ -216,7 +217,7 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 			panic("noMatch is not yet supported by the list match first op")
 		}
 		g.w.nest("if %s.Length > 0 {\n", contextName)
-		g.w.writeIndent("_item := _f.mem.lookupList(%s)[0]\n", contextName)
+		g.w.writeIndent("_item := _f.mem.LookupList(%s)[0]\n", contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
 
 	case *lang.MatchListLastExpr:
@@ -224,7 +225,7 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 			panic("noMatch is not yet supported by the list match last op")
 		}
 		g.w.nest("if %s.Length > 0 {\n", contextName)
-		g.w.writeIndent("_item := _f.mem.lookupList(%s)[%s.Length-1]\n", contextName, contextName)
+		g.w.writeIndent("_item := _f.mem.LookupList(%s)[%s.Length-1]\n", contextName, contextName)
 		g.genMatch(t.MatchItem, "_item", noMatch)
 
 	case *lang.MatchListSingleExpr:
@@ -235,7 +236,7 @@ func (g *factoryGen) genMatch(match lang.Expr, contextName string, noMatch bool)
 			g.w.nest("if %s.Length != 1 {\n", contextName)
 		} else {
 			g.w.nest("if %s.Length == 1 {\n", contextName)
-			g.w.writeIndent("_item := _f.mem.lookupList(%s)[0]\n", contextName)
+			g.w.writeIndent("_item := _f.mem.LookupList(%s)[0]\n", contextName)
 			g.genMatch(t.MatchItem, "_item", noMatch)
 		}
 
@@ -334,14 +335,14 @@ func (g *factoryGen) genMatchNameAndChildren(
 // genConstantMatch is called when the MatchExpr has only one define name
 // to match (i.e. no tags). In this case, the type of the expression to match
 // is statically known, and so the generated code can directly manipulate
-// strongly-typed expression structs (e.g. selectExpr, innerJoinExpr, etc).
+// strongly-typed expression structs (e.g. SelectExpr, InnerJoinExpr, etc).
 func (g *factoryGen) genConstantMatch(
 	match *lang.MatchExpr, opName string, contextName string, noMatch bool,
 ) {
 	varName := g.uniquifier.makeUnique(fmt.Sprintf("_%s", unTitle(opName)))
 
 	// Match expression name.
-	g.w.writeIndent("%s := _f.mem.lookupNormExpr(%s).as%s()\n", varName, contextName, opName)
+	g.w.writeIndent("%s := _f.mem.NormExpr(%s).As%s()\n", varName, contextName, opName)
 
 	if noMatch {
 		g.w.nest("if %s == nil {\n", varName)
@@ -357,7 +358,7 @@ func (g *factoryGen) genConstantMatch(
 	// operator. If there are fewer arguments than there are children, then
 	// only the first N children need to be matched.
 	for index, matchArg := range match.Args {
-		fieldName := unTitle(string(g.compiled.LookupDefine(opName).Fields[index].Name))
+		fieldName := g.compiled.LookupDefine(opName).Fields[index].Name
 		g.genMatch(matchArg, fmt.Sprintf("%s.%s()", varName, fieldName), false /* noMatch */)
 	}
 }
@@ -370,7 +371,7 @@ func (g *factoryGen) genDynamicMatch(
 ) {
 	// Match expression name.
 	normName := g.uniquifier.makeUnique("_norm")
-	g.w.writeIndent("%s := _f.mem.lookupNormExpr(%s)\n", normName, contextName)
+	g.w.writeIndent("%s := _f.mem.NormExpr(%s)\n", normName, contextName)
 
 	var buf bytes.Buffer
 	for i, name := range names {
@@ -381,10 +382,10 @@ func (g *factoryGen) genDynamicMatch(
 		define := g.compiled.LookupDefine(string(name))
 		if define != nil {
 			// Match operator name.
-			fmt.Fprintf(&buf, "%s.op == opt.%sOp", normName, name)
+			fmt.Fprintf(&buf, "%s.Operator() == opt.%sOp", normName, name)
 		} else {
 			// Match tag name.
-			fmt.Fprintf(&buf, "%s.is%s()", normName, name)
+			fmt.Fprintf(&buf, "%s.Is%s()", normName, name)
 		}
 	}
 
@@ -403,7 +404,7 @@ func (g *factoryGen) genDynamicMatch(
 		// operator. If there are fewer arguments than there are children, then
 		// only the first N children need to be matched.
 		for index, matchArg := range match.Args {
-			childGroup := fmt.Sprintf("%s.childGroup(_f.mem, %d)", normName, index)
+			childGroup := fmt.Sprintf("%s.ChildGroup(_f.mem, %d)", normName, index)
 			g.genMatch(matchArg, childGroup, false /* noMatch */)
 		}
 	}
@@ -437,7 +438,7 @@ func (g *factoryGen) genNestedExpr(e lang.Expr) {
 			// Handle OpName function that couldn't be statically resolved by
 			// looking up op name at runtime.
 			ref := t.Args[0].(*lang.RefExpr)
-			g.w.write("_f.mem.lookupNormExpr(%s).op", ref.Label)
+			g.w.write("_f.mem.NormExpr(%s).Operator()", ref.Label)
 		} else {
 			funcName := unTitle(string(t.Name))
 			g.w.write("_f.%s(", funcName)
@@ -455,7 +456,7 @@ func (g *factoryGen) genNestedExpr(e lang.Expr) {
 
 	case *lang.StringExpr:
 		// Literal string expressions construct DString datums.
-		g.w.write("m.mem.internPrivate(tree.NewDString(%s))", t)
+		g.w.write("m.mem.InternPrivate(tree.NewDString(%s))", t)
 
 	case *lang.NameExpr:
 		// OpName literal expressions construct an op identifier like SelectOp,
@@ -486,14 +487,14 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 		// Construct expression based on dynamic type of referenced op.
 		ref := t.Args[0].(*lang.RefExpr)
 		g.w.write(
-			"_f.DynamicConstruct(_f.mem.lookupNormExpr(%s).op, opt.DynamicOperands{",
+			"_f.DynamicConstruct(_f.mem.NormExpr(%s).Operator(), DynamicOperands{",
 			ref.Label,
 		)
 		for i, arg := range construct.Args {
 			if i != 0 {
 				g.w.write(", ")
 			}
-			g.w.write("opt.DynamicID(")
+			g.w.write("DynamicID(")
 			g.genNestedExpr(arg)
 			g.w.write(")")
 		}
@@ -506,7 +507,7 @@ func (g *factoryGen) genConstruct(construct *lang.ConstructExpr) {
 
 // genConstructList generates code to construct an interned list of items.
 func (g *factoryGen) genConstructList(list *lang.ConstructListExpr) {
-	g.w.write("_f.mem.internList([]opt.GroupID{")
+	g.w.write("_f.mem.InternList([]memo.GroupID{")
 	for i, item := range list.Items {
 		if i != 0 {
 			g.w.write(", ")
@@ -522,7 +523,7 @@ func (g *factoryGen) genConstructList(list *lang.ConstructListExpr) {
 func (g *factoryGen) genDynamicConstructLookup() {
 	defines := filterEnforcerDefines(g.compiled.Defines)
 
-	funcType := "func(f *Factory, operands opt.DynamicOperands) opt.GroupID"
+	funcType := "func(f *Factory, operands DynamicOperands) memo.GroupID"
 	g.w.writeIndent("type dynConstructLookupFunc %s\n", funcType)
 
 	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructLookupFunc\n\n")
@@ -546,9 +547,9 @@ func (g *factoryGen) genDynamicConstructLookup() {
 			if isListType(string(field.Type)) {
 				g.w.write("operands[%d].ListID()", i)
 			} else if isPrivateType(string(field.Type)) {
-				g.w.write("opt.PrivateID(operands[%d])", i)
+				g.w.write("memo.PrivateID(operands[%d])", i)
 			} else {
-				g.w.write("opt.GroupID(operands[%d])", i)
+				g.w.write("memo.GroupID(operands[%d])", i)
 			}
 		}
 		g.w.write(")\n")
@@ -558,8 +559,8 @@ func (g *factoryGen) genDynamicConstructLookup() {
 
 	g.w.unnest("}\n\n")
 
-	args := "op opt.Operator, operands opt.DynamicOperands"
-	g.w.nest("func (f *Factory) DynamicConstruct(%s) opt.GroupID {\n", args)
+	args := "op opt.Operator, operands DynamicOperands"
+	g.w.nest("func (f *Factory) DynamicConstruct(%s) memo.GroupID {\n", args)
 	g.w.writeIndent("return dynConstructLookup[op](f, operands)\n")
 	g.w.unnest("}\n")
 }

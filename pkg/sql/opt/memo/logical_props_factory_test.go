@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform_test
+package memo_test
 
 import (
 	"strings"
@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,14 +49,14 @@ func TestLogicalJoinProps(t *testing.T) {
 		leftGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), a)))
 		rightGroup := f.ConstructScan(f.InternPrivate(constructScanOpDef(f.Metadata(), b)))
 		onGroup := f.ConstructTrue()
-		operands := opt.DynamicOperands{
-			opt.DynamicID(leftGroup),
-			opt.DynamicID(rightGroup),
-			opt.DynamicID(onGroup),
+		operands := xform.DynamicOperands{
+			xform.DynamicID(leftGroup),
+			xform.DynamicID(rightGroup),
+			xform.DynamicID(onGroup),
 		}
 		joinGroup := f.DynamicConstruct(op, operands)
 
-		ev := o.Optimize(joinGroup, &opt.PhysicalProps{})
+		ev := o.Optimize(joinGroup, &memo.PhysicalProps{})
 		testLogicalProps(t, f.Metadata(), ev, expected)
 	}
 
@@ -69,15 +70,15 @@ func TestLogicalJoinProps(t *testing.T) {
 	joinFunc(opt.AntiJoinApplyOp, "a.x:1(int!null) a.y:2(int)\n")
 }
 
-func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *opt.ScanOpDef {
-	def := opt.ScanOpDef{Table: tblIndex}
+func constructScanOpDef(md *opt.Metadata, tblIndex opt.TableIndex) *memo.ScanOpDef {
+	def := memo.ScanOpDef{Table: tblIndex}
 	for i := 0; i < md.Table(tblIndex).ColumnCount(); i++ {
 		def.Cols.Add(int(md.TableColumn(tblIndex, i)))
 	}
 	return &def
 }
 
-func testLogicalProps(t *testing.T, md *opt.Metadata, ev xform.ExprView, expected string) {
+func testLogicalProps(t *testing.T, md *opt.Metadata, ev memo.ExprView, expected string) {
 	t.Helper()
 
 	logical := ev.Logical()

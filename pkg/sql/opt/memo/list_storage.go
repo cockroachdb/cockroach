@@ -12,11 +12,21 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package memo
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-)
+// ListID identifies a variable-sized list used by a memo expression and stored
+// by the memo. The ID consists of an offset into the memo's lists slice, plus
+// the number of elements in the list. Valid lists have offsets greater than 0;
+// a ListID with offset 0 indicates an undefined list (probable indicator of a
+// bug).
+type ListID struct {
+	Offset uint32
+	Length uint32
+}
+
+// EmptyList is a list with zero elements. It begins at offset 1 because offset
+// 0 is reserved to indicate an invalid, uninitialized list.
+var EmptyList = ListID{Offset: 1, Length: 0}
 
 // listStorage stores lists of memo group ids. Each list is interned, which
 // means that each unique list is stored at most once. If the same list is
@@ -67,7 +77,7 @@ type listStorage struct {
 	// list in the lists slice. See listStorageKey comment for more details
 	// about node path format.
 	index map[listStorageKey]uint32
-	lists []opt.GroupID
+	lists []GroupID
 }
 
 // listStorageKey is the path to a node in the prefix tree. The path is a
@@ -76,14 +86,14 @@ type listStorage struct {
 // a legal and efficient map key type, and it allows the entire prefix tree to
 // be stored in a map, which are highly optimized in Go.
 type listStorageKey struct {
-	prefix opt.ListID
-	item   opt.GroupID
+	prefix ListID
+	item   GroupID
 }
 
 // init must be called before using other methods on listStorage.
 func (ls *listStorage) init() {
 	ls.index = make(map[listStorageKey]uint32)
-	ls.lists = make([]opt.GroupID, 1)
+	ls.lists = make([]GroupID, 1)
 }
 
 // intern adds the given list to storage and returns an id that can later be
@@ -91,9 +101,9 @@ func (ls *listStorage) init() {
 // previously added to storage, then intern always returns the same list id
 // that was returned from the previous call. intern is an O(N) operation, where
 // N is the length of the list.
-func (ls *listStorage) intern(list []opt.GroupID) opt.ListID {
+func (ls *listStorage) intern(list []GroupID) ListID {
 	// Start with empty prefix.
-	prefix := opt.EmptyList
+	prefix := EmptyList
 
 	for i, item := range list {
 		// Is there an existing list for the prefix + next item?
@@ -105,7 +115,7 @@ func (ls *listStorage) intern(list []opt.GroupID) opt.ListID {
 		}
 
 		// Yes, so set the new prefix and keep looping.
-		prefix = opt.ListID{Offset: existing, Length: uint32(i + 1)}
+		prefix = ListID{Offset: existing, Length: uint32(i + 1)}
 	}
 
 	// Found an existing list, so return it.
@@ -115,11 +125,11 @@ func (ls *listStorage) intern(list []opt.GroupID) opt.ListID {
 // lookup returns a list that was previously interned by listStorage. Do not
 // change the elements of the returned list or append to it. lookup is an O(1)
 // operation.
-func (ls *listStorage) lookup(id opt.ListID) []opt.GroupID {
+func (ls *listStorage) lookup(id ListID) []GroupID {
 	return ls.lists[id.Offset : id.Offset+id.Length]
 }
 
-func (ls *listStorage) appendList(prefix opt.ListID, list []opt.GroupID) opt.ListID {
+func (ls *listStorage) appendList(prefix ListID, list []GroupID) ListID {
 	var offset uint32
 
 	// If prefix is the last list in the slice, then optimize by appending only
@@ -136,8 +146,8 @@ func (ls *listStorage) appendList(prefix opt.ListID, list []opt.GroupID) opt.Lis
 	for i := prefix.Length; i < uint32(len(list)); i++ {
 		key := listStorageKey{prefix: prefix, item: list[i]}
 		ls.index[key] = offset
-		prefix = opt.ListID{Offset: offset, Length: i + 1}
+		prefix = ListID{Offset: offset, Length: i + 1}
 	}
 
-	return opt.ListID{Offset: offset, Length: uint32(len(list))}
+	return ListID{Offset: offset, Length: uint32(len(list))}
 }

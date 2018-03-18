@@ -15,13 +15,13 @@
 package optbuilder
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"strings"
 
-	"bytes"
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -37,8 +37,8 @@ type scope struct {
 	parent       *scope
 	cols         []columnProps
 	groupby      groupby
-	ordering     opt.Ordering
-	presentation opt.Presentation
+	ordering     memo.Ordering
+	presentation memo.Presentation
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions.
@@ -149,7 +149,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *columnProps {
 
 // findGrouping finds the given grouping expression among the bound variables
 // in the groupingsScope. Returns nil if the grouping is not found.
-func (s *scope) findGrouping(grouping opt.GroupID) *columnProps {
+func (s *scope) findGrouping(grouping memo.GroupID) *columnProps {
 	for i, g := range s.groupby.groupings {
 		if g == grouping {
 			// Grouping already exists, so return information about the

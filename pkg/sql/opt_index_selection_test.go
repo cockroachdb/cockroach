@@ -23,8 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -110,7 +110,7 @@ func makeSpans(
 	if err != nil {
 		t.Fatal(err)
 	}
-	filterExpr := o.Optimize(filterGroup, &opt.PhysicalProps{})
+	filterExpr := o.Optimize(filterGroup, &memo.PhysicalProps{})
 	err = c.makeIndexConstraints(o, filterExpr, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)

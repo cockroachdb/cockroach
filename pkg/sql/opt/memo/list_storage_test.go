@@ -12,13 +12,11 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package xform
+package memo
 
 import (
 	"bytes"
 	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 func TestListStorage(t *testing.T) {
@@ -26,37 +24,37 @@ func TestListStorage(t *testing.T) {
 	ls.init()
 
 	catID := ls.intern(stringToGroups("cat"))
-	if catID != (opt.ListID{Offset: 1, Length: 3}) {
+	if catID != (ListID{Offset: 1, Length: 3}) {
 		t.Fatalf("unexpected id: %v", catID)
 	}
 
 	// Should return sublist since "c" is prefix of "cat".
 	cID := ls.intern(stringToGroups("c"))
-	if cID != (opt.ListID{Offset: 1, Length: 1}) {
+	if cID != (ListID{Offset: 1, Length: 1}) {
 		t.Fatalf("unexpected id: %v", cID)
 	}
 
 	// Should append to existing "cat" list, since it's last in the slice.
 	catalogID := ls.intern(stringToGroups("catalog"))
-	if catalogID != (opt.ListID{Offset: 1, Length: 7}) {
+	if catalogID != (ListID{Offset: 1, Length: 7}) {
 		t.Fatalf("unexpected id: %v", catalogID)
 	}
 
 	// Should create new list.
 	dogID := ls.intern(stringToGroups("dog"))
-	if dogID != (opt.ListID{Offset: 8, Length: 3}) {
+	if dogID != (ListID{Offset: 8, Length: 3}) {
 		t.Fatalf("unexpected id: %v", dogID)
 	}
 
 	// Should create new list, since "catalog" is no longer last in the slice.
 	catalogingID := ls.intern(stringToGroups("cataloging"))
-	if catalogingID != (opt.ListID{Offset: 11, Length: 10}) {
+	if catalogingID != (ListID{Offset: 11, Length: 10}) {
 		t.Fatalf("unexpected id: %v", catalogingID)
 	}
 
 	// Should create new list even though it's a substring of existing list.
 	logID := ls.intern(stringToGroups("log"))
-	if logID != (opt.ListID{Offset: 21, Length: 3}) {
+	if logID != (ListID{Offset: 21, Length: 3}) {
 		t.Fatalf("unexpected id: %v", logID)
 	}
 
@@ -73,15 +71,15 @@ func TestListStorage(t *testing.T) {
 	}
 }
 
-func stringToGroups(s string) []opt.GroupID {
-	groups := make([]opt.GroupID, len(s))
+func stringToGroups(s string) []GroupID {
+	groups := make([]GroupID, len(s))
 	for i, rune := range s {
-		groups[i] = opt.GroupID(rune)
+		groups[i] = GroupID(rune)
 	}
 	return groups
 }
 
-func groupsToString(groups []opt.GroupID) string {
+func groupsToString(groups []GroupID) string {
 	var buf bytes.Buffer
 	for _, group := range groups {
 		buf.WriteRune(rune(group))

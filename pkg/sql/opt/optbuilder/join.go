@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -30,7 +31,7 @@ import (
 // return values.
 func (b *Builder) buildJoin(
 	join *tree.JoinTableExpr, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	left, leftScope := b.buildTable(join.Left, inScope)
 	right, rightScope := b.buildTable(join.Right, inScope)
 
@@ -75,7 +76,7 @@ func (b *Builder) buildJoin(
 		outScope.appendColumns(leftScope)
 		outScope.appendColumns(rightScope)
 
-		var filter opt.GroupID
+		var filter memo.GroupID
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			filter = b.buildScalar(outScope.resolveType(on.Expr, types.Bool), outScope)
 		} else {
@@ -127,9 +128,9 @@ func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
 func (b *Builder) buildUsingJoin(
 	joinType sqlbase.JoinType,
 	names tree.NameList,
-	left, right opt.GroupID,
+	left, right memo.GroupID,
 	leftScope, rightScope, inScope *scope,
-) (out opt.GroupID, outScope *scope) {
+) (out memo.GroupID, outScope *scope) {
 	// Build the join predicate.
 	mergedCols, filter, outScope := b.buildUsingJoinPredicate(
 		joinType, leftScope.cols, rightScope.cols, names, inScope,
@@ -139,7 +140,7 @@ func (b *Builder) buildUsingJoin(
 
 	if len(mergedCols) > 0 {
 		// Wrap in a projection to include the merged columns.
-		projections := make([]opt.GroupID, 0, len(outScope.cols))
+		projections := make([]memo.GroupID, 0, len(outScope.cols))
 		for _, col := range outScope.cols {
 			if mergedCol, ok := mergedCols[col.index]; ok {
 				projections = append(projections, mergedCol)
@@ -229,10 +230,10 @@ func (b *Builder) buildUsingJoinPredicate(
 	rightCols []columnProps,
 	names tree.NameList,
 	inScope *scope,
-) (mergedCols map[opt.ColumnIndex]opt.GroupID, out opt.GroupID, outScope *scope) {
+) (mergedCols map[opt.ColumnIndex]memo.GroupID, out memo.GroupID, outScope *scope) {
 	joined := make(map[tree.Name]*columnProps, len(names))
-	conditions := make([]opt.GroupID, 0, len(names))
-	mergedCols = make(map[opt.ColumnIndex]opt.GroupID)
+	conditions := make([]memo.GroupID, 0, len(names))
+	mergedCols = make(map[opt.ColumnIndex]memo.GroupID)
 	outScope = inScope.push()
 
 	for _, name := range names {
@@ -280,7 +281,7 @@ func (b *Builder) buildUsingJoinPredicate(
 			}
 			texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
 			col := b.synthesizeColumn(outScope, string(leftCol.name), typ, texpr)
-			merged := b.factory.ConstructCoalesce(b.factory.InternList([]opt.GroupID{leftVar, rightVar}))
+			merged := b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{leftVar, rightVar}))
 			mergedCols[col.index] = merged
 		}
 
@@ -317,7 +318,7 @@ func hideMatchingColumns(cols []columnProps, joined map[tree.Name]*columnProps, 
 // constructFilter builds a set of memo groups that represent the given
 // list of filter conditions. It returns the top-level memo group ID for the
 // filter.
-func (b *Builder) constructFilter(conditions []opt.GroupID) opt.GroupID {
+func (b *Builder) constructFilter(conditions []memo.GroupID) memo.GroupID {
 	switch len(conditions) {
 	case 0:
 		return b.factory.ConstructTrue()
@@ -329,8 +330,8 @@ func (b *Builder) constructFilter(conditions []opt.GroupID) opt.GroupID {
 }
 
 func (b *Builder) constructJoin(
-	joinType sqlbase.JoinType, left, right, filter opt.GroupID,
-) opt.GroupID {
+	joinType sqlbase.JoinType, left, right, filter memo.GroupID,
+) memo.GroupID {
 	switch joinType {
 	case sqlbase.InnerJoin:
 		return b.factory.ConstructInnerJoin(left, right, filter)

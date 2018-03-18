@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -162,7 +163,7 @@ func TestIndexConstraints(t *testing.T) {
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
 					}
-					ev := o.Optimize(group, &opt.PhysicalProps{})
+					ev := o.Optimize(group, &memo.PhysicalProps{})
 
 					var ic Instance
 					ic.Init(ev, colInfos, invertedIndex, &evalCtx, o.Factory())
@@ -176,7 +177,7 @@ func TestIndexConstraints(t *testing.T) {
 						fmt.Fprintf(&buf, "%s\n", sp)
 					}
 					remainingFilter := ic.RemainingFilter()
-					remEv := o.Optimize(remainingFilter, &opt.PhysicalProps{})
+					remEv := o.Optimize(remainingFilter, &memo.PhysicalProps{})
 					if remEv.Operator() != opt.TrueOp {
 						execBld := execbuilder.New(nil /* execFactory */, remEv)
 						expr := execBld.BuildScalar(&iVarHelper)
@@ -259,7 +260,7 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			ev := o.Optimize(group, &opt.PhysicalProps{})
+			ev := o.Optimize(group, &memo.PhysicalProps{})
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic Instance

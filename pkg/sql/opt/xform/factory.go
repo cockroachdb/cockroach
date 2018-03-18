@@ -19,11 +19,32 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 //go:generate optgen -out factory.og.go factory ../ops/*.opt rules/*.opt
+
+// DynamicID is used when dynamically creating operators using the factory's
+// DynamicConstruct method. Each operand, whether it be a group, a private, or
+// a list, is first converted to a DynamicID and then passed as one of the
+// DynamicOperands.
+type DynamicID uint64
+
+// MakeDynamicListID constructs a DynamicID from a ListID.
+func MakeDynamicListID(id memo.ListID) DynamicID {
+	return (DynamicID(id.Offset) << 32) | DynamicID(id.Length)
+}
+
+// ListID converts the DynamicID to a ListID.
+func (id DynamicID) ListID() memo.ListID {
+	return memo.ListID{Offset: uint32(id >> 32), Length: uint32(id & 0xffffffff)}
+}
+
+// DynamicOperands is the list of operands passed to the factory's
+// DynamicConstruct method in order to dynamically create an operator.
+type DynamicOperands [opt.MaxOperands]DynamicID
 
 // Factory constructs a normalized expression tree within the memo. As each
 // kind of expression is constructed by the factory, it transitively runs
@@ -40,7 +61,7 @@ import (
 // step, in order to allow any custom manual code to execute.
 type Factory struct {
 	o       *Optimizer
-	mem     *memo
+	mem     *memo.Memo
 	evalCtx *tree.EvalContext
 }
 
@@ -53,26 +74,26 @@ func newFactory(o *Optimizer) *Factory {
 // Metadata returns the query-specific metadata, which includes information
 // about the columns and tables used in this particular query.
 func (f *Factory) Metadata() *opt.Metadata {
-	return f.mem.metadata
+	return f.mem.Metadata()
 }
 
 // InternList adds the given list of group IDs to memo storage and returns an
 // ID that can be used for later lookup. If the same list was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (f *Factory) InternList(items []opt.GroupID) opt.ListID {
-	return f.mem.internList(items)
+func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
+	return f.mem.InternList(items)
 }
 
 // InternPrivate adds the given private value to the memo and returns an ID
 // that can be used for later lookup. If the same value was added previously,
 // this method is a no-op and returns the ID of the previous value.
-func (f *Factory) InternPrivate(private interface{}) opt.PrivateID {
-	return f.mem.internPrivate(private)
+func (f *Factory) InternPrivate(private interface{}) memo.PrivateID {
+	return f.mem.InternPrivate(private)
 }
 
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
-func (f *Factory) onConstruct(group opt.GroupID) opt.GroupID {
+func (f *Factory) onConstruct(group memo.GroupID) memo.GroupID {
 	return group
 }
 
@@ -83,8 +104,8 @@ func (f *Factory) onConstruct(group opt.GroupID) opt.GroupID {
 //
 // ----------------------------------------------------------------------
 
-func (f *Factory) extractColList(private opt.PrivateID) opt.ColList {
-	return *f.mem.lookupPrivate(private).(*opt.ColList)
+func (f *Factory) extractColList(private memo.PrivateID) opt.ColList {
+	return *f.mem.LookupPrivate(private).(*opt.ColList)
 }
 
 // ----------------------------------------------------------------------
@@ -97,13 +118,13 @@ func (f *Factory) extractColList(private opt.PrivateID) opt.ColList {
 
 // listOnlyHasNulls if every item in the given list is a Null op. If the list
 // is empty, listOnlyHasNulls returns false.
-func (f *Factory) listOnlyHasNulls(list opt.ListID) bool {
+func (f *Factory) listOnlyHasNulls(list memo.ListID) bool {
 	if list.Length == 0 {
 		return false
 	}
 
-	for _, item := range f.mem.lookupList(list) {
-		if f.mem.lookupNormExpr(item).op != opt.NullOp {
+	for _, item := range f.mem.LookupList(list) {
+		if f.mem.NormExpr(item).Operator() != opt.NullOp {
 			return false
 		}
 	}
@@ -113,8 +134,8 @@ func (f *Factory) listOnlyHasNulls(list opt.ListID) bool {
 // isSortedUniqueList returns true if the list is in sorted order, with no
 // duplicates. See the comment for listSorter.compare for comparison rule
 // details.
-func (f *Factory) isSortedUniqueList(list opt.ListID) bool {
-	ls := listSorter{f: f, list: f.mem.lookupList(list)}
+func (f *Factory) isSortedUniqueList(list memo.ListID) bool {
+	ls := listSorter{f: f, list: f.mem.LookupList(list)}
 	for i := 0; i < int(list.Length-1); i++ {
 		if !ls.less(i, i+1) {
 			return false
@@ -126,10 +147,10 @@ func (f *Factory) isSortedUniqueList(list opt.ListID) bool {
 // constructSortedUniqueList sorts the given list and removes duplicates, and
 // returns the resulting list. See the comment for listSorter.compare for
 // comparison rule details.
-func (f *Factory) constructSortedUniqueList(list opt.ListID) opt.ListID {
+func (f *Factory) constructSortedUniqueList(list memo.ListID) memo.ListID {
 	// Make a copy of the list, since it needs to stay immutable.
-	newList := make([]opt.GroupID, list.Length)
-	copy(newList, f.mem.lookupList(list))
+	newList := make([]memo.GroupID, list.Length)
+	copy(newList, f.mem.LookupList(list))
 	ls := listSorter{f: f, list: newList}
 
 	// Sort the list.
@@ -143,14 +164,14 @@ func (f *Factory) constructSortedUniqueList(list opt.ListID) opt.ListID {
 			n++
 		}
 	}
-	return f.mem.internList(newList[:n])
+	return f.mem.InternList(newList[:n])
 }
 
 // listSorter is a helper struct that implements the sort.Slice "less"
 // comparison function.
 type listSorter struct {
 	f    *Factory
-	list []opt.GroupID
+	list []memo.GroupID
 }
 
 // less returns true if item i in the list compares less than item j.
@@ -165,16 +186,16 @@ func (s listSorter) less(i, j int) bool {
 // are sorted and uniquified by GroupID (arbitrary, but stable).
 func (s listSorter) compare(i, j int) int {
 	// If both are constant values, then use datum comparison.
-	isLeftConst := s.f.mem.lookupNormExpr(s.list[i]).isConstValue()
-	isRightConst := s.f.mem.lookupNormExpr(s.list[j]).isConstValue()
+	isLeftConst := s.f.mem.NormExpr(s.list[i]).IsConstValue()
+	isRightConst := s.f.mem.NormExpr(s.list[j]).IsConstValue()
 	if isLeftConst {
 		if !isRightConst {
 			// Constant always sorts before non-constant
 			return -1
 		}
 
-		leftD := ExtractConstDatum(makeNormExprView(s.f.mem, s.list[i]))
-		rightD := ExtractConstDatum(makeNormExprView(s.f.mem, s.list[j]))
+		leftD := memo.ExtractConstDatum(memo.MakeNormExprView(s.f.mem, s.list[i]))
+		rightD := memo.ExtractConstDatum(memo.MakeNormExprView(s.f.mem, s.list[j]))
 		return leftD.Compare(s.f.evalCtx, rightD)
 	} else if isRightConst {
 		// Non-constant always sorts after constant.
@@ -200,24 +221,23 @@ func (s listSorter) compare(i, j int) int {
 
 // hasType returns true if the given expression has a static type that's
 // equivalent to the requested type.
-func (f *Factory) hasType(group opt.GroupID, typ opt.PrivateID) bool {
-	groupType := f.mem.lookupGroup(group).logical.Scalar.Type
-	requestedType := f.mem.lookupPrivate(typ).(types.T)
+func (f *Factory) hasType(group memo.GroupID, typ memo.PrivateID) bool {
+	groupType := f.lookupScalar(group).Type
+	requestedType := f.mem.LookupPrivate(typ).(types.T)
 	return groupType.Equivalent(requestedType)
 }
 
-func (f *Factory) boolType() opt.PrivateID {
+func (f *Factory) boolType() memo.PrivateID {
 	return f.InternPrivate(types.Bool)
 }
 
 // canConstructBinary returns true if (op left right) has a valid binary op
 // overload and is therefore legal to construct. For example, while
 // (Minus <date> <int>) is valid, (Minus <int> <date>) is not.
-func (f *Factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) bool {
-	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
-	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
-	_, ok := findBinaryOverload(opt.MinusOp, rightType, leftType)
-	return ok
+func (f *Factory) canConstructBinary(op opt.Operator, left, right memo.GroupID) bool {
+	leftType := f.lookupScalar(left).Type
+	rightType := f.lookupScalar(right).Type
+	return memo.BinaryOverloadExists(opt.MinusOp, rightType, leftType)
 }
 
 // ----------------------------------------------------------------------
@@ -229,20 +249,25 @@ func (f *Factory) canConstructBinary(op opt.Operator, left, right opt.GroupID) b
 // ----------------------------------------------------------------------
 
 // lookupLogical returns the given group's logical properties.
-func (f *Factory) lookupLogical(group opt.GroupID) *LogicalProps {
-	return &f.mem.lookupGroup(group).logical
+func (f *Factory) lookupLogical(group memo.GroupID) *memo.LogicalProps {
+	return f.mem.GroupProperties(group)
 }
 
 // lookupRelational returns the given group's logical relational properties.
-func (f *Factory) lookupRelational(group opt.GroupID) *RelationalProps {
-	return f.mem.lookupGroup(group).logical.Relational
+func (f *Factory) lookupRelational(group memo.GroupID) *memo.RelationalProps {
+	return f.lookupLogical(group).Relational
+}
+
+// lookupScalar returns the given group's logical scalar properties.
+func (f *Factory) lookupScalar(group memo.GroupID) *memo.ScalarProps {
+	return f.lookupLogical(group).Scalar
 }
 
 // outputCols is a helper function that extracts the set of columns projected
 // by the given operator. In addition to extracting columns from any relational
 // operator, outputCols can also extract columns from the Projections and
 // Aggregations scalar operators, which are used with Project and GroupBy.
-func (f *Factory) outputCols(group opt.GroupID) opt.ColSet {
+func (f *Factory) outputCols(group memo.GroupID) opt.ColSet {
 	// Handle columns projected by relational operators.
 	logical := f.lookupLogical(group)
 	if logical.Relational != nil {
@@ -250,15 +275,15 @@ func (f *Factory) outputCols(group opt.GroupID) opt.ColSet {
 	}
 
 	// Handle columns projected by Aggregations and Projections operators.
-	var colList opt.PrivateID
-	expr := f.mem.lookupNormExpr(group)
-	switch expr.op {
+	var colList memo.PrivateID
+	expr := f.mem.NormExpr(group)
+	switch expr.Operator() {
 	case opt.AggregationsOp:
-		colList = expr.asAggregations().cols()
+		colList = expr.AsAggregations().Cols()
 	case opt.ProjectionsOp:
-		colList = expr.asProjections().cols()
+		colList = expr.AsProjections().Cols()
 	default:
-		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.op))
+		panic(fmt.Sprintf("outputCols doesn't support op %s", expr.Operator()))
 	}
 
 	return opt.ColListToSet(f.extractColList(colList))
@@ -266,21 +291,21 @@ func (f *Factory) outputCols(group opt.GroupID) opt.ColSet {
 
 // outerCols returns the set of outer columns associated with the given group,
 // whether it be a relational or scalar operator.
-func (f *Factory) outerCols(group opt.GroupID) opt.ColSet {
+func (f *Factory) outerCols(group memo.GroupID) opt.ColSet {
 	return f.lookupLogical(group).OuterCols()
 }
 
 // onlyConstants returns true if the scalar expression is a "constant
 // expression tree", meaning that it will always evaluate to the same result.
 // See the CommuteConst pattern comment for more details.
-func (f *Factory) onlyConstants(group opt.GroupID) bool {
+func (f *Factory) onlyConstants(group memo.GroupID) bool {
 	// TODO(andyk): Consider impact of "impure" functions with side effects.
-	return f.mem.lookupGroup(group).logical.Scalar.OuterCols.Empty()
+	return f.lookupScalar(group).OuterCols.Empty()
 }
 
 // hasSameCols returns true if the two groups have an identical set of output
 // columns.
-func (f *Factory) hasSameCols(left, right opt.GroupID) bool {
+func (f *Factory) hasSameCols(left, right memo.GroupID) bool {
 	return f.outputCols(left).Equals(f.outputCols(right))
 }
 
@@ -293,17 +318,17 @@ func (f *Factory) hasSameCols(left, right opt.GroupID) bool {
 
 // neededCols returns the set of columns needed by the given group. It is an
 // alias for outerCols that's used for clarity with the UnusedCols patterns.
-func (f *Factory) neededCols(group opt.GroupID) opt.ColSet {
+func (f *Factory) neededCols(group memo.GroupID) opt.ColSet {
 	return f.outerCols(group)
 }
 
 // neededCols2 unions the set of columns needed by either of the given groups.
-func (f *Factory) neededCols2(left, right opt.GroupID) opt.ColSet {
+func (f *Factory) neededCols2(left, right memo.GroupID) opt.ColSet {
 	return f.outerCols(left).Union(f.outerCols(right))
 }
 
 // neededCols3 unions the set of columns needed by any of the given groups.
-func (f *Factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
+func (f *Factory) neededCols3(group1, group2, group3 memo.GroupID) opt.ColSet {
 	cols := f.outerCols(group1)
 	cols.UnionWith(f.outerCols(group2))
 	cols.UnionWith(f.outerCols(group3))
@@ -313,16 +338,16 @@ func (f *Factory) neededCols3(group1, group2, group3 opt.GroupID) opt.ColSet {
 // neededColsGroupBy unions the columns needed by either of a GroupBy's
 // operands - either aggregations or groupingCols. This case doesn't fit any
 // of the neededCols methods because groupingCols is a private, not a group.
-func (f *Factory) neededColsGroupBy(aggs opt.GroupID, groupingCols opt.PrivateID) opt.ColSet {
-	colSet := *f.mem.lookupPrivate(groupingCols).(*opt.ColSet)
+func (f *Factory) neededColsGroupBy(aggs memo.GroupID, groupingCols memo.PrivateID) opt.ColSet {
+	colSet := *f.mem.LookupPrivate(groupingCols).(*opt.ColSet)
 	return f.outerCols(aggs).Union(colSet)
 }
 
 // neededColsLimit unions the columns needed by Projections with the columns in
 // the Ordering of a Limit/Offset operator.
-func (f *Factory) neededColsLimit(projections opt.GroupID, ordering opt.PrivateID) opt.ColSet {
+func (f *Factory) neededColsLimit(projections memo.GroupID, ordering memo.PrivateID) opt.ColSet {
 	colSet := f.outerCols(projections).Copy()
-	for _, col := range *f.mem.lookupPrivate(ordering).(*opt.Ordering) {
+	for _, col := range *f.mem.LookupPrivate(ordering).(*memo.Ordering) {
 		colSet.Add(int(col.Index()))
 	}
 	return colSet
@@ -330,7 +355,7 @@ func (f *Factory) neededColsLimit(projections opt.GroupID, ordering opt.PrivateI
 
 // hasUnusedColumns returns true if the target group has additional columns
 // that are not part of the neededCols set.
-func (f *Factory) hasUnusedColumns(target opt.GroupID, neededCols opt.ColSet) bool {
+func (f *Factory) hasUnusedColumns(target memo.GroupID, neededCols opt.ColSet) bool {
 	return !f.outputCols(target).Difference(neededCols).Empty()
 }
 
@@ -339,9 +364,9 @@ func (f *Factory) hasUnusedColumns(target opt.GroupID, neededCols opt.ColSet) bo
 // column filtering (like Scan, Values, Projections, etc.), then create a new
 // instance of that operator that does the filtering. Otherwise, construct a
 // Project operator that wraps the operator and does the filtering.
-func (f *Factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet) opt.GroupID {
-	targetExpr := f.mem.lookupNormExpr(target)
-	switch targetExpr.op {
+func (f *Factory) filterUnusedColumns(target memo.GroupID, neededCols opt.ColSet) memo.GroupID {
+	targetExpr := f.mem.NormExpr(target)
+	switch targetExpr.Operator() {
 	case opt.ScanOp:
 		return f.filterUnusedScanColumns(target, neededCols)
 
@@ -357,20 +382,20 @@ func (f *Factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet)
 	// Create a new list of groups to project, along with the list of column
 	// indexes to be projected. These will become inputs to the construction of
 	// the Projections or Aggregations operator.
-	groupList := make([]opt.GroupID, 0, cnt)
+	groupList := make([]memo.GroupID, 0, cnt)
 	colList := make(opt.ColList, 0, cnt)
 
-	switch targetExpr.op {
+	switch targetExpr.Operator() {
 	case opt.ProjectionsOp, opt.AggregationsOp:
 		// Get groups from existing lists.
-		var existingList []opt.GroupID
+		var existingList []memo.GroupID
 		var existingCols opt.ColList
-		if targetExpr.op == opt.ProjectionsOp {
-			existingList = f.mem.lookupList(targetExpr.asProjections().elems())
-			existingCols = f.extractColList(targetExpr.asProjections().cols())
+		if targetExpr.Operator() == opt.ProjectionsOp {
+			existingList = f.mem.LookupList(targetExpr.AsProjections().Elems())
+			existingCols = f.extractColList(targetExpr.AsProjections().Cols())
 		} else {
-			existingList = f.mem.lookupList(targetExpr.asAggregations().aggs())
-			existingCols = f.extractColList(targetExpr.asAggregations().cols())
+			existingList = f.mem.LookupList(targetExpr.AsAggregations().Aggs())
+			existingCols = f.extractColList(targetExpr.AsAggregations().Cols())
 		}
 
 		for i, group := range existingList {
@@ -390,12 +415,12 @@ func (f *Factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet)
 		})
 	}
 
-	if targetExpr.op == opt.AggregationsOp {
+	if targetExpr.Operator() == opt.AggregationsOp {
 		return f.ConstructAggregations(f.InternList(groupList), f.InternPrivate(&colList))
 	}
 
 	projections := f.ConstructProjections(f.InternList(groupList), f.InternPrivate(&colList))
-	if targetExpr.op == opt.ProjectionsOp {
+	if targetExpr.Operator() == opt.ProjectionsOp {
 		return projections
 	}
 
@@ -405,24 +430,26 @@ func (f *Factory) filterUnusedColumns(target opt.GroupID, neededCols opt.ColSet)
 
 // filterUnusedScanColumns constructs a new Scan operator based on the given
 // existing Scan operator, but projecting only the needed columns.
-func (f *Factory) filterUnusedScanColumns(scan opt.GroupID, neededCols opt.ColSet) opt.GroupID {
+func (f *Factory) filterUnusedScanColumns(scan memo.GroupID, neededCols opt.ColSet) memo.GroupID {
 	colSet := f.outputCols(scan).Intersection(neededCols)
-	scanExpr := f.mem.lookupNormExpr(scan).asScan()
-	existing := f.mem.lookupPrivate(scanExpr.def()).(*opt.ScanOpDef)
-	new := opt.ScanOpDef{Table: existing.Table, Cols: colSet}
-	return f.ConstructScan(f.mem.internPrivate(&new))
+	scanExpr := f.mem.NormExpr(scan).AsScan()
+	existing := f.mem.LookupPrivate(scanExpr.Def()).(*memo.ScanOpDef)
+	new := memo.ScanOpDef{Table: existing.Table, Cols: colSet}
+	return f.ConstructScan(f.mem.InternPrivate(&new))
 }
 
 // filterUnusedValuesColumns constructs a new Values operator based on the
 // given existing Values operator. The new operator will have the same set of
 // rows, but containing only the needed columns. Other columns are discarded.
-func (f *Factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.ColSet) opt.GroupID {
-	valuesExpr := f.mem.lookupNormExpr(values).asValues()
-	existingCols := f.extractColList(valuesExpr.cols())
+func (f *Factory) filterUnusedValuesColumns(
+	values memo.GroupID, neededCols opt.ColSet,
+) memo.GroupID {
+	valuesExpr := f.mem.NormExpr(values).AsValues()
+	existingCols := f.extractColList(valuesExpr.Cols())
 	newCols := make(opt.ColList, 0, neededCols.Len())
 
-	existingRows := f.mem.lookupList(valuesExpr.rows())
-	newRows := make([]opt.GroupID, 0, len(existingRows))
+	existingRows := f.mem.LookupList(valuesExpr.Rows())
+	newRows := make([]memo.GroupID, 0, len(existingRows))
 
 	// Create new list of columns that only contains needed columns.
 	for _, colIndex := range existingCols {
@@ -434,10 +461,10 @@ func (f *Factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.C
 
 	// newElems is used to store tuple values, and can be allocated once and
 	// reused repeatedly, since InternList will copy values to memo storage.
-	newElems := make([]opt.GroupID, len(newCols))
+	newElems := make([]memo.GroupID, len(newCols))
 
 	for _, row := range existingRows {
-		existingElems := f.mem.lookupList(f.mem.lookupNormExpr(row).asTuple().elems())
+		existingElems := f.mem.LookupList(f.mem.NormExpr(row).AsTuple().Elems())
 
 		n := 0
 		for i, elem := range existingElems {
@@ -464,8 +491,8 @@ func (f *Factory) filterUnusedValuesColumns(values opt.GroupID, neededCols opt.C
 
 // emptyGroupingCols returns true if the given grouping columns for a GroupBy
 // operator are empty.
-func (f *Factory) emptyGroupingCols(cols opt.PrivateID) bool {
-	return f.mem.lookupPrivate(cols).(*opt.ColSet).Empty()
+func (f *Factory) emptyGroupingCols(cols memo.PrivateID) bool {
+	return f.mem.LookupPrivate(cols).(*opt.ColSet).Empty()
 }
 
 // isCorrelated returns true if variables in the source expression reference
@@ -479,7 +506,7 @@ func (f *Factory) emptyGroupingCols(cols opt.PrivateID) bool {
 // The (Eq) expression is correlated with the (Scan a) expression because it
 // references one of its columns. But the (Eq) expression is not correlated
 // with the (Scan b) expression.
-func (f *Factory) isCorrelated(src, dst opt.GroupID) bool {
+func (f *Factory) isCorrelated(src, dst memo.GroupID) bool {
 	return f.outerCols(src).Intersects(f.outputCols(dst))
 }
 
@@ -498,65 +525,65 @@ func (f *Factory) isCorrelated(src, dst opt.GroupID) bool {
 // Calling extractCorrelatedConditions with the filter conditions list and
 // (Scan b) as the destination would extract the (Eq) expression, since it
 // references columns from b.
-func (f *Factory) extractCorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
-	extracted := make([]opt.GroupID, 0, list.Length)
-	for _, item := range f.mem.lookupList(list) {
+func (f *Factory) extractCorrelatedConditions(list memo.ListID, dst memo.GroupID) memo.ListID {
+	extracted := make([]memo.GroupID, 0, list.Length)
+	for _, item := range f.mem.LookupList(list) {
 		if f.isCorrelated(item, dst) {
 			extracted = append(extracted, item)
 		}
 	}
-	return f.mem.internList(extracted)
+	return f.mem.InternList(extracted)
 }
 
 // extractUncorrelatedConditions is the inverse of extractCorrelatedConditions.
 // Instead of extracting correlated expressions, it extracts list expressions
 // that are *not* correlated with the destination.
-func (f *Factory) extractUncorrelatedConditions(list opt.ListID, dst opt.GroupID) opt.ListID {
-	extracted := make([]opt.GroupID, 0, list.Length)
-	for _, item := range f.mem.lookupList(list) {
+func (f *Factory) extractUncorrelatedConditions(list memo.ListID, dst memo.GroupID) memo.ListID {
+	extracted := make([]memo.GroupID, 0, list.Length)
+	for _, item := range f.mem.LookupList(list) {
 		if !f.isCorrelated(item, dst) {
 			extracted = append(extracted, item)
 		}
 	}
-	return f.mem.internList(extracted)
+	return f.mem.InternList(extracted)
 }
 
 // concatFilters creates a new Filters operator that contains conditions from
 // both the left and right boolean filter expressions. If the left or right
 // expression is itself a Filters operator, then it is "flattened" by merging
 // its conditions into the new Filters operator.
-func (f *Factory) concatFilters(left, right opt.GroupID) opt.GroupID {
-	leftExpr := f.mem.lookupNormExpr(left)
-	rightExpr := f.mem.lookupNormExpr(right)
+func (f *Factory) concatFilters(left, right memo.GroupID) memo.GroupID {
+	leftExpr := f.mem.NormExpr(left)
+	rightExpr := f.mem.NormExpr(right)
 
 	// Handle cases where left/right filters are constant boolean values.
-	if leftExpr.op == opt.TrueOp || rightExpr.op == opt.FalseOp {
+	if leftExpr.Operator() == opt.TrueOp || rightExpr.Operator() == opt.FalseOp {
 		return right
 	}
-	if rightExpr.op == opt.TrueOp || leftExpr.op == opt.FalseOp {
+	if rightExpr.Operator() == opt.TrueOp || leftExpr.Operator() == opt.FalseOp {
 		return left
 	}
 
 	// Determine how large to make the conditions slice (at least 2 slots).
 	cnt := 2
-	leftFiltersExpr := leftExpr.asFilters()
+	leftFiltersExpr := leftExpr.AsFilters()
 	if leftFiltersExpr != nil {
-		cnt += int(leftFiltersExpr.conditions().Length) - 1
+		cnt += int(leftFiltersExpr.Conditions().Length) - 1
 	}
-	rightFiltersExpr := rightExpr.asFilters()
+	rightFiltersExpr := rightExpr.AsFilters()
 	if rightFiltersExpr != nil {
-		cnt += int(rightFiltersExpr.conditions().Length) - 1
+		cnt += int(rightFiltersExpr.Conditions().Length) - 1
 	}
 
 	// Create the conditions slice and populate it.
-	conditions := make([]opt.GroupID, 0, cnt)
+	conditions := make([]memo.GroupID, 0, cnt)
 	if leftFiltersExpr != nil {
-		conditions = append(conditions, f.mem.lookupList(leftFiltersExpr.conditions())...)
+		conditions = append(conditions, f.mem.LookupList(leftFiltersExpr.Conditions())...)
 	} else {
 		conditions = append(conditions, left)
 	}
 	if rightFiltersExpr != nil {
-		conditions = append(conditions, f.mem.lookupList(rightFiltersExpr.conditions())...)
+		conditions = append(conditions, f.mem.LookupList(rightFiltersExpr.Conditions())...)
 	} else {
 		conditions = append(conditions, right)
 	}
@@ -576,15 +603,15 @@ func (f *Factory) concatFilters(left, right opt.GroupID) opt.GroupID {
 // level of flattening is necessary, since this pattern would have already
 // matched any And operator children. If, after simplification, no operands
 // remain, then simplifyAnd returns True.
-func (f *Factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length+1)
-	for _, item := range f.mem.lookupList(conditions) {
-		itemExpr := f.mem.lookupNormExpr(item)
+func (f *Factory) simplifyAnd(conditions memo.ListID) memo.GroupID {
+	list := make([]memo.GroupID, 0, conditions.Length+1)
+	for _, item := range f.mem.LookupList(conditions) {
+		itemExpr := f.mem.NormExpr(item)
 
-		switch itemExpr.op {
+		switch itemExpr.Operator() {
 		case opt.AndOp:
 			// Flatten nested And operands.
-			list = append(list, f.mem.lookupList(itemExpr.asAnd().conditions())...)
+			list = append(list, f.mem.LookupList(itemExpr.AsAnd().Conditions())...)
 
 		case opt.TrueOp:
 			// And operator skips True operands.
@@ -601,7 +628,7 @@ func (f *Factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 	if len(list) == 0 {
 		return f.ConstructTrue()
 	}
-	return f.ConstructAnd(f.mem.internList(list))
+	return f.ConstructAnd(f.mem.InternList(list))
 }
 
 // simplifyOr removes False operands from an Or operator, and eliminates the Or
@@ -610,15 +637,15 @@ func (f *Factory) simplifyAnd(conditions opt.ListID) opt.GroupID {
 // level of flattening is necessary, since this pattern would have already
 // matched any Or operator children. If, after simplification, no operands
 // remain, then simplifyOr returns False.
-func (f *Factory) simplifyOr(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length+1)
-	for _, item := range f.mem.lookupList(conditions) {
-		itemExpr := f.mem.lookupNormExpr(item)
+func (f *Factory) simplifyOr(conditions memo.ListID) memo.GroupID {
+	list := make([]memo.GroupID, 0, conditions.Length+1)
+	for _, item := range f.mem.LookupList(conditions) {
+		itemExpr := f.mem.NormExpr(item)
 
-		switch itemExpr.op {
+		switch itemExpr.Operator() {
 		case opt.OrOp:
 			// Flatten nested Or operands.
-			list = append(list, f.mem.lookupList(itemExpr.asOr().conditions())...)
+			list = append(list, f.mem.LookupList(itemExpr.AsOr().Conditions())...)
 
 		case opt.FalseOp:
 			// Or operator skips False operands.
@@ -635,7 +662,7 @@ func (f *Factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 	if len(list) == 0 {
 		return f.ConstructFalse()
 	}
-	return f.ConstructOr(f.mem.internList(list))
+	return f.ConstructOr(f.mem.InternList(list))
 }
 
 // simplifyFilters behaves the same way as simplifyAnd, with one addition: if
@@ -643,15 +670,15 @@ func (f *Factory) simplifyOr(conditions opt.ListID) opt.GroupID {
 // expression is False. This works because the Filters expression only appears
 // as a Select or Join filter condition, both of which treat a Null filter
 // conjunct exactly as if it were False.
-func (f *Factory) simplifyFilters(conditions opt.ListID) opt.GroupID {
-	list := make([]opt.GroupID, 0, conditions.Length+1)
-	for _, item := range f.mem.lookupList(conditions) {
-		itemExpr := f.mem.lookupNormExpr(item)
+func (f *Factory) simplifyFilters(conditions memo.ListID) memo.GroupID {
+	list := make([]memo.GroupID, 0, conditions.Length+1)
+	for _, item := range f.mem.LookupList(conditions) {
+		itemExpr := f.mem.NormExpr(item)
 
-		switch itemExpr.op {
+		switch itemExpr.Operator() {
 		case opt.AndOp:
 			// Flatten nested And operands.
-			list = append(list, f.mem.lookupList(itemExpr.asAnd().conditions())...)
+			list = append(list, f.mem.LookupList(itemExpr.AsAnd().Conditions())...)
 
 		case opt.TrueOp:
 			// Filters operator skips True operands.
@@ -672,24 +699,23 @@ func (f *Factory) simplifyFilters(conditions opt.ListID) opt.GroupID {
 	if len(list) == 0 {
 		return f.ConstructTrue()
 	}
-	return f.ConstructFilters(f.mem.internList(list))
+	return f.ConstructFilters(f.mem.InternList(list))
 }
 
-// negateConditions negates the given conditions and puts them in a new list.
-func (f *Factory) negateConditions(conditions opt.ListID) opt.ListID {
-	list := f.mem.lookupList(conditions)
-	negCond := make([]opt.GroupID, len(list))
+func (f *Factory) negateConditions(conditions memo.ListID) memo.ListID {
+	list := f.mem.LookupList(conditions)
+	negCond := make([]memo.GroupID, len(list))
 	for i := range list {
 		negCond[i] = f.ConstructNot(list[i])
 	}
-	return f.mem.internList(negCond)
+	return f.mem.InternList(negCond)
 }
 
 // negateComparison negates a comparison op like:
 //   a.x = 5
 // to:
 //   a.x <> 5
-func (f *Factory) negateComparison(cmp opt.Operator, left, right opt.GroupID) opt.GroupID {
+func (f *Factory) negateComparison(cmp opt.Operator, left, right memo.GroupID) memo.GroupID {
 	switch cmp {
 	case opt.EqOp:
 		return f.ConstructNe(left, right)
@@ -741,7 +767,7 @@ func (f *Factory) negateComparison(cmp opt.Operator, left, right opt.GroupID) op
 //   5 < x
 // to:
 //   x > 5
-func (f *Factory) commuteInequality(op opt.Operator, left, right opt.GroupID) opt.GroupID {
+func (f *Factory) commuteInequality(op opt.Operator, left, right memo.GroupID) memo.GroupID {
 	switch op {
 	case opt.GeOp:
 		return f.ConstructLe(right, left)
@@ -767,14 +793,14 @@ func (f *Factory) commuteInequality(op opt.Operator, left, right opt.GroupID) op
 //   (a, b, c) = (x, y, z)
 // into this:
 //   (a = x) AND (b = y) AND (c = z)
-func (f *Factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
+func (f *Factory) normalizeTupleEquality(left, right memo.ListID) memo.GroupID {
 	if left.Length != right.Length {
 		panic("tuple length mismatch")
 	}
 
-	leftList := f.mem.lookupList(left)
-	rightList := f.mem.lookupList(right)
-	conditions := make([]opt.GroupID, left.Length)
+	leftList := f.mem.LookupList(left)
+	rightList := f.mem.LookupList(right)
+	conditions := make([]memo.GroupID, left.Length)
 	for i := range conditions {
 		conditions[i] = f.ConstructEq(leftList[i], rightList[i])
 	}
@@ -790,17 +816,17 @@ func (f *Factory) normalizeTupleEquality(left, right opt.ListID) opt.GroupID {
 
 // simplifyCoalesce discards any leading null operands, and then if the next
 // operand is a constant, replaces with that constant.
-func (f *Factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
-	argList := f.mem.lookupList(args)
+func (f *Factory) simplifyCoalesce(args memo.ListID) memo.GroupID {
+	argList := f.mem.LookupList(args)
 	for i := 0; i < int(args.Length-1); i++ {
 		// If item is not a constant value, then its value may turn out to be
 		// null, so no more folding. Return operands from then on.
-		item := f.mem.lookupNormExpr(argList[i])
-		if !item.isConstValue() {
+		item := f.mem.NormExpr(argList[i])
+		if !item.IsConstValue() {
 			return f.ConstructCoalesce(f.InternList(argList[i:]))
 		}
 
-		if item.op != opt.NullOp {
+		if item.Operator() != opt.NullOp {
 			return argList[i]
 		}
 	}
@@ -813,29 +839,25 @@ func (f *Factory) simplifyCoalesce(args opt.ListID) opt.GroupID {
 // allowNullArgs returns true if the binary operator with the given inputs
 // allows one of those inputs to be null. If not, then the binary operator will
 // simply be replaced by null.
-func (f *Factory) allowNullArgs(op opt.Operator, left, right opt.GroupID) bool {
-	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
-	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
-	overload, ok := findBinaryOverload(op, leftType, rightType)
-	if !ok {
-		panic(fmt.Sprintf("could not find overload for binary expression %s", op))
-	}
-	return overload.allowNullArgs
+func (f *Factory) allowNullArgs(op opt.Operator, left, right memo.GroupID) bool {
+	leftType := f.lookupScalar(left).Type
+	rightType := f.lookupScalar(right).Type
+	return memo.BinaryAllowsNullArgs(op, leftType, rightType)
 }
 
 // foldNullUnary replaces the unary operator with a typed null value having the
 // same type as the unary operator would have.
-func (f *Factory) foldNullUnary(op opt.Operator, input opt.GroupID) opt.GroupID {
-	typ := f.mem.lookupGroup(input).logical.Scalar.Type
-	return f.ConstructNull(f.InternPrivate(inferUnaryType(op, typ)))
+func (f *Factory) foldNullUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
+	typ := f.lookupScalar(input).Type
+	return f.ConstructNull(f.InternPrivate(memo.InferUnaryType(op, typ)))
 }
 
 // foldNullBinary replaces the binary operator with a typed null value having
 // the same type as the binary operator would have.
-func (f *Factory) foldNullBinary(op opt.Operator, left, right opt.GroupID) opt.GroupID {
-	leftType := f.mem.lookupGroup(left).logical.Scalar.Type
-	rightType := f.mem.lookupGroup(right).logical.Scalar.Type
-	return f.ConstructNull(f.InternPrivate(inferBinaryType(op, leftType, rightType)))
+func (f *Factory) foldNullBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	leftType := f.lookupScalar(left).Type
+	rightType := f.lookupScalar(right).Type
+	return f.ConstructNull(f.InternPrivate(memo.InferBinaryType(op, leftType, rightType)))
 }
 
 // ----------------------------------------------------------------------
@@ -847,8 +869,8 @@ func (f *Factory) foldNullBinary(op opt.Operator, left, right opt.GroupID) opt.G
 
 // isZero returns true if the input expression is a numeric constant with a
 // value of zero.
-func (f *Factory) isZero(input opt.GroupID) bool {
-	d := f.mem.lookupPrivate(f.mem.lookupNormExpr(input).asConst().value()).(tree.Datum)
+func (f *Factory) isZero(input memo.GroupID) bool {
+	d := f.mem.LookupPrivate(f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
 	switch t := d.(type) {
 	case *tree.DDecimal:
 		return t.Decimal.Sign() == 0
@@ -862,8 +884,8 @@ func (f *Factory) isZero(input opt.GroupID) bool {
 
 // isOne returns true if the input expression is a numeric constant with a
 // value of one.
-func (f *Factory) isOne(input opt.GroupID) bool {
-	d := f.mem.lookupPrivate(f.mem.lookupNormExpr(input).asConst().value()).(tree.Datum)
+func (f *Factory) isOne(input memo.GroupID) bool {
+	d := f.mem.LookupPrivate(f.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
 	switch t := d.(type) {
 	case *tree.DDecimal:
 		return t.Decimal.Cmp(&tree.DecimalOne.Decimal) == 0

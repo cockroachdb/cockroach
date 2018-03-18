@@ -16,22 +16,22 @@ package execbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
-// expression tree (xform.ExprView).
+// expression tree (memo.ExprView).
 type Builder struct {
 	factory exec.Factory
-	ev      xform.ExprView
+	ev      memo.ExprView
 }
 
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
-func New(factory exec.Factory, ev xform.ExprView) *Builder {
+func New(factory exec.Factory, ev memo.ExprView) *Builder {
 	return &Builder{factory: factory, ev: ev}
 }
 
@@ -41,7 +41,7 @@ func (b *Builder) Build() (exec.Node, error) {
 	return b.build(b.ev)
 }
 
-func (b *Builder) build(ev xform.ExprView) (exec.Node, error) {
+func (b *Builder) build(ev memo.ExprView) (exec.Node, error) {
 	if !ev.IsRelational() && !ev.IsEnforcer() {
 		return nil, errors.Errorf("building execution for non-relational operator %s", ev.Operator())
 	}
