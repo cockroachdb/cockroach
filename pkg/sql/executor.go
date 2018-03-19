@@ -896,10 +896,13 @@ func (e *Executor) execParsed(
 			}
 		}
 
-		// If the txn is not in an "open" state any more, exec the schema changes.
-		// They'll short-circuit themselves if the mutation that queued them has
-		// been rolled back from the table descriptor.
-		if !txnState.TxnIsOpen() {
+		// If we're no longer in a transaction, exec the schema changes.
+		// They'll short-circuit themselves if the mutation that queued
+		// them has been rolled back from the table descriptor. (It's
+		// important that this condition match the one used to call
+		// finishSQLTxn above:
+		// https://github.com/cockroachdb/cockroach/issues/23979)
+		if txnState.State() == NoTxn {
 			// Verify that metadata callback eventually succeeds, if one was
 			// set.
 			if e.cfg.TestingKnobs.WaitForGossipUpdate {
