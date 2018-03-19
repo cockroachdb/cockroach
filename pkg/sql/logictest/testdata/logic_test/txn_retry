@@ -17,15 +17,12 @@ statement ok
 BEGIN
 
 # On a different connection, do a read at a higher timestamp.
-#
-# We use dont_inherit_database, as otherwise we'd run some statements under the
-# hood that break the auto-retry that we'll need later.
-user testuser dont_inherit_database
+user testuser
 
 statement ok
 SELECT * FROM test.test_retry
 
-user root dont_inherit_database
+user root
 
 # Run a cluster_logical_timestamp(), so that the transaction "observes its
 # commit timestamp" and so can't be refreshed, and the do an insert that will
