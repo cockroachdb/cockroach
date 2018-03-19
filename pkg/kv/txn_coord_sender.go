@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -991,8 +992,6 @@ func (tc *TxnCoordSender) heartbeatLoop(ctx context.Context) {
 func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	// Clone the intents and the txn to avoid data races.
-	intentSpans, _ := roachpb.MergeSpans(append([]roachpb.Span(nil), tc.mu.meta.Intents...))
 	tc.cleanupTxnLocked(ctx, aborted)
 	txn := tc.mu.meta.Txn.Clone()
 
@@ -1008,15 +1007,15 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 	// caller's context has been canceled.
 	if err := tc.stopper.RunAsyncTask(
 		tc.AnnotateCtx(context.Background()), "kv.TxnCoordSender: aborting txn", func(ctx context.Context) {
-			// Use the wrapped sender since the normal Sender does not allow
-			// clients to specify intents.
 			resp, pErr := client.SendWrappedWith(
-				ctx, tc.wrapped, roachpb.Header{Txn: &txn}, &roachpb.EndTransactionRequest{
-					Span: roachpb.Span{
-						Key: txn.Key,
+				ctx, tc.wrapped, roachpb.Header{}, &roachpb.PushTxnRequest{
+					Span: roachpb.Span{Key: txn.Key},
+					PusherTxn: roachpb.Transaction{
+						TxnMeta: enginepb.TxnMeta{Priority: roachpb.MaxTxnPriority},
 					},
-					Commit:      false,
-					IntentSpans: intentSpans,
+					PusheeTxn: txn.TxnMeta,
+					Now:       tc.clock.Now(),
+					PushType:  roachpb.PUSH_ABORT,
 				},
 			)
 			tc.mu.Lock()
@@ -1029,7 +1028,7 @@ func (tc *TxnCoordSender) tryAsyncAbort(ctx context.Context) {
 					tc.mu.meta.Txn.Update(errTxn)
 				}
 			} else {
-				tc.mu.meta.Txn.Update(resp.(*roachpb.EndTransactionResponse).Txn)
+				tc.mu.meta.Txn.Update(&resp.(*roachpb.PushTxnResponse).PusheeTxn)
 			}
 		},
 	); err != nil {
