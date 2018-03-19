@@ -87,6 +87,9 @@ var (
 	// is to allow a restarting node to discover approximately how long it has
 	// been down without needing to retrieve liveness records from the cluster.
 	localStoreLastUpSuffix = []byte("uptm")
+	// localHLCUpperBoundSuffix stores an upper bound to the wall time used by
+	// the HLC
+	localHLCUpperBoundSuffix = []byte("hlcu")
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")
