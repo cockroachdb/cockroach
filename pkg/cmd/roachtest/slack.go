@@ -62,8 +62,13 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 	params := slack.PostMessageParameters{
 		Username: "roachtest",
 	}
-	message := fmt.Sprintf("%d passed, %d failed, %d skipped",
-		len(pass), len(fail), skip)
+
+	branch := "<unknown branch>"
+	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+		branch = b
+	}
+	message := fmt.Sprintf("%s: %d passed, %d failed, %d skipped",
+		branch, len(pass), len(fail), skip)
 
 	status := "good"
 	if len(fail) > 0 {
