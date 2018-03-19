@@ -15,6 +15,7 @@
 package opt
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // makeEqSpan returns a span that constraints column <offset> to a single value.
@@ -836,11 +838,16 @@ func (c *indexConstraintCtx) makeInvertedIndexSpansForExpr(
 
 		switch rd.Type() {
 		case json.ArrayJSONType, json.ObjectJSONType:
-			// We want to have a full index scan for an empty json array or object on the RHS of @>.
-			if rd.Len() < 1 {
+			// We want to have a full index scan if the RHS contains either [] or {}.
+			hasContainerLeaf, err := rd.HasContainerLeaf()
+			if err != nil {
+				log.Errorf(context.TODO(), "unexpected JSON error: %v", err)
 				return nil, false, false
 			}
 
+			if hasContainerLeaf {
+				return nil, false, false
+			}
 			return LogicalSpans{c.makeEqSpan(0 /* offset */, rhs.private.(tree.Datum))}, true, true
 		default:
 			// If we find a scalar on the right side of the @> operator it means that we need to find
