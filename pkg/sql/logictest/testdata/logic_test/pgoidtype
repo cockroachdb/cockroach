@@ -285,3 +285,10 @@ SELECT * FROM o WHERE a <= 4
 ----
 1
 4
+
+# Regression test for #23652.
+
+query B
+SELECT NOT (prorettype::regtype::text = 'foo') AND proretset FROM pg_proc WHERE proretset=false LIMIT 1
+----
+false

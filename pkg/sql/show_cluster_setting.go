@@ -43,7 +43,7 @@ func (p *planner) showStateMachineSetting(
 	// also processed the corresponding Gossip update (which is important as only then does the node
 	// update its persisted state; see #22796).
 	if err := retry.ForDuration(10*time.Second, func() error {
-		datums, err := p.QueryRow(ctx, "SELECT value FROM system.settings WHERE name = $1", name)
+		datums, err := p.queryRow(ctx, "SELECT value FROM system.settings WHERE name = $1", name)
 		if err != nil {
 			return err
 		}
