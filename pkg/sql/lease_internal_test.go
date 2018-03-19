@@ -265,11 +265,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock().Now()) != nil {
+	if leaseManager.tableNames.get(tableDesc.ParentID, "test", s.Clock().Now(), 0) != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease := leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now())
+	lease := leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now(), 0)
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
@@ -292,11 +292,11 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	}
 
 	// Check that the cache has been updated.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now()) != nil {
+	if leaseManager.tableNames.get(tableDesc.ParentID, "test2", s.Clock().Now(), 0) != nil {
 		t.Fatalf("old name still in cache")
 	}
 
-	lease = leaseManager.tableNames.get(newTableDesc.ParentID, "test2", s.Clock().Now())
+	lease = leaseManager.tableNames.get(newTableDesc.ParentID, "test2", s.Clock().Now(), 0)
 	if lease == nil {
 		t.Fatalf("new name not found in cache")
 	}
@@ -333,7 +333,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 
 	// Check the assumptions this tests makes: that there is a cache entry
 	// (with a valid lease).
-	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease == nil {
+	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now(), 0); lease == nil {
 		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
 	} else {
 		if err := leaseManager.Release(&lease.TableDescriptor); err != nil {
@@ -344,7 +344,7 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	leaseManager.ExpireLeases(s.Clock())
 
 	// Check the name no longer resolves.
-	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now()); lease != nil {
+	if lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now(), 0); lease != nil {
 		t.Fatalf("name cache has unexpired entry for (%d, %s): %s", tableDesc.ParentID, tableName, lease)
 	}
 }
@@ -371,7 +371,7 @@ CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Check that we cannot get the table by a different name.
-	if leaseManager.tableNames.get(tableDesc.ParentID, "tEsT", s.Clock().Now()) != nil {
+	if leaseManager.tableNames.get(tableDesc.ParentID, "tEsT", s.Clock().Now(), 0) != nil {
 		t.Fatalf("lease manager incorrectly found table with different case")
 	}
 }
