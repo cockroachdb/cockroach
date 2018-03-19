@@ -1018,7 +1018,7 @@ func (s *adminServer) Settings(
 		}
 		resp.KeyValues[k] = serverpb.SettingsResponse_Value{
 			Type:        v.Typ(),
-			Value:       v.String(&s.server.st.SV),
+			Value:       settings.SanitizedValue(k, &s.server.st.SV),
 			Description: v.Description(),
 		}
 	}
