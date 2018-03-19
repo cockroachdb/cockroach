@@ -451,6 +451,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.admin = newAdminServer(s, &sqlExecutor)
 	s.status = newStatusServer(
 		s.cfg.AmbientCtx,
+		st,
 		s.cfg.Config,
 		s.admin,
 		s.db,
