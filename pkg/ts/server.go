@@ -37,7 +37,7 @@ const (
 	URLPrefix = "/ts/"
 	// queryWorkerMax is the default maximum number of worker goroutines that
 	// the time series server can use to service incoming queries.
-	queryWorkerMax = 64
+	queryWorkerMax = 8
 	// queryMemoryMax is a soft limit for the amount of total memory used by
 	// time series queries. This is not currently enforced, but is used for
 	// monitoring purposes.
@@ -231,6 +231,16 @@ func (s *Server) Query(
 				func(ctx context.Context) {
 					// Create a memory account for the results of this query.
 					resultAccounts[queryIdx] = s.resultMemMonitor.MakeBoundAccount()
+
+					// Estimated source count is either the count of requested sources
+					// *or* the estimated cluster node count if no sources are specified.
+					var estimatedSourceCount int64
+					if len(query.Sources) > 0 {
+						estimatedSourceCount = int64(len(query.Sources))
+					} else {
+						estimatedSourceCount = estimatedClusterNodeCount
+					}
+
 					datapoints, sources, err := s.db.QueryMemoryConstrained(
 						ctx,
 						query,
@@ -244,7 +254,7 @@ func (s *Server) Query(
 						// The worker is allotted an even share of the total worker memory
 						// budget for the server.
 						s.queryMemoryMax/int64(s.queryWorkerMax),
-						estimatedClusterNodeCount,
+						estimatedSourceCount,
 					)
 					if err == nil {
 						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
