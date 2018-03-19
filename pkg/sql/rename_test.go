@@ -227,7 +227,7 @@ CREATE TABLE test.t (a INT PRIMARY KEY);
 	// that the node doesn't have a lease on it anymore (committing the txn
 	// should have released the lease on the version of the descriptor with the
 	// old name), even thoudh the name mapping still exists.
-	lease := s.LeaseManager().(*LeaseManager).tableNames.get(tableDesc.ID, "t", s.Clock().Now())
+	lease := s.LeaseManager().(*LeaseManager).tableNames.get(tableDesc.ID, "t", s.Clock().Now(), 0)
 	if lease != nil {
 		t.Fatalf(`still have lease on "t"`)
 	}

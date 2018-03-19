@@ -79,10 +79,12 @@ func (s *tableVersionState) String() string {
 	return fmt.Sprintf("%d(%q) ver=%d:%s, refcount=%d", s.ID, s.Name, s.Version, s.expiration, s.refcount)
 }
 
-// hasExpired checks if the table is too old to be used (by a txn operating)
-// at the given timestamp
-func (s *tableVersionState) hasExpired(timestamp hlc.Timestamp) bool {
-	return !timestamp.Less(s.expiration)
+// hasExpired checks if the table lease is too old to be used
+// (by a txn operating) at the given timestamp + budget. This
+// is needed because transactions can get pushed forward in time
+// invalidating the use of a descriptor.
+func (s *tableVersionState) hasExpired(timestamp hlc.Timestamp, budget time.Duration) bool {
+	return !timestamp.Add(int64(budget), 0).Less(s.expiration)
 }
 
 func (s *tableVersionState) incRefcount() {
@@ -119,9 +121,13 @@ type LeaseStore struct {
 	// range of the actual lease duration will be
 	// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration]
 	leaseJitterFraction float64
-	// leaseRenewalTimeout is the time before a lease expires when
-	// acquisition to renew the lease begins.
-	leaseRenewalTimeout time.Duration
+	// leaseAsyncRenewalTimeout is the time before a lease expires when
+	// asynchronous acquisition to renew the lease begins.
+	leaseAsyncRenewalTimeout time.Duration
+	// leaseSyncRenewalTimeout is the time before a lease expires when
+	// synchronous acquisition to renew the lease begins. Clients requesting
+	// the lease will block waiting for the lease acquisition.
+	leaseSyncRenewalTimeout time.Duration
 
 	testingKnobs LeaseStoreTestingKnobs
 	memMetrics   *MemoryMetrics
@@ -611,7 +617,9 @@ func (t *tableState) acquire(
 	// holding the tableState lock, so anything can happen in between lease
 	// acquisition and us getting control again.
 	s := t.mu.active.findNewest()
-	for ; s == nil || s.hasExpired(timestamp); s = t.mu.active.findNewest() {
+	for ; s == nil || s.hasExpired(
+		timestamp, m.LeaseStore.leaseSyncRenewalTimeout,
+	); s = t.mu.active.findNewest() {
 		var resultChan <-chan singleflight.Result
 		resultChan, _ = t.mu.group.DoChan(acquireGroupKey, func() (interface{}, error) {
 			return t.acquireNodeLease(ctx, m, hlc.Timestamp{})
@@ -629,7 +637,7 @@ func (t *tableState) acquire(
 
 	// If the latest lease is nearly expired, ensure a renewal is queued.
 	durationUntilExpiry := time.Duration(s.expiration.WallTime - timestamp.WallTime)
-	if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
+	if durationUntilExpiry < m.LeaseStore.leaseAsyncRenewalTimeout {
 		if err := t.maybeQueueLeaseRenewal(ctx, m, s); err != nil {
 			return nil, err
 		}
@@ -1112,7 +1120,7 @@ type tableNameCache struct {
 // The table's refcount is incremented before returning, so the caller
 // is responsible for releasing it to the leaseManager.
 func (c *tableNameCache) get(
-	dbID sqlbase.ID, tableName string, timestamp hlc.Timestamp,
+	dbID sqlbase.ID, tableName string, timestamp hlc.Timestamp, budget time.Duration,
 ) *tableVersionState {
 	c.mu.Lock()
 	table, ok := c.tables[makeTableNameCacheKey(dbID, tableName)]
@@ -1135,7 +1143,7 @@ func (c *tableNameCache) get(
 	}
 
 	// Expired table. Don't hand it out.
-	if table.hasExpired(timestamp) {
+	if table.hasExpired(timestamp, budget) {
 		return nil
 	}
 
@@ -1234,12 +1242,13 @@ func NewLeaseManager(
 ) *LeaseManager {
 	lm := &LeaseManager{
 		LeaseStore: LeaseStore{
-			execCfg:             execCfg,
-			leaseDuration:       cfg.TableDescriptorLeaseDuration,
-			leaseJitterFraction: cfg.TableDescriptorLeaseJitterFraction,
-			leaseRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
-			testingKnobs:        testingKnobs.LeaseStoreTestingKnobs,
-			memMetrics:          memMetrics,
+			execCfg:                  execCfg,
+			leaseDuration:            cfg.TableDescriptorLeaseDuration,
+			leaseJitterFraction:      cfg.TableDescriptorLeaseJitterFraction,
+			leaseAsyncRenewalTimeout: cfg.TableDescriptorLeaseRenewalTimeout,
+			leaseSyncRenewalTimeout:  cfg.TableDescriptorLeaseRenewalTimeout / 2,
+			testingKnobs:             testingKnobs.LeaseStoreTestingKnobs,
+			memMetrics:               memMetrics,
 		},
 		testingKnobs: testingKnobs,
 		tableNames: tableNameCache{
@@ -1275,12 +1284,13 @@ func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	// Check if we have cached an ID for this name.
-	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
+	tableVersion := m.tableNames.get(
+		dbID, tableName, timestamp, m.LeaseStore.leaseSyncRenewalTimeout)
 	if tableVersion != nil {
 		if !timestamp.Less(tableVersion.ModificationTime) {
 			// If this lease is nearly expired, ensure a renewal is queued.
 			durationUntilExpiry := time.Duration(tableVersion.expiration.WallTime - timestamp.WallTime)
-			if durationUntilExpiry < m.LeaseStore.leaseRenewalTimeout {
+			if durationUntilExpiry < m.LeaseStore.leaseAsyncRenewalTimeout {
 				if t := m.findTableState(tableVersion.ID, false /* create */); t != nil {
 					if err := t.maybeQueueLeaseRenewal(ctx, m, tableVersion); err != nil {
 						return nil, hlc.Timestamp{}, err
