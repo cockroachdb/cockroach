@@ -205,6 +205,8 @@ enum TransactionStatus {
   // ABORTED state are deleted and are never made visible to other
   // transactions.
   ABORTED = 2;
+  // ...
+  STAGED = 3;
 }
 
 message ObservedTimestamp {

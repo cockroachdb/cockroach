@@ -448,6 +448,7 @@ func (t *RaftTransport) connectAndProcess(
 		if err != nil {
 			return err
 		}
+		log.Warningf(ctx, "TSX connected to %s", addr.String())
 		client := NewMultiRaftClient(conn)
 		batchCtx, cancel := context.WithCancel(ctx)
 		defer cancel()

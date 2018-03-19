@@ -1,0 +1,574 @@
+{
+  "version": 1,
+  "width": 105,
+  "height": 28,
+  "duration": 50.598507,
+  "command": null,
+  "title": null,
+  "env": {
+    "TERM": "xterm-256color",
+    "SHELL": "/usr/local/bin/bash"
+  },
+  "stdout": [
+    [
+      0.120974,
+      "[tschottdorf@macts-2 cockroach (roachtest/network)]$ "
+    ],
+    [
+      0.353828,
+      "go install ./pkg/cmd/roachtest/... && roachtest run -\r--local network"
+    ],
+    [
+      0.642206,
+      "\r\n"
+    ],
+    [
+      0.348217,
+      "=== RUN   network/latency/nodes=3\r\n"
+    ],
+    [
+      0.000352,
+      "> roachprod create local -n 3 --gce-machine-type=n1-standard-4\r\n"
+    ],
+    [
+      0.021431,
+      "Creating cluster local with 3 nodes\r\n"
+    ],
+    [
+      0.000352,
+      "OK\r\n"
+    ],
+    [
+      0.004247,
+      "> roachprod put local:1-3 /var/folders/yy/4q8rrssd27vdgbr59w9qbffr0000gn/T/toxiproxy-wrapper366958402 ./cockroach\r\n"
+    ],
+    [
+      0.028514,
+      "local: putting /var/folders/yy/4q8rrssd27vdgbr59w9qbffr0000gn/T/toxiproxy-wrapper366958402 ./cockroach\r\n"
+    ],
+    [
+      0.000511,
+      "\r\n   1: done\r\n   2: done\r\n   3: done\r\n"
+    ],
+    [
+      0.003612,
+      "> roachprod put local:1-3 /Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/cockroach ./cockroach.real\r\n"
+    ],
+    [
+      0.026923,
+      "local: putting /Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/cockroach ./cockroach.real\r\n"
+    ],
+    [
+      0.002594,
+      "\r\n   1: done\r\n   2: done\r\n   3: done\r\n"
+    ],
+    [
+      0.003583,
+      "> roachprod put local:1-3 /Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/bin/workload ./workload\r\n"
+    ],
+    [
+      0.020199,
+      "local: putting /Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/bin/workload ./workload\r\n"
+    ],
+    [
+      0.000719,
+      "\r\n   1: done\r\n   2: done\r\n   3: done\r\n"
+    ],
+    [
+      0.003954,
+      "> roachprod ssh local:1 -- curl -Lo toxiproxy-server https://github.com/Shopify/toxiproxy/releases/download/v2.1.2/toxiproxy-server-darwin-amd64\r\n"
+    ],
+    [
+      0.139966,
+      "  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\r\n                                 Dload  Upload   Total   Sp"
+    ],
+    [
+      0.000155,
+      "ent    Left  Speed\r\n\r  0     0    0     0    "
+    ],
+    [
+      8.2e-05,
+      "0     0      0      0 --:--:-- --:--:-- --:--:--     0"
+    ],
+    [
+      0.176866,
+      "\r100   619"
+    ],
+    [
+      8.2e-05,
+      "    0   619    0     0   3498    "
+    ],
+    [
+      0.00011,
+      "  0 --:--:-- --:--:-- --:--:--  3517\r\n"
+    ],
+    [
+      0.513202,
+      "\r 11 6471k   11  747k    0     0  1082k     "
+    ],
+    [
+      3.3e-05,
+      " 0  0:00:05 --:--:--  0:00:05 1082k"
+    ],
+    [
+      1.006527,
+      "\r 97 6471k   97 6305k    0     0  3715k      0  0:00:01  0:00:01 --:--:-- 5524k"
+    ],
+    [
+      0.018551,
+      "\r100 6471k  100 6471k    0     0  3771k      0  0:00:01  0:00:01 "
+    ],
+    [
+      3.7e-05,
+      "--:--:-- 5584k\r\n"
+    ],
+    [
+      0.01372,
+      "> roachprod ssh local:1 -- chmod +x toxiproxy-server\r\n"
+    ],
+    [
+      0.13305,
+      "> roachprod ssh local:1 -- mkdir -p logs && ./toxiproxy-server --port 8475 2>&1 > logs/toxiproxy.out\r\n"
+    ],
+    [
+      1.007772,
+      "> roachprod ssh local:2 -- curl -Lo toxiproxy-server https://github.com/Shopify/toxiproxy/releases/download/v2.1.2/toxiproxy-server-darwin-amd64\r\n"
+    ],
+    [
+      0.128833,
+      "  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\r\n                                 Dload  Upload"
+    ],
+    [
+      7.1e-05,
+      "   Total   Spent    Left  Speed\r\n\r  0     0   "
+    ],
+    [
+      4.4e-05,
+      " 0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0"
+    ],
+    [
+      0.173436,
+      "\r100   619    0   619    0     0   3568      0 --:--:-- --:--:-- --:--:--  3578\r\n"
+    ],
+    [
+      0.518209,
+      "\r 26 6471k   26 1716k    0     0  2480k    "
+    ],
+    [
+      4.9e-05,
+      "  0  0:00:02 --:--:--  0:00:02 2480k"
+    ],
+    [
+      1.012382,
+      "\r 91 6471k   91 5914k    0     0  3470k      0  0:00:01  0:00:01 --:--:-- 4148k"
+    ],
+    [
+      0.110681,
+      "\r100 6471k  100 6471k    0     0  3565k      0  "
+    ],
+    [
+      3.6e-05,
+      "0:00:01  0:00:01 --:--:-- 4234k\r\n"
+    ],
+    [
+      0.032832,
+      "> roachprod ssh local:2 -- chmod +x toxiproxy-server\r\n"
+    ],
+    [
+      0.141072,
+      "> roachprod ssh local:2 -- mkdir -p logs && ./toxiproxy-server --port 8476 2>&1 > logs/toxiproxy.out\r\n"
+    ],
+    [
+      1.004276,
+      "> roachprod ssh local:3 -- curl -Lo toxiproxy-server https://github.com/Shopify/toxiproxy/releases/download/v2.1.2/toxiproxy-server-darwin-amd64\r\n"
+    ],
+    [
+      0.125924,
+      "  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current\r\n                                 Dload  Upload"
+    ],
+    [
+      3.8e-05,
+      "   Total   Spent    Left  Spe"
+    ],
+    [
+      6.6e-05,
+      "ed\r\n\r  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0"
+    ],
+    [
+      0.18371,
+      "\r100   619    0   619    0     0   3373      0 --:--:--"
+    ],
+    [
+      6.1e-05,
+      " --:--:-- --:--:--  3382\r\n"
+    ],
+    [
+      0.399719,
+      "\r  4 6471k    4  305k  "
+    ],
+    [
+      0.000117,
+      "  0     0   523k      0  0:00:12 --:--:--  "
+    ],
+    [
+      4.8e-05,
+      "0:00:12  523k"
+    ],
+    [
+      0.99216,
+      "\r 75 6471k   75 4878k    0     0  3095k     "
+    ],
+    [
+      9.1e-05,
+      " 0  0:00:02  0:00:01  0:00:01 4605k"
+    ],
+    [
+      0.295892,
+      "\r100 6471k  100 6471k    0     0  3457k      0  0:00:01  0:00:01 --"
+    ],
+    [
+      5e-05,
+      ":--:-- 4787k\r\n"
+    ],
+    [
+      0.02085,
+      "> roachprod ssh local:3 -- chmod +x toxiproxy-server\r\n"
+    ],
+    [
+      0.137405,
+      "> roachprod ssh local:3 -- mkdir -p logs && ./toxiproxy-server --port 8477 2>&1 > logs/toxiproxy.out\r\n"
+    ],
+    [
+      1.00631,
+      "> roachprod start local:1-3\r\n"
+    ],
+    [
+      0.018573,
+      "local: starting"
+    ],
+    [
+      0.687758,
+      "\r\nlocal: initializing cluster settings"
+    ],
+    [
+      0.39627,
+      "\r\nSET CLUSTER SETTING\r\n"
+    ],
+    [
+      17.087405,
+      "MONITOR: 1: 47055\r\n"
+    ],
+    [
+      0.004582,
+      "MONITOR: 3: 47097\r\n"
+    ],
+    [
+      0.016412,
+      "MONITOR: 2: 47078\r\n"
+    ],
+    [
+      0.224919,
+      "SET CLUSTER SETTING trace.debug.enable = true\r\n"
+    ],
+    [
+      0.534565,
+      "CREATE DATABASE test\r\n"
+    ],
+    [
+      0.542728,
+      "CREATE TABLE test.commit (a INT, b INT, v INT, PRIMARY KEY (a, b))\r\n"
+    ],
+    [
+      2.318398,
+      "ALTER TABLE test.commit SPLIT AT VALUES (2, 0), (3, 0)\r\n"
+    ],
+    [
+      0.000905,
+      "SELECT 1\r\n"
+    ],
+    [
+      0.978868,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 0), (1, 0), (3, 0); COMMIT\r\n978.858754ms\r\n"
+    ],
+    [
+      0.227419,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 1), (1, 1), (3, 1); COMMIT\r\n226.997908ms\r\n"
+    ],
+    [
+      0.229428,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 2), (1, 2), (3, 2); COMMIT\r\n229.758503ms\r\n"
+    ],
+    [
+      0.214069,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 3), (1, 3), (3, 3); COMMIT\r\n214.047411ms\r\n"
+    ],
+    [
+      0.218648,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 4), (1, 4), (3, 4); COMMIT\r\n218.405561ms\r\n"
+    ],
+    [
+      0.214891,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 5), (1, 5), (3, 5); COMMIT\r\n215.006193ms\r\n"
+    ],
+    [
+      0.208085,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 6), (1, 6), (3, 6); COMMIT\r\n208.074056ms\r\n"
+    ],
+    [
+      0.214114,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 7), (1, 7), (3, 7); COMMIT\r\n214.06763ms\r\n"
+    ],
+    [
+      0.214718,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 8), (1, 8), (3, 8); COMMIT\r\n214.556437ms\r\n"
+    ],
+    [
+      0.209869,
+      "BEGIN; INSERT INTO test.commit VALUES (2, 9), (1, 9), (3, 9); COMMIT\r\n209.961784ms\r\n"
+    ],
+    [
+      0.000118,
+      "> roachprod ssh local:1 -- ./cockroach sql --insecure -e 'set tracing=on; insert into test.commit values(3,1000), (1,1000), (2,1000); select age, message from [ show trace for session ];'\r\n"
+    ],
+    [
+      0.494501,
+      "age\tmessage\r\n0s\t=== SPAN START: sql txn ===\r\n120µs759ns\t=== SPAN START: session recording ===\r\n137µs498ns\tAutoCommit. err: <nil>\r\n169µs331ns\t[NoTxn pos:1] executing ExecStmt: INSERT INTO test.commit VALUES (3, 1000), (1, 1000), (2, 1000)\r\n176µs211ns\texecuting: INSERT INTO test.commit VALUES (3, 1000), (1, 1000), (2, 1000) in state: NoTxn\r\n183µs245ns\t=== SPAN START: sql txn ===\r\n205µs324ns\t[Open pos:1] executing ExecStmt: INSERT INTO test.commit VALUES (3, 1000), (1, 1000), (2, 1000)\r\n210µs912ns\texecuting: INSERT INTO test.commit VALUES (3, 1000), (1, 1000), (2, 1000) in state: Open\r\n279µs234ns\tadded table 'test.public.commit' to table collection\r\n335µs884ns\tquery not supported for distSQL: mutations not supported\r\n403µs18ns\t=== SPAN START: dist sender ===\r\n431µs663ns\tquerying next range at /Table/51/1/1/1000/0\r\n455µs293ns\t=== SPAN START: kv.DistSender: sending partial batch ===\r\n477µs768ns\tquerying next range at /Table/51/1/2/1000/0\r\n487µs700ns\t=== SPAN START: kv.DistSender: sending partial batc"
+    ],
+    [
+      0.000759,
+      "h ===\r\n502µs165ns\tquerying next range at /Table/51/1/3/1000/0\r\n560µs925ns\tr25: sending batch 1 CPut, 1 BeginTxn, 1 EndTxn to (n1,s1):1\r\n571µs801ns\tr24: sending batch 1 CPut to (n1,s1):1\r\n571µs861ns\tr22: sending batch 1 CPut to (n1,s1):1\r\n597µs214ns\tsending request to local server\r\n597µs366ns\tsending request to local server\r\n597µs378ns\tsending request to local server\r\n617µs416ns\t=== SPAN START: /cockroach.roachpb.Internal/Batch ===\r\n624µs619ns\t=== SPAN START: /cockroach.roachpb.Internal/Batch ===\r\n624µs907ns\t=== SPAN START: /cockroach.roachpb.Internal/Batch ===\r\n628µs861ns\t1 CPut, 1 BeginTxn, 1 EndTxn\r\n632µs187ns\tread has no clock uncertainty\r\n641µs597ns\t1 CPut\r\n643µs3ns\texecuting 3 requests\r\n643µs951ns\t1 CPut\r\n646µs79ns\tread has no clock uncertainty\r\n647µs119ns\tread has no clock uncertainty\r\n656µs109ns\tread-write path\r\n656µs515ns\texecuting 1 requests\r\n656µs553ns\texecuting 1 requests\r\n668µs140ns\tread-write path\r\n668µs218ns\tread-write path\r\n674µs768ns\tcommand queue\r\n678µs700ns\tcommand qu"
+    ],
+    [
+      7.5e-05,
+      "eue\r\n678µs932ns\tcommand queue\r\n709µs585ns\tapplied timestamp cache\r\n709µs597ns\tapplied timestamp cache\r\n709µs721ns\tapplied timestamp cache\r\n793µs744ns\tevaluated request\r\n806µs90ns\tacquired {raft,replica}mu\r\n817µs674ns\tevaluated request\r\n818µs622ns\tevaluated request\r\n831µs619ns\tacquired {raft,replica}mu\r\n831µs637ns\tacquired {raft,replica}mu\r\n114ms88µs556ns\tapplying command\r\n114ms226µs312ns\tapplying command\r\n114ms266µs998ns\tapplying command\r\n114ms604µs964ns\treleasing 1 tables\r\n114ms633µs367ns\t[NoTxn pos:2] executing ExecStmt: SELECT age, message FROM [SHOW TRACE FOR SESSION]\r\n114ms647µs381ns\texecuting: SELECT age, message FROM [SHOW TRACE FOR SESSION] in state: NoTxn\r\n114ms660µs727ns\t=== SPAN START: sql txn ===\r\n114ms695µs524ns\t[Open pos:2] executing ExecStmt: SELECT age, message FROM [SHOW TRACE FOR SESSION]\r\n114ms701µs995ns\texecuting: SELECT age, message FROM [SHOW TRACE FOR SESSION] in state: Open\r\n"
+    ],
+    [
+      12.133414,
+      "^C"
+    ],
+    [
+      0.003536,
+      "> roachprod destroy local\r\n"
+    ],
+    [
+      0.048022,
+      "local: stopping"
+    ],
+    [
+      0.209311,
+      "\r\nlocal: wiping"
+    ],
+    [
+      0.039801,
+      "\r\n"
+    ],
+    [
+      0.00421,
+      "OK\r\n"
+    ],
+    [
+      1.96492,
+      "^\\"
+    ],
+    [
+      0.002639,
+      "SIGQUIT: quit\r\nPC=0x405ae0b m=0 sigcode=0\r\n\r\ngoroutine 0 [idle]:\r\n"
+    ],
+    [
+      5.1e-05,
+      "runtime.mach_semaphore_wait(0xb03, 0xc400000000, 0x0, 0x459da00, 0x30030ad68, 0x4bc4160, 0x7ffeefbff210, 0x40551d3, 0xffffffffffffffff, 0x0, ...)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/sys_darwin_amd64.s:540 +0xb\r\n"
+    ],
+    [
+      3.3e-05,
+      "runtime.semasleep1(0xffffffffffffffff, 0x0)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/os_darwin.go:438 +0x52\r\nruntime.semasleep.func1()\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/os_darwin.go:457"
+    ],
+    [
+      2.9e-05,
+      " +0x33\r\nruntime.semasleep(0xffffffffffffffff, 0x0)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/os_darwin.go:456 +0x44\r\n"
+    ],
+    [
+      2.7e-05,
+      "runtime.notesleep(0x4bc49e8)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/lock_sema.go:167 +0xe9\r\nruntime.stopm()\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/proc.go"
+    ],
+    [
+      2.2e-05,
+      ":1947 +0xe5\r\nruntime.findrunnable(0xc42004af00, 0x0)\r\n"
+    ],
+    [
+      2.3e-05,
+      "\t/usr/local/Cellar/go/1.10/libexec/src/runtime/proc.go:2410 +0x50c\r\nruntime.schedule()\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/proc.go"
+    ],
+    [
+      2e-05,
+      ":2536 +0x13b\r\nruntime.goexit0(0xc420550780)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/proc.go"
+    ],
+    [
+      2.1e-05,
+      ":2708 +0x251\r\nruntime.mcall(0x7ffeefbff448)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/asm_amd64.s"
+    ],
+    [
+      2.1e-05,
+      ":351 +0x5b\r\n\r\ngoroutine 1 [select]:\r\n"
+    ],
+    [
+      2.2e-05,
+      "main.(*registry).Run(0x4bb1bf0, 0xc4201b8a20, 0x1, "
+    ],
+    [
+      2.3e-05,
+      "0x2, 0x0)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test.go:171 +0x41d\r\n"
+    ],
+    [
+      2.1e-05,
+      "main.main.func1(0xc4200d8900, 0xc4201b8a20, 0x1, 0x2, 0x0, 0x0)\r\n"
+    ],
+    [
+      2e-05,
+      "\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/main.go:49 +0x6b\r\n"
+    ],
+    [
+      2.6e-05,
+      "github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra.(*Command).execute(0xc4200d8900, 0xc4201b8a00, 0x2, 0x2, 0xc4200d8900"
+    ],
+    [
+      2.5e-05,
+      ", 0xc4201b8a00)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra/command.go:698 +0x46d\r\ngithub.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra.(*Command).ExecuteC(0xc4200d86c0"
+    ],
+    [
+      2e-05,
+      ", 0x0, 0x4777897, 0x37)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra/command.go:783 +0x2e4\r\n"
+    ],
+    [
+      2.9e-05,
+      "github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra.(*Command).Execute(0xc4200d86c0, 0x4bc1e10, 0x47536c1)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/vendor/github.com/spf13/cobra/command.go:736 +0x2b\r\n"
+    ],
+    [
+      2.2e-05,
+      "main.main()\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/main.go:82 +0x6ce\r\n\r\n"
+    ],
+    [
+      2e-05,
+      "goroutine 19 [syscall]:\r\nos/signal.signal_recv(0x4820580)\r\n\t"
+    ],
+    [
+      2.1e-05,
+      "/usr/local/Cellar/go/1.10/libexec/src/runtime/sigqueue.go:139 +0xa7\r\nos/signal.loop()\r\n"
+    ],
+    [
+      2.1e-05,
+      "\t/usr/local/Cellar/go/1.10/libexec/src/os/signal/signal_unix.go:22 +0x22\r\ncreated by os/signal.init.0\r\n\t"
+    ],
+    [
+      0.001322,
+      "/usr/local/Cellar/go/1.10/libexec/src/os/signal/signal_unix.go:28 +0x41\r\n\r\ngoroutine 23 [chan receive"
+    ],
+    [
+      9.6e-05,
+      "]:\r\ngithub.com/cockroachdb/cockroach/pkg/util/log.flushDaemon()\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:1131 +0xf1\r\ncreated by github.com/cockroachdb/cockroach/pkg/util/log.init.0\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:592 +0x110\r\n\r\ngoroutine 24 [chan receive]:\r\ngithub.com/cockroachdb/cockroach/pkg/util/log.signalFlusher()\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:601 +0x105\r\ncreated by github.com/cockroachdb/cockroach/pkg/util/log.init.0\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/util/log/clog.go:593 +0x128\r\n\r\ngoroutine 25 [select, locked to thread]:\r\nruntime.gopark(0x47ce8d8, 0x0, 0x47544c1, 0x6, 0x18, 0x1)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/proc.go:291 +0x11a\r\nruntime.selectgo(0xc420477f50, 0xc420448060)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/select.go:392 +0xe50\r\nruntime.ensureSigM.func1()\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/si"
+    ],
+    [
+      3.9e-05,
+      "gnal_unix.go:549 +0x1c6\r\nruntime.goexit()\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/asm_amd64.s:2361 +0x1\r\n\r\ngoroutine 5 [semacquire]:\r\nsync.runtime_Semacquire(0xc4200b297c)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/sema.go:"
+    ],
+    [
+      2.7e-05,
+      "56 +0x39\r\nsync.(*WaitGroup).Wait(0xc4200b2970)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/sync/waitgroup.go:129 +0x72\r\nmain.(*registry).Run.func2(0xc4200b2970, "
+    ],
+    [
+      2.6e-05,
+      "0xc42009e180)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test.go:158 +0x2b\r\ncreated by main.(*registry).Run\r\n\t"
+    ],
+    [
+      2.2e-05,
+      "/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test.go:157 +0x260\r\n\r\ngoroutine 51 [semacquire]:\r\nsync.runtime_Semacquire"
+    ],
+    [
+      2e-05,
+      "(0xc42040844c)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/sema.go:56 +0x39\r\nsync.(*WaitGroup).Wait"
+    ],
+    [
+      2.2e-05,
+      "(0xc420408440)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/sync/waitgroup.go:129 +0x72\r\nmain.(*monitor).wait"
+    ],
+    [
+      2e-05,
+      "(0xc42027c3c0, 0xc42042ebd0, 0x3, 0x3, 0xc420252860, 0xc42007bc48"
+    ],
+    [
+      2.1e-05,
+      ")\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster.go:810 +0x336\r\nmain.(*monitor).Wait(0xc42027c3c0"
+    ],
+    [
+      2.2e-05,
+      ")\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster.go:703 +0xd2\r\nmain.runLatency("
+    ],
+    [
+      2e-05,
+      "0x4823cc0, 0xc4200b2008, 0xc4200d1b80, 0xc4200b4180, 0x3)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/network.go"
+    ],
+    [
+      2.1e-05,
+      ":197 +0x1052\r\nmain.init.11.func1(0x4823cc0, 0xc4200b2008, "
+    ],
+    [
+      2.1e-05,
+      "0xc4200d1b80, 0xc4200b4180)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/network.go:206 +0x52\r\nmain.(*test).run.func2"
+    ],
+    [
+      2.1e-05,
+      "(0x47cdfa0, 0xc4200d1b80, 0x481b9e0, 0xc4200be008, 0xc420266000)\r\n\t"
+    ],
+    [
+      3.5e-05,
+      "/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test.go:370 +0x1b0\r\ncreated by main.(*test).run\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test.go"
+    ],
+    [
+      2.2e-05,
+      ":336 +0x69\r\n\r\ngoroutine 104 [select]:\r\ndatabase/sql.(*DB).connectionOpener("
+    ],
+    [
+      5.8e-05,
+      "0xc4202fcdc0, 0x4823c80, 0xc42049e780)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/database/sql/sql.go:935 +0x119"
+    ],
+    [
+      2.5e-05,
+      "\r\ncreated by database/sql.OpenDB\r\n\t/usr/local/Cellar/go/1.10/libexec/src/database/sql/sql.go:634 +0x178\r\n\r\ngoroutine 105 [select]:\r\ndatabase/sql.(*DB).connectionResetter(0xc4202fcdc0, "
+    ],
+    [
+      2.1e-05,
+      "0x4823c80, 0xc42049e780)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/database/sql/sql.go:948 +0x12a\r\ncreated by database/sql.OpenDB"
+    ],
+    [
+      2.6e-05,
+      "\r\n\t/usr/local/Cellar/go/1.10/libexec/src/database/sql/sql.go:635 +0x1ae\r\n\r\ngoroutine 106 ["
+    ],
+    [
+      2.6e-05,
+      "sleep]:\r\ntime.Sleep(0x34630b8a000)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/time.go:102 +"
+    ],
+    [
+      0.000545,
+      "0x166\r\nmain.runLatency.func7(0x4823c80, 0xc42049e800, 0xc420498840, 0xc420012790)\r\n\t"
+    ],
+    [
+      0.000128,
+      "/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/network.go:193 +0x3b2\r\nmain.(*monitor).Go.func1(0x8, 0x47cea20)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster.go:693 +0x3b\r\ngithub.com/cockroachdb/cockroach/vendor/golang.org/x/sync/errgroup.(*Group).Go.func1(0xc42049e840, 0xc420252860)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/sync/errgroup/errgroup.go:58 +0x57\r\ncreated by github.com/cockroachdb/cockroach/vendor/golang.org/x/sync/errgroup.(*Group).Go\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/sync/errgroup/errgroup.go:55 +0x66\r\n\r\ngoroutine 107 [semacquire]:\r\nsync.runtime_Semacquire(0xc42049e854)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/runtime/sema.go:56 +0x39\r\nsync.(*WaitGroup).Wait(0xc42049e848)\r\n\t/usr/local/Cellar/go/1.10/libexec/src/sync/waitgroup.go:129 +0x72\r\ngithub.com/cockroachdb/cockroach/vendor/golang.org/x/sync/errgroup.(*Group).Wait(0xc42049e840, 0x47cdf60"
+    ],
+    [
+      3.5e-05,
+      ", 0xc42027c3c0)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/vendor/golang.org/x/sync/errgroup/errgroup.go:41 +0x31\r\nmain.(*monitor).wait.func2(0xc42027c3c0, 0xc420408440, 0xc420252880)\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster.go:749 +0x63\r\ncreated by main.(*monitor).wait\r\n\t/Users/tschottdorf/go/src/github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster.go:744 +0x126\r\n\r\nrax    0xe\r\nrbx    0x4bc48a0\r\nrcx    0x7ffeefbff1b0\r\nrdx    0x7ffeefbff230\r\nrdi    0xb03\r\nrsi    0x1\r\nrbp    0x7ffeefbff1e8\r\nrsp    0x7ffeefbff1b0\r\nr8     0x3\r\nr9     0x4bc4160\r\nr10    0x0\r\nr11    0x286\r\nr12    0xc420013760\r\n"
+    ],
+    [
+      2.2e-05,
+      "r13    0xc420013790\r\nr14    0xc42025a4e0\r\nr15    0x1\r\nrip    0x405ae0b\r\nrflags 0x286\r\ncs     0x7"
+    ],
+    [
+      2.2e-05,
+      "\r\nfs     0x0\r\ngs     0x0\r\n"
+    ],
+    [
+      0.048073,
+      "[tschottdorf@macts-2 cockroach (roachtest/network)]$ "
+    ]
+  ]
+}

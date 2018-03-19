@@ -101,6 +101,8 @@ func runLatency(ctx context.Context, t *test, c *cluster, nodes int) {
 		return fmt.Sprintf("%d", 26257+2*(i-1)+10000)
 	}
 
+	const latency = 100 * time.Millisecond
+
 	for i := 1; i <= nodes; i++ {
 		i := i
 		c.Run(ctx, i, "curl", "-Lo", "toxiproxy-server", toxiURL)
@@ -121,12 +123,12 @@ func runLatency(ctx context.Context, t *test, c *cluster, nodes int) {
 			t.Fatal(err)
 		}
 		if _, err := proxy.AddToxic("", "latency", "downstream", 1, client.Attributes{
-			"latency": 1000, // ms
+			"latency": latency / (2 * time.Millisecond), // ms
 		}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := proxy.AddToxic("", "latency", "upstream", 1, client.Attributes{
-			"latency": 1000, // ms
+			"latency": latency / (2 * time.Millisecond), // ms
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -167,6 +169,7 @@ func runLatency(ctx context.Context, t *test, c *cluster, nodes int) {
 		if err := rows.Close(); err != nil {
 			panic(err)
 		}
+		c.l.printf(stmt + "\n")
 		return timeutil.Since(tBegin)
 	}
 
@@ -176,14 +179,16 @@ func runLatency(ctx context.Context, t *test, c *cluster, nodes int) {
 		measure(ctx, "CREATE DATABASE test")
 		measure(ctx, `CREATE TABLE test.commit (a INT, b INT, v INT, PRIMARY KEY (a, b))`)
 		measure(ctx, "ALTER TABLE test.commit SPLIT AT VALUES (2, 0), (3, 0)")
-		if duration := measure(ctx, `SELECT 1`); duration > time.Second/2 {
+		if duration := measure(ctx, `SELECT 1`); duration > latency/2 {
 			return errors.Errorf("SELECT 1 took %s but should not have been slowed down", duration)
 		}
 
-		for i := 0; i < 100; i++ {
+		for i := 0; i < 10; i++ {
 			duration := measure(ctx, fmt.Sprintf("BEGIN; INSERT INTO test.commit VALUES (2, %[1]d), (1, %[1]d), (3, %[1]d); COMMIT", i))
 			c.l.printf("%s\n", duration)
 		}
+
+		c.RunE(ctx, 1, "./cockroach sql --insecure -e 'set tracing=on; insert into test.commit values(3,1000), (1,1000), (2,1000); select age, message from [ show trace for session ];'")
 
 		time.Sleep(time.Hour)
 		return nil

@@ -498,6 +498,7 @@ func (ctx *Context) GRPCDial(target string) *Connection {
 
 	conn := value.(*Connection)
 	conn.initOnce.Do(func() {
+		log.Warningf(context.Background(), "TSX dialing %s", target)
 		var redialChan <-chan struct{}
 		conn.grpcConn, redialChan, conn.dialErr = ctx.GRPCDialRaw(target)
 		if conn.dialErr == nil {

@@ -137,12 +137,13 @@ enum TransactionStatus {
   PENDING = 0,
   COMMITTED = 1,
   ABORTED = 2,
+  STAGED = 3,
   TransactionStatus_INT_MIN_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32min,
   TransactionStatus_INT_MAX_SENTINEL_DO_NOT_USE_ = ::google::protobuf::kint32max
 };
 bool TransactionStatus_IsValid(int value);
 const TransactionStatus TransactionStatus_MIN = PENDING;
-const TransactionStatus TransactionStatus_MAX = ABORTED;
+const TransactionStatus TransactionStatus_MAX = STAGED;
 const int TransactionStatus_ARRAYSIZE = TransactionStatus_MAX + 1;
 
 // ===================================================================

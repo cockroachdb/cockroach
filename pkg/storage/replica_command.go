@@ -569,13 +569,17 @@ func updateTxnWithExternalIntents(
 	externalIntents []roachpb.Span,
 ) error {
 	key := keys.TransactionKey(txn.Key, txn.ID)
-	if txnAutoGC && len(externalIntents) == 0 {
+	if txn.Status != roachpb.STAGED && txnAutoGC && len(externalIntents) == 0 {
 		if log.V(2) {
 			log.Infof(ctx, "auto-gc'ed %s (%d intents)", txn.Short(), len(args.IntentSpans))
 		}
 		return engine.MVCCDelete(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
 	txn.Intents = externalIntents
+	diskTxn := *txn
+	if txn.Status == roachpb.COMMITTED {
+		diskTxn.Status = roachpb.STAGED
+	}
 	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, txn)
 }
 

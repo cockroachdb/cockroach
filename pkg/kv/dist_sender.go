@@ -846,9 +846,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// If the request is more than but ends with EndTransaction, we
 			// want the caller to come again with the EndTransaction in an
 			// extra call.
-			if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
-				responseCh <- response{pErr: errNo1PCTxn}
-				return
+			if false {
+				if l := len(ba.Requests) - 1; l > 0 && ba.Requests[l].GetInner().Method() == roachpb.EndTransaction {
+					responseCh <- response{pErr: errNo1PCTxn}
+					return
+				}
 			}
 		}
 

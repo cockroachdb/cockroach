@@ -156,6 +156,9 @@ func PushTxn(
 	// If already committed or aborted, return success.
 	if reply.PusheeTxn.Status != roachpb.PENDING {
 		// Trivial noop.
+		if reply.PusheeTxn.Status == roachpb.STAGED {
+			reply.PusheeTxn.Status = roachpb.COMMITTED
+		}
 		return result.Result{}, nil
 	}
 
