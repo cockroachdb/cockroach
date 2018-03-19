@@ -59,7 +59,7 @@ func runTestFlow(
 
 	req := distsqlrun.SetupFlowRequest{
 		Version: distsqlrun.Version,
-		Txn:     *txn.Proto(),
+		Txn:     txn.Proto(),
 		Flow: distsqlrun.FlowSpec{
 			FlowID:     distsqlrun.FlowID{UUID: uuid.MakeV4()},
 			Processors: procs,
