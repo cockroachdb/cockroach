@@ -7,17 +7,29 @@
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
 import React from "react";
-import {InjectedRouter, RouterState} from "react-router";
+import { InjectedRouter, RouterState } from "react-router";
 
 import { Breadcrumbs } from "src/views/clusterviz/containers/map/breadcrumbs";
+import NeedEnterpriseLicense from "src/views/clusterviz/containers/map/needEnterpriseLicense";
 import NodeCanvasContainer from "src/views/clusterviz/containers/map/nodeCanvasContainer";
 import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
+import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
-
+import spinner from "assets/spinner.gif";
+import Loading from "src/views/shared/components/loading";
+import { connect } from "react-redux";
+import { AdminUIState } from "src/redux/state";
 import "./tweaks.styl";
 
-export default class ClusterVisualization extends React.Component<RouterState & { router: InjectedRouter }> {
+// tslint:disable-next-line:variable-name
+const NodeCanvasContent = swapByLicense(NeedEnterpriseLicense, NodeCanvasContainer);
+
+interface ClusterVisualizationProps {
+  licenseDataExists: boolean;
+}
+
+class ClusterVisualization extends React.Component<ClusterVisualizationProps & RouterState & { router: InjectedRouter }> {
   handleMapTableToggle = (opt: DropdownOption) => {
     this.props.router.push(`/overview/${opt.value}`);
   }
@@ -59,8 +71,22 @@ export default class ClusterVisualization extends React.Component<RouterState & 
           <div style={{ float: "right" }}><TimeScaleDropdown /></div>
           <div style={{ textAlign: "center", paddingTop: 4 }}><Breadcrumbs tiers={tiers} /></div>
         </div>
-        <NodeCanvasContainer tiers={tiers} />
+        <Loading
+          loading={!this.props.licenseDataExists}
+          className="loading-image loading-image__spinner-left"
+          image={spinner}
+        >
+          <NodeCanvasContent tiers={tiers} />
+        </Loading>
       </div>
     );
   }
 }
+
+function mapStateToProps(state: AdminUIState) {
+  return {
+    licenseDataExists: !!state.cachedData.cluster.data,
+  };
+}
+
+export default connect(mapStateToProps)(ClusterVisualization);
