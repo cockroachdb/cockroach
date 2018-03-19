@@ -230,7 +230,7 @@ var (
 	timeoutSetting = settings.RegisterDurationSetting(
 		cloudStorageTimeout,
 		"the timeout for import/export storage operations",
-		30*time.Minute)
+		10*time.Minute)
 )
 
 type localFileStorage struct {
@@ -655,14 +655,15 @@ func makeGCSStorage(
 }
 
 func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.ReadSeeker) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&g.settings.SV))
-	defer cancel()
 	const maxAttempts = 3
 	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
+		// Set the timeout within the retry loop.
+		deadlineCtx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&g.settings.SV))
+		defer cancel()
 		if _, err := content.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(ctx)
+		w := g.bucket.Object(path.Join(g.prefix, basename)).NewWriter(deadlineCtx)
 		if _, err := io.Copy(w, content); err != nil {
 			_ = w.Close()
 			return err
@@ -737,8 +738,6 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-	defer cancel()
 	name := path.Join(s.prefix, basename)
 	// A blob in Azure is composed of an ordered list of blocks. To create a
 	// blob, we must first create an empty block blob (i.e., a blob backed
@@ -754,7 +753,7 @@ func (s *azureStorage) WriteFile(
 
 	blob := s.container.GetBlobReference(name)
 
-	writeFile := func() error {
+	writeFile := func(ctx context.Context) error {
 		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 			return blob.CreateBlockBlob(nil)
 		}); err != nil {
@@ -806,7 +805,10 @@ func (s *azureStorage) WriteFile(
 		if _, err := content.Seek(0, io.SeekStart); err != nil {
 			return errors.Wrap(err, "seek")
 		}
-		return writeFile()
+		// Set the timeout within the retry loop.
+		deadlineCtx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
+		defer cancel()
+		return writeFile(deadlineCtx)
 	})
 	return errors.Wrap(err, "write file")
 }
