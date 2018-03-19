@@ -18,6 +18,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"sort"
@@ -435,6 +436,23 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 	end := engine.MakeMVCCMetadataKey(keys.LocalRangeMax)
 
 	return db.Iterate(start, end, printRangeDescriptor)
+}
+
+var debugDecodeKeyCmd = &cobra.Command{
+	Use:   "decode-key",
+	Short: "decode <key>",
+	Long: `
+Decode a hexadecimal-encoded key. For example, 'decode-key BB89F902ADB43000'
+prints /Table/51/1/44938288/NULL.`,
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		buf, err := hex.DecodeString(args[0])
+		if err != nil {
+			return err
+		}
+		fmt.Println(roachpb.Key(buf))
+		return nil
+	},
 }
 
 var debugRaftLogCmd = &cobra.Command{
@@ -1030,6 +1048,7 @@ var debugCmds = []*cobra.Command{
 	debugKeysCmd,
 	debugRangeDataCmd,
 	debugRangeDescriptorsCmd,
+	debugDecodeKeyCmd,
 	debugRaftLogCmd,
 	debugGCCmd,
 	debugCheckStoreCmd,
