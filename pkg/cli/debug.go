@@ -189,6 +189,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 	}
 
 	iter := rditer.NewReplicaDataIterator(&desc, db, debugCtx.replicated)
+	defer iter.Close()
 	for ; ; iter.Next() {
 		if ok, err := iter.Valid(); err != nil {
 			return err
