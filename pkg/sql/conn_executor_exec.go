@@ -345,6 +345,29 @@ func (ex *connExecutor) execStmtInOpenState(
 		if err := res.Err(); err != nil {
 			return makeErrEvent(err)
 		}
+
+		txn := ex.state.mu.txn
+		if !os.ImplicitTxn.Get() && txn.IsSerializablePushAndRefreshNotPossible() {
+			rc, canAutoRetry := ex.getRewindTxnCapability()
+			if canAutoRetry {
+				ev := eventRetriableErr{
+					IsCommit:     fsm.FromBool(isCommit(stmt.AST)),
+					CanAutoRetry: fsm.FromBool(canAutoRetry),
+				}
+				txn.Proto().Restart(0 /* userPriority */, 0 /* upgradePriority */, ex.server.cfg.Clock.Now())
+				payload := eventRetriableErrPayload{
+					err: roachpb.NewHandledRetryableTxnError(
+						"serializable transaction timestamp pushed (detected by connExecutor)",
+						txn.ID(),
+						// No updated transaction required; we've already manually updated our
+						// client.Txn.
+						roachpb.Transaction{},
+					),
+					rewCap: rc,
+				}
+				return ev, payload, nil
+			}
+		}
 	}
 
 	// No event was generated.
