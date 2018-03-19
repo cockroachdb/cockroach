@@ -186,7 +186,7 @@ import (
 //  - sleep <duration>
 //    Introduces a sleep period. Example: sleep 2s
 //
-//  - user <username>
+//  - user <username> [{inherit_database,dont_inherit_database}]
 //    Changes the user for subsequent statements or queries.
 //
 //  - skipif <mysql/mssql/postgresql/cockroachdb>
@@ -797,13 +797,26 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 	}
 }
 
+// databaseOpt is passed to setUser() to control the setup of the returned
+// connection.
+type databaseOpt bool
+
+const (
+	// inheritDatabase means that the connection to which setUser() switches will
+	// be set up to use the database currently used by the current connection.
+	// To do this, some statements will be run on both the old and the new
+	// connection.
+	inheritDatabase     databaseOpt = false
+	dontInheritDatabase databaseOpt = true
+)
+
 // setUser sets the DB client to the specified user.
 // It returns a cleanup function to be run when the credentials
 // are no longer needed.
-func (t *logicTest) setUser(user string) func() {
+func (t *logicTest) setUser(user string, dbOpt databaseOpt) func() {
 	var outDBName string
 
-	if t.db != nil {
+	if t.db != nil && dbOpt == inheritDatabase {
 		var inDBName string
 
 		if err := t.db.QueryRow("SHOW DATABASE").Scan(&inDBName); err != nil {
@@ -827,8 +840,10 @@ func (t *logicTest) setUser(user string) func() {
 		t.db = db
 		t.user = user
 
-		if err := t.db.QueryRow("SHOW DATABASE").Scan(&outDBName); err != nil {
-			t.Fatal(err)
+		if dbOpt == inheritDatabase {
+			if err := t.db.QueryRow("SHOW DATABASE").Scan(&outDBName); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		// No cleanup necessary, but return a no-op func to avoid nil pointer dereference.
@@ -938,7 +953,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 
 	// db may change over the lifetime of this function, with intermediate
 	// values cached in t.clients and finally closed in t.close().
-	t.cleanupFuncs = append(t.cleanupFuncs, t.setUser(security.RootUser))
+	t.cleanupFuncs = append(t.cleanupFuncs, t.setUser(security.RootUser, dontInheritDatabase))
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
@@ -1386,7 +1401,21 @@ func (t *logicTest) processSubtest(
 			if len(fields[1]) == 0 {
 				return errors.Errorf("user command requires a non-blank argument")
 			}
-			cleanupUserFunc := t.setUser(fields[1])
+			var dbOpt databaseOpt
+			if len(fields) > 2 {
+				if len(fields) != 3 {
+					return errors.Errorf("user command can have 1 or 2 args")
+				}
+				switch fields[2] {
+				case "inherit_database":
+					dbOpt = inheritDatabase
+				case "dont_inherit_database":
+					dbOpt = dontInheritDatabase
+				default:
+					return errors.Errorf("invalid option: %q", fields[2])
+				}
+			}
+			cleanupUserFunc := t.setUser(fields[1], dbOpt)
 			defer cleanupUserFunc()
 
 		case "skipif":

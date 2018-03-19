@@ -977,3 +977,45 @@ SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
 
 statement ok
 ROLLBACK
+
+# go back to default
+statement ok
+SET default_transaction_read_only = false
+
+statement ok
+SET transaction_isolation = 'serializable'
+
+# Check that we auto-retry pushed transactions which can't be refreshed - if
+# they're pushed while we can still auto-retry them.
+subtest autoretry-on-push-first-batch
+
+statement ok
+CREATE TABLE test_retry (
+  k INT PRIMARY KEY
+)
+
+statement ok
+GRANT ALL ON test_retry TO testuser
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
+
+# On a different connection, do a read at a higher timestamp.
+#
+# We use dont_inherit_database, as otherwise we'd run some statements under the
+# hood that break the auto-retry that we'll need later.
+user testuser dont_inherit_database
+
+statement ok
+SELECT * FROM test.test_retry
+
+user root dont_inherit_database
+
+# Run a cluster_logical_timestamp(), so that the transaction "observes its
+# commit timestamp" and so can't be refreshed, and the do an insert that will
+# cause the txn to be pushed.
+statement ok
+SELECT cluster_logical_timestamp(); INSERT INTO test_retry VALUES (1);
+
+statement ok
+COMMIT
