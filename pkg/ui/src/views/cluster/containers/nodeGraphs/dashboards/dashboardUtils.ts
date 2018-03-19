@@ -1,5 +1,3 @@
-import _ from "lodash";
-
 import { NodesSummary } from "src/redux/nodes";
 
 /**
@@ -45,9 +43,5 @@ export function nodeDisplayName(nodesSummary: NodesSummary, nid: string) {
 }
 
 export function storeIDsForNode(nodesSummary: NodesSummary, nid: string): string[] {
-  const ns = nodesSummary.nodeStatusByID[nid];
-  if (!ns) {
-    return [];
-  }
-  return _.map(ns.store_statuses, (ss) => ss.desc.store_id.toString());
+  return nodesSummary.storeIDsByNodeID[nid] || [];
 }

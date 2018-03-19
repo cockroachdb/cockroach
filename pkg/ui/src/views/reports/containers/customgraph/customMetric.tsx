@@ -8,12 +8,14 @@ import { DropdownOption } from "src/views/shared/components/dropdown";
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
 
-const aggregatorOptions: DropdownOption[] = [
+const downsamplerOptions: DropdownOption[] = [
   TimeSeriesQueryAggregator.AVG,
   TimeSeriesQueryAggregator.MAX,
   TimeSeriesQueryAggregator.MIN,
   TimeSeriesQueryAggregator.SUM,
 ].map(agg => ({ label: TimeSeriesQueryAggregator[agg], value: agg.toString() }));
+
+const aggregatorOptions = downsamplerOptions;
 
 const derivativeOptions: DropdownOption[] = [
   { label: "Normal", value: TimeSeriesQueryDerivative.NONE.toString() },
@@ -26,6 +28,7 @@ export class CustomMetricState {
   downsampler = TimeSeriesQueryAggregator.AVG;
   aggregator = TimeSeriesQueryAggregator.SUM;
   derivative = TimeSeriesQueryDerivative.NONE;
+  perNode = false;
   source = "";
 }
 
@@ -73,6 +76,12 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
     });
   }
 
+  changePerNode = (selection: React.FormEvent<HTMLInputElement>) => {
+    this.changeState({
+      perNode: selection.currentTarget.checked,
+    });
+  }
+
   deleteOption = () => {
     this.props.onDelete(this.props.index);
   }
@@ -81,7 +90,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
     const {
       metricOptions,
       nodeOptions,
-      rowState: { metric, downsampler, aggregator, derivative, source },
+      rowState: { metric, downsampler, aggregator, derivative, source, perNode },
     } = this.props;
 
     return (
@@ -107,7 +116,7 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
               clearable={false}
               searchable={false}
               value={downsampler.toString()}
-              options={aggregatorOptions}
+              options={downsamplerOptions}
               onChange={this.changeDownsampler}
             />
           </div>
@@ -147,6 +156,9 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
               onChange={this.changeSource}
             />
           </div>
+        </td>
+        <td className="metric-table__cell">
+          <input type="checkbox" checked={perNode} onChange={this.changePerNode} />
         </td>
         <td>
           <button className="metric-edit-button" onClick={this.deleteOption}>Remove</button>
