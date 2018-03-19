@@ -53,8 +53,8 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 	if client == nil {
 		return
 	}
-	// TODO(peter): switch to #engineering once we're finished debugging
-	channel, _ := findChannel(client, "roachprod-status")
+
+	channel, _ := findChannel(client, "production")
 	if channel == "" {
 		return
 	}
