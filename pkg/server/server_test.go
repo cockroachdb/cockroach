@@ -45,9 +45,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 var nodeTestBaseContext = testutils.NewNodeTestBaseContext()
@@ -663,5 +666,230 @@ func TestClusterIDMismatch(t *testing.T) {
 	expected := "conflicting store cluster IDs"
 	if !testutils.IsError(err, expected) {
 		t.Fatalf("expected %s error, got %v", expected, err)
+	}
+}
+
+func TestEnsureInitialWallTimeMonotonicity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		name              string
+		prevHLCUpperBound int64
+		clockStartTime    int64
+		checkPersist      bool
+	}{
+		{
+			name:              "lower upper bound time",
+			prevHLCUpperBound: 100,
+			clockStartTime:    1000,
+			checkPersist:      true,
+		},
+		{
+			name:              "higher upper bound time",
+			prevHLCUpperBound: 10000,
+			clockStartTime:    1000,
+			checkPersist:      true,
+		},
+		{
+			name:              "significantly higher upper bound time",
+			prevHLCUpperBound: int64(3 * time.Hour),
+			clockStartTime:    int64(1 * time.Hour),
+			checkPersist:      true,
+		},
+		{
+			name:              "equal upper bound time",
+			prevHLCUpperBound: int64(time.Hour),
+			clockStartTime:    int64(time.Hour),
+			checkPersist:      true,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+
+			const maxOffset = 500 * time.Millisecond
+			m := hlc.NewManualClock(test.clockStartTime)
+			c := hlc.NewClock(m.UnixNano, maxOffset)
+
+			sleepUntilFn := func(until int64, currentTime func() int64) {
+				delta := until - currentTime()
+				if delta > 0 {
+					m.Increment(delta)
+				}
+			}
+
+			wallTime1 := c.Now().WallTime
+			if test.clockStartTime < test.prevHLCUpperBound {
+				a.True(
+					wallTime1 < test.prevHLCUpperBound,
+					fmt.Sprintf(
+						"expected wall time %d < prev upper bound %d",
+						wallTime1,
+						test.prevHLCUpperBound,
+					),
+				)
+			}
+
+			ensureClockMonotonicity(
+				context.TODO(),
+				c,
+				c.PhysicalTime(),
+				test.prevHLCUpperBound,
+				sleepUntilFn,
+			)
+
+			wallTime2 := c.Now().WallTime
+			// After ensuring monotonicity, wall time should be greater than
+			// persisted upper bound
+			a.True(
+				wallTime2 > test.prevHLCUpperBound,
+				fmt.Sprintf(
+					"expected wall time %d > prev upper bound %d",
+					wallTime2,
+					test.prevHLCUpperBound,
+				),
+			)
+		})
+	}
+}
+
+func TestPersistHLCUpperBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var fatal bool
+	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(func(r int) {
+		defer log.Flush()
+		if r != 0 {
+			fatal = true
+		}
+	})
+
+	testCases := []struct {
+		name            string
+		persistInterval time.Duration
+	}{
+		{
+			name:            "persist default delta",
+			persistInterval: 200 * time.Millisecond,
+		},
+		{
+			name:            "persist 100ms delta",
+			persistInterval: 50 * time.Millisecond,
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			a := assert.New(t)
+			m := hlc.NewManualClock(int64(1))
+			c := hlc.NewClock(m.UnixNano, time.Nanosecond)
+
+			var persistErr error
+			var persistedUpperBound int64
+			var tickerDur time.Duration
+			persistUpperBoundFn := func(i int64) error {
+				if persistErr != nil {
+					return persistErr
+				}
+				persistedUpperBound = i
+				return nil
+			}
+
+			tickerCh := make(chan time.Time)
+			tickProcessedCh := make(chan struct{})
+			persistHLCUpperBoundIntervalCh := make(chan time.Duration, 1)
+			stopCh := make(chan struct{}, 1)
+			defer close(persistHLCUpperBoundIntervalCh)
+
+			go periodicallyPersistHLCUpperBound(
+				c,
+				persistHLCUpperBoundIntervalCh,
+				persistUpperBoundFn,
+				func(d time.Duration) *time.Ticker {
+					ticker := time.NewTicker(d)
+					ticker.Stop()
+					ticker.C = tickerCh
+					tickerDur = d
+					return ticker
+				},
+				stopCh,
+				func() {
+					tickProcessedCh <- struct{}{}
+				},
+			)
+
+			fatal = false
+			// persist an upper bound
+			m.Increment(100)
+			wallTime3 := c.Now().WallTime
+			persistHLCUpperBoundIntervalCh <- test.persistInterval
+			<-tickProcessedCh
+
+			a.True(
+				test.persistInterval == tickerDur,
+				fmt.Sprintf(
+					"expected persist interval %d = ticker duration %d",
+					test.persistInterval,
+					tickerDur,
+				),
+			)
+
+			// Updating persistInterval should have triggered a persist
+			firstPersist := persistedUpperBound
+			a.True(
+				persistedUpperBound > wallTime3,
+				fmt.Sprintf(
+					"expected persisted wall time %d > wall time %d",
+					persistedUpperBound,
+					wallTime3,
+				),
+			)
+			// ensure that in memory value and persisted value are same
+			a.Equal(c.WallTimeUpperBound(), persistedUpperBound)
+
+			// Increment clock by 100 and tick the timer.
+			// A persist should have happened
+			m.Increment(100)
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+			secondPersist := persistedUpperBound
+			a.True(
+				secondPersist == firstPersist+100,
+				fmt.Sprintf(
+					"expected persisted wall time %d to be 100 more than earlier persisted value %d",
+					secondPersist,
+					firstPersist,
+				),
+			)
+			a.Equal(c.WallTimeUpperBound(), persistedUpperBound)
+			a.False(fatal)
+			fatal = false
+
+			// After disabling persistHLCUpperBound, a value of 0 should be persisted
+			persistHLCUpperBoundIntervalCh <- 0
+			<-tickProcessedCh
+			a.Equal(
+				int64(0),
+				c.WallTimeUpperBound(),
+			)
+			a.Equal(int64(0), persistedUpperBound)
+			a.Equal(int64(0), c.WallTimeUpperBound())
+			a.False(fatal)
+			fatal = false
+
+			persistHLCUpperBoundIntervalCh <- test.persistInterval
+			<-tickProcessedCh
+			m.Increment(100)
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+			// If persisting fails, a fatal error is expected
+			persistErr = errors.New("test err")
+			fatal = false
+			tickerCh <- timeutil.Now()
+			<-tickProcessedCh
+			a.True(fatal)
+		})
 	}
 }
