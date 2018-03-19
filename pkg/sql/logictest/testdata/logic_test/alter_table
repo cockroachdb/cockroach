@@ -594,6 +594,11 @@ INSERT INTO privs VALUES (1)
 
 user testuser
 
+query T
+SHOW DATABASE
+----
+test
+
 statement error user testuser does not have CREATE privilege on relation privs
 ALTER TABLE privs ADD c INT
 
