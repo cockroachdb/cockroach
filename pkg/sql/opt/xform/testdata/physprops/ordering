@@ -47,6 +47,16 @@ sort
  └── scan a
       └── columns: a.x:1(int!null) a.y:2(float!null) a.z:3(decimal) a.s:4(string!null)
 
+# Order by suffix, don't project prefix (scan shouldn't be able to provide).
+opt
+SELECT y FROM a ORDER BY y DESC
+----
+sort
+ ├── columns: y:2(float!null)
+ ├── ordering: -2
+ └── scan a
+      └── columns: a.y:2(float!null)
+
 # Order by additional column (scan shouldn't be able to provide for now).
 opt
 SELECT * FROM a ORDER BY x, y DESC, z

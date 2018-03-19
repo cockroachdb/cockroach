@@ -104,18 +104,24 @@ func (f physicalPropsFactory) canProvideOrdering(eid memo.ExprID, required memo.
 		def := mexpr.Private(f.mem).(*memo.ScanOpDef)
 		primary := f.mem.Metadata().Table(def.Table).Primary()
 
-		// Scan can project subset of columns.
-		ordering := make(memo.Ordering, 0, primary.ColumnCount())
-		for i := 0; i < primary.ColumnCount(); i++ {
+		// If there are more required columns than the primary index has, then
+		// primary index cannot provide the required ordering.
+		if len(required) > primary.ColumnCount() {
+			return false
+		}
+
+		// Determine whether the required columns are a prefix of the primary
+		// index columns.
+		for i, requiredCol := range required {
 			primaryCol := primary.Column(i)
 			colIndex := f.mem.Metadata().TableColumn(def.Table, primaryCol.Ordinal)
-			if def.Cols.Contains(int(colIndex)) {
-				orderingCol := opt.MakeOrderingColumn(colIndex, primaryCol.Descending)
-				ordering = append(ordering, orderingCol)
+			orderingCol := opt.MakeOrderingColumn(colIndex, primaryCol.Descending)
+			if orderingCol != requiredCol {
+				return false
 			}
 		}
 
-		return ordering.Provides(required)
+		return true
 
 	case opt.LimitOp:
 		// Limit can provide the same ordering it requires of its input.
