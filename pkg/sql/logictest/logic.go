@@ -801,25 +801,6 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 // It returns a cleanup function to be run when the credentials
 // are no longer needed.
 func (t *logicTest) setUser(user string) func() {
-	var outDBName string
-
-	if t.db != nil {
-		var inDBName string
-
-		if err := t.db.QueryRow("SHOW DATABASE").Scan(&inDBName); err != nil {
-			t.Fatal(err)
-		}
-
-		defer func() {
-			if inDBName != outDBName {
-				// Propagate the DATABASE setting to the newly-live connection.
-				if _, err := t.db.Exec(fmt.Sprintf("SET DATABASE = '%s'", inDBName)); err != nil {
-					t.Fatal(err)
-				}
-			}
-		}()
-	}
-
 	if t.clients == nil {
 		t.clients = map[string]*gosql.DB{}
 	}
@@ -827,17 +808,16 @@ func (t *logicTest) setUser(user string) func() {
 		t.db = db
 		t.user = user
 
-		if err := t.db.QueryRow("SHOW DATABASE").Scan(&outDBName); err != nil {
-			t.Fatal(err)
-		}
-
 		// No cleanup necessary, but return a no-op func to avoid nil pointer dereference.
 		return func() {}
 	}
 
 	addr := t.cluster.Server(t.nodeIdx).ServingAddr()
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, addr, "TestLogic", url.User(user))
-	db, err := gosql.Open("postgres", pgURL.String())
+	// Connect to the test database by default, to match the default test
+	// connection (which creates and uses that database).
+	urlStr := pgURL.String() + "&database=test"
+	db, err := gosql.Open("postgres", urlStr)
 	if err != nil {
 		t.Fatal(err)
 	}
