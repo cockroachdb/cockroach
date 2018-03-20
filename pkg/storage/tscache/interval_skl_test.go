@@ -1176,11 +1176,16 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	size := 1
 	for i := 0; i < 9; i++ {
 		b.Run(fmt.Sprintf("size_%d", size), func(b *testing.B) {
+			froms, tos := make([][]byte, b.N), make([][]byte, b.N)
 			for iter := 0; iter < b.N; iter++ {
 				rnd := int64(rng.Int31n(max))
-				from := []byte(fmt.Sprintf("%020d", rnd))
-				to := []byte(fmt.Sprintf("%020d", rnd+int64(size-1)))
-				s.AddRange(from, to, 0, makeVal(clock.Now(), txnID))
+				froms[iter] = []byte(fmt.Sprintf("%020d", rnd))
+				tos[iter] = []byte(fmt.Sprintf("%020d", rnd+int64(size-1)))
+			}
+
+			b.ResetTimer()
+			for iter := 0; iter < b.N; iter++ {
+				s.AddRange(froms[iter], tos[iter], 0, makeVal(clock.Now(), txnID))
 			}
 		})
 

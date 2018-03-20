@@ -685,6 +685,7 @@ func BenchmarkTimestampCacheInsertion(b *testing.B) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	tc := New(clock, 0, MakeMetrics())
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		cdTS := clock.Now()
 		tc.Add(roachpb.Key("c"), roachpb.Key("d"), cdTS, noTxnID, true)
