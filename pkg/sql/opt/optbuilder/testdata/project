@@ -220,3 +220,28 @@ build
 SELECT CAST(x AS int[]) FROM b
 ----
 error: invalid cast: int -> INT[]
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT c FROM (SELECT a FROM abc)
+----
+error: column name "c" not found
+
+build
+SELECT c FROM (SELECT a FROM abc ORDER BY c)
+----
+error: column name "c" not found
+
+build
+SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
+----
+error: column name "c" not found

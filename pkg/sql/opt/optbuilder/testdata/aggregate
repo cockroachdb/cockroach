@@ -1768,16 +1768,12 @@ SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 group-by
  ├── columns: column5:5(string)
  ├── project
- │    ├── columns: kv.s:4(string)
- │    ├── project
- │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
- │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    │    └── projections [outer=(1,4)]
- │    │         ├── variable: kv.s [type=string, outer=(4)]
- │    │         └── variable: kv.k [type=int, outer=(1)]
- │    └── projections [outer=(4)]
- │         └── variable: kv.s [type=string, outer=(4)]
+ │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    └── projections [outer=(1,4)]
+ │         ├── variable: kv.s [type=string, outer=(4)]
+ │         └── variable: kv.k [type=int, outer=(1)]
  └── aggregations [outer=(4)]
       └── function: concat_agg [type=string, outer=(4)]
            └── variable: kv.s [type=string, outer=(4)]
@@ -1788,16 +1784,12 @@ SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 group-by
  ├── columns: column5:5(jsonb)
  ├── project
- │    ├── columns: kv.s:4(string)
- │    ├── project
- │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
- │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    │    └── projections [outer=(1,4)]
- │    │         ├── variable: kv.s [type=string, outer=(4)]
- │    │         └── variable: kv.k [type=int, outer=(1)]
- │    └── projections [outer=(4)]
- │         └── variable: kv.s [type=string, outer=(4)]
+ │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    └── projections [outer=(1,4)]
+ │         ├── variable: kv.s [type=string, outer=(4)]
+ │         └── variable: kv.k [type=int, outer=(1)]
  └── aggregations [outer=(4)]
       └── function: json_agg [type=jsonb, outer=(4)]
            └── variable: kv.s [type=string, outer=(4)]
@@ -1808,16 +1800,12 @@ SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 group-by
  ├── columns: column5:5(jsonb)
  ├── project
- │    ├── columns: kv.s:4(string)
- │    ├── project
- │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
- │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    │    └── projections [outer=(1,4)]
- │    │         ├── variable: kv.s [type=string, outer=(4)]
- │    │         └── variable: kv.k [type=int, outer=(1)]
- │    └── projections [outer=(4)]
- │         └── variable: kv.s [type=string, outer=(4)]
+ │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
+ │    └── projections [outer=(1,4)]
+ │         ├── variable: kv.s [type=string, outer=(4)]
+ │         └── variable: kv.k [type=int, outer=(1)]
  └── aggregations [outer=(4)]
       └── function: jsonb_agg [type=jsonb, outer=(4)]
            └── variable: kv.s [type=string, outer=(4)]

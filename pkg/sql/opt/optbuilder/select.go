@@ -175,7 +175,7 @@ func (b *Builder) buildSelect(
 	}
 
 	if outScope.ordering == nil && orderBy != nil {
-		projectionsScope := outScope.push()
+		projectionsScope := outScope.replace()
 		projectionsScope.cols = make([]columnProps, 0, len(outScope.cols))
 		projections := make([]memo.GroupID, 0, len(outScope.cols))
 		for i := range outScope.cols {
@@ -188,6 +188,18 @@ func (b *Builder) buildSelect(
 	if limit != nil {
 		out, outScope = b.buildLimit(limit, inScope, out, outScope)
 	}
+
+	// Remove hidden columns from outScope.
+	n := 0
+	for i := range outScope.cols {
+		if !outScope.cols[i].hidden {
+			if n != i {
+				outScope.cols[n] = outScope.cols[i]
+			}
+			n++
+		}
+	}
+	outScope.cols = outScope.cols[:n]
 
 	// TODO(rytaft): Support FILTER expression.
 	return out, outScope
@@ -215,7 +227,7 @@ func (b *Builder) buildSelectClause(
 	if b.needsAggregation(sel) {
 		out, outScope, projections, projectionsScope = b.buildAggregation(sel, out, fromScope)
 	} else {
-		projectionsScope = fromScope.push()
+		projectionsScope = fromScope.replace()
 		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 	}
 
