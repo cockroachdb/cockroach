@@ -814,10 +814,8 @@ func (t *logicTest) setUser(user string) func() {
 
 	addr := t.cluster.Server(t.nodeIdx).ServingAddr()
 	pgURL, cleanupFunc := sqlutils.PGUrl(t.t, addr, "TestLogic", url.User(user))
-	// Connect to the test database by default, to match the default test
-	// connection (which creates and uses that database).
-	urlStr := pgURL.String() + "&database=test"
-	db, err := gosql.Open("postgres", urlStr)
+	pgURL.Path = "test"
+	db, err := gosql.Open("postgres", pgURL.String())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -853,6 +851,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					AssertFuncExprReturnTypes:   true,
 				},
 			},
+			UseDatabase: "test",
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
@@ -922,7 +921,6 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 
 	if _, err := t.db.Exec(`
 CREATE DATABASE test;
-SET DATABASE = test;
 `); err != nil {
 		t.Fatal(err)
 	}
