@@ -23,39 +23,36 @@ import {
   tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr,
 } from "src/util/constants";
 
+import { alertDataSync } from "src/redux/alerts";
 import "src/redux/analytics";
 import { store, history } from "src/redux/state";
+
 import visualizationRoutes from "src/routes/visualization";
 
+import NotFound from "src/views/app/components/NotFound";
 import Layout from "src/views/app/containers/layout";
-
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
-
-import JobsPage from "src/views/jobs";
-
-import NodesOverview from "src/views/cluster/containers/nodesOverview";
-import NodeOverview from "src/views/cluster/containers/nodeOverview";
-import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
-import NodeLogs from "src/views/cluster/containers/nodeLogs";
 import { EventPage } from "src/views/cluster/containers/events";
-
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
+import NodeGraphs from "src/views/cluster/containers/nodeGraphs";
+import NodesOverview from "src/views/cluster/containers/nodesOverview";
+import NodeOverview from "src/views/cluster/containers/nodeOverview";
+import NodeLogs from "src/views/cluster/containers/nodeLogs";
+import JobsPage from "src/views/jobs";
+import Certificates from "src/views/reports/containers/certificates";
+import CommandQueue from "src/views/reports/containers/commandQueue";
+import CustomGraph from "src/views/reports/containers/customgraph";
+import Debug from "src/views/reports/containers/debug";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Localities from "src/views/reports/containers/localities";
 import Network from "src/views/reports/containers/network";
 import Nodes from "src/views/reports/containers/nodes";
-import Certificates from "src/views/reports/containers/certificates";
-import Range from "src/views/reports/containers/range";
-import CommandQueue from "src/views/reports/containers/commandQueue";
-import Debug from "src/views/reports/containers/debug";
 import ReduxDebug from "src/views/reports/containers/redux";
-import CustomGraph from "src/views/reports/containers/customgraph";
-import NotFound from "src/views/app/components/NotFound";
-
-import { alertDataSync } from "src/redux/alerts";
+import Range from "src/views/reports/containers/range";
+import Settings from "src/views/reports/containers/settings";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -144,6 +141,7 @@ ReactDOM.render(
           <Route path="localities" component={ Localities } />
           <Route path="network" component={ Network } />
           <Route path="nodes" component={ Nodes } />
+          <Route path="settings" component={ Settings } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
