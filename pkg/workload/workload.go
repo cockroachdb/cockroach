@@ -54,6 +54,10 @@ type FlagMeta struct {
 	// RuntimeOnly may be set to true only if the corresponding flag has no
 	// impact on the behavior of any Tables in this workload.
 	RuntimeOnly bool
+	// CheckConsistencyOnly is expected to be true only if the corresponding
+	// flag only has an effect on the CheckConsistency hook. Setting
+	// CheckConsistencyOnly to true also implies true for RuntimeOnly.
+	CheckConsistencyOnly bool
 }
 
 // Flags is a container for flags and associated metadata.
@@ -100,6 +104,10 @@ type Hooks struct {
 	// PostRun is called after workload run has ended. This is where any post-run
 	// special printing or validation can be done.
 	PostRun func() error
+	// CheckConsistency is called to run generator-specific consistency checks.
+	// These are expected to pass after the initial data load as well as after
+	// running queryload.
+	CheckConsistency func(context.Context, *gosql.DB) error
 }
 
 // Meta is used to register a Generator at init time and holds meta information
@@ -209,6 +217,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		return int64(bits.Len64(math.Float64bits(t))+8) / 8
 	case string:
 		return int64(len(t))
+	case []byte:
+		return int64(len(t))
 	case time.Time:
 		return 12
 	default:
@@ -254,6 +264,10 @@ func Setup(
 
 	var size int64
 	for _, table := range tables {
+		if table.InitialRowFn == nil {
+			// Some workloads don't support initial table data.
+			continue
+		}
 		rowsPerWorker := table.InitialRowCount / concurrency
 		g, gCtx := errgroup.WithContext(ctx)
 		for i := 0; i < concurrency; i++ {
