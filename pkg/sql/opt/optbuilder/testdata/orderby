@@ -629,17 +629,14 @@ project
 build
 SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
 ----
-sort
+values
  ├── columns: x:1(string)
- ├── ordering: +1
- └── values
-      ├── columns: column1:1(string)
-      ├── tuple [type=tuple{string}]
-      │    └── const: 'a' [type=string]
-      ├── tuple [type=tuple{string}]
-      │    └── const: 'b' [type=string]
-      └── tuple [type=tuple{string}]
-           └── const: 'c' [type=string]
+ ├── tuple [type=tuple{string}]
+ │    └── const: 'a' [type=string]
+ ├── tuple [type=tuple{string}]
+ │    └── const: 'b' [type=string]
+ └── tuple [type=tuple{string}]
+      └── const: 'c' [type=string]
 
 exec-ddl
 CREATE TABLE blocks (
