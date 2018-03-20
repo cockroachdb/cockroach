@@ -149,6 +149,44 @@ class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollecto
   const char* Name() const override { return "TimeBoundTblPropCollectorFactory"; }
 };
 
+class DeleteRangeTblPropCollector : public rocksdb::TablePropertiesCollector {
+ public:
+  const int kMaxTombstones = 5;
+
+  const char* Name() const override { return "DeleteRangeTblPropCollector"; }
+
+  rocksdb::Status Finish(rocksdb::UserCollectedProperties*) override {
+    return rocksdb::Status::OK();
+  }
+
+  rocksdb::Status AddUserKey(const rocksdb::Slice&, const rocksdb::Slice&,
+                             rocksdb::EntryType type, rocksdb::SequenceNumber,
+                             uint64_t) override {
+    if (type == rocksdb::kEntryRangeDelete) {
+      ntombstones_++;
+    }
+    return rocksdb::Status::OK();
+  }
+
+  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
+    return rocksdb::UserCollectedProperties{};
+  }
+
+  virtual bool NeedCompact() const override {
+    return ntombstones_ > kMaxTombstones;
+  }
+
+ private:
+  int ntombstones_;
+};
+
+class DeleteRangeTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
+  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
+      rocksdb::TablePropertiesCollectorFactory::Context context) override {
+    return new DeleteRangeTblPropCollector();
+  }
+  const char* Name() const override { return "DeleteRangeTblPropCollectorFactory"; }
+};
 }  // namespace
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
@@ -201,9 +239,13 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
 
   // Use the TablePropertiesCollector hook to store the min and max MVCC
   // timestamps present in each sstable in the metadata for that sstable.
-  std::shared_ptr<rocksdb::TablePropertiesCollectorFactory> time_bound_prop_collector(
-      new TimeBoundTblPropCollectorFactory());
-  options.table_properties_collector_factories.push_back(time_bound_prop_collector);
+  options.table_properties_collector_factories.emplace_back(
+    new TimeBoundTblPropCollectorFactory());
+
+  // Automatically request compactions whenever an SST contains too many range
+  // deletions.
+  options.table_properties_collector_factories.emplace_back(
+    new DeleteRangeTblPropCollectorFactory());
 
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files.
