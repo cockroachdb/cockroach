@@ -220,6 +220,14 @@ const commandQueueReducerObj = new KeyedCachedDataReducer(
 );
 export const refreshCommandQueue = commandQueueReducerObj.refresh;
 
+export const settingsReducerObj = new CachedDataReducer(
+  api.getSettings,
+  "settings",
+  moment.duration(0),
+  moment.duration(1, "m"),
+);
+export const refreshSettings = settingsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -243,6 +251,7 @@ export interface APIReducersState {
   allocatorRange: KeyedCachedDataReducerState<api.AllocatorRangeResponseMessage>;
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
   commandQueue: KeyedCachedDataReducerState<api.CommandQueueResponseMessage>;
+  settings: CachedDataReducerState<api.SettingsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -268,6 +277,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [allocatorRangeReducerObj.actionNamespace]: allocatorRangeReducerObj.reducer,
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
   [commandQueueReducerObj.actionNamespace]: commandQueueReducerObj.reducer,
+  [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };
