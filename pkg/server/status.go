@@ -1092,10 +1092,10 @@ func (s *statusServer) Ranges(
 				WritesPerSecond:  rep.WritesPerSecond(),
 			},
 			Problems: serverpb.RangeProblems{
-				Unavailable:          metrics.RangeCounter && metrics.Unavailable,
+				Unavailable:          metrics.Unavailable,
 				LeaderNotLeaseHolder: metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
 				NoRaftLeader:         !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
-				Underreplicated:      metrics.Leader && metrics.Underreplicated,
+				Underreplicated:      metrics.Underreplicated,
 				NoLease:              metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 			},
 			CmdQLocal:   serverpb.CommandQueueMetrics(metrics.CmdQMetricsLocal),
