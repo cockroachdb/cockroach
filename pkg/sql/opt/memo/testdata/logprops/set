@@ -24,59 +24,91 @@ union
  ├── columns: x:6(int) y:7(int)
  ├── left columns: a.x:1(int) a.y:2(int)
  ├── right columns: b.x:3(int) b.z:4(int)
+ ├── stats: [rows=2000]
  ├── scan a
- │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    └── stats: [rows=1000]
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null)
+      ├── stats: [rows=1000]
       ├── scan b
-      │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    └── stats: [rows=1000]
       └── projections [outer=(3,4)]
            ├── variable: b.x [type=int, outer=(3)]
            └── variable: b.z [type=int, outer=(4)]
 
 build
-SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM b
+SELECT x, y, x FROM a INTERSECT SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
 ----
 intersect
  ├── columns: x:1(int!null) y:2(int) x:1(int!null)
  ├── left columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
  ├── right columns: b.z:4(int) b.x:3(int) b.rowid:5(int)
+ ├── stats: [rows=550]
  ├── project
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.x:1(int!null)
+ │    ├── stats: [rows=1000]
  │    ├── scan a
- │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── stats: [rows=1000]
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         ├── variable: a.y [type=int, outer=(2)]
  │         └── variable: a.x [type=int, outer=(1)]
  └── project
       ├── columns: b.z:4(int!null) b.x:3(int) b.rowid:5(int!null)
-      ├── scan b
-      │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      ├── stats: [rows=100]
+      ├── select
+      │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    ├── stats: [rows=100]
+      │    ├── scan b
+      │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    │    └── stats: [rows=1000]
+      │    └── eq [type=bool, outer=(3)]
+      │         ├── variable: b.x [type=int, outer=(3)]
+      │         └── const: 1 [type=int]
       └── projections [outer=(3-5)]
            ├── variable: b.z [type=int, outer=(4)]
            ├── variable: b.x [type=int, outer=(3)]
            └── variable: b.rowid [type=int, outer=(5)]
 
 build
-SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM b
+SELECT x, x, y FROM a EXCEPT SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
 ----
 except
  ├── columns: x:1(int!null) x:1(int!null) y:2(int)
  ├── left columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
  ├── right columns: b.x:3(int) b.z:4(int) b.z:4(int)
+ ├── stats: [rows=550]
  ├── project
  │    ├── columns: a.x:1(int!null) a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=1000]
  │    ├── scan a
- │    │    └── columns: a.x:1(int!null) a.y:2(int)
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    │    └── stats: [rows=1000]
  │    └── projections [outer=(1,2)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         ├── variable: a.x [type=int, outer=(1)]
  │         └── variable: a.y [type=int, outer=(2)]
  └── project
       ├── columns: b.x:3(int) b.z:4(int!null) b.z:4(int!null)
-      ├── scan b
-      │    └── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      ├── stats: [rows=100]
+      ├── project
+      │    ├── columns: b.x:3(int) b.z:4(int!null)
+      │    ├── stats: [rows=100]
+      │    ├── select
+      │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    │    ├── stats: [rows=100]
+      │    │    ├── scan b
+      │    │    │    ├── columns: b.x:3(int) b.z:4(int!null) b.rowid:5(int!null)
+      │    │    │    └── stats: [rows=1000]
+      │    │    └── eq [type=bool, outer=(3)]
+      │    │         ├── variable: b.x [type=int, outer=(3)]
+      │    │         └── const: 1 [type=int]
+      │    └── projections [outer=(3,4)]
+      │         ├── variable: b.x [type=int, outer=(3)]
+      │         └── variable: b.z [type=int, outer=(4)]
       └── projections [outer=(3,4)]
            ├── variable: b.x [type=int, outer=(3)]
            ├── variable: b.z [type=int, outer=(4)]

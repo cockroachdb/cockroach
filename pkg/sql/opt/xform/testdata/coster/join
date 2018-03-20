@@ -1,0 +1,54 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── s string
+ ├── d decimal not null
+ └── INDEX primary
+      └── k int not null
+
+exec-ddl
+CREATE TABLE b (x INT, z INT NOT NULL)
+----
+TABLE b
+ ├── x int
+ ├── z int not null
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+opt
+SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
+----
+inner-join
+ ├── columns: k:1(int!null) x:5(int)
+ ├── stats: [rows=10000]
+ ├── cost: 2000.00
+ ├── project
+ │    ├── columns: a.k:1(int!null)
+ │    ├── stats: [rows=100]
+ │    ├── cost: 1000.00
+ │    ├── select
+ │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
+ │    │    ├── stats: [rows=100]
+ │    │    ├── cost: 1000.00
+ │    │    ├── scan a
+ │    │    │    ├── columns: a.k:1(int!null) a.d:4(decimal!null)
+ │    │    │    ├── stats: [rows=1000]
+ │    │    │    └── cost: 1000.00
+ │    │    └── filters [type=bool, outer=(4)]
+ │    │         └── eq [type=bool, outer=(4)]
+ │    │              ├── variable: a.d [type=decimal, outer=(4)]
+ │    │              └── const: 1.0 [type=decimal]
+ │    └── projections [outer=(1)]
+ │         └── variable: a.k [type=int, outer=(1)]
+ ├── scan b
+ │    ├── columns: b.x:5(int)
+ │    ├── stats: [rows=1000]
+ │    └── cost: 1000.00
+ └── filters [type=bool, outer=(1,5)]
+      └── eq [type=bool, outer=(1,5)]
+           ├── variable: a.k [type=int, outer=(1)]
+           └── variable: b.x [type=int, outer=(5)]

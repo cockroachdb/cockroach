@@ -98,7 +98,7 @@ func (e *OptTester) Memo() (string, error) {
 
 // OptSteps returns a string that shows each optimization step using the
 // standard unified diff format. It is used for debugging the optimizer.
-func (e *OptTester) OptSteps() (string, error) {
+func (e *OptTester) OptSteps(fmtFlags memo.ExprFmtFlags) (string, error) {
 	var buf bytes.Buffer
 	var prev, next string
 	for i := 0; ; i++ {
@@ -109,7 +109,7 @@ func (e *OptTester) OptSteps() (string, error) {
 			return "", err
 		}
 
-		next = o.Optimize(root, required).String()
+		next = o.Optimize(root, required).FormatString(fmtFlags)
 		if prev == next {
 			// No change, so nothing more to optimize.
 			// TODO(andyk): this method of detecting changes won't work

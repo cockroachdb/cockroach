@@ -68,7 +68,7 @@ func (f logicalPropsFactory) constructRelationalProps(ev ExprView) LogicalProps 
 		return f.constructGroupByProps(ev)
 
 	case opt.LimitOp, opt.OffsetOp:
-		return f.passThroughRelationalProps(ev, 0 /* inputChildIdx */)
+		return f.passThroughRelationalProps(ev, 0 /* childIdx */)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -94,19 +94,25 @@ func (f logicalPropsFactory) constructScanProps(ev ExprView) LogicalProps {
 		}
 	}
 
+	// TODO: Need actual number of rows.
+	props.Relational.Stats.RowCount = 1000
+
 	return props
 }
 
 func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := ev.lookupChildGroup(0).logical
+	inputProps := ev.lookupChildGroup(0).logical.Relational
 
 	// Inherit output columns from input.
-	props.Relational.OutputCols = inputProps.Relational.OutputCols
+	props.Relational.OutputCols = inputProps.OutputCols
 
 	// Inherit not null columns from input.
-	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
+	props.Relational.NotNullCols = inputProps.NotNullCols
+
+	// TODO: Need better estimate based on actual filter conditions.
+	props.Relational.Stats.RowCount = inputProps.Stats.RowCount / 10
 
 	return props
 }
@@ -114,14 +120,16 @@ func (f logicalPropsFactory) constructSelectProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	inputProps := ev.lookupChildGroup(0).logical
+	inputProps := ev.lookupChildGroup(0).logical.Relational
 
 	// Use output columns from projection list.
 	props.Relational.OutputCols = opt.ColListToSet(*ev.Child(1).Private().(*opt.ColList))
 
 	// Inherit not null columns from input.
-	props.Relational.NotNullCols = inputProps.Relational.NotNullCols
+	props.Relational.NotNullCols = inputProps.NotNullCols
 	filterNullCols(props.Relational)
+
+	props.Relational.Stats.RowCount = inputProps.Stats.RowCount
 
 	return props
 }
@@ -129,17 +137,17 @@ func (f logicalPropsFactory) constructProjectProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	leftProps := ev.lookupChildGroup(0).logical
-	rightProps := ev.lookupChildGroup(1).logical
+	leftProps := ev.lookupChildGroup(0).logical.Relational
+	rightProps := ev.lookupChildGroup(1).logical.Relational
 
 	// Output columns are union of columns from left and right inputs, except
 	// in case of semi and anti joins, which only project the left columns.
-	props.Relational.OutputCols = leftProps.Relational.OutputCols.Copy()
+	props.Relational.OutputCols = leftProps.OutputCols.Copy()
 	switch ev.Operator() {
 	case opt.SemiJoinOp, opt.AntiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp:
 
 	default:
-		props.Relational.OutputCols.UnionWith(rightProps.Relational.OutputCols)
+		props.Relational.OutputCols.UnionWith(rightProps.OutputCols)
 	}
 
 	// Left/full outer joins can result in right columns becoming null.
@@ -149,7 +157,7 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 		opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 
 	default:
-		props.Relational.NotNullCols = rightProps.Relational.NotNullCols.Copy()
+		props.Relational.NotNullCols = rightProps.NotNullCols.Copy()
 	}
 
 	// Right/full outer joins can result in left columns becoming null.
@@ -158,7 +166,13 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 	case opt.RightJoinOp, opt.FullJoinOp, opt.RightJoinApplyOp, opt.FullJoinApplyOp:
 
 	default:
-		props.Relational.NotNullCols.UnionWith(leftProps.Relational.NotNullCols)
+		props.Relational.NotNullCols.UnionWith(leftProps.NotNullCols)
+	}
+
+	// TODO: Need better estimate based on actual on conditions.
+	props.Relational.Stats.RowCount = leftProps.Stats.RowCount * rightProps.Stats.RowCount
+	if ev.Child(2).Operator() != opt.TrueOp {
+		props.Relational.Stats.RowCount /= 10
 	}
 
 	return props
@@ -167,6 +181,8 @@ func (f logicalPropsFactory) constructJoinProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
+	inputProps := ev.lookupChildGroup(0).logical.Relational
+
 	// Output columns are the union of grouping columns with columns from the
 	// aggregate projection list.
 	groupingColSet := *ev.Private().(*opt.ColSet)
@@ -174,9 +190,17 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 	aggColList := *ev.Child(1).Private().(*opt.ColList)
 	props.Relational.OutputCols.UnionWith(opt.ColListToSet(aggColList))
 
-	// Propagate not null setting from grouping columns.
-	props.Relational.NotNullCols = ev.Child(0).Logical().Relational.NotNullCols.Copy()
+	// Propagate not null setting from input columns that are being grouped.
+	props.Relational.NotNullCols = inputProps.NotNullCols.Copy()
 	props.Relational.NotNullCols.IntersectionWith(groupingColSet)
+
+	if groupingColSet.Empty() {
+		// Scalar group by.
+		props.Relational.Stats.RowCount = 1
+	} else {
+		// TODO: Need better estimate.
+		props.Relational.Stats.RowCount = inputProps.Stats.RowCount / 10
+	}
 
 	return props
 }
@@ -184,8 +208,8 @@ func (f logicalPropsFactory) constructGroupByProps(ev ExprView) LogicalProps {
 func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	props := LogicalProps{Relational: &RelationalProps{}}
 
-	leftProps := ev.lookupChildGroup(0).logical
-	rightProps := ev.lookupChildGroup(1).logical
+	leftProps := ev.lookupChildGroup(0).logical.Relational
+	rightProps := ev.lookupChildGroup(1).logical.Relational
 	colMap := *ev.Private().(*SetOpColMap)
 	if len(colMap.Out) != len(colMap.Left) || len(colMap.Out) != len(colMap.Right) {
 		panic(fmt.Errorf("lists in SetOpColMap are not all the same length. new:%d, left:%d, right:%d",
@@ -200,10 +224,19 @@ func (f logicalPropsFactory) constructSetProps(ev ExprView) LogicalProps {
 	// with the output columns, since OutputCols are not ordered and may
 	// not correspond to each other.
 	for i := range colMap.Out {
-		if leftProps.Relational.NotNullCols.Contains(int((colMap.Left)[i])) &&
-			rightProps.Relational.NotNullCols.Contains(int((colMap.Right)[i])) {
+		if leftProps.NotNullCols.Contains(int((colMap.Left)[i])) &&
+			rightProps.NotNullCols.Contains(int((colMap.Right)[i])) {
 			props.Relational.NotNullCols.Add(int((colMap.Out)[i]))
 		}
+	}
+
+	// TODO: Need better estimate.
+	switch ev.Operator() {
+	case opt.UnionOp, opt.UnionAllOp:
+		props.Relational.Stats.RowCount = leftProps.Stats.RowCount + rightProps.Stats.RowCount
+
+	default:
+		props.Relational.Stats.RowCount = (leftProps.Stats.RowCount + rightProps.Stats.RowCount) / 2
 	}
 
 	return props
@@ -214,17 +247,18 @@ func (f logicalPropsFactory) constructValuesProps(ev ExprView) LogicalProps {
 
 	// Use output columns that are attached to the values op.
 	props.Relational.OutputCols = opt.ColListToSet(*ev.Private().(*opt.ColList))
+
+	props.Relational.Stats.RowCount = uint64(ev.ChildCount())
+
 	return props
 }
 
-// passThroughRelationalProps returns a copy of the relational properties of the
-// given child group.
-func (f logicalPropsFactory) passThroughRelationalProps(
-	ev ExprView, inputChildIdx int,
-) LogicalProps {
-	inputProps := ev.lookupChildGroup(inputChildIdx).logical
-	relPropsCopy := *inputProps.Relational
-	return LogicalProps{Relational: &relPropsCopy}
+// passThroughRelationalProps returns the relational properties of the given
+// child group.
+func (f logicalPropsFactory) passThroughRelationalProps(ev ExprView, childIdx int) LogicalProps {
+	// Properties are immutable after construction, so just inherit relational
+	// props pointer from child.
+	return LogicalProps{Relational: ev.lookupChildGroup(childIdx).logical.Relational}
 }
 
 func (f logicalPropsFactory) constructScalarProps(ev ExprView) LogicalProps {
