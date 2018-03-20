@@ -1767,16 +1767,12 @@ SELECT CONCAT_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 group-by
  ├── columns: column5:5(string)
  ├── project
- │    ├── columns: kv.s:4(string)
- │    ├── project
- │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
- │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    │    └── projections
- │    │         ├── variable: kv.s [type=string]
- │    │         └── variable: kv.k [type=int]
+ │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
- │         └── variable: kv.s [type=string]
+ │         ├── variable: kv.s [type=string]
+ │         └── variable: kv.k [type=int]
  └── aggregations
       └── function: concat_agg [type=string]
            └── variable: kv.s [type=string]
@@ -1787,16 +1783,12 @@ SELECT JSON_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 group-by
  ├── columns: column5:5(jsonb)
  ├── project
- │    ├── columns: kv.s:4(string)
- │    ├── project
- │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
- │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    │    └── projections
- │    │         ├── variable: kv.s [type=string]
- │    │         └── variable: kv.k [type=int]
+ │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
- │         └── variable: kv.s [type=string]
+ │         ├── variable: kv.s [type=string]
+ │         └── variable: kv.k [type=int]
  └── aggregations
       └── function: json_agg [type=jsonb]
            └── variable: kv.s [type=string]
@@ -1807,16 +1799,12 @@ SELECT JSONB_AGG(s) FROM (SELECT s FROM kv ORDER BY k)
 group-by
  ├── columns: column5:5(jsonb)
  ├── project
- │    ├── columns: kv.s:4(string)
- │    ├── project
- │    │    ├── columns: kv.s:4(string) kv.k:1(int!null)
- │    │    ├── scan kv
- │    │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
- │    │    └── projections
- │    │         ├── variable: kv.s [type=string]
- │    │         └── variable: kv.k [type=int]
+ │    ├── columns: kv.s:4(string) kv.k:1(int!null)
+ │    ├── scan kv
+ │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │    └── projections
- │         └── variable: kv.s [type=string]
+ │         ├── variable: kv.s [type=string]
+ │         └── variable: kv.k [type=int]
  └── aggregations
       └── function: jsonb_agg [type=jsonb]
            └── variable: kv.s [type=string]

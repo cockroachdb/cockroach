@@ -166,7 +166,7 @@ func (b *Builder) buildOrderByProject(
 	projections, orderByProjections []memo.GroupID,
 	inScope, projectionsScope, orderByScope *scope,
 ) (out memo.GroupID, outScope *scope) {
-	outScope = inScope.push()
+	outScope = inScope.replace()
 
 	outScope.cols = make([]columnProps, 0, len(projectionsScope.cols)+len(orderByScope.cols))
 	outScope.appendColumns(projectionsScope)
@@ -179,22 +179,22 @@ func (b *Builder) buildOrderByProject(
 		// Only append order by columns that aren't already present.
 		if findColByIndex(outScope.cols, col.index) == nil {
 			outScope.cols = append(outScope.cols, *col)
+			outScope.cols[len(outScope.cols)-1].hidden = true
 			combined = append(combined, orderByProjections[i])
 		}
 	}
 
+	outScope.ordering = orderByScope.ordering
+	outScope.presentation = makePresentation(projectionsScope.cols)
+
 	if outScope.hasSameColumns(inScope) {
 		// All order by and projection columns were already present, so no need to
 		// construct the projection expression.
-		inScope.ordering = orderByScope.ordering
-		inScope.presentation = makePresentation(projectionsScope.cols)
-		return in, inScope
+		return in, outScope
 	}
 
 	p := b.constructList(opt.ProjectionsOp, combined, outScope.cols)
 	out = b.factory.ConstructProject(in, p)
-	outScope.ordering = orderByScope.ordering
-	outScope.presentation = makePresentation(projectionsScope.cols)
 	return out, outScope
 }
 
