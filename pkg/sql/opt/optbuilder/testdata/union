@@ -326,10 +326,10 @@ project
  │         └── projections
  │              ├── const: 2 [type=int]
  │              └── const: 4 [type=int]
- └── projections [outer=(5,6)]
-      ├── variable: column1 [type=int, outer=(5)]
-      └── function: pg_typeof [type=string, outer=(6)]
-           └── variable: column2 [type=int, outer=(6)]
+ └── projections
+      ├── variable: column1 [type=int]
+      └── function: pg_typeof [type=string]
+           └── variable: column2 [type=int]
 
 build
 SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
@@ -354,10 +354,10 @@ project
  │         └── projections
  │              ├── const: 2 [type=int]
  │              └── null [type=unknown]
- └── projections [outer=(5,6)]
-      ├── variable: column1 [type=int, outer=(5)]
-      └── function: pg_typeof [type=string, outer=(6)]
-           └── variable: column2 [type=int, outer=(6)]
+ └── projections
+      ├── variable: column1 [type=int]
+      └── function: pg_typeof [type=string]
+           └── variable: column2 [type=int]
 
 exec-ddl
 CREATE TABLE uniontest (
@@ -385,22 +385,22 @@ union
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    └── eq [type=bool, outer=(1)]
- │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
  │    │         └── const: 1 [type=int]
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    └── eq [type=bool, outer=(4)]
-      │         ├── variable: uniontest.k [type=int, outer=(4)]
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
       │         └── const: 2 [type=int]
-      └── projections [outer=(5)]
-           └── variable: uniontest.v [type=int, outer=(5)]
+      └── projections
+           └── variable: uniontest.v [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2
@@ -415,22 +415,22 @@ union-all
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    └── eq [type=bool, outer=(1)]
- │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
  │    │         └── const: 1 [type=int]
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    └── eq [type=bool, outer=(4)]
-      │         ├── variable: uniontest.k [type=int, outer=(4)]
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
       │         └── const: 2 [type=int]
-      └── projections [outer=(5)]
-           └── variable: uniontest.v [type=int, outer=(5)]
+      └── projections
+           └── variable: uniontest.v [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT SELECT v FROM uniontest WHERE k = 2
@@ -445,22 +445,22 @@ intersect
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    └── eq [type=bool, outer=(1)]
- │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
  │    │         └── const: 1 [type=int]
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    └── eq [type=bool, outer=(4)]
-      │         ├── variable: uniontest.k [type=int, outer=(4)]
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
       │         └── const: 2 [type=int]
-      └── projections [outer=(5)]
-           └── variable: uniontest.v [type=int, outer=(5)]
+      └── projections
+           └── variable: uniontest.v [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 INTERSECT ALL SELECT v FROM uniontest WHERE k = 2
@@ -475,22 +475,22 @@ intersect-all
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    └── eq [type=bool, outer=(1)]
- │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
  │    │         └── const: 1 [type=int]
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    └── eq [type=bool, outer=(4)]
-      │         ├── variable: uniontest.k [type=int, outer=(4)]
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
       │         └── const: 2 [type=int]
-      └── projections [outer=(5)]
-           └── variable: uniontest.v [type=int, outer=(5)]
+      └── projections
+           └── variable: uniontest.v [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT SELECT v FROM uniontest WHERE k = 2
@@ -505,22 +505,22 @@ except
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    └── eq [type=bool, outer=(1)]
- │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
  │    │         └── const: 1 [type=int]
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    └── eq [type=bool, outer=(4)]
-      │         ├── variable: uniontest.k [type=int, outer=(4)]
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
       │         └── const: 2 [type=int]
-      └── projections [outer=(5)]
-           └── variable: uniontest.v [type=int, outer=(5)]
+      └── projections
+           └── variable: uniontest.v [type=int]
 
 build
 SELECT v FROM uniontest WHERE k = 1 EXCEPT ALL SELECT v FROM uniontest WHERE k = 2
@@ -535,22 +535,22 @@ except-all
  │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │    │    ├── scan uniontest
  │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    │    └── eq [type=bool, outer=(1)]
- │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+ │    │    └── eq [type=bool]
+ │    │         ├── variable: uniontest.k [type=int]
  │    │         └── const: 1 [type=int]
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.v:5(int)
       ├── select
       │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
       │    ├── scan uniontest
       │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      │    └── eq [type=bool, outer=(4)]
-      │         ├── variable: uniontest.k [type=int, outer=(4)]
+      │    └── eq [type=bool]
+      │         ├── variable: uniontest.k [type=int]
       │         └── const: 2 [type=int]
-      └── projections [outer=(5)]
-           └── variable: uniontest.v [type=int, outer=(5)]
+      └── projections
+           └── variable: uniontest.v [type=int]
 
 build
 (SELECT v FROM uniontest WHERE k = 1 UNION ALL SELECT v FROM uniontest WHERE k = 2) ORDER BY 1 DESC
@@ -568,22 +568,22 @@ sort
       │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
       │    │    ├── scan uniontest
       │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
-      │    │    └── eq [type=bool, outer=(1)]
-      │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+      │    │    └── eq [type=bool]
+      │    │         ├── variable: uniontest.k [type=int]
       │    │         └── const: 1 [type=int]
-      │    └── projections [outer=(2)]
-      │         └── variable: uniontest.v [type=int, outer=(2)]
+      │    └── projections
+      │         └── variable: uniontest.v [type=int]
       └── project
            ├── columns: uniontest.v:5(int)
            ├── select
            │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            │    ├── scan uniontest
            │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           │    └── eq [type=bool, outer=(4)]
-           │         ├── variable: uniontest.k [type=int, outer=(4)]
+           │    └── eq [type=bool]
+           │         ├── variable: uniontest.k [type=int]
            │         └── const: 2 [type=int]
-           └── projections [outer=(5)]
-                └── variable: uniontest.v [type=int, outer=(5)]
+           └── projections
+                └── variable: uniontest.v [type=int]
 
 # The ORDER BY applies to the UNION, not the last SELECT.
 build
@@ -602,22 +602,22 @@ sort
       │    │    ├── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
       │    │    ├── scan uniontest
       │    │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
-      │    │    └── eq [type=bool, outer=(1)]
-      │    │         ├── variable: uniontest.k [type=int, outer=(1)]
+      │    │    └── eq [type=bool]
+      │    │         ├── variable: uniontest.k [type=int]
       │    │         └── const: 1 [type=int]
-      │    └── projections [outer=(2)]
-      │         └── variable: uniontest.v [type=int, outer=(2)]
+      │    └── projections
+      │         └── variable: uniontest.v [type=int]
       └── project
            ├── columns: uniontest.v:5(int)
            ├── select
            │    ├── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
            │    ├── scan uniontest
            │    │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           │    └── eq [type=bool, outer=(4)]
-           │         ├── variable: uniontest.k [type=int, outer=(4)]
+           │    └── eq [type=bool]
+           │         ├── variable: uniontest.k [type=int]
            │         └── const: 2 [type=int]
-           └── projections [outer=(5)]
-                └── variable: uniontest.v [type=int, outer=(5)]
+           └── projections
+                └── variable: uniontest.v [type=int]
 
 build
 SELECT v FROM uniontest UNION SELECT k FROM uniontest
@@ -630,14 +630,14 @@ union
  │    ├── columns: uniontest.v:2(int)
  │    ├── scan uniontest
  │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.k:4(int)
       ├── scan uniontest
       │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      └── projections [outer=(4)]
-           └── variable: uniontest.k [type=int, outer=(4)]
+      └── projections
+           └── variable: uniontest.k [type=int]
 
 build
 SELECT v FROM uniontest UNION ALL SELECT k FROM uniontest
@@ -650,14 +650,14 @@ union-all
  │    ├── columns: uniontest.v:2(int)
  │    ├── scan uniontest
  │    │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │    └── projections [outer=(2)]
- │         └── variable: uniontest.v [type=int, outer=(2)]
+ │    └── projections
+ │         └── variable: uniontest.v [type=int]
  └── project
       ├── columns: uniontest.k:4(int)
       ├── scan uniontest
       │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-      └── projections [outer=(4)]
-           └── variable: uniontest.k [type=int, outer=(4)]
+      └── projections
+           └── variable: uniontest.k [type=int]
 
 build
 SELECT * FROM (SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1);
@@ -680,9 +680,9 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── eq [type=bool, outer=(1,4)]
-      ├── variable: column1 [type=int, outer=(1)]
-      └── variable: column1 [type=int, outer=(4)]
+ └── eq [type=bool]
+      ├── variable: column1 [type=int]
+      └── variable: column1 [type=int]
 
 build
 SELECT * FROM (VALUES (1)) a LEFT JOIN (VALUES (1) UNION VALUES (2)) b on a.column1 = b.column1;
@@ -705,9 +705,9 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── eq [type=bool, outer=(1,4)]
-      ├── variable: column1 [type=int, outer=(1)]
-      └── variable: column1 [type=int, outer=(4)]
+ └── eq [type=bool]
+      ├── variable: column1 [type=int]
+      └── variable: column1 [type=int]
 
 build
 SELECT 1, 2 UNION SELECT 3
@@ -786,15 +786,15 @@ union
  │    ├── columns: xy.x:1(string!null) xy.x:1(string!null) xy.y:2(string!null)
  │    ├── scan xy
  │    │    └── columns: xy.x:1(string!null) xy.y:2(string!null) xy.rowid:3(int!null)
- │    └── projections [outer=(1,2)]
- │         ├── variable: xy.x [type=string, outer=(1)]
- │         ├── variable: xy.x [type=string, outer=(1)]
- │         └── variable: xy.y [type=string, outer=(2)]
+ │    └── projections
+ │         ├── variable: xy.x [type=string]
+ │         ├── variable: xy.x [type=string]
+ │         └── variable: xy.y [type=string]
  └── project
       ├── columns: abc.a:4(string) abc.b:5(string!null) abc.c:6(string!null)
       ├── scan abc
       │    └── columns: abc.a:4(string) abc.b:5(string!null) abc.c:6(string!null) abc.rowid:7(int!null)
-      └── projections [outer=(4-6)]
-           ├── variable: abc.a [type=string, outer=(4)]
-           ├── variable: abc.b [type=string, outer=(5)]
-           └── variable: abc.c [type=string, outer=(6)]
+      └── projections
+           ├── variable: abc.a [type=string]
+           ├── variable: abc.b [type=string]
+           └── variable: abc.c [type=string]

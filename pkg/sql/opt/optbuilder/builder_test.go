@@ -115,7 +115,7 @@ func TestBuilder(t *testing.T) {
 					if err != nil {
 						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}
-					return ev.String()
+					return ev.FormatString(memo.ExprFmtHideAll)
 
 				case "build-scalar":
 					typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
@@ -144,7 +144,7 @@ func TestBuilder(t *testing.T) {
 						return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 					}
 					exprView := o.Optimize(group, &memo.PhysicalProps{})
-					return exprView.String()
+					return exprView.FormatString(memo.ExprFmtHideAll)
 
 				case "exec-ddl":
 					return testutils.ExecuteTestDDL(t, d.Input, catalog)
