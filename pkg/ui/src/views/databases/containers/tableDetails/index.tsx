@@ -1,5 +1,5 @@
 import React from "react";
-import { RouterState, Link } from "react-router";
+import { Link, RouterState } from "react-router";
 import { connect } from "react-redux";
 
 import "./sqlhighlight.styl";
@@ -77,15 +77,19 @@ class TableMain extends React.Component<TableMainProps, {}> {
     hljs.highlightBlock(this.createStmtNode);
   }
 
+  componentDidUpdate() {
+    hljs.highlightBlock(this.createStmtNode);
+  }
+
   render() {
     const { tableInfo, grantsSortSetting } = this.props;
 
     if (tableInfo) {
       return <div>
-        <section className="section parent-link">
-          <Link to="/databases/tables">&lt; Back to Databases</Link>
-        </section>
         <section className="section">
+          <section className="section parent-link">
+            <Link to="/databases/tables">&lt; Back to Databases</Link>
+          </section>
           <div className="database-summary-title">
             <h2>{ this.props.params[tableNameAttr] }</h2>
           </div>

@@ -386,9 +386,6 @@ const NodesMainConnected = connect(
 function NodesPage() {
   return (
     <div>
-      <section className="section parent-link">
-        <Link to="/">&lt; Back to Cluster</Link>
-      </section>
       <NodesMainConnected />
     </div>
   );
