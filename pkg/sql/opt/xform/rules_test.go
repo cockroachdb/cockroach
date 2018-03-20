@@ -30,7 +30,7 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestRules/comp"
 //   ...
 func TestRules(t *testing.T) {
-	runDataDrivenTest(t, "testdata/rules/*")
+	runDataDrivenTest(t, "testdata/rules/*", memo.ExprFmtHideStats|memo.ExprFmtHideCost)
 }
 
 // Test the FoldNullInEmpty rule. Can't create empty tuple on right side of

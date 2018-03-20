@@ -64,13 +64,13 @@ SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 render                         0  render  ·            ·          (column4)         ·
  │                             0  ·       render 0     column4    ·                 ·
- └── limit                     1  limit   ·            ·          (column4, "t.v")  ·
+ └── limit                     1  limit   ·            ·          (column4, "t.v")  -"t.v"
       │                        1  ·       count        10         ·                 ·
-      └── render               2  render  ·            ·          (column4, "t.v")  ·
-           │                   2  ·       render 0     agg0       ·                 ·
-           │                   2  ·       render 1     v          ·                 ·
-           └── sort            3  sort    ·            ·          (k, v, agg0)      -v
-                │              3  ·       order        -v         ·                 ·
+      └── sort                 2  sort    ·            ·          (column4, "t.v")  -"t.v"
+           │                   2  ·       order        -"t.v"     ·                 ·
+           └── render          3  render  ·            ·          (column4, "t.v")  ·
+                │              3  ·       render 0     agg0       ·                 ·
+                │              3  ·       render 1     v          ·                 ·
                 └── group      4  group   ·            ·          (k, v, agg0)      ·
                      │         4  ·       aggregate 0  k          ·                 ·
                      │         4  ·       aggregate 1  v          ·                 ·

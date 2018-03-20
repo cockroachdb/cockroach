@@ -18,12 +18,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
 func TestMemo(t *testing.T) {
-	runDataDrivenTest(t, "testdata/memo")
+	runDataDrivenTest(t, "testdata/memo", memo.ExprFmtShowAll)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
@@ -54,7 +55,7 @@ func TestMemo(t *testing.T) {
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the memo containing the forest of trees.
 //
-func runDataDrivenTest(t *testing.T, testdataGlob string) {
+func runDataDrivenTest(t *testing.T, testdataGlob string, flags memo.ExprFmtFlags) {
 	for _, path := range testutils.GetTestFiles(t, testdataGlob) {
 		catalog := testutils.NewTestCatalog()
 		t.Run(filepath.Base(path), func(t *testing.T) {
@@ -69,14 +70,14 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
-					return ev.String()
+					return ev.FormatString(flags)
 
 				case "opt":
 					ev, err := tester.Optimize()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
-					return ev.String()
+					return ev.FormatString(flags)
 
 				case "memo":
 					result, err := tester.Memo()
