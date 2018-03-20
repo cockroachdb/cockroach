@@ -197,10 +197,16 @@ const (
 	ExprFmtShowAll ExprFmtFlags = 0
 
 	// ExprFmtHideOuterCols does not show outer columns in the output.
-	ExprFmtHideOuterCols = 1 << iota
+	ExprFmtHideOuterCols ExprFmtFlags = 1 << iota
+
+	// ExprFmtHideStats does not show statistics in the output.
+	ExprFmtHideStats
+
+	// ExprFmtHideCost does not show expression cost in the output.
+	ExprFmtHideCost
 
 	// ExprFmtHideAll shows only the most basic properties of the expression.
-	ExprFmtHideAll = ExprFmtHideOuterCols
+	ExprFmtHideAll = ExprFmtHideStats | ExprFmtHideCost | ExprFmtHideOuterCols
 )
 
 // String returns a string representation of this expression for testing and
@@ -217,8 +223,8 @@ func (ev ExprView) FormatString(flags ExprFmtFlags) string {
 	return tp.String()
 }
 
-// String returns a string representation of this expression for testing and
-// debugging.
+// format constructs a treeprinter view of this expression for testing and
+// debugging. The given flags control which properties are added.
 func (ev ExprView) format(tp treeprinter.Node, flags ExprFmtFlags) {
 	if ev.IsScalar() {
 		ev.formatScalar(tp, flags)
@@ -289,6 +295,14 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		logProps.FormatColList("right columns:", colMap.Right, ev.Metadata(), tp)
 	}
 
+	if !flags.HasFlags(ExprFmtHideStats) {
+		tp.Childf("stats: [rows=%d]", logProps.Relational.Stats.RowCount)
+	}
+
+	if !flags.HasFlags(ExprFmtHideCost) && ev.best != normBestOrdinal {
+		tp.Childf("cost: %.2f", ev.lookupBestExpr().cost)
+	}
+
 	if physProps.Ordering.Defined() {
 		tp.Childf("ordering: %s", physProps.Ordering.String())
 	}
@@ -333,7 +347,6 @@ func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
 				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
 			}
 			buf.WriteString("]")
-
 		}
 	}
 

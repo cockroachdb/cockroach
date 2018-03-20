@@ -13,11 +13,14 @@ SELECT a.y, SUM(a.z), a.x, False FROM a GROUP BY a.x, a.y
 ----
 project
  ├── columns: y:2(int) column4:4(float) x:1(int!null) column5:5(bool)
+ ├── stats: [rows=100]
  ├── group-by
  │    ├── columns: a.x:1(int!null) a.y:2(int) column4:4(float)
  │    ├── grouping columns: a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=100]
  │    ├── scan a
- │    │    └── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
+ │    │    └── stats: [rows=1000]
  │    └── aggregations [outer=(3)]
  │         └── function: sum [type=float, outer=(3)]
  │              └── variable: a.z [type=float, outer=(3)]
@@ -26,3 +29,25 @@ project
       ├── variable: column4 [type=float, outer=(4)]
       ├── variable: a.x [type=int, outer=(1)]
       └── false [type=bool]
+
+# Scalar groupby.
+build
+SELECT SUM(a.x), MAX(a.y) FROM a
+----
+group-by
+ ├── columns: column4:4(decimal) column5:5(int)
+ ├── stats: [rows=1]
+ ├── project
+ │    ├── columns: a.x:1(int!null) a.y:2(int)
+ │    ├── stats: [rows=1000]
+ │    ├── scan a
+ │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.z:3(float!null)
+ │    │    └── stats: [rows=1000]
+ │    └── projections [outer=(1,2)]
+ │         ├── variable: a.x [type=int, outer=(1)]
+ │         └── variable: a.y [type=int, outer=(2)]
+ └── aggregations [outer=(1,2)]
+      ├── function: sum [type=decimal, outer=(1)]
+      │    └── variable: a.x [type=int, outer=(1)]
+      └── function: max [type=int, outer=(2)]
+           └── variable: a.y [type=int, outer=(2)]

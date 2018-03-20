@@ -317,11 +317,9 @@ project
  ├── columns: s:4(string)
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    ├── sort
+ │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    ├── ordering: +1,+2
- │    │    └── scan a
- │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── ordering: +1,+2
  │    └── const: 10 [type=int]
  └── projections [outer=(4)]
       └── variable: a.s [type=string, outer=(4)]
@@ -334,11 +332,9 @@ project
  ├── columns: x:1(int!null) s:4(string)
  ├── limit
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    ├── sort
+ │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    ├── ordering: +1,+2
- │    │    └── scan a
- │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── ordering: +1,+2
  │    └── const: 10 [type=int]
  └── projections [outer=(1,4)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -372,11 +368,9 @@ project
  ├── columns: s:4(string)
  ├── offset
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    ├── sort
+ │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    ├── ordering: +1,+2
- │    │    └── scan a
- │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── ordering: +1,+2
  │    └── const: 10 [type=int]
  └── projections [outer=(4)]
       └── variable: a.s [type=string, outer=(4)]
@@ -389,11 +383,9 @@ project
  ├── columns: x:1(int!null) s:4(string)
  ├── offset
  │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    ├── sort
+ │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    ├── ordering: +1,+2
- │    │    └── scan a
- │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    └── ordering: +1,+2
  │    └── const: 10 [type=int]
  └── projections [outer=(1,4)]
       ├── variable: a.x [type=int, outer=(1)]
@@ -434,11 +426,9 @@ project
  │    ├── offset
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
  │    │    ├── ordering: +1,+2
- │    │    ├── sort
+ │    │    ├── scan a
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    │    ├── ordering: +1,+2
- │    │    │    └── scan a
- │    │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    └── ordering: +1,+2
  │    │    └── const: 10 [type=int]
  │    └── const: 10 [type=int]
  └── projections [outer=(4)]
@@ -455,11 +445,9 @@ project
  │    ├── offset
  │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
  │    │    ├── ordering: +1,+2
- │    │    ├── sort
+ │    │    ├── scan a
  │    │    │    ├── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
- │    │    │    ├── ordering: +1,+2
- │    │    │    └── scan a
- │    │    │         └── columns: a.x:1(int!null) a.y:2(int) a.s:4(string)
+ │    │    │    └── ordering: +1,+2
  │    │    └── const: 10 [type=int]
  │    └── const: 10 [type=int]
  └── projections [outer=(1,4)]

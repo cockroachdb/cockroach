@@ -1,0 +1,15 @@
+opt
+SELECT * FROM (VALUES (1, 2, 3), (4, 5, 6))
+----
+values
+ ├── columns: column1:1(int) column2:2(int) column3:3(int)
+ ├── stats: [rows=2]
+ ├── cost: 2.00
+ ├── tuple [type=tuple{int, int, int}]
+ │    ├── const: 1 [type=int]
+ │    ├── const: 2 [type=int]
+ │    └── const: 3 [type=int]
+ └── tuple [type=tuple{int, int, int}]
+      ├── const: 4 [type=int]
+      ├── const: 5 [type=int]
+      └── const: 6 [type=int]

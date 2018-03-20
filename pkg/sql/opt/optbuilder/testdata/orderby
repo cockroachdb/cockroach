@@ -17,74 +17,69 @@ TABLE t
 build
 SELECT c FROM t ORDER BY c
 ----
-project
+sort
  ├── columns: c:3(bool)
  ├── ordering: +3
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: +3
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      └── variable: t.c [type=bool]
+ └── project
+      ├── columns: t.c:3(bool)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           └── variable: t.c [type=bool]
 
 build
 SELECT c FROM t ORDER BY c DESC
 ----
-project
+sort
  ├── columns: c:3(bool)
  ├── ordering: -3
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -3
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      └── variable: t.c [type=bool]
+ └── project
+      ├── columns: t.c:3(bool)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           └── variable: t.c [type=bool]
 
 build
 SELECT a, b FROM t ORDER BY b
 ----
-project
+sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: +2
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 build
 SELECT a, b FROM t ORDER BY b DESC
 ----
-project
+sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: -2
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -2
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 build
 SELECT a FROM t ORDER BY 1 DESC
 ----
-project
+sort
  ├── columns: a:1(int!null)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      └── variable: t.a [type=int]
+ └── project
+      ├── columns: t.a:1(int!null)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           └── variable: t.a [type=int]
 
 # TODO(rytaft): This query causes an error in Postgres, but it is supported by
 # CockroachDB with the semantics:
@@ -101,17 +96,16 @@ error: column name "b" not found
 build
 SELECT a AS foo, b FROM t ORDER BY foo DESC
 ----
-project
+sort
  ├── columns: foo:1(int!null) b:2(int)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 # Check that ambiguous references to renders are properly reported.
 build
@@ -152,95 +146,89 @@ project
 build
 SELECT a AS "foo.bar", b FROM t ORDER BY "foo.bar" DESC
 ----
-project
+sort
  ├── columns: foo.bar:1(int!null) b:2(int)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 build
 SELECT a AS foo, b FROM t ORDER BY a DESC
 ----
-project
+sort
  ├── columns: foo:1(int!null) b:2(int)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 build
 SELECT b FROM t ORDER BY a DESC
 ----
-project
+sort
  ├── columns: b:2(int)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.b [type=int]
-      └── variable: t.a [type=int]
+ └── project
+      ├── columns: t.b:2(int) t.a:1(int!null)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.b [type=int]
+           └── variable: t.a [type=int]
 
 build
 SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-project
+sort
  ├── columns: b:2(int)
  ├── ordering: -1,+2
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1,+2
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.b [type=int]
-      └── variable: t.a [type=int]
+ └── project
+      ├── columns: t.b:2(int) t.a:1(int!null)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.b [type=int]
+           └── variable: t.a [type=int]
 
 build
 SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-project
+sort
  ├── columns: b:2(int)
  ├── ordering: -1,-2
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1,-2
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.b [type=int]
-      └── variable: t.a [type=int]
+ └── project
+      ├── columns: t.b:2(int) t.a:1(int!null)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.b [type=int]
+           └── variable: t.a [type=int]
 
 # both presentation and ordering
 build
 SELECT a, b, b FROM t ORDER BY c
 ----
-project
+sort
  ├── columns: a:1(int!null) b:2(int) b:2(int)
  ├── ordering: +3
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: +3
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      ├── variable: t.b [type=int]
-      ├── variable: t.b [type=int]
-      └── variable: t.c [type=bool]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int) t.b:2(int) t.c:3(bool)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           ├── variable: t.b [type=int]
+           ├── variable: t.b [type=int]
+           └── variable: t.c [type=bool]
 
 build
 SELECT * FROM t ORDER BY (b, t.*)
@@ -281,38 +269,35 @@ sort
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
-project
+sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2,+1
- ├── select
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: +2,+1
- │    ├── sort
- │    │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    │    ├── ordering: +2,+1
- │    │    └── scan t
- │    │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    └── eq [type=bool]
- │         ├── variable: t.b [type=int]
- │         └── const: 7 [type=int]
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── select
+      │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    ├── scan t
+      │    │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      │    └── eq [type=bool]
+      │         ├── variable: t.b [type=int]
+      │         └── const: 7 [type=int]
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 build
 SELECT a, b FROM t ORDER BY b, a DESC
 ----
-project
+sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2,-1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: +2,-1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      ├── variable: t.a [type=int]
-      └── variable: t.b [type=int]
+ └── project
+      ├── columns: t.a:1(int!null) t.b:2(int)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           ├── variable: t.a [type=int]
+           └── variable: t.b [type=int]
 
 build
 SELECT a, b, a+b AS ab FROM t WHERE b = 7 ORDER BY ab DESC, a
@@ -367,30 +352,28 @@ project
 build
 (((SELECT a FROM t))) ORDER BY a DESC
 ----
-project
+sort
  ├── columns: a:1(int!null)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      └── variable: t.a [type=int]
+ └── project
+      ├── columns: t.a:1(int!null)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           └── variable: t.a [type=int]
 
 build
 (((SELECT a FROM t ORDER BY a DESC)))
 ----
-project
+sort
  ├── columns: a:1(int!null)
  ├── ordering: -1
- ├── sort
- │    ├── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- │    ├── ordering: -1
- │    └── scan t
- │         └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
- └── projections
-      └── variable: t.a [type=int]
+ └── project
+      ├── columns: t.a:1(int!null)
+      ├── scan t
+      │    └── columns: t.a:1(int!null) t.b:2(int) t.c:3(bool)
+      └── projections
+           └── variable: t.a [type=int]
 
 build
 ((SELECT a FROM t ORDER BY a)) ORDER BY a
@@ -712,34 +695,32 @@ TABLE abcd
 build
 SELECT a, b FROM abcd ORDER BY b, c
 ----
-project
+sort
  ├── columns: a:1(int!null) b:2(int)
  ├── ordering: +2,+3
- ├── sort
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- │    ├── ordering: +2,+3
- │    └── scan abcd
- │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- └── projections
-      ├── variable: abcd.a [type=int]
-      ├── variable: abcd.b [type=int]
-      └── variable: abcd.c [type=int]
+ └── project
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int)
+      ├── scan abcd
+      │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      └── projections
+           ├── variable: abcd.a [type=int]
+           ├── variable: abcd.b [type=int]
+           └── variable: abcd.c [type=int]
 
 build
 SELECT a FROM abcd ORDER BY b, c
 ----
-project
+sort
  ├── columns: a:1(int!null)
  ├── ordering: +2,+3
- ├── sort
- │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- │    ├── ordering: +2,+3
- │    └── scan abcd
- │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- └── projections
-      ├── variable: abcd.a [type=int]
-      ├── variable: abcd.b [type=int]
-      └── variable: abcd.c [type=int]
+ └── project
+      ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int)
+      ├── scan abcd
+      │    └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+      └── projections
+           ├── variable: abcd.a [type=int]
+           ├── variable: abcd.b [type=int]
+           └── variable: abcd.c [type=int]
 
 build
 SELECT a FROM abcd ORDER BY a, b, c
@@ -747,11 +728,9 @@ SELECT a FROM abcd ORDER BY a, b, c
 project
  ├── columns: a:1(int!null)
  ├── ordering: +1,+2,+3
- ├── sort
+ ├── scan abcd
  │    ├── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
- │    ├── ordering: +1,+2,+3
- │    └── scan abcd
- │         └── columns: abcd.a:1(int!null) abcd.b:2(int) abcd.c:3(int) abcd.d:4(int)
+ │    └── ordering: +1,+2,+3
  └── projections
       ├── variable: abcd.a [type=int]
       ├── variable: abcd.b [type=int]
