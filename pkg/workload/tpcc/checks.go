@@ -1,15 +1,27 @@
-package main
+// Copyright 2017 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+
+package tpcc
 
 import (
-	"database/sql"
-	"fmt"
-
-	"time"
+	gosql "database/sql"
 
 	"github.com/pkg/errors"
 )
 
-func check3321(db *sql.DB) error {
+func check3321(db *gosql.DB) error {
 	// 3.3.2.1 Entries in the WAREHOUSE and DISTRICT tables must satisfy the relationship:
 	// W_YTD = sum (D_YTD)
 
@@ -34,7 +46,7 @@ WHERE w_ytd != sum_d_ytd
 	return nil
 }
 
-func check3322(db *sql.DB) error {
+func check3322(db *gosql.DB) error {
 	// Entries in the DISTRICT, ORDER, and NEW-ORDER tables must satisfy the relationship:
 	// D_NEXT_O_ID - 1 = max(O_ID) = max(NO_O_ID)
 
@@ -69,7 +81,7 @@ SELECT MAX(o_id) FROM tpcc.order GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
 		}
 
 		if (order != newOrder) || (order != (district - 1)) {
-			return errors.Errorf("inequality at idx %d: order: %d, newOrder: %d, district-1: %d",
+			return errors.Errorf("inequality at idx %d: order: %f, newOrder: %f, district-1: %f",
 				i, order, newOrder, district-1)
 		}
 	}
@@ -93,7 +105,7 @@ SELECT MAX(o_id) FROM tpcc.order GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
 	return nil
 }
 
-func check3323(db *sql.DB) error {
+func check3323(db *gosql.DB) error {
 	// max(NO_O_ID) - min(NO_O_ID) + 1 = # of rows in new_order for each warehouse/district
 	row := db.QueryRow(`
 SELECT COUNT(*) FROM
@@ -114,7 +126,7 @@ SELECT COUNT(*) FROM
 	return nil
 }
 
-func check3324(db *sql.DB) error {
+func check3324(db *gosql.DB) error {
 	// SUM(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
 
 	leftRows, err := db.Query(`
@@ -155,7 +167,7 @@ SELECT COUNT(*) FROM tpcc.order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id,
 	return rightRows.Close()
 }
 
-func check3325(db *sql.DB) error {
+func check3325(db *gosql.DB) error {
 	// We want the symmetric difference between the sets:
 	// (SELECT no_w_id, no_d_id, no_o_id FROM tpcc.new_order)
 	// (SELECT o_w_id, o_d_id, o_id FROM tpcc.order@primary WHERE o_carrier_id IS NULL)
@@ -190,7 +202,7 @@ EXCEPT ALL
 	return secondQuery.Close()
 }
 
-func check3326(db *sql.DB) error {
+func check3326(db *gosql.DB) error {
 	// For any row in the ORDER table, O_OL_CNT must equal the number of rows
 	// in the ORDER-LINE table for the corresponding order defined by
 	// (O_W_ID, O_D_ID, O_ID) = (OL_W_ID, OL_D_ID, OL_O_ID).
@@ -229,7 +241,7 @@ EXCEPT ALL
 	return secondQuery.Close()
 }
 
-func check3327(db *sql.DB) error {
+func check3327(db *gosql.DB) error {
 	// For any row in the ORDER-LINE table, OL_DELIVERY_D is set to a null
 	// date/time if and only if the corresponding row in the ORDER table defined
 	// by (O_W_ID, O_D_ID, O_ID) = (OL_W_ID, OL_D_ID, OL_O_ID) has
@@ -256,7 +268,7 @@ WHERE ol_o_id IS NULL OR o_id IS NULL
 	return nil
 }
 
-func check3328(db *sql.DB) error {
+func check3328(db *gosql.DB) error {
 	// Entries in the WAREHOUSE and HISTORY tables must satisfy the relationship:
 	// W_YTD = SUM(H_AMOUNT) for each warehouse defined by (W_ID = H _W_ID).
 
@@ -282,7 +294,7 @@ SELECT COUNT(*) FROM
 	return nil
 }
 
-func check3329(db *sql.DB) error {
+func check3329(db *gosql.DB) error {
 	// Entries in the DISTRICT and HISTORY tables must satisfy the relationship:
 	// D_YTD=SUM(H_AMOUNT) for each district defined by (D_W_ID,D_ID)=(H_W_ID,H_D_ID)
 
@@ -308,43 +320,22 @@ SELECT COUNT(*) FROM
 	return nil
 }
 
-func checkConsistency(db *sql.DB) bool {
-	type check struct {
-		name      string
-		f         func(db *sql.DB) error
-		expensive bool
+type check struct {
+	name      string
+	f         func(db *gosql.DB) error
+	expensive bool
+}
+
+func allChecks() []check {
+	return []check{
+		{"3.3.2.1", check3321, false},
+		{"3.3.2.2", check3322, false},
+		{"3.3.2.3", check3323, false},
+		{"3.3.2.4", check3324, false},
+		{"3.3.2.5", check3325, false},
+		{"3.3.2.6", check3326, true},
+		{"3.3.2.7", check3327, false},
+		{"3.3.2.8", check3328, false},
+		{"3.3.2.9", check3329, false},
 	}
-
-	checks := []check{
-		{"3.3.2.1 ", check3321, false},
-		{"3.3.2.2 ", check3322, false},
-		{"3.3.2.3 ", check3323, false},
-		{"3.3.2.4 ", check3324, false},
-		{"3.3.2.5 ", check3325, false},
-		{"3.3.2.6 ", check3326, true},
-		{"3.3.2.7 ", check3327, false},
-		{"3.3.2.8 ", check3327, false},
-		{"3.3.2.9 ", check3327, false},
-	}
-	var errorEncountered bool
-
-	// TODO(arjun): We should run each test in a single transaction as currently
-	// we have to shut down load before running the checks.
-
-	for _, check := range checks {
-		if check.expensive && !*expensive {
-			continue
-		}
-		start := time.Now()
-		fmt.Printf(check.name)
-		if err := check.f(db); err != nil {
-			fmt.Printf(": error encountered: '%+v'", err)
-			errorEncountered = true
-		} else {
-			fmt.Printf(" passed")
-		}
-
-		fmt.Printf(" after %f seconds.\n", time.Since(start).Seconds())
-	}
-	return errorEncountered
 }
