@@ -213,7 +213,7 @@ func main() {
 				continue
 			}
 
-			buildOne(svc, o)
+			buildOneCockroach(svc, o)
 		}
 	}
 }
@@ -258,9 +258,9 @@ func buildArchive(svc s3putter, o opts) {
 	}
 }
 
-func buildOne(svc s3putter, o opts) {
+func buildOneCockroach(svc s3putter, o opts) {
 	defer func() {
-		log.Printf("done building: %s", pretty.Sprint(o))
+		log.Printf("done building cockroach: %s", pretty.Sprint(o))
 	}()
 
 	{
