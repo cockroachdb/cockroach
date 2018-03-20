@@ -19,7 +19,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	_ "github.com/lib/pq"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func init() {
@@ -58,8 +62,29 @@ func init() {
 			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock"
 			run(stmtDropConstraint)
 
-			const stmtDelete = "DELETE FROM tpcc.stock"
-			run(stmtDelete)
+			var rows, minWarehouse, maxWarehouse int
+			if err := db.QueryRow("select count(*), min(s_w_id), max(s_w_id) from tpcc.stock").Scan(&rows,
+				&minWarehouse, &maxWarehouse); err != nil {
+				t.Fatalf("failed to get range count: %v", err)
+			}
+
+			deleted := int64(0)
+
+			for i := minWarehouse; i <= maxWarehouse; i++ {
+				t.Progress(float64(deleted) / float64(rows))
+				res, err := db.ExecContext(ctx,
+					"DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
+				if err != nil {
+					return err
+				}
+
+				rowsDeleted, err := res.RowsAffected()
+				if err != nil {
+					return err
+				}
+
+				deleted += rowsDeleted
+			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
 			run(stmtTruncate)
@@ -74,7 +99,42 @@ gc:
 '`
 			run(stmtZone)
 
-			// TODO(tschottdorf): assert that the disk usage drops to "near nothing".
+			// We're waiting a maximum of 5 minutes to makes sure that the drop operations clear the disk.
+			for i := 0; i < 5; i++ {
+				allNodesSpaceCleared := true
+				for j := 1; j <= nodes; j++ {
+					out, err := c.RunWithBuffer(ctx, c.l, j, fmt.Sprintf("du -s {store-dir:%d} | grep -oE '^[0-9]+'", j))
+					if err != nil {
+						return err
+					}
+
+					str := string(out)
+
+					// We need this check because sometimes the first line of the roachprod output is a warning
+					// about adding an ip to a list of known hosts.
+					if strings.Contains(str, "Warning") {
+						str = strings.Split(str, "\n")[1]
+					}
+
+					size, err := strconv.Atoi(strings.TrimSpace(str))
+					if err != nil {
+						return err
+					}
+
+					c.l.printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
+
+					// Return if the size of the directory is less than 100mb
+					if size > 1E8 {
+						allNodesSpaceCleared = allNodesSpaceCleared && false
+					}
+				}
+
+				if allNodesSpaceCleared {
+					break
+				}
+				time.Sleep(time.Minute)
+			}
+
 			return nil
 		})
 		m.Wait()
