@@ -78,6 +78,9 @@ export default function Debug() {
             note="#/reports/network?locality=[regex]"
           />
         </DebugTableRow>
+        <DebugTableRow title="Settings">
+          <DebugTableLink name="Cluster Settings" url="#/reports/settings" />
+        </DebugTableRow>
         <DebugTableRow title="Security">
           <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
           <DebugTableLink

@@ -333,3 +333,19 @@ $reports-table
   &__cell
     white-space normal
     max-width none
+
+.settings-table
+  @extend $reports-table
+  font-size 12px
+
+  &__row
+    text-align left
+    vertical-align top
+    alternating-background white $table-border-color
+
+    &&--header
+      background-color $link-color
+
+  &__cell
+    white-space normal
+    max-width none
