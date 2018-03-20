@@ -47,13 +47,13 @@ type Constraint struct {
 
 // Init initializes the constraint to the columns in the key context and with
 // the given spans.
-func (c *Constraint) Init(keyCtx KeyContext, spans Spans) {
+func (c *Constraint) Init(keyCtx *KeyContext, spans Spans) {
 	for i := 1; i < spans.Count(); i++ {
 		if !spans.Get(i).StartsAfter(keyCtx, spans.Get(i-1)) {
 			panic("spans must be ordered and non-overlapping")
 		}
 	}
-	c.Columns = *keyCtx.Columns
+	c.Columns = keyCtx.Columns
 	c.Spans = spans
 	c.Spans.makeImmutable()
 }
@@ -91,7 +91,7 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 	for leftIndex < left.Count() || rightIndex < right.Count() {
 		if rightIndex < right.Count() {
 			if leftIndex >= left.Count() ||
-				left.Get(leftIndex).Compare(keyCtx, right.Get(rightIndex)) > 0 {
+				left.Get(leftIndex).Compare(&keyCtx, right.Get(rightIndex)) > 0 {
 				// Swap the two sets, so that going forward the current left
 				// span starts before the current right span.
 				left, right = right, left
@@ -124,13 +124,13 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 			// Constraint.
 			var ok bool
 			if leftIndex < left.Count() {
-				if mergeSpan.TryUnionWith(keyCtx, left.Get(leftIndex)) {
+				if mergeSpan.TryUnionWith(&keyCtx, left.Get(leftIndex)) {
 					leftIndex++
 					ok = true
 				}
 			}
 			if rightIndex < right.Count() {
-				if mergeSpan.TryUnionWith(keyCtx, right.Get(rightIndex)) {
+				if mergeSpan.TryUnionWith(&keyCtx, right.Get(rightIndex)) {
 					rightIndex++
 					ok = true
 				}
@@ -173,13 +173,13 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 	result := MakeSpans(left.Count())
 
 	for leftIndex < left.Count() && rightIndex < right.Count() {
-		if left.Get(leftIndex).StartsAfter(keyCtx, right.Get(rightIndex)) {
+		if left.Get(leftIndex).StartsAfter(&keyCtx, right.Get(rightIndex)) {
 			rightIndex++
 			continue
 		}
 
 		mergeSpan := left.Get(leftIndex).Copy()
-		if !mergeSpan.TryIntersectWith(keyCtx, right.Get(rightIndex)) {
+		if !mergeSpan.TryIntersectWith(&keyCtx, right.Get(rightIndex)) {
 			leftIndex++
 			continue
 		}
@@ -187,7 +187,7 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 
 		// Skip past whichever span ends first, or skip past both if they have
 		// the same endpoint.
-		cmp := left.Get(leftIndex).CompareEnds(keyCtx, right.Get(rightIndex))
+		cmp := left.Get(leftIndex).CompareEnds(&keyCtx, right.Get(rightIndex))
 		if cmp <= 0 {
 			leftIndex++
 		}

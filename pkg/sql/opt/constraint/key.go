@@ -104,7 +104,7 @@ func (k Key) Value(nth int) tree.Datum {
 //   (/1/2 - ...] (exclusive start key): ExtendHigh: /1/2/High
 //   [... - /1/2] (inclusive end key)  : ExtendHigh: /1/2/High
 //   [... - /1/2) (exclusive end key)  : ExtendLow : /1/2/Low
-func (k Key) Compare(keyCtx KeyContext, l Key, kext, lext KeyExtension) int {
+func (k Key) Compare(keyCtx *KeyContext, l Key, kext, lext KeyExtension) int {
 	klen := k.Length()
 	llen := l.Length()
 	for i := 0; i < klen && i < llen; i++ {
@@ -172,7 +172,7 @@ func (k Key) Concat(l Key) Key {
 //   Next(/2) = /1
 //
 // The key cannot be empty.
-func (k Key) Next(keyCtx KeyContext) (_ Key, ok bool) {
+func (k Key) Next(keyCtx *KeyContext) (_ Key, ok bool) {
 	// TODO(radu): here we could do a better job: if we know the last value is the
 	// maximum possible value, we could shorten the key; for example
 	//   Next(/1/true) -> /2
@@ -205,7 +205,7 @@ func (k Key) Next(keyCtx KeyContext) (_ Key, ok bool) {
 //   Prev(/1) = /2
 //
 // If this is the minimum possible key, returns EmptyKey.
-func (k Key) Prev(keyCtx KeyContext) (_ Key, ok bool) {
+func (k Key) Prev(keyCtx *KeyContext) (_ Key, ok bool) {
 	col := k.Length() - 1
 	prevVal, ok := keyCtx.Prev(col, k.Value(col))
 	if !ok {
@@ -236,19 +236,19 @@ func (k Key) String() string {
 
 // KeyContext contains the necessary metadata for comparing Keys.
 type KeyContext struct {
-	Columns *Columns
+	Columns Columns
 	EvalCtx *tree.EvalContext
 }
 
 // MakeKeyContext initializes a KeyContext.
 func MakeKeyContext(cols *Columns, evalCtx *tree.EvalContext) KeyContext {
-	return KeyContext{Columns: cols, EvalCtx: evalCtx}
+	return KeyContext{Columns: *cols, EvalCtx: evalCtx}
 }
 
 // Compare two values for a given column.
 // Returns 0 if the values are equal, -1 if a is less than b, or 1 if b is less
 // than a.
-func (c KeyContext) Compare(colIdx int, a, b tree.Datum) int {
+func (c *KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 	cmp := a.Compare(c.EvalCtx, b)
 	if c.Columns.Get(colIdx).Descending() {
 		cmp = -cmp
@@ -258,7 +258,7 @@ func (c KeyContext) Compare(colIdx int, a, b tree.Datum) int {
 
 // Next returns the next value on a given column (for discrete types like
 // integers). See Datum.Next/Prev.
-func (c KeyContext) Next(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
+func (c *KeyContext) Next(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
 	if c.Columns.Get(colIdx).Ascending() {
 		if val.IsMax(c.EvalCtx) {
 			return nil, false
@@ -273,7 +273,7 @@ func (c KeyContext) Next(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
 
 // Prev returns the previous value on a given column (for discrete types like
 // integers). See Datum.Next/Prev.
-func (c KeyContext) Prev(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
+func (c *KeyContext) Prev(colIdx int, val tree.Datum) (_ tree.Datum, ok bool) {
 	if c.Columns.Get(colIdx).Ascending() {
 		if val.IsMin(c.EvalCtx) {
 			return nil, false

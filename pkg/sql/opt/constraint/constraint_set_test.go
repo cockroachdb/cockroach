@@ -232,7 +232,7 @@ type spanTestData struct {
 	spGe1015 Span // [/10/15 - ]
 }
 
-func newSpanTestData(keyCtx KeyContext) *spanTestData {
+func newSpanTestData(keyCtx *KeyContext) *spanTestData {
 	data := &spanTestData{}
 
 	key10 := MakeKey(tree.NewDInt(10))
@@ -263,7 +263,7 @@ func newSpanTestData(keyCtx KeyContext) *spanTestData {
 	return data
 }
 
-func testSet(keyCtx KeyContext, sp *Span) *Set {
+func testSet(keyCtx *KeyContext, sp *Span) *Set {
 	var c Constraint
 	c.Init(keyCtx, SingleSpan(sp))
 	return SingleConstraint(c)
