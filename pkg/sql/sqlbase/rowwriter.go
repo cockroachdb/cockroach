@@ -881,11 +881,9 @@ func (ru *RowUpdater) UpdateRow(
 	// We're deleting indexes in a delete only state. We're bounding this by the number of indexes because inverted
 	// indexed will be handled separately.
 	if ru.DeleteHelper != nil {
-		for i, deletedSecondaryIndexEntry := range deleteOldSecondaryIndexEntries {
+		for _, deletedSecondaryIndexEntry := range deleteOldSecondaryIndexEntries {
 			if traceKV {
-				if i < len(ru.DeleteHelper.Indexes) {
-					log.VEventf(ctx, 2, "Del %s", oldSecondaryIndexEntries[i].Key)
-				}
+				log.VEventf(ctx, 2, "Del %s", deletedSecondaryIndexEntry.Key)
 			}
 			batch.Del(deletedSecondaryIndexEntry.Key)
 		}
@@ -893,6 +891,9 @@ func (ru *RowUpdater) UpdateRow(
 
 	// We're removing all of the inverted index entries from the row being updated.
 	for i := len(ru.Helper.Indexes); i < len(oldSecondaryIndexEntries); i++ {
+		if traceKV {
+			log.VEventf(ctx, 2, "Del %s", oldSecondaryIndexEntries[i].Key)
+		}
 		batch.Del(oldSecondaryIndexEntries[i].Key)
 	}
 
