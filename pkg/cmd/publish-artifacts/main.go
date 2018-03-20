@@ -216,6 +216,15 @@ func main() {
 			buildOneCockroach(svc, o)
 		}
 	}
+
+	if !*isRelease {
+		buildOneWorkload(svc, opts{
+			PkgDir:     pkg.Dir,
+			BucketName: bucketName,
+			Branch:     branch,
+			VersionStr: versionStr,
+		})
+	}
 }
 
 func buildArchive(svc s3putter, o opts) {
@@ -338,6 +347,42 @@ func buildOneCockroach(svc s3putter, o opts) {
 	} else {
 		putRelease(svc, o)
 	}
+	if err := o.Binary.Close(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func buildOneWorkload(svc s3putter, o opts) {
+	defer func() {
+		log.Printf("done building workload: %s", pretty.Sprint(o))
+	}()
+
+	if *isRelease {
+		log.Fatalf("refusing to build workload in release mode")
+	}
+
+	{
+		cmd := exec.Command("make", "bin/workload")
+		cmd.Dir = o.PkgDir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		log.Printf("%s %s", cmd.Env, cmd.Args)
+		if err := cmd.Run(); err != nil {
+			log.Fatalf("%s: %s", cmd.Args, err)
+		}
+	}
+
+	o.Base = "workload"
+	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", o.Base)
+	{
+		var err error
+		o.Binary, err = os.Open(o.AbsolutePath)
+
+		if err != nil {
+			log.Fatalf("os.Open(%s): %s", o.AbsolutePath, err)
+		}
+	}
+	putNonRelease(svc, o)
 	if err := o.Binary.Close(); err != nil {
 		log.Fatal(err)
 	}
