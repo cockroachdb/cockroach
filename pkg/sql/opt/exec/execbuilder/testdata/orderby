@@ -737,10 +737,9 @@ sort                 0  sort    ·         ·            (c)     -c
 exec-explain
 SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render               0  render  ·         ·            (b, c, a)  ·
+render               0  render  ·         ·            (b, c)     ·
  │                   0  ·       render 0  b            ·          ·
  │                   0  ·       render 1  c            ·          ·
- │                   0  ·       render 2  a            ·          ·
  └── sort            1  sort    ·         ·            (a, b, c)  +b,+c
       │              1  ·       order     +b,+c        ·          ·
       └── filter     2  filter  ·         ·            (a, b, c)  ·
@@ -877,7 +876,7 @@ NaN
 1.0
 
 exec-explain
-SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort         0  sort    ·              ·                 (x)  +x
  │           0  ·       order          +x                ·    ·
@@ -886,6 +885,15 @@ sort         0  sort    ·              ·                 (x)  +x
 ·            1  ·       row 0, expr 0  'a'               ·    ·
 ·            1  ·       row 1, expr 0  'b'               ·    ·
 ·            1  ·       row 2, expr 0  'c'               ·    ·
+
+exec-explain
+SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+----
+values  0  values  ·              ·                 (x)  ·
+·       0  ·       size           1 column, 3 rows  ·    ·
+·       0  ·       row 0, expr 0  'a'               ·    ·
+·       0  ·       row 1, expr 0  'b'               ·    ·
+·       0  ·       row 2, expr 0  'c'               ·    ·
 
 # TODO(radu): ordinality not supported
 #exec-explain
@@ -903,26 +911,25 @@ sort         0  sort    ·              ·                 (x)  +x
 # └── ordinality   ·      ·
 #      └── values  ·      ·
 #·                 size   1 column, 3 rows
-
-exec-explain
-SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
-----
-values  0  values  ·              ·                 (x)  ·
-·       0  ·       size           1 column, 3 rows  ·    ·
-·       0  ·       row 0, expr 0  'a'               ·    ·
-·       0  ·       row 1, expr 0  'b'               ·    ·
-·       0  ·       row 2, expr 0  'c'               ·    ·
-
-exec-explain
-SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
-----
-sort         0  sort    ·              ·                 (x)  +x
- │           0  ·       order          +x                ·    ·
- └── values  1  values  ·              ·                 (x)  ·
-·            1  ·       size           1 column, 3 rows  ·    ·
-·            1  ·       row 0, expr 0  'a'               ·    ·
-·            1  ·       row 1, expr 0  'b'               ·    ·
-·            1  ·       row 2, expr 0  'c'               ·    ·
+#
+# Once ordinality is supported these test cases should have a sort node.
+#exec-explain
+#SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x)) WITH ORDINALITY
+#----
+#values  0  values  ·              ·                 (x)  ·
+#·       0  ·       size           1 column, 3 rows  ·    ·
+#·       0  ·       row 0, expr 0  'a'               ·    ·
+#·       0  ·       row 1, expr 0  'b'               ·    ·
+#·       0  ·       row 2, expr 0  'c'               ·    ·
+#
+#exec-explain
+#SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x) WITH ORDINALITY
+#----
+#values  0  values  ·              ·                 (x)  ·
+#·       0  ·       size           1 column, 3 rows  ·    ·
+#·       0  ·       row 0, expr 0  'a'               ·    ·
+#·       0  ·       row 1, expr 0  'b'               ·    ·
+#·       0  ·       row 2, expr 0  'c'               ·    ·
 
 # TODO(radu): DML statements not supported yet.
 ## Check that the ordering of the source does not propagate blindly to RETURNING.
