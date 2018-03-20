@@ -25,9 +25,9 @@ limit
  │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
- │    └── projections [outer=(1,2)]
- │         ├── variable: t.k [type=int, outer=(1)]
- │         └── variable: t.v [type=int, outer=(2)]
+ │    └── projections
+ │         ├── variable: t.k [type=int]
+ │         └── variable: t.v [type=int]
  └── const: 5 [type=int]
 
 build
@@ -36,17 +36,16 @@ SELECT k, v FROM t ORDER BY v FETCH FIRST 5 ROWS ONLY
 limit
  ├── columns: k:1(int!null) v:2(int)
  ├── ordering: +2
- ├── project
+ ├── sort
  │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    ├── ordering: +2
- │    ├── sort
- │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    ├── ordering: +2
- │    │    └── scan t
- │    │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    └── projections [outer=(1,2)]
- │         ├── variable: t.k [type=int, outer=(1)]
- │         └── variable: t.v [type=int, outer=(2)]
+ │    └── project
+ │         ├── columns: t.k:1(int!null) t.v:2(int)
+ │         ├── scan t
+ │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         └── projections
+ │              ├── variable: t.k [type=int]
+ │              └── variable: t.v [type=int]
  └── const: 5 [type=int]
 
 build
@@ -58,9 +57,9 @@ limit
  │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    ├── scan t
  │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    └── projections [outer=(1,2)]
- │         ├── variable: t.k [type=int, outer=(1)]
- │         └── variable: t.v [type=int, outer=(2)]
+ │    └── projections
+ │         ├── variable: t.k [type=int]
+ │         └── variable: t.v [type=int]
  └── const: 3 [type=int]
 
 build
@@ -75,8 +74,8 @@ limit
  │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
- │    └── projections [outer=(1)]
- │         └── variable: t.k [type=int, outer=(1)]
+ │    └── projections
+ │         └── variable: t.k [type=int]
  └── const: 1 [type=int]
 
 build
@@ -94,8 +93,8 @@ limit
  │    │    ├── scan t
  │    │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    │    └── ordering: +1
- │    │    └── projections [outer=(1)]
- │    │         └── variable: t.k [type=int, outer=(1)]
+ │    │    └── projections
+ │    │         └── variable: t.k [type=int]
  │    └── const: 3 [type=int]
  └── const: 1 [type=int]
 
@@ -111,9 +110,9 @@ offset
  │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
- │    └── projections [outer=(1,2)]
- │         ├── variable: t.k [type=int, outer=(1)]
- │         └── variable: t.v [type=int, outer=(2)]
+ │    └── projections
+ │         ├── variable: t.k [type=int]
+ │         └── variable: t.v [type=int]
  └── const: 5 [type=int]
 
 build
@@ -128,8 +127,8 @@ limit
  │    ├── scan t
  │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
  │    │    └── ordering: +1
- │    └── projections [outer=(1)]
- │         └── variable: t.k [type=int, outer=(1)]
+ │    └── projections
+ │         └── variable: t.k [type=int]
  └── const: 2 [type=int]
 
 build
@@ -148,23 +147,22 @@ SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 limit
  ├── columns: column4:4(decimal)
  ├── ordering: -2
- ├── project
- │    ├── columns: column4:4(decimal) t.v:2(int)
+ ├── sort
+ │    ├── columns: t.v:2(int) column4:4(decimal)
  │    ├── ordering: -2
- │    ├── sort
- │    │    ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
- │    │    ├── ordering: -2
- │    │    └── group-by
- │    │         ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
- │    │         ├── grouping columns: t.k:1(int!null) t.v:2(int)
- │    │         ├── scan t
- │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │         └── aggregations [outer=(3)]
- │    │              └── function: sum [type=decimal, outer=(3)]
- │    │                   └── variable: t.w [type=int, outer=(3)]
- │    └── projections [outer=(2,4)]
- │         ├── variable: column4 [type=decimal, outer=(4)]
- │         └── variable: t.v [type=int, outer=(2)]
+ │    └── project
+ │         ├── columns: column4:4(decimal) t.v:2(int)
+ │         ├── group-by
+ │         │    ├── columns: t.k:1(int!null) t.v:2(int) column4:4(decimal)
+ │         │    ├── grouping columns: t.k:1(int!null) t.v:2(int)
+ │         │    ├── scan t
+ │         │    │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │         │    └── aggregations
+ │         │         └── function: sum [type=decimal]
+ │         │              └── variable: t.w [type=int]
+ │         └── projections
+ │              ├── variable: column4 [type=decimal]
+ │              └── variable: t.v [type=int]
  └── const: 10 [type=int]
 
 build
@@ -281,17 +279,16 @@ project
  ├── columns: k:1(int!null)
  ├── limit
  │    ├── columns: t.k:1(int!null) t.v:2(int)
- │    ├── project
+ │    ├── sort
  │    │    ├── columns: t.k:1(int!null) t.v:2(int)
  │    │    ├── ordering: +2
- │    │    ├── sort
- │    │    │    ├── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    │    ├── ordering: +2
- │    │    │    └── scan t
- │    │    │         └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
- │    │    └── projections [outer=(1,2)]
- │    │         ├── variable: t.k [type=int, outer=(1)]
- │    │         └── variable: t.v [type=int, outer=(2)]
+ │    │    └── project
+ │    │         ├── columns: t.k:1(int!null) t.v:2(int)
+ │    │         ├── scan t
+ │    │         │    └── columns: t.k:1(int!null) t.v:2(int) t.w:3(int)
+ │    │         └── projections
+ │    │              ├── variable: t.k [type=int]
+ │    │              └── variable: t.v [type=int]
  │    └── const: 10 [type=int]
- └── projections [outer=(1)]
-      └── variable: t.k [type=int, outer=(1)]
+ └── projections
+      └── variable: t.k [type=int]

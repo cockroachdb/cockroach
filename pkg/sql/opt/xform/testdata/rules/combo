@@ -20,7 +20,7 @@ TABLE b
       └── x int not null
 
 # --------------------------------------------------
-# Use optstep.
+# Use optsteps.
 # --------------------------------------------------
 optsteps
 SELECT s FROM a INNER JOIN b ON a.x=b.x AND i+1=10

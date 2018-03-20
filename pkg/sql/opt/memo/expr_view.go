@@ -171,14 +171,6 @@ func (ev ExprView) Metadata() *opt.Metadata {
 	return ev.mem.metadata
 }
 
-// String returns a string representation of this expression for testing and
-// debugging.
-func (ev ExprView) String() string {
-	tp := treeprinter.New()
-	ev.format(tp)
-	return tp.String()
-}
-
 func (ev ExprView) lookupChildGroup(nth int) *group {
 	return ev.mem.group(ev.ChildGroup(nth))
 }
@@ -187,83 +179,61 @@ func (ev ExprView) lookupBestExpr() *BestExpr {
 	return ev.mem.group(ev.group).bestExpr(ev.best)
 }
 
-func (ev ExprView) format(tp treeprinter.Node) {
+// --------------------------------------------------------------------
+// String representation.
+// --------------------------------------------------------------------
+
+// ExprFmtFlags controls which properties of the expression are shown in
+// formatted output.
+type ExprFmtFlags int
+
+// HasFlags tests whether the given flags are all set.
+func (f ExprFmtFlags) HasFlags(subset ExprFmtFlags) bool {
+	return f&subset == subset
+}
+
+const (
+	// ExprFmtShowAll shows all properties of the expression.
+	ExprFmtShowAll ExprFmtFlags = 0
+
+	// ExprFmtHideOuterCols does not show outer columns in the output.
+	ExprFmtHideOuterCols ExprFmtFlags = 1 << iota
+
+	// ExprFmtHideStats does not show statistics in the output.
+	ExprFmtHideStats
+
+	// ExprFmtHideCost does not show expression cost in the output.
+	ExprFmtHideCost
+
+	// ExprFmtHideAll shows only the most basic properties of the expression.
+	ExprFmtHideAll = ExprFmtHideStats | ExprFmtHideCost | ExprFmtHideOuterCols
+)
+
+// String returns a string representation of this expression for testing and
+// debugging. The output shows all properties of the expression.
+func (ev ExprView) String() string {
+	return ev.FormatString(ExprFmtShowAll)
+}
+
+// FormatString returns a string representation of this expression for testing
+// and debugging. The given flags control which properties are shown.
+func (ev ExprView) FormatString(flags ExprFmtFlags) string {
+	tp := treeprinter.New()
+	ev.format(tp, flags)
+	return tp.String()
+}
+
+// format constructs a treeprinter view of this expression for testing and
+// debugging. The given flags control which properties are added.
+func (ev ExprView) format(tp treeprinter.Node, flags ExprFmtFlags) {
 	if ev.IsScalar() {
-		ev.formatScalar(tp)
+		ev.formatScalar(tp, flags)
 	} else {
-		ev.formatRelational(tp)
+		ev.formatRelational(tp, flags)
 	}
 }
 
-func (ev ExprView) formatScalar(tp treeprinter.Node) {
-	var buf bytes.Buffer
-
-	fmt.Fprintf(&buf, "%v", ev.op)
-	ev.formatPrivate(&buf, ev.Private())
-
-	// Don't panic if scalar properties don't yet exist when printing
-	// expression.
-	scalar := ev.Logical().Scalar
-	if scalar == nil {
-		buf.WriteString(" [type=undefined]")
-	} else {
-		showType := true
-		switch ev.Operator() {
-		case opt.ProjectionsOp, opt.AggregationsOp:
-			// Don't show the type of these ops because they are simply tuple
-			// types of their children's types, and the types of children are
-			// already listed.
-			showType = false
-		}
-
-		hasOuterCols := !ev.Logical().Scalar.OuterCols.Empty()
-
-		if showType || hasOuterCols {
-			buf.WriteString(" [")
-			if showType {
-				fmt.Fprintf(&buf, "type=%s", scalar.Type)
-				if hasOuterCols {
-					buf.WriteString(", ")
-				}
-			}
-			if hasOuterCols {
-				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
-			}
-			buf.WriteString("]")
-
-		}
-	}
-
-	tp = tp.Child(buf.String())
-	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		child.format(tp)
-	}
-}
-
-func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
-	switch ev.op {
-	case opt.VariableOp:
-		colIndex := private.(opt.ColumnIndex)
-		private = ev.mem.metadata.ColumnLabel(colIndex)
-
-	case opt.NullOp:
-		// Private is redundant with logical type property.
-		private = nil
-
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		// The private data of these ops was already used to print the output
-		// columns for their containing op (Project or GroupBy), so no need to
-		// print again.
-		private = nil
-	}
-
-	if private != nil {
-		fmt.Fprintf(buf, ": %v", private)
-	}
-}
-
-func (ev ExprView) formatRelational(tp treeprinter.Node) {
+func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 	var buf bytes.Buffer
 
 	fmt.Fprintf(&buf, "%v", ev.op)
@@ -316,8 +286,8 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 		groupingColSet := *ev.Private().(*opt.ColSet)
 		logProps.FormatColSet("grouping columns:", groupingColSet, ev.Metadata(), tp)
 
-	// Special-case handling for set operators to show the left and right
-	// input columns that correspond to the output columns.
+		// Special-case handling for set operators to show the left and right
+		// input columns that correspond to the output columns.
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		colMap := ev.Private().(*SetOpColMap)
@@ -325,12 +295,87 @@ func (ev ExprView) formatRelational(tp treeprinter.Node) {
 		logProps.FormatColList("right columns:", colMap.Right, ev.Metadata(), tp)
 	}
 
+	if !flags.HasFlags(ExprFmtHideStats) {
+		tp.Childf("stats: [rows=%d]", logProps.Relational.Stats.RowCount)
+	}
+
+	if !flags.HasFlags(ExprFmtHideCost) && ev.best != normBestOrdinal {
+		tp.Childf("cost: %.2f", ev.lookupBestExpr().cost)
+	}
+
 	if physProps.Ordering.Defined() {
 		tp.Childf("ordering: %s", physProps.Ordering.String())
 	}
 
 	for i := 0; i < ev.ChildCount(); i++ {
-		ev.Child(i).format(tp)
+		ev.Child(i).format(tp, flags)
+	}
+}
+
+func (ev ExprView) formatScalar(tp treeprinter.Node, flags ExprFmtFlags) {
+	var buf bytes.Buffer
+
+	fmt.Fprintf(&buf, "%v", ev.op)
+	ev.formatPrivate(&buf, ev.Private())
+
+	// Don't panic if scalar properties don't yet exist when printing
+	// expression.
+	scalar := ev.Logical().Scalar
+	if scalar == nil {
+		buf.WriteString(" [type=undefined]")
+	} else {
+		showType := true
+		switch ev.Operator() {
+		case opt.ProjectionsOp, opt.AggregationsOp:
+			// Don't show the type of these ops because they are simply tuple
+			// types of their children's types, and the types of children are
+			// already listed.
+			showType = false
+		}
+
+		hasOuterCols := !flags.HasFlags(ExprFmtHideOuterCols) && !ev.Logical().Scalar.OuterCols.Empty()
+
+		if showType || hasOuterCols {
+			buf.WriteString(" [")
+			if showType {
+				fmt.Fprintf(&buf, "type=%s", scalar.Type)
+				if hasOuterCols {
+					buf.WriteString(", ")
+				}
+			}
+			if hasOuterCols {
+				fmt.Fprintf(&buf, "outer=%s", scalar.OuterCols)
+			}
+			buf.WriteString("]")
+		}
+	}
+
+	tp = tp.Child(buf.String())
+	for i := 0; i < ev.ChildCount(); i++ {
+		child := ev.Child(i)
+		child.format(tp, flags)
+	}
+}
+
+func (ev ExprView) formatPrivate(buf *bytes.Buffer, private interface{}) {
+	switch ev.op {
+	case opt.VariableOp:
+		colIndex := private.(opt.ColumnIndex)
+		private = ev.mem.metadata.ColumnLabel(colIndex)
+
+	case opt.NullOp:
+		// Private is redundant with logical type property.
+		private = nil
+
+	case opt.ProjectionsOp, opt.AggregationsOp:
+		// The private data of these ops was already used to print the output
+		// columns for their containing op (Project or GroupBy), so no need to
+		// print again.
+		private = nil
+	}
+
+	if private != nil {
+		fmt.Fprintf(buf, ": %v", private)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
@@ -27,7 +28,15 @@ import (
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
 func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/*")
+	runDataDrivenTest(t, "testdata/physprops/*", memo.ExprFmtHideAll)
+}
+
+// TestCoster files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/sort"
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestCoster/scan"
+//   ...
+func TestCoster(t *testing.T) {
+	runDataDrivenTest(t, "testdata/coster/*", memo.ExprFmtShowAll)
 }
 
 // runDataDrivenTest runs data-driven testcases of the form
@@ -63,7 +72,7 @@ func TestPhysicalPropsFactory(t *testing.T) {
 //    Builds an expression tree from a SQL query, fully optimizes it using the
 //    memo, and then outputs the memo containing the forest of trees.
 //
-func runDataDrivenTest(t *testing.T, testdataGlob string) {
+func runDataDrivenTest(t *testing.T, testdataGlob string, fmtFlags memo.ExprFmtFlags) {
 	for _, path := range testutils.GetTestFiles(t, testdataGlob) {
 		catalog := testutils.NewTestCatalog()
 		t.Run(filepath.Base(path), func(t *testing.T) {
@@ -78,17 +87,17 @@ func runDataDrivenTest(t *testing.T, testdataGlob string) {
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
-					return ev.String()
+					return ev.FormatString(fmtFlags)
 
 				case "opt":
 					ev, err := tester.Optimize()
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
-					return ev.String()
+					return ev.FormatString(fmtFlags)
 
 				case "optsteps":
-					result, err := tester.OptSteps()
+					result, err := tester.OptSteps(fmtFlags)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}

@@ -59,6 +59,11 @@ type BestExpr struct {
 	// remainder stores any additional children once the initial array is full.
 	// This will only be used for operators that have a list operand.
 	remainder []BestExprID
+
+	// cost is the estimated execution cost for this expression. The best
+	// expression for a given group and set of physical properties is the
+	// expression with the lowest cost.
+	cost Cost
 }
 
 // MakeBestExpr constructs a new candidate BestExpr for the given expression,
@@ -66,7 +71,12 @@ type BestExpr struct {
 // group.RatchetBestExpr in order to check whether it has a lower cost than
 // the current best expression for the group.
 func MakeBestExpr(op opt.Operator, eid ExprID, required PhysicalPropsID) BestExpr {
-	return BestExpr{op: op, eid: eid, required: required}
+	return BestExpr{op: op, eid: eid, required: required, cost: MaxCost}
+}
+
+// Operator returns the type of the expression.
+func (be *BestExpr) Operator() opt.Operator {
+	return be.op
 }
 
 // Required is the set of physical properties that must be provided by this
@@ -74,6 +84,15 @@ func MakeBestExpr(op opt.Operator, eid ExprID, required PhysicalPropsID) BestExp
 // cannot be the best expression, no matter how low its cost.
 func (be *BestExpr) Required() PhysicalPropsID {
 	return be.required
+}
+
+// SetCost updates the cost of the best expression. This is used by the coster
+// to set the cost of a candidate best expression.
+func (be *BestExpr) SetCost(cost Cost) {
+	if be.cost != MaxCost {
+		panic("SetCost should only be used once to set the cost")
+	}
+	be.cost = cost
 }
 
 // ChildCount returns the number of children added to the best expression.
@@ -90,6 +109,9 @@ func (be *BestExpr) Child(nth int) BestExprID {
 	if nth < int(be.initialCount) {
 		return be.initial[nth]
 	}
+
+	// Remainder slice is only used if there are more operands than
+	// opt.MaxOperands.
 	return be.remainder[nth-opt.MaxOperands]
 }
 
@@ -118,4 +140,12 @@ func (be *BestExpr) Private(mem *Memo) interface{} {
 // BestExpr.
 func (be *BestExpr) initialized() bool {
 	return be.required != 0
+}
+
+// ratchetCost overwrites this expression with the candidate expression if it
+// has a lower cost.
+func (be *BestExpr) ratchetCost(candidate *BestExpr) {
+	if candidate.cost.Less(be.cost) {
+		*be = *candidate
+	}
 }

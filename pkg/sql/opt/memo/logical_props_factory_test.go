@@ -28,7 +28,7 @@ import (
 )
 
 func TestLogicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/logprops/*")
+	runDataDrivenTest(t, "testdata/logprops/*", memo.ExprFmtHideCost)
 }
 
 // Test joins that cannot yet be tested using SQL syntax + optimizer.

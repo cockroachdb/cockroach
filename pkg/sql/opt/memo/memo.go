@@ -258,10 +258,18 @@ func (m *Memo) EnsureBestExpr(group GroupID, required PhysicalPropsID) BestExprI
 // RatchetBestExpr overwrites the existing best expression with the given id if
 // the candidate expression has a lower cost.
 func (m *Memo) RatchetBestExpr(best BestExprID, candidate *BestExpr) {
-	m.group(best.group).ratchetBestExpr(best, candidate)
+	m.bestExpr(best).ratchetCost(candidate)
+}
+
+// BestExprCost returns the estimated cost of the given best expression.
+func (m *Memo) BestExprCost(best BestExprID) Cost {
+	return m.bestExpr(best).cost
 }
 
 // bestExpr returns the best expression with the given id.
+// NOTE: The returned best expression is only valid until the next call to
+//       EnsureBestExpr, since that may trigger a resize of the bestExprs slice
+//       in the group.
 func (m *Memo) bestExpr(best BestExprID) *BestExpr {
 	return m.groups[best.group].bestExpr(best.ordinal)
 }
@@ -401,7 +409,7 @@ func (m *Memo) formatBestExprSet(mgrp *group, tp treeprinter.Node) {
 		// Don't show best expressions for scalar groups because they're not too
 		// interesting.
 		if !isScalarLookup[sort.best.op] {
-			child := tp.Childf("\"%s\" [cost=0.0]", sort.fingerprint)
+			child := tp.Childf("\"%s\" [cost=%.2f]", sort.fingerprint, sort.best.cost)
 			m.formatBestExpr(sort.best, &buf)
 			child.Childf("best: %s", buf.String())
 		}

@@ -17,8 +17,6 @@ package memo
 import (
 	"fmt"
 	"math"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 )
 
 // GroupID identifies a memo group. Groups have numbers greater than 0; a
@@ -103,7 +101,7 @@ func (g *group) bestExprCount() int {
 	return 1 + len(g.otherBestExprs)
 }
 
-// BestExpr returns the nth BestExpr in the group. This method is used in
+// bestExpr returns the nth BestExpr in the group. This method is used in
 // concert with bestExprCount to iterate over the expressions in the group:
 //   for i := 0; i < g.bestExprCount(); i++ {
 //     e := g.BestExpr(i)
@@ -125,6 +123,7 @@ func (g *group) ensureBestExpr(required PhysicalPropsID) BestExprID {
 	// Handle case where firstBestExpr is not yet in use.
 	if !g.firstBestExpr.initialized() {
 		g.firstBestExpr.required = required
+		g.firstBestExpr.cost = MaxCost
 		return BestExprID{group: g.id, ordinal: 0}
 	}
 
@@ -143,17 +142,6 @@ func (g *group) ensureBestExpr(required PhysicalPropsID) BestExprID {
 		panic(fmt.Sprintf("exceeded max number of expressions in group: %+v", g))
 	}
 
-	g.otherBestExprs = append(g.otherBestExprs, BestExpr{required: required})
+	g.otherBestExprs = append(g.otherBestExprs, BestExpr{required: required, cost: MaxCost})
 	return BestExprID{group: g.id, ordinal: bestOrdinal(ordinal)}
-}
-
-// RatchetBestExpr overwrites the existing best expression with the given id if
-// the candidate expression has a lower cost.
-// TODO(andyk): Currently, there is no costing function, so just assume that
-//              the first expression is the lowest cost.
-func (g *group) ratchetBestExpr(best BestExprID, candidate *BestExpr) {
-	be := g.bestExpr(best.ordinal)
-	if be.op == opt.UnknownOp {
-		*be = *candidate
-	}
 }
