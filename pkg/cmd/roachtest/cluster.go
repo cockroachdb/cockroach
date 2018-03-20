@@ -196,6 +196,17 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 	return nil
 }
 
+func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, error) {
+	l.printf("> %s\n", strings.Join(args, " "))
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, errors.Wrapf(err, `%s`, strings.Join(args, ` `))
+	}
+	return out, nil
+}
+
 func makeClusterName(t testI) string {
 	if clusterName != "" {
 		return clusterName
@@ -620,6 +631,15 @@ func (c *cluster) RunE(ctx context.Context, node int, args ...string) error {
 
 // RunL runs a command on the specified node, returning an error.
 func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string) error {
+	if err := c.preRunChecks(); err != nil {
+		return err
+	}
+	return execCmd(ctx, l,
+		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
+}
+
+// preRunChecks runs checks to see if it makes sense to run a command.
+func (c *cluster) preRunChecks() error {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return errors.New("test already failed")
@@ -627,7 +647,19 @@ func (c *cluster) RunL(ctx context.Context, l *logger, node int, args ...string)
 	if atomic.LoadInt32(&interrupted) == 1 {
 		return errors.New("interrupted")
 	}
-	return execCmd(ctx, l,
+
+	return nil
+}
+
+// RunWithBuffer runs a command on the specified node, returning the resulting combined stderr
+// and stdout or an error.
+func (c *cluster) RunWithBuffer(
+	ctx context.Context, l *logger, node int, args ...string,
+) ([]byte, error) {
+	if err := c.preRunChecks(); err != nil {
+		return nil, err
+	}
+	return execCmdWithBuffer(ctx, l,
 		append([]string{"roachprod", "ssh", c.makeNodes(c.Node(node)), "--"}, args...)...)
 }
 
