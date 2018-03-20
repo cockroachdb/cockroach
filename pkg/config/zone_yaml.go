@@ -15,7 +15,7 @@
 package config
 
 import (
-	fmt "fmt"
+	"fmt"
 	"runtime/debug"
 	"sort"
 	"strings"
