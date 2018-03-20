@@ -2425,6 +2425,7 @@ func (r *Replica) executeAdminBatch(
 	if pErr != nil {
 		return nil, pErr
 	}
+	// Note there is no need to limit transaction max timestamp on admin requests.
 
 	var resp roachpb.Response
 	switch tArgs := args.(type) {
@@ -2487,6 +2488,61 @@ func (r *Replica) executeAdminBatch(
 	return br, nil
 }
 
+// limitTxnMaxTimestamp limits the batch transaction's max timestamp
+// so that it respects any timestamp already observed on this node.
+// This prevents unnecessary uncertainty interval restarts caused by
+// reading a value written at a timestamp between txn.Timestamp and
+// txn.MaxTimestamp. The replica lease's start time is also taken into
+// consideration to ensure that a lease transfer does not result in
+// the observed timestamp for this node being inapplicable to data
+// previously written by the former leaseholder. To wit:
+//
+// 1. put(k on leaseholder n1), gateway chooses t=1.0
+// 2. begin; read(unrelated key on n2); gateway chooses t=0.98
+// 3. pick up observed timestamp for n2 of t=0.99
+// 4. n1 transfers lease for range with k to n2 @ t=1.1
+// 5. read(k) on leaseholder n2 at OrigTimestamp=0.98 should get
+//    ReadWithinUncertaintyInterval because of the write in step 1, so
+//    even though we observed n2's timestamp in step 3 we must expand
+//    the uncertainty interval to the lease's start time, which is
+//    guaranteed to be greater than any write which occurred under
+//    the previous leaseholder.
+func (r *Replica) limitTxnMaxTimestamp(
+	ctx context.Context, ba *roachpb.BatchRequest, status LeaseStatus,
+) {
+	if ba.Txn == nil {
+		return
+	}
+	// For calls that read data within a txn, we keep track of timestamps
+	// observed from the various participating nodes' HLC clocks. If we have
+	// a timestamp on file for this Node which is smaller than MaxTimestamp,
+	// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
+	// OrigTimestamp, we effectively can't see uncertainty restarts anymore.
+	obsTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID)
+	if !ok {
+		return
+	}
+	// If the lease is valid, we use the greater of the observed
+	// timestamp and the lease start time, up to the max timestamp. This
+	// ensures we avoid incorrect assumptions about when data was
+	// written, in absolute time on a different node, which held the
+	// lease before this replica acquired it.
+	if status.State == LeaseState_VALID {
+		obsTS.Forward(status.Lease.Start)
+	}
+	if obsTS.Less(ba.Txn.MaxTimestamp) {
+		// Copy-on-write to protect others we might be sharing the Txn with.
+		shallowTxn := *ba.Txn
+		// The uncertainty window is [OrigTimestamp, maxTS), so if that window
+		// is empty, there won't be any uncertainty restarts.
+		if !ba.Txn.OrigTimestamp.Less(obsTS) {
+			log.Event(ctx, "read has no clock uncertainty")
+		}
+		shallowTxn.MaxTimestamp.Backward(obsTS)
+		ba.Txn = &shallowTxn
+	}
+}
+
 // executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
@@ -2494,11 +2550,13 @@ func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// If the read is not inconsistent, the read requires the range lease.
+	var status LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
-		if _, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
+		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			return nil, pErr
 		}
 	}
+	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
 	spans, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
@@ -2698,18 +2756,19 @@ func (r *Replica) tryExecuteWriteBatch(
 	}()
 
 	var lease roachpb.Lease
+	var status LeaseStatus
 	// For lease commands, use the provided previous lease for verification.
 	if ba.IsSingleSkipLeaseCheckRequest() {
 		lease = ba.GetPrevLeaseForLeaseRequest()
 	} else {
 		// Other write commands require that this replica has the range
 		// lease.
-		var status LeaseStatus
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
 			return nil, pErr, proposalNoRetry
 		}
 		lease = status.Lease
 	}
+	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp

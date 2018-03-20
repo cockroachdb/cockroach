@@ -650,7 +650,7 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 	ambient := log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer}
 	m.distSenders[idx] = kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx: ambient,
-		Clock:      m.clock,
+		Clock:      m.clocks[idx],
 		RangeDescriptorDB: mtcRangeDescriptorDB{
 			multiTestContext: m,
 			ds:               &m.distSenders[idx],
@@ -664,12 +664,12 @@ func (m *multiTestContext) populateDB(idx int, stopper *stop.Stopper) {
 		ambient,
 		m.storeConfig.Settings,
 		m.distSenders[idx],
-		m.clock,
+		m.clocks[idx],
 		false,
 		stopper,
 		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	m.dbs[idx] = client.NewDB(tcsFactory, m.clock)
+	m.dbs[idx] = client.NewDB(tcsFactory, m.clocks[idx])
 }
 
 func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.NodeLiveness) {
@@ -678,7 +678,7 @@ func (m *multiTestContext) populateStorePool(idx int, nodeLiveness *storage.Node
 		log.AmbientContext{Tracer: m.storeConfig.Settings.Tracer},
 		m.storeConfig.Settings,
 		m.gossips[idx],
-		m.clock,
+		m.clocks[idx],
 		storage.MakeStorePoolNodeLivenessFunc(nodeLiveness),
 		/* deterministic */ false,
 	)
@@ -831,7 +831,7 @@ func (m *multiTestContext) addStore(idx int) {
 		ch: make(chan struct{}),
 	}
 	m.nodeLivenesses[idx].StartHeartbeat(ctx, stopper, func(ctx context.Context) {
-		now := m.clock.Now()
+		now := m.clocks[idx].Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
@@ -924,7 +924,7 @@ func (m *multiTestContext) restartStoreWithoutHeartbeat(i int) {
 	m.transport.GetCircuitBreaker(m.idents[i].NodeID).Reset()
 	m.mu.Unlock()
 	cfg.NodeLiveness.StartHeartbeat(ctx, stopper, func(ctx context.Context) {
-		now := m.clock.Now()
+		now := m.clocks[i].Now()
 		if err := store.WriteLastUpTimestamp(ctx, now); err != nil {
 			log.Warning(ctx, err)
 		}
@@ -1122,7 +1122,7 @@ func (m *multiTestContext) unreplicateRangeNonFatal(rangeID roachpb.RangeID, des
 func (m *multiTestContext) readIntFromEngines(key roachpb.Key) []int64 {
 	results := make([]int64, len(m.engines))
 	for i, eng := range m.engines {
-		val, _, err := engine.MVCCGet(context.Background(), eng, key, m.clock.Now(), true, nil)
+		val, _, err := engine.MVCCGet(context.Background(), eng, key, m.clocks[i].Now(), true, nil)
 		if err != nil {
 			log.VEventf(context.TODO(), 1, "engine %d: error reading from key %s: %s", i, key, err)
 		} else if val == nil {
