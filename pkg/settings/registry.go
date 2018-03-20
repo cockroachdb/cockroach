@@ -81,3 +81,41 @@ var ReadableTypes = map[string]string{
 	"e": "enumeration",
 	"m": "custom validation",
 }
+
+// safeToReportSettings are the names of settings which we want reported with
+// their values, regardless of their type -- usually only numeric/duration/bool
+// settings are reported to avoid including potentially sensitive info that may
+// appear in strings or byte/proto/statemachine settings.
+var safeToReportSettings = map[string]struct{}{
+	"version": {},
+}
+
+// SanitizedValue returns a string representation of the value for settings
+// types the are not considered sensitive (numbers, bools, etc) or
+// <redacted> for those with values could store sensitive things (i.e. strings).
+func SanitizedValue(name string, values *Values) string {
+	if setting, ok := Lookup(name); ok {
+		if _, ok := safeToReportSettings[name]; ok {
+			return setting.String(values)
+		}
+		// for settings with types that can't be sensitive, report values.
+		switch setting.(type) {
+		case *IntSetting,
+			*FloatSetting,
+			*ByteSizeSetting,
+			*DurationSetting,
+			*BoolSetting,
+			*EnumSetting:
+			return setting.String(values)
+		case *StringSetting:
+			if setting.String(values) == "" {
+				return ""
+			}
+			return "<redacted>"
+		default:
+			return "<redacted>"
+		}
+	} else {
+		return "<unknown>"
+	}
+}

@@ -410,13 +410,13 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("expected %d changed settings, got %d: %v", expected, actual, r.last.AlteredSettings)
 	}
 	for key, expected := range map[string]string{
-		"cluster.organization":                     "<non-default>",
+		"cluster.organization":                     "<redacted>",
 		"diagnostics.reporting.enabled":            "true",
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "20s",
 		"trace.debug.enable":                       "false",
 		"version":                                  "2.0-1",
-		"cluster.secret":                           "<non-default>",
+		"cluster.secret":                           "<redacted>",
 	} {
 		if got, ok := r.last.AlteredSettings[key]; !ok {
 			t.Fatalf("expected report of altered setting %q", key)
