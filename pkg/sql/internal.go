@@ -18,8 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -95,36 +93,6 @@ func (ie InternalExecutor) QueryRows(
 		return err
 	})
 	return rows, cols, err
-}
-
-// GetTableSpan gets the key span for a SQL table, including any indices.
-func (ie *InternalExecutor) GetTableSpan(
-	ctx context.Context, user string, txn *client.Txn, dbName, tableName string,
-) (roachpb.Span, error) {
-	// Lookup the table ID.
-	p, cleanup := newInternalPlanner(
-		"get-table-span", txn, user, ie.ExecCfg.LeaseManager.memMetrics, ie.ExecCfg)
-	defer cleanup()
-	ie.initSession(p)
-
-	tn := tree.MakeTableName(tree.Name(dbName), tree.Name(tableName))
-	var desc *TableDescriptor
-	var err error
-	// We avoid the cache because we want to be able to inspect spans
-	// without blocking on a lease.
-	p.runWithOptions(resolveFlags{allowAdding: true, skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, &tn, true /*required*/, anyDescType)
-	})
-	if err != nil {
-		return roachpb.Span{}, err
-	}
-	tableID := desc.ID
-
-	// Determine table data span.
-	tablePrefix := keys.MakeTablePrefix(uint32(tableID))
-	tableStartKey := roachpb.Key(tablePrefix)
-	tableEndKey := tableStartKey.PrefixEnd()
-	return roachpb.Span{Key: tableStartKey, EndKey: tableEndKey}, nil
 }
 
 func (ie *InternalExecutor) initSession(p *planner) {
