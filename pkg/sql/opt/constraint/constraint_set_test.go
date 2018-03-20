@@ -17,13 +17,14 @@ package constraint
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 func TestConstraintSetIntersect(t *testing.T) {
-	keyCtx := testKeyContext(1, 2)
-	evalCtx := keyCtx.EvalCtx
+	kc1 := testKeyContext(1)
+	kc2 := testKeyContext(2)
+	kc12 := testKeyContext(1, 2)
+	evalCtx := kc1.EvalCtx
 
 	test := func(cs *Set, expected string) {
 		t.Helper()
@@ -32,15 +33,15 @@ func TestConstraintSetIntersect(t *testing.T) {
 		}
 	}
 
-	data := newSpanTestData(keyCtx)
+	data := newSpanTestData(kc12)
 
 	// Simple AND case.
 	// @1 > 20
-	gt20 := NewForColumn(1, &data.spGt20)
+	gt20 := testSet(kc1, &data.spGt20)
 	test(gt20, "/1: (/20 - ]\n")
 
 	// @1 <= 40
-	le40 := NewForColumn(1, &data.spLe40)
+	le40 := testSet(kc1, &data.spLe40)
 	test(le40, "/1: [ - /40]\n")
 
 	// @1 > 20 AND @1 <= 40
@@ -51,7 +52,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 
 	// Include constraint on multiple columns.
 	// (@1, @2) >= (10, 15)
-	gt1015 := NewForColumns([]opt.OrderingColumn{1, 2}, &data.spGe1015)
+	gt1015 := testSet(kc12, &data.spGe1015)
 	test(gt1015, "/1/2: [/10/15 - ]\n")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40
@@ -66,7 +67,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/1/2: [/10/15 - ]\n")
 
 	// (@1, @2) >= (10, 15) AND @1 <= 40 AND @2 < 80
-	lt80 := NewForColumn(2, &data.spLt80)
+	lt80 := testSet(kc2, &data.spLt80)
 	multi3 := lt80.Intersect(evalCtx, multi2)
 	test(multi3, ""+
 		"/1: [ - /40]\n"+
@@ -80,7 +81,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/2: [ - /80)\n")
 
 	// Mismatched number of constraints in each set.
-	eq10 := NewForColumn(1, &data.spEq10)
+	eq10 := testSet(kc1, &data.spEq10)
 	mismatched := eq10.Intersect(evalCtx, multi3)
 	test(mismatched, ""+
 		"/1: [/10 - /10]\n"+
@@ -94,7 +95,7 @@ func TestConstraintSetIntersect(t *testing.T) {
 		"/2: [ - /80)\n")
 
 	// Multiple intersecting constraints on different columns.
-	diffCols := eq10.Intersect(evalCtx, NewForColumn(2, &data.spGt20))
+	diffCols := eq10.Intersect(evalCtx, testSet(kc2, &data.spGt20))
 	res := diffCols.Intersect(evalCtx, multi3)
 	test(res, ""+
 		"/1: [/10 - /10]\n"+
@@ -127,9 +128,11 @@ func TestConstraintSetIntersect(t *testing.T) {
 }
 
 func TestConstraintSetUnion(t *testing.T) {
-	keyCtx := testKeyContext(1, 2)
-	evalCtx := keyCtx.EvalCtx
-	data := newSpanTestData(keyCtx)
+	kc1 := testKeyContext(1)
+	kc2 := testKeyContext(2)
+	kc12 := testKeyContext(1, 2)
+	evalCtx := kc1.EvalCtx
+	data := newSpanTestData(kc12)
 
 	test := func(cs *Set, expected string) {
 		t.Helper()
@@ -140,11 +143,11 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Simple OR case.
 	// @1 > 20
-	gt20 := NewForColumn(1, &data.spGt20)
+	gt20 := testSet(kc1, &data.spGt20)
 	test(gt20, "/1: (/20 - ]\n")
 
 	// @1 = 10
-	eq10 := NewForColumn(1, &data.spEq10)
+	eq10 := testSet(kc1, &data.spEq10)
 	test(eq10, "/1: [/10 - /10]\n")
 
 	// @1 > 20 OR @1 = 10
@@ -155,7 +158,7 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Combine constraints that result in full span and unconstrained result.
 	// @1 > 20 OR @1 = 10 OR @1 <= 40
-	le40 := NewForColumn(1, &data.spLe40)
+	le40 := testSet(kc1, &data.spLe40)
 	res := gt20eq10.Union(evalCtx, le40)
 	test(res, "unconstrained\n")
 	res = le40.Union(evalCtx, gt20eq10)
@@ -163,13 +166,13 @@ func TestConstraintSetUnion(t *testing.T) {
 
 	// Include constraint on multiple columns and union with itself.
 	// (@1, @2) >= (10, 15)
-	gt1015 := NewForColumns([]opt.OrderingColumn{1, 2}, &data.spGe1015)
+	gt1015 := testSet(kc12, &data.spGe1015)
 	res = gt1015.Union(evalCtx, gt1015)
 	test(res, "/1/2: [/10/15 - ]\n")
 
 	// Union incompatible constraints (both are discarded).
 	// (@1, @2) >= (10, 15) OR @2 < 80
-	lt80 := NewForColumn(2, &data.spLt80)
+	lt80 := testSet(kc2, &data.spLt80)
 	res = gt1015.Union(evalCtx, lt80)
 	test(res, "unconstrained\n")
 	res = lt80.Union(evalCtx, gt1015)
@@ -180,7 +183,7 @@ func TestConstraintSetUnion(t *testing.T) {
 	multi3 := gt1015.Intersect(evalCtx, lt80)
 	multi3 = multi3.Intersect(evalCtx, gt20)
 
-	eq80 := NewForColumn(2, &data.spEq80)
+	eq80 := testSet(kc2, &data.spEq80)
 	multi2 := eq10.Intersect(evalCtx, eq80)
 
 	res = multi3.Union(evalCtx, multi2)
@@ -258,4 +261,10 @@ func newSpanTestData(keyCtx KeyContext) *spanTestData {
 	data.spGe1015.Set(keyCtx, key1015, IncludeBoundary, EmptyKey, IncludeBoundary)
 
 	return data
+}
+
+func testSet(keyCtx KeyContext, sp *Span) *Set {
+	var c Constraint
+	c.Init(keyCtx, SingleSpan(sp))
+	return SingleConstraint(c)
 }
