@@ -16,10 +16,12 @@
 package tpcc
 
 import (
+	"context"
 	gosql "database/sql"
 	"math/rand"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -43,6 +45,8 @@ type tpcc struct {
 
 	txs         []tx
 	totalWeight int
+
+	expensiveChecks bool
 
 	randomCIDsCache struct {
 		syncutil.Mutex
@@ -72,11 +76,12 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:      {RuntimeOnly: true},
-			`fks`:     {RuntimeOnly: true},
-			`mix`:     {RuntimeOnly: true},
-			`wait`:    {RuntimeOnly: true},
-			`workers`: {RuntimeOnly: true},
+			`db`:               {RuntimeOnly: true},
+			`fks`:              {RuntimeOnly: true},
+			`mix`:              {RuntimeOnly: true},
+			`wait`:             {RuntimeOnly: true},
+			`workers`:          {RuntimeOnly: true},
+			`expensive-checks`: {CheckConsistencyOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -96,6 +101,7 @@ var tpccMeta = workload.Meta{
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 
+		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		return g
 	},
 }
@@ -135,6 +141,22 @@ func (w *tpcc) Hooks() workload.Hooks {
 			for _, fkStmt := range fkStmts {
 				if _, err := sqlDB.Exec(fkStmt); err != nil {
 					return err
+				}
+			}
+			return nil
+		},
+		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
+			// TODO(arjun): We should run each test in a single transaction as
+			// currently we have to shut down load before running the checks.
+			for _, check := range allChecks() {
+				if !w.expensiveChecks && check.expensive {
+					continue
+				}
+				start := timeutil.Now()
+				err := check.f(db)
+				log.Infof(ctx, `check %s took %s`, check.name, timeutil.Since(start))
+				if err != nil {
+					return errors.Wrapf(err, `check failed: %s`, check.name)
 				}
 			}
 			return nil
