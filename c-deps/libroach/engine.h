@@ -47,7 +47,7 @@ struct DBEngine {
   DBString GetUserProperties();
 };
 
-class EnvManager;
+struct EnvManager;
 
 namespace cockroach {
 
