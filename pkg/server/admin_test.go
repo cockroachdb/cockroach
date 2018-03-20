@@ -846,8 +846,14 @@ func TestAdminAPISettings(t *testing.T) {
 		}
 		typ := ref.Typ()
 
-		if ref.String(&st.SV) != v.Value {
-			t.Errorf("%s: expected value %s, got %s", k, ref, v.Value)
+		if typ == "s" && k != "version" {
+			if v.Value != "<redacted>" && v.Value != "" {
+				t.Errorf("%s: expected redacted value for %v, got %s", k, ref, v.Value)
+			}
+		} else {
+			if ref.String(&st.SV) != v.Value {
+				t.Errorf("%s: expected value %v, got %s", k, ref, v.Value)
+			}
 		}
 
 		if desc := ref.Description(); desc != v.Description {
