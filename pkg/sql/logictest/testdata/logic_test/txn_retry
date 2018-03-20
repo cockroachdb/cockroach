@@ -1,0 +1,34 @@
+# LogicTest: default
+
+# Check that we auto-retry pushed transactions which can't be refreshed - if
+# they're pushed while we can still auto-retry them.
+subtest autoretry-on-push-first-batch
+
+statement ok
+CREATE TABLE test_retry (
+  k INT PRIMARY KEY
+)
+
+statement ok
+GRANT ALL ON test_retry TO testuser
+
+# Start a txn (and fix a timestamp).
+statement ok
+BEGIN
+
+# On a different connection, do a read at a higher timestamp.
+user testuser
+
+statement ok
+SELECT * FROM test.test_retry
+
+user root
+
+# Run a cluster_logical_timestamp(), so that the transaction "observes its
+# commit timestamp" and so can't be refreshed, and the do an insert that will
+# cause the txn to be pushed.
+statement ok
+SELECT cluster_logical_timestamp(); INSERT INTO test_retry VALUES (1);
+
+statement ok
+COMMIT

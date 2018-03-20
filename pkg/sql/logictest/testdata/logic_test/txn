@@ -494,6 +494,10 @@ snapshot
 statement ok
 COMMIT
 
+# restore default
+statement ok
+SET DEFAULT_TRANSACTION_ISOLATION TO 'SERIALIZABLE'
+
 # SHOW TRANSACTION STATUS
 
 query T
@@ -977,3 +981,7 @@ SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
 
 statement ok
 ROLLBACK
+
+# restore the default
+statement ok
+SET default_transaction_read_only = false

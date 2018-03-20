@@ -1212,10 +1212,34 @@ func (txn *Txn) GenerateForcedRetryableError(msg string) error {
 		txn.ID(),
 		roachpb.MakeTransaction(
 			txn.DebugName(),
-			nil, // baseKey
+			nil, // aseKey
 			txn.UserPriority(),
 			txn.Isolation(),
 			txn.db.clock.Now(),
 			txn.db.clock.MaxOffset().Nanoseconds(),
 		))
+}
+
+// IsSerializablePushAndRefreshNotPossible returns true if the transaction is
+// serializable, its timestamp has been pushed and there's no chance that
+// refreshing the read spans will succeed later (thus allowing the transaction
+// to commit and not be restarted). Used to detect whether the txn is guaranteed
+// to get a retriable error later.
+//
+// Note that this method allows for false negatives: sometimes the client only
+// figures out that it's been pushed when it sends an EndTransaction - i.e. it's
+// possible for the txn to have been pushed asynchoronously by some other
+// operation (usually, but not exclusively, by a high-priority txn with
+// conflicting writes).
+func (txn *Txn) IsSerializablePushAndRefreshNotPossible() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+
+	origTimestamp := txn.Proto().OrigTimestamp
+	origTimestamp.Forward(txn.Proto().RefreshedTimestamp)
+	isTxnPushed := txn.Proto().Timestamp != origTimestamp
+	// We check OrigTimestampWasObserved here because, if that's set, refreshing
+	// of reads is not performed.
+	return txn.Proto().Isolation == enginepb.SERIALIZABLE &&
+		isTxnPushed && txn.mu.Proto.OrigTimestampWasObserved
 }
