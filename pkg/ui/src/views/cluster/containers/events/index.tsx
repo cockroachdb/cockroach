@@ -134,9 +134,6 @@ export class EventPageUnconnected extends React.Component<EventPageProps, {}> {
         // TODO(mrtracy): This currently always links back to the main cluster
         // page, when it should link back to the dashboard previously visible.
       }
-      <section className="section parent-link">
-        <Link to="/">&lt; Back to Cluster</Link>
-      </section>
       <section className="section section--heading">
         <h2>Events</h2>
       </section>
