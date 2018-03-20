@@ -3343,6 +3343,7 @@ func TestValidSplitKeys(t *testing.T) {
 			{roachpb.Key("\x03\x00"), false},
 			{roachpb.Key("\x03\xff"), false},
 			{roachpb.Key("\x03\xff\xff"), false},
+			{roachpb.Key("\x03\xff\xff\x88"), false},
 			{roachpb.Key("\x04"), true},
 			{roachpb.Key("\x05"), true},
 			{roachpb.Key("a"), true},
@@ -3359,6 +3360,7 @@ func TestValidSplitKeys(t *testing.T) {
 			{roachpb.Key("\x03\x00"), true}, // different
 			{roachpb.Key("\x03\xff"), true}, // different
 			{roachpb.Key("\x03\xff\xff"), false},
+			{roachpb.Key("\x03\xff\xff\x88"), false},
 			{roachpb.Key("\x04"), true},
 			{roachpb.Key("\x05"), true},
 			{roachpb.Key("a"), true},
@@ -3418,7 +3420,10 @@ func TestFindSplitKey(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ind, _ := strconv.Atoi(string(humanSplitKey))
+		ind, err := strconv.Atoi(string(humanSplitKey))
+		if err != nil {
+			t.Fatalf("%d: could not parse key %s as int: %v", i, humanSplitKey, err)
+		}
 		if ind == 0 {
 			t.Fatalf("%d: should never select first key as split key", i)
 		}
@@ -3497,6 +3502,29 @@ func TestFindValidSplitKeys(t *testing.T) {
 				roachpb.Key("\x03"),
 			},
 			expSplit: roachpb.Key("\x03"),
+			expError: false,
+		},
+		// Between meta2Max and metaMax, splits at metaMax.
+		{
+			keys: []roachpb.Key{
+				roachpb.Key("\x03\xff\xff"),
+				roachpb.Key("\x03\xff\xff\x88"),
+				roachpb.Key("\x04"),
+				roachpb.Key("\x04\xff\xff\x88"),
+			},
+			expSplit: roachpb.Key("\x04"),
+			expError: false,
+		},
+		// Even lopsided, always split at metaMax.
+		{
+			keys: []roachpb.Key{
+				roachpb.Key("\x03\xff\xff"),
+				roachpb.Key("\x03\xff\xff\x11"),
+				roachpb.Key("\x03\xff\xff\x88"),
+				roachpb.Key("\x03\xff\xff\xee"),
+				roachpb.Key("\x04"),
+			},
+			expSplit: roachpb.Key("\x04"),
 			expError: false,
 		},
 		// Lopsided, truncate non-zone prefix.

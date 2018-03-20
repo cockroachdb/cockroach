@@ -85,6 +85,7 @@ func TestStoreRangeSplitAtIllegalKeys(t *testing.T) {
 		testutils.MakeKey(keys.Meta1Prefix, []byte("a")),
 		testutils.MakeKey(keys.Meta1Prefix, roachpb.RKeyMax),
 		keys.Meta2KeyMax,
+		testutils.MakeKey(keys.Meta2KeyMax, []byte("a")),
 		keys.MakeTablePrefix(10 /* system descriptor ID */),
 	} {
 		args := adminSplitArgs(key)
