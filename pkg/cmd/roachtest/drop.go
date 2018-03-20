@@ -19,7 +19,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	_ "github.com/lib/pq"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func init() {
@@ -30,7 +34,7 @@ func init() {
 	// by a truncation for the `stock` table (which contains warehouses*100k
 	// rows). Next, it issues a `DROP` for the whole database, and sets the GC TTL
 	// to one second.
-	runDrop := func(ctx context.Context, t *test, c *cluster, warehouses, nodes int) {
+	runDrop := func(ctx context.Context, t *test, c *cluster, warehouses, nodes int, initDiskSpace int) {
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
 		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
@@ -58,8 +62,44 @@ func init() {
 			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock"
 			run(stmtDropConstraint)
 
-			const stmtDelete = "DELETE FROM tpcc.stock"
-			run(stmtDelete)
+			var rows, minWarehouse, maxWarehouse int
+			if err := db.QueryRow("select count(*), min(s_w_id), max(s_w_id) from tpcc.stock").Scan(&rows,
+				&minWarehouse, &maxWarehouse); err != nil {
+				t.Fatalf("failed to get range count: %v", err)
+			}
+
+			for j := 1; j <= nodes; j++ {
+				size, err := getDiskUsageInByte(ctx, j, c)
+				if err != nil {
+					return err
+				}
+
+				c.l.printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
+
+				// Return if the size of the directory is less than 100mb
+				if size < initDiskSpace {
+					t.Fatalf("Node %d space used: %s less than %s", j, humanizeutil.IBytes(int64(size)),
+						humanizeutil.IBytes(int64(initDiskSpace)))
+				}
+			}
+
+			deleted := int64(0)
+
+			for i := minWarehouse; i <= maxWarehouse; i++ {
+				t.Progress(float64(deleted) / float64(rows))
+				res, err := db.ExecContext(ctx,
+					"DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
+				if err != nil {
+					return err
+				}
+
+				rowsDeleted, err := res.RowsAffected()
+				if err != nil {
+					return err
+				}
+
+				deleted += rowsDeleted
+			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
 			run(stmtTruncate)
@@ -74,7 +114,34 @@ gc:
 '`
 			run(stmtZone)
 
-			// TODO(tschottdorf): assert that the disk usage drops to "near nothing".
+			var allNodesSpaceCleared bool
+			// We're waiting a maximum of 10 minutes to makes sure that the drop operations clear the disk.
+			for i := 0; i < 10; i++ {
+				allNodesSpaceCleared = true
+				for j := 1; j <= nodes; j++ {
+					size, err := getDiskUsageInByte(ctx, j, c)
+					if err != nil {
+						return err
+					}
+
+					c.l.printf("Node %d space after deletion used: %s\n", j, humanizeutil.IBytes(int64(size)))
+
+					// Return if the size of the directory is less than 100mb
+					if size > 1E8 {
+						allNodesSpaceCleared = allNodesSpaceCleared && false
+					}
+				}
+
+				if allNodesSpaceCleared {
+					break
+				}
+				time.Sleep(time.Minute)
+			}
+
+			if !allNodesSpaceCleared {
+				t.Fatalf("Disk space has not been freed within 10 minutes of deletion.")
+			}
+
 			return nil
 		})
 		m.Wait()
@@ -82,6 +149,9 @@ gc:
 
 	warehouses := 100
 	numNodes := 9
+
+	// 1GB
+	initDiskSpace := int(1E9)
 
 	tests.Add(testSpec{
 		Name:  fmt.Sprintf("drop/tpcc/w=%d,nodes=%d", warehouses, numNodes),
@@ -92,9 +162,33 @@ gc:
 			if local {
 				numNodes = 4
 				warehouses = 1
+
+				// 100 MB
+				initDiskSpace = 1E8
 				fmt.Printf("running with w=%d,nodes=%d in local mode\n", warehouses, numNodes)
 			}
-			runDrop(ctx, t, c, warehouses, numNodes)
+			runDrop(ctx, t, c, warehouses, numNodes, initDiskSpace)
 		},
 	})
+}
+
+func getDiskUsageInByte(ctx context.Context, node int, c *cluster) (int, error) {
+	out, err := c.RunWithBuffer(ctx, c.l, node, fmt.Sprintf("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+	if err != nil {
+		return 0, err
+	}
+
+	str := string(out)
+	// We need this check because sometimes the first line of the roachprod output is a warning
+	// about adding an ip to a list of known hosts.
+	if strings.Contains(str, "Warning") {
+		str = strings.Split(str, "\n")[1]
+	}
+
+	size, err := strconv.Atoi(strings.TrimSpace(str))
+	if err != nil {
+		return 0, err
+	}
+
+	return size * 1024, nil
 }
