@@ -14,7 +14,12 @@
 
 package constraint
 
-import "github.com/cockroachdb/cockroach/pkg/sql/opt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+)
 
 // Columns identifies the columns which correspond to the values in a Key (and
 // consequently the columns of a Span or Constraint).
@@ -43,6 +48,8 @@ func (c *Columns) InitSingle(col opt.OrderingColumn) {
 	c.otherCols = nil
 }
 
+var _ = (*Columns).InitSingle
+
 // Count returns the number of constrained columns (always at least one).
 func (c *Columns) Count() int {
 	// There's always at least one column.
@@ -58,4 +65,14 @@ func (c *Columns) Get(nth int) opt.OrderingColumn {
 		return c.firstCol
 	}
 	return c.otherCols[nth-1]
+}
+
+func (c Columns) String() string {
+	var b strings.Builder
+
+	for i := 0; i < c.Count(); i++ {
+		b.WriteRune('/')
+		b.WriteString(fmt.Sprintf("%d", c.Get(i)))
+	}
+	return b.String()
 }
