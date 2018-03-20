@@ -26,7 +26,7 @@ import (
 )
 
 func TestTyping(t *testing.T) {
-	runDataDrivenTest(t, "testdata/typing")
+	runDataDrivenTest(t, "testdata/typing", memo.ExprFmtHideAll)
 }
 
 func TestTypingJson(t *testing.T) {

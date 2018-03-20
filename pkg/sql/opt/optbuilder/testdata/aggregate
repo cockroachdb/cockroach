@@ -1701,33 +1701,32 @@ project
 build
 SELECT TO_HEX(XOR_AGG(a)), b, XOR_AGG(c) FROM xor_bytes GROUP BY b ORDER BY b
 ----
-project
+sort
  ├── columns: column6:6(string) b:2(int) column7:7(int)
  ├── ordering: +2
- ├── sort
- │    ├── columns: xor_bytes.b:2(int) column5:5(bytes) column7:7(int)
- │    ├── ordering: +2
- │    └── group-by
- │         ├── columns: xor_bytes.b:2(int) column5:5(bytes) column7:7(int)
- │         ├── grouping columns: xor_bytes.b:2(int)
- │         ├── project
- │         │    ├── columns: xor_bytes.b:2(int) xor_bytes.a:1(bytes) xor_bytes.c:3(int)
- │         │    ├── scan xor_bytes
- │         │    │    └── columns: xor_bytes.a:1(bytes) xor_bytes.b:2(int) xor_bytes.c:3(int) xor_bytes.rowid:4(int!null)
- │         │    └── projections
- │         │         ├── variable: xor_bytes.b [type=int]
- │         │         ├── variable: xor_bytes.a [type=bytes]
- │         │         └── variable: xor_bytes.c [type=int]
- │         └── aggregations
- │              ├── function: xor_agg [type=bytes]
- │              │    └── variable: xor_bytes.a [type=bytes]
- │              └── function: xor_agg [type=int]
- │                   └── variable: xor_bytes.c [type=int]
- └── projections
-      ├── function: to_hex [type=string]
-      │    └── variable: column5 [type=bytes]
-      ├── variable: xor_bytes.b [type=int]
-      └── variable: column7 [type=int]
+ └── project
+      ├── columns: column6:6(string) xor_bytes.b:2(int) column7:7(int)
+      ├── group-by
+      │    ├── columns: xor_bytes.b:2(int) column5:5(bytes) column7:7(int)
+      │    ├── grouping columns: xor_bytes.b:2(int)
+      │    ├── project
+      │    │    ├── columns: xor_bytes.b:2(int) xor_bytes.a:1(bytes) xor_bytes.c:3(int)
+      │    │    ├── scan xor_bytes
+      │    │    │    └── columns: xor_bytes.a:1(bytes) xor_bytes.b:2(int) xor_bytes.c:3(int) xor_bytes.rowid:4(int!null)
+      │    │    └── projections
+      │    │         ├── variable: xor_bytes.b [type=int]
+      │    │         ├── variable: xor_bytes.a [type=bytes]
+      │    │         └── variable: xor_bytes.c [type=int]
+      │    └── aggregations
+      │         ├── function: xor_agg [type=bytes]
+      │         │    └── variable: xor_bytes.a [type=bytes]
+      │         └── function: xor_agg [type=int]
+      │              └── variable: xor_bytes.c [type=int]
+      └── projections
+           ├── function: to_hex [type=string]
+           │    └── variable: column5 [type=bytes]
+           ├── variable: xor_bytes.b [type=int]
+           └── variable: column7 [type=int]
 
 build
 SELECT XOR_AGG(i) FROM (VALUES (b'\x01'), (b'\x01\x01')) AS a(i)

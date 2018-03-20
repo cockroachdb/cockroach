@@ -1,0 +1,18 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, s STRING, d DECIMAL NOT NULL)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── s string
+ ├── d decimal not null
+ └── INDEX primary
+      └── k int not null
+
+opt
+SELECT k, s FROM a
+----
+scan a
+ ├── columns: k:1(int!null) s:3(string)
+ ├── stats: [rows=1000]
+ └── cost: 1000.00

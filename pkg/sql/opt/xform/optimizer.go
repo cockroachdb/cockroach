@@ -61,6 +61,7 @@ type Optimizer struct {
 	evalCtx *tree.EvalContext
 	mem     *memo.Memo
 	f       *Factory
+	coster  coster
 
 	// stateMap allocates temporary storage that's used to speed up optimization.
 	// This state could be discarded once optimization is complete.
@@ -91,6 +92,7 @@ func NewOptimizer(evalCtx *tree.EvalContext) *Optimizer {
 		MaxSteps: OptimizeAll,
 	}
 	o.f = newFactory(o)
+	o.coster.init(o.mem)
 	return o
 }
 
@@ -313,6 +315,13 @@ func (o *Optimizer) optimizeGroup(group memo.GroupID, required memo.PhysicalProp
 func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID) *optState {
 	fullyOptimized := true
 
+	// Compute the cost for enforcers to provide the required properties. This
+	// may be lower than the expression providing the properties itself. For
+	// example, it might be better to sort the results of a hash join than to
+	// use the results of a merge join that are already sorted, but at the cost
+	// of requiring one of the merge join children to be sorted.
+	fullyOptimized = o.enforceProps(eid, required)
+
 	// If the expression cannot provide the required properties, then don't
 	// continue. But what if the expression is able to provide a subset of the
 	// properties? That case is taken care of by enforceProps, which will
@@ -347,13 +356,6 @@ func (o *Optimizer) optimizeExpr(eid memo.ExprID, required memo.PhysicalPropsID)
 		// Check whether this is the new lowest cost expression.
 		o.ratchetCost(eid.Group, &candidateBest)
 	}
-
-	// Compute the cost for enforcers to provide the required properties. This
-	// may be lower than the expression providing the properties itself. For
-	// example, it might be better to sort the results of a hash join than to
-	// use the results of a merge join that are already sorted, but at the cost
-	// of requiring one of the merge join children to be sorted.
-	fullyOptimized = o.enforceProps(eid, required) && fullyOptimized
 
 	// Get the lowest cost expression after considering enforcers, and mark it
 	// as fully optimized if all the combinations have been considered.
@@ -425,8 +427,8 @@ func (o *Optimizer) enforceProps(
 // ratchetCost computes the cost of the candidate expression, and then checks
 // whether it's lower than the cost of the existing best expression in the
 // group. If so, then the candidate becomes the new lowest cost expression.
-// TODO(andyk): Actually run the costing function in the future.
 func (o *Optimizer) ratchetCost(group memo.GroupID, candidate *memo.BestExpr) {
+	o.coster.computeCost(candidate, o.mem.GroupProperties(group))
 	best := o.lookupOptState(group, candidate.Required()).best
 	o.mem.RatchetBestExpr(best, candidate)
 }

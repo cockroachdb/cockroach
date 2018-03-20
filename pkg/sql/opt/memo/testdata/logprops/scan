@@ -23,15 +23,18 @@ build
 SELECT * FROM a
 ----
 scan a
- └── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ └── stats: [rows=1000]
 
 build
 SELECT * FROM b
 ----
 project
  ├── columns: x:1(int) z:2(int!null)
+ ├── stats: [rows=1000]
  ├── scan b
- │    └── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+ │    ├── columns: b.x:1(int) b.z:2(int!null) b.rowid:3(int!null)
+ │    └── stats: [rows=1000]
  └── projections [outer=(1,2)]
       ├── variable: b.x [type=int, outer=(1)]
       └── variable: b.z [type=int, outer=(2)]
@@ -41,4 +44,5 @@ opt
 SELECT s, x FROM a
 ----
 scan a
- └── columns: s:3(string) x:1(int!null)
+ ├── columns: s:3(string) x:1(int!null)
+ └── stats: [rows=1000]

@@ -528,10 +528,10 @@ render               0  render  ·         ·            (a, b, c)     ·
  │                   0  ·       render 0  a            ·             ·
  │                   0  ·       render 1  b            ·             ·
  │                   0  ·       render 2  c            ·             ·
- └── filter          1  filter  ·         ·            (a, b, c, d)  ·
-      │              1  ·       filter    b > 4        ·             ·
-      └── sort       2  sort    ·         ·            (a, b, c, d)  +b,+a,+d
-           │         2  ·       order     +b,+a,+d     ·             ·
+ └── sort            1  sort    ·         ·            (a, b, c, d)  +b,+a,+d
+      │              1  ·       order     +b,+a,+d     ·             ·
+      └── filter     2  filter  ·         ·            (a, b, c, d)  ·
+           │         2  ·       filter    b > 4        ·             ·
            └── scan  3  scan    ·         ·            (a, b, c, d)  ·
 ·                    3  ·       table     abc@primary  ·             ·
 ·                    3  ·       spans     ALL          ·             ·
@@ -551,10 +551,10 @@ a:int  b:int  c:int
 exec-explain
 SELECT a, b, c, d FROM abc WHERE b > 4 ORDER BY b, a, c, d
 ----
-filter          0  filter  ·       ·            (a, b, c, d)  ·
- │              0  ·       filter  b > 4        ·             ·
- └── sort       1  sort    ·       ·            (a, b, c, d)  +b,+a,+c,+d
-      │         1  ·       order   +b,+a,+c,+d  ·             ·
+sort            0  sort    ·       ·            (a, b, c, d)  +b,+a,+c,+d
+ │              0  ·       order   +b,+a,+c,+d  ·             ·
+ └── filter     1  filter  ·       ·            (a, b, c, d)  ·
+      │         1  ·       filter  b > 4        ·             ·
       └── scan  2  scan    ·       ·            (a, b, c, d)  ·
 ·               2  ·       table   abc@primary  ·             ·
 ·               2  ·       spans   ALL          ·             ·
@@ -710,12 +710,12 @@ a:int
 exec-explain
 SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
-render               0  render  ·         ·            (c)     ·
- │                   0  ·       render 0  c            ·       ·
- └── filter          1  filter  ·         ·            (b, c)  ·
-      │              1  ·       filter    b = 2        ·       ·
-      └── sort       2  sort    ·         ·            (b, c)  +c
-           │         2  ·       order     +c           ·       ·
+sort                 0  sort    ·         ·            (c)     +c
+ │                   0  ·       order     +c           ·       ·
+ └── render          1  render  ·         ·            (c)     ·
+      │              1  ·       render 0  c            ·       ·
+      └── filter     2  filter  ·         ·            (b, c)  ·
+           │         2  ·       filter    b = 2        ·       ·
            └── scan  3  scan    ·         ·            (b, c)  ·
 ·                    3  ·       table     abc@primary  ·       ·
 ·                    3  ·       spans     ALL          ·       ·
@@ -723,12 +723,12 @@ render               0  render  ·         ·            (c)     ·
 exec-explain
 SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
-render               0  render  ·         ·            (c)     ·
- │                   0  ·       render 0  c            ·       ·
- └── filter          1  filter  ·         ·            (b, c)  ·
-      │              1  ·       filter    b = 2        ·       ·
-      └── sort       2  sort    ·         ·            (b, c)  -c
-           │         2  ·       order     -c           ·       ·
+sort                 0  sort    ·         ·            (c)     -c
+ │                   0  ·       order     -c           ·       ·
+ └── render          1  render  ·         ·            (c)     ·
+      │              1  ·       render 0  c            ·       ·
+      └── filter     2  filter  ·         ·            (b, c)  ·
+           │         2  ·       filter    b = 2        ·       ·
            └── scan  3  scan    ·         ·            (b, c)  ·
 ·                    3  ·       table     abc@primary  ·       ·
 ·                    3  ·       spans     ALL          ·       ·
@@ -741,10 +741,10 @@ render               0  render  ·         ·            (b, c, a)  ·
  │                   0  ·       render 0  b            ·          ·
  │                   0  ·       render 1  c            ·          ·
  │                   0  ·       render 2  a            ·          ·
- └── filter          1  filter  ·         ·            (a, b, c)  ·
-      │              1  ·       filter    a = 1        ·          ·
-      └── sort       2  sort    ·         ·            (a, b, c)  +b,+c
-           │         2  ·       order     +b,+c        ·          ·
+ └── sort            1  sort    ·         ·            (a, b, c)  +b,+c
+      │              1  ·       order     +b,+c        ·          ·
+      └── filter     2  filter  ·         ·            (a, b, c)  ·
+           │         2  ·       filter    a = 1        ·          ·
            └── scan  3  scan    ·         ·            (a, b, c)  ·
 ·                    3  ·       table     abc@primary  ·          ·
 ·                    3  ·       spans     ALL          ·          ·
@@ -818,10 +818,10 @@ column5:int
 exec-explain
 SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
-filter          0  filter  ·       ·                    (a, b, c)  ·
- │              0  ·       filter  (a = 1) AND (b = 4)  ·          ·
- └── sort       1  sort    ·       ·                    (a, b, c)  +c
-      │         1  ·       order   +c                   ·          ·
+sort            0  sort    ·       ·                    (a, b, c)  +c
+ │              0  ·       order   +c                   ·          ·
+ └── filter     1  filter  ·       ·                    (a, b, c)  ·
+      │         1  ·       filter  (a = 1) AND (b = 4)  ·          ·
       └── scan  2  scan    ·       ·                    (a, b, c)  ·
 ·               2  ·       table   abcd@primary         ·          ·
 ·               2  ·       spans   ALL                  ·          ·
@@ -829,10 +829,10 @@ filter          0  filter  ·       ·                    (a, b, c)  ·
 exec-explain
 SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
-filter          0  filter  ·       ·                    (a, b, c)  ·
- │              0  ·       filter  (a = 1) AND (b = 4)  ·          ·
- └── sort       1  sort    ·       ·                    (a, b, c)  +c,+b,+a
-      │         1  ·       order   +c,+b,+a             ·          ·
+sort            0  sort    ·       ·                    (a, b, c)  +c,+b,+a
+ │              0  ·       order   +c,+b,+a             ·          ·
+ └── filter     1  filter  ·       ·                    (a, b, c)  ·
+      │         1  ·       filter  (a = 1) AND (b = 4)  ·          ·
       └── scan  2  scan    ·       ·                    (a, b, c)  ·
 ·               2  ·       table   abcd@primary         ·          ·
 ·               2  ·       spans   ALL                  ·          ·
@@ -840,10 +840,10 @@ filter          0  filter  ·       ·                    (a, b, c)  ·
 exec-explain
 SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
-filter          0  filter  ·       ·                    (a, b, c)  ·
- │              0  ·       filter  (a = 1) AND (b = 4)  ·          ·
- └── sort       1  sort    ·       ·                    (a, b, c)  +b,+a,+c
-      │         1  ·       order   +b,+a,+c             ·          ·
+sort            0  sort    ·       ·                    (a, b, c)  +b,+a,+c
+ │              0  ·       order   +b,+a,+c             ·          ·
+ └── filter     1  filter  ·       ·                    (a, b, c)  ·
+      │         1  ·       filter  (a = 1) AND (b = 4)  ·          ·
       └── scan  2  scan    ·       ·                    (a, b, c)  ·
 ·               2  ·       table   abcd@primary         ·          ·
 ·               2  ·       spans   ALL                  ·          ·
@@ -851,10 +851,10 @@ filter          0  filter  ·       ·                    (a, b, c)  ·
 exec-explain
 SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
-filter          0  filter  ·       ·                    (a, b, c)  ·
- │              0  ·       filter  (a = 1) AND (b = 4)  ·          ·
- └── sort       1  sort    ·       ·                    (a, b, c)  +b,+c,+a
-      │         1  ·       order   +b,+c,+a             ·          ·
+sort            0  sort    ·       ·                    (a, b, c)  +b,+c,+a
+ │              0  ·       order   +b,+c,+a             ·          ·
+ └── filter     1  filter  ·       ·                    (a, b, c)  ·
+      │         1  ·       filter  (a = 1) AND (b = 4)  ·          ·
       └── scan  2  scan    ·       ·                    (a, b, c)  ·
 ·               2  ·       table   abcd@primary         ·          ·
 ·               2  ·       spans   ALL                  ·          ·
@@ -976,10 +976,10 @@ render               0  render  ·         ·               (y, w, x)  ·
  │                   0  ·       render 0  y               ·          ·
  │                   0  ·       render 1  w               ·          ·
  │                   0  ·       render 2  x               ·          ·
- └── filter          1  filter  ·         ·               (w, x, y)  ·
-      │              1  ·       filter    y = 1           ·          ·
-      └── sort       2  sort    ·         ·               (w, x, y)  +w,+x
-           │         2  ·       order     +w,+x           ·          ·
+ └── sort            1  sort    ·         ·               (w, x, y)  +w,+x
+      │              1  ·       order     +w,+x           ·          ·
+      └── filter     2  filter  ·         ·               (w, x, y)  ·
+           │         2  ·       filter    y = 1           ·          ·
            └── scan  3  scan    ·         ·               (w, x, y)  ·
 ·                    3  ·       table     uvwxyz@primary  ·          ·
 ·                    3  ·       spans     ALL             ·          ·

@@ -197,10 +197,16 @@ const (
 	ExprFmtShowAll ExprFmtFlags = 0
 
 	// ExprFmtHideOuterCols does not show outer columns in the output.
-	ExprFmtHideOuterCols = 1 << iota
+	ExprFmtHideOuterCols ExprFmtFlags = 1 << iota
+
+	// ExprFmtHideStats does not show statistics in the output.
+	ExprFmtHideStats
+
+	// ExprFmtHideCost does not show expression cost in the output.
+	ExprFmtHideCost
 
 	// ExprFmtHideAll shows only the most basic properties of the expression.
-	ExprFmtHideAll = ExprFmtHideOuterCols
+	ExprFmtHideAll = ExprFmtHideStats | ExprFmtHideCost | ExprFmtHideOuterCols
 )
 
 // String returns a string representation of this expression for testing and
@@ -287,6 +293,14 @@ func (ev ExprView) formatRelational(tp treeprinter.Node, flags ExprFmtFlags) {
 		colMap := ev.Private().(*SetOpColMap)
 		logProps.FormatColList("left columns:", colMap.Left, ev.Metadata(), tp)
 		logProps.FormatColList("right columns:", colMap.Right, ev.Metadata(), tp)
+	}
+
+	if !flags.HasFlags(ExprFmtHideStats) {
+		tp.Childf("stats: [rows=%d]", logProps.Relational.Stats.RowCount)
+	}
+
+	if !flags.HasFlags(ExprFmtHideCost) && ev.best != normBestOrdinal {
+		tp.Childf("cost: %.2f", ev.lookupBestExpr().cost)
 	}
 
 	if physProps.Ordering.Defined() {
