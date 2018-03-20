@@ -3542,6 +3542,25 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			} else {
 				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
+		case *roachpb.RaftGroupDeletedError:
+			if replErr != nil {
+				// RangeNotFoundErrors are expected here; nothing else is.
+				if _, ok := replErr.(*roachpb.RangeNotFoundError); !ok {
+					log.Error(ctx, replErr)
+				}
+				return nil
+			}
+
+			// If the replica is talking to a replica that's been deleted, it must be
+			// out of date. While this may just mean it's slightly behind, it can
+			// also mean that it is so far behind it no longer knows where any of the
+			// other replicas are (#23994). Add it to the replica GC queue to do a
+			// proper check.
+			if _, err := s.replicaGCQueue.Add(repl, replicaGCPriorityDefault); err != nil {
+				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
+			} else {
+				log.Infof(ctx, "added to replica GC queue (contacted deleted peer)")
+			}
 		case *roachpb.StoreNotFoundError:
 			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
