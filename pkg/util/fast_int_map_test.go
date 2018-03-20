@@ -15,7 +15,7 @@
 package util
 
 import (
-	fmt "fmt"
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
