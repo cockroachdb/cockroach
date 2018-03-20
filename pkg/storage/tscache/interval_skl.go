@@ -155,7 +155,7 @@ type intervalSkl struct {
 	// data structure will usually have a size limit of pageSize*minPages.
 	// However, this limit can be violated if the intervalSkl needs to grow
 	// larger to enforce a minimum retention policy.
-	pageSize uint32
+	pageSize func() uint32
 
 	// The linked list maintains fixed-size skiplist pages, ordered by creation
 	// time such that the first page is the one most recently created. When the
@@ -181,7 +181,7 @@ type intervalSkl struct {
 // newIntervalSkl creates a new interval skiplist with the given minimum
 // retention duration and the maximum size.
 func newIntervalSkl(
-	clock *hlc.Clock, minRet time.Duration, pageSize uint32, metrics sklMetrics,
+	clock *hlc.Clock, minRet time.Duration, pageSize func() uint32, metrics sklMetrics,
 ) *intervalSkl {
 	s := intervalSkl{
 		clock:    clock,
@@ -225,10 +225,12 @@ func (s *intervalSkl) AddRange(from, to []byte, opt rangeOptions, val cacheValue
 	if from == nil && to == nil {
 		panic("from and to keys cannot be nil")
 	}
-	if encodedRangeSize(from, to, opt) > int(s.pageSize)-initialSklAllocSize {
+	if util.RaceEnabled {
 		// Without this check, we could fall into an infinite page rotation loop
 		// if a range would take up more space than available in an empty page.
-		panic("key range too large to fit in any page")
+		if encodedRangeSize(from, to, opt) > int(s.pageSize())-initialSklAllocSize {
+			panic("key range too large to fit in any page")
+		}
 	}
 
 	if to != nil {
@@ -363,11 +365,12 @@ func (s *intervalSkl) frontPage() *sklPage {
 // pushNewPage prepends a new empty page to the front of the pages list. It
 // accepts an optional arena argument to facilitate re-use.
 func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
-	if arena != nil && arena.Size() == s.pageSize {
+	size := s.pageSize()
+	if arena != nil && arena.Size() == size {
 		// Re-use the provided arena, if possible.
 		arena.Reset()
 	} else {
-		arena = arenaskl.NewArena(s.pageSize)
+		arena = arenaskl.NewArena(size)
 	}
 	p := newSklPage(arena)
 	p.maxWallTime = maxWallTime

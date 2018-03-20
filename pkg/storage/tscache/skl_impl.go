@@ -16,23 +16,42 @@ package tscache
 
 import (
 	"context"
+	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-const (
-	// defaultSklPageSize is the default size of each page in the sklImpl's
-	// read and write intervalSkl.
-	defaultSklPageSize = 32 << 20 // 32 MB
-	// TestSklPageSize is passed to tests as the size of each page in the
-	// sklImpl to limit its memory footprint. Reducing this size can hurt
-	// performance but it decreases the risk of OOM failures when many tests
-	// are running concurrently.
-	TestSklPageSize = 128 << 10 // 128 KB
+// SklPageSize is the amount of memory in bytes used for each page in the
+// sklImpl timestamp cache.
+var SklPageSize = settings.RegisterValidatedByteSizeSetting(
+	"kv.timestamp_cache.page_size",
+	"amount of memory in bytes used for each page in the timestamp cache",
+	32<<20, /* 32MB */
+	func(size int64) error {
+		min := int64(TestSklPageSize())
+		max := int64(math.MaxUint32)
+		if size < min {
+			return fmt.Errorf("page_size must be greater than %s", humanizeutil.IBytes(min))
+		}
+		if size > max {
+			return fmt.Errorf("page_size must be less than %s", humanizeutil.IBytes(max))
+		}
+		return nil
+	},
 )
+
+// TestSklPageSize is passed to tests as the size of each page in the
+// sklImpl to limit its memory footprint. Reducing this size can hurt
+// performance but it decreases the risk of OOM failures when many tests
+// are running concurrently.
+func TestSklPageSize() uint32 { return 128 << 10 /* 128 KB */ }
 
 // sklImpl implements the Cache interface. It maintains a pair of skiplists
 // containing keys or key ranges and the timestamps at which they were most
@@ -42,18 +61,21 @@ const (
 type sklImpl struct {
 	rCache, wCache *intervalSkl
 	clock          *hlc.Clock
-	pageSize       uint32
 	metrics        Metrics
+	pageSize       func() uint32
 }
 
 var _ Cache = &sklImpl{}
 
 // newSklImpl returns a new treeImpl with the supplied hybrid clock.
-func newSklImpl(clock *hlc.Clock, pageSize uint32, metrics Metrics) *sklImpl {
-	if pageSize == 0 {
-		pageSize = defaultSklPageSize
+func newSklImpl(st *cluster.Settings, clock *hlc.Clock, metrics Metrics) *sklImpl {
+	tc := sklImpl{
+		clock:   clock,
+		metrics: metrics,
+		pageSize: func() uint32 {
+			return uint32(SklPageSize.Get(&st.SV))
+		},
 	}
-	tc := sklImpl{clock: clock, pageSize: pageSize, metrics: metrics}
 	tc.clear(clock.Now())
 	return &tc
 }
@@ -128,7 +150,7 @@ func (tc *sklImpl) boundKeyLengths(start, end roachpb.Key) (roachpb.Key, roachpb
 	// and still not trigger the "key range too large" panic in intervalSkl,
 	// but anything larger could require multiple page rotations before it's
 	// able to fit in if other ranges are being added concurrently.
-	maxKeySize := int(tc.pageSize / 32)
+	maxKeySize := int(tc.pageSize() / 32)
 
 	// If either key is too long, truncate its length, making sure to always
 	// grow the [start,end) range instead of shrinking it. This will reduce the

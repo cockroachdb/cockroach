@@ -64,6 +64,10 @@ func makeVal(ts hlc.Timestamp, txnIDStr string) cacheValue {
 	return cacheValue{ts: ts, txnID: txnID}
 }
 
+func pageSize(size uint32) func() uint32 {
+	return func() uint32 { return size }
+}
+
 func makeMetrics() sklMetrics {
 	return MakeMetrics().Skl.Read
 }
@@ -802,7 +806,7 @@ func TestIntervalSklFill(t *testing.T) {
 	const n = 200
 	const txnID = "123"
 
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 1500, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize(1500), makeMetrics())
 
 	for i := 0; i < n; i++ {
 		key := []byte(fmt.Sprintf("%05d", i))
@@ -831,7 +835,7 @@ func TestIntervalSklFill2(t *testing.T) {
 	const txnID = "123"
 
 	// n >> 1000 so the intervalSkl's pages will be filled.
-	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, 1000, makeMetrics())
+	s := newIntervalSkl(nil /* clock */, 0 /* minRet */, pageSize(1000), makeMetrics())
 	key := []byte("some key")
 
 	for i := 0; i < n; i++ {
@@ -849,7 +853,7 @@ func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 
 	const minRet = 500
-	s := newIntervalSkl(clock, minRet, 1500, makeMetrics())
+	s := newIntervalSkl(clock, minRet, pageSize(1500), makeMetrics())
 	s.floorTS = floorTS
 
 	// Add an initial value. Rotate the page so it's alone.
@@ -911,7 +915,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 		{name: "Pages", pageSize: 4096, minPages: 16},
 		// Test concurrency with a larger page size in order to test slot
 		// concurrency without the added complication of page rotations.
-		{name: "Slots", pageSize: TestSklPageSize},
+		{name: "Slots", pageSize: 128 << 10},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -921,7 +925,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-				s := newIntervalSkl(clock, 0 /* minRet */, tc.pageSize, makeMetrics())
+				s := newIntervalSkl(clock, 0 /* minRet */, pageSize(tc.pageSize), makeMetrics())
 				if tc.minPages != 0 {
 					s.setMinPages(tc.minPages)
 				}
@@ -1019,8 +1023,8 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 
-		const smallPageSize = 32 * 1024 // 32 KB
 		const retainForever = math.MaxInt64
+		smallPageSize := pageSize(32 * 1024) // 32 KB
 		sequentialS := newIntervalSkl(clock, retainForever, smallPageSize, makeMetrics())
 		concurrentS := newIntervalSkl(clock, retainForever, smallPageSize, makeMetrics())
 
@@ -1147,6 +1151,11 @@ func assertRatchet(t *testing.T, before, after cacheValue) {
 // rotation loop for ranges that are too large to fit in a single page. Instead,
 // we detect this scenario early and panic.
 func TestIntervalSklMaxEncodedSize(t *testing.T) {
+	// The assertion tested is only enabled in race mode.
+	if !util.RaceEnabled {
+		t.Skip("!race")
+	}
+
 	ts := makeTS(200, 0)
 	val := makeVal(ts, "1")
 
@@ -1154,12 +1163,12 @@ func TestIntervalSklMaxEncodedSize(t *testing.T) {
 	encSize := encodedRangeSize(key, nil, 0)
 
 	t.Run("fit", func(t *testing.T) {
-		size := uint32(initialSklAllocSize + encSize)
+		size := pageSize(uint32(initialSklAllocSize + encSize))
 		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, size, makeMetrics())
 		require.NotPanics(t, func() { s.Add(key, val) })
 	})
 	t.Run("!fit", func(t *testing.T) {
-		size := uint32(initialSklAllocSize + encSize - 1)
+		size := pageSize(uint32(initialSklAllocSize + encSize - 1))
 		s := newIntervalSkl(nil /* clock */, 0 /* minRet */, size, makeMetrics())
 		require.Panics(t, func() { s.Add(key, val) })
 	})

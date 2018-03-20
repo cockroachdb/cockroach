@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -85,11 +86,11 @@ type Cache interface {
 
 // New returns a new timestamp cache with the supplied hybrid clock. If the
 // pageSize is provided, it will override the default page size.
-func New(clock *hlc.Clock, pageSize uint32, metrics Metrics) Cache {
+func New(st *cluster.Settings, clock *hlc.Clock, metrics Metrics) Cache {
 	if envutil.EnvOrDefaultBool("COCKROACH_USE_TREE_TSCACHE", false) {
 		return newTreeImpl(clock)
 	}
-	return newSklImpl(clock, pageSize, metrics)
+	return newSklImpl(st, clock, metrics)
 }
 
 // cacheValue combines a timestamp with an optional txnID. It is shared between

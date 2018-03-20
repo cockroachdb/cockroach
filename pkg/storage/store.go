@@ -162,7 +162,7 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
-		TimestampCachePageSize:      tscache.TestSklPageSize,
+		TimestampCachePageSize:      tscache.TestSklPageSize(),
 		HistogramWindowInterval:     metric.TestSampleInterval,
 		EnableEpochRangeLeases:      true,
 	}
@@ -891,8 +891,15 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	s.mu.uninitReplicas = map[roachpb.RangeID]*Replica{}
 	s.mu.Unlock()
 
+	if cfg.TimestampCachePageSize != 0 {
+		// If the TimestampCachePageSize setting is set then we override
+		// SklPageSize. This is used in tests to limit the initial size of the
+		// TimestampCache. This override may be undone by gossip updates, but
+		// that's ok because we only care about the first sklImpl page size.
+		tscache.SklPageSize.Override(&cfg.Settings.SV, int64(cfg.TimestampCachePageSize))
+	}
 	tsCacheMetrics := tscache.MakeMetrics()
-	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize, tsCacheMetrics)
+	s.tsCache = tscache.New(cfg.Settings, cfg.Clock, tsCacheMetrics)
 	s.metrics.registry.AddMetricStruct(tsCacheMetrics)
 
 	s.compactor = compactor.NewCompactor(

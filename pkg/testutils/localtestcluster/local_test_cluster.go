@@ -147,7 +147,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 		/* deterministic */ false,
 	)
 	cfg.Transport = transport
-	cfg.TimestampCachePageSize = tscache.TestSklPageSize
+	cfg.TimestampCachePageSize = tscache.TestSklPageSize()
 	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
 
