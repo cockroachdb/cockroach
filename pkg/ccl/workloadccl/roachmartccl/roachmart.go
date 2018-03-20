@@ -153,12 +153,12 @@ func (m *roachmart) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (m *roachmart) Tables() []workload.Table {
-	rng := rand.New(rand.NewSource(m.seed))
 	users := workload.Table{
 		Name:            `users`,
 		Schema:          usersSchema,
 		InitialRowCount: m.users,
 		InitialRowFn: func(rowIdx int) []interface{} {
+			rng := rand.New(rand.NewSource(m.seed + int64(rowIdx)))
 			const emailTemplate = `user-%d@roachmart.example`
 			return []interface{}{
 				zones[rowIdx%3],                     // zone
