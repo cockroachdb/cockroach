@@ -3,6 +3,7 @@ import React from "react";
 
 import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
+import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 
@@ -15,6 +16,18 @@ interface AllocatorOutputProps {
 export default class AllocatorOutput extends React.Component<AllocatorOutputProps, {}> {
   render() {
     const { allocator } = this.props;
+
+    // TODO(couchand): This is a really myopic way to check for this particular
+    // case, but making major changes to the CachedDataReducer or util.api seems
+    // fraught at this point.  We should revisit this soon.
+    if (allocator.lastError && allocator.lastError.message === "Forbidden") {
+      return (
+        <div>
+          <h2>Simulated Allocator Output</h2>
+          { REMOTE_DEBUGGING_ERROR_TEXT }
+        </div>
+      );
+    }
 
     if (allocator && !_.isNil(allocator.lastError)) {
       return (
