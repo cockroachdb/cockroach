@@ -12,17 +12,27 @@ const config = {
 if (process.env.PGSSLCERT && process.env.PGSSLKEY) {
   config.ssl = {
     cert: fs.readFileSync(process.env.PGSSLCERT),
-    key:  fs.readFileSync(process.env.PGSSLKEY),
+    key: fs.readFileSync(process.env.PGSSLKEY),
   };
 }
 
 const client = new pg.Client(config);
 
-before(() => {
-  client.connect();
-  client.query('DROP DATABASE IF EXISTS node_test');
-  client.query('CREATE DATABASE node_test');
-  client.query('USE node_test');
+before(done => {
+  client
+    .connect()
+    .then(() => {
+      return client.query('DROP DATABASE IF EXISTS node_test');
+    })
+    .then(() => {
+      return client.query('CREATE DATABASE node_test');
+    })
+    .then(() => {
+      return client.query('USE node_test');
+    })
+    .then(() => {
+      done();
+    });
 });
 
 after(() => {
