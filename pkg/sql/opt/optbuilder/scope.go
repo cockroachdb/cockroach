@@ -114,6 +114,20 @@ func (s *scope) hasSameColumns(other *scope) bool {
 	return true
 }
 
+// removeHiddenCols removes hidden columns from the scope.
+func (s *scope) removeHiddenCols() {
+	n := 0
+	for i := range s.cols {
+		if !s.cols[i].hidden {
+			if n != i {
+				s.cols[n] = s.cols[i]
+			}
+			n++
+		}
+	}
+	s.cols = s.cols[:n]
+}
+
 // getAggregateCols returns the columns in this scope corresponding
 // to aggregate functions.
 func (s *scope) getAggregateCols() []columnProps {
