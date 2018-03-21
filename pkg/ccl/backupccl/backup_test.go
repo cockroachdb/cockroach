@@ -663,7 +663,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		high := keys.MakeTablePrefix(ip.backupTableID + 1)
 		if bytes.Compare(lowWaterMark, low) <= 0 || bytes.Compare(lowWaterMark, high) >= 0 {
 			return errors.Errorf("expected low water mark %v to be between %v and %v",
-				roachpb.Key(lowWaterMark), roachpb.Key(low), roachpb.Key(high))
+				lowWaterMark, roachpb.Key(low), roachpb.Key(high))
 		}
 		return nil
 	}
