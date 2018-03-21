@@ -338,6 +338,15 @@ func (ds *ServerImpl) setupFlow(
 	}
 	evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 	evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
+	evalCtx.SessionData.SequenceState = sessiondata.NewSequenceState()
+	var haveSequences bool
+	for _, seq := range req.EvalContext.SeqState.Seqs {
+		evalCtx.SessionData.SequenceState.RecordValue(seq.SeqID, seq.LatestVal)
+	}
+	if haveSequences {
+		evalCtx.SessionData.SequenceState.SetLastSequenceIncremented(
+			*req.EvalContext.SeqState.LastSeqIncremented)
+	}
 
 	// TODO(radu): we should sanity check some of these fields (especially
 	// txnProto).
