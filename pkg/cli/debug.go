@@ -32,6 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -792,6 +795,59 @@ Output environment variables that influence configuration.
 	},
 }
 
+func tick(s string) string {
+	return fmt.Sprintf("`%s`", s)
+}
+
+var debugSettingsCmd = &cobra.Command{
+	Use:   "settings <output-dir>",
+	Short: "output available cluster settings",
+	Long: `
+Output all cluster settings known to this binary.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wrapCode := func(s string) string {
+			if cliCtx.tableDisplayFormat == tableDisplayHTML {
+				return fmt.Sprintf("<code>%s</code>", s)
+			}
+			return s
+		}
+
+		// Fill a Values struct with the defaults.
+		s := cluster.MakeTestingClusterSettings()
+		settings.NewUpdater(&s.SV).ResetRemaining()
+
+		var rows [][]string
+		for _, name := range settings.Keys() {
+			setting, ok := settings.Lookup(name)
+			if !ok {
+				panic(fmt.Sprintf("could not find setting %q", name))
+			}
+			typ, ok := settings.ReadableTypes[setting.Typ()]
+			if !ok {
+				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
+			}
+			defaultVal := setting.String(&s.SV)
+			if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+				defaultVal = override
+			}
+			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
+			rows = append(rows, row)
+		}
+
+		reporter, err := makeReporter()
+		if err != nil {
+			return err
+		}
+		if hr, ok := reporter.(*htmlReporter); ok {
+			hr.escape = false
+			hr.rowStats = false
+		}
+		cols := []string{"Setting", "Type", "Default", "Description"}
+		return render(reporter, os.Stdout, cols, newRowSliceIter(rows, "dddd"), nil /* noRowsHook*/)
+	},
+}
+
 var debugCompactCmd = &cobra.Command{
 	Use:   "compact [directory]",
 	Short: "compact the sstables in a store",
@@ -1040,6 +1096,7 @@ var debugCmds = []*cobra.Command{
 	debugGossipValuesCmd,
 	debugSyncTestCmd,
 	debugEnvCmd,
+	debugSettingsCmd,
 	debugZipCmd,
 }
 
