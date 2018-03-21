@@ -1,43 +1,3 @@
-// Copyright 2016 The Cockroach Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//	 http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-// implied. See the License for the specific language governing
-// permissions and limitations under the License.
-
-package acceptance
-
-import (
-	"context"
-	"strings"
-	"testing"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-)
-
-func TestDockerC(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	ctx := context.Background()
-	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12", 1)})
-	})
-	t.Run("Fail", func(t *testing.T) {
-		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c", strings.Replace(c, "%v", "SELECT 1", 1)})
-	})
-}
-
-const c = `
-set -e
-cat > main.c << 'EOF'
 #include <libpq-fe.h>
 #include <libpqtypes.h>
 #include <limits.h>
@@ -159,17 +119,30 @@ void timestampPrint(PGtimestamp ts) {
 	timePrint(ts.time);
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, char *argv[]) {
+	if (argc != 2) {
+		fprintf(stderr, "usage: %s QUERY", argv[0]);
+	}
+	char *query = argv[1];
+
 	PGconn *conn = PQconnectdb("");
 	if (PQstatus(conn) != CONNECTION_OK) {
 		fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
 		return 1;
 	}
 
+	const char *version = PQparameterStatus(conn, "crdb_version");
+	if (version == NULL) {
+		fprintf(stderr, "ERROR PQparameterStatus: crdb_version not reported: %s\n", PQgeterror());
+		return 1;
+	}
+	if (strncmp(version, "CockroachDB ", strlen("CockroachDB ")) != 0) {
+		fprintf(stderr, "crdb_version mismatch: '%s' doesn't start with 'CockroachDB '\n", version);
+		return 1;
+	}
+
 	/* Always call first on any conn that is to be used with libpqtypes */
 	PQinitTypes(conn);
-
-	const char *query = "%v";
 
 	PGparam *param = PQparamCreate(conn);
 
@@ -488,54 +461,3 @@ int main(int argc, char const *argv[]) {
 
 	return 0;
 }
-EOF
-gcc -std=c99 -I/usr/include/postgresql main.c -lpq -lpqtypes
-./a.out
-`
-
-func TestDockerPGWireVersion(t *testing.T) {
-	s := log.Scope(t)
-	defer s.Close(t)
-
-	ctx := context.Background()
-	t.Run("Success", func(t *testing.T) {
-		testDockerSuccess(ctx, t, "c", []string{"/bin/sh", "-c",
-			strings.Replace(cVersion, "EXPECTED_VERSION", "CockroachDB ", -1)})
-	})
-	t.Run("Fail", func(t *testing.T) {
-		testDockerFail(ctx, t, "c", []string{"/bin/sh", "-c",
-			strings.Replace(cVersion, "EXPECTED_VERSION", "--NotValid--", -1)})
-	})
-}
-
-const cVersion = `
-set -e
-cat > main.c << 'EOF'
-#include <libpq-fe.h>
-#include <libpqtypes.h>
-#include <string.h>
-#include <stdio.h>
-
-int main(int argc, char const *argv[]) {
-	PGconn *conn = PQconnectdb("");
-	if (PQstatus(conn) != CONNECTION_OK) {
-		fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
-		return 1;
-	}
-
-	const char *version = PQparameterStatus(conn, "crdb_version");
-	if (version == NULL) {
-		fprintf(stderr, "ERROR PQparameterStatus: crdb_version not reported: %s\n", PQgeterror());
-		return 1;
-	}
-	if (strncmp(version, "EXPECTED_VERSION", strlen("EXPECTED_VERSION")) != 0) {
-		fprintf(stderr, "crdb_version mismatch: '%s' doesn't start with 'EXPECTED_VERSION'\n", version);
-		return 1;
-	}
-
-	return 0;
-}
-EOF
-gcc -std=c99 -I/usr/include/postgresql main.c -lpq -lpqtypes
-./a.out
-`
