@@ -62,7 +62,9 @@ func (b *Builder) buildTable(
 		return b.buildTable(source.Expr, inScope)
 
 	case *tree.Subquery:
-		return b.buildStmt(source.Select, inScope)
+		out, outScope = b.buildStmt(source.Select, inScope)
+		outScope.removeHiddenCols()
+		return out, outScope
 
 	default:
 		panic(errorf("not yet implemented: table expr: %T", texpr))
@@ -175,7 +177,7 @@ func (b *Builder) buildSelect(
 	}
 
 	if outScope.ordering == nil && orderBy != nil {
-		projectionsScope := outScope.push()
+		projectionsScope := outScope.replace()
 		projectionsScope.cols = make([]columnProps, 0, len(outScope.cols))
 		projections := make([]memo.GroupID, 0, len(outScope.cols))
 		for i := range outScope.cols {
@@ -215,7 +217,7 @@ func (b *Builder) buildSelectClause(
 	if b.needsAggregation(sel) {
 		out, outScope, projections, projectionsScope = b.buildAggregation(sel, out, fromScope)
 	} else {
-		projectionsScope = fromScope.push()
+		projectionsScope = fromScope.replace()
 		projections = b.buildProjectionList(sel.Exprs, fromScope, projectionsScope)
 	}
 
@@ -233,8 +235,11 @@ func (b *Builder) buildSelectClause(
 	if !projectionsScope.hasSameColumns(outScope) {
 		p := b.constructList(opt.ProjectionsOp, projections, projectionsScope.cols)
 		out = b.factory.ConstructProject(out, p)
-		outScope = projectionsScope
 	}
+
+	// Assign projectionsScope to outScope even if they have the same columns
+	// since the column names and hidden status may have changed.
+	outScope = projectionsScope
 
 	// Wrap with distinct operator if it exists.
 	out, outScope = b.buildDistinct(out, sel.Distinct, outScope.cols, outScope)

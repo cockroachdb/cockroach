@@ -201,6 +201,27 @@ SELECT rowid FROM b, c
 error: column reference "rowid" is ambiguous (candidates: b.rowid, c.rowid)
 
 build
+SELECT x, y, rowid FROM c WHERE rowid > 0
+----
+select
+ ├── columns: x:1(int) y:2(float) rowid:3(int!null)
+ ├── scan c
+ │    └── columns: c.x:1(int) c.y:2(float) c.rowid:3(int!null)
+ └── gt [type=bool]
+      ├── variable: c.rowid [type=int]
+      └── const: 0 [type=int]
+
+build
+SELECT r FROM (SELECT x, y, rowid AS r FROM c)
+----
+project
+ ├── columns: r:3(int!null)
+ ├── scan c
+ │    └── columns: c.x:1(int) c.y:2(float) c.rowid:3(int!null)
+ └── projections
+      └── variable: c.rowid [type=int]
+
+build
 SELECT rowid::string FROM b
 ----
 project
@@ -220,3 +241,28 @@ build
 SELECT CAST(x AS int[]) FROM b
 ----
 error: invalid cast: int -> INT[]
+
+exec-ddl
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c int
+ └── INDEX primary
+      └── a int not null
+
+build
+SELECT c FROM (SELECT a FROM abc)
+----
+error: column name "c" not found
+
+build
+SELECT c FROM (SELECT a FROM abc ORDER BY c)
+----
+error: column name "c" not found
+
+build
+SELECT c FROM (SELECT a, b FROM abc ORDER BY c)
+----
+error: column name "c" not found

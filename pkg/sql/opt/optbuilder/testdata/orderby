@@ -627,7 +627,7 @@ project
            └── variable: abcd.d [type=int]
 
 build
-SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x
 ----
 sort
  ├── columns: x:1(string)
@@ -640,6 +640,18 @@ sort
       │    └── const: 'b' [type=string]
       └── tuple [type=tuple{string}]
            └── const: 'c' [type=string]
+
+build
+SELECT * FROM (SELECT * FROM (VALUES ('a'), ('b'), ('c')) AS c(x) ORDER BY x)
+----
+values
+ ├── columns: x:1(string)
+ ├── tuple [type=tuple{string}]
+ │    └── const: 'a' [type=string]
+ ├── tuple [type=tuple{string}]
+ │    └── const: 'b' [type=string]
+ └── tuple [type=tuple{string}]
+      └── const: 'c' [type=string]
 
 exec-ddl
 CREATE TABLE blocks (
