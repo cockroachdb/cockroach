@@ -1715,6 +1715,7 @@ alter_table_cmd ::=
 	| 'VALIDATE' 'CONSTRAINT' constraint_name
 	| 'DROP' 'CONSTRAINT' 'IF' 'EXISTS' constraint_name opt_drop_behavior
 	| 'DROP' 'CONSTRAINT' constraint_name opt_drop_behavior
+	| 'EXPERIMENTAL_AUDIT' 'SET' audit_mode
 	| partition_by
 
 alter_index_cmd ::=
@@ -1903,6 +1904,10 @@ alter_column_default ::=
 opt_validate_behavior ::=
 	'NOT' 'VALID'
 	| 
+
+audit_mode ::=
+	'READ' 'WRITE'
+	| 'OFF'
 
 signed_iconst64 ::=
 	signed_iconst

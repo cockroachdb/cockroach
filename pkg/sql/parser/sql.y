@@ -1416,7 +1416,6 @@ alter_table_cmd:
 // ALTER TABLE <name> EXPERIMENTAL_AUDIT SET <mode>
 | EXPERIMENTAL_AUDIT SET audit_mode
   {
-    /* SKIP DOC */
     $$.val = &tree.AlterTableSetAudit{Mode: $3.auditMode()}
   }
 | partition_by
