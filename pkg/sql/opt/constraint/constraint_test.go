@@ -156,6 +156,48 @@ func TestConstraintIntersect(t *testing.T) {
 	test(t, &evalCtx, &data.mangoStrawberry, &data.cherryRaspberry, expected)
 }
 
+func TestConstraintImplies(t *testing.T) {
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	data := newConstraintTestData(&evalCtx)
+
+	test := func(left, right Constraint, expected bool) {
+		t.Helper()
+		if actual := left.Implies(&evalCtx, &right); actual != expected {
+			format := "left: %s, right: %s, expected: %t, actual: %t"
+			t.Errorf(format, left.String(), right.String(), expected, actual)
+		}
+	}
+
+	var left, right Constraint
+	left = data.c1to10
+	test(left, left, true)
+
+	test(left, data.cLt10, false)
+	test(data.cLt10, left, false)
+
+	right = data.c1to10
+	right.UnionWith(&evalCtx, &data.c5to25)
+	test(left, right, true)
+	test(right, left, false)
+
+	left.UnionWith(&evalCtx, &data.c30to40)
+	test(left, right, false)
+	test(right, left, false)
+
+	right.UnionWith(&evalCtx, &data.c30to40)
+	test(left, right, true)
+	test(right, left, false)
+
+	right.UnionWith(&evalCtx, &data.c20to30)
+	test(left, right, true)
+	test(right, left, false)
+
+	right.UnionWith(&evalCtx, &data.c40to50)
+	test(left, right, true)
+	test(right, left, false)
+}
+
 type constraintTestData struct {
 	cLt10           Constraint // [ - /10)
 	cGt20           Constraint // (/20 - ]

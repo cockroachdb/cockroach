@@ -266,5 +266,5 @@ func newSpanTestData(keyCtx *KeyContext) *spanTestData {
 func testSet(keyCtx *KeyContext, sp *Span) *Set {
 	var c Constraint
 	c.Init(keyCtx, SingleSpan(sp))
-	return SingleConstraint(c)
+	return SingleConstraint(&c)
 }

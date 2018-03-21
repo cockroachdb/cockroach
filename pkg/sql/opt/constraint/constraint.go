@@ -73,7 +73,12 @@ func (c *Constraint) IsUnconstrained() bool {
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
 // constraints.
+//
+// The two constraints must be on the same set of columns.
 func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if !c.Columns.Equals(&other.Columns) {
+		panic("column mismatch")
+	}
 	if c.IsUnconstrained() || other.IsContradiction() {
 		return
 	}
@@ -157,7 +162,12 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 // spans, then the intersection is empty, and tryIntersectWith returns false.
 // If a constraint set has even one empty constraint, then the entire set
 // should be marked as empty and all constraints removed.
+//
+// The two constraints must be on the same set of columns.
 func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if !c.Columns.Equals(&other.Columns) {
+		panic("column mismatch")
+	}
 	if c.IsContradiction() || other.IsUnconstrained() {
 		return
 	}
@@ -200,7 +210,7 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 	c.Spans.makeImmutable()
 }
 
-func (c *Constraint) String() string {
+func (c Constraint) String() string {
 	var b strings.Builder
 	b.WriteString(c.Columns.String())
 	b.WriteString(": ")
@@ -212,4 +222,36 @@ func (c *Constraint) String() string {
 		b.WriteString(c.Spans.String())
 	}
 	return b.String()
+}
+
+// Implies returns true if the receiver constraint is stronger than the other
+// constraint (i.e. c.Spans are completely contained in other.Spans).
+//
+// The two constraints must be on the same set of columns.
+func (c *Constraint) Implies(evalCtx *tree.EvalContext, other *Constraint) bool {
+	if !c.Columns.Equals(&other.Columns) {
+		panic("column mismatch")
+	}
+
+	left := &c.Spans
+	right := &other.Spans
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+
+	for leftIndex, rightIndex := 0, 0; leftIndex < left.Count(); leftIndex++ {
+		leftSpan := left.Get(leftIndex)
+		if leftSpan.StartsAfter(&keyCtx, right.Get(rightIndex)) {
+			rightIndex++
+			if rightIndex == right.Count() {
+				// There is no span that overlaps with leftSpan.
+				return false
+			}
+		}
+		rightSpan := right.Get(rightIndex)
+		// Check if rightSpan includes leftSpan.
+		if leftSpan.CompareStarts(&keyCtx, rightSpan) < 0 ||
+			leftSpan.CompareEnds(&keyCtx, rightSpan) > 0 {
+			return false
+		}
+	}
+	return true
 }
