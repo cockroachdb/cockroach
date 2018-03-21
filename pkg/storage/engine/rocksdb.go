@@ -876,6 +876,12 @@ func (r *RocksDB) CompactRange(start, end roachpb.Key, forceBottommost bool) err
 	return statusToError(C.DBCompactRange(r.rdb, goToCSlice(start), goToCSlice(end), C.bool(forceBottommost)))
 }
 
+// DeleteFilesInRange efficiently deletes underlying SSTables which contain
+// only keys which fall within the specified range.
+func (r *RocksDB) DeleteFilesInRange(start, end MVCCKey) error {
+	return statusToError(C.DBDeleteFilesInRange(r.rdb, goToCKey(start), goToCKey(end)))
+}
+
 // ApproximateDiskBytes returns the approximate on-disk size of the specified key range.
 func (r *RocksDB) ApproximateDiskBytes(from, to roachpb.Key) (uint64, error) {
 	start := MVCCKey{Key: from}

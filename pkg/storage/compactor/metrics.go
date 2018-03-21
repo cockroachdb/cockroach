@@ -18,12 +18,14 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // Metrics holds all metrics relating to a Compactor.
 type Metrics struct {
-	BytesQueued         *metric.Gauge
-	BytesSkipped        *metric.Counter
-	BytesCompacted      *metric.Counter
-	CompactionSuccesses *metric.Counter
-	CompactionFailures  *metric.Counter
-	CompactingNanos     *metric.Counter
+	BytesQueued                 *metric.Gauge
+	BytesSkipped                *metric.Counter
+	BytesCompacted              *metric.Counter
+	CompactionSuccesses         *metric.Counter
+	CompactionFailures          *metric.Counter
+	DeleteFilesInRangeSuccesses *metric.Counter
+	DeleteFilesInRangeFailures  *metric.Counter
+	CompactingNanos             *metric.Counter
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -47,6 +49,12 @@ var (
 	metaCompactionFailures = metric.Metadata{
 		Name: "compactor.compactions.failure",
 		Help: "Number of failed compaction requests sent to the storage engine"}
+	metaDeleteFilesInRangeSuccesses = metric.Metadata{
+		Name: "compactor.deletefilesinrange.success",
+		Help: "Number of successful DeleteFilesInRange requests sent to the storage engine"}
+	metaDeleteFilesInRangeFailures = metric.Metadata{
+		Name: "compactor.deletefilesinrange.failure",
+		Help: "Number of failed DeleteFilesInRange requests sent to the storage engine"}
 	metaCompactingNanos = metric.Metadata{
 		Name: "compactor.compactingnanos",
 		Help: "Number of nanoseconds spent compacting ranges"}
@@ -55,11 +63,13 @@ var (
 // makeMetrics returns a Metrics struct.
 func makeMetrics() Metrics {
 	return Metrics{
-		BytesQueued:         metric.NewGauge(metaBytesQueued),
-		BytesSkipped:        metric.NewCounter(metaBytesSkipped),
-		BytesCompacted:      metric.NewCounter(metaBytesCompacted),
-		CompactionSuccesses: metric.NewCounter(metaCompactionSuccesses),
-		CompactionFailures:  metric.NewCounter(metaCompactionFailures),
-		CompactingNanos:     metric.NewCounter(metaCompactingNanos),
+		BytesQueued:                 metric.NewGauge(metaBytesQueued),
+		BytesSkipped:                metric.NewCounter(metaBytesSkipped),
+		BytesCompacted:              metric.NewCounter(metaBytesCompacted),
+		CompactionSuccesses:         metric.NewCounter(metaCompactionSuccesses),
+		CompactionFailures:          metric.NewCounter(metaCompactionFailures),
+		DeleteFilesInRangeSuccesses: metric.NewCounter(metaDeleteFilesInRangeSuccesses),
+		DeleteFilesInRangeFailures:  metric.NewCounter(metaDeleteFilesInRangeFailures),
+		CompactingNanos:             metric.NewCounter(metaCompactingNanos),
 	}
 }

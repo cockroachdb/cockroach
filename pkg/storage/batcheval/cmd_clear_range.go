@@ -105,6 +105,7 @@ func ClearRange(
 			Compaction: storagebase.Compaction{
 				Bytes:            statsDelta.Total(),
 				SuggestedAtNanos: cArgs.Header.Timestamp.WallTime,
+				Voided:           true,
 			},
 		},
 	}

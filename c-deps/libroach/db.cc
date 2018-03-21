@@ -310,6 +310,14 @@ DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bot
   return kSuccess;
 }
 
+DBStatus DBDeleteFilesInRange(DBEngine* db, DBKey start, DBKey end) {
+  std::string start_key = EncodeKey(start);
+  std::string end_key = EncodeKey(end);
+  rocksdb::Slice start_key_slice(start_key);
+  rocksdb::Slice end_key_slice(end_key);
+  return ToDBStatus(rocksdb::DeleteFilesInRange(db->rep, db->rep->DefaultColumnFamily(), &start_key_slice, &end_key_slice));
+}
+
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size) {
   const std::string start_key(EncodeKey(start));
   const std::string end_key(EncodeKey(end));

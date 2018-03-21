@@ -114,6 +114,14 @@ DBStatus DBCompact(DBEngine* db);
 // If end is empty, it indicates the end of the database.
 DBStatus DBCompactRange(DBEngine* db, DBSlice start, DBSlice end, bool force_bottommost);
 
+// If a key range has been cleared and will never be used again, this
+// is the most efficient means to recover space. It simply unlinks
+// any SSTable files completely subsumed by the specified key span.
+// In general, it makes sense to invoke this method first, followed by
+// calls to DBCompactRange in order to clean up remaining keys stored
+// in SSTables containing keys outside this span.
+DBStatus DBDeleteFilesInRange(DBEngine* db, DBKey start, DBKey end);
+
 // Stores the approximate on-disk size of the given key range into the
 // supplied uint64.
 DBStatus DBApproximateDiskBytes(DBEngine* db, DBKey start, DBKey end, uint64_t* size);

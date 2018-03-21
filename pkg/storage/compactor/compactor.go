@@ -323,6 +323,15 @@ func (c *Compactor) processCompaction(
 	if shouldProcess {
 		startTime := timeutil.Now()
 		log.Infof(ctx, "processing compaction %s", aggr)
+		if aggr.Voided {
+			if err := c.eng.DeleteFilesInRange(
+				engine.MVCCKey{Key: aggr.StartKey}, engine.MVCCKey{Key: aggr.EndKey},
+			); err != nil {
+				c.Metrics.DeleteFilesInRangeFailures.Inc(1)
+				return 0, errors.Wrapf(err, "unable to delete files in suggested compaction %+v", aggr)
+			}
+			c.Metrics.DeleteFilesInRangeSuccesses.Inc(1)
+		}
 		if err := c.eng.CompactRange(aggr.StartKey, aggr.EndKey, false /* forceBottommost */); err != nil {
 			c.Metrics.CompactionFailures.Inc(1)
 			return 0, errors.Wrapf(err, "unable to compact range %+v", aggr)
@@ -374,9 +383,19 @@ func (c *Compactor) aggregateCompaction(
 	aggr *aggregatedCompaction,
 	sc storagebase.SuggestedCompaction,
 ) bool {
+	// If the suggested compactions' voided flags don't match, cannot
+	// aggregate.
+	if aggr.Voided != sc.Voided {
+		return true // suggested compaction could not be aggregated
+	}
 	// If the key spans don't overlap, then check whether they're
 	// "nearly" contiguous.
 	if aggr.EndKey.Compare(sc.StartKey) < 0 {
+		// First, if voided, the spans must be exactly contiguous or we
+		// are unable to aggregate.
+		if aggr.Voided {
+			return true
+		}
 		// Aggregate if the gap between current aggregate and proposed
 		// compaction span overlaps (at most) two contiguous SSTables at
 		// the bottommost level.
@@ -438,6 +457,9 @@ func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompact
 	// more bytes being made available for compaction, so there is no
 	// double-counting if the same range were cleared twice.
 	if ok {
+		if existing.Voided && !sc.Voided {
+			panic("existing suggested compaction was voided, but new is not voided")
+		}
 		sc.Bytes += existing.Bytes
 	}
 

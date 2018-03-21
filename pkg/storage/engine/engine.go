@@ -274,6 +274,8 @@ type WithSSTables interface {
 	Engine
 	// GetSSTables retrieves metadata about this engine's live sstables.
 	GetSSTables() SSTableInfos
+	// DeleteFilesInRange deletes SSTables in the specified key range.
+	DeleteFilesInRange(start, end MVCCKey) error
 }
 
 // Batch is the interface for batch specific operations.
