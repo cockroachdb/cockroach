@@ -1252,10 +1252,15 @@ func TestImportLivenessWithLeniency(t *testing.T) {
 		WallTime: hlc.UnixNano() - (15 * time.Second).Nanoseconds(),
 	})
 
-	// Wait for the registry cancel loop to run and cancel the job.
+	// Wait for the registry cancel loop to run and not cancel the job.
 	<-nl.SelfCalledCh
 	<-nl.SelfCalledCh
 	close(allowResponse)
+
+	// Set the node to be fully live again.  This prevents the registry
+	// from canceling all of the jobs if the test node is saturated
+	// and the import runs slowly.
+	nl.FakeSetExpiration(1, hlc.MaxTimestamp)
 
 	// Verify that the client didn't see anything amiss.
 	if err := <-errCh; err != nil {
