@@ -726,6 +726,9 @@ build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 $(COCKROACH) build buildoss buildshort go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+ifndef XHOST_TRIPLE
+	 @$(COCKROACH) debug settings --format=html > docs/generated/settings/settings.html
+endif
 
 .PHONY: install
 install: ## Install the CockroachDB binary.
