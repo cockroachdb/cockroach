@@ -143,7 +143,7 @@ func TestKeyNextPrev(t *testing.T) {
 
 	testCases := []struct {
 		key     Key
-		keyCtx  KeyContext
+		keyCtx  *KeyContext
 		expNext string
 		expPrev string
 	}{
@@ -232,12 +232,13 @@ func testKey(t *testing.T, k Key, expected string) {
 	}
 }
 
-func testKeyContext(cols ...opt.OrderingColumn) KeyContext {
+func testKeyContext(cols ...opt.OrderingColumn) *KeyContext {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 
 	var columns Columns
 	columns.Init(cols)
 
-	return MakeKeyContext(&columns, &evalCtx)
+	keyCtx := MakeKeyContext(&columns, &evalCtx)
+	return &keyCtx
 }

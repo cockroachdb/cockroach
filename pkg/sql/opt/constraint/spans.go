@@ -116,7 +116,7 @@ func (s *Spans) makeImmutable() {
 
 // isSortedAndUnique returns true if the collection of spans is strictly ordered
 // (see Span.Compare).
-func (s *Spans) isSortedAndUnique(keyCtx KeyContext) bool {
+func (s *Spans) isSortedAndUnique(keyCtx *KeyContext) bool {
 	for i := 1; i < s.Count(); i++ {
 		if s.Get(i-1).Compare(keyCtx, s.Get(i)) >= 0 {
 			return false
@@ -127,13 +127,13 @@ func (s *Spans) isSortedAndUnique(keyCtx KeyContext) bool {
 
 // SortAndDedup sorts the spans (according to Span.Compare) and removes any
 // duplicates.
-func (s *Spans) SortAndDedup(keyCtx KeyContext) {
+func (s *Spans) SortAndDedup(keyCtx *KeyContext) {
 	// In many cases (e.g spans generated from normalized tuples), the spans are
 	// already ordered. Check for that as a fast path.
 	if s.isSortedAndUnique(keyCtx) {
 		return
 	}
-	sort.Sort(&spanSorter{keyCtx: keyCtx, spans: s})
+	sort.Sort(&spanSorter{keyCtx: *keyCtx, spans: s})
 	n := 1
 	for i := 1; i < s.Count(); i++ {
 		curr := s.Get(i)
@@ -161,7 +161,7 @@ func (ss *spanSorter) Len() int {
 
 // Less is part of sort.Interface.
 func (ss *spanSorter) Less(i, j int) bool {
-	return ss.spans.Get(i).Compare(ss.keyCtx, ss.spans.Get(j)) < 0
+	return ss.spans.Get(i).Compare(&ss.keyCtx, ss.spans.Get(j)) < 0
 }
 
 // Swap is part of sort.Interface.
