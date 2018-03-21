@@ -20,6 +20,8 @@ import (
 	"math/rand"
 	"sync"
 
+	"net/url"
+
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -44,6 +46,7 @@ type tpcc struct {
 	txs         []tx
 	totalWeight int
 
+	usePostgres  bool
 	serializable bool
 	txOpts       *gosql.TxOptions
 
@@ -75,12 +78,12 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:           {RuntimeOnly: true},
-			`fks`:          {RuntimeOnly: true},
-			`mix`:          {RuntimeOnly: true},
-			`wait`:         {RuntimeOnly: true},
-			`workers`:      {RuntimeOnly: true},
-			`serializable`: {RuntimeOnly: true},
+			`db`:          {RuntimeOnly: true},
+			`fks`:         {RuntimeOnly: true},
+			`mix`:         {RuntimeOnly: true},
+			`usePostgres`: {RuntimeOnly: true},
+			`wait`:        {RuntimeOnly: true},
+			`workers`:     {RuntimeOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -235,6 +238,13 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	parsedURL, err := url.Parse(urls[0])
+	if err != nil {
+		return workload.QueryLoad{}, err
+	}
+
+	w.usePostgres = parsedURL.Port() == "5432"
+
 	nConns := w.warehouses / len(urls)
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
