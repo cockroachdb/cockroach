@@ -744,6 +744,8 @@ $(COCKROACH) build buildoss buildshort go-install gotestdashi generate lint lint
 	$(if $(BUILDCHANNEL),-X "github.com/cockroachdb/cockroach/pkg/build.channel=$(BUILDCHANNEL)") \
 	$(if $(BUILD_TAGGED_RELEASE),-X "github.com/cockroachdb/cockroach/pkg/util/log.crashReportEnv=$(shell cat .buildinfo/tag)")
 
+SETTINGS_DOC_PAGE := docs/generated/settings/settings.html
+
 # Note: We pass `-v` to `go build` and `go test -i` so that warnings
 # from the linker aren't suppressed. The usage of `-v` also shows when
 # dependencies are rebuilt which is useful when switching between
@@ -753,6 +755,10 @@ build: ## Build the CockroachDB binary.
 buildoss: ## Build the CockroachDB binary without any CCL-licensed code.
 $(COCKROACH) build buildoss buildshort go-install:
 	 $(XGO) $(BUILDMODE) -v $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(BUILDTARGET)
+ifndef XHOST_TRIPLE
+	 @$(COCKROACH) gen settings-list --format=html > $(SETTINGS_DOC_PAGE).tmp
+	 @mv -f $(SETTINGS_DOC_PAGE).tmp $(SETTINGS_DOC_PAGE)
+endif
 
 .PHONY: install
 install: ## Install the CockroachDB binary.

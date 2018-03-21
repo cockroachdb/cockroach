@@ -20,6 +20,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 )
@@ -123,6 +126,55 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+var genSettingsListCmd = &cobra.Command{
+	Use:   "settings-list <output-dir>",
+	Short: "output a list of available cluster settings",
+	Long: `
+Output the list of cluster settings known to this binary.
+`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wrapCode := func(s string) string {
+			if cliCtx.tableDisplayFormat == tableDisplayHTML {
+				return fmt.Sprintf("<code>%s</code>", s)
+			}
+			return s
+		}
+
+		// Fill a Values struct with the defaults.
+		s := cluster.MakeTestingClusterSettings()
+		settings.NewUpdater(&s.SV).ResetRemaining()
+
+		var rows [][]string
+		for _, name := range settings.Keys() {
+			setting, ok := settings.Lookup(name)
+			if !ok {
+				panic(fmt.Sprintf("could not find setting %q", name))
+			}
+			typ, ok := settings.ReadableTypes[setting.Typ()]
+			if !ok {
+				panic(fmt.Sprintf("unknown setting type %q", setting.Typ()))
+			}
+			defaultVal := setting.String(&s.SV)
+			if override, ok := sqlmigrations.SettingsDefaultOverrides[name]; ok {
+				defaultVal = override
+			}
+			row := []string{wrapCode(name), typ, wrapCode(defaultVal), setting.Description()}
+			rows = append(rows, row)
+		}
+
+		reporter, err := makeReporter()
+		if err != nil {
+			return err
+		}
+		if hr, ok := reporter.(*htmlReporter); ok {
+			hr.escape = false
+			hr.rowStats = false
+		}
+		cols := []string{"Setting", "Type", "Default", "Description"}
+		return render(reporter, os.Stdout, cols, newRowSliceIter(rows, "dddd"), nil /* noRowsHook*/)
+	},
+}
+
 var genCmd = &cobra.Command{
 	Use:   "gen [command]",
 	Short: "generate auxiliary files",
@@ -137,6 +189,7 @@ var genCmds = []*cobra.Command{
 	genAutocompleteCmd,
 	genExamplesCmd,
 	genHAProxyCmd,
+	genSettingsListCmd,
 }
 
 func init() {
