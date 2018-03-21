@@ -44,6 +44,9 @@ type tpcc struct {
 	txs         []tx
 	totalWeight int
 
+	serializable bool
+	txOpts       *gosql.TxOptions
+
 	randomCIDsCache struct {
 		syncutil.Mutex
 		values [][]int
@@ -72,11 +75,12 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:      {RuntimeOnly: true},
-			`fks`:     {RuntimeOnly: true},
-			`mix`:     {RuntimeOnly: true},
-			`wait`:    {RuntimeOnly: true},
-			`workers`: {RuntimeOnly: true},
+			`db`:           {RuntimeOnly: true},
+			`fks`:          {RuntimeOnly: true},
+			`mix`:          {RuntimeOnly: true},
+			`wait`:         {RuntimeOnly: true},
+			`workers`:      {RuntimeOnly: true},
+			`serializable`: {RuntimeOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -95,6 +99,7 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 
 		return g
 	},
@@ -116,6 +121,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if w.doWaits && w.workers != w.warehouses*numWorkersPerWarehouse {
 				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
 					w.warehouses, w.warehouses*numWorkersPerWarehouse)
+			}
+
+			if w.serializable {
+				w.txOpts = &gosql.TxOptions{Isolation: gosql.LevelSerializable}
 			}
 
 			return initializeMix(w)
