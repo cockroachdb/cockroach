@@ -46,6 +46,11 @@ type tpcc struct {
 	txs         []tx
 	totalWeight int
 
+	split   bool
+	scatter bool
+
+	partitions int
+
 	usePostgres  bool
 	serializable bool
 	txOpts       *gosql.TxOptions
@@ -78,12 +83,16 @@ var tpccMeta = workload.Meta{
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
-			`db`:          {RuntimeOnly: true},
-			`fks`:         {RuntimeOnly: true},
-			`mix`:         {RuntimeOnly: true},
-			`usePostgres`: {RuntimeOnly: true},
-			`wait`:        {RuntimeOnly: true},
-			`workers`:     {RuntimeOnly: true},
+			`db`:           {RuntimeOnly: true},
+			`fks`:          {RuntimeOnly: true},
+			`mix`:          {RuntimeOnly: true},
+			`partitions`:   {RuntimeOnly: true},
+			`scatter`:      {RuntimeOnly: true},
+			`serializable`: {RuntimeOnly: true},
+			`split`:        {RuntimeOnly: true},
+			`usePostgres`:  {RuntimeOnly: true},
+			`wait`:         {RuntimeOnly: true},
+			`workers`:      {RuntimeOnly: true},
 		}
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -102,7 +111,10 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
+		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
+		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 
 		return g
 	},
@@ -124,6 +136,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 			if w.doWaits && w.workers != w.warehouses*numWorkersPerWarehouse {
 				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
 					w.warehouses, w.warehouses*numWorkersPerWarehouse)
+			}
+
+			if w.partitions != 0 && !w.split {
+				return errors.Errorf(`--partitions requires --split`)
 			}
 
 			if w.serializable {
@@ -255,6 +271,18 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		// Allow a maximum of concurrency+1 connections to the database.
 		dbs[i].SetMaxOpenConns(nConns)
 		dbs[i].SetMaxIdleConns(nConns)
+	}
+
+	if w.split {
+		splitTables(dbs[0], w.warehouses)
+
+		if w.partitions > 0 {
+			partitionTables(dbs[0], w.warehouses, w.partitions)
+		}
+	}
+
+	if w.scatter {
+		scatterRanges(dbs[0])
 	}
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
