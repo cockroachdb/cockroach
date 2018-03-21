@@ -80,6 +80,31 @@ func (c *Columns) Equals(other *Columns) bool {
 	return true
 }
 
+// IsStrictSuffixOf returns true if the columns in c are a strict suffix of the
+// columns in other.
+func (c *Columns) IsStrictSuffixOf(other *Columns) bool {
+	offset := other.Count() - c.Count()
+	if offset <= 0 {
+		return false
+	}
+	if c.firstCol != other.otherCols[offset-1] {
+		return false
+	}
+	// Fast path when the slices are aliased.
+	if len(c.otherCols) == 0 || &c.otherCols[0] == &other.otherCols[offset] {
+		return true
+	}
+	cmpCols := other.otherCols[offset:]
+	// Hint for the compiler to eliminate the bound check inside the loop.
+	cmpCols = cmpCols[:len(c.otherCols)]
+	for i, v := range c.otherCols {
+		if v != cmpCols[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func (c Columns) String() string {
 	var b strings.Builder
 
