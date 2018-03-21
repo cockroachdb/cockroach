@@ -119,7 +119,7 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestTabsInShellScripts", func(t *testing.T) {
 		t.Parallel()
-		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nF", "\t", "--", "*.sh")
+		cmd, stderr, filter, err := dirCmd(pkg.Dir, "git", "grep", "-nE", "^ *\t", "--", "*.sh")
 		if err != nil {
 			t.Fatal(err)
 		}

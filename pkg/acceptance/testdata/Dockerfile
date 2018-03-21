@@ -59,6 +59,7 @@ RUN curl -fsSL https://dl.yarnpkg.com/debian/pubkey.gpg > /etc/apt/trusted.gpg.d
     libc6-dev \
     libpq-dev \
     libpqtypes-dev \
+    make \
     maven \
     nodejs \
     gcc \
