@@ -562,6 +562,7 @@ func TestRunTransactionRetryOnErrors(t *testing.T) {
 		{&roachpb.RangeNotFoundError{}, false},
 		{&roachpb.RangeKeyMismatchError{}, false},
 		{&roachpb.TransactionStatusError{}, false},
+		{&roachpb.TransactionNotFoundError{}, false},
 	}
 
 	for _, test := range testCases {

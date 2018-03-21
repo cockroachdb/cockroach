@@ -135,6 +135,7 @@
 		TransactionRetryError
 		TransactionReplayError
 		TransactionStatusError
+		TransactionNotFoundError
 		WriteIntentError
 		WriteTooOldError
 		OpRequiresTxnError

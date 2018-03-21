@@ -174,6 +174,12 @@ message TransactionStatusError {
   optional string msg = 1 [(gogoproto.nullable) = false];
 }
 
+// A TransactionNotFoundError indicates that a request was sent to a
+// transaction record that does not exist.
+message TransactionNotFoundError {
+  option (gogoproto.equal) = true;
+}
+
 // A WriteIntentError indicates that one or more write intent
 // belonging to another transaction were encountered leading to a
 // read/write or write/write conflict. The keys at which the intent
@@ -370,6 +376,7 @@ message ErrorDetail {
   optional TransactionRetryError transaction_retry = 7;
   optional TransactionReplayError transaction_replay = 22;
   optional TransactionStatusError transaction_status = 8;
+  optional TransactionNotFoundError transaction_not_found = 34;
   optional WriteIntentError write_intent = 9;
   optional WriteTooOldError write_too_old = 10;
   optional OpRequiresTxnError op_requires_txn = 11;

@@ -436,8 +436,9 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 	{
 		var ba roachpb.BatchRequest
 		ba.Add(&roachpb.EndTransactionRequest{
-			Commit: false,
 			Span:   roachpb.Span{Key: initialTxn.Proto().Key},
+			Commit: false,
+			Poison: true,
 		})
 		ba.Txn = initialTxn.Proto()
 		if _, pErr := tc.TxnCoordSenderFactory.wrapped.Send(context.Background(), ba); pErr != nil {
@@ -713,8 +714,7 @@ func TestTxnCoordSenderCancel(t *testing.T) {
 	// path. We'll either succeed, get a "does not exist" error, or get a
 	// context canceled error. Anything else is unexpected.
 	err := txn.CommitOrCleanup(ctx)
-	if err != nil && err.Error() != context.Canceled.Error() &&
-		!testutils.IsError(err, "TransactionStatusError: does not exist") {
+	if err != nil && err.Error() != context.Canceled.Error() {
 		t.Fatal(err)
 	}
 }

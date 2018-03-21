@@ -437,6 +437,21 @@ func (e *TransactionStatusError) message(pErr *Error) string {
 
 var _ ErrorDetailInterface = &TransactionStatusError{}
 
+// NewTransactionNotFoundError initializes a new TransactionNotFoundError.
+func NewTransactionNotFoundError() *TransactionNotFoundError {
+	return &TransactionNotFoundError{}
+}
+
+func (e *TransactionNotFoundError) Error() string {
+	return "txn record not found"
+}
+
+func (e *TransactionNotFoundError) message(pErr *Error) string {
+	return fmt.Sprintf("txn record not found for %s", pErr.GetTxn())
+}
+
+var _ ErrorDetailInterface = &TransactionNotFoundError{}
+
 func (e *WriteIntentError) Error() string {
 	return e.message(nil)
 }

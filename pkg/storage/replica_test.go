@@ -2593,8 +2593,8 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 
 	t.Run("16266", func(t *testing.T) {
 		instrs := []cancelInstr{
-			{reqOverride: heartbeatBa, expErr: "record not present"},
-			{reqOverride: endTxnBa, expErr: "does not exist"},
+			{reqOverride: heartbeatBa, expErr: "txn record not found"},
+			{reqOverride: endTxnBa, expErr: "txn record not found"},
 			{reqOverride: pushBa},
 			{reqOverride: pushBa},
 		}
@@ -2604,10 +2604,10 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 	})
 	t.Run("CancelEndTxn", func(t *testing.T) {
 		instrs := []cancelInstr{
-			{reqOverride: heartbeatBa, expErr: "record not present"},
-			{reqOverride: endTxnBa, expErr: "does not exist"},
+			{reqOverride: heartbeatBa, expErr: "txn record not found"},
+			{reqOverride: endTxnBa, expErr: "txn record not found"},
 			{reqOverride: pushBa},
-			{reqOverride: heartbeatBa, expErr: "record not present"},
+			{reqOverride: heartbeatBa, expErr: "txn record not found"},
 			{reqOverride: resolveIntentBa},
 			{reqOverride: pushBa},
 		}
@@ -2657,7 +2657,7 @@ func TestReplicaCommandQueueCancellationLocal(t *testing.T) {
 			{reqOverride: splitBa},
 			{reqOverride: putKeyBa, expErr: "retry txn"},
 			{reqOverride: getKeyBa},
-			{reqOverride: endTxnBa, expErr: "does not exist"},
+			{reqOverride: endTxnBa, expErr: "txn record not found"},
 			{reqOverride: resolveIntentBa},
 		}
 
@@ -3593,7 +3593,8 @@ func TestReplicaAbortSpanOnlyWithIntent(t *testing.T) {
 	args, h := heartbeatArgs(txn, tc.Clock().Now())
 	// If the AbortSpan were active for this request, we'd catch a txn retry.
 	// Instead, we expect the error from heartbeating a nonexistent txn.
-	if _, pErr := tc.SendWrappedWith(h, &args); !testutils.IsPError(pErr, "record not present") {
+	_, pErr := tc.SendWrappedWith(h, &args)
+	if _, ok := pErr.GetDetail().(*roachpb.TransactionNotFoundError); !ok {
 		t.Fatal(pErr)
 	}
 }
@@ -4213,7 +4214,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 		existTS      hlc.Timestamp
 		expErrRegexp string
 	}{
-		{roachpb.Key("a"), doesNotExist, txn.Epoch, txn.Timestamp, "does not exist"},
+		{roachpb.Key("a"), doesNotExist, txn.Epoch, txn.Timestamp, "txn record not found"},
 		{roachpb.Key("a"), roachpb.COMMITTED, txn.Epoch, txn.Timestamp, "txn \"test\" id=.*: already committed"},
 		{roachpb.Key("b"), roachpb.ABORTED, txn.Epoch, txn.Timestamp, "txn aborted \"test\" id=.*"},
 		{roachpb.Key("c"), roachpb.PENDING, txn.Epoch + 1, txn.Timestamp, "txn \"test\" id=.*: epoch regression: 0"},
@@ -4523,9 +4524,9 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 				t.Error(pErr)
 			}
 
-			// EndTransaction should fail with a status error (does not exist).
+			// EndTransaction should fail with a txn not found error.
 			_, pErr = tc.SendWrappedWith(etH, &et)
-			if _, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); !ok {
+			if _, ok := pErr.GetDetail().(*roachpb.TransactionNotFoundError); !ok {
 				t.Errorf("expected transaction aborted for iso=%s; got %s", iso, pErr)
 			}
 
