@@ -349,11 +349,15 @@ func TestSpanCompareEnds(t *testing.T) {
 func TestSpanStartsAfter(t *testing.T) {
 	keyCtx := testKeyContext(1, 2)
 
-	test := func(left, right Span, expected bool) {
+	test := func(left, right Span, expected, expectedStrict bool) {
 		t.Helper()
 		if actual := left.StartsAfter(keyCtx, &right); actual != expected {
 			format := "left: %s, right: %s, expected: %v, actual: %v"
 			t.Errorf(format, left.String(), right.String(), expected, actual)
+		}
+		if actual := left.StartsStrictlyAfter(keyCtx, &right); actual != expectedStrict {
+			format := "left: %s, right: %s, expected: %v, actual: %v"
+			t.Errorf(format, left.String(), right.String(), expectedStrict, actual)
 		}
 	}
 
@@ -364,7 +368,7 @@ func TestSpanStartsAfter(t *testing.T) {
 		MakeCompositeKey(tree.DNull, tree.NewDInt(100)), IncludeBoundary,
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), IncludeBoundary,
 	)
-	test(banana, banana, false)
+	test(banana, banana, false, false)
 
 	// Right span's start equal to left span's end.
 	var cherry Span
@@ -373,8 +377,8 @@ func TestSpanStartsAfter(t *testing.T) {
 		MakeCompositeKey(tree.NewDString("banana"), tree.NewDInt(50)), ExcludeBoundary,
 		MakeKey(tree.NewDString("cherry")), ExcludeBoundary,
 	)
-	test(banana, cherry, false)
-	test(cherry, banana, true)
+	test(banana, cherry, false, false)
+	test(cherry, banana, true, false)
 
 	// Right span's start greater than left span's end, and inverse.
 	var cherry2 Span
@@ -383,8 +387,8 @@ func TestSpanStartsAfter(t *testing.T) {
 		MakeCompositeKey(tree.NewDString("cherry"), tree.NewDInt(0)), IncludeBoundary,
 		MakeKey(tree.NewDString("mango")), ExcludeBoundary,
 	)
-	test(cherry, cherry2, false)
-	test(cherry2, cherry, true)
+	test(cherry, cherry2, false, false)
+	test(cherry2, cherry, true, true)
 }
 
 func TestSpanIntersect(t *testing.T) {

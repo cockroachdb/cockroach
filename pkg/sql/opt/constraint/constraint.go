@@ -49,7 +49,7 @@ type Constraint struct {
 // the given spans.
 func (c *Constraint) Init(keyCtx *KeyContext, spans Spans) {
 	for i := 1; i < spans.Count(); i++ {
-		if !spans.Get(i).StartsAfter(keyCtx, spans.Get(i-1)) {
+		if !spans.Get(i).StartsStrictlyAfter(keyCtx, spans.Get(i-1)) {
 			panic("spans must be ordered and non-overlapping")
 		}
 	}
@@ -73,7 +73,12 @@ func (c *Constraint) IsUnconstrained() bool {
 // columns of both constraints must be the same. Constrained columns in the
 // merged constraint can have values that are part of either of the input
 // constraints.
+//
+// The two constraints must be on the same set of columns.
 func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if !c.Columns.Equals(&other.Columns) {
+		panic("column mismatch")
+	}
 	if c.IsUnconstrained() || other.IsContradiction() {
 		return
 	}
@@ -157,7 +162,12 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 // spans, then the intersection is empty, and tryIntersectWith returns false.
 // If a constraint set has even one empty constraint, then the entire set
 // should be marked as empty and all constraints removed.
+//
+// The two constraints must be on the same set of columns.
 func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint) {
+	if !c.Columns.Equals(&other.Columns) {
+		panic("column mismatch")
+	}
 	if c.IsContradiction() || other.IsUnconstrained() {
 		return
 	}
@@ -200,7 +210,7 @@ func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint)
 	c.Spans.makeImmutable()
 }
 
-func (c *Constraint) String() string {
+func (c Constraint) String() string {
 	var b strings.Builder
 	b.WriteString(c.Columns.String())
 	b.WriteString(": ")
@@ -212,4 +222,77 @@ func (c *Constraint) String() string {
 		b.WriteString(c.Spans.String())
 	}
 	return b.String()
+}
+
+// Implies returns true if the receiver constraint is stronger than the other
+// constraint (i.e. c.Spans are completely contained in other.Spans).
+//
+// The two constraints must be on the same set of columns.
+func (c *Constraint) Implies(evalCtx *tree.EvalContext, other *Constraint) bool {
+	if !c.Columns.Equals(&other.Columns) {
+		panic("column mismatch")
+	}
+
+	left := &c.Spans
+	right := &other.Spans
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+
+	for leftIndex, rightIndex := 0, 0; leftIndex < left.Count(); leftIndex++ {
+		leftSpan := left.Get(leftIndex)
+		rightSpan := right.Get(rightIndex)
+		for leftSpan.StartsAfter(&keyCtx, rightSpan) {
+			rightIndex++
+			if rightIndex == right.Count() {
+				// There is no span that overlaps with leftSpan.
+				return false
+			}
+			rightSpan = right.Get(rightIndex)
+		}
+		// Check if rightSpan includes leftSpan.
+		if leftSpan.CompareStarts(&keyCtx, rightSpan) < 0 ||
+			leftSpan.CompareEnds(&keyCtx, rightSpan) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// CutFirstColumn removes the first column from the constraint and tries to
+// deduce a constraint on the remaining suffix. If no constraint can be deduced,
+// the constraint becomes unconstrained.
+//
+// We can deduce a constraint only if all the spans have equal start and end
+// keys on the first column. For example:
+//   before: /0/1/2/3: [/1/5 - /1/6] [/2/3 - /2/4]
+//   after:  /1/2/3: [/3 - /4] [/5 - /6]
+// In contrast:
+//   before: /0/1/2/3: [/1/2 - /3/1]
+//   after: /1/2/3: unconstrained.
+func (c *Constraint) CutFirstColumn(evalCtx *tree.EvalContext) {
+	keyCtx := MakeKeyContext(&c.Columns, evalCtx)
+	// keyCtx stores a copy of Columns, it is ok to modify.
+	c.Columns.firstCol = c.Columns.otherCols[0]
+	c.Columns.otherCols = c.Columns.otherCols[1:]
+	if c.Spans.Count() == 0 {
+		return
+	}
+	for i := 0; i < c.Spans.Count(); i++ {
+		sp := c.Spans.Get(i)
+		if sp.start.Length() == 0 || sp.end.Length() == 0 ||
+			keyCtx.Compare(0, sp.start.Value(0), sp.end.Value(0)) != 0 {
+			c.Spans = SingleSpan(&UnconstrainedSpan)
+			return
+		}
+	}
+	result := MakeSpans(c.Spans.Count())
+	for i := 0; i < c.Spans.Count(); i++ {
+		sp := c.Spans.Get(i).Copy()
+		sp.start = sp.start.CutFront(1)
+		sp.end = sp.end.CutFront(1)
+		result.Append(&sp)
+	}
+	result.SortAndMergeOverlaps(&keyCtx)
+
+	c.Spans = result
+	c.Spans.makeImmutable()
 }

@@ -114,15 +114,45 @@ func (s *Spans) makeImmutable() {
 	}
 }
 
-// isSortedAndUnique returns true if the collection of spans is strictly ordered
-// (see Span.Compare).
-func (s *Spans) isSortedAndUnique(keyCtx *KeyContext) bool {
+// sortedAndNonOverlapping returns true if the collection of spans is strictly
+// ordered and no spans overlap.
+func (s *Spans) sortedAndNonOverlapping(keyCtx *KeyContext) bool {
 	for i := 1; i < s.Count(); i++ {
-		if s.Get(i-1).Compare(keyCtx, s.Get(i)) >= 0 {
+		if !s.Get(i).StartsStrictlyAfter(keyCtx, s.Get(i-1)) {
 			return false
 		}
 	}
 	return true
+}
+
+// SortAndMergeOverlaps sorts the spans and merges any overlapping spans.
+func (s *Spans) SortAndMergeOverlaps(keyCtx *KeyContext) {
+	if s.sortedAndNonOverlapping(keyCtx) {
+		return
+	}
+	sort.Sort(&spanSorter{keyCtx: *keyCtx, spans: s})
+
+	// Merge overlapping spans. We maintain the last span and extend it with
+	// whatever spans it overlaps with.
+	n := 0
+	currentSpan := *s.Get(0)
+	for i := 1; i < s.Count(); i++ {
+		sp := s.Get(i)
+		if sp.StartsStrictlyAfter(keyCtx, &currentSpan) {
+			// No overlap. "Output" the current span.
+			*s.Get(n) = currentSpan
+			n++
+			currentSpan = *sp
+		} else {
+			// There is overlap; extend the current span to the right if necessary.
+			if currentSpan.CompareEnds(keyCtx, sp) < 0 {
+				currentSpan.end = sp.end
+				currentSpan.endBoundary = sp.endBoundary
+			}
+		}
+	}
+	*s.Get(n) = currentSpan
+	s.Truncate(n + 1)
 }
 
 // SortAndDedup sorts the spans (according to Span.Compare) and removes any
@@ -130,7 +160,7 @@ func (s *Spans) isSortedAndUnique(keyCtx *KeyContext) bool {
 func (s *Spans) SortAndDedup(keyCtx *KeyContext) {
 	// In many cases (e.g spans generated from normalized tuples), the spans are
 	// already ordered. Check for that as a fast path.
-	if s.isSortedAndUnique(keyCtx) {
+	if s.sortedAndNonOverlapping(keyCtx) {
 		return
 	}
 	sort.Sort(&spanSorter{keyCtx: *keyCtx, spans: s})
