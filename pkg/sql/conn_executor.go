@@ -1138,6 +1138,10 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 		// 3: ExecutePortal
 		// 4: Sync
 
+		// Note that the current command cannot influence the rewind point if
+		// if the rewind point is not current set to the command's position
+		// (i.e. we don't do anything if txnRewindPos != pos).
+
 		if advInfo.code != advanceOne {
 			panic(fmt.Sprintf("unexpected advanceCode: %s", advInfo.code))
 		}
@@ -1165,7 +1169,9 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			case Sync:
 				canAdvance = true
 			case DrainRequest:
-				ex.setTxnRewindPos(ctx, pos+1)
+				canAdvance = true
+			case Flush:
+				canAdvance = true
 			default:
 				panic(fmt.Sprintf("unsupported cmd: %T", cmd))
 			}
