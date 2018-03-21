@@ -236,6 +236,7 @@ func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
 		panic(fmt.Sprintf("combining %+v with %+v", rh.ResumeSpan, otherRH.ResumeSpan))
 	}
 	rh.ResumeSpan = otherRH.ResumeSpan
+	rh.ResumeReason = otherRH.ResumeReason
 	rh.NumKeys += otherRH.NumKeys
 	rh.RangeInfos = append(rh.RangeInfos, otherRH.RangeInfos...)
 	return nil
